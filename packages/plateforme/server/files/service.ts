@@ -415,8 +415,8 @@ export async function fileAvailability(db: PlatformDb, identity: Identity, fileI
   return { available: head !== null }
 }
 
-/** Les octets d'une URL de lecture : 10 s au plus, coupés au-delà de 4 Mo (`too_large`) ; objet absent : `not_found`. */
-async function boundedBytes(url: string, name: string): Promise<Uint8Array> {
+/** Les octets d'une URL de lecture : 10 s au plus, coupés au-delà de `max`, 4 Mo à défaut (`too_large`) ; objet absent : `not_found`. */
+export async function boundedBytes(url: string, name: string, max: number = TEXT_FILE_MAX_BYTES): Promise<Uint8Array> {
   const answer = await onStorage("read", () => fetch(url, { signal: AbortSignal.timeout(TEXT_READ_TIMEOUT_MS), redirect: "error" }))
   // Un objet absent : 404, ou 403 quand les clés ne listent pas le bucket.
   if (answer.status === 404 || answer.status === 403) throw unknownFile()
@@ -425,8 +425,8 @@ async function boundedBytes(url: string, name: string): Promise<Uint8Array> {
     throw new PlatformError("internal", "File storage unreachable. Retry later.")
   }
   const body = answer.body
-  const bytes = await onStorage("read", () => readBounded(body, TEXT_FILE_MAX_BYTES, () => null))
-  if (!bytes) throw new PlatformError("too_large", `${name} is over ${megabytes(TEXT_FILE_MAX_BYTES)}: download it instead.`)
+  const bytes = await onStorage("read", () => readBounded(body, max, () => null))
+  if (!bytes) throw new PlatformError("too_large", `${name} is over ${megabytes(max)}${max === TEXT_FILE_MAX_BYTES ? ": download it instead" : ""}.`)
   return bytes
 }
 

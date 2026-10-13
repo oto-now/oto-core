@@ -156,11 +156,16 @@ function refusal(url: URL): string | null {
   return isIP(host) !== 0 && !isPublicAddress(host) ? SOURCE_FAILURES.address : null
 }
 
-/** Le corps, lu par morceaux et coupé au-delà de 1 Mo (`readBounded`). */
-async function boundedBody(answer: SourceAnswer): Promise<Fetched> {
-  const read = await readBounded(answer.body, UPLOAD_BYTES_MAX, () => {
+/** Ce qu'une source sert au-delà de la borne de son appel. */
+function tooLarge(maxBytes: number): string {
+  return maxBytes === UPLOAD_BYTES_MAX ? SOURCE_FAILURES.tooLarge : `source_url serves more than ${Math.round(maxBytes / (1024 * 1024))} MB`
+}
+
+/** Le corps, lu par morceaux et coupé au-delà de la borne (`readBounded`), 1 Mo à défaut. */
+async function boundedBody(answer: SourceAnswer, maxBytes: number): Promise<Fetched> {
+  const read = await readBounded(answer.body, maxBytes, () => {
     answer.discard()
-    return { failure: SOURCE_FAILURES.tooLarge }
+    return { failure: tooLarge(maxBytes) }
   })
   return read instanceof Uint8Array ? { bytes: read, type: answer.type } : read
 }
@@ -168,7 +173,7 @@ async function boundedBody(answer: SourceAnswer): Promise<Fetched> {
 type Hop = { next: URL } | Fetched
 
 /** Une requête de la chaîne : une redirection à suivre, ou l'issue (octets, cause). */
-async function hop(url: URL, deps: { resolve: Resolve; get: SourceGet; signal: AbortSignal }): Promise<Hop> {
+async function hop(url: URL, deps: { resolve: Resolve; get: SourceGet; signal: AbortSignal; maxBytes: number }): Promise<Hop> {
   const refused = { address: false }
   let answer: SourceAnswer
   try {
@@ -186,22 +191,22 @@ async function hop(url: URL, deps: { resolve: Resolve; get: SourceGet; signal: A
     answer.discard()
     return { failure: `source_url answered ${answer.status}` }
   }
-  if (answer.length !== null && answer.length > UPLOAD_BYTES_MAX) {
+  if (answer.length !== null && answer.length > deps.maxBytes) {
     answer.discard()
-    return { failure: SOURCE_FAILURES.tooLarge }
+    return { failure: tooLarge(deps.maxBytes) }
   }
-  return boundedBody(answer)
+  return boundedBody(answer, deps.maxBytes)
 }
 
 /**
  * Télécharge une adresse fournie (AC-f12, AC-f13) : chaque adresse de la chaîne contrôlée avant sa requête, 3
- * redirections au plus, 10 s en tout, 1 Mo lus au plus. Rend les octets, ou la cause d'un échec, en une phrase sans
+ * redirections au plus, 10 s en tout, 1 Mo lus au plus (`maxBytes` : la borne d'un autre appelant, l'import d'un arbre). Rend les octets, ou la cause d'un échec, en une phrase sans
  * l'adresse (AC-f14). `deps` : la résolution, la requête et le délai, que les tests remplacent (aucun réseau, aucune
  * attente de 10 s).
  */
-export async function fetchSource(source: string, deps: { resolve?: Resolve; get?: SourceGet; timeoutMs?: number } = {}): Promise<Fetched> {
+export async function fetchSource(source: string, deps: { resolve?: Resolve; get?: SourceGet; timeoutMs?: number; maxBytes?: number } = {}): Promise<Fetched> {
   const signal = AbortSignal.timeout(deps.timeoutMs ?? TIMEOUT_MS)
-  const chain = { resolve: deps.resolve ?? systemResolve, get: deps.get ?? httpsGet, signal }
+  const chain = { resolve: deps.resolve ?? systemResolve, get: deps.get ?? httpsGet, signal, maxBytes: deps.maxBytes ?? UPLOAD_BYTES_MAX }
   try {
     let url = new URL(source)
     for (let redirects = 0; ; redirects++) {

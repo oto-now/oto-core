@@ -17,6 +17,17 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.2 — 2026-10-13
+
+### Assistants
+- `node.export_tree` exports one or several roots with everything under them to a signed address valid one hour: a faithful JSON for another Oto platform, or a zip of .md and .csv.
+- `node.import_tree` imports such an address, a zip of .md and .csv, a single .md or .csv, or a file attached to a page, in two passes with links following; `continue_from` resumes a long import.
+- A JSON export carries the attached files of its pages: the import copies them to the arrival pages.
+
+### Hosts
+- Install: upgrade to 1.4.2; no migration, no new variable, no import to change. Published from 1.4.1, without what main carries for 1.5.0.
+- Server: `node.export_tree` writes its file in your storage bucket under `<org id>/exports/`; once its one-hour address expired, the next export, import or trash pass of the organisation lists that prefix and removes it. Your storage keys need the right to list the bucket (`s3:ListBucket`); without it, a server log line says so and the exports stay.
+
 ## 1.4.1 — 2026-10-13
 
 ### Hosts

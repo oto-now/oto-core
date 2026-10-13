@@ -1,7 +1,7 @@
 # Fichiers et stockage
 
 - **Statut** : validé avec JB le 28/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-13
 
 ## Résumé
 
@@ -22,7 +22,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 
 ### Le port `FileStore` (ADR-016 § 1 et § 2)
 
-- Port de `server/` à cinq opérations : URL présignée d'envoi, URL présignée de lecture, métadonnées (`HEAD`), suppression, copie côté bucket (`copy`, pour la duplication, D118). Un seul adaptateur livré, S3 signé en SigV4 (`aws4fetch`, pas le SDK AWS : `tech-stack.md`) ; il sert AWS S3, l'Object Storage de Scaleway, MinIO et Supabase Storage par son point d'accès S3. Les tests ont un adaptateur en mémoire.
+- Port de `server/` à sept opérations : URL présignée d'envoi, URL présignée de lecture (60 s, ou la durée que l'appelant donne : une heure pour l'export d'une arborescence), métadonnées (`HEAD`), suppression, copie côté bucket (`copy`, pour la duplication, D118), écriture par le serveur (`put`, l'objet qu'il produit lui-même : l'export d'une arborescence, sous `<org>/exports/`, [transfert d'une arborescence](transfert-d-arborescence.md)), liste des clés sous un préfixe (`list`, ListObjectsV2 : les exports expirés à purger). Un seul adaptateur livré, S3 signé en SigV4 (`aws4fetch`, pas le SDK AWS : `tech-stack.md`) ; il sert AWS S3, l'Object Storage de Scaleway, MinIO et Supabase Storage par son point d'accès S3. Les tests ont un adaptateur en mémoire.
 - Adresses en chemin, `<endpoint>/<bucket>/<clé>`, sans option pour un fournisseur qui n'admettrait que le sous-domaine (D148, HN-E10S02-31).
 - Cinq variables de l'hôte : `PLATFORM_STORAGE_ENDPOINT`, `PLATFORM_STORAGE_BUCKET`, `PLATFORM_STORAGE_REGION`, `PLATFORM_STORAGE_ACCESS_KEY_ID`, `PLATFORM_STORAGE_SECRET_ACCESS_KEY` : des clés d'accès S3, jamais la clé `service_role`. Un `PLATFORM_STORAGE_ENDPOINT` qui n'est pas une adresse `http(s)` lève `PlatformConfigError` ; `null` reste réservé à une variable absente (HN-E10S02-34).
 - **Sans ces variables, les fichiers sont désactivés** : les écrans ne proposent aucun dépôt, l'API refuse par `not_enabled` avec un message qui nomme les variables, le reste fonctionne. `GET files/<id>` et `POST files/<id>/complete` refusent aussi par `not_enabled`, avant de lire la ligne (HN-E10S02-26). Le bucket est privé ; ses règles CORS (envoi depuis l'origine de l'hôte) sont dans le README du paquet.
@@ -98,7 +98,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 
 ## Sécurité et confidentialité
 
-- Les clés du bucket sont des clés d'accès S3 de l'hôte, jamais `service_role` ; le bucket est privé ; une URL de lecture vit 60 secondes et n'est jamais journalisée en clair.
+- Les clés du bucket sont des clés d'accès S3 de l'hôte, jamais `service_role` ; le bucket est privé ; une URL de lecture vit 60 secondes (une heure pour l'export d'une arborescence, une capacité que l'assistant relaie à l'import) et n'est jamais journalisée en clair.
 - Le nom d'origine n'entre jamais dans la clé d'objet ; type et disposition sont signés dans l'URL, jamais lus de l'objet ni du navigateur.
 - Les droits se décident dans le service avant toute URL (`security-patterns.md § Droits dans le service`) ; voir [droits d'accès](droits-d-acces.md).
 
@@ -122,3 +122,4 @@ Aucune à ce jour.
 - 2026-09-29 : adresses S3 en chemin, type par l'extension, copies comptées au quota — option du pilote (source : fiches D148, D149, story E10-S02).
 - 2026-09-30 : taille seule comparée à la confirmation, `HEAD` en `identity` et repli `content-range` (versions 1.1.3 et 1.1.4) — option du pilote (source : HN-E10S02-114, HN-E10S02-124).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-016, les fiches D113, D118, D148, D149 et les choix HN-E10S02 du stockage — décidé par Alexis, accord de JB.
+- 2026-10-13 : sixième et septième opérations du port, `put` et `list`, et URL de lecture d'une heure pour l'export d'une arborescence et ses fichiers joints — décidé par JB (source : cahier des charges du transfert d'arborescence, session du 13/10/2026).

@@ -1,7 +1,7 @@
 # Dépôt par lien
 
 - **Statut** : validé avec JB le 28/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-13
 
 ## Résumé
 
@@ -48,7 +48,7 @@ Claude Code doit pouvoir déposer un fichier qu'il a déjà (un fichier à joind
 
 ### Téléchargement d'une adresse fournie (ADR-018 § 7)
 
-- Pour un assistant sans shell (claude.ai, ChatGPT), `upload.link` accepte une adresse `https` publique que le serveur télécharge (D130) : la seule requête du paquet vers une adresse choisie par un appelant. Schéma, port et adresse résolue sont contrôlés avant la requête et à chaque redirection (E10-S02 AC-f13), 10 s et 1 Mo au plus (`uploads-fetch.ts`, `readBounded`).
+- Pour un assistant sans shell (claude.ai, ChatGPT), `upload.link` accepte une adresse `https` publique que le serveur télécharge (D130). Avec `node.import_tree` ([transfert d'une arborescence](transfert-d-arborescence.md), 30 s et 25 Mo), ce sont les seules requêtes du paquet vers une adresse choisie par un appelant, toutes deux par `fetchSource` : schéma, port et adresse résolue contrôlés avant la requête et à chaque redirection (E10-S02 AC-f13), 10 s et 1 Mo au plus pour `upload.link` (`uploads-fetch.ts`, `readBounded`).
 - Toute adresse IPv6 qui porte une IPv4 (mappée, NAT64, `::/96`, 6to4, Teredo) est refusée entière ; la résolution contrôlée est celle de la connexion (`lookup`), toutes les adresses rendues doivent être publiques ; une adresse IP écrite dans l'URL se contrôle avant la requête (HN-E10S02-104).
 - Un `.md` ou un CSV n'est téléchargé que servi en `text/*` autre que `text/html`, en `application/octet-stream` ou sans type (`textSourceFailure`, paramètres ignorés) ; sinon un résultat d'échec qui nomme le type servi, le ticket libre pour le formulaire. Un `.md` dont le texte commence par `<!doctype html` ou `<html` (blancs de tête ignorés, sans casse) est refusé par toute porte (`invalid_arguments`, rien d'écrit) : le rendu échappait déjà ce HTML, le refus évite une page remplie du source d'un site (HN-E10S02-118).
 - `source_url` est masquée au journal par son nom normalisé exact (`MASKED_NAMES`, `server/journal.ts`), ses voisines restant lisibles ; un téléchargement en échec est un résultat, pas `isError` : la cause sans l'adresse, et `form_url` (HN-E10S02-103).
@@ -93,3 +93,4 @@ Aucune à ce jour.
 - 2026-09-29 : formulaire monté par une page de l'hôte, avec son propre jeton — option du pilote, approuvée à la revue (source : fiches D146, D147).
 - 2026-09-30 : cause dite par cas quand le stockage échoue, page retirée sur échec, `.md` en HTML refusé, `forbidden` hors `POST`, repli sans `curl` — option du pilote (source : retours FB-0012 à FB-0014, HN-E10S02-115 à HN-E10S02-123).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-018, les fiches D117, D130, D146, D147 et les choix HN-E10S02 du dépôt — décidé par Alexis, accord de JB.
+- 2026-10-13 : `node.import_tree` télécharge aussi une adresse choisie par l'appelant, par les mêmes gardes, à sa propre borne — décidé par JB (source : cahier des charges du transfert d'arborescence, session du 13/10/2026).

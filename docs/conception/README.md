@@ -65,6 +65,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Dépôt par lien](depot-par-lien.md) | Comment un assistant dépose-t-il un fichier sans le faire passer par la conversation ? | validé avec JB le 28/09/2026 |
 | [Contenu HTML isolé et lecture des fichiers](contenu-html-isole.md) | Comment voit-on un fichier HTML, `.md` ou PDF sans exposer l'hôte, et comment un assistant en lit-il le texte ? | validé avec JB le 30/09/2026 |
 | [Partage public](partage-public.md) | Comment un contenu s'ouvre-t-il à qui n'a pas de compte, et que montre son lien ? | validé avec JB le 27/09/2026 |
+| [Transfert d'une arborescence](transfert-d-arborescence.md) | Comment une base, un dossier ou des procédures passent-ils d'une plateforme Oto à une autre, ou d'un dossier de `.md` à une plateforme ? | proposé |
 
 ### Les écrans
 
