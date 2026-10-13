@@ -112,7 +112,7 @@ export function s3FileStore(config: S3Config): FileStore {
 
     readUrl(key: string, response: ObjectResponse) {
       const query = { "response-content-type": response.contentType, "response-content-disposition": response.disposition }
-      return presign(client, objectUrl(key), { method: "GET", query, seconds: READ_URL_SECONDS })
+      return presign(client, objectUrl(key), { method: "GET", query, seconds: response.seconds ?? READ_URL_SECONDS })
     },
 
     async head(key: string) {
@@ -133,6 +133,17 @@ export function s3FileStore(config: S3Config): FileStore {
       // S3 peut rendre 200 avec une erreur dans le corps d'une copie : le corps se lit aussi.
       const body = await answer.text()
       if (!answer.ok || body.includes("<Error>")) throw failed("copy", answer.status)
+    },
+
+    async put(key: string, bytes: Uint8Array, mime: string) {
+      const answer = await client.fetch(objectUrl(key), {
+        method: "PUT",
+        headers: { "content-type": mime, "content-length": String(bytes.byteLength) },
+        body: bytes,
+        signal: AbortSignal.timeout(OPERATION_TIMEOUT_MS),
+      })
+      await answer.body?.cancel()
+      if (!answer.ok) throw failed("PUT", answer.status)
     },
 
     async remove(key: string) {

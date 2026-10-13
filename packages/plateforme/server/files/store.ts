@@ -10,7 +10,7 @@ import { s3FileStore } from "./s3"
 export type ObjectHead = { size: number; mime: string }
 
 /** Ce que l'URL de lecture fixe dans sa signature (ADR-016 § 5) : jamais lu de l'objet. */
-export type ObjectResponse = { contentType: string; disposition: string }
+export type ObjectResponse = { contentType: string; disposition: string; /** Durée de l'URL, `READ_URL_SECONDS` à défaut : une heure pour l'export d'un arbre. */ seconds?: number }
 
 export type FileStore = {
   /**
@@ -29,6 +29,8 @@ export type FileStore = {
   copy(from: string, to: string): Promise<void>
   /** Supprime l'objet ; un objet déjà absent n'est pas une erreur. */
   remove(key: string): Promise<void>
+  /** Écrit un objet produit par le serveur lui-même (l'export d'un arbre), sans URL d'envoi. */
+  put(key: string, bytes: Uint8Array, mime: string): Promise<void>
 }
 
 /** 5 minutes pour envoyer (ADR-016 § 4). */

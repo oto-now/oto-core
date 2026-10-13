@@ -19,6 +19,7 @@ import { tableRelease } from "../tables/release"
 import { tableRows } from "../tables/rows"
 import { tableSchema } from "../tables/schema"
 import { tableWrite } from "../tables/write"
+import { nodeExportTree, nodeImportTree } from "../transfer/functions"
 import { argumentsJsonSchema } from "./arguments"
 import { declaredConnectors } from "./connector-source"
 import type { CatalogFunction } from "./define"
@@ -32,7 +33,7 @@ export const NATIVE_CONNECTOR = "table"
  * Catalogue de la V1 (H80) : `mail` simulé (E04-S01), lecture des tableaux (E07-S01), écriture et file
  * de travail (E07-S02), import d'un CSV (E10-S01), suppression de lignes, abandon d'un brouillon et
  * corbeille (E11-S02, connecteur natif `node`) ; ERP (E08-S05) s'y ajoute ; le dépôt par lien (E10-S02 lot f, connecteur
- * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; les fonctions des connecteurs
+ * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; les fonctions des connecteurs
  * décrits que l'hôte déclare (`registerConnectors`).
  */
 export function catalogFunctions(): CatalogFunction[] {
@@ -51,6 +52,8 @@ export function catalogFunctions(): CatalogFunction[] {
     nodeTrash,
     nodeMove,
     nodeWriteMany,
+    nodeExportTree,
+    nodeImportTree,
     uploadLink,
     ...erpFunctions(),
     ...declaredConnectors().flatMap((connector) => connector.functions),

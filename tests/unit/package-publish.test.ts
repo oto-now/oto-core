@@ -73,7 +73,8 @@ describe("package manifest (AC1)", () => {
     // 1.1.3 : mermaid, le dessin des blocs mermaid, chargé à la demande dans le navigateur (`ui/noeud/diagramme-mermaid.tsx`).
     // E10-S02 lot a : aws4fetch, la signature SigV4 du port de stockage S3 (`server/files/s3.ts`, ADR-016).
     // Moteur des connecteurs décrits : ajv, la validation du JSON Schema 2020-12 d'un connecteur décrit (`server/catalog/arguments.ts`).
-    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.26.0", ajv: "8.20.0", aws4fetch: "1.0.20", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
+    // fflate : les ZIP du transfert d'une arborescence (`server/transfer/formats.ts`).
+    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.26.0", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
     expect(pkg.peerDependencies.zod).toBe("^3.25")
   })
 })

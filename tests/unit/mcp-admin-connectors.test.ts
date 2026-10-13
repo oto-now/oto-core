@@ -190,7 +190,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       const crm = catalogFunctions()
         .filter((fn) => fn.connector === "crm")
         .sort((a, b) => a.name.localeCompare(b.name))
-      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.write_many (write)"])
+      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.write_many (write)", "node.export_tree (read)", "node.import_tree (write)"])
       expect(uploads.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["upload.link (write)"])
       expect(listed.text).toBe(
         [

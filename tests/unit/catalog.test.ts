@@ -106,6 +106,9 @@ describe("catalog (AC23)", () => {
       // E11-S18 (AC-5, AC-12) : déplacer, écrire par lot.
       "node.move",
       "node.write_many",
+      // Transfert d'une arborescence d'un MCP Oto à un autre.
+      "node.export_tree",
+      "node.import_tree",
       // E10-S02 (lot f) : le dépôt par lien à usage unique.
       "upload.link",
     ])

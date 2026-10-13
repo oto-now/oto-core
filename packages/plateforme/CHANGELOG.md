@@ -17,7 +17,12 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- `node.export_tree` exports one or several roots with everything under them to a signed address valid one hour: a faithful JSON for another Oto platform, or a zip of .md and .csv.
+- `node.import_tree` imports such an address, a zip of .md and .csv, a single .md or .csv, or a file attached to a page, in two passes with links following; `continue_from` resumes a long import.
+
 ### Hosts
+- Server: `node.export_tree` writes its file in your storage bucket under `<org id>/exports/` and nothing removes it after its one-hour address; a lifecycle rule on that prefix can expire it.
 - MCP: in OIDC mode, a token is also accepted when its `aud` is the resource the metadata announce for the called address (`<origin>/api/mcp`, `<origin>/api/mcp-admin`), besides `PLATFORM_OIDC_AUDIENCE`. An issuer that puts the requested resource in `aud` (Logto) now serves the admin MCP and every organisation address, each declared at the issuer as an API resource; a token issued for another address is still refused.
 - Install: the reference host's `src/middleware.ts` builds its redirects on `X-Forwarded-Host` (else `Host`) and `X-Forwarded-Proto`: under `next start` behind a proxy it sent browsers to `https://localhost:<port>`. Copy the new `publicUrl` into your middleware.
 

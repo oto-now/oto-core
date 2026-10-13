@@ -47,6 +47,7 @@
     "@modelcontextprotocol/sdk": "1.26.0",
     "ajv": "8.20.0",
     "aws4fetch": "1.0.20",
+    "fflate": "0.8.3",
     "jose": "6.2.12",
     "mcp-handler": "1.1.0",
     "mermaid": "11.17.2",
@@ -54,28 +55,40 @@
     "postgres": "3.4.9"
   },
   "peerDependencies": {
+    "@hookform/resolvers": "^5",
+    "@modelcontextprotocol/ext-apps": "^1.7",
+    "@phosphor-icons/react": "^2",
     "@supabase/supabase-js": "^2",
+    "@tailwindcss/postcss": "^4",
+    "@vitejs/plugin-react": "^4",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19",
-    "@phosphor-icons/react": "^2",
-    "zod": "^3.25",
     "react-hook-form": "^7.55",
-    "@hookform/resolvers": "^5",
-    "vite": "^7",
-    "@vitejs/plugin-react": "^4",
-    "vite-plugin-singlefile": "^2.3",
-    "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
-    "@modelcontextprotocol/ext-apps": "^1.7"
+    "vite": "^7",
+    "vite-plugin-singlefile": "^2.3",
+    "zod": "^3.25"
   },
   "peerDependenciesMeta": {
-    "vite": { "optional": true },
-    "@vitejs/plugin-react": { "optional": true },
-    "vite-plugin-singlefile": { "optional": true },
-    "@tailwindcss/postcss": { "optional": true },
-    "tailwindcss": { "optional": true },
-    "@modelcontextprotocol/ext-apps": { "optional": true }
+    "vite": {
+      "optional": true
+    },
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
+    "vite-plugin-singlefile": {
+      "optional": true
+    },
+    "@tailwindcss/postcss": {
+      "optional": true
+    },
+    "tailwindcss": {
+      "optional": true
+    },
+    "@modelcontextprotocol/ext-apps": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",

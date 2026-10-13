@@ -82,6 +82,7 @@
     "eslint": "^9",
     "eslint-config-next": "^15",
     "eslint-plugin-import": "^2.32.0",
+    "fflate": "0.8.3",
     "jose": "6.2.12",
     "jsdom": "^26",
     "mermaid": "11.17.2",

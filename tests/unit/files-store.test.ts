@@ -36,9 +36,9 @@ describe("fileStore (AC-a1)", () => {
     expect(fileStore({ ...storageEnv(), [name]: "" })).toBeNull()
   })
 
-  it("should give a store of five operations with the five variables", () => {
+  it("should give a store of six operations with the five variables", () => {
     const store = fileStore(storageEnv())
-    expect(Object.keys(store ?? {}).sort()).toEqual(["copy", "head", "readUrl", "remove", "uploadUrl"])
+    expect(Object.keys(store ?? {}).sort()).toEqual(["copy", "head", "put", "readUrl", "remove", "uploadUrl"])
   })
 
   it("should name the five variables in the not_enabled refusal", () => {
