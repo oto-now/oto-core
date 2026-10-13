@@ -70,7 +70,7 @@ function LigneDePersonne({ nom, email, precision, actions = [] }: { nom: string;
         )
       }
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="ms-2 flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate">{nom}</span>
         {precision && <span className="oto-caption">{precision}</span>}
         <span className="oto-caption truncate">{email}</span>
@@ -117,6 +117,7 @@ function Dedans({ equipe, ...props }: Omit<SectionsProps, "dehors" | "ajouter">)
         {pluriel(equipe.members.length, "personne", "personnes")}
       </h3>
       <RowList
+        className="flex flex-col gap-1"
         aria-label={`Les personnes de ${equipe.name}`}
         empty={
           <EmptyState icon={<AnimatedIcon as={UsersThree} size="lg" />} title="Personne pour l'instant">
@@ -145,6 +146,7 @@ function Dehors({ equipe, dehors, enCours, ajouter }: Pick<SectionsProps, "equip
         Ajouter quelqu&apos;un
       </h3>
       <RowList
+        className="flex flex-col gap-1"
         aria-label={`À ajouter à ${equipe.name}`}
         empty={
           <EmptyState icon={<AnimatedIcon as={UsersThree} size="lg" />} title="Tout le monde y est déjà">
@@ -219,6 +221,7 @@ export function PersonnesDeLEquipe({ equipe, personnes, compose, nommeLesRespons
       open
       onClose={onFermer}
       title={`Les personnes de ${equipe.name}`}
+      size="xl"
       footer={
         <Button variant="secondary" onClick={onFermer}>
           Fermer

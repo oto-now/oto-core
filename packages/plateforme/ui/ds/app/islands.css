@@ -51,7 +51,8 @@
   flex-direction: column;
 }
 
-.oto-island[data-overflow="visible"] { overflow: visible; }
+/* Un îlot qui laisse sortir son contenu ne le fait pas défiler : il prend sa hauteur, sans rétrécir dans la colonne du contenu, qui défile à sa place ; rétréci, son contenu passait sous son bord. */
+.oto-island[data-overflow="visible"] { overflow: visible; flex-shrink: 0; }
 
 /* l'îlot qui prend la place restante dans un groupe */
 .oto-island[data-grow], .oto-desk-group > .oto-island.oto-grow { flex: 1; }
