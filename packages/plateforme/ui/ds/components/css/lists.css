@@ -20,8 +20,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  inline-size: 20px;
-  block-size: 20px;
+  /* Au moins 20 px, et la taille de ce qu'elle porte : un avatar de 24 px débordait d'une boîte de 20 et passait sous le texte. */
+  min-inline-size: 20px;
+  min-block-size: 20px;
   color: var(--ink);
 }
 

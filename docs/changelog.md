@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-13] — 1.4.1 : version corrective partie de 1.4.0 (écran Équipes)
+
+**Quoi :** depuis `v1.4.0`, sur la branche `release/1.4.1` : les correctifs de l'écran Équipes de `main` (barre d'onglets, îlot qui débordait, modale « Les personnes de … » élargie, case de tête d'une ligne) et leur garde `tests/unit/css-debordements.test.ts` ; la CI tourne aussi sur `release/**`. `version` 1.4.1, aucune migration.
+**Pourquoi :** décision de JB : publier ces correctifs sans le lot de connecteurs que porte `main` pour la 1.5.0.
+**Fichiers :** `packages/plateforme/ui/ds/{app/islands.css,components/css/{navigation,lists,dialog}.css,react/dialog.tsx}`, `packages/plateforme/ui/equipes/personnes-de-l-equipe.tsx`, `tests/unit/css-debordements.test.ts`, `.github/workflows/ci.yml`, `packages/plateforme/{package.json,CHANGELOG.md}`.
+
 ## [2026-10-03] — 1.4.0 : entrée sans invitation, bascule jour ou nuit au menu du compte, version du paquet
 
 **Quoi :** migration `20261003090000_v1_4_0.sql` (table `member_exclusions` sous RLS, `open_entry_gate` interne, `open_entry_admits`, `join_org`, `accept_invitations` qui lève l'exclusion, `forget_user` qui les emporte) ; `server/open-entry.ts` (`readOpenEntry`, `setOpenEntry`, `enterOrg`) ; `resolveIdentity` tente l'entrée après un refus `not_member` d'une session ; `removeMember` inscrit l'exclusion ; `PATCH admin/open-entry` ; `EntreeSansInvitation` sous les membres ; la porte MCP sert le plafond comme un refus ; `PlatformDb.retranslate` fait relire l'identité créée par l'entrée. Bascule jour ou nuit : `Hote.apparence`, entrée du menu du compte. `version` 1.4.0, qui porte aussi les widgets (éteints par défaut) et l'adresse choisie par l'hôte.

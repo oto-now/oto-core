@@ -17,6 +17,13 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.1 — 2026-10-13
+
+### Hosts
+- Install: upgrade to 1.4.1; no migration, no new variable, no import to change.
+- UI: with many members, « Équipes & accès » no longer crushes its tab bar nor lets the entry setting fall out of its card: the tab bar keeps its height and an island that lets its content out takes its height, the page scrolling instead.
+- UI: « Les personnes de <équipe> » opens twice as wide (`Dialog size="xl"`, 1040 px), its rows 4 px apart; the lead of a row takes the size of what it holds, so a 24 px avatar no longer runs under the name.
+
 ## 1.4.0 — 2026-10-03
 
 ### Hosts

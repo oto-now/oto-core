@@ -71,7 +71,7 @@ type DialogProps = Omit<ComponentProps<"dialog">, "title" | "open"> & {
   onClose: () => void
   title?: ReactNode
   description?: ReactNode
-  size?: "sm" | "md" | "lg"
+  size?: "sm" | "md" | "lg" | "xl"
   footer?: ReactNode
   closeLabel?: string
 }

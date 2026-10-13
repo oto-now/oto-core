@@ -27,6 +27,8 @@
 }
 .oto-dialog[data-size="sm"] { inline-size: min(400px, calc(100vw - var(--space-8))); }
 .oto-dialog[data-size="lg"] { inline-size: min(720px, calc(100vw - var(--space-8))); }
+/* Une liste de personnes, nom, adresse et deux gestes par ligne : à 520 px, l'adresse se coupait après quelques lettres. */
+.oto-dialog[data-size="xl"] { inline-size: min(1040px, calc(100vw - var(--space-8))); }
 
 /* `backwards` : comme `.oto-pop` (`overlay.css`), le dialogue ouvert n'est pas le bloc conteneur de la liste d'un `Select`. */
 .oto-dialog[open] { animation: oto-zoom var(--dur-base) var(--ease-out) backwards; }

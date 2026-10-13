@@ -12,6 +12,8 @@
   border-block-end: 1px solid var(--hair);
   overflow-x: auto;
   scrollbar-width: none;
+  /* Une bande : dans une colonne flex, `overflow-x` ramène sa hauteur minimale à zéro, et la barre s'écrasait sous un contenu long. */
+  flex: none;
 }
 .oto-tabs::-webkit-scrollbar { display: none; }
 

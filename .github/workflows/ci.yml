@@ -8,7 +8,9 @@ name: CI — Build
 
 on:
   push:
-    branches: [main]
+    # `release/**` : une version corrective partie d'un tag (`release/1.4.1` depuis `v1.4.0`), quand main porte un lot pas encore
+    # publiable ; son tag ne part que d'un commit où ces jobs sont verts, comme sur main.
+    branches: [main, "release/**"]
   pull_request:
     branches: [main]
 
