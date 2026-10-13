@@ -138,13 +138,16 @@ migrations du paquet ; `admin_cell {"op":"migrations"}` les compte (§ 4.3, éta
    proche.
 2. **Organisation** : un membre de l'équipe plateforme, dans un assistant branché sur
    `https://<adresse>/api/mcp-admin`, appelle `admin_context`, puis
-   `admin_org {"op":"create","org":"<slug>","name":"<nom>","prefix":"<préfixe>","host":"<adresse>"}`,
+   `admin_org {"op":"create","org":"<slug>","name":"<nom>","prefix":"<préfixe>","host":"<adresse>","admin_email":"<email>"}`,
    une première fois pour le résumé, une seconde avec `"confirm": true`. Le préfixe nomme les outils
    de l'organisation pour toujours.
-3. **Premier administrateur** : le membre de l'équipe plateforme ouvre l'adresse de l'organisation
-   (il y a un accès plateforme), écran « Équipes », et invite la personne en rôle administrateur. En
-   mode OIDC, l'email part par le relais de l'hôte ; la personne se connecte ou crée son compte chez
-   l'émetteur avec cette adresse, et entre.
+3. **Premier administrateur** : `admin_email` est exigé à la création. Votre propre adresse (celle
+   de votre jeton) vous fait membre administrateur dès la création, sans invitation ni email, en mode
+   OIDC comme en mode Supabase. Une autre adresse reçoit l'invitation administrateur de l'écran
+   « Équipes », dont le lien mène à une adresse de l'organisation ; en mode OIDC, l'email part par le
+   relais de l'hôte, et la personne se connecte ou crée son compte chez l'émetteur avec cette adresse,
+   et entre. Pour une organisation déjà créée : `admin_org {"op":"add_admin","org":"<slug>","admin_email":"<email>"}`,
+   même règle ; un membre présent devient administrateur.
 
 ## Développer le paquet
 

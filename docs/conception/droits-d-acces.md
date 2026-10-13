@@ -1,7 +1,7 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-10-05
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
@@ -90,7 +90,7 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 
 ### Équipe plateforme
 
-- L'équipe plateforme (`platform_staff`) entre dans une organisation par un accès daté (`platform_grants`), donné à qui la crée, révocable par l'administrateur du client ; avec un accès en cours, elle agit en administrateur hors espaces personnels (H73). Elle reçoit un accès à l'organisation qu'elle crée, puis invite le client ; l'administrateur du client voit ces accès, nommés et datés, et peut les révoquer (D2).
+- L'équipe plateforme (`platform_staff`) entre dans une organisation par un accès daté (`platform_grants`), donné à qui la crée, révocable par l'administrateur du client ; avec un accès en cours, elle agit en administrateur hors espaces personnels (H73). Elle reçoit un accès à l'organisation qu'elle crée et en nomme le premier administrateur, elle-même ou le client invité ([administration et cellule](administration-et-cellule.md)) ; l'administrateur du client voit ces accès, nommés et datés, et peut les révoquer (D2).
 - Un membre de l'équipe plateforme avec un accès en cours peut devenir membre de l'organisation ; la liste des accès plateforme montre à côté les membres ajoutés par l'équipe plateforme (D17). Ces membres, lus dans `invitations`, ne se lisent et ne se servent qu'aux administrateurs de l'organisation, jamais au reste de l'équipe plateforme (HN-E01S07-C2).
 - `platform_access_directory(p_org)` nomme, pour le staff et les administrateurs de l'organisation, qui tient ou a tenu un accès plateforme et qui en a accordé ou révoqué un sans être membre ; rien pour les autres (E01-S04 N14). Nom et email s'y lisent dans `platform_staff`, puis `members`, puis la copie posée sur l'accès (P27).
 
@@ -137,3 +137,4 @@ Aucune à ce jour.
 - 2026-09-28 : plusieurs responsables par équipe, équipe par défaut retirée, règles et accès plateforme hors de l'écran Équipes & accès — décidé par JB (source : fiches D127, D128, story E05-S13).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-014, les fiches D2, D4, D5, D17, D18, D20, D94, D101, D127, D128 et les choix H, P et de story — décidé par Alexis, accord de JB.
 - 2026-10-05 : autorisation répartie et recalculée au front écartée, leçon d'oto 1 (ADR 0053, 0066) — décidé par Alexis (source : tri des issues d'oto-enterprise du 05/10).
+- 2026-10-14 : l'équipe plateforme nomme le premier administrateur de l'organisation qu'elle crée (elle-même, membre sans email, ou le client invité) au lieu de l'inviter ensuite — décidé par Alexis (source : [administration et cellule](administration-et-cellule.md)).

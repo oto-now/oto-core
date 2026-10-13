@@ -155,14 +155,21 @@ export type SignupInput = z.infer<typeof signupSchema>
  */
 export type PersonOrganisation = { id: string; name: string; host: string | null; current: boolean }
 
-/** `create` d'`admin_org` : slug, nom, préfixe, première adresse facultative, deux temps (N8). */
+/**
+ * `create` d'`admin_org` : slug, nom, préfixe, première adresse facultative, premier administrateur exigé (décision du
+ * 2026-10-14 : l'appelant lui-même, membre `admin` tout de suite, ou une autre adresse, invitée `admin`), deux temps (N8).
+ */
 export const orgCreateSchema = z.strictObject({
   org: orgSlugSchema,
   name: orgNameSchema,
   prefix: toolPrefixSchema,
   host: hostSchema.optional(),
+  admin_email: emailSchema,
   confirm: z.boolean().optional(),
 })
+
+/** `add_admin` d'`admin_org` : l'organisation visée et l'email de l'administrateur à nommer, selon la règle de `create`. */
+export const addAdminSchema = z.object({ org: orgSlugSchema, admin_email: emailSchema })
 
 /** `add_host` et `remove_host` d'`admin_org` (seul `remove_host` passe en deux temps). */
 export const hostOpSchema = z.object({ org: orgSlugSchema, host: hostSchema, confirm: z.boolean().optional() })

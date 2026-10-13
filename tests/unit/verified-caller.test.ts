@@ -65,7 +65,7 @@ describe("verified caller at the three gates (E01-S10 part a)", () => {
     const claims = (await verifyToken(request, bearer))?.extra
 
     const mcp = await resolveMcpRequest({ accessToken: bearer, claims, host: HOST, origin: `https://${HOST}`, userAgent: null })
-    await expect(openAdminRequest({ accessToken: bearer, claims, userAgent: null })).rejects.toMatchObject({ code: "forbidden" })
+    await expect(openAdminRequest({ accessToken: bearer, claims, userAgent: null, origin: "https://cell.example.test" })).rejects.toMatchObject({ code: "forbidden" })
     const api = await handlePlateforme(request, { accessToken: bearer, host: HOST, verifyToken, defer: () => {} })
 
     expect([mcp.kind, api.status]).toEqual(["unknown_org", 404])

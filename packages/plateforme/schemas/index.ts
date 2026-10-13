@@ -86,6 +86,7 @@ export type { Activity, ActivityPage, ActivityVerb, UsefulProcedure } from "./ac
 // `platformAccessSchema.shape`). `hostSchema` sort seul : E09-S02 en passe chaque adresse d'une création
 // et le domaine de base de la cellule (E08-S02).
 export {
+  addAdminSchema,
   emailSchema,
   hostOpSchema,
   hostSchema,

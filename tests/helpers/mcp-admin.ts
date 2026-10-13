@@ -58,6 +58,9 @@ export async function connectAdminMcp(deps: AdminMcpDeps) {
 
 export type AdminSession = Awaited<ReturnType<typeof connectAdminMcp>>
 
+/** L'origine du MCP admin des tests (`calledOrigin` de la route) : le lien d'une invitation en reprend protocole et port. */
+export const ADMIN_ORIGIN = "http://cell.test:3000"
+
 // Les personnes, organisations et équipes de la base simulée des tests admin, en UUID : les services
 // d'E05-S03 lisent leurs identifiants par `parseId`.
 const id = (block: string, n: number) => `${block}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`
@@ -299,6 +302,7 @@ export function simulatedAdmin(
     // tests qui ne touchent pas la base (liste des outils, contrat).
     db: simulated.db,
     caller: { userId: PERSONS[caller].id, email: PERSONS[caller].email },
+    origin: ADMIN_ORIGIN,
     userAgent: "vitest",
     journal: [],
   }

@@ -47,12 +47,12 @@ describe.skipIf(!sqlConfigured)(portable(SUITE), { timeout: NETWORK_TIMEOUT }, (
   it.skipIf(privatePending)(privateFolderSuite("should anchor an admin session, name a taken slug or prefix, create an organisation and journal apart (AC6, AC16, AC22, N24)", privatePending), async () => {
     const { accessToken } = await fx.sessionFor(staff)
     const userAgent = `vitest-admin-${hex(3)}`
-    const session = await connectAdminMcp(await openAdminRequest({ accessToken, claims: { sub: staff.id, email: staff.email }, userAgent }))
+    const session = await connectAdminMcp(await openAdminRequest({ accessToken, claims: { sub: staff.id, email: staff.email }, userAgent, origin: "https://cell.example.test" }))
     const { code } = await session.openAdmin()
     const anchor = await admin`select tool, op, user_id, org_id, is_error from platform.admin_journal where ctx = ${code}`
     expect(anchor).toEqual([{ tool: "admin_context", op: "ctx", user_id: staff.id, org_id: null, is_error: false }])
 
-    const create = (args: Record<string, unknown>) => session.call("admin_org", { ctx: code, op: "create", confirm: true, ...args })
+    const create = (args: Record<string, unknown>) => session.call("admin_org", { ctx: code, op: "create", confirm: true, admin_email: staff.email, ...args })
     const slugTaken = await create({ org: taken.slug, name: "Taken", prefix: `t${hex(4)}` })
     expect(slugTaken.text).toBe(`Slug ${taken.slug} is already taken. Pick another slug.`)
     const prefixTaken = await create({ org: `t${hex(4)}`, name: "Taken", prefix: taken.prefix })
@@ -63,6 +63,7 @@ describe.skipIf(!sqlConfigured)(portable(SUITE), { timeout: NETWORK_TIMEOUT }, (
     // Slug égal au préfixe, `t<hex>` : la marque des données de test que reconnaît `pnpm test:cleanup`.
     const slug = `t${hex(4)}`
     const host = `${slug}.example.invalid`
+    // Le créateur se nomme premier administrateur (décision du 2026-10-14) : membre `admin`, sans invitation.
     const created = await create({ org: slug, name: `Test ${slug}`, prefix: slug, host })
     // `structuredContent.org` : l'organisation créée, que rend `create` (AC16) ; typée objet quelconque.
     const orgId = String((created.structured?.org as { id?: string } | undefined)?.id)
@@ -70,16 +71,22 @@ describe.skipIf(!sqlConfigured)(portable(SUITE), { timeout: NETWORK_TIMEOUT }, (
     expect(created.text.split("\n")[0]).toBe(
       `Organisation ${slug} (Test ${slug}) created: root page guide, context page contexte, personal spaces (private), your platform access, address ${host}.`,
     )
-    const [nodes, grants, domains] = await Promise.all([
+    expect(created.text.split("\n")[1]).toBe(`You (${staff.email}) are its first administrator: a member with the admin role.`)
+    const [nodes, grants, domains, members] = await Promise.all([
       admin`select path, kind from platform.nodes where org_id = ${orgId} order by path`,
       admin`select user_id, granted_by, reason, revoked_at from platform.platform_grants where org_id = ${orgId}`,
       admin`select host from platform.org_domains where org_id = ${orgId}`,
+      admin`select user_id, role from platform.members where org_id = ${orgId}`,
     ])
-    expect(nodes).toEqual([
-      { path: "contexte", kind: "context" },
-      { path: "guide", kind: "page" },
-      { path: "private", kind: "page" },
+    // Son espace personnel et son Contexte naissent avec sa ligne `members` (`members_tree_sync`).
+    expect(nodes.map((node) => node.path)).toEqual([
+      "contexte",
+      "guide",
+      "private",
+      expect.stringMatching(/^private\/[a-z0-9_]+$/),
+      expect.stringMatching(/^private\/[a-z0-9_]+\/contexte$/),
     ])
+    expect(members).toEqual([{ user_id: staff.id, role: "admin" }])
     expect(grants).toEqual([{ user_id: staff.id, granted_by: staff.id, reason: "creation", revoked_at: null }])
     expect(domains).toEqual([{ host }])
 

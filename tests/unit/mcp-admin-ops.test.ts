@@ -21,6 +21,9 @@ const CODE = /^ctx: ([0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}) \(admin sessio
 const MISSING = "Missing or unknown admin ctx. Call admin_context first and pass its ctx code."
 const STALE = "Admin ctx expired after 24 hours: call admin_context again, then retry this call."
 const HOUR = 3600 * 1000
+/** Ce que fait `create`, dans son contrat (`op help`), depuis le premier administrateur exigé (décision du 2026-10-14). */
+const CREATE_SUMMARY =
+  "Creates an organisation with its root page, context page, personal spaces, your platform access, its first address and its first administrator (admin_email): your own email makes you a member with the admin role at creation, without email; another email is invited with the admin role, by the invitation email of the web app (Équipes)."
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
 
@@ -151,10 +154,10 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       const { session, code } = await opened()
       const acme = admin.orgs.acme.slug
       const unknown = await session.call("admin_org", { ctx: code, op: "delete", org: acme })
-      expect(unknown.text).toBe("Unknown op delete for admin_org. Operations: help, list, get, create, update, add_host, remove_host, grant_access, revoke_access.")
+      expect(unknown.text).toBe("Unknown op delete for admin_org. Operations: help, list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin.")
       const extra = await session.call("admin_org", { ctx: code, op: "get", org: acme, name: "Acme" })
       expect(extra.text).toBe('Field name is not used by op get of admin_org. Fields of get: org. Call admin_org {"op": "help"} for details.')
-      const invalid = await session.call("admin_org", { ctx: code, op: "create", org: "acme2", name: "Acme Deux", prefix: "2acme" })
+      const invalid = await session.call("admin_org", { ctx: code, op: "create", org: "acme2", name: "Acme Deux", prefix: "2acme", admin_email: "alice@example.com" })
       expect(invalid.text).toBe(
         'Invalid arguments for admin_org op create: prefix: 2 to 12 lowercase letters or digits, starting with a letter. Call admin_org {"op": "help"} for details.',
       )
@@ -178,13 +181,27 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       expect(text).toContain(
         [
           "Op create (two steps: without confirm: true it returns a summary and changes nothing)",
-          "Creates an organisation with its root page, context page, personal spaces, your platform access and its first address.",
-          "Required: org, name, prefix. Optional: host, confirm.",
-          'Example: admin_org {"op":"create","ctx":"7K3Q-M2XA","org":"acme2","name":"Acme Deux","prefix":"acmedeux","host":"acme2.localhost"}',
+          `${CREATE_SUMMARY}`,
+          "Required: org, name, prefix, admin_email. Optional: host, confirm.",
+          'Example: admin_org {"op":"create","ctx":"7K3Q-M2XA","org":"acme2","name":"Acme Deux","prefix":"acmedeux","host":"acme2.localhost","admin_email":"alice@example.com"}',
           "Possible refusals:",
+          "- invalid_arguments: Inviting <admin_email> needs an address of <org> to sign in at: pass host, or name yourself with admin_email.",
           "- conflict: Address <host> already opens another organisation.",
         ].join("\n"),
       )
+      // Décision du 2026-10-14 : l'opération qui nomme un administrateur d'une organisation existante, ajoutée en dernier.
+      expect(text.endsWith(
+        [
+          "Op add_admin",
+          "Names an administrator of the organisation, by the rule of create: your own email makes you a member with the admin role at once, without email; a member becomes an administrator; another email is invited with the admin role, by the invitation email of the web app (Équipes).",
+          "Required: org, admin_email. Optional: none.",
+          'Example: admin_org {"op":"add_admin","ctx":"7K3Q-M2XA","org":"acme","admin_email":"alice@example.com"}',
+          "Possible refusals:",
+          '- invalid_arguments: Inviting <admin_email> needs an address of <org> to sign in at: add one with admin_org {"op": "add_host"} first.',
+          "- conflict: An invitation is already pending for <admin_email>. Revoke it to send another.",
+          "- forbidden: op <op> of admin_org is reserved to platform team members who administer <org>.",
+        ].join("\n"),
+      )).toBe(true)
       expect(text).toContain("Op get\nReads an organisation")
     })
 
@@ -196,7 +213,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       }
       const without = await help(await connectAdminMcp(deps))
       const hooked = await help(await connectAdminMcp({ ...deps, orgCreation: { addresses: () => [], created: async () => [] } }))
-      const summary = "Creates an organisation with its root page, context page, personal spaces, your platform access and its first address."
+      const summary = CREATE_SUMMARY
       const added = "The application may add its own addresses, for example a sub-domain of this cell: the summary lists them before anything is created."
       expect(without).not.toContain(added)
       expect(hooked).toBe(without.replace(summary, `${summary} ${added}`))
@@ -216,7 +233,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           [demo.slug, `- ${demo.slug} · Démo · admin (member)`],
         ]),
         "Admin tools (pass ctx on every call, and org = the organisation slug):",
-        "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access",
+        "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin",
         "- admin_team: list, create, rename, set_lead, add_lead, remove_lead, add_member, remove_member, delete",
         "- admin_node: move, publish, transfer_owner, rules, add_rule, remove_rule",
         "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule",
@@ -296,7 +313,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
         ].join("\n"),
       )
       // Slug et adresse jetables : aucune organisation du projet partagé ne les porte.
-      const draft = { org: `t${hex(4)}`, name: "Acme Deux", prefix: "acmedeux", host: `t${hex(4)}.example.invalid` }
+      const draft = { org: `t${hex(4)}`, name: "Acme Deux", prefix: "acmedeux", host: `t${hex(4)}.example.invalid`, admin_email: "alice@example.com" }
       const preview = await org({ op: "create", ...draft })
       expect(preview).toMatchObject({ isError: false, structured: expect.objectContaining({ next_actions: [] }) })
       expect(preview.text).toBe(
@@ -304,6 +321,8 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           `About to create organisation Acme Deux (slug ${draft.org}).`,
           "Its assistant tools will be named acmedeux_context, acmedeux_find, acmedeux_read, acmedeux_call, acmedeux_write, acmedeux_feedback, for good: the prefix never changes and no operation deletes an organisation.",
           `Address: ${draft.host}`,
+          // Décision du 2026-10-14 : le récapitulatif dit lequel des deux cas se produira, ici une invitation.
+          `First administrator: alice@example.com, invited with the admin role once it is created, by the invitation email of the web app (Équipes), with a link to http://${draft.host}:3000, valid 7 days; they become a member when they sign in with that address.`,
           // E05-S13 (AC-7) : plus de promesse d'un écran client qui montre et révoque l'accès.
           "You get a platform access to it. Your calls are recorded in its journal, which its administrators read.",
           "Nothing was created. Show this to the user and ask for explicit approval, then call again with confirm: true.",
@@ -351,6 +370,24 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
         ].join("\n"),
       )
       expect((await org({ op: "revoke_access", email: sam.email, confirm: true })).text).toBe(`Platform access of ${sam.email} to ${acme.slug} revoked.`)
+    })
+
+    it("should name an administrator: oneself a member at once, a member promoted, an administrator unchanged (add_admin, 2026-10-14)", async () => {
+      const mine = await ownSeed()
+      const { session, code } = await opened(mine.admin)
+      const { acme } = mine.admin.orgs
+      const { sam, claire, ada } = mine.admin.persons
+      const named = (email: string) => session.call("admin_org", { ctx: code, op: "add_admin", org: acme.slug, admin_email: email })
+      const self = await named(sam.email.toUpperCase())
+      expect(self).toMatchObject({ isError: false, text: `You (${sam.email}) are now a member of ${acme.slug} with the admin role.` })
+      expect(self.structured).toMatchObject({ admin: { email: sam.email, self: true, outcome: "joined" }, next_actions: ["admin_org get"] })
+      expect((await named(sam.email)).text).toBe(`You (${sam.email}) are already an administrator of ${acme.slug}: nothing changed.`)
+      expect((await named(claire.email)).text).toBe(`${claire.email} is now an administrator of ${acme.slug}: they were a member.`)
+      expect((await named(ada.email)).text).toBe(`${ada.email} is already an administrator of ${acme.slug}: nothing changed.`)
+      const roles = await mine.seed.admin<Row[]>`select user_id, role from platform.members where org_id = ${acme.id} and role = 'admin' order by user_id`
+      expect(roles.map((row) => mine.admin.readable(row)).sort((a, b) => String(a.user_id).localeCompare(String(b.user_id)))).toEqual(
+        [PERSONS.ada.id, PERSONS.claire.id, PERSONS.sam.id].sort().map((id) => ({ user_id: id, role: "admin" })),
+      )
     })
   })
 

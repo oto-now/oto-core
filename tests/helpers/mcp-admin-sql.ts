@@ -12,7 +12,7 @@
 // autre personne, ou en retirant la ligne de `platform_staff`. Les lignes d'`admin_journal` survivent à
 // leur organisation (`on delete set null`) : `forgetJournal()` avant `seed.cleanup()`.
 import type { AdminMcpDeps } from "../../packages/plateforme/mcp/admin/server"
-import { adminTables, adminTree, ORGS, PERSONS, type AdminPerson } from "./mcp-admin"
+import { ADMIN_ORIGIN, adminTables, adminTree, ORGS, PERSONS, type AdminPerson } from "./mcp-admin"
 import { keysOf, mapRecord, personDb, simulatedIds, writeTables, type Directory, type SeededNamed } from "./reference-org-sql"
 import type { Tables } from "./simulated-db"
 import type { SeededData, SeededOrg } from "./sql"
@@ -80,6 +80,7 @@ export async function seedAdminFixture(seed: SeededData, options: { tree?: boole
     deps: async (caller) => ({
       db: await personDb(persons[caller]),
       caller: { userId: persons[caller].id, email: persons[caller].email },
+      origin: ADMIN_ORIGIN,
       userAgent: "vitest",
       journal: [],
     }),

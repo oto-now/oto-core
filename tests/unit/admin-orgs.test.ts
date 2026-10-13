@@ -8,8 +8,10 @@
 // il le défait après lui, même en échec (`undo`) : chacun passe seul. Slugs, adresses et emails sont
 // jetables : les lignes se comparent par `readable`, les textes portent les valeurs réelles. En
 // suite portable (`sqlConfigured`) : le projet, ou le Postgres nu du job `bare-postgres`.
+import { AuthClient } from "@supabase/supabase-js"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  addAdmin,
   addHost,
   createOrg,
   describeTeamDeletion,
@@ -22,7 +24,7 @@ import {
   updateOrg,
   type StaffCaller,
 } from "@otomata_tech/oto_platform/server"
-import { adminTables, ORGS, PERSONS, type AdminPerson } from "../helpers/mcp-admin"
+import { ADMIN_ORIGIN, adminTables, ORGS, PERSONS, type AdminPerson } from "../helpers/mcp-admin"
 import { seedAdminFixture, type AdminFixtureSql } from "../helpers/mcp-admin-sql"
 import { isoInstants, sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
 import { createdOrgs, recordRequests, requestedWrites, undoAll } from "../helpers/spy-t1-d2a"
@@ -49,6 +51,9 @@ function bySlug<T>(entries: [string, T][]): T[] {
   return [...entries].sort(([a], [b]) => a.localeCompare(b)).map(([, value]) => value)
 }
 
+/** L'origine du MCP admin appelé, que `createOrg` et `addAdmin` reçoivent de la route. */
+const origin = { origin: ADMIN_ORIGIN }
+
 /** Un texte tel quel dans une expression régulière. */
 const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
@@ -58,7 +63,22 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
+
+/**
+ * L'email d'une invitation en mode Supabase (le lien magique, `signInWithOtp`), simulé : rien ne part vers le projet.
+ * `failing` : l'envoi refusé, comme un service d'email en panne.
+ */
+function magicLinks({ failing = false } = {}) {
+  vi.stubEnv("PLATFORM_OIDC_ISSUER", "")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.example.invalid")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key")
+  const refused = { name: "AuthApiError", message: "unavailable", status: 500 }
+  const answer = failing ? { data: { user: null, session: null }, error: refused } : { data: { user: null, session: null }, error: null }
+  // L'erreur de Supabase Auth est une classe : la réponse simulée n'en reprend que les champs que lit le service.
+  return vi.spyOn(AuthClient.prototype, "signInWithOtp").mockResolvedValue(answer as never)
+}
 
 describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP (E08-S02)"), { timeout: NETWORK_TIMEOUT }, () => {
   let seed: SeededData
@@ -171,17 +191,21 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
 
   describe("create an organisation (AC15, AC16)", () => {
     /** Une organisation à créer : slug jetable, noté pour le ménage, qui sert aussi de préfixe (`pnpm test:cleanup`), et une adresse libre. */
-    function draftOf(name: string) {
+    function draftOf(name: string, adminEmail = admin.persons.sam.email) {
       const slug = orgs.slug()
-      return { org: slug, name, prefix: slug, host: `${slug}.example.test` }
+      return { org: slug, name, prefix: slug, host: `${slug}.example.test`, admin_email: adminEmail }
     }
 
     it("should write nothing before confirm, and refuse an address taken as soon as the first step", async () => {
       const spy = recordRequests(await dbOf("sam"))
       const draft = draftOf("Acme Deux")
-      expect(await createOrg(spy.db, as("sam"), draft)).toEqual({ created: false, org: { slug: draft.org, name: "Acme Deux", prefix: draft.prefix, host: draft.host } })
+      expect(await createOrg(spy.db, as("sam"), draft, origin)).toEqual({
+        created: false,
+        org: { slug: draft.org, name: "Acme Deux", prefix: draft.prefix, host: draft.host },
+        firstAdmin: { email: admin.persons.sam.email, self: true },
+      })
       const taken = admin.orgs.acme.host
-      await expect(createOrg(spy.db, as("sam"), { ...draft, host: taken })).rejects.toMatchObject({
+      await expect(createOrg(spy.db, as("sam"), { ...draft, host: taken }, origin)).rejects.toMatchObject({
         code: "conflict",
         message: `Address ${taken} already opens another organisation.`,
       })
@@ -190,7 +214,7 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
 
     it("should refuse a caller outside the platform team before any other request", async () => {
       const spy = recordRequests(await dbOf("ada"))
-      await expect(createOrg(spy.db, as("ada"), { ...draftOf("Acme Deux"), confirm: true })).rejects.toMatchObject({ code: "forbidden" })
+      await expect(createOrg(spy.db, as("ada"), { ...draftOf("Acme Deux"), confirm: true }, origin)).rejects.toMatchObject({ code: "forbidden" })
       expect(spy.requests.map((request) => request.objects)).toEqual([["is_staff"]])
     })
 
@@ -198,9 +222,17 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
       undo.push(() => orgs.cleanup())
       const spy = recordRequests(await dbOf("sam"))
       const draft = draftOf("Acme Deux")
-      const created = await createOrg(spy.db, as("sam"), { ...draft, confirm: true })
-      expect(spy.requests.at(-1)).toMatchObject({ objects: ["create_org"], values: ["Acme Deux", draft.org, draft.prefix, [draft.host]] })
-      expect(created).toMatchObject({ created: true, org: { slug: draft.org } })
+      const created = await createOrg(spy.db, as("sam"), { ...draft, confirm: true }, origin)
+      // Sam se nomme premier administrateur : membre `admin` dans la transaction de `create_org`, sans invitation.
+      expect(spy.requests.slice(-2)).toMatchObject([
+        { objects: ["create_org"], values: ["Acme Deux", draft.org, draft.prefix, [draft.host]] },
+        { objects: ["claim_org_admin"] },
+      ])
+      expect(created).toMatchObject({ created: true, org: { slug: draft.org }, firstAdmin: { email: admin.persons.sam.email, self: true, outcome: "joined" } })
+      const members = await seed.admin`
+        select m.user_id, m.role, m.email from platform.members m join platform.orgs o on o.id = m.org_id where o.slug = ${draft.org}`
+      expect(admin.readable([...members])).toEqual([{ user_id: PERSONS.sam.id, role: "admin", email: PERSONS.sam.email }])
+      expect(await seed.admin`select 1 from platform.invitations i join platform.orgs o on o.id = i.org_id where o.slug = ${draft.org}`).toEqual([])
       const grants = await seed.admin`
         select g.user_id, g.granted_by, g.reason from platform.platform_grants g join platform.orgs o on o.id = g.org_id where o.slug = ${draft.org}`
       expect(admin.readable([...grants])).toEqual([{ user_id: PERSONS.sam.id, granted_by: PERSONS.sam.id, reason: "creation" }])
@@ -213,10 +245,107 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
           if (request.objects.includes("create_org")) await seed.admin`insert into platform.org_domains (host, org_id) values (${late.host}, ${admin.orgs.other.id})`
         },
       })
-      await expect(createOrg(raced.db, as("sam"), { ...late, confirm: true })).rejects.toMatchObject({
+      await expect(createOrg(raced.db, as("sam"), { ...late, confirm: true }, origin)).rejects.toMatchObject({
         code: "conflict",
         message: `Address ${late.host} already opens another organisation.`,
       })
+    })
+
+    it("should invite another first administrator with the admin role once created, by the email of the Équipes screen, linking to its address", async () => {
+      undo.push(() => orgs.cleanup())
+      const otp = magicLinks()
+      const invited = `first-${admin.persons.ada.email}`.toUpperCase()
+      const draft = draftOf("Acme Deux", invited)
+      const email = invited.toLowerCase()
+      const link = `http://${draft.host}:3000`
+      expect(await createOrg(await dbOf("sam"), as("sam"), draft, origin)).toMatchObject({ created: false, firstAdmin: { email, self: false, link } })
+      expect(otp).not.toHaveBeenCalled()
+
+      const created = await createOrg(await dbOf("sam"), as("sam"), { ...draft, confirm: true }, origin)
+      expect(created).toMatchObject({ created: true, firstAdmin: { email, self: false, outcome: "invited", link } })
+      expect(otp).toHaveBeenCalledTimes(1)
+      expect(otp.mock.calls[0]?.[0]).toMatchObject({ email, options: { emailRedirectTo: `${link}/auth/confirm?next=/` } })
+      const rows = await seed.admin`
+        select i.email, i.role, i.invited_by from platform.invitations i join platform.orgs o on o.id = i.org_id where o.slug = ${draft.org}`
+      expect(admin.readable([...rows])).toEqual([{ email, role: "admin", invited_by: PERSONS.sam.id }])
+      // Le créateur n'est pas membre : il garde son accès `creation`, comme avant.
+      expect(await seed.admin`select 1 from platform.members m join platform.orgs o on o.id = m.org_id where o.slug = ${draft.org}`).toEqual([])
+    })
+
+    it("should refuse to invite without an address before any write, and keep the organisation when the invitation email fails", async () => {
+      undo.push(() => orgs.cleanup())
+      const spy = recordRequests(await dbOf("sam"))
+      const noHost = { ...draftOf("Acme Deux", `first-${admin.persons.ada.email}`), host: undefined }
+      await expect(createOrg(spy.db, as("sam"), { ...noHost, confirm: true }, origin)).rejects.toMatchObject({
+        code: "invalid_arguments",
+        message: `Inviting first-${admin.persons.ada.email} needs an address of ${noHost.org} to sign in at: pass host, or name yourself with admin_email.`,
+      })
+      expect(requestedWrites(spy.requests)).toEqual([])
+
+      magicLinks({ failing: true })
+      const draft = draftOf("Acme Trois", `first-${admin.persons.ada.email}`)
+      const created = await createOrg(await dbOf("sam"), as("sam"), { ...draft, confirm: true }, origin)
+      expect(created).toMatchObject({
+        created: true,
+        firstAdmin: { outcome: "invitation_failed", failure: "The invitation email could not be sent; the invitation was withdrawn. Try again." },
+      })
+      const [state] = await seed.admin<{ orgs: number; open: number }[]>`
+        select (select count(*)::int from platform.orgs where slug = ${draft.org}) as orgs,
+               (select count(*)::int from platform.invitations i join platform.orgs o on o.id = i.org_id
+                 where o.slug = ${draft.org} and i.revoked_at is null) as open`
+      expect(state).toEqual({ orgs: 1, open: 0 })
+    })
+  })
+
+  describe("name an administrator (add_admin, 2026-10-14)", () => {
+    /** Sam n'a qu'un accès à acme dans la graine : sa ligne `members` part après le test. */
+    function forgetSamMemberOfAcme(): void {
+      undo.push(() => seed.admin`delete from platform.members where org_id = ${admin.orgs.acme.id} and user_id = ${admin.persons.sam.id}`)
+    }
+
+    it("should make the caller a member with the admin role without email, then change nothing", async () => {
+      forgetSamMemberOfAcme()
+      const otp = magicLinks()
+      const db = await dbOf("sam")
+      const identity = await resolveAdminOrg(db, as("sam"), admin.orgs.acme.slug)
+      const email = admin.persons.sam.email
+      expect(await addAdmin(db, identity, { admin_email: email.toUpperCase() }, origin)).toEqual({ email, self: true, outcome: "joined" })
+      const [row] = await seed.admin`select role, email from platform.members where org_id = ${admin.orgs.acme.id} and user_id = ${admin.persons.sam.id}`
+      expect(row).toEqual({ role: "admin", email })
+      const again = await resolveAdminOrg(db, as("sam"), admin.orgs.acme.slug)
+      expect(await addAdmin(db, again, { admin_email: email }, origin)).toEqual({ email, self: true, outcome: "unchanged" })
+      expect(otp).not.toHaveBeenCalled()
+    })
+
+    it("should promote a member, keep an administrator, and invite another address with the admin role", async () => {
+      undo.push(() => seed.admin`update platform.members set role = 'member' where org_id = ${admin.orgs.acme.id} and user_id = ${admin.persons.claire.id}`)
+      const invited = `new-${admin.persons.claire.email}`
+      undo.push(() => seed.admin`delete from platform.invitations where org_id = ${admin.orgs.acme.id} and email = ${invited}`)
+      const otp = magicLinks()
+      const db = await dbOf("sam")
+      const identity = await resolveAdminOrg(db, as("sam"), admin.orgs.acme.slug)
+      const claire = admin.persons.claire.email
+      expect(await addAdmin(db, identity, { admin_email: claire }, origin)).toEqual({ email: claire, self: false, outcome: "promoted" })
+      const ada = admin.persons.ada.email
+      expect(await addAdmin(db, identity, { admin_email: ada }, origin)).toEqual({ email: ada, self: false, outcome: "unchanged" })
+      const link = `http://${admin.orgs.acme.host}:3000`
+      expect(await addAdmin(db, identity, { admin_email: invited }, origin)).toMatchObject({ email: invited, self: false, outcome: "invited", link })
+      expect(otp).toHaveBeenCalledTimes(1)
+      const roles = await seed.admin`
+        select (select role from platform.members where org_id = ${admin.orgs.acme.id} and user_id = ${admin.persons.claire.id}) as claire,
+               (select role from platform.invitations where org_id = ${admin.orgs.acme.id} and email = ${invited}) as invited`
+      expect([...roles]).toEqual([{ claire: "admin", invited: "admin" }])
+    })
+
+    it("should refuse a caller who does not administer the organisation as platform team, before any request", async () => {
+      const db = await dbOf("ada")
+      const identity = await resolveAdminOrg(db, as("ada"), admin.orgs.acme.slug)
+      const spy = recordRequests(db)
+      await expect(addAdmin(spy.db, identity, { admin_email: admin.persons.ada.email }, origin)).rejects.toMatchObject({
+        code: "forbidden",
+        message: STAFF_ADMIN("add_admin", admin.orgs.acme.slug),
+      })
+      expect(spy.requests).toEqual([])
     })
   })
 

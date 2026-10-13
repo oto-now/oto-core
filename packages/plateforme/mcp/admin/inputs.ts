@@ -27,7 +27,7 @@ function confirm(ops: string) {
 /** Les opérations déclarées de chaque outil, dans l'ordre du contrat ; `help` d'abord. */
 export const ADMIN_OPS = {
   admin_context: ["ctx", "orgs", "help"],
-  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access"],
+  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access", "add_admin"],
   admin_team: ["help", "list", "create", "rename", "set_lead", "add_lead", "remove_lead", "add_member", "remove_member", "delete"],
   admin_node: ["help", "move", "publish", "transfer_owner", "rules", "add_rule", "remove_rule"],
   admin_connector: [
@@ -84,6 +84,13 @@ export const ADMIN_INPUTS = {
     // `revoke_access` : `platform_grants` n'a pas de motif de révocation, la ligne du journal admin le garde (N35).
     reason: platformAccessSchema.shape.reason.describe("Why, kept with the dated access line (grant_access) or in the admin journal (revoke_access)"),
     confirm: confirm("create, remove_host, revoke_access"),
+    // Décision du 2026-10-14 : ajouté en dernier, le schéma servi n'évoluant que par ajout.
+    admin_email: z
+      .string()
+      .optional()
+      .describe(
+        "Email of the administrator to name (create: its first administrator, required; add_admin). Your own email makes you a member with the admin role at once, without email; another email is invited with the admin role",
+      ),
   }),
   admin_team: z.object({
     ctx,

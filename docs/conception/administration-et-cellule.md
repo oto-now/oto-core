@@ -1,11 +1,11 @@
 # Administration et cellule
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
-L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. Drapeaux, marque, état de la cellule et export-import d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
+L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. Une organisation créée par l'équipe plateforme a toujours un premier administrateur : le créateur lui-même, membre sans email, ou une personne invitée. Drapeaux, marque, état de la cellule et export-import d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
 
 ## Contexte
 
@@ -40,6 +40,17 @@ Une cellule est un déploiement de l'application hôte : une base, un émetteur,
 - E08-S02 N12 : `orgs.settings.routing {threshold, gap}` (0 à 1, défauts 0,65 et 0,1) se règle par `updateOrg`, que servent `admin_org update` et la page Organisation du tableau de bord (voir [routage et recherche](routage-et-recherche.md)).
 - E08-S02 N19 : `admin_org update` écrit nom et `settings` en une écriture sous garde `updated_at`, puis la marque par `updateBrand`, seul écrivain d'`orgs.brand` (dernière écriture gagnante sur la marque).
 - E08-S02 N23 : avant toute écriture : `updateOrg` sans `isOrgAdmin` → `forbidden` « Changing the settings of <org> is reserved to … » ; `add_host`, `remove_host`, `grant_access` sans `isStaff` et `isOrgAdmin` → `forbidden` « op <op> of admin_org is reserved… ».
+
+### Premier administrateur
+
+Décision du 2026-10-14 : une organisation créée par l'équipe plateforme a toujours un premier administrateur (`server/admin/first-admin.ts`).
+
+- `admin_org create` exige `admin_email`, l'adresse du premier administrateur. L'adresse de l'appelant, comparée sans casse à celle de son identité vérifiée, le fait membre `admin` dans la transaction de `create_org` (`claim_org_admin`), sans invitation ni email ; en mode OIDC, son identifiant est celui de sa ligne `platform_staff` (`identity_for_caller()`), sans compte chez l'émetteur, et le mode Supabase prend le `sub`. Une autre adresse reçoit, une fois l'organisation créée, une invitation `admin` par `inviteMember` : le service, les contrôles et l'email de l'écran Équipes (lien magique en mode Supabase, email de la plateforme au nom de qui invite en mode OIDC), sous l'accès `creation` de l'appelant. Le récapitulatif du premier temps dit lequel des deux cas va se produire.
+- Le lien d'une invitation mène à une adresse de l'organisation, celle que `reachableHost` choisit d'après l'adresse du MCP admin appelé, au protocole et au port de celle-ci : l'invité revient sur l'adresse de son organisation, comme depuis l'écran Équipes (E02-S01 N2). Sans adresse, l'invitation est refusée avant toute écriture (`invalid_arguments`) : passer `host`, ou se nommer soi-même.
+- Une invitation qui échoue après la création (email qui ne part pas : l'invitation est retirée, comme à l'écran) laisse l'organisation créée ; le résultat le dit et renvoie à `add_admin`, sans lever, parce que rejouer `create` buterait sur le slug pris.
+- L'accès plateforme `creation` du créateur reste créé dans les deux cas (fiche D2) : il nomme et date l'entrée de l'équipe plateforme pour le client, qui peut le révoquer ; il porte l'invitation d'une autre adresse ; il garde l'administration au créateur que le client retirerait de ses membres. Membre et titulaire d'un accès, le créateur agit en membre (`listOrgs`, N9 ; `identityInOrg`) : l'accès ne double rien.
+- `admin_org add_admin` nomme un administrateur d'une organisation existante, par la même règle, réservée au membre de l'équipe plateforme qui l'administre (`requireStaffAdmin`, comme `add_host`, N23), en un temps comme `grant_access`. L'appelant devient membre `admin` tout de suite (`claim_org_admin`, sous la limite `members_max`, que l'équipe plateforme passe en le journalisant) ; un membre présent, l'appelant compris, passe `admin` (`updateMember`, le geste de l'écran Équipes, ou `claim_org_admin`) ; un administrateur présent ne change pas, et le texte le dit ; une autre adresse est invitée `admin`.
+- En base, `claim_org_admin(org)` en est la seconde barrière (`is_staff()` et `is_org_admin`, email dans les claims, sinon `42501`) ; la ligne `members` s'écrit par `seat_org_admin`, interne, partagée avec `signup_org` ([offres de l'hôte](offres-de-l-hote.md)).
 
 ### Équipe plateforme et accès
 
@@ -110,12 +121,17 @@ Une cellule est un déploiement de l'application hôte : une base, un émetteur,
 - **Sous-domaines posés par le paquet** : écarté (D24) ; un appel à un hébergeur n'entre ni dans le paquet ni dans `src/`, sauf désactivé par une variable et listé (`CLAUDE.md § Projet`).
 - **Supprimer une organisation par une opération** : écarté (E08-S02 N8) ; le préfixe nomme les outils pour toujours.
 - **Rebrancher oto-saas sur Vercel** : écarté par D126 au profit d'un déploiement Scaleway.
+- **Inviter le premier administrateur depuis l'écran Équipes après la création** (le parcours jusqu'au 2026-10-14) : écarté ; une organisation pouvait rester sans membre, et le créateur qui en était le premier administrateur devait s'inviter et accepter son propre email.
+- **Retirer l'accès `creation` quand le créateur devient membre** : écarté ; l'accès trace l'entrée de l'équipe plateforme pour le client (D2) et survit au retrait du membre.
+- **Refuser `add_admin` pour un membre présent** : écarté au profit de la promotion, le geste qu'un administrateur fait à l'écran Équipes ; une invitation de ce membre serait refusée (`already_member`, `invitations_guard`).
+- **Lien de l'invitation vers l'adresse du MCP admin** : écarté ; cette adresse n'ouvre pas forcément l'organisation de l'invité.
 
 ## Sécurité et confidentialité
 
 - Le MCP admin refuse tout jeton hors équipe plateforme sans servir de métadonnées (E08-S02 N2) ; une organisation sans accès se dit inconnue (E08-S02 N9).
 - `admin_cell` ne sert jamais la valeur d'une variable (E08-S04 NH5) ; une exception du point d'extension n'est jamais servie ni journalisée (HN-E09S02-9).
 - `platform_staff` ne s'écrit par aucune porte du paquet (E08-S02 N21) ; l'export-import passe par la connexion d'administration, jamais importée par l'application.
+- Se nommer administrateur (`claim_org_admin`) est réservé à qui administre déjà l'organisation comme membre de l'équipe plateforme : aucun pouvoir de plus qu'une invitation acceptée. Il ne lève pas une exclusion (`member_exclusions`), que seule une invitation acceptée lève.
 - Le journal admin vit à part (`admin_journal`) ; le masquage de l'espace personnel d'autrui s'y applique : [journal et retours](journal-et-retours.md).
 
 ## Écart avec le code
@@ -135,3 +151,4 @@ Aucune à ce jour.
 - 2026-09-28 : oto-saas déployé chez Scaleway, pas rebranché sur Vercel — décidé par JB (source : fiche D126).
 - 2026-09-29 : MCP admin en huit outils, journal à part, tableau de bord, drapeaux, état de la cellule ; sous-domaines hors du paquet par un point d'extension de l'hôte, marque, export-import d'une organisation, livrés dans la 1.0.0 — décision de JB (fiche D24) et choix du projet (source : H105 à H107, H110 à H112, P29, stories E08-S02 à E08-S06, E09-S02, E09-S04).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend D24, D126, H105 à H107, H110 à H112, P29, H-cellule-saas et les choix des stories E08-S02, E08-S03, E08-S04, E08-S06, E09-S02, E09-S04 — décidé par Alexis, accord de JB.
+- 2026-10-14 : premier administrateur exigé à la création d'une organisation par l'équipe plateforme (`admin_email` : l'appelant membre `admin` sans email, ou une invitation `admin`), et `admin_org add_admin` pour une organisation existante ; l'accès `creation` reste — décidé par Alexis (source : une organisation de production créée par un membre de l'équipe plateforme qui n'en était pas membre).

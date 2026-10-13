@@ -8,7 +8,7 @@
 // `create_org`. En suite portable (`sqlConfigured`) : le projet, ou le Postgres nu du job `bare-postgres`.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { createOrg, PlatformError, type OrgCreationHook, type StaffCaller } from "@otomata_tech/oto_platform/server"
-import { connectAdminMcp, ORGS, type AdminPerson } from "../helpers/mcp-admin"
+import { ADMIN_ORIGIN, connectAdminMcp, ORGS, type AdminPerson } from "../helpers/mcp-admin"
 import { seedAdminFixture, type AdminFixtureSql } from "../helpers/mcp-admin-sql"
 import { loggedText } from "../helpers/logs"
 import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
@@ -19,8 +19,7 @@ const SETUP_TIMEOUT = 180_000
 
 /** L'adresse qu'ouvre `other` dans la base simulée d'AC6 ; la fixture lui tire sa valeur réelle. */
 const CELL = "acme.cellule.test"
-const NEXT_LINE =
-  'Next: set its work domains with admin_org {"op": "update"}, create its teams with admin_team {"op": "create"}, and invite its first administrator from the web app (Équipes).'
+const NEXT_LINE = 'Next: set its work domains with admin_org {"op": "update"} and create its teams with admin_team {"op": "create"}.'
 const INTERNAL = "Internal error. Retry once; if it fails again, report it to the platform developers."
 
 /** L'adresse que le point simulé ajoute à une organisation, et celle qu'un test passe en `host`. */
@@ -72,6 +71,10 @@ describe.skipIf(!sqlConfigured)(
     }, SETUP_TIMEOUT)
 
     const staff = (person: AdminPerson): StaffCaller => ({ userId: admin.persons[person].id, email: admin.persons[person].email })
+    /** Sam se nomme premier administrateur (décision du 2026-10-14) : le cas sans invitation, celui de ces tests. */
+    const samFirst = () => ({ admin_email: admin.persons.sam.email })
+    const options = (orgCreation: OrgCreationHook) => ({ orgCreation, origin: ADMIN_ORIGIN })
+    const firstAdminLine = () => `You (${admin.persons.sam.email}) are its first administrator: a member with the admin role.`
 
     /** Les organisations de ces slugs et les adresses de cette liste, dans la base : ce qu'une création y aurait écrit. */
     async function written(slugs: string[], hosts: string[]) {
@@ -99,7 +102,7 @@ describe.skipIf(!sqlConfigured)(
       const { code } = await session.openAdmin()
       const slug = orgs.slug()
       const create = (args: Record<string, unknown> = {}) =>
-        session.call("admin_org", { ctx: code, op: "create", org: slug, name: "Acme", prefix: slug, ...args })
+        session.call("admin_org", { ctx: code, op: "create", org: slug, name: "Acme", prefix: slug, ...samFirst(), ...args })
       return { spy: watched, session, create, slug }
     }
 
@@ -113,7 +116,7 @@ describe.skipIf(!sqlConfigured)(
           return [cellOf(slug)]
         }),
       })
-      const summary = await createOrg(spy.db, staff("sam"), { org: slug, name: "Acme", prefix: slug }, { orgCreation: point })
+      const summary = await createOrg(spy.db, staff("sam"), { org: slug, name: "Acme", prefix: slug, ...samFirst() }, options(point))
       expect(point.addresses).toHaveBeenCalledTimes(1)
       expect(point.addresses).toHaveBeenCalledWith({ slug, hosts: [] })
       expect(before).toEqual([["is_staff"]])
@@ -123,6 +126,7 @@ describe.skipIf(!sqlConfigured)(
       expect(summary).toEqual({
         created: false,
         org: { slug, name: "Acme", prefix: slug, host: null },
+        firstAdmin: { email: admin.persons.sam.email, self: true },
         addresses: { hosts: [cellOf(slug)], added: [cellOf(slug)] },
       })
       expect(point.created).not.toHaveBeenCalled()
@@ -138,6 +142,7 @@ describe.skipIf(!sqlConfigured)(
         prefix: other.slug,
         host: otherOf(other.slug),
         hosts: [otherOf(other.slug), cellOf(other.slug)],
+        first_admin: { email: admin.persons.sam.email, self: true },
       })
       expect(createOrgRequests(spy.requests)).toEqual([])
       expect(await written([slug, other.slug], [cellOf(slug), cellOf(other.slug), otherOf(other.slug)])).toEqual({ orgs: 0, hosts: 0 })
@@ -183,6 +188,7 @@ describe.skipIf(!sqlConfigured)(
       expect(await hostsOf(one.slug)).toEqual([cellOf(one.slug)])
       expect(confirmed.text.split("\n")).toEqual([
         `Organisation ${one.slug} (Acme) created: root page guide, context page contexte, personal spaces (private), your platform access, address ${cellOf(one.slug)}.`,
+        firstAdminLine(),
         NEXT_LINE,
         `Line of ${cellOf(one.slug)}.`,
       ])
@@ -202,11 +208,12 @@ describe.skipIf(!sqlConfigured)(
       const both = await two.create({ host: otherOf(two.slug), confirm: true })
       expect(second.created).toHaveBeenCalledTimes(1)
       expect(second.created).toHaveBeenCalledWith({ slug: two.slug, hosts: [otherOf(two.slug), cellOf(two.slug)] })
-      expect(seen.at(-1)).toEqual(["create_org"])
+      // Sam se nomme premier administrateur : `claim_org_admin` suit `create_org`, dans sa transaction.
+      expect(seen.slice(-2)).toEqual([["create_org"], ["claim_org_admin"]])
       expect(both.text.split("\n").slice(0, 1)).toEqual([
         `Organisation ${two.slug} (Acme) created: root page guide, context page contexte, personal spaces (private), your platform access, addresses ${otherOf(two.slug)}, ${cellOf(two.slug)}.`,
       ])
-      expect(both.text.split("\n").slice(2)).toEqual(["First line.", "Second line."])
+      expect(both.text.split("\n").slice(3)).toEqual(["First line.", "Second line."])
       expect(both.structured?.address_setup).toEqual([
         { host: cellOf(two.slug), status: "pending_verification" },
         { host: otherOf(two.slug), status: "attached" },
@@ -242,6 +249,7 @@ describe.skipIf(!sqlConfigured)(
       expect(result.isError).toBe(false)
       expect(result.text.split("\n")).toEqual([
         `Organisation ${slug} (Acme) created: root page guide, context page contexte, personal spaces (private), your platform access, address ${cellOf(slug)}.`,
+        firstAdminLine(),
         NEXT_LINE,
         `Organisation ${slug} is created, but this application could not finish setting up its addresses. Check them with admin_org {"op": "get"}.`,
       ])
@@ -262,17 +270,17 @@ describe.skipIf(!sqlConfigured)(
       const point = hook({ addresses: vi.fn<OrgCreationHook["addresses"]>(() => [taken]) })
       const slug = orgs.slug()
       const ada = await admin.deps("ada")
-      await expect(createOrg(ada.db, staff("ada"), { org: slug, name: "Acme", prefix: slug, confirm: true }, { orgCreation: point })).rejects.toMatchObject({
+      await expect(createOrg(ada.db, staff("ada"), { org: slug, name: "Acme", prefix: slug, ...samFirst(), confirm: true }, options(point))).rejects.toMatchObject({
         code: "forbidden",
       })
       const sam = recordRequests((await admin.deps("sam")).db)
-      await expect(createOrg(sam.db, staff("sam"), { org: "Acme!", name: "Acme", prefix: "acme" }, { orgCreation: point })).rejects.toMatchObject({
+      await expect(createOrg(sam.db, staff("sam"), { org: "Acme!", name: "Acme", prefix: "acme", ...samFirst() }, options(point))).rejects.toMatchObject({
         code: "invalid_arguments",
       })
       expect(sam.requests).toEqual([])
       expect(point.addresses).not.toHaveBeenCalled()
 
-      await expect(createOrg(sam.db, staff("sam"), { org: slug, name: "Acme", prefix: slug, confirm: true }, { orgCreation: point })).rejects.toMatchObject({
+      await expect(createOrg(sam.db, staff("sam"), { org: slug, name: "Acme", prefix: slug, ...samFirst(), confirm: true }, options(point))).rejects.toMatchObject({
         code: "conflict",
         message: `Address ${taken} already opens another organisation.`,
       })

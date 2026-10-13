@@ -295,7 +295,7 @@ L'attendu se lit dans `admin_journal`.
 
 | # | Prompt | Attendu au journal admin |
 |---|--------|--------------------------|
-| A1 | Crée l'organisation Delta Logistique, préfixe delta, adresse delta.example.com. | `admin_context` → `admin_org create` sans `confirm` (récapitulatif) → question à l'utilisateur ; après « oui » : `admin_org create` avec `confirm: true`. Jamais `confirm` avant l'accord |
+| A1 | Crée l'organisation Delta Logistique, préfixe delta, adresse delta.example.com, avec alice@example.com pour premier administrateur. | `admin_context` → `admin_org create` avec `admin_email` sans `confirm` (récapitulatif, qui dit l'invitation d'alice@example.com) → question à l'utilisateur ; après « oui » : `admin_org create` avec `confirm: true`. Jamais `confirm` avant l'accord ; sans premier administrateur dans la demande, le modèle le demande |
 | A2 | Qui a un accès plateforme chez Acme ? | `admin_context` → `admin_org get {org: "acme"}` ; aucune écriture |
 | A3 | Ajoute Marc à l'équipe Support d'Acme. | `admin_context` → (`admin_team list` facultatif) → `admin_team add_member {org: "acme", team: "support", email}` |
 | A4 | Supprime l'équipe Conseil d'Acme. | `admin_context` → `admin_team delete` sans `confirm` → question ; `confirm: true` seulement après l'accord |

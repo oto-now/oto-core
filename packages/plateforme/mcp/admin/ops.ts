@@ -21,8 +21,11 @@ import type { AdminToolKey } from "./tools"
 /** L'organisation d'une opération : visée (résolue et gardée, AC10), à créer (son slug), ou aucune (AC9, N4). */
 export type OrgTarget = "target" | "new" | "none"
 
-/** `orgCreation` : le point de création que branche l'hôte (E09-S02), lu par `admin_org create` et son aide. */
-export type AdminDeps = { db: PlatformDb; caller: StaffCaller; orgCreation?: OrgCreationHook }
+/**
+ * `orgCreation` : le point de création que branche l'hôte (E09-S02), lu par `admin_org create` et son aide. `origin` :
+ * l'origine du MCP admin appelé (`https://cell.example.com`), dont le lien d'une invitation reprend protocole et port.
+ */
+export type AdminDeps = { db: PlatformDb; caller: StaffCaller; origin: string; orgCreation?: OrgCreationHook }
 
 /** Ce que reçoit une opération : ses champs validés, l'organisation visée s'il y en a une, le code de la session. */
 export type OpCall = { deps: AdminDeps; identity: Identity | null; input: Record<string, unknown>; ctx: string }

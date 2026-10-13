@@ -13,13 +13,14 @@
 import { randomBytes, randomUUID } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "../../packages/plateforme/api/handler"
-import { handleAdminMcp } from "../../packages/plateforme/mcp/admin/handler"
+import { handleAdminMcp, openAdminRequest } from "../../packages/plateforme/mcp/admin/handler"
 import { makeVerifyToken } from "../../packages/plateforme/mcp/auth"
 import { resolveMcpRequest } from "../../packages/plateforme/mcp/handler"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 import { inviteMember } from "../../packages/plateforme/server/invitations"
 import { loggedText } from "../helpers/logs"
 import { connectDeps } from "../helpers/mcp"
+import { connectAdminMcp } from "../helpers/mcp-admin"
 import { testIssuer, type TestIssuer } from "../helpers/oidc-issuer"
 import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData, type SeededOrg, type SeededPerson } from "../helpers/sql"
 
@@ -235,6 +236,39 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "issuer wired to the gates (E01-
     expect([api.status, (await api.json()).error.code]).toEqual([409, "conflict"])
     // Le conflit journalisé (`security-patterns.md § Idempotence`) : la porte de l'API ne journalise pas une `PlatformError`.
     expect(loggedText(log)).toContain("[platform] identity: first call of this subject still held by another request")
+  })
+
+  it("should make a platform team member without any account the first administrator of the organisation she creates, without email, and invite another address by the platform email (2026-10-14)", async () => {
+    // L'équipe plateforme en mode OIDC : une ligne `platform_staff` par email, aucun compte chez l'émetteur ni ailleurs.
+    const staff = { ...seed.person(), subject: `staff-${hex()}` }
+    await seed.admin`insert into platform.platform_staff (user_id, email) values (${staff.id}, ${staff.email})`
+    const slug = `t${hex()}`
+    const host = `${slug}.example.invalid`
+    try {
+      const bearer = await tokenOf(staff.subject, staff.email)
+      const claims = (await makeVerifyToken()(new Request(`https://${org.host}/api/mcp-admin`, { method: "POST" }), bearer))?.extra
+      const session = await connectAdminMcp(await openAdminRequest({ accessToken: bearer, claims, userAgent: "vitest", origin: `https://${org.host}` }))
+      const { code } = await session.openAdmin()
+      const created = await session.call("admin_org", { ctx: code, op: "create", org: slug, name: "Acme OIDC", prefix: slug, host, admin_email: staff.email.toUpperCase(), confirm: true })
+      expect(created.text.split("\n")[1]).toBe(`You (${staff.email}) are its first administrator: a member with the admin role.`)
+      const members = await seed.admin`select m.user_id, m.role, m.email from platform.members m join platform.orgs o on o.id = m.org_id where o.slug = ${slug}`
+      expect([...members]).toEqual([{ user_id: staff.id, role: "admin", email: staff.email }])
+      expect(relay.sent).toEqual([])
+
+      const invited = address()
+      const other = await session.call("admin_org", { ctx: code, op: "add_admin", org: slug, admin_email: invited })
+      expect(other.text.startsWith(`Invitation to administer ${slug} sent to ${invited} (role admin, valid until `), other.text).toBe(true)
+      expect(relay.sent).toHaveLength(1)
+      // L'email de l'écran Équipes, au nom de qui invite : la créatrice, membre depuis la création, nommée par ses claims.
+      expect(relay.sent[0]).toMatchObject({ from: FROM, to: invited, subject: "Camille vous invite à rejoindre Acme OIDC" })
+      expect(relay.sent[0].text).toContain(`https://${host}/login`)
+      const rows = await seed.admin`
+        select i.role, i.invited_by from platform.invitations i join platform.orgs o on o.id = i.org_id where o.slug = ${slug} and i.email = ${invited}`
+      expect([...rows]).toEqual([{ role: "admin", invited_by: staff.id }])
+    } finally {
+      await seed.admin`delete from platform.orgs where slug = ${slug}`
+      await seed.admin`delete from platform.admin_journal where user_id = ${staff.id}`
+    }
   })
 
   it("should admit at the admin MCP a verified email of the platform team, under the id of its platform_staff row (AC-a13)", async () => {

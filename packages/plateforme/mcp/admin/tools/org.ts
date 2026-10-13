@@ -1,7 +1,7 @@
 // Opérations d'`admin_org` (E08-S02, AC14 à AC19) : chaque opération appelle un service de
 // `server/admin/` et met son résultat en texte ; aucun droit ne se décide ici (H123).
 import * as z from "zod/v4"
-import { hostOpSchema, orgCreateSchema, orgSlugSchema, orgUpdateSchema, platformAccessSchema, type PlatformAccessView } from "../../../schemas"
+import { addAdminSchema, hostOpSchema, orgCreateSchema, orgSlugSchema, orgUpdateSchema, platformAccessSchema, type PlatformAccessView } from "../../../schemas"
 import { staffDirectory } from "../../../server/admin/context"
 import { grantAccess, revokeAccess } from "../../../server/admin/grants"
 import { addHost, removeHost } from "../../../server/admin/hosts"
@@ -11,6 +11,7 @@ import { boundedList } from "../../../server/errors"
 import { TOOL_KEYS } from "../../tools"
 import { day, MAX_LIST_LINES, nothingWas, plural, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { NO_ORGANISATION } from "./context"
+import { adminAdded, firstAdminData, firstAdminLine, firstAdminSummary } from "./first-admin"
 
 const LIST_NEXT = ["admin_org get", "admin_team list"]
 const GET_NEXT = ["admin_org update", "admin_team list"]
@@ -112,7 +113,7 @@ function setupLines(slug: string, setup: AddressSetup[] | null | undefined): str
 }
 
 async function create(call: OpCall): Promise<AdminOutput> {
-  const result = await createOrg(call.deps.db, call.deps.caller, call.input, { orgCreation: call.deps.orgCreation })
+  const result = await createOrg(call.deps.db, call.deps.caller, call.input, { orgCreation: call.deps.orgCreation, origin: call.deps.origin })
   const { slug, name, prefix, host } = result.org
   // Avec le point de l'hôte, toutes les adresses en données ; sans lui, les données d'E08-S02.
   const withHosts = result.addresses ? { hosts: result.addresses.hosts } : {}
@@ -121,20 +122,22 @@ async function create(call: OpCall): Promise<AdminOutput> {
       `About to create organisation ${name} (slug ${slug}).`,
       `Its assistant tools will be named ${toolNames(prefix)}, for good: the prefix never changes and no operation deletes an organisation.`,
       summaryAddresses(host, result.addresses),
+      firstAdminSummary(result.firstAdmin),
       // E05-S13 (AC-7, HN-E05S13-5) : l'écran client ne montre plus les accès ; le journal, lu par ses administrateurs, les trace.
       "You get a platform access to it. Your calls are recorded in its journal, which its administrators read.",
       nothingWas("created"),
     ].join("\n")
-    return { text, data: { summary: { ...result.org, ...withHosts } }, nextActions: [] }
+    return { text, data: { summary: { ...result.org, ...withHosts, first_admin: firstAdminData(result.firstAdmin) } }, nextActions: [] }
   }
   const address = createdAddresses(result.addresses?.hosts ?? (host ? [host] : []))
   const text = [
     `Organisation ${slug} (${name}) created: root page guide, context page contexte, personal spaces (private), your platform access, ${address}.`,
-    'Next: set its work domains with admin_org {"op": "update"}, create its teams with admin_team {"op": "create"}, and invite its first administrator from the web app (Équipes).',
+    firstAdminLine(slug, result.firstAdmin),
+    'Next: set its work domains with admin_org {"op": "update"} and create its teams with admin_team {"op": "create"}.',
     ...setupLines(slug, result.setup),
   ].join("\n")
   const setup = result.setup ? { address_setup: result.setup.map((entry) => ({ host: entry.host, status: entry.status })) } : {}
-  const data = { org: { ...result.org, ...withHosts }, ...setup }
+  const data = { org: { ...result.org, ...withHosts }, first_admin: firstAdminData(result.firstAdmin), ...setup }
   return { text, data, orgId: result.org.id, nextActions: ["admin_org update", "admin_team create", "admin_org get"] }
 }
 
@@ -240,9 +243,11 @@ export const ORG_OPS: OpTable = {
     schema: orgCreateSchema,
     org: "new",
     twoStep: true,
-    summary: "Creates an organisation with its root page, context page, personal spaces, your platform access and its first address.",
-    example: { org: "acme2", name: "Acme Deux", prefix: "acmedeux", host: "acme2.localhost" },
+    summary:
+      "Creates an organisation with its root page, context page, personal spaces, your platform access, its first address and its first administrator (admin_email): your own email makes you a member with the admin role at creation, without email; another email is invited with the admin role, by the invitation email of the web app (Équipes).",
+    example: { org: "acme2", name: "Acme Deux", prefix: "acmedeux", host: "acme2.localhost", admin_email: "alice@example.com" },
     refusals: [
+      "invalid_arguments: Inviting <admin_email> needs an address of <org> to sign in at: pass host, or name yourself with admin_email.",
       "conflict: Address <host> already opens another organisation.",
       "conflict: Slug <org> is already taken. Pick another slug.",
       "conflict: Prefix <prefix> is already used by another organisation.",
@@ -300,5 +305,19 @@ export const ORG_OPS: OpTable = {
     example: { org: "acme", email: "colleague@oto.example" },
     refusals: ["not_found: <email> has no platform access to <org> in progress."],
     run: revoked,
+  },
+  add_admin: {
+    schema: addAdminSchema,
+    org: "target",
+    twoStep: false,
+    summary:
+      "Names an administrator of the organisation, by the rule of create: your own email makes you a member with the admin role at once, without email; a member becomes an administrator; another email is invited with the admin role, by the invitation email of the web app (Équipes).",
+    example: { org: "acme", admin_email: "alice@example.com" },
+    refusals: [
+      'invalid_arguments: Inviting <admin_email> needs an address of <org> to sign in at: add one with admin_org {"op": "add_host"} first.',
+      "conflict: An invitation is already pending for <admin_email>. Revoke it to send another.",
+      staffAdmin,
+    ],
+    run: adminAdded,
   },
 }

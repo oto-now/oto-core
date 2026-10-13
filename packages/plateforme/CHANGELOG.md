@@ -17,7 +17,14 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- Platform team: `admin_org create` takes `admin_email`, its first administrator (you join at once; another email is invited), and `admin_org add_admin` names one later.
+
 ### Hosts
+- MCP: `admin_org create` requires `admin_email`, the first administrator: the caller's own email (no case) makes them a member with the admin role in the creation transaction, without email, in OIDC and Supabase modes; another email gets an admin invitation once created, by the invitation service and email of the Équipes screen, linking to an address of the organisation. Its summary says which; its next line no longer says to invite from Équipes. The creator's `creation` platform access stays.
+- MCP: `admin_org add_admin` (`org`, `admin_email`) names an administrator of an existing organisation by the same rule, reserved like `add_host` to platform team members who administer it; a member is promoted, an administrator left as is. `admin_email` is a new property of the served schema.
+- Server: `createOrg(db, staff, input, { orgCreation?, origin })` takes the origin of the admin MCP called (`handleAdminMcp` passes it) and returns `firstAdmin`; `addAdmin(db, identity, staff, input, { origin })` is new. A direct call of `createOrg` without `admin_email` is now refused (`invalid_arguments`).
+- Migrations: apply `20261014090000_platform_premier_administrateur.sql` (two functions, `claim_org_admin` for `authenticated`, `seat_org_admin` internal, and `signup_org` rewritten on it, same signature; additive).
 - MCP: in OIDC mode, a token is also accepted when its `aud` is the resource the metadata announce for the called address (`<origin>/api/mcp`, `<origin>/api/mcp-admin`), besides `PLATFORM_OIDC_AUDIENCE`. An issuer that puts the requested resource in `aud` (Logto) now serves the admin MCP and every organisation address, each declared at the issuer as an API resource; a token issued for another address is still refused.
 - Install: the reference host's `src/middleware.ts` builds its redirects on `X-Forwarded-Host` (else `Host`) and `X-Forwarded-Proto`: under `next start` behind a proxy it sent browsers to `https://localhost:<port>`. Copy the new `publicUrl` into your middleware.
 

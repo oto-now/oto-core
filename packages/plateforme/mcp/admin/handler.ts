@@ -13,6 +13,7 @@ import { adminJournalEntry, flushAdminJournal, requireStaff, type AdminJournalEn
 import type { OrgCreationHook } from "../../server/admin/org-creation"
 import { createPlatformDb } from "../../server/db"
 import { isPlatformError } from "../../server/errors"
+import { rawRequestHost, requestOrigin } from "../../server/identity"
 import { initializeSignatures } from "../../server/journal"
 import { MCP_ADMIN_RESOURCE_PATH } from "../../server/oauth"
 import { verifiedCaller, type VerifyToken } from "../auth"
@@ -30,6 +31,8 @@ export type AdminRequestFacts = {
   /** `extra` de l'`AuthInfo` rendu par `makeVerifyToken` : `sub`, `email` et `name` du jeton. */
   claims: Record<string, unknown> | undefined
   userAgent: string | null
+  /** L'origine appelée (`calledOrigin`) : le lien d'une invitation envoyée par `admin_org` en reprend protocole et port. */
+  origin: string
 }
 
 /**
@@ -42,7 +45,13 @@ export async function openAdminRequest(facts: AdminRequestFacts): Promise<AdminM
   const db = createPlatformDb({ caller: verifiedCaller(facts.claims) ?? undefined })
   const email = typeof facts.claims?.email === "string" ? facts.claims.email : ""
   const caller = await requireStaff(db, { email })
-  return { db, caller, userAgent: facts.userAgent, journal: [] }
+  return { db, caller, origin: facts.origin, userAgent: facts.userAgent, journal: [] }
+}
+
+/** L'origine du MCP admin telle que le navigateur ou l'assistant l'a appelée, derrière un proxy compris (`requestOrigin`). */
+export function calledOrigin(request: Request): string {
+  const url = new URL(request.url)
+  return requestOrigin(request.headers, rawRequestHost(request.headers) ?? url.host, url.protocol.replace(/:$/, ""))
 }
 
 /** Hors de l'équipe plateforme : 401 sans `resource_metadata`, corps JSON-RPC fixe (AC2, N2). */
@@ -79,7 +88,7 @@ async function serveAdmin(request: Request, context: RequestContext): Promise<Re
 
   let deps: AdminMcpDeps
   try {
-    const opened = await openAdminRequest({ accessToken: auth.token, claims: auth.extra, userAgent: context.userAgent })
+    const opened = await openAdminRequest({ accessToken: auth.token, claims: auth.extra, userAgent: context.userAgent, origin: calledOrigin(request) })
     deps = { ...opened, orgCreation: context.orgCreation }
   } catch (error) {
     if (isPlatformError(error) && error.code === "forbidden") return outsideStaff()

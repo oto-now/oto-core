@@ -4,8 +4,8 @@
 // aucune porte hors de l'outillage ne crée une organisation cliente.
 //
 // Repris d'Oto (`capabilities/orgs/admin.py` l. 37-71) : ce qui peut échouer se résout avant d'écrire
-// (formats et adresse avant `create_org`) ; retiré : le responsable nommé membre de l'organisation
-// créée, l'escalade super-admin sur le contenu. Repris (`capabilities/orgs/core.py` l. 100-134) : le
+// (formats et adresse avant `create_org`) ; retiré : l'escalade super-admin sur le contenu ; le responsable
+// membre de l'organisation créée revient quand il s'en nomme premier administrateur (`first-admin.ts`). Repris (`capabilities/orgs/core.py` l. 100-134) : le
 // nom nettoyé de 1 à 80 caractères ; retiré : la création en libre-service, le quota, l'organisation
 // personnelle.
 //
@@ -26,11 +26,12 @@ import { readBrand, updateBrand } from "../brand"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { memberDirectory } from "../directory"
-import { changedMeanwhile, fromDatabaseError, inTransaction, invalidInput, PlatformError, uniqueConstraint } from "../errors"
+import { changedMeanwhile, fromDatabaseError, inTransaction, invalidInput, isPlatformError, PlatformError, uniqueConstraint } from "../errors"
 import { memberRole, orgContact, type Identity, type MemberRole } from "../identity"
 import { listPlatformAccess } from "../members"
 import { routingSettings, type RoutingSettings } from "../routing"
-import { domainsOf, requireStaff, type StaffCaller } from "./context"
+import { domainsOf, requireStaff, resolveAdminOrg, type StaffCaller } from "./context"
+import { claimOrgAdmin, firstAdminPlan, inviteAdmin, type AdminNamed, type FirstAdminPlan } from "./first-admin"
 import { addressTaken, orgHosts } from "./hosts"
 import {
   applicationAddresses,
@@ -240,27 +241,30 @@ export async function createConflict(
 }
 
 /**
- * Crée une organisation cliente, en deux temps (AC15, AC16, N8) : les adresses sont vérifiées dès le
- * premier ; sans `confirm`, rien n'est écrit. Confirmé, `create_org` (E01-S04) pose l'organisation,
+ * Crée une organisation cliente, en deux temps (AC15, AC16, N8) : les adresses et le premier administrateur sont
+ * vérifiés dès le premier ; sans `confirm`, rien n'est écrit. Confirmé, `create_org` (E01-S04) pose l'organisation,
  * sa racine, son Contexte, `private`, l'accès du créateur (`creation`, fiche D2) et les adresses. Seule
  * l'équipe plateforme crée : décidé ici (`requireStaff`) avant toute autre requête, la porte qui
  * l'appelle ne suffisant pas (H123) ; le contrôle `is_staff()` de `create_org` en est la seconde barrière.
  * Avec le point de l'hôte (E09-S02, `org-creation.ts`) : ses adresses aux deux temps, contrôlées comme
  * la première, puis `created` une fois l'organisation créée.
+ * Premier administrateur (décision du 2026-10-14, `first-admin.ts`) : l'appelant lui-même devient membre `admin` dans
+ * la transaction de `create_org` (`claim_org_admin`) ; une autre adresse est invitée `admin` une fois l'organisation
+ * créée, le lien ramenant à une de ses adresses (`origin` : celle du MCP admin appelé, pour le protocole et le port).
  */
 export async function createOrg(
   db: PlatformDb,
   staff: StaffCaller,
   input: unknown,
-  { orgCreation }: { orgCreation?: OrgCreationHook } = {},
+  { orgCreation, origin }: { orgCreation?: OrgCreationHook; origin: string },
 ): Promise<
-  | { created: false; org: OrgDraft; addresses?: CreationAddresses }
-  | { created: true; org: OrgDraft & { id: string }; addresses?: CreationAddresses; setup?: AddressSetup[] | null }
+  | { created: false; org: OrgDraft; firstAdmin: FirstAdminPlan; addresses?: CreationAddresses }
+  | { created: true; org: OrgDraft & { id: string }; firstAdmin: FirstAdminOutcome; addresses?: CreationAddresses; setup?: AddressSetup[] | null }
 > {
   const parsed = orgCreateSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   await requireStaff(db, staff)
-  const { org: slug, name, prefix, host, confirm } = parsed.data
+  const { org: slug, name, prefix, host, admin_email: adminEmail, confirm } = parsed.data
   const draft: OrgDraft = { slug, name, prefix, host: host ?? null }
   const passed = host ? [host] : []
   const takenHost = await takenAddress(db, passed)
@@ -268,17 +272,43 @@ export async function createOrg(
   const addresses = orgCreation ? await applicationAddresses(db, orgCreation, slug, passed) : undefined
   const hosts = addresses?.hosts ?? passed
   const withAddresses = addresses ? { addresses } : {}
-  if (confirm !== true) return { created: false, org: draft, ...withAddresses }
-  // Sa propre transaction : un refus de `create_org` la perd, et `createConflict` relit dans une autre.
+  const plan = firstAdminPlan(staff, adminEmail, { slug, hosts, origin })
+  if (confirm !== true) return { created: false, org: draft, firstAdmin: plan, ...withAddresses }
+  // Sa propre transaction : un refus de `create_org` la perd, et `createConflict` relit dans une autre. Le créateur
+  // nommé premier administrateur y devient membre : l'organisation n'existe jamais sans lui.
   const [row] = await db
-    .tx((sql) => sql<{ id: string }[]>`
-      select platform.create_org(p_name => ${name}, p_slug => ${slug}, p_prefix => ${prefix}, p_hosts => ${hosts}::text[]) as id`)
+    .tx(async (sql) => {
+      const created = await sql<{ id: string }[]>`
+        select platform.create_org(p_name => ${name}, p_slug => ${slug}, p_prefix => ${prefix}, p_hosts => ${hosts}::text[]) as id`
+      if (plan.self && created[0]) await claimOrgAdmin(sql, created[0].id)
+      return created
+    })
     .catch(async (error: { code?: string; message?: string }) => {
       throw (await createConflict(db, error, draft, hosts)) ?? fromDatabaseError(error, `createOrg: create_org by ${staff.userId}`)
     })
   const org = { ...draft, id: row.id }
-  if (!orgCreation) return { created: true, org }
-  return { created: true, org, ...withAddresses, setup: await setupAddresses(orgCreation, slug, hosts) }
+  const firstAdmin = await firstAdminOf(db, staff, slug, plan)
+  if (!orgCreation) return { created: true, org, firstAdmin }
+  return { created: true, org, firstAdmin, ...withAddresses, setup: await setupAddresses(orgCreation, slug, hosts) }
+}
+
+/** Le premier administrateur une fois l'organisation créée : sa place, son invitation, ou l'échec de celle-ci (`failure`). */
+export type FirstAdminOutcome = AdminNamed | { email: string; self: false; outcome: "invitation_failed"; failure: string }
+
+/**
+ * Le premier administrateur d'une organisation créée : l'appelant, déjà membre (`create_org`) ; sinon l'invitation, par
+ * l'accès `creation` de l'appelant (`resolveAdminOrg`). L'organisation reste créée quand l'invitation échoue : le refus
+ * est rendu dans le résultat, jamais levé, pour que la création ne se rejoue pas sur un slug pris.
+ */
+async function firstAdminOf(db: PlatformDb, staff: StaffCaller, slug: string, plan: FirstAdminPlan): Promise<FirstAdminOutcome> {
+  if (plan.self) return { email: plan.email, self: true, outcome: "joined" }
+  try {
+    return await inviteAdmin(db, await resolveAdminOrg(db, staff, slug), plan.email, plan.link)
+  } catch (error) {
+    if (!isPlatformError(error)) console.error(`[platform] createOrg: ${slug} created, inviting its first administrator failed`, error)
+    const failure = isPlatformError(error) && error.message !== "Internal error." ? error.message : "Internal error."
+    return { email: plan.email, self: false, outcome: "invitation_failed", failure }
+  }
 }
 
 /** `settings` avec les domaines de travail (N10) et les seuils de routage (N12) passés, les autres clés gardées. */

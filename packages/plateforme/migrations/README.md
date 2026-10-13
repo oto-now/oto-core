@@ -182,6 +182,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   lecture de `token_ciphertext` ; `account_token(compte)`, `security definer`, `search_path` vide, révoquée à `public`
   et `anon`, accordée à `authenticated` : le chiffré du jeton au seul membre de l'organisation du compte. Fusionnée
   avec les deux précédentes avant le tag.
+- `20261014090000_platform_premier_administrateur.sql` (premier administrateur d'une organisation créée par l'équipe
+  plateforme, décision du 2026-10-14) : `seat_org_admin(org, personne, email, nom)`, `security definer`, `search_path`
+  vide, révoquée à `public`, accordée à aucun rôle (interne, comme `org_skeleton`) : la ligne `members` au rôle `admin`
+  (handle, email, nom), ou le rôle `admin` d'un membre présent ; rend `joined`, `promoted` ou `unchanged`.
+  `signup_org` réécrite sur elle, même signature et même résultat. `claim_org_admin(org)`, `security definer`,
+  `search_path` vide, révoquée à `public`, accordée à `authenticated` : l'appelant de l'équipe plateforme qui
+  administre l'organisation (`is_staff()` et `is_org_admin`), email dans les claims, en devient membre `admin`, sinon
+  `42501`. Aucune table, colonne ni policy.
 
 ## Installer sur un hôte neuf
 
