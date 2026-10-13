@@ -11,6 +11,7 @@ import { slugOf } from "../../schemas/nodes"
 import {
   TREE_NODES_MAX,
   treePivotSchema,
+  type PivotFile,
   type PivotRow,
   type TreeImportFormat,
   type TreePivot,
@@ -18,6 +19,7 @@ import {
 import type { TableHeader } from "../../schemas/tables"
 import { PlatformError } from "../errors"
 import { SEGMENT_MAX, UNTITLED_SEGMENT } from "../nodes/segments"
+import { attachedFileId } from "./files"
 
 /** Un nœud à importer, son chemin relatif à la destination : `sav`, `sav/fiches/garantie`. */
 export type PlanNode = {
@@ -31,6 +33,8 @@ export type PlanNode = {
   table?: { header: TableHeader; rows: PivotRow[] }
   /** Un tableau d'un CSV : la ligne d'en-tête et les lignes, lues comme `table.import` les lit. */
   csv?: { headers: string[]; rows: string[][] }
+  /** Les fichiers joints que cite le corps d'une page du pivot, à relire à leur URL et joindre à la page d'arrivée. */
+  files?: PivotFile[]
 }
 
 /**
@@ -125,7 +129,9 @@ function pivotPlan(bytes: Uint8Array): ImportPlan {
   const nodes = pivot.nodes.map((node): PlanNode => {
     const base = { path: node.path, kind: node.kind, title: node.title, summary: node.summary }
     if (node.table) return { ...base, markdown: "", table: node.table }
-    return { ...base, markdown: renderBlocks(node.blocks ?? []) }
+    const cited = new Set((node.blocks ?? []).map(attachedFileId))
+    const files = (pivot.files ?? []).filter((file) => cited.has(file.id))
+    return { ...base, markdown: renderBlocks(node.blocks ?? []), ...(files.length > 0 ? { files } : {}) }
   })
   // Un lien vers une racine exportée ou sous elle : le nom de la racine, puis le reste du chemin.
   const relink = (sourcePath: string): string | null => {

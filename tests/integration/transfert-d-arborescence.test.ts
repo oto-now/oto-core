@@ -19,6 +19,7 @@ import { writeNodeLazily } from "../../packages/plateforme/server/nodes/write-la
 import { publishedHeader } from "../../packages/plateforme/server/tables/meta"
 import { loadRows, toReadRow } from "../../packages/plateforme/server/tables/rows"
 import { tableWrite } from "../../packages/plateforme/server/tables/write"
+import { purgeExpiredExports } from "../../packages/plateforme/server/transfer/files"
 import { importPlan } from "../../packages/plateforme/server/transfer/formats"
 import { nodeExportTree, nodeImportTree, setTreeFetchDeps } from "../../packages/plateforme/server/transfer/functions"
 import { runImport } from "../../packages/plateforme/server/transfer/import"
@@ -266,6 +267,46 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it("should carry the attached files of a json export to the arrival page, leave the mention of a file that does not arrive, and carry none in a zip", async () => {
+    vi.stubGlobal("fetch", memory.fetch)
+    try {
+      const source = `pj_${root}`
+      await write({ path: source, kind: "page", title: "Pièces", summary: "Les pièces jointes." })
+      const page = await findNode(ada.db, ada.identity, source)
+      const kept = await storeFile(ada.db, ada.identity, { nodeId: page!.node.id, name: "rapport.pdf", bytes: new Uint8Array([1, 2, 3]) })
+      const lost = await storeFile(ada.db, ada.identity, { nodeId: page!.node.id, name: "perdu.txt", bytes: strToU8("perdu") })
+      const text = ["Le rapport :", `[rapport.pdf (3 bytes, pdf)](${FILES_ROUTE}/${kept.id})`, `[perdu.txt (5 bytes, txt)](${FILES_ROUTE}/${lost.id})`].join("\n\n")
+      await write({ path: source, base_revision: page!.node.revision, ops: [{ op: "set_markdown", text }] })
+      const exported = await exportTree({ paths: [source] })
+      expect(exported.data?.files).toBe(2)
+      // L'objet du second fichier disparaît du bucket : l'import ne le relit pas.
+      memory.objects.delete(`${o.org.id}/${lost.id}`)
+      await write({ path: `support/pj_${root}`, kind: "page", title: "Arrivée", summary: "L'arrivée." })
+      const output = await importTree({ source_url: String(exported.data?.url), parent: `support/pj_${root}` })
+      expect(output.data?.refused).toEqual([{ path: `support/pj_${root}/${source} (file perdu.txt)`, reason: expect.stringContaining("could not download it") }])
+      const arrival = await findNode(ada.db, ada.identity, `support/pj_${root}/${source}`)
+      const blocks = await loadBlocks(ada.db, arrival!.node.id, "published")
+      const file = blocks.find((block) => block.type === "file")
+      expect(file?.data).toMatchObject({ name: "rapport.pdf", size: 3 })
+      expect(file?.data.file_id).not.toBe(kept.id)
+      expect(memory.objects.get(`${o.org.id}/${String(file?.data.file_id)}`)?.bytes).toEqual(new Uint8Array([1, 2, 3]))
+      expect(blocks.map((block) => block.text)).toContain("(Fichier joint non transféré : perdu.txt)")
+      const zip = await exportTree({ paths: [source], format: "zip" })
+      expect(zip.data?.files_left).toEqual([{ from: source, name: "rapport.pdf" }, { from: source, name: "perdu.txt" }])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("should remove the exports whose address expired, and only them", async () => {
+    await exportTree({ paths: [root] })
+    const prefix = `${o.org.id}/exports/`
+    const before = [...memory.objects.keys()].filter((key) => key.startsWith(prefix)).length
+    expect(await purgeExpiredExports(memory, o.org.id)).toBe(0)
+    expect(await purgeExpiredExports(memory, o.org.id, Date.now() + 3_601_000)).toBe(before)
+    expect([...memory.objects.keys()].filter((key) => key.startsWith(prefix))).toEqual([])
   })
 
   it("should refuse an unknown parent and a source that is not a tree", async () => {

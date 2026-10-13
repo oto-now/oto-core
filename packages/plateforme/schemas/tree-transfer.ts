@@ -14,6 +14,9 @@ export const TREE_FORMAT_VERSION = 1
 export const TREE_ROOTS_MAX = 20
 export const TREE_NODES_MAX = 2_000
 
+/** Fichiers joints au plus par export, chacun relu par l'import à son URL signée. */
+export const TREE_FILES_MAX = 1_000
+
 /** L'URL d'un export : une heure, relue autant de fois que l'import le demande. */
 export const TREE_EXPORT_URL_SECONDS = 3_600
 
@@ -106,6 +109,19 @@ const pivotNodeSchema = z.strictObject({
 
 export type PivotNode = z.infer<typeof pivotNodeSchema>
 
+/**
+ * Un fichier joint qu'un bloc exporté cite (`file`, image jointe) : son identifiant à la source, celui que le bloc porte,
+ * et l'URL signée où l'import relit ses octets, valable aussi longtemps que celle de l'export.
+ */
+const pivotFileSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string().min(1).max(255),
+  size: z.number().int().min(0),
+  url: z.string().max(4_000),
+})
+
+export type PivotFile = z.infer<typeof pivotFileSchema>
+
 export const treePivotSchema = z.strictObject({
   format: z.literal(TREE_FORMAT),
   version: z.literal(TREE_FORMAT_VERSION),
@@ -114,6 +130,7 @@ export const treePivotSchema = z.strictObject({
   /** Chaque racine : son chemin à la source, absolu, et le nom qu'elle porte dans `nodes` ; un lien vers elle ou sous elle se recolle à l'import. */
   roots: z.array(z.strictObject({ path: nodePathSchema, name: nodePathSchema })).min(1).max(TREE_ROOTS_MAX),
   nodes: z.array(pivotNodeSchema).max(TREE_NODES_MAX),
+  files: z.array(pivotFileSchema).max(TREE_FILES_MAX).optional(),
 })
 
 export type TreePivot = z.infer<typeof treePivotSchema>

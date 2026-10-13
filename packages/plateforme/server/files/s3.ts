@@ -80,6 +80,25 @@ function sizeHeaders(answer: Response): Record<string, string | number | null> {
   return { status: answer.status, "content-length": read("content-length"), "content-encoding": read("content-encoding"), "transfer-encoding": read("transfer-encoding"), "content-range": read("content-range"), "content-type": read("content-type") }
 }
 
+/** Pages de 1 000 clés au plus lues par `list`. */
+const LIST_PAGES_MAX = 10
+
+const XML_ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" }
+
+/** Les valeurs des balises `<name>` d'une réponse XML du bucket, entités décodées, par un parcours linéaire. */
+function xmlValues(xml: string, name: string): string[] {
+  const values: string[] = []
+  const open = `<${name}>`
+  const close = `</${name}>`
+  for (let at = xml.indexOf(open); at !== -1; at = xml.indexOf(open, at)) {
+    const end = xml.indexOf(close, at + open.length)
+    if (end === -1) break
+    values.push(xml.slice(at + open.length, end).replace(/&(?:amp|lt|gt|quot|apos);/g, (entity) => XML_ENTITIES[entity] ?? entity))
+    at = end + close.length
+  }
+  return values
+}
+
 export function s3FileStore(config: S3Config): FileStore {
   const client = s3Client(config)
   const base = `${trimmedEndpoint(config.endpoint)}/${encodeURIComponent(config.bucket)}`
@@ -144,6 +163,22 @@ export function s3FileStore(config: S3Config): FileStore {
       })
       await answer.body?.cancel()
       if (!answer.ok) throw failed("PUT", answer.status)
+    },
+
+    // ListObjectsV2, page par page : les `<Key>` de la réponse, lus à la main (une réponse du bucket, pas d'un client).
+    async list(prefix: string) {
+      const keys: string[] = []
+      let token: string | null = null
+      for (let page = 0; page < LIST_PAGES_MAX; page++) {
+        const query = new URLSearchParams({ "list-type": "2", prefix, ...(token ? { "continuation-token": token } : {}) })
+        const answer = await client.fetch(`${base}?${query.toString()}`, { method: "GET", signal: AbortSignal.timeout(OPERATION_TIMEOUT_MS) })
+        const body = await answer.text()
+        if (!answer.ok) throw failed("list", answer.status)
+        keys.push(...xmlValues(body, "Key"))
+        token = xmlValues(body, "NextContinuationToken")[0] ?? null
+        if (token === null) break
+      }
+      return keys
     },
 
     async remove(key: string) {

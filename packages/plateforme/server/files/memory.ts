@@ -11,7 +11,7 @@ const ORIGIN = "https://memory.invalid"
 export type StoredObject = { bytes: Uint8Array; mime: string }
 
 /** Les opérations du port qu'un test fait échouer (panne du bucket). */
-export type StoreOperation = "uploadUrl" | "readUrl" | "head" | "copy" | "remove" | "put"
+export type StoreOperation = "uploadUrl" | "readUrl" | "head" | "copy" | "remove" | "put" | "list"
 
 export type MemoryFileStore = FileStore & {
   /** Les objets du bucket, par clé : un test y pose un objet qui ne tient pas sa demande, ou l'en retire. */
@@ -93,6 +93,10 @@ export function memoryFileStore(now: () => number = Date.now): MemoryFileStore {
     async put(key: string, bytes: Uint8Array, mime: string) {
       guard("put")
       objects.set(key, { bytes: bytes.slice(), mime })
+    },
+    async list(prefix: string) {
+      guard("list")
+      return [...objects.keys()].filter((key) => key.startsWith(prefix)).sort()
     },
   }
 }

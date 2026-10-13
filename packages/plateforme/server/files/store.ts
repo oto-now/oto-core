@@ -31,6 +31,8 @@ export type FileStore = {
   remove(key: string): Promise<void>
   /** Écrit un objet produit par le serveur lui-même (l'export d'un arbre), sans URL d'envoi. */
   put(key: string, bytes: Uint8Array, mime: string): Promise<void>
+  /** Les clés sous un préfixe (les exports expirés d'une organisation, à purger), 10 000 au plus. */
+  list(prefix: string): Promise<string[]>
 }
 
 /** 5 minutes pour envoyer (ADR-016 § 4). */

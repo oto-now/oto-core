@@ -1,8 +1,8 @@
 // `node.export_tree` et `node.import_tree`, derrière `call`, sans outil ajouté (ADR-002) : une arborescence passe d'un
 // MCP Oto à un autre par une URL signée que la plateforme destinataire télécharge elle-même. L'assistant ne fait que
 // relayer l'adresse : aucun contenu ne passe par la conversation, aucune borne de volume ne lui revient. Adaptateurs fins
-// : la lecture est dans `collect.ts`, les formats dans `formats.ts`, l'écriture dans `import.ts`.
-import { randomUUID } from "node:crypto"
+// : la lecture est dans `collect.ts`, les formats dans `formats.ts`, l'écriture dans `import.ts`, les fichiers joints et la
+// purge des exports expirés dans `files.ts`.
 import { strToU8 } from "fflate"
 import { fileExtension } from "../../schemas/csv"
 import {
@@ -15,10 +15,11 @@ import {
 import { defineFunction, type FunctionContext, type FunctionOutput } from "../catalog/define"
 import { PlatformError } from "../errors"
 import { boundedBytes, onStorage, readableFile, requireStore } from "../files/service"
-import { objectKey } from "../files/store"
+import { fileStore, objectKey } from "../files/store"
 import { fileIdOfUrl } from "../nodes/markdown-files"
-import { fetchSource, type Resolve, type SourceGet } from "../uploads-fetch"
+import { fetchSource } from "../uploads-fetch"
 import { collectTree, type ExportReport } from "./collect"
+import { exportKey, purgeExpiredExports, treeFetchDeps } from "./files"
 import { detectFormat, importPlan, pivotZip } from "./formats"
 import { reportLines, runImport, type ImportReport } from "./import"
 
@@ -32,17 +33,18 @@ function exportText(url: string, nodes: number, format: string, report: ExportRe
     `Exported ${nodes} node(s) as ${format}. Give this address to node.import_tree on the other platform (it downloads it itself; valid 1 hour, readable several times): ${url}`,
     ...section("Links outside the export, left as they are", report.orphans.map((orphan) => `${orphan.from} → ${orphan.to}`)),
     ...section("Left out", report.skipped.map((skipped) => `${skipped.path}: ${skipped.reason}`)),
-    ...section("Attached files not carried (only their mention travels)", report.files.map((file) => `${file.from}: ${file.name}`)),
+    ...section("Attached files not carried (only their mention travels; a zip carries none)", report.files.map((file) => `${file.from}: ${file.name}`)),
   ].join("\n")
 }
 
 async function runExport(context: FunctionContext, args: { paths: string[]; format?: "json" | "zip" }): Promise<FunctionOutput> {
   const store = requireStore()
-  const { pivot, report } = await collectTree(context.db, context.identity, args.paths, context.origin)
+  await purgeExpiredExports(store, context.identity.org.id)
   const format = args.format ?? "json"
+  const { pivot, report } = await collectTree(context.db, context.identity, args.paths, { origin: context.origin, store: format === "json" ? store : null })
   const bytes = format === "zip" ? pivotZip(pivot) : strToU8(JSON.stringify(pivot))
   const name = `${pivot.roots.map((root) => root.name).join("_").slice(0, 80)}.${format}`
-  const key = objectKey(context.identity.org.id, `exports/${randomUUID()}.${format}`)
+  const key = exportKey(context.identity.org.id, format)
   const mime = format === "zip" ? "application/zip" : "application/json"
   try {
     await store.put(key, bytes, mime)
@@ -60,7 +62,8 @@ async function runExport(context: FunctionContext, args: { paths: string[]; form
     roots: pivot.roots,
     orphans: report.orphans,
     skipped: report.skipped,
-    files: report.files,
+    files: pivot.files?.length ?? 0,
+    files_left: report.files,
   }
   return { text: exportText(url, pivot.nodes.length, format, report), data, next: ["node.import_tree"] }
 }
@@ -71,7 +74,7 @@ export const nodeExportTree = defineFunction({
   class: "read",
   origin: "paquet",
   description:
-    "Exports one or several roots, each with everything under it that you can read, to a signed address valid one hour: json is the faithful pivot (pages and procedures with their typed blocks, tables with their header, rows and the proof of each value), meant for node.import_tree on another Oto platform; zip gives one .md per page and one .csv per table, for a person. Use it to copy a knowledge base, a team folder or a set of procedures to another organisation: give the address to node.import_tree there; the content never goes through this conversation. Links to pages outside the export are kept as they are and listed; attached files are not carried. In French: exporter, sauvegarder, transférer une arborescence.",
+    "Exports one or several roots, each with everything under it that you can read, to a signed address valid one hour: json is the faithful pivot (pages and procedures with their typed blocks, tables with their header, rows and the proof of each value), meant for node.import_tree on another Oto platform; zip gives one .md per page and one .csv per table, for a person. Use it to copy a knowledge base, a team folder or a set of procedures to another organisation: give the address to node.import_tree there; the content never goes through this conversation. Links to pages outside the export are kept as they are and listed; json carries the attached files, zip only their mention. In French: exporter, sauvegarder, transférer une arborescence.",
   schema: treeExportArgsSchema,
   examples: [{ paths: ["sav"] }, { paths: ["sav/fiches", "sav/procedures"], format: "zip" }],
   refusals: [
@@ -109,15 +112,7 @@ function importText(run: Awaited<ReturnType<typeof runImport>>, args: TreeImport
   ].join("\n")
 }
 
-/** Les dépendances du téléchargement, que les tests remplacent (aucun réseau). */
-export type TreeFetchDeps = { resolve?: Resolve; get?: SourceGet }
-
-let fetchDeps: TreeFetchDeps = {}
-
-/** Pour les tests : la résolution et la requête du téléchargement de la source. */
-export function setTreeFetchDeps(deps: TreeFetchDeps): void {
-  fetchDeps = deps
-}
+export { setTreeFetchDeps, type TreeFetchDeps } from "./files"
 
 /**
  * Les octets de la source : un fichier joint à une page de cette plateforme (l'adresse que `read` donne d'un fichier) est
@@ -133,12 +128,13 @@ async function sourceOf(context: FunctionContext, address: string): Promise<{ by
     const url = await onStorage("read url", () => store.readUrl(objectKey(context.identity.org.id, file.id), { contentType: "application/octet-stream", disposition: "attachment" }))
     return { bytes: await boundedBytes(url, file.name, TREE_IMPORT_BYTES_MAX), type: null, name: file.name }
   }
-  const fetched = await fetchSource(address, { ...fetchDeps, maxBytes: TREE_IMPORT_BYTES_MAX, timeoutMs: 30_000 })
+  const fetched = await fetchSource(address, { ...treeFetchDeps(), maxBytes: TREE_IMPORT_BYTES_MAX, timeoutMs: 30_000 })
   if ("failure" in fetched) throw new PlatformError("invalid_arguments", `Could not download the source: ${fetched.failure}. Export it again (an export address lasts one hour), or give another address.`)
   return { bytes: fetched.bytes, type: fetched.type, name: fileNameOf(address) }
 }
 
 async function runImportTree(context: FunctionContext, args: TreeImportArgs): Promise<FunctionOutput> {
+  await purgeExpiredExports(fileStore(), context.identity.org.id)
   const fetched = await sourceOf(context, args.source_url)
   const name = fetched.name
   const format = detectFormat(args.format ?? "auto", fetched.bytes, fetched.type, name)
@@ -165,7 +161,7 @@ export const nodeImportTree = defineFunction({
   class: "write",
   origin: "paquet",
   description:
-    "Imports a tree under an existing page, from an https address the platform downloads itself: the address node.export_tree gave on another Oto platform (json, faithful: blocks, table headers, rows and proofs), or a .zip (folders become parent pages, .md files pages, .csv files tables; a folder's page is <folder>.md next to it or <folder>/index.md), a single .md (one page) or a single .csv (one table, columns inferred); or the address of a file attached to a page of this platform, as read gives it. Links between imported pages follow their new paths. A path already taken: skip (default) keeps it unless it is empty, overwrite updates it (same kind), suffix puts the imported root next to it. Use it after node.export_tree, or to bring a folder of markdown files; for a file on the person's disk, attach it to a page first (on screen, or upload.link kind file), then pass the address of that file. A long import answers continue_from: call again with it. In French: importer, restaurer, greffer une arborescence.",
+    "Imports a tree under an existing page, from an https address the platform downloads itself: the address node.export_tree gave on another Oto platform (json, faithful: blocks, table headers, rows and proofs, attached files), or a .zip (folders become parent pages, .md files pages, .csv files tables; a folder's page is <folder>.md next to it or <folder>/index.md), a single .md (one page) or a single .csv (one table, columns inferred); or the address of a file attached to a page of this platform, as read gives it. Links between imported pages follow their new paths. A path already taken: skip (default) keeps it unless it is empty, overwrite updates it (same kind), suffix puts the imported root next to it. Use it after node.export_tree, or to bring a folder of markdown files; for a file on the person's disk, attach it to a page first (on screen, or upload.link kind file), then pass the address of that file. A long import answers continue_from: call again with it. In French: importer, restaurer, greffer une arborescence.",
   schema: treeImportArgsSchema,
   examples: [
     { source_url: "https://storage.example.com/exports/sav.json?X-Amz-Signature=…", parent: "csm_sav" },

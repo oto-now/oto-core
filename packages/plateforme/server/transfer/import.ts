@@ -23,6 +23,7 @@ import { importRows, inferredHeader } from "../tables/import"
 import { publishedHeader } from "../tables/meta"
 import { countRows } from "../tables/rows"
 import { tableWrite } from "../tables/write"
+import { carryFiles } from "./files"
 import type { ImportPlan, PlanNode } from "./formats"
 
 /** Le temps d'un appel avant de rendre la main : la route MCP a 60 s, la réponse et le journal en prennent une part. */
@@ -254,7 +255,9 @@ async function fill(run: Run, node: PlanNode): Promise<void> {
         await importRows(run.context, { path: destination, by: run.origin, comment: `Importé de ${run.source}`, headers: node.csv.headers, rows: node.csv.rows })
       }
     } else {
-      const chunks = chunksOf(run, node, destination)
+      const carried = node.files ? await carryFiles(run.context, found.node.id, node.markdown, node.files) : { markdown: node.markdown, failed: [] }
+      for (const file of carried.failed) run.report.refused.push({ path: `${destination} (file ${file.name})`, reason: file.reason })
+      const chunks = chunksOf(run, { ...node, markdown: carried.markdown }, destination)
       if (chunks.length > 0) {
         // Chaque morceau en tête, du dernier au premier : l'ordre du texte, en une écriture qui remplace tout le corps.
         const ops = [...chunks].reverse().map((text) => ({ op: "insert_after", text }))

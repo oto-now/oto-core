@@ -15,8 +15,10 @@ import { defineFunction, type FunctionContext, type FunctionSummary } from "../c
 import type { PlatformDb } from "../db"
 import { boundedList, changedMeanwhile, inTransaction, invalidInput, PlatformError } from "../errors"
 import { purgePendingFiles, removeObjects } from "../files/service"
+import { fileStore } from "../files/store"
 import type { Identity } from "../identity"
 import type { Mutation } from "../members"
+import { purgeExpiredExports } from "../transfer/files"
 import { findNode, NODE_SQL_COLUMNS, unknownNode, type NodeRow } from "./lookup"
 import { structureOf } from "./move"
 import { freePath, lastSegment } from "./segments"
@@ -43,6 +45,8 @@ const TRASH_ROWS = 1_000
 export async function purgeTrash(db: PlatformDb, identity: Identity): Promise<number> {
   // E10-S02 (AC-a6) : les envois de fichiers abandonnés partent au passage de la corbeille, objets compris.
   await purgePendingFiles(db, identity)
+  // Les exports d'arborescence dont l'URL a expiré partent aussi au passage de la corbeille (le paquet n'a pas de tâche planifiée).
+  await purgeExpiredExports(fileStore(), identity.org.id)
   const [purged] = await inTransaction(db, "trash: purge", (sql) => sql<{ nodes: number; files: string[] }[]>`
     with gone as (
       delete from platform.nodes n

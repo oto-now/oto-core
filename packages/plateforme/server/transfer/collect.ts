@@ -2,7 +2,8 @@
 // contenu publié (blocs d'une page ou d'une procédure, en-tête et lignes d'un tableau avec la preuve de chaque valeur),
 // rangé dans le format pivot (`schemas/tree-transfer.ts`). Les droits sont décidés ici, avant toute lecture de contenu
 // (ADR-012 § 3) : `findNode` pour une racine, `nodeLevels` pour ses descendants ; ce qu'on ne lit pas reste hors de
-// l'export, et ce qui est sous lui aussi. Sans lui, l'export lirait le contenu sans les règles d'accès.
+// l'export, et ce qui est sous lui aussi. Les fichiers joints des pages lues voyagent par `files.ts`. Sans lui, l'export
+// lirait le contenu sans les règles d'accès.
 import { linksIn } from "../../schemas/link-syntax"
 import {
   TREE_FORMAT,
@@ -17,6 +18,7 @@ import { FILTERED_ROWS_MAX } from "../../schemas/tables"
 import { ACCESS_LEVELS, nodeLevels } from "../access"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
+import type { FileStore } from "../files/store"
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
 import { findNode, NODE_SQL_COLUMNS, parentPath, type NodeRow } from "../nodes/lookup"
@@ -24,6 +26,7 @@ import { lastSegment } from "../nodes/segments"
 import { loadBlocks } from "../nodes/store"
 import { publishedHeader } from "../tables/meta"
 import { loadRows, toReadRow } from "../tables/rows"
+import { attachedFileId, attachedName, exportedFiles, fileNote } from "./files"
 
 /** Ce que l'export dit en plus du pivot : liens hors du périmètre, nœuds laissés, fichiers joints non emportés. */
 export type ExportReport = {
@@ -31,7 +34,7 @@ export type ExportReport = {
   orphans: { from: string; to: string }[]
   /** Un nœud non emporté : jamais publié, ou un tableau de plus de 5 000 lignes. */
   skipped: { path: string; reason: string }[]
-  /** Un fichier joint ou une image jointe : seule sa mention voyage, pas ses octets. */
+  /** Un fichier joint ou une image jointe qui ne voyage pas (absent du stockage, ou un export ZIP) : sa mention seule. */
   files: { from: string; name: string }[]
 }
 
@@ -72,21 +75,9 @@ function underRoots(path: string, roots: readonly string[]): boolean {
   return roots.some((root) => path === root || path.startsWith(`${root}/`))
 }
 
-/** Les blocs publiés d'une page en pivot ; un fichier joint ne voyage pas : sa mention est dite au rapport. */
-function pivotBlocks(path: string, blocks: Awaited<ReturnType<typeof loadBlocks>>, report: ExportReport): PivotBlock[] {
-  const kept: PivotBlock[] = []
-  for (const block of blocks) {
-    if (block.type === "row") continue
-    const attached = block.type === "file" || (block.type === "image" && typeof block.data.file_id === "string" && block.data.src === undefined)
-    if (attached) {
-      const name = typeof block.data.name === "string" ? block.data.name : typeof block.data.alt === "string" ? block.data.alt : "file"
-      report.files.push({ from: path, name })
-      kept.push({ type: "paragraph", text: `(Fichier joint non transféré : ${name})`, data: {}, key: null })
-      continue
-    }
-    kept.push({ type: block.type, text: block.text, data: block.data, key: block.key })
-  }
-  return kept
+/** Les blocs publiés d'une page en pivot, ses fichiers joints cités tels quels (`exportedFiles` les décide ensuite). */
+function pivotBlocks(blocks: Awaited<ReturnType<typeof loadBlocks>>): PivotBlock[] {
+  return blocks.filter((block) => block.type !== "row").map((block) => ({ type: block.type, text: block.text, data: block.data, key: block.key }))
 }
 
 /** Une ligne en pivot : ses valeurs, ses vides vérifiés, et pour chaque valeur sa preuve (commentaire, lien). */
@@ -128,15 +119,21 @@ async function pivotNode(db: PlatformDb, node: NodeRow, relative: string, report
   }
   // Un Contexte voyage en page : à la destination, son chemin ne désigne pas forcément le Contexte d'une équipe.
   const kind = node.kind === "procedure" ? "procedure" : "page"
-  return { ...head, kind, blocks: pivotBlocks(node.path, await loadBlocks(db, node.id, "published"), report) }
+  return { ...head, kind, blocks: pivotBlocks(await loadBlocks(db, node.id, "published")) }
 }
 
 /**
  * Le pivot des racines `paths` : chaque racine illisible ou inconnue refuse l'export (`not_found`), une racine sous une
  * autre aussi (`invalid_arguments`) ; au-delà de 2 000 nœuds, `too_large`. Chaque nœud porte son chemin relatif : le
- * nom de sa racine, puis son chemin sous elle.
+ * nom de sa racine, puis son chemin sous elle. `store` : les fichiers joints voyagent, à une URL signée chacun ; `null`
+ * (un export ZIP) : chaque fichier joint laisse sa mention.
  */
-export async function collectTree(db: PlatformDb, identity: Identity, paths: readonly string[], origin?: string): Promise<Collected> {
+export async function collectTree(
+  db: PlatformDb,
+  identity: Identity,
+  paths: readonly string[],
+  options: { origin?: string; store: FileStore | null },
+): Promise<Collected> {
   const unique = [...new Set(paths)]
   const nested = unique.find((path) => unique.some((other) => other !== path && path.startsWith(`${other}/`)))
   if (nested) throw new PlatformError("invalid_arguments", `${nested} is under another root of this export: give its ancestor only.`)
@@ -152,6 +149,7 @@ export async function collectTree(db: PlatformDb, identity: Identity, paths: rea
 
   const report: ExportReport = { orphans: [], skipped: [], files: [] }
   const nodes: PivotNode[] = []
+  const sources = new Map<string, NodeRow>()
   const rootPaths = roots.map((root) => root.node.path)
   for (const root of roots) {
     const subtree = await readableSubtree(db, identity, root.node)
@@ -175,15 +173,29 @@ export async function collectTree(db: PlatformDb, identity: Identity, paths: rea
       const cited = (pivot.blocks ?? []).flatMap((block) => citedPaths(block))
       for (const to of cited.filter((path) => !underRoots(path, rootPaths))) report.orphans.push({ from: node.path, to })
       nodes.push(pivot)
+      sources.set(relative, node)
+    }
+  }
+  const missing = (node: PivotNode, name: string) => report.files.push({ from: sources.get(node.path)?.path ?? node.path, name })
+  const nodeIds = new Map([...sources].map(([relative, node]) => [relative, node.id]))
+  const files = options.store ? await exportedFiles({ db, identity, store: options.store }, nodes, nodeIds, missing) : []
+  if (!options.store) {
+    for (const node of nodes) {
+      node.blocks = node.blocks?.map((block) => {
+        if (attachedFileId(block) === null) return block
+        missing(node, attachedName(block))
+        return fileNote(attachedName(block))
+      })
     }
   }
   const pivot: TreePivot = {
     format: TREE_FORMAT,
     version: TREE_FORMAT_VERSION,
     exported_at: new Date().toISOString(),
-    source: { org: identity.org.slug, ...(origin ? { origin } : {}) },
+    source: { org: identity.org.slug, ...(options.origin ? { origin: options.origin } : {}) },
     roots: roots.map((root) => ({ path: root.node.path, name: root.name })),
     nodes,
+    ...(files.length > 0 ? { files } : {}),
   }
   return { pivot, report }
 }

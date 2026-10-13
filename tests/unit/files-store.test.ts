@@ -36,9 +36,9 @@ describe("fileStore (AC-a1)", () => {
     expect(fileStore({ ...storageEnv(), [name]: "" })).toBeNull()
   })
 
-  it("should give a store of six operations with the five variables", () => {
+  it("should give a store of seven operations with the five variables", () => {
     const store = fileStore(storageEnv())
-    expect(Object.keys(store ?? {}).sort()).toEqual(["copy", "head", "put", "readUrl", "remove", "uploadUrl"])
+    expect(Object.keys(store ?? {}).sort()).toEqual(["copy", "head", "list", "put", "readUrl", "remove", "uploadUrl"])
   })
 
   it("should name the five variables in the not_enabled refusal", () => {
@@ -67,6 +67,27 @@ describe("S3 adapter", () => {
     const absent = [await store.head(objectKey(ORG, FILE)), await store.head(objectKey(ORG, FILE))]
     await expect(store.head(objectKey(ORG, FILE))).rejects.toThrow("storage HEAD answered HTTP 400")
     expect(absent).toEqual([null, null])
+  })
+
+  it("should list the keys under a prefix page by page (ListObjectsV2), entities decoded, and fail on a refusal", async () => {
+    const store = s3FileStore({ ...AWS_EXAMPLE, endpoint: "https://s3.fr-par.scw.cloud", bucket: "plateforme-essai", region: "fr-par" })
+    const pages = [
+      `<ListBucketResult><Contents><Key>${ORG}/exports/1-a.json</Key></Contents><NextContinuationToken>t&amp;2</NextContinuationToken></ListBucketResult>`,
+      `<ListBucketResult><Contents><Key>${ORG}/exports/2-b&amp;c.zip</Key></Contents></ListBucketResult>`,
+    ]
+    const asked: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        asked.push(new URL(request.url).searchParams.get("continuation-token") ?? "")
+        return new Response(pages.shift() ?? "", { status: 200 })
+      }),
+    )
+    expect(await store.list(`${ORG}/exports/`)).toEqual([`${ORG}/exports/1-a.json`, `${ORG}/exports/2-b&c.zip`])
+    expect(asked).toEqual(["", "t&2"])
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<Error/>", { status: 403 })))
+    await expect(store.list(`${ORG}/exports/`)).rejects.toThrow("storage list answered HTTP 403")
   })
 
   /**
