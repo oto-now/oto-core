@@ -17,6 +17,7 @@ import type { PlatformDb } from "./db"
 import { inTransaction } from "./errors"
 import type { Identity } from "./identity"
 import { clip, cut, MAX_TARGET_CHARS } from "./journal"
+import { FUNCTIONS_PATH } from "./reserved-paths"
 import { formatScore, roundScore } from "./routing"
 import type { ToolOutput } from "./tool-output"
 
@@ -108,8 +109,8 @@ export function firstSentence(description: string): string {
   return `${(end === -1 ? description : description.slice(0, end)).trim()}.`
 }
 
-/** Le chemin réservé de `read` qui liste toutes les fonctions (E11-S19, AC-e3, HN-E11S19-8), comme `journal` (P22). */
-export const FUNCTIONS_PATH = "functions"
+// Le chemin réservé vit dans un module feuille (`reserved-paths.ts`) ; redit ici pour ses lecteurs d'avant.
+export { FUNCTIONS_PATH }
 
 /** La phrase d'une fonction dans la liste (E11-S19, AC-e3) : une description de l'ERP sans point ne l'allonge pas au-delà. */
 const FUNCTION_LINE_MAX = 200

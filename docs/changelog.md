@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-14] — 1.4.4, partie de 1.4.3 : le build d'un hôte cassé par un cycle d'imports
+
+**Quoi :** publication partie de `v1.4.3` (branche `release/1.4.4`), sans le lot 1.5.0 de main : `FUNCTIONS_PATH` passe dans un module feuille (`server/reserved-paths.ts`), ce qui casse le cycle `catalog/registry.ts → transfer/inspect.ts → find.ts → catalog/registry.ts` qui faisait lever « Cannot access … before initialization » au `next build` d'un hôte ; garde : `tests/unit/import-cycles.test.ts` ; règle réécrite dans `coding-standards.md § Imports`.
+**Pourquoi :** retour de la session oto-saas (déploiement de la 1.4.3 en erreur, production restée en 1.4.2) ; JB a demandé la publication.
+**Fichiers :** ceux du commit de main `bf6305b`, `packages/plateforme/package.json`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-14] — 1.4.3, partie de 1.4.2 : un agent autonome dès le premier appel, bloc « Intégration », éditeur et rail
 
 **Quoi :** publication partie de `v1.4.2` (branche `release/1.4.3`), sans le lot 1.5.0 de main : bloc `embed` et sa migration ; « / » aux mêmes entrées que le « + », menus sans barre de défilement, invite qui cite « / » ; import d'arborescence fiable (appels, cellules et outils préfixés recollés, coquilles retirées, Contexte et chemin tenu placés à côté, refus entiers, compte en tête, `node.check` à la fin) ; règles servies v2, guide `help` (migration `20261014130000` pour le slug), propositions de `context`, `node.tree`, `node.check`, avertissements des procédures, avis d'un code périmé qui dit un refus ou une panne, refus d'un chemin pris qui dit ses causes ; texte à liens sans vide au repos ; barre droite du glisser-déposer du rail. Le manifeste pointe sur le dépôt `oto-now/oto-core`, pour la provenance npm.

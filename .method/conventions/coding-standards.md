@@ -98,11 +98,12 @@ que cela, sans erreur. Elle passe par une fonction appelée dans du code servi (
 « Invalid input »). **Vérifiable :** aucun `import "<module>"` sans nom dans `packages/plateforme/`
 hors feuilles de style (`rg -n '^import "' packages/plateforme`).
 
-Un module que le registre du catalogue importe (une fonction de `call`, et ce qu'elle importe) n'importe ni `nodes/write.ts`
-ni `procedures-check.ts` statiquement : ceux-ci relisent le registre, et le cycle fait charger deux registres sous le
-`vi.mock` d'un test, l'un sans les fonctions que l'autre a reçues. Il passe par `writeNodeLazily` ou un import dynamique à
-l'appel. **Vérifiable :** `tests/unit/connectors-services.test.ts` et `tests/unit/procedures-service.test.ts`, qui
-remplacent le registre, échouent sur un tel cycle.
+Aucun cycle d'imports évalués ne passe par `server/catalog/registry.ts` : le registre importe chaque fonction de `call`, et
+beaucoup de services le relisent (`find.ts`, `nodes/write.ts`, `procedures-check.ts`) ; un cycle par lui casse le build
+d'un hôte dès qu'une constante y est lue au chargement (« Cannot access … before initialization »), et charge deux
+registres sous le `vi.mock` d'un test. Une fonction du catalogue lit ces services à l'appel (`writeNodeLazily`, import
+dynamique), et une constante qu'ils partagent vit dans un module feuille (`reserved-paths.ts`). **Vérifiable :**
+`tests/unit/import-cycles.test.ts` (« should keep server/catalog/registry.ts out of every evaluated import cycle »).
 
 ## Error Handling
 

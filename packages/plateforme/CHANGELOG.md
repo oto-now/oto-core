@@ -17,6 +17,12 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.4 — 2026-10-14
+
+### Hosts
+- Install: upgrade to 1.4.4; no migration, no new variable, no import to change. Published from 1.4.3, without what main carries for 1.5.0.
+- Server: `next build` of a host no longer fails with « Cannot access … before initialization » at « Collecting page data »: 1.4.3 closed an import cycle through the function catalog, now broken and guarded by a test.
+
 ## 1.4.3 — 2026-10-14
 
 ### Assistants
