@@ -2,6 +2,29 @@
 // passées telles quelles : aucune fonction ne traverse la frontière client (portage-ecrans.md § 2).
 import type { PersonOrganisation, TreeNode } from "../../schemas"
 import type { Resultat } from "../api/resultat"
+import type { GlypheDeLHote } from "./glyphes-de-l-hote"
+
+/**
+ * Où un écran se range : en tête du rail, sous Accueil ; un titre du menu de l'entreprise ; une ligne du pied du rail ;
+ * le menu du compte ; ou nulle part hors de la palette.
+ */
+export type Rangement = "tete" | "reglages" | "pied" | "compte" | "hors-menu"
+
+/**
+ * Un écran propre à l'hôte, hors du paquet (décision du 2026-10-14) : il entre dans la table des écrans du paquet
+ * (`ecrans.ts`), et le rail, la palette, le menu de l'entreprise et le fil de l'administration le lisent comme les
+ * autres. Son adresse l'identifie (ligne courante, `courant` d'`EnTeteDAdministration`) : unique dans la table.
+ */
+export type EcranDeLHote = {
+  libelle: string
+  /** Un chemin de l'application ; la ligne est courante sur lui et ses sous-pages. */
+  adresse: string
+  /** Un nom de la table fermée `GLYPHES_DE_L_HOTE` (Phosphor) ; `AppWindow` à défaut. Un nom inconnu lève une erreur. */
+  glyphe?: GlypheDeLHote
+  rangement: Rangement
+  /** Réservé à qui administre (`DonneesDuRail.administre`), comme les écrans d'administration du paquet ; `false` à défaut. */
+  admin?: boolean
+}
 
 /**
  * Les adresses des écrans de l'hôte : une adresse absente retire son entrée des menus et de la palette
@@ -37,6 +60,11 @@ export type AdressesDuRail = {
    * organisation », sous la bascule du menu de l'entreprise, pour toute personne ; absente, rien.
    */
   inscription?: string
+  /**
+   * Les écrans propres à l'hôte, rangés après ceux du paquet dans leur rangement, dans l'ordre donné ; absents, rien ne
+   * change.
+   */
+  ecransDeLHote?: EcranDeLHote[]
 }
 
 export type EquipeDuRail = { slug: string; name: string }

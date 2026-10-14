@@ -11,17 +11,18 @@
 // arrivent avec la page). Ajouté (fiche D90 B) : sous 768 px, le bouton « Menu » ouvre le rail en tiroir,
 // qu'oto-frontend laissait sans déclencheur ; son bouton est le `.oto-rail-toggle` du design system.
 // E11-S20 : l'arbre servi est l'état de départ, remplacé par les relectures du rail (`useArbreDuRail`).
+// 2026-10-14 : la tête du rail rend les écrans rangés « en tête » (`ecrans.ts`) : Accueil, puis ceux de l'hôte.
 import { useCallback, useId, useRef, useState } from "react"
 import { List } from "@phosphor-icons/react/dist/csr/List"
-import { SquaresFour } from "@phosphor-icons/react/dist/csr/SquaresFour"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { AnimatedIcon } from "../ds/react/icon"
-import { Rail, RailItem, RailScroll } from "../ds/react/layout"
+import { Rail, RailScroll } from "../ds/react/layout"
 import { IconButton } from "../ds/react/primitives"
 import { useHote } from "../hote/navigation"
-import { LigneDuRail } from "./arbre-du-rail"
+import { ecransPermis } from "./ecrans"
 import { EntrepriseDuRail } from "./entreprise-du-rail"
 import { RAIL } from "./libelles"
+import { LignesDEcrans } from "./lignes-d-ecrans"
 import { PiedDuRail } from "./pied-du-rail"
 import { RechercheDuRail } from "./recherche-du-rail"
 import { SectionsDuRail } from "./sections-du-rail"
@@ -92,9 +93,7 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
       <Rail id={idDuRail} open={tiroir.ouvert} onClose={tiroir.fermer}>
         <EntrepriseDuRail entreprise={entreprise} adresses={adresses} administre={administre} organisations={organisations} />
         <RailScroll>
-          {adresses.accueil !== undefined && (
-            <RailItem as={LigneDuRail} href={adresses.accueil} label={RAIL.accueil} icon={<AnimatedIcon as={SquaresFour} size="xs" />} active={chemin === adresses.accueil} />
-          )}
+          <LignesDEcrans ecrans={ecransPermis(adresses, administre).filter((ecran) => ecran.rangement === "tete")} chemin={chemin} />
           <RechercheDuRail arbre={lu} handle={handle} adresses={adresses} administre={administre} />
           <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} />
         </RailScroll>

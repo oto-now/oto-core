@@ -13,13 +13,13 @@ import { Moon } from "@phosphor-icons/react/dist/csr/Moon"
 import { SignOut } from "@phosphor-icons/react/dist/csr/SignOut"
 import { Sun } from "@phosphor-icons/react/dist/csr/Sun"
 import { AnimatedIcon } from "../ds/react/icon"
-import { RailFoot, RailItem } from "../ds/react/layout"
+import { RailFoot } from "../ds/react/layout"
 import type { MenuItem } from "../ds/react/overlays"
 import { RailAccount } from "../ds/react/rail"
 import { useHote, type Hote } from "../hote/navigation"
-import { LigneDuRail } from "./arbre-du-rail"
 import { ecransPermis, type EcranPermis } from "./ecrans"
 import { COMPTE } from "./libelles"
+import { LignesDEcrans } from "./lignes-d-ecrans"
 import type { AdressesDuRail } from "./types"
 
 /** L'entrée qui passe à l'autre mode : elle nomme le mode où l'on va, jamais celui où l'on est. */
@@ -41,20 +41,6 @@ function itemsDuCompte(ecrans: readonly EcranPermis[], { naviguer, deconnecter, 
   ]
 }
 
-/** Les lignes du pied, au-dessus du compte ; la courante est marquée, sous-pages comprises. */
-function LignesDuPied({ ecrans, chemin }: { ecrans: readonly EcranPermis[]; chemin: string }) {
-  return ecrans.map((ecran) => (
-    <RailItem
-      key={ecran.adresse}
-      as={LigneDuRail}
-      href={ecran.adresse}
-      label={ecran.libelle}
-      icon={<AnimatedIcon as={ecran.glyphe} size="xs" />}
-      active={chemin === ecran.adresse || chemin.startsWith(`${ecran.adresse}/`)}
-    />
-  ))
-}
-
 export type PiedDuRailProps = {
   /** Le nom de la personne ; `null` quand l'identité n'a pas été lue (« Mon compte »). */
   compte: string | null
@@ -69,7 +55,7 @@ export function PiedDuRail({ compte, adresses, administre }: PiedDuRailProps) {
   const ecrans = ecransPermis(adresses, administre)
   return (
     <RailFoot>
-      <LignesDuPied ecrans={ecrans.filter((ecran) => ecran.rangement === "pied")} chemin={hote.chemin} />
+      <LignesDEcrans ecrans={ecrans.filter((ecran) => ecran.rangement === "pied")} chemin={hote.chemin} />
       <RailAccount
         name={compte ?? COMPTE.anonyme}
         items={itemsDuCompte(
