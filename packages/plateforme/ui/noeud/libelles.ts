@@ -73,13 +73,13 @@ export const CHOIX_DE_BLOC = {
   ajouter: (mots: string) => `Ajouter un bloc après — ${mots}`,
 } as const
 
-/** Le bloc « Intégration » (1.4.3) : son entrée au « + » et à « / », le dialogue de son adresse, son menu, son cadre. */
+/** Le bloc « Iframe » (« Intégration » en 1.4.3) : son entrée au « + » et à « / », le dialogue de son adresse, son menu, son cadre. */
 export const INTEGRATION = {
-  entree: "Intégration",
+  entree: "Iframe",
   dialogue: "Intégrer une page",
   modifier: "Modifier l'adresse",
   adresse: "Adresse de la page",
-  aide: "Une adresse https d'un autre site : une vidéo, une maquette, un document partagé, un tableau de bord. Préférez l'adresse d'intégration que le site propose (« Intégrer », « Embed »).",
+  aide: "L'adresse https d'un autre site, ou le code <iframe> qu'il donne (« Intégrer », « Embed ») : une vidéo, une carte, une maquette, un document partagé. Seule l'adresse est gardée.",
   invalide: "Une adresse https, sans espace ni guillemet.",
   valider: "Intégrer",
   annuler: "Annuler",
