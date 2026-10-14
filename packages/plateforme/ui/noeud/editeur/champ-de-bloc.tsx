@@ -59,6 +59,7 @@ import { ChampAuRepos, DiagrammeAuRepos } from "./champ-au-repos"
 import { ListeDesChoix, useChoixParBarre } from "./choix-de-bloc"
 import { citationAuCurseur, idDOption, lienVers, ListeACiter, useOptionActive, type Citation } from "./citer"
 import { ElementsDeListe } from "./elements-de-liste"
+import type { Genre } from "./envoi-de-fichier"
 import { useCheminDeLaFile } from "./file-d-operations"
 import { useGestes } from "./gestes"
 import { PanneauDuLien, useLienAuCurseur } from "./lien-du-bloc"
@@ -153,6 +154,8 @@ type ChampDeBlocProps = {
   ouvert: boolean
   /** L'invite du champ vide : le Texte d'une page vide (E11-S05, AC-g1). */
   invite?: string
+  /** Le stockage est activé : « / » propose aussi « Image » et « Fichier », joints après le bloc (E10-S02, AC-b7). */
+  joindre?: (quoi: Genre) => void
   /**
    * Un diagramme non vide tel qu'à la lecture (1.1.4) : au repos, il remplace le texte brut (`DiagrammeAuRepos`) ; le
    * survol ne monte pas le champ, qui cacherait le dessin sous la souris.
@@ -260,7 +263,7 @@ function useCollage(cle: string, lectureSeule: boolean, texteVide: boolean) {
   }
 }
 
-export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, lectureSeule, liens, menuOuvert, ouvert, invite, diagrammeLu }: ChampDeBlocProps) {
+export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, lectureSeule, liens, menuOuvert, ouvert, invite, diagrammeLu, joindre }: ChampDeBlocProps) {
   const gestes = useGestes()
   const champ = useRef<HTMLTextAreaElement>(null)
   const unTexte = genre === "paragraph"
@@ -268,7 +271,14 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
   const idDeLaListe = useId()
   const idDesChoix = useId()
   const citation = useCitation(cle, texte)
-  const choix = useChoixParBarre(texte, (un) => gestes.remplacerParChoix(cle, un))
+  // Un fichier choisi par « / » : le Texte perd sa barre, le fichier se joint après lui.
+  const joindreParBarre = joindre
+    ? (quoi: Genre) => {
+        gestes.saisir(cle, "")
+        joindre(quoi)
+      }
+    : undefined
+  const choix = useChoixParBarre(texte, (un) => gestes.remplacerParChoix(cle, un), joindreParBarre)
   // Le focus du champ choisit ce que montre la copie d'une liste : son texte brut au focus, son rendu au repos (E11-S06).
   const [auFocus, setAuFocus] = useState(false)
   // Sous la souris, le `<textarea>` est monté avant l'appui : le clic pose le curseur, le glissé sélectionne, comme partout.

@@ -107,6 +107,7 @@ function importText(run: Awaited<ReturnType<typeof runImport>>, args: TreeImport
     ...section("Updated", report.updated),
     ...section("Kept as they were", report.skipped.map((item) => `${item.path}: ${item.reason}`)),
     ...section("Refused", report.refused.map((item) => `${item.path}: ${item.reason}`)),
+    ...section("Kept as drafts, their publication refused (fix them, then publish)", report.drafts.map((item) => `${item.path}: ${item.reason}`)),
     ...section("Links outside the imported tree, left as they are", report.orphans.map((orphan) => `${orphan.from} → ${orphan.to}`)),
     ...report.notes,
   ].join("\n")
@@ -150,6 +151,7 @@ async function runImportTree(context: FunctionContext, args: TreeImportArgs): Pr
     updated: run.report.updated,
     skipped: run.report.skipped,
     refused: run.report.refused,
+    drafts: run.report.drafts,
     orphans: run.report.orphans,
   }
   return { text: importText(run, args), data, next: ["node.import_tree"] }

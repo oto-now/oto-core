@@ -247,6 +247,25 @@ describe("EditeurDeBlocs — an image (AC-b1)", () => {
     await waitFor(() => expect(EnvoiSimule.envois).toHaveLength(1))
     expect(screen.queryByRole("dialog")).toBeNull()
   })
+
+  it("should offer « Image » and « Fichier » at the end of the list of « / » too, and open the same choice, the Texte emptied of its slash", async () => {
+    simulerLeStockage()
+    render(<Editeur />)
+    const plus = screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" })
+    act(() => plus.focus())
+    fireEvent.click(plus)
+    await screen.findByRole("menuitem", { name: FICHIERS.image })
+    fireEvent.click(screen.getByRole("menuitem", { name: "Texte" }))
+    const texte = screen.getByRole("textbox", { name: "Modifier ce texte — bloc vide" })
+    await waitFor(() => expect(document.activeElement).toBe(texte))
+    fireEvent.change(texte, { target: { value: "/" } })
+    const liste = screen.getByRole("listbox", { name: "Blocs à insérer" })
+    expect(within(liste).getAllByRole("option").map((option) => option.textContent).slice(-2)).toEqual([FICHIERS.image, FICHIERS.fichier])
+    fireEvent.change(texte, { target: { value: "/fich" } })
+    fireEvent.keyDown(texte, { key: "Enter" })
+    expect(screen.getByRole("dialog", { name: FICHIERS.titreFichier })).toBeInTheDocument()
+    expect(texte).toHaveValue("")
+  })
 })
 
 describe("EditeurDeBlocs — a file (AC-b2)", () => {

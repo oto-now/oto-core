@@ -8,7 +8,6 @@
 // réponse arrêtée par le temps donne l'étape d'où repartir. Sans lui, une base de connaissances se recopierait page par
 // page par l'assistant, et un tableau y perdrait son schéma et ses preuves.
 import { readPageMarkdown } from "../../schemas/blocks-render"
-import { closesFence, linksIn, openingFence, type Fence } from "../../schemas/link-syntax"
 import type { TableHeader } from "../../schemas/tables"
 import { tableWriteArgsSchema } from "../../schemas/table-write"
 import type { TreeCollision, TreeImportArgs } from "../../schemas/tree-transfer"
@@ -25,6 +24,7 @@ import { countRows } from "../tables/rows"
 import { tableWrite } from "../tables/write"
 import { carryFiles } from "./files"
 import type { ImportPlan, PlanNode } from "./formats"
+import { rewriteLinks } from "./links"
 
 /** Le temps d'un appel avant de rendre la main : la route MCP a 60 s, la réponse et le journal en prennent une part. */
 const TIME_BUDGET_MS = 40_000
@@ -41,6 +41,8 @@ export type ImportReport = {
   updated: string[]
   skipped: { path: string; reason: string }[]
   refused: { path: string; reason: string }[]
+  /** Une procédure que la publication refuse (une fonction absente du catalogue, un appel invalide) : son texte gardé en brouillon. */
+  drafts: { path: string; reason: string }[]
   orphans: { from: string; to: string }[]
   notes: string[]
 }
@@ -100,61 +102,6 @@ function relinked(run: Run, sourcePath: string): string | null {
   return destinationOf(run, relative) ?? run.args.parent
 }
 
-/** Le `[[…]]` d'une ligne avec son chemin remplacé, clé et libellé gardés tels qu'écrits. */
-function rewriteLine(run: Run, line: string, from: string): string {
-  const found = linksIn(line).filter((entry) => entry.link !== null)
-  if (found.length === 0) return line
-  let out = ""
-  let at = 0
-  for (const entry of found) {
-    const link = entry.link
-    if (!link) continue
-    const target = relinked(run, link.path)
-    out += line.slice(at, entry.start)
-    if (target === null) {
-      run.report.orphans.push({ from, to: link.path })
-      out += line.slice(entry.start, entry.end)
-    } else {
-      const inner = line.slice(entry.start + 2, entry.end - 2)
-      out += `[[${inner.replace(link.path, target)}]]`
-    }
-    at = entry.end
-  }
-  return out + line.slice(at)
-}
-
-/**
- * Le markdown d'un nœud, ses liens recollés : chaque `[[…]]` hors du code vers un chemin du plan prend le chemin
- * d'arrivée, comme la première ligne d'un bloc de référence ; un lien hors du périmètre reste tel quel.
- */
-function rewriteLinks(run: Run, markdown: string, from: string): string {
-  let fence: Fence | null = null
-  let referenceLine = false
-  return markdown
-    .split("\n")
-    .map((line) => {
-      if (fence) {
-        if (closesFence(line, fence)) {
-          fence = null
-          return line
-        }
-        if (!referenceLine) return line
-        referenceLine = false
-        const [path = "", ...rest] = line.split(" ")
-        const target = path ? relinked(run, path) : null
-        if (path && target === null) run.report.orphans.push({ from, to: path })
-        return target === null ? line : [target, ...rest].join(" ")
-      }
-      fence = openingFence(line, 3)
-      if (fence) {
-        referenceLine = fence.info.split(/\s+/)[0] === "reference"
-        return line
-      }
-      return rewriteLine(run, line, from)
-    })
-    .join("\n")
-}
-
 /** Ce qu'un nœud déjà là contient : rien (une page sans bloc publié, un tableau sans ligne), ou du contenu. */
 async function isEmpty(run: Run, node: NodeRow): Promise<boolean> {
   if (node.kind === "table") return (await countRows(run.context.db, node.id)) === 0
@@ -210,7 +157,7 @@ async function reserve(run: Run, node: PlanNode): Promise<void> {
 /** Les morceaux du corps d'une page, ses liens recollés ; le titre ajouté puis retiré, pour qu'un `#` du corps reste. */
 function chunksOf(run: Run, node: PlanNode, destination: string): string[] {
   if (node.markdown.trim() === "") return []
-  const body = rewriteLinks(run, node.markdown, destination)
+  const body = rewriteLinks(node.markdown, (path) => relinked(run, path), (to) => run.report.orphans.push({ from: destination, to }))
   return readPageMarkdown(`# ${node.title}\n\n${body}`, `${lastSegment(destination)}.md`).chunks
 }
 
@@ -231,6 +178,31 @@ async function writeTableRows(run: Run, destination: string, rows: NonNullable<P
     for (const outcome of outcomes) {
       if (outcome.status === "refused") run.report.refused.push({ path: `${destination} (row ${String(outcome.key)})`, reason: String(outcome.message ?? "refused") })
     }
+  }
+}
+
+/**
+ * Le corps d'une page ou d'une procédure : ses fichiers joints d'abord, puis tout son texte en une écriture. Une procédure
+ * dont la publication est refusée (une fonction que ce catalogue n'a pas) garde son texte en brouillon, à corriger à
+ * l'écran ou par l'assistant, plutôt que de disparaître de l'import.
+ */
+async function writeBody(run: Run, node: PlanNode, destination: string, target: { node: NodeRow; created: boolean }): Promise<void> {
+  const { db, identity } = run.context
+  const carried = node.files ? await carryFiles(run.context, target.node.id, node.markdown, node.files) : { markdown: node.markdown, failed: [] }
+  for (const file of carried.failed) run.report.refused.push({ path: `${destination} (file ${file.name})`, reason: file.reason })
+  const chunks = chunksOf(run, { ...node, markdown: carried.markdown }, destination)
+  if (chunks.length === 0) return
+  // Chaque morceau en tête, du dernier au premier : l'ordre du texte, en une écriture qui remplace tout le corps.
+  const ops = [...chunks].reverse().map((text) => ({ op: "insert_after", text }))
+  const origin: WriteOrigin = { kind: "agent", ctx: run.context.ctx ?? null, file: { replace: true } }
+  const summary = target.created || target.node.summary === node.summary ? {} : { summary: node.summary }
+  const input = { path: destination, base_revision: target.node.revision, ops, ...summary }
+  try {
+    await writeNodeLazily(db, identity, input, origin)
+  } catch (error) {
+    if (node.kind !== "procedure") throw error
+    await writeNodeLazily(db, identity, { ...input, publish: false }, origin)
+    run.report.drafts.push({ path: destination, reason: message(error) })
   }
 }
 
@@ -255,16 +227,7 @@ async function fill(run: Run, node: PlanNode): Promise<void> {
         await importRows(run.context, { path: destination, by: run.origin, comment: `Importé de ${run.source}`, headers: node.csv.headers, rows: node.csv.rows })
       }
     } else {
-      const carried = node.files ? await carryFiles(run.context, found.node.id, node.markdown, node.files) : { markdown: node.markdown, failed: [] }
-      for (const file of carried.failed) run.report.refused.push({ path: `${destination} (file ${file.name})`, reason: file.reason })
-      const chunks = chunksOf(run, { ...node, markdown: carried.markdown }, destination)
-      if (chunks.length > 0) {
-        // Chaque morceau en tête, du dernier au premier : l'ordre du texte, en une écriture qui remplace tout le corps.
-        const ops = [...chunks].reverse().map((text) => ({ op: "insert_after", text }))
-        const origin: WriteOrigin = { kind: "agent", ctx: run.context.ctx ?? null, file: { replace: true } }
-        const summary = created || found.node.summary === node.summary ? {} : { summary: node.summary }
-        await writeNodeLazily(db, identity, { path: destination, base_revision: found.node.revision, ops, ...summary }, origin)
-      }
+      await writeBody(run, node, destination, { node: found.node, created })
     }
     if (!created) run.report.updated.push(destination)
   } catch (error) {
@@ -321,7 +284,7 @@ export async function runImport(
     origin: { kind: "agent", ctx: context.ctx ?? null },
     source: args.source,
     cursor: decodeCursor(args.continue_from),
-    report: { created: [], updated: [], skipped: [], refused: [], orphans: [], notes: [...plan.notes] },
+    report: { created: [], updated: [], skipped: [], refused: [], drafts: [], orphans: [], notes: [...plan.notes] },
   }
   const all = steps(plan)
   const started = now()

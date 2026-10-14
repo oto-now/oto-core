@@ -300,6 +300,24 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     }
   })
 
+  it("should point the paths of the call blocks of a procedure to the arrival, and keep as a draft a procedure whose publication is refused", async () => {
+    const source = `proc_${root}`
+    await write({ path: source, kind: "page", title: "Procédures", summary: "Les procédures." })
+    await write({ path: `${source}/tickets`, kind: "table", title: "Tickets", summary: "Les tickets.", header: { columns: [{ name: "ticket", type: "text" }], key: "ticket" } })
+    const appel = ["```call", `table.rows {"table":"${source}/tickets"}`, "```"].join("\n")
+    await write({ path: `${source}/traiter`, kind: "procedure", title: "Traiter", summary: "Traiter un ticket.", ops: [{ op: "set_markdown", text: `Lire les tickets.\n\n${appel}` }] })
+    await write({ path: `support/proc_${root}`, kind: "page", title: "Arrivée", summary: "L'arrivée." })
+    const output = await importTree({ source_url: String((await exportTree({ paths: [source] })).data?.url), parent: `support/proc_${root}` })
+    expect(output.data?.refused).toEqual([])
+    expect((await texts(`support/proc_${root}/${source}/traiter`)).join("\n")).toContain(`support/proc_${root}/${source}/tickets`)
+
+    const inconnu = ["---", "title: Appeler le PMO", "summary: Une fonction que ce catalogue n'a pas.", "kind: procedure", "---", "", "```call", "pmo.list_tickets {}", "```"].join("\n")
+    served.set("https://exemple.test/pmo.md", { bytes: strToU8(inconnu), type: "text/markdown" })
+    const refusee = await importTree({ source_url: "https://exemple.test/pmo.md", parent: `support/proc_${root}` })
+    expect(refusee.data?.drafts).toEqual([{ path: `support/proc_${root}/pmo`, reason: expect.any(String) }])
+    expect(String(refusee.text)).toContain("Kept as drafts")
+  })
+
   it("should remove the exports whose address expired, and only them", async () => {
     await exportTree({ paths: [root] })
     const prefix = `${o.org.id}/exports/`

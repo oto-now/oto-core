@@ -54,6 +54,9 @@
   max-inline-size: min(420px, 100%);
 }
 
+/* La liste de « / » montre toutes ses entrées, comme le « + » : posée dans le flux, elle pousse la page au lieu de défiler. */
+.oto-pop.oto-choix-de-bloc > .oto-menu { max-block-size: none; }
+
 /* Le titre d'abord ; le chemin dessous, en légende : côte à côte, à 375 px, le chemin rognait le titre à une lettre (contrôle visuel). */
 .oto-citer .oto-menu-item {
   flex-wrap: wrap;
@@ -310,8 +313,9 @@
   border-color: var(--island-bd);
 }
 
-/* ── le menu de la poignée (E11-S15, AC-b5) : sa hauteur suit ses entrées, celles d'un tableau comprises, sans barre de défilement ; bornée à la fenêtre, moins les 8 px que `useAnchor` laisse de chaque côté et le filet du panneau. */
-.oto-pop.oto-menu-de-poignee > .oto-menu {
+/* ── le menu de la poignée (E11-S15, AC-b5) et celui du « + » : leur hauteur suit leurs entrées, celles d'un tableau ou « Image » et « Fichier » comprises, sans barre de défilement ; bornée à la fenêtre, moins les 8 px que `useAnchor` laisse de chaque côté et le filet du panneau. */
+.oto-pop.oto-menu-de-poignee > .oto-menu,
+.oto-pop.oto-menu-du-plus > .oto-menu {
   max-block-size: calc(100dvh - var(--space-5));
 }
 

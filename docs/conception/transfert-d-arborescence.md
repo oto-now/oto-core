@@ -1,7 +1,7 @@
 # Transfert d'une arborescence
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-13
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
@@ -35,11 +35,11 @@ Avant, déplacer une base d'une organisation à l'autre passait par l'assistant,
 - Formats (`server/transfer/formats.ts`), reconnus au type servi, au nom ou aux premiers octets : le pivot (fidèle) ; un ZIP (un dossier devient une page parente, un `.md` une page, un `.csv` un tableau ; la page d'un dossier se lit dans `<dossier>.md` à côté de lui **ou** `<dossier>/index.md`, le premier l'emportant, dit au rapport ; un dossier sans page devient une page vide ; les autres fichiers sont ignorés et listés) ; un `.md` seul (une page) ; un CSV seul (un tableau, colonnes et clé inférées comme `table.import`). Les chemins naissent des noms (`slugOf`), le titre du frontmatter, du premier `#` ou du nom.
 - Deux passes, puis une troisième pour les tableaux du pivot (`server/transfer/import.ts`) :
   1. **réserver** : chaque nœud est créé vide à son chemin d'arrivée, parents d'abord (une page avec titre et résumé ; un tableau avec ses colonnes et sa clé seulement) ;
-  2. **remplir** : les fichiers joints d'une page du pivot sont relus chacun à son URL (gardes de `fetchSource`, 50 Mo), joints à la page d'arrivée par `storeFile` (type, taille, quota), et leurs liens pointés vers les copies ; un fichier qui n'arrive pas laisse sa mention, dite parmi les refus ; puis le corps de chaque page est écrit d'un coup (opérations `insert_after` d'une écriture d'agent en mode tolérant), ses liens `[[chemin…]]` réécrits vers les chemins d'arrivée (clé et libellé gardés ; rien de réécrit dans un bloc de code, sauf la ligne d'ouverture d'un bloc `reference`) ; les lignes d'un tableau par lots de 50 par `table.write`, avec leurs preuves ;
+  2. **remplir** : les fichiers joints d'une page du pivot sont relus chacun à son URL (gardes de `fetchSource`, 50 Mo), joints à la page d'arrivée par `storeFile` (type, taille, quota), et leurs liens pointés vers les copies ; un fichier qui n'arrive pas laisse sa mention, dite parmi les refus ; puis le corps de chaque page est écrit d'un coup (opérations `insert_after` d'une écriture d'agent en mode tolérant), ses liens `[[chemin…]]` réécrits vers les chemins d'arrivée (clé et libellé gardés ; rien de réécrit dans un bloc de code, sauf la ligne d'ouverture d'un bloc `reference` et les arguments d'un bloc `call`, dont chaque chaîne qui nomme un chemin importé prend le chemin d'arrivée) ; une procédure dont la publication est refusée (une fonction que le catalogue d'arrivée n'a pas, un appel invalide) garde son texte en brouillon, dit au rapport (`drafts`) ; les lignes d'un tableau par lots de 50 par `table.write`, avec leurs preuves ;
   3. **finir** : l'en-tête complet d'un tableau du pivot (file de travail, état clos, preuve exigée) est posé après ses lignes, qu'il refuserait sinon.
 - Collisions, décidées au chemin (aucune table de correspondance) : `skip` garde un nœud existant non vide et remplit un nœud vide (c'est ce qui reprend un import interrompu) ; `overwrite` réécrit un nœud du même genre (genre différent : refusé, listé) ; `suffix` place une racine importée à côté de l'existante (`_2`, `_3`…), ses descendants suivant. Le titre d'un nœud existant n'est jamais changé (il déplacerait le chemin).
 - Temps : 40 s de travail par appel, sous les 60 s de la route MCP. Au-delà, la réponse rend `continue_from`, un curseur opaque (l'étape atteinte et les places choisies par `suffix`) ; l'assistant rappelle avec les mêmes arguments et ce curseur, la source étant relue.
-- Rapport : créés, mis à jour, gardés tels quels (avec la raison), refusés (avec le refus de `write` ou de `table.write`), liens hors de l'arbre importé, notes du format. Un refus sur un nœud n'arrête pas les autres.
+- Rapport : créés, mis à jour, gardés tels quels (avec la raison), refusés (avec le refus de `write` ou de `table.write`), procédures gardées en brouillon (avec le refus de leur publication), liens hors de l'arbre importé, notes du format. Un refus sur un nœud n'arrête pas les autres.
 
 ## Décisions et alternatives écartées
 

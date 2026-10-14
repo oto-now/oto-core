@@ -105,7 +105,7 @@ export const EDITEUR = {
    * L'invite du Texte seul d'une page vide (E11-S05, AC-g1, HN-E11S05-22), mot pour mot : ce qu'on fait, et « @ » ;
    * rien sur « / ».
    */
-  invite: "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)",
+  invite: "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace",
   lectureSeule: "Ce bloc se modifie par votre assistant.",
   enregistrement: "Enregistrement…",
   supprime: "Bloc supprimé.",

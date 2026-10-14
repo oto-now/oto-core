@@ -156,10 +156,12 @@ type BlocEcritProps = {
   /** La cellule d'un tableau simple qui prend le focus : la rangée la tient pour son menu (E10-S06, AC-b2). */
   suivreLaCellule: (position: Position) => void
   invite?: string
+  /** Le stockage est activé : « / » propose « Image » et « Fichier » (E10-S02, AC-b7). */
+  joindre?: (quoi: Genre) => void
 }
 
 /** Les champs d'un tableau ou d'un repli (E10-S06), ou le champ de texte de toute autre forme écrite. */
-function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, suivreLaCellule, decritPar, invite }: Omit<BlocEcritProps, "erreur"> & { decritPar?: string }) {
+function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, suivreLaCellule, decritPar, invite, joindre }: Omit<BlocEcritProps, "erreur"> & { decritPar?: string }) {
   const { cle, bloc } = rangee
   const mots = premiersMots(bloc)
   if (forme === "tableau") return <TableauEdite cle={cle} bloc={bloc} decritPar={decritPar} lectureSeule={verrouille} suivre={suivreLaCellule} />
@@ -181,6 +183,7 @@ function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, su
       menuOuvert={menuOuvert}
       ouvert={ouvert}
       invite={invite}
+      joindre={joindre}
       // Hors du focus, un diagramme non vide se lit comme à la lecture ; pendant la frappe, rien ne se redessine. Sans
       // sa référence : l'ancre est déjà sur l'élément du bloc (`BlocEcrit`).
       diagrammeLu={
@@ -265,12 +268,13 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
   // Un tableau sans colonne ne se convertit pas (le schéma d'un tableau de données en veut une) : pas d'entrée.
   const tableauSimple = bloc.type === "simple_table" && simpleTableOf(bloc.data).columns.length > 0
   const menu: Menu = { cle, bloc, forme, premiere, derniere, tableauSimple, cellule }
+  const joindre = props.fichiers ? (quoi: Genre) => gestes.choisirUnFichier(cle, quoi) : undefined
   const contenu = conflit ? (
     <ConflitDeBloc conflit={conflit} />
   ) : bloc.type === "image" || bloc.type === "file" ? (
     <FichierEdite rangee={rangee} erreur={erreur} lectureSeule={verrouillee} prefixe={liens.prefixe} />
   ) : forme ? (
-    <BlocEcrit rangee={rangee} forme={forme} erreur={erreur} verrouille={verrouillee} liens={liens} menuOuvert={menuOuvert} ouvert={props.ouvert} suivreLaCellule={setCellule} invite={invite} />
+    <BlocEcrit rangee={rangee} forme={forme} erreur={erreur} verrouille={verrouillee} liens={liens} menuOuvert={menuOuvert} ouvert={props.ouvert} suivreLaCellule={setCellule} invite={invite} joindre={joindre} />
   ) : (
     <RenduDUnBloc bloc={bloc} Lien="a" hrefDuChemin={(chemin) => `${liens.prefixe}${chemin}`} cibles={liens.cibles} rendu={rendu} />
   )
@@ -309,7 +313,6 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
       <AnimatedIcon as={Plus} size="xs" />
     </IconButton>
   )
-  const joindre = props.fichiers ? (quoi: Genre) => gestes.choisirUnFichier(cle, quoi) : undefined
   return (
     <BlockRow
       data-cle={cle}
@@ -323,7 +326,7 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
       // Un clic ou ↓ dans la rangée, avant l'ouverture qu'il porte peut-être : les menus ont leurs entrées quand ils s'ouvrent.
       onClickCapture={demanderLesMenus}
       onKeyDownCapture={(evenement) => evenement.key === "ArrowDown" && demanderLesMenus()}
-      insert={<DropdownMenu side="bottom" align="start" trigger={plus} items={menusDemandes ? itemsDuChoix((choix) => gestes.inserer(cle, choix), joindre) : []} />}
+      insert={<DropdownMenu side="bottom" align="start" className="oto-menu-du-plus" trigger={plus} items={menusDemandes ? itemsDuChoix((choix) => gestes.inserer(cle, choix), joindre) : []} />}
       // Le bloc en conflit se règle dans son panneau : sa poignée n'ouvre pas de menu.
       handle={
         conflit ? (
