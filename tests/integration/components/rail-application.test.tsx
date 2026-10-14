@@ -19,14 +19,11 @@ import {
   ContexteDeLHote,
   ContexteDeRafraichissement,
   CoquilleOto,
-  EnTeteDAdministration,
   RailApplication,
   SectionsDuRail,
   type AdressesDuRail,
-  type EcranDeLHote,
   type RailApplicationProps,
 } from "@otomata_tech/oto_platform/ui"
-import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar"
 import { simulerLesDialogues } from "../../helpers/dialogue"
 import { choisirDansLaListe } from "../../helpers/liste-de-choix"
 
@@ -992,100 +989,6 @@ describe("RailApplication search (AC-a7)", () => {
     expect(within(dansLeContenu).getByText("Appliquer la grille tarifaire à chaque prospect…")).toBeInTheDocument()
     fireEvent.click(within(dansLeContenu).getByRole("option", { name: /Qualifier un prospect/ }))
     expect(hote.naviguer).toHaveBeenLastCalledWith("/n/ventes/qualifier")
-  })
-})
-
-// Les écrans propres à l'hôte (décision du 2026-10-14) : la même table que ceux du paquet, lue par la tête du rail,
-// le menu de l'entreprise, le pied, la palette et le fil de l'administration ; ceux d'administration pour qui administre.
-const ECRANS_DE_L_HOTE: EcranDeLHote[] = [
-  { libelle: "Rapports", adresse: "/reports", glyphe: "ChartBar", rangement: "tete" },
-  { libelle: "Planning", adresse: "/planning", glyphe: "Calendar", rangement: "tete", admin: true },
-  { libelle: "Facturation", adresse: "/admin/invoicing", glyphe: "Receipt", rangement: "reglages", admin: true },
-  { libelle: "Aide", adresse: "/help", rangement: "pied" },
-]
-
-describe("RailApplication, the host's own screens", () => {
-  const avecLesSiens = { adresses: { ...ADRESSES, ecransDeLHote: ECRANS_DE_L_HOTE } }
-
-  it("should lay the head screens under Accueil and above Rechercher, mark the current one with its sub-pages, and keep the administration ones for who administers", () => {
-    const rail = monter(avecLesSiens, "/reports/2026")
-    const ordre = [
-      within(rail).getByRole("link", { name: "Accueil" }),
-      within(rail).getByRole("link", { name: "Rapports" }),
-      within(rail).getByRole("link", { name: "Planning" }),
-      within(rail).getByRole("searchbox", { name: "Rechercher" }),
-    ]
-    for (const [rang, element] of ordre.slice(0, -1).entries()) {
-      expect(element.compareDocumentPosition(ordre[rang + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    }
-    expect(ordre[1]).toHaveAttribute("href", "/reports")
-    expect(ordre[1]).toHaveAttribute("data-lien", "hote")
-    expect(ordre[1]).toHaveAttribute("aria-current", "page")
-    expect(ordre[0]).not.toHaveAttribute("aria-current")
-    cleanup()
-
-    const membre = monter({ ...avecLesSiens, administre: false })
-    expect(within(membre).getByRole("link", { name: "Rapports" })).toBeInTheDocument()
-    expect(within(membre).queryByRole("link", { name: "Planning" })).toBeNull()
-  })
-
-  it("should add the settings screen to the company menu after the package's, and the foot line after Connecteurs", () => {
-    const rail = monter(avecLesSiens)
-    const connecteurs = within(rail).getByRole("link", { name: "Connecteurs" })
-    const aide = within(rail).getByRole("link", { name: "Aide" })
-    expect(connecteurs.compareDocumentPosition(aide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(aide).toHaveAttribute("href", "/help")
-
-    fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
-    expect(itemsDuMenu()).toEqual(["Organisation", "Équipes & accès", "Journal", "Facturation"])
-    fireEvent.click(menu().getByRole("menuitem", { name: "Facturation" }))
-    expect(hote.naviguer).toHaveBeenCalledWith("/admin/invoicing")
-    cleanup()
-
-    const membre = monter({ ...avecLesSiens, administre: false })
-    fireEvent.click(within(membre).getByRole("button", { name: /^Entreprise : Démo/ }))
-    expect(itemsDuMenu()).toEqual(["Équipes & accès", "Journal"])
-  })
-
-  it("should offer the host's screens in the palette under « Aller à »", () => {
-    const rail = monter(avecLesSiens)
-    fireEvent.click(within(rail).getByRole("searchbox", { name: "Rechercher" }))
-    const allerA = within(within(screen.getByRole("dialog", { name: "Palette de commandes" })).getByRole("group", { name: "Aller à" }))
-    for (const libelle of ["Rapports", "Planning", "Facturation", "Aide"]) expect(allerA.getByRole("option", { name: libelle })).toBeInTheDocument()
-    fireEvent.click(allerA.getByRole("option", { name: "Rapports" }))
-    expect(hote.naviguer).toHaveBeenCalledWith("/reports")
-  })
-
-  it("should lay out the same rail as before for a host without screens of its own", () => {
-    const sans = monter()
-    const liens = within(sans).getAllByRole("link").map((lien) => lien.getAttribute("href"))
-    cleanup()
-    const vide = monter({ adresses: { ...ADRESSES, ecransDeLHote: [] } })
-    expect(within(vide).getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(liens)
-  })
-
-  it("should name a host's settings screen in the administration header by its address, its siblings those of the settings", () => {
-    render(
-      <CoquilleOto>
-        <ContexteDeLHote.Provider value={{ Lien: LienDeLHote, chemin: "/admin/invoicing", naviguer: hote.naviguer }}>
-          <EnTeteDAdministration courant={{ adresse: "/admin/invoicing" }} fil={{ adresses: avecLesSiens.adresses, administre: true }} titre="Facturation" glyphe={ChartBar} />
-        </ContexteDeLHote.Provider>
-      </CoquilleOto>,
-    )
-    const fil = within(screen.getByRole("navigation", { name: "Chemin" }))
-    expect(fil.getByRole("link", { name: "Réglages de l’entreprise" })).toHaveAttribute("href", "/admin/organization")
-    const courant = fil.getByRole("button", { name: "Facturation" })
-    expect(courant).toHaveAttribute("aria-current", "page")
-    fireEvent.click(courant)
-    const freres = within(screen.getByRole("menu")).getAllByRole("menuitemradio")
-    expect(freres.map((frere) => [frere.textContent, frere.getAttribute("aria-checked")])).toEqual([
-      ["Organisation", "false"],
-      ["Équipes & accès", "false"],
-      ["Journal", "false"],
-      ["Facturation", "true"],
-    ])
-    fireEvent.click(freres[0])
-    expect(hote.naviguer).toHaveBeenCalledWith("/admin/organization")
   })
 })
 

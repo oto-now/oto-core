@@ -266,23 +266,6 @@ Une seule coque est visible, quel que soit le niveau choisi :
    </CoquilleOto>
    ```
 
-   Les écrans propres à l'hôte entrent dans la même coque par `adresses.ecransDeLHote`, rangés après ceux du
-   paquet : `tete` (sous Accueil), `reglages` (menu de l'entreprise), `pied`, `compte` (menu du compte) ou
-   `hors-menu` (la palette seule), tous dans la palette. `admin: true` les réserve à qui administre ; `glyphe` est
-   un nom de la liste fermée `GlypheDeLHote` (noms Phosphor : `ChartBar`, `FileText`, `Receipt`…), `AppWindow`
-   à défaut. Un nom inconnu, ou une adresse déjà prise par un autre écran, lève une erreur. Leur page pose
-   `EnTeteDAdministration courant={{ adresse: "/reports" }}`, qui a son fil quand l'écran se range aux réglages :
-
-   ```tsx
-   const adresses: AdressesDuRail = {
-     pages: "/n/", accueil: "/", organisation: "/admin/organization",
-     ecransDeLHote: [
-       { libelle: "Rapports", adresse: "/reports", glyphe: "ChartBar", rangement: "tete" },
-       { libelle: "Facturation", adresse: "/admin/invoicing", glyphe: "Receipt", rangement: "reglages", admin: true },
-     ],
-   }
-   ```
-
 2. **Les morceaux du rail dans la barre latérale de l'ERP**, sans second rail : `EntrepriseDuRail`
    (l'organisation et son menu), `RechercheDuRail` (« Rechercher », ⌘K et la palette),
    `SectionsDuRail` (Tout le monde, les équipes, Privé : le Contexte en tête, l'arbre, ses menus

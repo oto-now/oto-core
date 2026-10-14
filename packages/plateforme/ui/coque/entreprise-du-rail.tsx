@@ -19,9 +19,9 @@ import { OrgSwitcher } from "../ds/react/product"
 import { useHote } from "../hote/navigation"
 import { LogoDOrganisation } from "../marque/logo-d-organisation"
 import type { PersonOrganisation } from "../../schemas"
-import { ecransPermis, type EcranPermis } from "./ecrans"
+import { ecransPermis, type EcranPermis, type Rangement } from "./ecrans"
 import { ENTREPRISE } from "./libelles"
-import type { AdressesDuRail, Rangement } from "./types"
+import type { AdressesDuRail } from "./types"
 
 const GROUPES: readonly { rangement: Rangement; titre: string }[] = [
   { rangement: "reglages", titre: ENTREPRISE.reglages },

@@ -1,7 +1,7 @@
 # Écrans et coque
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-02
 
 ## Résumé
 
@@ -57,12 +57,6 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
   - équipes et nom de l'organisation restent ceux du layout, relus avec la page (`router.refresh()`) ; les relire avec l'arbre demanderait une seconde route (HN-E11S20-5).
 - Menus. Les écrans sans équivalent dans `oto-frontend` se rangent sous les menus les plus proches (« Suivi de l'entreprise », « Réglages de l'entreprise », « Membres & équipes ») (HN-E05S09-1). Les connecteurs n'ont ni entrée du rail ni bloc d'accueil ; leur écran d'administration reste joignable par le menu des réglages, pour qui administre (HN-E05S09-2). « Couleur », au pied du rail, choisit le thème de l'organisation (`PATCH brand`, le reste inchangé), pour qui administre ; un nom affiché égal au nom de l'organisation repart vide (HN-E05S09a-1). La langue de l'organisation vit dans `orgs.brand.language` (`fr`, `en`, facultative), à côté du thème : `org_by_host` la rend déjà avec la marque, sans lecture ni migration de plus ; son effet : [adresses et langue](adresses-et-langue.md) (HN-E05S11-4). Le menu de l'entreprise ne liste que l'organisation de l'adresse : aucune bascule, on change d'organisation en changeant d'adresse (HN-E05S09a-2).
 - Menu du compte : « Contexte » en tête, glyphe `Info`, clé `contexte` ; sans `adresses.contexte`, ni entrée ni commande de la palette (HN-E11S10-18) ; « Brancher un assistant » si l'hôte en sert l'adresse ; jour et nuit suivent le système (HN-E05S09a-3, amendée ci-dessous). `/profil` est une page de l'hôte ouverte à tout membre (HN-E05S11-30) : prénom et nom dans `members.profile` (`first_name`, `last_name`), `name` recomposé par `update_my_profile` pour que tout lecteur de `name` reste juste (HN-E05S11-2).
-- **Écrans propres à l'hôte** (décision du 2026-10-14) : l'hôte ajoute les siens à la coque par `AdressesDuRail.ecransDeLHote`, une liste de `{ libelle, adresse, glyphe?, rangement, admin? }`. Ils entrent dans la seule table des écrans (`ui/coque/ecrans.ts`), après ceux du paquet dans leur rangement : la tête du rail, le menu de l'entreprise, le pied, le menu du compte, la palette et le fil de l'administration les lisent par `ecransPermis`, comme les autres, sans seconde liste.
-  - Rangements : `tete` (lignes sous Accueil, au-dessus de « Rechercher » ; Accueil y est rangé et n'est plus codé dans le rail), `reglages`, `pied`, `compte`, `hors-menu` (la palette seule). Une ligne est courante sur son adresse et ses sous-pages, Accueil compris.
-  - `admin: true` réserve l'écran à qui administre (`DonneesDuRail.administre`), la règle des écrans d'administration du paquet ; absent, tout membre le voit.
-  - Le glyphe est un nom de la table fermée `GLYPHES_DE_L_HOTE` (`ui/coque/glyphes-de-l-hote.ts`, noms Phosphor), `AppWindow` à défaut : rien de fonctionnel ne traverse la frontière serveur-client. Un nom inconnu lève une erreur, comme une adresse déjà prise par un autre écran : l'adresse identifie l'écran.
-  - `EnTeteDAdministration` nomme un écran de l'hôte par `courant={{ adresse }}` ; rangé aux réglages, il a le fil du groupe et ses frères, comme Organisation.
-  - Sans l'option, le rail, les menus et la palette sont ceux d'avant.
 - Les écrans Marque, Drapeaux et Accès plateforme restent exportés jusqu'à leur retrait (M65) : `ui/index.ts` est un fichier d'ajout, les pages de l'hôte redirigent (HN-E05S11-15).
 
 ### Accueil et vue « Contexte »
@@ -89,10 +83,6 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - **Relire le rail par une minuterie** : écarté, rien ne relit le rail sans geste ; une personne ajoutée à une équipe par un autre la voit au prochain chargement ou après son prochain geste (HN-E11S10-10) ; la relecture à la navigation, au retour sur l'onglet et après chaque geste (E11-S20) a complété ce choix.
 - **« Profil » ouvrant le Contexte Perso (`/n/perso/<handle>/contexte`) et « Apparence » au menu du compte** (HN-E05S09a-3) : remplacés par la page `/profil` (HN-E05S11-30) ; la couleur de la personne est dans Profil, celle de l'organisation dans Organisation.
 
-- **Une seconde liste pour les écrans de l'hôte**, rendue à côté de la table du paquet : deux listes des mêmes menus divergent au premier écran ajouté (en-tête d'`ecrans.ts`). Écartée le 2026-10-14 : les écrans de l'hôte entrent dans la table.
-- **Un glyphe passé en composant** par l'hôte : un composant ne traverse pas la frontière serveur-client, la page serveur de l'hôte passe les adresses au rail client. Écarté le 2026-10-14 : un nom pris dans une table fermée.
-- **Une clé `cle` par écran de l'hôte**, pour la ligne courante et `courant` de l'en-tête : l'adresse, unique dans la table, l'identifie déjà ; la ligne courante et le fil cherchaient l'écran par son adresse. Écartée le 2026-10-14.
-
 ## Sécurité et confidentialité
 
 - `ui/` ne voit jamais `server/` ni la base : toute donnée arrive par props depuis la page serveur de l'hôte, toute mutation par l'API sous la session (ADR-008 § 4) ; les droits se décident dans le service ([droits d'accès](droits-d-acces.md)).
@@ -107,7 +97,6 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - M72 : dans la vue « Contexte », la ligne « Not loaded: … » d'un Contexte écrivable est masquée par l'éditeur.
 - M73 : lignes de faits et de connecteurs du Contexte encore en anglais à l'écran, `EcranUsage` et `usageSummary` sans page.
 - M96 : campagne visuelle à mener dans les deux thèmes (zoom, « Partager », filet de `/connect` et de « Brancher », explication de la vue « Contexte »).
-- Les écrans de l'hôte n'ont pas de spec e2e : l'hôte de référence (`src/`) n'en déclare aucun ; les tests d'intégration du rail les couvrent.
 - La spec e2e `rail.spec.ts` d'E11-S20 est écrite, non lancée ; la famille « Mistral » attend le banc Le Chat (HN-E11S09-6).
 
 ## Questions ouvertes
@@ -124,4 +113,3 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-008, les fiches D15, D16, D90, D136, D139, P16, les questions Q3 et Q4 et les choix des stories E05-S07, E05-S09, E05-S11, E11-S09, E11-S10, E11-S20 — décidé par Alexis, accord de JB.
 - 2026-10-02 : ADR-008 § 5 appliqué : le widget routeur dans la conversation rend les composants du design system — proposé par la session de la story widgets-dans-la-conversation, avec ADR-009 § 3 ([outils MCP](outils-mcp.md)).
 - 2026-10-03 : le menu du compte du rail offre la bascule jour ou nuit quand l'hôte la sert (`Hote.apparence` : le mode et le geste) ; le mode reste à l'hôte, le paquet ne l'écrit pas — demandé par JB (source : hôte SaaS, aucun moyen de changer de mode dans l'application).
-- 2026-10-14 : l'hôte ajoute ses écrans à la coque (`AdressesDuRail.ecransDeLHote`) : la même table que ceux du paquet, rangement `tete` sous Accueil, glyphe nommé dans une table fermée, réservés aux administrateurs par `admin`, fil de l'administration par `courant={{ adresse }}` — décidé par Alexis, JB prévenu (source : besoin d'une application hôte).
