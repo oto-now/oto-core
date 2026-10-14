@@ -33,7 +33,7 @@ import { simpleTableOf } from "../../../schemas/blocks"
 import { isRecord } from "../../../schemas/tables"
 import { texteDUnAppel } from "../../procedure/libelles"
 import { texteLu } from "../en-ligne"
-import { CHOIX_DE_BLOC } from "../libelles"
+import { CHOIX_DE_BLOC, INTEGRATION } from "../libelles"
 import { avecTableau, repliDuTexte, TABLEAU_NEUF, tableauDuTexte, texteDuRepli, texteDuTableau, type Tableau } from "./blocs-de-page"
 
 /** Les formes du menu « Style » (E05-S10, AC-a2 ; E10-S06, AC-a3), dans son ordre ; tout autre bloc se lit, se déplace, se duplique et se supprime. */
@@ -275,8 +275,8 @@ export function avecForme(servi: BlocEdite, forme: Forme): BlocEdite {
 export function premiersMots(bloc: Pick<BlocEdite, "type" | "text" | "data">): string {
   const donnee = (champ: string) => (typeof bloc.data[champ] === "string" ? String(bloc.data[champ]) : "")
   // Un tableau simple se nomme par ses colonnes, un repli par son résumé (E10-S04), un séparateur par son nom (E10-S06) : ils n'ont pas de texte.
-  // Un fichier joint se nomme par son nom (E10-S02).
-  const propre = bloc.type === "divider" ? CHOIX_DE_BLOC.separateur : bloc.type === "file" ? donnee("name") : bloc.type === "call" ? donnee("function") : bloc.type === "reference" ? donnee("path") : bloc.type === "toggle" ? donnee("summary") : bloc.type === "simple_table" ? simpleTableOf(bloc.data).columns.join(" ") : null
+  // Un fichier joint se nomme par son nom (E10-S02), un cadre intégré par son adresse (1.4.3).
+  const propre = bloc.type === "divider" ? CHOIX_DE_BLOC.separateur : bloc.type === "embed" ? `${INTEGRATION.entree} ${donnee("url")}` : bloc.type === "file" ? donnee("name") : bloc.type === "call" ? donnee("function") : bloc.type === "reference" ? donnee("path") : bloc.type === "toggle" ? donnee("summary") : bloc.type === "simple_table" ? simpleTableOf(bloc.data).columns.join(" ") : null
   const texte = propre ?? (bloc.type === "image" ? donnee("alt") || (bloc.text ?? "") : texteDe(bloc))
   const mots = texteLu(texte).trim().split(/\s+/).filter(Boolean).slice(0, 4)
   return mots.length > 0 ? mots.join(" ") : "bloc vide"

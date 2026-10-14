@@ -145,6 +145,8 @@ export type DialogueDeFichier =
   | { genre: "choisir"; cle: string; quoi: Genre }
   | { genre: "depot"; cle: string; fichier: File; extension: "md" | "csv" }
   | { genre: "import"; cle: string; fichier: File }
+  // 1.4.3 : l'adresse d'un cadre intégré, neuf après la rangée, ou celui de la rangée à changer.
+  | { genre: "integration"; cle: string; modifier: boolean; adresse: string }
 
 /** L'état des fichiers de l'éditeur : le stockage, les envois par rangée locale, le dialogue ouvert. Quitter l'écran annule les envois. */
 export function useFichiersDeLEditeur() {

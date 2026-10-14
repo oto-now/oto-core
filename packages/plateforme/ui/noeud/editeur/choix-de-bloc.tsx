@@ -12,12 +12,12 @@
 //
 // E10-S02 (lot b) : le groupe « Insérer » propose aussi « Image » et « Fichier » quand le stockage est activé (AC-b1, AC-b2,
 // AC-b7), au « + » comme à « / » : les deux listes montrent les mêmes entrées. Choisis par « / », le Texte se vide de sa
-// barre et le fichier se joint après lui.
+// barre et le fichier se joint après lui. 1.4.3 : « Intégration » les suit, partout : elle ouvre le dialogue de son adresse.
 import { useEffect, useState, type KeyboardEvent } from "react"
 import { normalizeTitle } from "../../../schemas/nodes"
 import { fuzzyScore } from "../../ds/react/command-palette"
 import type { MenuItem } from "../../ds/react/overlays"
-import { CHOIX_DE_BLOC, FORMES } from "../libelles"
+import { CHOIX_DE_BLOC, FORMES, INTEGRATION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { idDOption } from "./citer"
 import type { Genre } from "./envoi-de-fichier"
@@ -29,26 +29,30 @@ const GROUPES: readonly { titre: string; choix: readonly Choix[] }[] = [
   { titre: CHOIX_DE_BLOC.inserer, choix: ["tableau", "separateur"] },
 ]
 
-/** Une entrée de « / » : un bloc, ou un fichier à joindre (« Image », « Fichier »). */
-export type ChoixDeBarre = Choix | Genre
+/** Une entrée de « / » : un bloc, un fichier à joindre (« Image », « Fichier »), ou un cadre à intégrer. */
+export type ChoixDeBarre = Choix | Genre | "integration"
 
 const FICHIERS_JOINTS: readonly Genre[] = ["image", "fichier"]
 
 const estUnFichier = (choix: ChoixDeBarre): choix is Genre => choix === "image" || choix === "fichier"
 
-const libelleDe = (choix: ChoixDeBarre) => (estUnFichier(choix) ? FICHIERS[choix] : choix === "separateur" ? CHOIX_DE_BLOC.separateur : FORMES[choix].libelle)
+const libelleDe = (choix: ChoixDeBarre) =>
+  choix === "integration" ? INTEGRATION.entree : estUnFichier(choix) ? FICHIERS[choix] : choix === "separateur" ? CHOIX_DE_BLOC.separateur : FORMES[choix].libelle
 
 /**
  * Le menu du « + » (AC-a1) : les deux groupes ; choisir insère le bloc après la rangée. `joindre` : le stockage est
  * activé, « Image » et « Fichier » terminent « Insérer » (E10-S02, AC-b7).
  */
-export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void): MenuItem[] {
-  const fichiers: MenuItem[] = joindre
-    ? [
-        { label: FICHIERS.image, onSelect: () => joindre("image") },
-        { label: FICHIERS.fichier, onSelect: () => joindre("fichier") },
-      ]
-    : []
+export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void, integrer?: () => void): MenuItem[] {
+  const fichiers: MenuItem[] = [
+    ...(joindre
+      ? [
+          { label: FICHIERS.image, onSelect: () => joindre("image") },
+          { label: FICHIERS.fichier, onSelect: () => joindre("fichier") },
+        ]
+      : []),
+    ...(integrer ? [{ label: INTEGRATION.entree, onSelect: integrer }] : []),
+  ]
   return GROUPES.flatMap(({ titre, choix }, rang) => [
     { group: titre },
     ...choix.map((un) => ({ label: libelleDe(un), onSelect: () => choisir(un) })),
@@ -60,8 +64,8 @@ export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: G
  * Les entrées que retient ce qui est tapé après « / » (AC-a2) : toutes sans rien, sinon les meilleures d'abord, sans casse
  * ni accent. `fichiers` : le stockage est activé, « Image » et « Fichier » terminent la liste, comme au « + ».
  */
-export function choixRetenus(requete: string, fichiers = false): ChoixDeBarre[] {
-  const tous: ChoixDeBarre[] = [...GROUPES.flatMap(({ choix }) => choix), ...(fichiers ? FICHIERS_JOINTS : [])]
+export function choixRetenus(requete: string, fichiers = false, integrer = false): ChoixDeBarre[] {
+  const tous: ChoixDeBarre[] = [...GROUPES.flatMap(({ choix }) => choix), ...(fichiers ? FICHIERS_JOINTS : []), ...(integrer ? (["integration"] as const) : [])]
   if (requete === "") return tous
   const cherche = normalizeTitle(requete)
   return tous
@@ -76,10 +80,10 @@ export function choixRetenus(requete: string, fichiers = false): ChoixDeBarre[] 
  * parcourent, Entrée ou Tab choisit et remplace le Texte par le bloc choisi ; Échap la ferme, le texte reste. Un « / »
  * tapé ailleurs reste du texte.
  */
-export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void) {
+export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void, integrer?: () => void) {
   const [ouverte, setOuverte] = useState(false)
   const [actif, setActif] = useState(0)
-  const retenus = ouverte ? choixRetenus(texte.slice(1), joindre !== undefined) : []
+  const retenus = ouverte ? choixRetenus(texte.slice(1), joindre !== undefined, integrer !== undefined) : []
   const fermer = () => setOuverte(false)
   /** La frappe d'un Texte : `avant`, son texte d'avant ; rend `true` si la liste reste ouverte après elle. */
   const suivre = (avant: string, apres: string, unTexte: boolean): boolean => {
@@ -90,6 +94,7 @@ export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void,
   }
   const prendre = (choix: ChoixDeBarre) => {
     fermer()
+    if (choix === "integration") return integrer?.()
     if (!estUnFichier(choix)) return choisir(choix)
     joindre?.(choix)
   }

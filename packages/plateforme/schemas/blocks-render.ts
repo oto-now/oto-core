@@ -203,6 +203,8 @@ function renderBody<B extends BlockLike>(block: B, options: RenderOptions<B>): s
     // Un fichier joint (E10-S02, AC-d1) : « [<nom> (<taille>, <type>)](<route>/<id>) », le nom tel quel, comme le texte
     // alternatif d'une image ; `parseMarkdown` le relit de droite à gauche (`markdown-files.ts`). Le type est
     // l'extension du nom (`pdf`), le type de la ligne pour un nom sans extension admise.
+    // Un cadre intégré (1.4.3) : son adresse dans une clôture `embed`, sa hauteur ensuite quand elle est choisie.
+    case "embed": return fenced("embed", valid.data.height === undefined ? valid.data.url : `${valid.data.url} ${JSON.stringify({ height: valid.data.height })}`)
     case "file":
       return `[${valid.data.name} (${fileSizeText(valid.data.size)}, ${fileTypeOf(valid.data.name) ?? valid.data.mime})](${filePath(valid.data.file_id, options.fileRoute)})`
   }

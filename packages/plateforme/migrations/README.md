@@ -190,6 +190,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `search_path` vide, révoquée à `public`, accordée à `authenticated` : l'appelant de l'équipe plateforme qui
   administre l'organisation (`is_staff()` et `is_org_admin`), email dans les claims, en devient membre `admin`, sinon
   `42501`. Aucune table, colonne ni policy.
+- `20261014120000_platform_bloc_integration.sql` (version 1.4.3, bloc « Intégration ») : `blocks_type_check` admet
+  `embed` ; `blocks_shape_check` lui ajoute sa forme (texte nul, `url` en `https://` de 9 à 2 000 caractères sans blanc
+  ni guillemet, `height` facultative parmi `small`, `medium`, `large`). Les deux contraintes sont retirées puis reposées
+  telles que les écrit la partie 3 de `20260930100000_v1_1_0.sql`, le type nouveau en plus : aucun bloc existant ne
+  change. Aucune table, colonne ni fonction.
 
 ## Installer sur un hôte neuf
 

@@ -14,6 +14,7 @@ import { Button } from "../../ds/react/primitives"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { ACCEPTES, LIMITES, type DialogueDeFichier, type Genre } from "./envoi-de-fichier"
 import { useGestes } from "./gestes"
+import { ChoixDeLIntegration } from "./integration-editee"
 import type { OptionDuDepot } from "./gestes-des-fichiers"
 
 /** Les issues d'un dépôt, la recommandée d'abord (AC-b5). */
@@ -80,5 +81,6 @@ export function DialogueDesFichiers({ dialogue, chemin }: { dialogue: DialogueDe
   if (dialogue === null) return null
   if (dialogue.genre === "choisir") return <ChoixDuFichier quoi={dialogue.quoi} />
   if (dialogue.genre === "depot") return <ChoixAuDepot nom={dialogue.fichier.name} extension={dialogue.extension} />
+  if (dialogue.genre === "integration") return <ChoixDeLIntegration adresse={dialogue.adresse} modifier={dialogue.modifier} />
   return <ImportDuCsv chemin={chemin} fichier={dialogue.fichier} />
 }

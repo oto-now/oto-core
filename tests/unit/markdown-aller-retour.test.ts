@@ -28,9 +28,9 @@ const produced = DOCUMENT_CASES.flatMap(({ name, valid, block: raw }) => {
 })
 
 describe("a page exported to .md and imported back (AC-a6)", () => {
-  it("should cover the block types the analysis produces, those of E10-S04 and the attached file of E10-S02 included", () => {
+  it("should cover the block types the analysis produces, those of E10-S04, the attached file of E10-S02 and the embed of 1.4.3 included", () => {
     const types = new Set(produced.map(({ block }) => String(block.type)))
-    expect([...types].sort()).toEqual(["callout", "checklist", "code", "divider", "heading", "image", "list", "mermaid", "paragraph", "simple_table", "toggle", "call", "file"].sort())
+    expect([...types].sort()).toEqual(["callout", "checklist", "code", "divider", "heading", "image", "list", "mermaid", "paragraph", "simple_table", "toggle", "call", "file", "embed"].sort())
   })
 
   it.each(produced.map((one) => [one.name, one.block] as const))("should give back the title and %s, nothing kept as text", (_name, block) => {

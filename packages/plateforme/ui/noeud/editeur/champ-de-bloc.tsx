@@ -156,6 +156,8 @@ type ChampDeBlocProps = {
   invite?: string
   /** Le stockage est activé : « / » propose aussi « Image » et « Fichier », joints après le bloc (E10-S02, AC-b7). */
   joindre?: (quoi: Genre) => void
+  /** « / » propose « Intégration », un cadre écrit après le bloc (1.4.3). */
+  integrer?: () => void
   /**
    * Un diagramme non vide tel qu'à la lecture (1.1.4) : au repos, il remplace le texte brut (`DiagrammeAuRepos`) ; le
    * survol ne monte pas le champ, qui cacherait le dessin sous la souris.
@@ -263,7 +265,7 @@ function useCollage(cle: string, lectureSeule: boolean, texteVide: boolean) {
   }
 }
 
-export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, lectureSeule, liens, menuOuvert, ouvert, invite, diagrammeLu, joindre }: ChampDeBlocProps) {
+export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, lectureSeule, liens, menuOuvert, ouvert, invite, diagrammeLu, joindre, integrer }: ChampDeBlocProps) {
   const gestes = useGestes()
   const champ = useRef<HTMLTextAreaElement>(null)
   const unTexte = genre === "paragraph"
@@ -278,7 +280,14 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
         joindre(quoi)
       }
     : undefined
-  const choix = useChoixParBarre(texte, (un) => gestes.remplacerParChoix(cle, un), joindreParBarre)
+  // Un cadre choisi par « / » : le Texte perd sa barre, le cadre s'écrit après lui.
+  const integrerParBarre = integrer
+    ? () => {
+        gestes.saisir(cle, "")
+        integrer()
+      }
+    : undefined
+  const choix = useChoixParBarre(texte, (un) => gestes.remplacerParChoix(cle, un), joindreParBarre, integrerParBarre)
   // Le focus du champ choisit ce que montre la copie d'une liste : son texte brut au focus, son rendu au repos (E11-S06).
   const [auFocus, setAuFocus] = useState(false)
   // Sous la souris, le `<textarea>` est monté avant l'appui : le clic pose le curseur, le glissé sélectionne, comme partout.

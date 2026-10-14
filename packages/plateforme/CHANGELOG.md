@@ -19,14 +19,12 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ### Assistants
 - Platform team: `admin_org create` takes `admin_email`, its first administrator (you join at once; another email is invited), and `admin_org add_admin` names one later.
-- `node.import_tree` points the paths named in the call blocks of an imported procedure to the arrival, and keeps a procedure whose publication is refused as a draft, listed in `drafts`.
 
 ### Hosts
 - MCP: `admin_org create` requires `admin_email`, the first administrator: the caller's own email (no case) makes them a member with the admin role in the creation transaction, without email, in OIDC and Supabase modes; another email gets an admin invitation once created, by the invitation service and email of the Équipes screen, linking to an address of the organisation. Its summary says which; its next line no longer says to invite from Équipes. The creator's `creation` platform access stays.
 - MCP: `admin_org add_admin` (`org`, `admin_email`) names an administrator of an existing organisation by the same rule, reserved like `add_host` to platform team members who administer it; a member is promoted, an administrator left as is. `admin_email` is a new property of the served schema.
 - Server: `createOrg(db, staff, input, { orgCreation?, origin })` takes the origin of the admin MCP called (`handleAdminMcp` passes it) and returns `firstAdmin`; `addAdmin(db, identity, staff, input, { origin })` is new. A direct call of `createOrg` without `admin_email` is now refused (`invalid_arguments`).
 - Migrations: apply `20261014090000_platform_premier_administrateur.sql` (two functions, `claim_org_admin` for `authenticated`, `seat_org_admin` internal, and `signup_org` rewritten on it, same signature; additive).
-- UI: the list of « / » offers the same blocks as the « + », « Image » and « Fichier » included when files are enabled; both show all their entries without a scroll bar; the prompt of an empty page cites « / » and « @ ».
 - MCP: in OIDC mode, a token is also accepted when its `aud` is the resource the metadata announce for the called address (`<origin>/api/mcp`, `<origin>/api/mcp-admin`), besides `PLATFORM_OIDC_AUDIENCE`. An issuer that puts the requested resource in `aud` (Logto) now serves the admin MCP and every organisation address, each declared at the issuer as an API resource; a token issued for another address is still refused.
 - Install: the reference host's `src/middleware.ts` builds its redirects on `X-Forwarded-Host` (else `Host`) and `X-Forwarded-Proto`: under `next start` behind a proxy it sent browsers to `https://localhost:<port>`. Copy the new `publicUrl` into your middleware.
 
@@ -54,6 +52,18 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - UI: `EcranConnecteurs` takes `donnees.formulaires?` (`connectorAccountForms()`): « Créer un compte » creates a live account of a declared connector with its fields and settings, and each live account row offers « Secret et réglages », secret fields masked and never shown again. `AccountView` gains `secret?` (fields set, date) and `settings?`.
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
+
+## 1.4.3 — 2026-10-14
+
+### Assistants
+- A page can show the page of another site: the block `embed` is written as a fence ```embed with the https address, then {"height": "small" | "medium" | "large"}.
+- `node.import_tree` points the paths named in the call blocks of an imported procedure to the arrival, and keeps a procedure whose publication is refused as a draft, listed in `drafts`.
+
+### Hosts
+- Install: upgrade to 1.4.3, run `oto-platform migrations sync` and apply `20261014120000_platform_bloc_integration.sql` before deploying (the block type `embed` and its shape; additive). Published from 1.4.2, without what main carries for 1.5.0.
+- Migrations: `20261014120000_platform_bloc_integration.sql` sets `blocks_type_check` and `blocks_shape_check` again, `embed` added; no table, column nor function.
+- UI: « Intégration » in the « + » and « / » of the editor opens the address of the page to show; the frame is an `iframe` with `sandbox`, at the height chosen in its menu, and a link opens the page in a new tab. A host that sends a `Content-Security-Policy` with `frame-src` or `child-src` must admit the sites its pages embed.
+- UI: the list of « / » offers the same blocks as the « + », « Image » and « Fichier » included when files are enabled; both show all their entries without a scroll bar; the prompt of an empty page cites « / » and « @ ».
 
 ## 1.4.2 — 2026-10-13
 

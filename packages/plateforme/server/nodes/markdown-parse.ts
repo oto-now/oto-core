@@ -23,7 +23,7 @@
 //
 // E10-S02 (AC-d1) : l'image et le fichier joints, par l'adresse de lecture d'un fichier (`markdown-files.ts`).
 import { blockInputSchema, NODE_PATH_PATTERN, type BlockInput } from "../../schemas"
-import { trimBlanks } from "../../schemas/blocks"
+import { EMBED_HEIGHTS, embedUrlSchema, trimBlanks } from "../../schemas/blocks"
 import { closesFence, LINE_SEPARATORS, openingFence, type Fence } from "../../schemas/link-syntax"
 import { cut } from "../journal"
 import { charCount, formatCount } from "./document"
@@ -81,11 +81,29 @@ function referenceBlock(content: string, line: number): BlockInput {
   return { type: "reference", text: null, data: { path, view } }
 }
 
+/**
+ * Une adresse `https` (1.4.3), puis une hauteur JSON facultative (`{"height": "large"}`) : la forme d'`embedUrlSchema` et
+ * d'`EMBED_HEIGHTS`, contrôlée ici pour que le refus nomme la ligne.
+ */
+function embedBlock(content: string, line: number): BlockInput {
+  const body = content.trim()
+  const space = body.indexOf(" ")
+  const url = space === -1 ? body : body.slice(0, space)
+  const rest = space === -1 ? "" : body.slice(space + 1)
+  const shape = `line ${line}: an embed block holds an https address, then an optional {"height": "small" | "medium" | "large"};`
+  if (!embedUrlSchema.safeParse(url).success) refuse(`${shape} « ${quoted(url)} » is not an https address.`)
+  if (rest.trim() === "") return { type: "embed", text: null, data: { url } }
+  const options = jsonObject(rest)
+  const height = EMBED_HEIGHTS.find((one) => one === options?.height)
+  if (!height) refuse(`${shape} « ${quoted(rest)} » is not a height.`)
+  return { type: "embed", text: null, data: { url, height } }
+}
+
 /** Les clôtures dont le mot de tête fait un autre bloc qu'un `code` : relues telles quelles, elles le redeviendraient. */
-const SPECIAL_FENCES: ReadonlySet<string> = new Set(["call", "reference", "mermaid"])
+const SPECIAL_FENCES: ReadonlySet<string> = new Set(["call", "reference", "mermaid", "embed"])
 
 /**
- * Le bloc d'une clôture ; tolérant (E10-S01, AC-a2) : un `call` ou une `reference` mal formés restent un bloc
+ * Le bloc d'une clôture ; tolérant (E10-S01, AC-a2) : un `call`, une `reference` ou un `embed` mal formés restent un bloc
  * `code`, leur texte d'origine, sans mot de tête ; un `mermaid` vide est retiré (`null`).
  */
 function fenceBlock(fence: Fence, content: string, line: number, mode: ParseMode): BlockInput | null {
@@ -97,6 +115,7 @@ function fenceBlock(fence: Fence, content: string, line: number, mode: ParseMode
   try {
     if (word === "call") return callBlock(content, line)
     if (word === "reference") return referenceBlock(content, line)
+    if (word === "embed") return embedBlock(content, line)
   } catch (error) {
     if (!(error instanceof ParseProblem) || !mode.tolerant) throw error
     mode.kept++

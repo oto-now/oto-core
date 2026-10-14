@@ -131,6 +131,16 @@ export const DOCUMENT_CASES: BlockCase[] = [
   invalid("a joined file over 50 MB", { type: "file", data: { file_id: "f2000000-0000-4000-8000-000000000002", name: "a.pdf", size: 52_428_801, mime: "application/pdf" } }),
   invalid("a joined file without name", { type: "file", data: { file_id: "f2000000-0000-4000-8000-000000000002", size: 12, mime: "application/pdf" } }),
 
+  // 1.4.3 : un cadre intégré, une adresse https sans blanc ni guillemet, sa hauteur facultative.
+  valid("an embed", { type: "embed", data: { url: "https://www.youtube.com/embed/abc" } }),
+  valid("an embed of large height", { type: "embed", data: { url: "https://www.figma.com/embed?node=1", height: "large" } }),
+  invalid("an embed in http", { type: "embed", data: { url: "http://exemple.test/a" } }),
+  invalid("an embed with a space", { type: "embed", data: { url: "https://exemple.test/a b" } }),
+  invalid("an embed with a quote", { type: "embed", data: { url: 'https://exemple.test/"a' } }),
+  invalid("an embed of an unknown height", { type: "embed", data: { url: "https://exemple.test/a", height: "huge" } }),
+  invalid("an embed with a text", { type: "embed", text: "x", data: { url: "https://exemple.test/a" } }),
+  invalid("an embed without address", { type: "embed", data: {} }),
+
   valid("a toggle", { type: "toggle", text: "Corps [[ventes/devis]].\n\n```\n<b>\n```", data: { summary: "Détails" } }),
   valid("an empty toggle", { type: "toggle", text: "", data: { summary: "Rien" } }),
   invalid("a toggle without text", { type: "toggle", data: { summary: "a" } }),

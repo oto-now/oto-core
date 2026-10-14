@@ -1,7 +1,7 @@
 # Éditeur de blocs
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
@@ -46,7 +46,7 @@ Le contenu est fait de nœuds et de blocs ([pages et blocs](pages-et-blocs.md), 
 
 ### Choisir un bloc : « + » et « / »
 
-- D116 : le « + » et `/` ouvrent un choix en deux groupes : « Texte » (formes de texte et Repli) et « Insérer » (Tableau simple, Séparateur, Image, Fichier) ; un `.html` se joint par « Fichier » (D137, [contenu HTML isolé](contenu-html-isole.md)).
+- D116 : le « + » et `/` ouvrent un choix en deux groupes : « Texte » (formes de texte et Repli) et « Insérer » (Tableau simple, Séparateur, Image, Fichier, Intégration) ; les deux listes montrent les mêmes entrées, « Image » et « Fichier » quand le stockage est activé, sans barre de défilement ; un `.html` se joint par « Fichier » (D137, [contenu HTML isolé](contenu-html-isole.md)). « Intégration » ouvre le dialogue de l'adresse (contrôlée comme la base) et écrit le cadre tout de suite après le bloc ; le menu de la poignée d'un cadre règle sa hauteur (Petite, Moyenne, Grande) et change son adresse ([pages et blocs](pages-et-blocs.md)).
 - HN-E10S06-11 : la liste de « / » garde l'ordre du menu tant que rien ne suit `/`, puis met les meilleures entrées d'abord (`fuzzyScore`), casse et accents retirés par `normalizeTitle`.
 - D144, HN-E10S06-10 : tant que la liste de « / » est ouverte, le Texte attend le choix d'un bloc : le différé de 1 200 ms ne l'écrit pas, et la frappe qui ouvre la liste désarme celui d'une frappe d'avant ; la sortie du champ et ⌘S l'écrivent ; liste fermée (Échap, ou un texte qui ne commence plus par `/`), « /etc » part au différé dès la frappe suivante (`useChoixParBarre`).
 - HN-E10S06-6 : le « + » d'une page vide n'est pas codé : message, bouton de la page vide et `insererEnTete` restent ceux d'avant ; AC-a1 vaut pour le « + » d'un bloc, AC-a2 pour tout Texte vide (décision de JB du 2026-09-29 : la page vide sera remplacée par un premier Texte créé et focalisé).
