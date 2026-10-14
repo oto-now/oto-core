@@ -10,6 +10,13 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-14] — Éditeur : le bloc « Iframe » prend le code <iframe> d'un site (publié en 1.4.6)
+
+**Quoi :** le bloc `embed` s'appelle « Iframe » au « + », à « / » et dans le nom de ses gestes (« Intégration » avant). Son dialogue prend une adresse `https` ou le code `<iframe …>` collé tel que Google, YouTube et les autres le donnent : seul le premier attribut `src` (pas `data-src`) est gardé, `&amp;` relu en `&` (`adresseDeLaSaisie`, `integration-editee.tsx`), puis contrôlé par `embedUrlSchema` comme avant ; un code sans `src` est refusé par la même phrase. Aide du champ réécrite.
+**Pourquoi :** retour de JB : coller le code `<iframe>` que donne Google était refusé, et le nom « Iframe » dit mieux ce que fait le bloc.
+**Surfaces nouvelles :** `adresseDeLaSaisie` (sans elle, le code d'un site est refusé). Un cran plus simple écarté : expliquer dans l'aide d'aller chercher l'adresse dans le code (c'est le geste qui échouait).
+**Fichiers :** `packages/plateforme/ui/noeud/editeur/integration-editee.tsx`, `packages/plateforme/ui/noeud/libelles.ts`, tests (`bloc-integration`, `e10s02-fichiers`, `e10s06-editeur`), `docs/conception/{pages-et-blocs,editeur-de-blocs}.md`, `.method/conventions/component-registry.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-14] — 1.4.5, partie de 1.4.4 : les deux chantiers de l'éditeur ci-dessous, sans le lot 1.5.0 de main
 
 **Quoi :** version 1.4.5 depuis `v1.4.4` : le commit de main qui porte les liens réduits pendant la frappe et les trois titres, titre repliable et menu dépliant, sans ses documents de conception sur la lecture des fichiers ; `package.json` en 1.4.5, CHANGELOG du paquet.

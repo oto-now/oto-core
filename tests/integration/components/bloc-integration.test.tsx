@@ -9,8 +9,8 @@ import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-bl
 import { simulerLesDialogues } from "../../helpers/dialogue"
 import { bloc, ID, PAGE, simulerLAPI } from "../../helpers/noeud"
 
-// Le bloc « Intégration » (1.4.3) : lu, un cadre isolé (`sandbox`) à la hauteur du bloc, avec le lien qui ouvre la page ;
-// édité, l'entrée « Intégration » du « + » et de « / », le dialogue de l'adresse contrôlée comme la base, le cadre écrit
+// Le bloc « Iframe » (« Intégration » en 1.4.3) : lu, un cadre isolé (`sandbox`) à la hauteur du bloc, avec le lien qui ouvre la page ;
+// édité, l'entrée « Iframe » du « + » et de « / », le dialogue de l'adresse contrôlée comme la base, le cadre écrit
 // tout de suite, puis sa hauteur et son adresse changées par le menu de sa poignée.
 
 const rafraichir = vi.fn()
@@ -59,7 +59,7 @@ describe("RenduDUnBloc — an embed (1.4.3)", () => {
 })
 
 describe("EditeurDeBlocs — an embed (1.4.3)", () => {
-  it("should offer « Intégration » at the end of the « + », refuse an address that is not https, and write the frame at once after the block", async () => {
+  it("should offer « Iframe » at the end of the « + », refuse an address that is not https, and write the frame at once after the block", async () => {
     monter()
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
     const menu = within(screen.getByRole("menu"))
@@ -77,14 +77,31 @@ describe("EditeurDeBlocs — an embed (1.4.3)", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 
-  it("should offer « Intégration » in the list of « / » too, the Texte emptied of its slash", async () => {
+  // 1.4.6 : le code <iframe> qu'un site donne, collé tel quel, n'apporte que son adresse.
+  it("should keep only the src address of a pasted <iframe> code, &amp; read as &, and refuse a code without src", async () => {
+    monter()
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: INTEGRATION.entree }))
+    const dialogue = screen.getByRole("dialog", { name: INTEGRATION.dialogue })
+    const champ = within(dialogue).getByLabelText(INTEGRATION.adresse)
+    fireEvent.change(champ, { target: { value: '<iframe width="600" data-src="https://autre.test/x"></iframe>' } })
+    fireEvent.click(within(dialogue).getByRole("button", { name: INTEGRATION.valider }))
+    expect(within(dialogue).getByText(INTEGRATION.invalide)).toBeInTheDocument()
+    const code = `<iframe src="${ADRESSE}?a=1&amp;b=2" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy"></iframe>`
+    fireEvent.change(champ, { target: { value: code } })
+    fireEvent.click(within(dialogue).getByRole("button", { name: INTEGRATION.valider }))
+    await waitFor(() => expect(api.envoyes).toHaveLength(1))
+    expect(api.envoyes[0].ops).toEqual([{ op: "insert_after", block: ID.objet, input: { type: "embed", data: { url: `${ADRESSE}?a=1&b=2` } } }])
+  })
+
+  it("should offer « Iframe » in the list of « / » too, the Texte emptied of its slash", async () => {
     monter()
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Texte" }))
     const texte = screen.getByRole("textbox", { name: "Modifier ce texte — bloc vide" })
     await waitFor(() => expect(document.activeElement).toBe(texte))
     fireEvent.change(texte, { target: { value: "/" } })
-    fireEvent.change(texte, { target: { value: "/integ" } })
+    fireEvent.change(texte, { target: { value: "/ifr" } })
     expect(within(screen.getByRole("listbox", { name: "Blocs à insérer" })).getAllByRole("option").map((option) => option.textContent)).toEqual([INTEGRATION.entree])
     fireEvent.keyDown(texte, { key: "Enter" })
     expect(screen.getByRole("dialog", { name: INTEGRATION.dialogue })).toBeInTheDocument()

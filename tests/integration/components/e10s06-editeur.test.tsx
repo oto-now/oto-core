@@ -92,7 +92,7 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
       "Tableau simple",
       "Séparateur",
       // 1.4.3 : le cadre intégré.
-      "Intégration",
+      "Iframe",
     ])
     expect(menu.queryByRole("menuitem", { name: /HTML/i })).toBeNull()
     // Échap ferme le menu et rend le focus au « + ».

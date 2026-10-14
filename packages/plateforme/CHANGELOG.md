@@ -17,6 +17,12 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.6 — 2026-10-14
+
+### Hosts
+- Install: upgrade to 1.4.6; no migration, no new variable, no import to change. Published from 1.4.5, without what main carries for 1.5.0.
+- UI: the embed block is named « Iframe » in the block editor (« Intégration » before), and its address dialog also takes the `<iframe …>` code a site gives (« Embed », « Intégrer ») : only its `src` address is kept, `&amp;` read as `&`; the block, its markdown and its data do not change.
+
 ## 1.4.5 — 2026-10-14
 
 ### Assistants
