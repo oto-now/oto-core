@@ -71,8 +71,8 @@ function cyclesOf(graph: Map<string, string[]>): string[][] {
   return cycles
 }
 
-/** Cycles d'imports évalués entre les fichiers de `directory`, chacun rendu `a.ts → b.ts → a.ts`. */
-function importCycles(directory: string): string[] {
+/** Le graphe des imports évalués entre les fichiers de `directory`. */
+function importGraph(directory: string): Map<string, string[]> {
   const graph = new Map<string, string[]>()
   for (const file of sourceFiles(directory)) {
     const targets = evaluatedSpecifiers(readFileSync(file, "utf8"))
@@ -80,12 +80,48 @@ function importCycles(directory: string): string[] {
       .filter((target): target is string => target !== null && target.startsWith(directory))
     graph.set(file, [...new Set(targets)])
   }
-  return cyclesOf(graph).map((cycle) => cycle.map((file) => path.relative(directory, file).replaceAll("\\", "/")).join(" → "))
+  return graph
+}
+
+/** Cycles d'imports évalués entre les fichiers de `directory`, chacun rendu `a.ts → b.ts → a.ts`. */
+function importCycles(directory: string): string[] {
+  return cyclesOf(importGraph(directory)).map((cycle) => cycle.map((file) => path.relative(directory, file).replaceAll("\\", "/")).join(" → "))
+}
+
+/** Le plus court chemin d'imports évalués de `start` à lui-même, `null` s'il n'y en a pas (parcours en largeur). */
+function pathBack(graph: Map<string, string[]>, start: string): string[] | null {
+  const previous = new Map<string, string>()
+  const queue = [...(graph.get(start) ?? [])]
+  for (const first of queue) previous.set(first, start)
+  for (let at = 0; at < queue.length; at++) {
+    const node = queue[at]
+    if (node === start) {
+      const route = [start]
+      for (let back = previous.get(start); back !== undefined && back !== start; back = previous.get(back)) route.unshift(back)
+      return [start, ...route.slice(0, -1), start].filter((file, rank, all) => rank === 0 || file !== all[rank - 1])
+    }
+    for (const next of graph.get(node) ?? []) {
+      if (previous.has(next) && next !== start) continue
+      if (!previous.has(next)) previous.set(next, node)
+      if (next === start) previous.set(start, node)
+      queue.push(next)
+    }
+  }
+  return null
 }
 
 describe("package import cycles", () => {
   it.each(GUARDED_FACES)("should find no evaluated import cycle between the modules of %s/", (face) => {
     expect(importCycles(path.join(PACKAGE, face))).toEqual([])
+  })
+
+  // Le registre du catalogue importe chaque fonction de `call`, et beaucoup de services le relisent : un cycle qui passe
+  // par lui casse le build d'un hôte dès qu'une constante y est lue au chargement (« Cannot access … before
+  // initialization » à « Collecting page data »), ce que ni tsc ni Vitest ne voient (`coding-standards.md § Imports`).
+  it("should keep server/catalog/registry.ts out of every evaluated import cycle of server/", () => {
+    const server = path.join(PACKAGE, "server")
+    const route = pathBack(importGraph(server), path.join(server, "catalog", "registry.ts"))
+    expect(route?.map((file) => path.relative(server, file).replaceAll("\\", "/")).join(" → ") ?? null).toBeNull()
   })
 
   it("should count evaluated imports and skip type-only ones", () => {
