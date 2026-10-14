@@ -23,7 +23,7 @@
 //
 // E10-S02 (AC-d1) : l'image et le fichier joints, par l'adresse de lecture d'un fichier (`markdown-files.ts`).
 import { blockInputSchema, NODE_PATH_PATTERN, type BlockInput } from "../../schemas"
-import { EMBED_HEIGHTS, embedUrlSchema, trimBlanks } from "../../schemas/blocks"
+import { COLLAPSIBLE_MARKER, EMBED_HEIGHTS, embedUrlSchema, trimBlanks } from "../../schemas/blocks"
 import { closesFence, LINE_SEPARATORS, openingFence, type Fence } from "../../schemas/link-syntax"
 import { cut } from "../journal"
 import { charCount, formatCount } from "./document"
@@ -161,7 +161,10 @@ function headingAt(line: string, number: number, mode: ParseMode): BlockInput | 
   const match = /^ {0,3}(#+)[ \t]/.exec(line)
   if (!match || match[1].length > HEADING_LEVELS.length + 1) return null
   const rest = line.slice(match[0].length)
-  const text = trimBlanks(rest)
+  const written = trimBlanks(rest)
+  // Un titre repliable finit par son marqueur, qui n'entre pas dans son texte.
+  const collapsible = written.endsWith(COLLAPSIBLE_MARKER)
+  const text = collapsible ? trimBlanks(written.slice(0, -COLLAPSIBLE_MARKER.length)) : written
   if (text === "" || LINE_SEPARATORS.test(rest)) return null
   const hashes = match[1].length
   if (hashes === 1 && !mode.tolerant) refuse(`line ${number} « ${quoted(line)} » is the level of the page title; headings start at ##.`)
@@ -169,7 +172,7 @@ function headingAt(line: string, number: number, mode: ParseMode): BlockInput | 
     refuseOrKeep(mode, `line ${number}: a heading holds ${formatCount(HEADING_TEXT_MAX)} characters at most (${formatCount(charCount(text))}).`)
     return null
   }
-  return { type: "heading", text, data: { level: HEADING_LEVELS[Math.max(hashes - 2, 0)] } }
+  return { type: "heading", text, data: { level: HEADING_LEVELS[Math.max(hashes - 2, 0)], ...(collapsible ? { collapsible: true } : {}) } }
 }
 
 /**

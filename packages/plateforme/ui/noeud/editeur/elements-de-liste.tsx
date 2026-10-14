@@ -11,11 +11,16 @@
 // au repos d'un Texte : les repères suivent alors le texte qu'on voit. Les cases restent de vrais `input` nommés,
 // hors de la partie muette. Sans elle, une puce, un numéro ou une case se dessinaient par ligne de champ, lignes
 // repliées comprises (retour de démo, fiche D132).
+//
+// Au focus, quand des liens sont réduits à leur titre (story `liens-en-edition`), la copie dessine le texte montré du
+// champ, coloré, ligne par ligne, et le champ se tait dessous.
 import { EnLigne } from "../rendu-des-blocs"
 import { MENU_DU_BLOC } from "../libelles"
 import { numerosDeGouttiere } from "./blocs-de-page"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { useGestes } from "./gestes"
+import type { Morceau } from "./liens-masques"
+import { MorceauxMontres } from "./miroir-des-liens"
 
 /** La puce d'un élément du premier niveau, pendant du disque de la lecture. */
 const PUCE = "•"
@@ -48,6 +53,8 @@ type ElementsDeListeProps = {
   lectureSeule: boolean
   /** Au repos avec des liens : les liens que lit le rendu ; `null`, la copie muette du texte brut. */
   rendu: LiensDesBlocs | null
+  /** Au focus, des liens réduits : les morceaux montrés de chaque ligne, dessinés ; `null` sinon. */
+  miroir?: readonly (readonly Morceau[])[] | null
 }
 
 /** Une case d'une liste à cocher, nommée par son texte ; elle se coche sans quitter le bloc (E05-S10, AC-a2). */
@@ -67,7 +74,7 @@ function Case({ cle, rang, ligne, cochee, lectureSeule }: { cle: string; rang: n
   )
 }
 
-function Elements({ cle, texte, genre, debut, cases, lectureSeule, rendu }: ElementsDeListeProps) {
+function Elements({ cle, texte, genre, debut, cases, lectureSeule, rendu, miroir }: ElementsDeListeProps) {
   return elementsDu(texte, debut).map((element, rang) => (
     // Un élément est un rang de la liste : l'élément 3 reste l'élément 3 quoi qu'on tape dans sa ligne.
     <span key={rang} className="oto-block-element" data-debut={element.debut}>
@@ -80,7 +87,11 @@ function Elements({ cle, texte, genre, debut, cases, lectureSeule, rendu }: Elem
           </span>
         )
       )}
-      {rendu ? (
+      {miroir ? (
+        <span className="oto-block-element-texte" aria-hidden="true">
+          <MorceauxMontres morceaux={miroir[rang] ?? []} />
+        </span>
+      ) : rendu ? (
         <span className="oto-block-element-texte">
           <EnLigne texte={element.ligne} numeroter Lien="a" hrefDuChemin={(chemin) => `${rendu.prefixe}${chemin}`} cibles={rendu.cibles} lecture={rendu.lecture} />
         </span>

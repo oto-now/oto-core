@@ -1,8 +1,7 @@
 // Porté d'oto-frontend (src/design-system/components/react/content.jsx, `LinkedContent`) : un repli qu'on ne
 // regarde qu'au besoin, donc replié, et dont le résumé dit s'il faut l'ouvrir ; `<details>` et `<summary>`
 // natifs, l'état, le clavier et l'annonce « développé / réduit » viennent du navigateur. Tel quel, en
-// TypeScript. Retiré : `LinkedLabel` et `LinkedNote`, qu'aucun écran porté n'emploie encore. Changé : le chevron est
-// exporté (`LinkedChevron`), l'éditeur posant la même pastille sur une `div`, un champ ne vivant pas dans un `<summary>`.
+// TypeScript. Retiré : `LinkedLabel` et `LinkedNote`, qu'aucun écran porté n'emploie encore.
 import type { ComponentProps, ReactNode } from "react"
 import { cx } from "./outils"
 
@@ -13,8 +12,8 @@ type LinkedContentProps = Omit<ComponentProps<"details">, "title"> & {
   summary?: ReactNode
 }
 
-/** Le chevron du repli, qui pivote à l'ouverture (`content.css`) ; repris par le repli écrit dans l'éditeur (`repli-edite.tsx`). */
-export function LinkedChevron() {
+/** Le chevron du repli, qui pivote à l'ouverture (`content.css`). */
+function LinkedChevron() {
   return (
     <svg className="oto-icon oto-linked-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />

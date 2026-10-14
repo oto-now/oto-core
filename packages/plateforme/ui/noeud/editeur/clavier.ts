@@ -17,7 +17,8 @@
 import type { KeyboardEvent } from "react"
 import { NIVEAUX_DE_LISTE } from "../libelles"
 import type { EtatDeLEditeur } from "./actions"
-import { niveauDeLigne, positionDansLaLigne } from "./blocs-de-page"
+import { estUnTitre, niveauDeLigne, positionDansLaLigne } from "./blocs-de-page"
+import { placeDansLaSource, sourceDuChamp } from "./liens-masques"
 import * as modeleDEdition from "./modele"
 import { formeDe, FORMES_EN_LIGNES, texteDe, type Forme } from "./modele"
 import { MESSAGES_DU_BLOC } from "./operations"
@@ -42,7 +43,7 @@ function entree(etat: EtatDeLEditeur, envoyerLeTexte: Clavier["envoyerLeTexte"],
   const dansUneListe = liste !== null && FORMES_EN_LIGNES.has(liste)
   const auBout = champ.selectionStart === champ.selectionEnd && champ.selectionStart === champ.value.length
   if (dansUneListe && !(auBout && (champ.value === "" || champ.value.endsWith("\n")))) return false
-  const suite = dansUneListe ? modeleDEdition.sortirDeLaListe(modele.current, cle) : modeleDEdition.scinder(modele.current, cle, champ.selectionStart ?? 0)
+  const suite = dansUneListe ? modeleDEdition.sortirDeLaListe(modele.current, cle) : modeleDEdition.scinder(modele.current, cle, placeDansLaSource(champ, champ.selectionStart ?? 0))
   changerModele(suite.modele)
   if (!suite.focus) return true
   const accepte = suite.focus.cle === cle || envoyerLeTexte(cle)
@@ -57,7 +58,8 @@ function entree(etat: EtatDeLEditeur, envoyerLeTexte: Clavier["envoyerLeTexte"],
  */
 function niveau(etat: EtatDeLEditeur, cle: string, champ: Champ, pas: 1 | -1) {
   const numerotee = formeDe(etat.modele.current.find((rangee) => rangee.cle === cle)?.bloc ?? { type: "", data: {} }) === "numerotee"
-  const lu = niveauDeLigne(champ.value, champ.selectionStart ?? 0, pas, numerotee)
+  // Le champ montre ses liens réduits à leur titre : la ligne se lit dans la source (story `liens-en-edition`).
+  const lu = niveauDeLigne(sourceDuChamp(champ), placeDansLaSource(champ, champ.selectionStart ?? 0), pas, numerotee)
   if ("refus" in lu) return etat.envois.annoncer(lu.refus === "troisNiveaux" ? MESSAGES_DU_BLOC.troisNiveaux : NIVEAUX_DE_LISTE[lu.refus])
   const suite = modeleDEdition.ecrireTexte(etat.modele.current, cle, lu.texte)
   etat.changerModele(suite.modele)
@@ -82,6 +84,15 @@ export function echapOuEnregistrer(etat: EtatDeLEditeur, envoyerLeTexte: Clavier
 }
 
 /** Le clavier d'un champ (AC3) ; ce qui n'est pas intercepté reste au champ. */
+/** La clé de la rangée visible avant (`pas` -1) ou après (1) celle du champ ; une rangée cachée sous un titre replié est sautée. */
+function cleVisibleVoisine(champ: Champ, pas: 1 | -1): string | null {
+  let element: Element | null | undefined = champ.closest("[data-cle]")
+  while ((element = pas === 1 ? element?.nextElementSibling : element?.previousElementSibling)) {
+    if (element instanceof HTMLElement && element.dataset.cle !== undefined && !element.hidden) return element.dataset.cle
+  }
+  return null
+}
+
 export function clavier(etat: EtatDeLEditeur, actions: Clavier) {
   return (cle: string, evenement: KeyboardEvent<Champ>) => {
     if (echapOuEnregistrer(etat, actions.envoyerLeTexte, cle, evenement)) return
@@ -101,15 +112,22 @@ export function clavier(etat: EtatDeLEditeur, actions: Clavier) {
     // La liste à cocher n'a pas de sous-niveaux (HN-E10S04-2) : `Tab` y garde son rôle (AC-a6).
     if (tabulation && (forme === "puces" || forme === "numerotee")) return intercepter(() => niveau(etat, cle, champ, evenement.shiftKey ? -1 : 1))
     if (evenement.key === "Enter" && !evenement.shiftKey) return entree(etat, actions.envoyerLeTexte, cle, champ) ? evenement.preventDefault() : undefined
-    if (evenement.key === "Enter" && forme === "titre") return evenement.preventDefault()
+    if (evenement.key === "Enter" && estUnTitre(forme)) return evenement.preventDefault()
     if (evenement.key === "Backspace" && debut === 0 && fin === 0 && rang > 0) return intercepter(() => actions.fondre(cle))
     const suivante = etat.modele.current[rang + 1]
     if (evenement.key === "Delete" && debut === fin && fin === champ.value.length && suivante) return intercepter(() => actions.fondre(suivante.cle))
-    // ↑ au début du texte, ↓ à sa fin : le bloc voisin, dont le champ se monte, curseur à sa fin ou à son début (1.1.3).
+    // ↑ au début du texte, ↓ à sa fin : le bloc voisin visible, dont le champ se monte, curseur à sa fin ou à son début (1.1.3) ;
+    // la section d'un titre replié est sautée.
     const seule = !evenement.shiftKey && !evenement.altKey && !evenement.ctrlKey && !evenement.metaKey
-    const precedente = etat.modele.current[rang - 1]
-    if (evenement.key === "ArrowUp" && seule && debut === 0 && fin === 0 && precedente) return intercepter(() => etat.setFocus({ cle: precedente.cle, curseur: texteDe(precedente.bloc).length }))
-    if (evenement.key === "ArrowDown" && seule && debut === fin && fin === champ.value.length && suivante) return intercepter(() => etat.setFocus({ cle: suivante.cle, curseur: 0 }))
+    const voisine = (pas: 1 | -1) => etat.modele.current.find((rangee) => rangee.cle === cleVisibleVoisine(champ, pas))
+    if (evenement.key === "ArrowUp" && seule && debut === 0 && fin === 0) {
+      const precedente = voisine(-1)
+      if (precedente) return intercepter(() => etat.setFocus({ cle: precedente.cle, curseur: texteDe(precedente.bloc).length }))
+    }
+    if (evenement.key === "ArrowDown" && seule && debut === fin && fin === champ.value.length) {
+      const visible = voisine(1)
+      if (visible) return intercepter(() => etat.setFocus({ cle: visible.cle, curseur: 0 }))
+    }
   }
 }
 

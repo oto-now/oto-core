@@ -6,17 +6,19 @@
 // après la dernière frappe ; un résumé vide, un repli dans le corps, sont refusés par le contrôle (`operations.ts`),
 // le message sous le champ. Sans lui, un repli ne s'écrit que par un assistant.
 //
-// 1.1.3 : le repli s'écrit dans le dessin de la lecture (`LinkedContent`) : la pastille, son chevron et le panneau
-// du corps (`.oto-linked`, `content.css`), sur une `div`, un champ ne vivant pas dans un `<summary>` qui replie au
-// clic. Chaque champ est en place (`oto-inline-field`) : au repos, son texte se lit comme en lecture, marques et
-// liens compris, comme un Texte (`oto-block-pile`) ; sa bordure paraît au survol et au focus (`editeur.css`). Le
-// chevron replie et déplie le corps ; déplié à l'ouverture, l'état ne part pas (HN-E10S06-22).
+// Le menu dépliant s'écrit dans le dessin de la lecture (`DepliantLu`, `plis-lus.tsx`) : chevron à gauche, sans fond
+// ni filet, le corps décalé de la largeur du chevron (`.oto-depliant`, `content.css`), sur une `div`, un champ ne vivant
+// pas dans un `<summary>` qui replie au clic. Chaque champ est en place (`oto-inline-field`) : au repos, son texte se
+// lit comme en lecture, marques et liens compris, comme un Texte (`oto-block-pile`) ; sa bordure paraît au survol et au
+// focus (`editeur.css`). Le chevron replie et déplie le corps : replié à l'ouverture de la page, sauf s'il a été
+// gardé ouvert dans ce navigateur (`plis-gardes.ts`) ; un menu qu'on vient d'insérer est ouvert.
 import { useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react"
-import { LinkedChevron } from "../../ds/react/linked-content"
 import { IconButton } from "../../ds/react/primitives"
 import { uneLigne } from "../en-tete-modifiable"
 import { aDuBalisage } from "../en-ligne"
 import { REPLI_EDITE } from "../libelles"
+import { usePliGarde } from "../plis-gardes"
+import { GlypheDuPli } from "../plis-lus"
 import { EnLigne } from "../rendu-des-blocs"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { useGestes } from "./gestes"
@@ -42,7 +44,7 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
   const corps = useRef<HTMLTextAreaElement>(null)
   const chevron = useRef<HTMLButtonElement>(null)
   const idDuCorps = useId()
-  const [ouvert, setOuvert] = useState(true)
+  const [ouvert, setOuvert] = usePliGarde(bloc.id, bloc.id === undefined)
   // `Entrée` dans le résumé d'un repli replié : le corps se déplie, puis prend le focus une fois rendu.
   const [versLeCorps, setVersLeCorps] = useState(false)
   const texteDuResume = typeof bloc.data.summary === "string" ? bloc.data.summary : ""
@@ -82,9 +84,12 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
   const champ = "oto-inline-field field-sizing-content focus-visible:ring-2 focus-visible:ring-ink"
 
   return (
-    <div className="oto-linked" data-open={ouvert ? "" : undefined}>
-      <div className="oto-linked-head">
-        <span className="oto-block-pile">
+    <div className="oto-depliant" data-open={ouvert ? "" : undefined}>
+      <div className="oto-depliant-tete">
+        <IconButton ref={chevron} size="sm" className="oto-pli-bouton" label={REPLI_EDITE.plier(ouvert, mots)} aria-expanded={ouvert} aria-controls={idDuCorps} onClick={() => setOuvert(!ouvert)} onBlur={quitter}>
+          <GlypheDuPli />
+        </IconButton>
+        <span className="oto-block-pile oto-depliant-resume">
           <textarea
             ref={resume}
             data-champ=""
@@ -102,11 +107,8 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
           />
           {resumeAuRepos && <AuRepos texte={texteDuResume} liens={liens} />}
         </span>
-        <IconButton ref={chevron} size="sm" className="oto-linked-toggle" label={REPLI_EDITE.plier(ouvert, mots)} aria-expanded={ouvert} aria-controls={idDuCorps} onClick={() => setOuvert(!ouvert)} onBlur={quitter}>
-          <LinkedChevron />
-        </IconButton>
       </div>
-      <div id={idDuCorps} className="oto-linked-body" hidden={!ouvert}>
+      <div id={idDuCorps} className="oto-depliant-corps" hidden={!ouvert}>
         <span className="oto-block-pile text-sm text-ink">
           <textarea
             ref={corps}

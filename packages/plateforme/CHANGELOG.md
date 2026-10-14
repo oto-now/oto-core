@@ -17,6 +17,17 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.5 — 2026-10-14
+
+### Assistants
+- A heading line ending with `<!-- toggle -->` (`## Annexes <!-- toggle -->`) folds its section on screen for people; you always read it whole, marker included.
+
+### Hosts
+- Install: upgrade to 1.4.5; no migration, no new variable, no import to change. Published from 1.4.4, without what main carries for 1.5.0.
+- UI: while typing in the block editor, a labelled link shows as `[[Title]]` (a web link as `[Title]`), brackets in `--mute`, title underlined in `--link`, its path or address kept aside and written back on save: the block no longer jumps when its field takes the focus. Copy and cut put the full source in `text/plain`. No prop, no migration.
+- UI: the block editor writes three titles, « Grand titre », « Moyen titre », « Petit titre » (levels 1 to 3; `#`, `##`, `###` typed in a Texte), and a title's handle menu has a « Repliable » checkbox: its chevron folds its section. The toggle block is renamed « Menu dépliant » and drawn like Notion's (chevron on the left, no tinted box). Folds start closed, on the page, the public page and in the editor; what a person opens is kept in their browser (`localStorage` key `oto-plis-ouverts`, block ids).
+- Schemas: a heading's `data` takes `collapsible: true`, rendered and read as the `<!-- toggle -->` marker (`COLLAPSIBLE_MARKER`, `isCollapsible` in `schemas/blocks.ts`); no migration.
+
 ## 1.4.4 — 2026-10-14
 
 ### Hosts

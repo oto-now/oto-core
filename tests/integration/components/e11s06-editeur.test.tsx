@@ -26,6 +26,8 @@ const ID = {
 
 /** « Voir » (5 caractères), le lien de 5 à 39, puis « demain ». */
 const TEXTE = "Voir [[prive/moi/taches#k1|Mes tâches]] demain"
+/** Ce que montre son champ au focus (story `liens-en-edition`) : le lien réduit à son titre, de 5 à 19. */
+const MONTRE = "Voir [[Mes tâches]] demain"
 const NOM = "Modifier ce texte — Voir Mes tâches demain"
 const CIBLES: CiblesDesLiens = { "prive/moi/taches": { titre: "Mes tâches", chemin: "prive/moi/taches" } }
 
@@ -161,7 +163,7 @@ describe("EditeurDeBlocs, un repère par élément (E11-S06, AC-a1 à AC-a5)", (
     expect(nomsDesCases()).toEqual(["Cocher « Lire »", "Cocher « Écrire »"])
   })
 
-  it("should follow the rendered text at rest in a list whose item carries a link, and the raw text at focus", () => {
+  it("should follow the rendered text at rest in a list whose item carries a link, and the text shown at focus, its link reduced to its title", () => {
     const valeur = "un\nVoir [[prive/moi/taches|Mes tâches]] demain"
     monter([bloc(ID.puces, "list", null, { items: ["un", "Voir [[prive/moi/taches|Mes tâches]] demain"] })])
     const liste = champDe(valeur)
@@ -171,7 +173,8 @@ describe("EditeurDeBlocs, un repère par élément (E11-S06, AC-a1 à AC-a5)", (
     expect(reperesDe(liste)).toEqual(["•", "•"])
     act(() => liste.focus())
     expect(within(copie).queryByRole("link")).toBeNull()
-    expect(copie).toHaveTextContent("[[prive/moi/taches|Mes tâches]]")
+    expect(copie).toHaveTextContent("Voir [[Mes tâches]] demain")
+    expect(copie).not.toHaveTextContent("prive/moi/taches")
     // Le focus a monté le champ à la place du bloc lu : il se relit.
     expect(reperesDe(champDe(valeur))).toEqual(["•", "•"])
   })
@@ -189,12 +192,12 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     // Sur un bord du lien, le curseur n'y est pas.
     placer(texte, 5)
     expect(panneau()).toBeNull()
-    placer(texte, 39)
+    placer(texte, 19)
     expect(panneau()).toBeNull()
-    placer(texte, 38)
+    placer(texte, 18)
     expect(panneau()).not.toBeNull()
     // « @ » ouvert : sa liste, jamais le panneau.
-    fireEvent.change(texte, { target: { value: `${TEXTE} @` } })
+    fireEvent.change(texte, { target: { value: `${MONTRE} @` } })
     placer(texte, 10)
     expect(screen.getByRole("listbox", { name: "Contenus à citer" })).toBeInTheDocument()
     expect(panneau()).toBeNull()
@@ -254,7 +257,7 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     expect(panneau()).toBeNull()
     const ouvert = zone(texte())
     await focusSur(ouvert)
-    expect(ouvert.selectionStart).toBe(39)
+    expect(ouvert.selectionStart).toBe(19)
     // Ctrl ou ⌘ : le lien est suivi, aucun panneau.
     act(() => bouton("Ailleurs").focus())
     expect(cliquer(lienAuRepos(texte(), "Mes tâches"), { ctrlKey: true })).toBe(true)
@@ -271,12 +274,12 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     placer(liste, 12)
     expect(fireEvent.keyDown(liste, { key: "Enter", altKey: true })).toBe(false)
     await focusSur(libelle())
-    expect(liste).toHaveValue(avant)
+    expect(liste).toHaveValue("un\nVoir [[Mes tâches]] demain")
     fireEvent.change(libelle(), { target: { value: " Mes courses " } })
     fireEvent.keyDown(libelle(), { key: "Enter" })
-    await waitFor(() => expect(liste).toHaveValue("un\nVoir [[prive/moi/taches|Mes courses]] demain"))
+    await waitFor(() => expect(liste).toHaveValue("un\nVoir [[Mes courses]] demain"))
     await focusSur(liste)
-    expect(liste.selectionStart).toBe("un\nVoir [[prive/moi/taches|Mes courses]]".length)
+    expect(liste.selectionStart).toBe("un\nVoir [[Mes courses]]".length)
     expect(panneau()).toBeNull()
     fireEvent.keyDown(liste, { key: "Escape" })
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
@@ -296,7 +299,8 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     await focusSur(libelle())
     fireEvent.change(libelle(), { target: { value: "Mes courses" } })
     fireEvent.keyDown(libelle(), { key: "Enter" })
-    await waitFor(() => expect(liste).toHaveValue("a `b\nVoir [[prive/moi/taches|Mes courses]] c`"))
+    await waitFor(() => expect(liste).toHaveValue("a `b\nVoir [[Mes courses]] c`"))
+    expect(texteDuBloc(liste.getAttribute("aria-label") ?? "")).toBe("a `b\nVoir [[prive/moi/taches|Mes courses]] c`")
   })
 
   it("should open a link of the second item of a list from its context menu at rest, and remove it for the text it shows", async () => {
@@ -348,11 +352,11 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     // Le panneau a monté le champ du bloc : il se relit, avant que son nom ne suive le texte relu.
     const texte = zone(screen.getByRole("textbox", { name: NOM }))
     relire([{ ...bloc(ID.texte, "paragraph", `Revoir ${TEXTE.slice(5)}`), revision: 4 }, web])
-    await waitFor(() => expect(texte).toHaveValue(`Revoir ${TEXTE.slice(5)}`))
+    await waitFor(() => expect(texte).toHaveValue(`Revoir ${MONTRE.slice(5)}`))
     fireEvent.click(bouton("Appliquer"))
     expect(screen.getByText("Ce lien a changé ; rouvrez-le.")).toHaveAttribute("role", "alert")
     expect(panneau()).toBeNull()
-    expect(texte).toHaveValue(`Revoir ${TEXTE.slice(5)}`)
+    expect(texte).toHaveValue(`Revoir ${MONTRE.slice(5)}`)
     expect(api.envoyes).toEqual([])
   })
 
@@ -408,7 +412,7 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
   })
 
   it("should prefill a web link, offer no « Retirer le lien » for a bare address, and after Escape in the field stay closed until the cursor leaves the link", async () => {
-    // « Doc », le lien markdown de 4 à 36, « et », l'adresse nue de 40 à 58.
+    // « Doc », au focus, le lien markdown réduit à son titre de 4 à 12, « et », l'adresse nue de 16 à 34.
     monter([bloc(ID.web, "paragraph", "Doc [la doc](https://exemple.fr/doc) et https://exemple.fr fin")])
     const texte = champ("Modifier ce texte — Doc la doc et")
     act(() => texte.focus())
@@ -417,7 +421,7 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     expect(screen.getByRole("radio", { name: "Adresse web" })).toHaveAttribute("aria-checked", "true")
     expect(screen.getByRole("textbox", { name: "Adresse" })).toHaveValue("https://exemple.fr/doc")
     expect(bouton("Retirer le lien")).toBeInTheDocument()
-    placer(texte, 45)
+    placer(texte, 20)
     expect(libelle()).toHaveValue("")
     expect(screen.queryByRole("button", { name: "Retirer le lien" })).toBeNull()
     expect(texte).toHaveAccessibleDescription("Lien vers « https://exemple.fr ». Alt+Entrée pour le modifier.")
@@ -425,10 +429,10 @@ describe("EditeurDeBlocs, le panneau « Lien » (E11-S06, lot b)", () => {
     expect(fireEvent.keyDown(texte, { key: "Escape" })).toBe(false)
     expect(panneau()).toBeNull()
     expect(document.activeElement).toBe(texte)
-    placer(texte, 46)
+    placer(texte, 21)
     expect(panneau()).toBeNull()
-    placer(texte, 38)
-    placer(texte, 46)
+    placer(texte, 13)
+    placer(texte, 21)
     expect(panneau()).not.toBeNull()
     // Un second Échap, panneau fermé : la poignée, comme toujours.
     fireEvent.keyDown(texte, { key: "Escape" })

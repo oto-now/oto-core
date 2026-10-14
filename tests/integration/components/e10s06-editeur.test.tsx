@@ -66,6 +66,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
+  // Les plis ouverts sont gardés dans le navigateur (`plis-gardes.ts`) : chaque cas part replié.
+  window.localStorage.clear()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -77,14 +79,16 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
     expect(Array.from(screen.getByRole("menu").querySelectorAll(".oto-menu-group-label"), (groupe) => groupe.textContent)).toEqual(["Texte", "Insérer"])
     expect(menu.getAllByRole("menuitem").map((entree) => entree.textContent)).toEqual([
       "Texte",
-      "Titre",
+      "Grand titre",
+      "Moyen titre",
+      "Petit titre",
       "Liste à puces",
       "Liste numérotée",
       "Liste à cocher",
       "Citation",
       "Code",
       "Diagramme",
-      "Repli",
+      "Menu dépliant",
       "Tableau simple",
       "Séparateur",
       // 1.4.3 : le cadre intégré.
@@ -96,7 +100,7 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
     expect(document.activeElement).toBe(bouton("Ajouter un bloc après — Objet de la relance"))
-    // Flèches et Entrée : le deuxième choix, « Titre », après le bloc, le focus dans son champ.
+    // Flèches et Entrée : le deuxième choix, « Grand titre », après le bloc, le focus dans son champ.
     choixApres("Objet de la relance")
     const ouvert = screen.getByRole("menu")
     await focusSur(ouvert)
@@ -128,10 +132,10 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
     expect(document.querySelectorAll("hr.oto-separator")).toHaveLength(2)
   })
 
-  it("should make a heading of level 3 from #### typed at the start of a Texte, still « Titre » in the menu", async () => {
+  it("should make a small title of level 3 from ### typed at the start of a Texte, « Petit titre » in the menu", async () => {
     monter()
     const texte = await texteNeuf()
-    taper(texte, "#### Budget")
+    taper(texte, "### Budget")
     const titre = champ("Modifier ce titre — Budget")
     await focusSur(titre)
     expect(titre.closest("h4")).not.toBeNull()
@@ -139,7 +143,7 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
     expect(api.envoyes[0].ops).toEqual([{ op: "insert_after", block: ID.objet, input: { type: "heading", text: "Budget", data: { level: 3 } } }])
     fireEvent.click(bouton("Actions sur ce bloc — Budget"))
-    expect(within(screen.getByRole("menu")).getByRole("menuitemradio", { name: "Titre" })).toHaveAttribute("aria-checked", "true")
+    expect(within(screen.getByRole("menu")).getByRole("menuitemradio", { name: "Petit titre" })).toHaveAttribute("aria-checked", "true")
   })
 })
 
@@ -149,7 +153,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
     const texte = await texteNeuf()
     taper(texte, "/")
     const liste = screen.getByRole("listbox", { name: "Blocs à insérer" })
-    expect(within(liste).getAllByRole("option")).toHaveLength(12)
+    expect(within(liste).getAllByRole("option")).toHaveLength(14)
     expect(texte).toHaveAttribute("aria-controls", liste.id)
     taper(texte, "/SEPAR")
     expect(within(liste).getAllByRole("option").map((option) => option.textContent)).toEqual(["Séparateur"])
@@ -185,9 +189,9 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
     monter()
     const texte = await texteNeuf()
     taper(texte, "/")
-    taper(texte, "/repl")
+    taper(texte, "/depl")
     fireEvent.keyDown(texte, { key: "Tab" })
-    await focusSur(champ("Résumé du repli — bloc vide"))
+    await focusSur(champ("Résumé du menu dépliant — bloc vide"))
   })
 
   it("should hold the delayed send while the list of « / » is open, and send a / text once the list is closed (HN-E10S06-10)", async () => {
@@ -450,11 +454,11 @@ describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
 describe("EditeurDeBlocs, repli (AC-b4)", () => {
   it("should write a toggle in two fields, Enter going to the body and Backspace in an empty body back to the summary, and refuse an empty summary", async () => {
     monter()
-    insererApres("Objet de la relance", "Repli")
-    const resume = champ("Résumé du repli — bloc vide")
+    insererApres("Objet de la relance", "Menu dépliant")
+    const resume = champ("Résumé du menu dépliant — bloc vide")
     await focusSur(resume)
     fireEvent.keyDown(resume, { key: "Enter" })
-    const corps = zone(champ("Corps du repli — bloc vide"))
+    const corps = zone(champ("Corps du menu dépliant — bloc vide"))
     await focusSur(corps)
     fireEvent.keyDown(corps, { key: "Backspace" })
     await focusSur(resume)
@@ -476,26 +480,25 @@ describe("EditeurDeBlocs, repli (AC-b4)", () => {
     expect(api.envoyes[0].ops).toEqual([{ op: "insert_after", block: ID.objet, input: { type: "toggle", text: "Le corps", data: { summary: "Détails" } } }])
   })
 
-  // 1.1.3 : le dessin de la lecture (pastille, chevron, panneau), le corps replié au chevron, l'état jamais envoyé (HN-E10S06-22).
-  it("should draw the toggle as read, fold its body from the chevron without sending, and unfold it on Enter in the summary", async () => {
+  // Le dessin de la lecture (chevron à gauche, corps décalé), servi replié, déplié au chevron, l'état jamais envoyé.
+  it("should draw the toggle as read, folded when served, unfold and fold it from the chevron without sending, and unfold it on Enter in the summary", async () => {
     const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Le **corps**", { summary: "Détails" })
     monter([repli])
-    const resume = zone(champ("Résumé du repli — Détails"))
-    const corps = zone(champ("Corps du repli — Détails"))
-    const panneau = corps.closest(".oto-linked-body")
-    const pastille = resume.closest(".oto-linked-head")
-    expect(pastille?.parentElement).toHaveClass("oto-linked")
-    expect(panneau?.parentElement).toBe(pastille?.parentElement)
+    const resume = zone(champ("Résumé du menu dépliant — Détails"))
+    // Le chevron, un bouton natif avant le résumé (Entrée et Espace viennent du navigateur), dit l'état du corps.
+    const chevron = bouton("Déplier le corps — Détails")
+    const tete = resume.closest(".oto-depliant-tete")
+    expect(tete?.firstElementChild).toBe(chevron)
+    expect(chevron.querySelector(".oto-pli-chevron")).not.toBeNull()
+    expect(chevron).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(chevron)
+    const corps = zone(champ("Corps du menu dépliant — Détails"))
+    const panneau = corps.closest(".oto-depliant-corps")
+    expect(panneau?.parentElement).toBe(tete?.parentElement)
+    expect(chevron).toHaveAttribute("aria-controls", panneau?.id)
     // Au repos, le corps se lit comme en lecture, ses marques rendues sur le champ.
     expect(corps).toHaveAttribute("data-rendu")
     expect(within(corps.parentElement ?? corps).getByText("corps").tagName).toBe("STRONG")
-    // Le chevron, un bouton natif de la pastille (Entrée et Espace viennent du navigateur), dit l'état du corps.
-    const chevron = bouton("Replier le corps — Détails")
-    expect(chevron.tagName).toBe("BUTTON")
-    expect(pastille).toContainElement(chevron)
-    expect(chevron.querySelector(".oto-linked-chevron")).not.toBeNull()
-    expect(chevron).toHaveAttribute("aria-expanded", "true")
-    expect(chevron).toHaveAttribute("aria-controls", panneau?.id)
     // Le résumé s'écrit sur une ligne ; passer au chevron n'envoie rien, replier cache le corps.
     act(() => resume.focus())
     taper(resume, "Détails\nde la relance")
@@ -524,7 +527,8 @@ describe("EditeurDeBlocs, repli (AC-b4)", () => {
   it("should refuse a toggle inside the body", async () => {
     const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Corps", { summary: "Détails" })
     monter([repli])
-    const corps = champ("Corps du repli — Détails")
+    fireEvent.click(bouton("Déplier le corps — Détails"))
+    const corps = champ("Corps du menu dépliant — Détails")
     act(() => corps.focus())
     taper(corps, "Corps\n<details>")
     fireEvent.keyDown(corps, { key: "Escape" })

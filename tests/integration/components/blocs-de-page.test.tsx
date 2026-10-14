@@ -1,8 +1,9 @@
 import type { ReactNode } from "react"
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { BlockView } from "@otomata_tech/oto_platform/schemas"
 import { Reader } from "../../../packages/plateforme/ui/ds/react/reader"
+import { BlocsRepliables } from "../../../packages/plateforme/ui/noeud/blocs-repliables"
 import { CADRE_DU_TABLEAU } from "../../../packages/plateforme/ui/noeud/libelles"
 import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { bloc } from "../../helpers/noeud"
@@ -11,7 +12,11 @@ import { bloc } from "../../helpers/noeud"
 // tableau simple (AC-a1), séparateur (AC-a2), repli (AC-a3), listes imbriquées (AC-b1), titres `h2` à `h6`
 // (AC-b3), marques en ligne dans une cellule (AC-c1) ; aucun HTML injecté (`security-patterns.md § XSS Prevention`).
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // Les plis ouverts sont gardés dans le navigateur (`plis-gardes.ts`) : chaque cas part replié.
+  window.localStorage.clear()
+})
 
 function LienDeTest({ children, ...props }: { href: string; className?: string; children: ReactNode }) {
   return (
@@ -94,7 +99,7 @@ describe("RenduDUnBloc — page markdown forms (E10-S04)", () => {
     expect(repli).not.toHaveAttribute("open")
     const resume = container.querySelector("summary")
     expect(resume?.textContent).toBe("Voir le détail")
-    expect(resume?.querySelector("strong strong")?.textContent).toBe("le détail")
+    expect(resume?.querySelector("strong")?.textContent).toBe("le détail")
     if (resume) fireEvent.click(resume)
     expect(repli).toHaveAttribute("open")
     expect(repli?.querySelector("p")?.textContent).toBe("Ligne un\nLigne <script>deux</script>")
@@ -124,5 +129,82 @@ describe("RenduDUnBloc — page markdown forms (E10-S04)", () => {
     cleanup()
     rendre(titres, "h3")
     expect(screen.getAllByRole("heading").map((titre) => titre.tagName)).toEqual(["H3", "H4", "H5", "H6", "H6"])
+  })
+})
+
+// Story `titres-et-replis` (AC-b, AC-c, AC-e) : les plis d'une page lue, repliés à l'arrivée, gardés ouverts dans ce navigateur.
+describe("BlocsRepliables — folds of a read page", () => {
+  const page = () => [
+    bloc(id(20), "heading", "Annexes", { level: 1, collapsible: true }),
+    bloc(id(21), "paragraph", "Détail des annexes"),
+    bloc(id(22), "heading", "Suite", { level: 1 }),
+    bloc(id(23), "toggle", "Corps caché", { summary: "Voir" }),
+  ]
+  const rendreLaPage = () =>
+    render(
+      <Reader>
+        <BlocsRepliables blocs={page()} rendre={(un) => <RenduDUnBloc bloc={un} Lien={LienDeTest} hrefDuChemin={(chemin) => `/n/${chemin}`} />} />
+      </Reader>,
+    )
+
+  it("should fold the section of a collapsible title, the chevron in the title unfolding it, and keep it open on the next visit", async () => {
+    rendreLaPage()
+    const titre = screen.getByRole("heading", { name: /Annexes/ })
+    const chevron = within(titre).getByRole("button", { name: "Déplier la section — Annexes" })
+    expect(screen.getByText("Détail des annexes")).not.toBeVisible()
+    expect(screen.getByRole("heading", { name: "Suite" })).toBeVisible()
+    fireEvent.click(chevron)
+    expect(chevron).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByText("Détail des annexes")).toBeVisible()
+    cleanup()
+    rendreLaPage()
+    await waitFor(() => expect(screen.getByText("Détail des annexes")).toBeVisible())
+  })
+
+  it("should keep the folded default and still unfold when the browser refuses its storage", () => {
+    const lire = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("refusé", "SecurityError")
+    })
+    const ecrire = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("refusé", "SecurityError")
+    })
+    try {
+      rendreLaPage()
+      expect(screen.getByText("Détail des annexes")).not.toBeVisible()
+      fireEvent.click(screen.getByRole("button", { name: "Déplier la section — Annexes" }))
+      expect(screen.getByText("Détail des annexes")).toBeVisible()
+    } finally {
+      lire.mockRestore()
+      ecrire.mockRestore()
+    }
+  })
+
+  it("should open a folded section when the address anchor targets one of its blocks", async () => {
+    // jsdom ne fait pas défiler : l'ancre montrée se lit sur un espion.
+    const avant = Element.prototype.scrollIntoView
+    const defiler = vi.fn()
+    Element.prototype.scrollIntoView = defiler
+    try {
+      window.history.replaceState(null, "", "#00000021")
+      rendreLaPage()
+      await waitFor(() => expect(screen.getByText("Détail des annexes")).toBeVisible())
+      await waitFor(() => expect(defiler).toHaveBeenCalledTimes(1))
+    } finally {
+      Element.prototype.scrollIntoView = avant
+      act(() => window.history.replaceState(null, "", "#"))
+    }
+  })
+
+  it("should draw a toggle with its chevron first and no title box, and keep it open on the next visit", async () => {
+    const { container } = rendreLaPage()
+    const repli = container.querySelector("details.oto-depliant")
+    const resume = repli?.querySelector("summary")
+    expect(resume?.firstElementChild).toHaveClass("oto-pli-chevron")
+    expect(resume?.querySelector("strong")).toBeNull()
+    if (resume) fireEvent.click(resume)
+    await waitFor(() => expect(window.localStorage.getItem("oto-plis-ouverts")).toBe(id(23)))
+    cleanup()
+    const relu = rendreLaPage().container.querySelector("details.oto-depliant")
+    await waitFor(() => expect(relu).toHaveAttribute("open"))
   })
 })

@@ -150,6 +150,34 @@
   visibility: hidden;
 }
 
+/* ── les liens réduits à leur titre pendant la frappe (story `liens-en-edition`) : au focus, le dessin du texte montré se pose sur le champ, aux classes du champ, que le navigateur replie comme lui ; le champ garde le curseur et la sélection, son texte transparent dessous. La copie d'une liste dessine ses éléments de même. */
+.oto-block-pile > .oto-block-miroir {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  background: none;
+  border-color: transparent;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-miroir]:focus {
+  color: transparent;
+  caret-color: var(--ink);
+}
+
+/* Les crochets rythment, le titre se lit en lien : souligné, sans changer la chasse (le texte dessiné reste à l'aplomb du champ). Sur l'îlot, dans les huit teintes, `--mute` tient 5,4:1 au moins et `--link` 4,9:1 ; `--faint` n'y tient que 3,4 à 4,2:1 (ratios WCAG calculés sur les jetons d'`oto.css`, jour et nuit). */
+.oto-lien-reduit-crochet {
+  color: var(--mute);
+}
+
+.oto-lien-reduit-titre {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ── le bloc lu (1.1.3) : un bloc qu'on ne touche pas garde son texte brut dans un `span` aux classes du champ, qui le replie comme le `<textarea>` qui le remplace au toucher ; lecture seule et invite, dans le gris du champ, sauf le code et le diagramme, qui gardent l'encre du fond sombre (`--code-fg`). */
 .oto-block-field[data-au-repos] {
   white-space: pre-wrap;
@@ -247,8 +275,13 @@
 
 /* En couleurs forcées, le texte transparent ne se tait plus : le rendu d'un texte se retire, le champ reste seul et lisible. La copie d'une liste reste, lisible en couleurs du système : le champ, dessous, se tait vraiment, sans quoi deux textes se recouvriraient. */
 @media (forced-colors: active) {
-  .oto-block-pile > .oto-block-rendu {
+  .oto-block-pile > :is(.oto-block-rendu, .oto-block-miroir) {
     display: none;
+  }
+
+  /* Le dessin des liens réduits se retire : le champ montre lui-même `[[Titre]]`, lisible. */
+  .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-miroir]:focus {
+    color: CanvasText;
   }
 
   .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-rendu]:not(:focus) {
@@ -294,35 +327,16 @@
   border-color: var(--primary);
 }
 
-/* ── le repli écrit (1.1.3) : la pastille et le panneau de la lecture (`.oto-linked`, `content.css`) ; le résumé, champ en place, prend le corps du titre lu, le corps celui du texte lu (`text-sm text-ink` sur sa case) ; la pastille garde le curseur de texte, seul son chevron replie. */
-.oto-linked > .oto-linked-head {
-  cursor: auto;
-}
+/* ── le menu dépliant écrit : le dessin de la lecture (`.oto-depliant`, `content.css`) ; le résumé, champ en place, prend le corps du texte lu ; le corps, décalé de la largeur du bouton du chevron (`.oto-pli-bouton`) ; seul le chevron replie. */
+.oto-depliant-tete ~ .oto-depliant-corps { padding-inline-start: calc(var(--ctrl-h-sm) + var(--space-1)); }
 
-.oto-linked-head > .oto-block-pile {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--ink);
-}
-
-/* Le bouton du chevron, au bout de la pastille comme le chevron lu ; sa marge négative : la pastille garde la hauteur de la lecture. */
-.oto-linked-head > .oto-linked-toggle {
-  flex: none;
-  margin-block: calc(var(--space-1) * -1);
-  margin-inline-start: auto;
-}
-
-/* Le chevron, que la lecture pousse au bout de la pastille, se centre dans son bouton. */
-.oto-linked-toggle > .oto-linked-chevron {
-  margin-inline: auto;
-}
-
-/* La bordure d'un champ du repli paraît au survol (`.oto-inline-field:hover`) et au focus, comme celle d'une cellule du tableau simple. */
-.oto-linked .oto-inline-field:not([readonly]):focus-visible {
+/* La bordure d'un champ du menu dépliant paraît au survol (`.oto-inline-field:hover`) et au focus, comme celle d'une cellule du tableau simple. */
+.oto-depliant .oto-inline-field:not([readonly]):focus-visible {
   border-color: var(--island-bd);
 }
+
+/* ── une rangée dans la section d'un titre replié (`plis-de-l-editeur.ts`) : montée, sans se montrer ; la grille de la rangée bat sinon l'attribut `hidden`. */
+.oto-block-row[hidden] { display: none; }
 
 /* ── le menu de la poignée (E11-S15, AC-b5) et celui du « + » : leur hauteur suit leurs entrées, celles d'un tableau ou « Image » et « Fichier » comprises, sans barre de défilement ; bornée à la fenêtre, moins les 8 px que `useAnchor` laisse de chaque côté et le filet du panneau. */
 .oto-pop.oto-menu-de-poignee > .oto-menu,

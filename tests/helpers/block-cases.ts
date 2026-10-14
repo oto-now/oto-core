@@ -16,6 +16,7 @@ export const DOCUMENT_CASES: BlockCase[] = [
   valid("a heading with a key", { type: "heading", text: "Règles", data: { level: 1 }, key: "regles" }),
   // E10-S04 (AC-b3) : cinq niveaux.
   valid("a heading of level 5", { type: "heading", text: "Détail", data: { level: 5 } }),
+  valid("a collapsible heading", { type: "heading", text: "Annexes", data: { level: 2, collapsible: true } }),
   invalid("a heading of level 6", { type: "heading", text: "Titre", data: { level: 6 } }),
   invalid("a heading without text", { type: "heading", data: { level: 1 } }),
   invalid("a heading on two lines", { type: "heading", text: "Titre\nsuite", data: { level: 1 } }),

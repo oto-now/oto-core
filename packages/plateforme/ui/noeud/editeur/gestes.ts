@@ -100,6 +100,10 @@ export type Gestes = {
   ouvrirLeChamp: (cle: string, curseur: number) => void
   /** Le champ monté d'un bloc prend le focus, ou son panneau « Lien » s'ouvre : il reste monté quand le pointeur s'en va (1.1.3). */
   activerLeChamp: (cle: string) => void
+  /** Le chevron d'un titre repliable : sa section se replie ou se déplie, gardée dans ce navigateur. */
+  basculerLePli: (cle: string) => void
+  /** La case « Repliable » d'un titre : il replie sa section, ou plus ; il part comme un texte tapé. */
+  rendreRepliable: (cle: string, repliable: boolean) => void
 }
 
 export const ContexteDesGestes = createContext<Gestes | null>(null)

@@ -28,7 +28,7 @@
 //
 // E11-S15 (AC-b1) : l'en-tête d'un tableau simple sur le fond teinté du primary (`data-simple`, `editeur.css`).
 import { Suspense, use, type ReactNode } from "react"
-import { LIST_DEPTH_MAX, simpleTableOf, type ImageWidth } from "../../schemas/blocks"
+import { isCollapsible, LIST_DEPTH_MAX, simpleTableOf, type ImageWidth } from "../../schemas/blocks"
 import { filePath } from "../../schemas/files"
 import { fencedParts } from "../../schemas/link-syntax"
 import { isRecord } from "../../schemas/tables"
@@ -36,22 +36,22 @@ import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { LIEN } from "../components/classes"
 import { EmbedCard } from "../ds/react/embed-card"
-import { LinkedContent } from "../ds/react/linked-content"
 import { ReaderHeading, ReaderList, ReaderParagraph } from "../ds/react/reader"
 import { texteDUnAppel } from "../procedure/libelles"
 import { CadreIntegre } from "./cadre-integre"
 import { DiagrammeMermaid } from "./diagramme-mermaid"
-import { adresseSansIdentifiants, cibleDe, estUnTableau, libelleDUneAdresse, segmentsEnLigne, titreDuLien, type CiblesDesLiens, type Segment } from "./en-ligne"
+import { adresseSansIdentifiants, cibleDe, estUnTableau, libelleDUneAdresse, segmentsEnLigne, texteLu, titreDuLien, type CiblesDesLiens, type Segment } from "./en-ligne"
 import { CarteDeFichier, ImageAgrandissable } from "./fichier-du-bloc"
 import { GlypheDeNature } from "./glyphes"
 import { CADRE_DU_TABLEAU, DIAGRAMME, ECRAN } from "./libelles"
+import { ChevronDeSection, DepliantLu } from "./plis-lus"
 import { ciblesLues } from "./sous-pages"
 
 /** Le lien d'un bloc : celui de l'hôte (écran serveur) ou `"a"` (éditeur, îlot client). */
 type LienDUnBloc = LienDeLHote | "a"
 
-/** Un bloc servi, ou un bloc de l'éditeur : sans référence tant qu'il n'est pas écrit. */
-type BlocARendre = { type: string; text: string | null; data: Record<string, unknown>; ref?: string }
+/** Un bloc servi, ou un bloc de l'éditeur : sans référence tant qu'il n'est pas écrit ; l'`id` garde l'état d'un pli. */
+type BlocARendre = { type: string; text: string | null; data: Record<string, unknown>; ref?: string; id?: string }
 
 /**
  * Ce que lit le rendu d'un lien : le lien de l'hôte, l'adresse d'un chemin, les cibles connues (E05-S11, AC-26),
@@ -243,12 +243,12 @@ function TableauSimple({ bloc, ...liens }: RenduProps) {
 }
 
 /**
- * Un repli (E10-S04, AC-a3) : `LinkedContent`, `<details>` natif fermé, son résumé en titre ; le corps comme
- * un encart, texte en ligne et sauts de ligne gardés, chaque clôture de code en bloc préformaté.
+ * Un menu dépliant (E10-S04, AC-a3) : `DepliantLu`, `<details>` natif replié, au dessin de Notion, son état gardé dans
+ * ce navigateur ; le corps, texte en ligne et sauts de ligne gardés, chaque clôture de code en bloc préformaté.
  */
 function Repli({ bloc, ...liens }: RenduProps) {
   return (
-    <LinkedContent id={bloc.ref} className={APRES} title={<EnLigne texte={chaine(bloc.data.summary)} {...liens} />}>
+    <DepliantLu id={bloc.id} ancre={bloc.ref} className={APRES} resume={<EnLigne texte={chaine(bloc.data.summary)} {...liens} />}>
       {fencedParts(bloc.text ?? "").map((partie, rang) =>
         // Une partie n'a pas d'identité : son rang dans un corps dont l'identité est ailleurs.
         partie.code ? (
@@ -259,7 +259,7 @@ function Repli({ bloc, ...liens }: RenduProps) {
           </p>
         ),
       )}
-    </LinkedContent>
+    </DepliantLu>
   )
 }
 
@@ -369,12 +369,17 @@ function Paragraphe({ bloc, ...liens }: RenduProps) {
 export function RenduDUnBloc(props: RenduProps & { rendu?: ReactNode; baliseDeTitre?: "h3" }): ReactNode {
   const { bloc, rendu, baliseDeTitre, routeDesFichiers, ...liens } = props
   switch (bloc.type) {
-    case "heading":
+    case "heading": {
+      // Un titre repliable porte son chevron, que sa `SectionRepliable` sert (`BlocsRepliables`), puis son texte dans une case.
+      const texte = <EnLigne texte={bloc.text ?? ""} {...liens} />
+      const repliable = isCollapsible(bloc)
       return (
-        <ReaderHeading as={baliseDuTitre(bloc.data.level, baliseDeTitre)} id={bloc.ref}>
-          <EnLigne texte={bloc.text ?? ""} {...liens} />
+        <ReaderHeading as={baliseDuTitre(bloc.data.level, baliseDeTitre)} id={bloc.ref} className={repliable ? "oto-titre-repliable" : undefined}>
+          {repliable && <ChevronDeSection nom={texteLu(bloc.text ?? "")} />}
+          {repliable ? <span>{texte}</span> : texte}
         </ReaderHeading>
       )
+    }
     case "paragraph":
       return <Paragraphe {...props} />
     case "list":

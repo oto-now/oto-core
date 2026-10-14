@@ -30,6 +30,8 @@
 // E11-S17 (lot a) : ses rangées vivent dans la zone des blocs, où se tient la sélection de blocs entiers
 // (`selection-de-blocs.ts`) : surlignés, annoncés dans une région vivante montée vide, la zone nommée par leur nombre
 // quand elle a le focus ; le menu d'un bloc sélectionné parmi d'autres supprime et déplace le groupe.
+//
+// Il tient les titres repliables (`plis-de-l-editeur.ts`) : les rangées qu'un titre replié cache ne se montrent pas.
 import { useMemo, useState, type ReactNode } from "react"
 import type { BlockView, NodeKind } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
@@ -40,12 +42,14 @@ import { Publication } from "../publication"
 import { ContexteDesGestes, useGestesStables } from "./gestes"
 import { useGlisser } from "./glisser"
 import { AlerteDEdition, IndicationDEnregistrement, LigneDAnnonce } from "./lignes-d-etat"
+import { avecRepliable } from "./blocs-de-page"
 import type { Rangee } from "./modele"
 import { estLaPageVide } from "./page-vide"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { DialogueDesFichiers } from "./choix-au-depot"
 import type { Depot } from "./envoi-de-fichier"
 import type { Rectangle } from "./pointeur-de-la-selection"
+import { usePlisDeLEditeur } from "./plis-de-l-editeur"
 import { RangeeDeBloc } from "./rangee-de-bloc"
 import { useSelectionDeBlocs } from "./selection-de-blocs"
 import type { Conflit } from "./use-envois"
@@ -87,10 +91,13 @@ type RangeesProps = {
   selection: ReadonlySet<string>
   /** Le bloc touché, dont le champ est monté (1.1.3). */
   ouvert: string | null
+  /** Les rangées cachées sous un titre replié, par rang ; les titres repliables ouverts, par clé. */
+  cachees: readonly boolean[]
+  plisOuverts: ReadonlySet<string>
 }
 
 /** Les rangées, une par bloc, rendues par leur clé de rendu, jamais par leur rang ; le Texte d'une page vide porte l'invite. */
-function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert }: RangeesProps) {
+function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert, cachees, plisOuverts }: RangeesProps) {
   const invite = estLaPageVide(modele) ? EDITEUR.invite : undefined
   return modele.map((rangee, rang) => (
     <RangeeDeBloc
@@ -102,6 +109,8 @@ function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, reference
       selectionnee={selection.has(rangee.cle)}
       menuOuvert={menuOuvert === rangee.cle}
       ouvert={ouvert === rangee.cle}
+      cachee={cachees[rang]}
+      pliOuvert={plisOuverts.has(rangee.cle)}
       // Un conflit ouvert : les autres champs sont en lecture seule jusqu'à son règlement (HN-E05S08-3).
       verrouillee={conflit !== null && conflit.cle !== rangee.cle}
       erreur={erreurs[rangee.cle] ?? null}
@@ -124,7 +133,8 @@ function RectangleDeSelection({ rectangle }: { rectangle: Rectangle | null }) {
 
 export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
   const { blocs, revisionServie, referencesRendues, genre = "page" } = props
-  const editeur = useEditeur({ blocs, revisionServie, focusALOuverture: props.focusALOuverture })
+  const plis = usePlisDeLEditeur()
+  const editeur = useEditeur({ blocs, revisionServie, focusALOuverture: props.focusALOuverture, reveler: plis.reveler })
   const { envois } = editeur
   const [menuOuvert, setMenuOuvert] = useState<string | null>(null)
   const fermerLeMenu = () => setMenuOuvert(null)
@@ -149,6 +159,19 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
     deplacer: selection.deplacer,
     ouvrirLeChamp: editeur.ouvrirLeChamp,
     activerLeChamp: editeur.activerLeChamp,
+    basculerLePli: (cle) => {
+      const rangee = editeur.modele.find((une) => une.cle === cle)
+      if (rangee) plis.changer([rangee], !plis.ouverts.has(cle))
+    },
+    rendreRepliable: (cle, repliable) => {
+      const rangee = editeur.modele.find((une) => une.cle === cle)
+      if (!rangee) return
+      // L'option part tout de suite, comme un changement de style.
+      editeur.actions.modifierLeBloc(cle, avecRepliable(rangee.bloc, repliable))
+      editeur.actions.envoyerLeTexte(cle)
+      // Un titre qu'on vient de rendre repliable reste ouvert : l'auteur garde sous les yeux ce qu'il écrit.
+      if (repliable) plis.changer([rangee], true)
+    },
   })
   return (
     <ContexteDesGestes.Provider value={gestes}>
@@ -180,6 +203,8 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
             depots={editeur.fichiers.depots}
             selection={selection.ensemble}
             ouvert={editeur.ouvert}
+            cachees={plis.cachees(editeur.modele)}
+            plisOuverts={plis.ouverts}
           />
           <RectangleDeSelection rectangle={selection.rectangle} />
           <p role="status" className="oto-sr-only">

@@ -72,9 +72,9 @@ test.describe("éditeur des blocs de page (E10-S06)", () => {
       await page.keyboard.press("Escape")
       await attendreLEnregistrement(page)
 
-      // Un séparateur, puis un repli (AC-a1, AC-b4).
+      // Un séparateur, puis un menu dépliant (AC-a1, AC-b4).
       await choisirApres(page, /^Ajouter un bloc après — Poste/, "Séparateur")
-      await choisirApres(page, "Séparateur", "Repli")
+      await choisirApres(page, "Séparateur", "Menu dépliant")
       await page.keyboard.type("Notes brutes")
       await page.keyboard.press("Enter")
       await page.keyboard.type("Tout ce qui a été dit.")

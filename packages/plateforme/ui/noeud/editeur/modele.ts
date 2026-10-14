@@ -26,18 +26,21 @@
 //
 // E11-S05 (AC-g1) : retirer le dernier bloc laisse un Texte vide ; le Texte d'une page vide vit dans `page-vide.ts`.
 //
+// Trois titres (Grand, Moyen, Petit : niveaux 1, 2, 3), qui remplacent le « Titre » unique d'E05-S10, et leurs préfixes
+// à la Notion ; un titre garde son option « Repliable » (`collapsible`) d'un niveau à l'autre.
+//
 // 1.1.3 : le diagramme s'écrit (forme `diagramme`, bloc `mermaid`), en lignes comme le code, et passe de l'un à l'autre
 // avec son texte. Vide, il ne part pas, comme tout bloc vide (`estVide`) : le service refuse un `mermaid` blanc.
 import type { BlockView } from "../../../schemas"
-import { simpleTableOf } from "../../../schemas/blocks"
+import { isCollapsible, simpleTableOf } from "../../../schemas/blocks"
 import { isRecord } from "../../../schemas/tables"
 import { texteDUnAppel } from "../../procedure/libelles"
 import { texteLu } from "../en-ligne"
 import { CHOIX_DE_BLOC, INTEGRATION } from "../libelles"
-import { avecTableau, repliDuTexte, TABLEAU_NEUF, tableauDuTexte, texteDuRepli, texteDuTableau, type Tableau } from "./blocs-de-page"
+import { avecTableau, NIVEAUX_DES_TITRES, repliDuTexte, TABLEAU_NEUF, tableauDuTexte, texteDuRepli, texteDuTableau, type Tableau } from "./blocs-de-page"
 
 /** Les formes du menu « Style » (E05-S10, AC-a2 ; E10-S06, AC-a3), dans son ordre ; tout autre bloc se lit, se déplace, se duplique et se supprime. */
-export const FORMES_ECRITES = ["texte", "titre", "puces", "numerotee", "cases", "citation", "code", "diagramme", "repli"] as const
+export const FORMES_ECRITES = ["texte", "grandTitre", "moyenTitre", "petitTitre", "puces", "numerotee", "cases", "citation", "code", "diagramme", "repli"] as const
 
 /** Une forme qu'écrit l'écran : celles du menu, et le tableau simple, qui s'insère sans se convertir (E10-S06, AC-a3). */
 export type Forme = (typeof FORMES_ECRITES)[number] | "tableau"
@@ -77,23 +80,23 @@ function nouvelleCle(): string {
   return `rangee-${compteur}`
 }
 
-/** Champs de `data` propres à une forme : un changement de forme les retire (E05-S02, § Schémas). */
-const PROPRES_A_LA_FORME = new Set(["level", "items", "ordered", "start", "language", "tone", "summary", "columns", "rows", "align"])
+/** Champs de `data` propres à une forme : un changement de forme les retire (E05-S02, § Schémas) ; `collapsible` suit d'un titre à l'autre. */
+const PROPRES_A_LA_FORME = new Set(["level", "collapsible", "items", "ordered", "start", "language", "tone", "summary", "columns", "rows", "align"])
 
 /** Les formes qui s'écrivent en lignes (un élément par ligne, ou du code) : Entrée y passe à la ligne. */
 export const FORMES_EN_LIGNES: ReadonlySet<Forme> = new Set(["puces", "numerotee", "cases", "code", "diagramme"])
 
 /**
- * Le préfixe tapé au début d'un Texte, la forme qu'il donne (AC11) et le niveau d'un titre : `# ` et `## ` le niveau 1,
- * jusqu'à `###### ` le niveau 5, comme le markdown collé (E10-S06, AC-a5, HN-E10S06-5).
+ * Le préfixe tapé au début d'un Texte et la forme qu'il donne (AC11) : comme Notion, `# ` un grand titre, `## ` un moyen,
+ * `### ` un petit, et au-delà un petit encore ; le markdown collé ou écrit par un assistant garde ses niveaux (`##` : grand).
  */
-const PREFIXES: readonly (readonly [string, Forme, number?])[] = [
-  ["# ", "titre", 1],
-  ["## ", "titre", 1],
-  ["### ", "titre", 2],
-  ["#### ", "titre", 3],
-  ["##### ", "titre", 4],
-  ["###### ", "titre", 5],
+const PREFIXES: readonly (readonly [string, Forme])[] = [
+  ["# ", "grandTitre"],
+  ["## ", "moyenTitre"],
+  ["### ", "petitTitre"],
+  ["#### ", "petitTitre"],
+  ["##### ", "petitTitre"],
+  ["###### ", "petitTitre"],
   ["- ", "puces"],
   ["* ", "puces"],
   ["1. ", "numerotee"],
@@ -110,8 +113,8 @@ const seFond = (forme: Forme | null) => forme !== null && !NON_FUSIONNEES.has(fo
 export function formeDe(bloc: Pick<BlocEdite, "type" | "data">): Forme | null {
   // Un appel déjà écrit s'écrit comme un Texte (M59) : son texte est `texteDUnAppel`.
   if (bloc.type === "paragraph" || bloc.type === "call") return "texte"
-  // Tout niveau de titre se lit « Titre » : un titre 2 ou 3 déjà écrit garde son niveau en base (E05-S10, AC-a5).
-  if (bloc.type === "heading") return "titre"
+  // Les niveaux 3 à 5 se lisent « Petit titre » : un titre de niveau 4 ou 5 déjà écrit garde son niveau en base.
+  if (bloc.type === "heading") return bloc.data.level === 1 ? "grandTitre" : bloc.data.level === 2 ? "moyenTitre" : "petitTitre"
   if (bloc.type === "list") return bloc.data.ordered === true ? "numerotee" : "puces"
   if (bloc.type === "checklist") return "cases"
   if (bloc.type === "callout") return "citation"
@@ -268,7 +271,9 @@ export function avecForme(servi: BlocEdite, forme: Forme): BlocEdite {
   // Un Texte devenu repli : sa première ligne en résumé, coupée à 200 caractères ; les autres, le corps (E10-S06, AC-a3).
   if (forme === "repli") return avecTexte({ ...bloc, type: "toggle", text: "", data }, texte)
   if (forme === "tableau") return avecTexte({ ...bloc, type: "simple_table", text: null, data }, texte)
-  return { ...bloc, type: "heading", text: texte, data: { ...data, level: 1 } }
+  // D'un titre à l'autre, l'option « Repliable » reste.
+  const repliable = isCollapsible(bloc) ? { collapsible: true } : {}
+  return { ...bloc, type: "heading", text: texte, data: { ...data, level: NIVEAUX_DES_TITRES[forme], ...repliable } }
 }
 
 /** Les premiers mots d'un bloc, balisage retiré, pour nommer ses gestes (AC8, AC10) ; un séparateur, sans texte, par son nom. */
@@ -336,9 +341,8 @@ export function ecrireTexte(modele: readonly Rangee[], cle: string, texte: strin
   }
   const prefixe = unTexte ? PREFIXES.find(([marque]) => texte.startsWith(marque) && !avant.startsWith(marque)) : undefined
   if (!prefixe) return { modele: remplacer(modele, rang, { cle, bloc: avecTexte(rangee.bloc, texte) }) }
-  const [marque, forme, niveau] = prefixe
-  const change = avecTexte(avecForme(rangee.bloc, forme), texte.slice(marque.length))
-  const bloc = niveau === undefined ? change : { ...change, data: { ...change.data, level: niveau } }
+  const [marque, forme] = prefixe
+  const bloc = avecTexte(avecForme(rangee.bloc, forme), texte.slice(marque.length))
   // Le bloc change d'élément (titre, liste) : son champ est remonté, le curseur se redemande.
   return { modele: remplacer(modele, rang, { cle, bloc }), focus: { cle, curseur: 0 } }
 }

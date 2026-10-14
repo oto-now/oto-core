@@ -40,6 +40,7 @@ import type { MarqueDOrganisation } from "../marque/types"
 import { GlypheDeNature } from "../noeud/glyphes"
 import { dernierSegment } from "../noeud/en-ligne"
 import { PAGE_VIDE, resumeMontre } from "../noeud/libelles"
+import { BlocsRepliables } from "../noeud/blocs-repliables"
 import { RenduDUnBloc } from "../noeud/rendu-des-blocs"
 import { VisionneuseDeFichier } from "../noeud/visionneuse-de-fichier"
 import { Cellule } from "../tableau/cellule"
@@ -133,9 +134,10 @@ function Document({ vue, adresse, routeDesFichiers }: { vue: PublicNodeView; adr
         {blocs.length === 0 ? (
           <EmptyState title={PAGE_VIDE} />
         ) : (
-          blocs.map((bloc) => (
-            <RenduDUnBloc key={bloc.id} bloc={{ ...bloc, ref: bloc.key ?? undefined }} Lien={LienPublic} hrefDuChemin={hrefDuChemin} routeDesFichiers={routeDesFichiers} />
-          ))
+          <BlocsRepliables
+            blocs={blocs}
+            rendre={(bloc) => <RenduDUnBloc bloc={{ ...bloc, ref: bloc.key ?? undefined }} Lien={LienPublic} hrefDuChemin={hrefDuChemin} routeDesFichiers={routeDesFichiers} />}
+          />
         )}
       </Reader>
     </Island>

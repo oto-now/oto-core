@@ -19,6 +19,7 @@ Texte complet : `.method/conventions/accessibility-patterns.md`. La fiche suffit
 - Le focus rendu à la fin d'un envoi se pose dans un effet qui court après chaque rendu, gardé par une ref (par un état, `useFocusApresLEnvoi`, si l'envoi peut ne rien changer) ; son test joue une réponse immédiate. § Après une action
 - Un `<dialog>` démonté ouvert rend le focus par `useNativeDialog` ; un choix de menu rend le focus à son déclencheur. § Après une action
 - Le contraste se mesure sur les paires réellement utilisées, dans les deux thèmes : texte 4,5:1, grand texte et éléments d'interface 3:1 ; `pnpm audit:lh` après tout changement de token de couleur. § Couleurs & Contraste
+- Une règle CSS ajoutée sous `.oto` qui colore un texte porte en commentaire le ratio de sa paire, le plus bas des huit teintes jour et nuit (`--faint` ne tient pas 4,5:1 sur l'îlot). § Couleurs & Contraste
 - Une couleur de statut de l'hôte ne colore jamais un texte : aucun élément de `src/` ne porte `bg-<statut>/<n>` avec `text-<statut>` ; le texte d'une boîte teintée est en `text-card-foreground`. § Couleurs & Contraste
 - Pages, `loading.tsx` et `error.tsx` du groupe `(dashboard)`, et écrans d'authentification : texte en `text-ink`/`text-mute`, écrans du paquet montés, aucun import de `@/components/` (`tests/unit/ui-tokens.test.ts`). § Couleurs & Contraste
 - Sous `.oto`, une boîte d'alerte ou de statut s'écrit en `text-ink` sur `bg-card` (l'`Alert` du design system). § Couleurs & Contraste
