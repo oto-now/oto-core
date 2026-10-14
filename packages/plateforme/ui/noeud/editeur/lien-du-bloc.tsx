@@ -26,6 +26,7 @@ import { LIEN_DU_BLOC } from "../libelles"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { idDOption, lienVers, ListeACiter, useOptionActive } from "./citer"
 import { useGestes } from "./gestes"
+import { placeDansLeChamp } from "./liens-masques"
 
 /**
  * Un lien ouvert dans le panneau : lu dans le texte, sa source à l'ouverture, où rendre le curseur au champ, et
@@ -198,8 +199,11 @@ export function useLienAuCurseur(texte: string, champ: RefObject<HTMLTextAreaEle
     rendreLeFocus() {
       const curseur = ouvert?.curseur ?? null
       ecarter()
-      champ.current?.focus()
-      if (curseur !== null) champ.current?.setSelectionRange(curseur, curseur)
+      const element = champ.current
+      element?.focus()
+      if (curseur === null || !element) return
+      const place = placeDansLeChamp(element, curseur)
+      element.setSelectionRange(place, place)
     },
     /** Le lien n'est plus à sa place (AC-b5) : le panneau se ferme, le message reste sous le champ. */
     perdre() {

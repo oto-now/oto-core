@@ -211,7 +211,7 @@ describe("E11-S15, lot B — « @ » avant toute frappe", () => {
     expect(texte).toHaveAttribute("aria-activedescendant", screen.getAllByRole("option")[1].id)
     fireEvent.keyDown(texte, { key: "Enter" })
     const lie = zone(await screen.findByRole("textbox", { name: "Modifier ce texte — Voir Suivi des prospects" }))
-    expect(lie).toHaveValue("Voir [[ventes/suivi|Suivi des prospects]]")
+    expect(lie).toHaveValue("Voir [[Suivi des prospects]]")
     expect(screen.queryByRole("listbox")).toBeNull()
 
     // Rouverte, la liste relit les récents ; une lettre les retire, deux lancent la recherche.

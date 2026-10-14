@@ -213,7 +213,7 @@ describe("écran d'une procédure, celui d'une page (M59)", () => {
     const surUnePage = await controles("page")
     const surUneProcedure = await controles("procedure")
     expect(surUneProcedure).toEqual(surUnePage)
-    expect(surUneProcedure.formes).toEqual(["Texte", "Titre", "Liste à puces", "Liste numérotée", "Liste à cocher", "Citation", "Code", "Diagramme", "Repli"])
+    expect(surUneProcedure.formes).toEqual(["Texte", "Grand titre", "Moyen titre", "Petit titre", "Liste à puces", "Liste numérotée", "Liste à cocher", "Citation", "Code", "Diagramme", "Menu dépliant"])
     expect([...surUneProcedure.duBlocVide, ...surUneProcedure.deLaListe].filter((entree) => /appel/i.test(entree))).toEqual([])
     expect(surUneProcedure.champs).toEqual(["Modifier ce texte — Lis le contrat du", "Modifier ce texte — bloc vide", "Modifier cette liste numérotée — un deux"])
   })

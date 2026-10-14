@@ -63,7 +63,7 @@ describe("modèle d'édition, formes (AC11)", () => {
     const enListe = changerDeForme([titre], titre.cle, "numerotee").modele[0].bloc
     expect(enListe).toEqual({ id: "aaaaaaaa-0001", ref: "objet", revision: 3, type: "list", text: null, data: { items: ["Objet"], ordered: true }, key: "objet" })
     const liste = rangeesDepuis(PAGE)[3]
-    expect(changerDeForme([liste], liste.cle, "titre").modele[0].bloc).toMatchObject({ type: "heading", text: "Lire\nÉcrire", data: { level: 1 } })
+    expect(changerDeForme([liste], liste.cle, "grandTitre").modele[0].bloc).toMatchObject({ type: "heading", text: "Lire\nÉcrire", data: { level: 1 } })
   })
 
   it("should split a Texte at the caret into a new Texte, leave a list by Enter on its last empty line, and open a new Texte before a block split at its start", () => {
@@ -171,15 +171,18 @@ describe("modèle d'édition, structure (AC12)", () => {
 // E05-S10 : un seul niveau de titre (AC-a5), les styles d'un bloc (AC-a2).
 
 describe("modèle d'édition, styles d'un bloc (E05-S10, AC-a2, AC-a5)", () => {
-  it("should read a heading of any level as « Titre », keep its written level, and give a level 1 to a block turned into a title", () => {
-    for (const level of [1, 2, 3]) expect(formeDe({ type: "heading", data: { level } })).toBe("titre")
+  it("should read levels 1, 2 and 3 to 5 as large, medium and small titles, keep a written level, and give its level to a block turned into a title", () => {
+    expect([1, 2, 3, 4, 5].map((level) => formeDe({ type: "heading", data: { level } }))).toEqual(["grandTitre", "moyenTitre", "petitTitre", "petitTitre", "petitTitre"])
     const [ancien] = rangeesDepuis([servi("aaaaaaaa-0009", "heading", "Suite", { level: 3 })])
     // Un titre de niveau 3 réécrit garde son niveau en base : aucune migration.
     expect(ecrireTexte([ancien], ancien.cle, "Suite revue").modele[0].bloc.data).toEqual({ level: 3 })
     const [paragraphe] = rangeesDepuis([PAGE[1]])
-    expect(changerDeForme([paragraphe], paragraphe.cle, "titre").modele[0].bloc.data).toEqual({ level: 1 })
-    // E10-S06 (AC-a3) : « Style » garde un seul « Titre » et ajoute « Repli » ; 1.1.3, « Diagramme ».
-    expect(FORMES_ECRITES).toEqual(["texte", "titre", "puces", "numerotee", "cases", "citation", "code", "diagramme", "repli"])
+    expect(changerDeForme([paragraphe], paragraphe.cle, "moyenTitre").modele[0].bloc.data).toEqual({ level: 2 })
+    // Un titre de niveau 4 reste tel quand on choisit « Petit titre », qu'il est déjà.
+    const [profond] = rangeesDepuis([servi("aaaaaaaa-0010", "heading", "Détail", { level: 4 })])
+    expect(changerDeForme([profond], profond.cle, "petitTitre").modele[0].bloc.data).toEqual({ level: 4 })
+    // Trois titres, « Menu dépliant » (repli) et « Diagramme » (1.1.3).
+    expect(FORMES_ECRITES).toEqual(["texte", "grandTitre", "moyenTitre", "petitTitre", "puces", "numerotee", "cases", "citation", "code", "diagramme", "repli"])
   })
 
   it("should write a checklist, a quote and code on existing types that blockInputSchema accepts, the text following, the checks kept by line", () => {
@@ -245,7 +248,7 @@ describe("modèle d'édition, appel déjà écrit (M59)", () => {
     expect("entree" in controle && blockInputSchema.safeParse(controle.entree).success).toBe(true)
 
     // Un autre style prend son texte lisible, sans `function` ni `args`.
-    expect(changerDeForme([rangee], rangee.cle, "titre").modele[0].bloc).toEqual({ id: "eeeeeeee-0006", ref: "eeeeeeee", revision: 3, type: "heading", text: LU, data: { level: 1 }, key: "contrat" })
+    expect(changerDeForme([rangee], rangee.cle, "grandTitre").modele[0].bloc).toEqual({ id: "eeeeeeee-0006", ref: "eeeeeeee", revision: 3, type: "heading", text: LU, data: { level: 1 }, key: "contrat" })
     expect(avecForme(rangee.bloc, "puces")).toMatchObject({ type: "list", text: null, data: { items: [LU] } })
   })
 })

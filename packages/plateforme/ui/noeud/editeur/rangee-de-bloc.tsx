@@ -37,6 +37,9 @@
 // 1.1.3 : un diagramme s'écrit comme le code ; hors du focus, non vide, il se lit comme à la lecture, dessin puis
 // « Voir le code » replié (1.1.4, `DiagrammeAuRepos`). La rangée est mémoïsée : une frappe ne rend que la sienne ;
 // les entrées de ses menus se construisent au premier geste qui peut les ouvrir.
+//
+// Trois titres au menu « Style », et la case « Repliable » d'un titre : son chevron replie sa section, dont les rangées
+// restent montées sans se montrer.
 import { memo, useId, useState, type DragEvent, type ReactNode } from "react"
 import { ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown"
 import { ArrowUp } from "@phosphor-icons/react/dist/csr/ArrowUp"
@@ -45,7 +48,7 @@ import { DotsSixVertical } from "@phosphor-icons/react/dist/csr/DotsSixVertical"
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus"
 import { Table } from "@phosphor-icons/react/dist/csr/Table"
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash"
-import { EMBED_HEIGHTS, IMAGE_WIDTHS, simpleTableOf, type EmbedHeight } from "../../../schemas/blocks"
+import { EMBED_HEIGHTS, IMAGE_WIDTHS, isCollapsible, simpleTableOf, type EmbedHeight } from "../../../schemas/blocks"
 import { fileTypeOf } from "../../../schemas/files"
 import { aDesFichiers } from "../../coque/import-de-fichier"
 import { BlockRow } from "../../ds/react/block-row"
@@ -54,10 +57,11 @@ import { DropdownMenu, type MenuItem } from "../../ds/react/overlays"
 import { Button, IconButton } from "../../ds/react/primitives"
 import { hauteurDe } from "../cadre-integre"
 import { texteLu } from "../en-ligne"
-import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, SELECTION } from "../libelles"
+import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, PLIS, SELECTION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
+import { BoutonDuPli } from "../plis-lus"
 import { baliseDuTitre, largeurDe, RenduDUnBloc } from "../rendu-des-blocs"
-import type { Position } from "./blocs-de-page"
+import { estUnTitre, type Position } from "./blocs-de-page"
 import { ChampDeBloc, type LiensDesBlocs } from "./champ-de-bloc"
 import { itemsDuChoix } from "./choix-de-bloc"
 import { sortirDuBlocAuClavier } from "./clavier"
@@ -95,6 +99,10 @@ type RangeeDeBlocProps = {
   fichiers: boolean
   /** L'envoi en cours du bloc local d'un fichier (E10-S02, AC-b1, AC-b4). */
   depot?: Depot
+  /** La rangée est dans la section d'un titre replié : elle ne se montre pas. */
+  cachee: boolean
+  /** Un titre repliable : sa section est dépliée. */
+  pliOuvert: boolean
 }
 
 type Menu = {
@@ -133,7 +141,13 @@ function stylesDuMenu({ cle, bloc, forme, cellule }: Menu, gestes: Gestes): Menu
   }
   if (forme === "tableau") return itemsDuTableau(cle, bloc, cellule, gestes)
   if (!forme) return [{ group: EDITEUR.lectureSeule }]
-  return [{ group: MENU_DU_BLOC.style }, ...FORMES_ECRITES.map((une) => ({ label: FORMES[une].libelle, radio: true, checked: une === forme, onSelect: () => gestes.changerDeForme(cle, une) }))]
+  // Un titre a sa case « Repliable », sous ses formes ; aucun autre bloc ne l'a.
+  const repliable = isCollapsible(bloc)
+  return [
+    { group: MENU_DU_BLOC.style },
+    ...FORMES_ECRITES.map((une) => ({ label: FORMES[une].libelle, radio: true, checked: une === forme, onSelect: () => gestes.changerDeForme(cle, une) })),
+    ...(estUnTitre(forme) ? [{ separator: true }, { label: PLIS.repliable, checked: repliable, onSelect: () => gestes.rendreRepliable(cle, !repliable) }] : []),
+  ]
 }
 
 /** Le menu de la poignée (E05-S10, AC-a2) : monter, descendre, le style, dupliquer, supprimer. */
@@ -171,6 +185,8 @@ type BlocEcritProps = {
   joindre?: (quoi: Genre) => void
   /** « / » propose « Intégration » (1.4.3). */
   integrer?: () => void
+  /** Un titre repliable : sa section est dépliée. */
+  pliOuvert: boolean
 }
 
 /** Les champs d'un tableau ou d'un repli (E10-S06), ou le champ de texte de toute autre forme écrite. */
@@ -218,10 +234,13 @@ function BlocEcrit(props: BlocEcritProps) {
   // Un titre garde au repos la balise de son niveau, comme à l'écran de lecture (E10-S04, AC-b3).
   const Titre = baliseDuTitre(bloc.data.level)
   const champ = <ChampsDuBloc {...props} decritPar={erreur ? id : undefined} />
+  const repliable = isCollapsible(bloc)
   return (
     <>
       {bloc.type === "heading" ? (
-        <Titre id={bloc.ref} aria-label={texteLu(texteDe(bloc))}>
+        <Titre id={bloc.ref} aria-label={texteLu(texteDe(bloc))} className={repliable ? "oto-titre-repliable" : undefined}>
+          {/* Le chevron d'un titre repliable, avant son champ, comme à la lecture (`plis-lus.tsx`). */}
+          {repliable && <BoutonDuPli ouvert={props.pliOuvert} nom={premiersMots(bloc)} basculer={() => gestes.basculerLePli(cle)} />}
           {champ}
         </Titre>
       ) : (
@@ -289,7 +308,20 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
   ) : bloc.type === "image" || bloc.type === "file" ? (
     <FichierEdite rangee={rangee} erreur={erreur} lectureSeule={verrouillee} prefixe={liens.prefixe} />
   ) : forme ? (
-    <BlocEcrit rangee={rangee} forme={forme} erreur={erreur} verrouille={verrouillee} liens={liens} menuOuvert={menuOuvert} ouvert={props.ouvert} suivreLaCellule={setCellule} invite={invite} joindre={joindre} integrer={integrer} />
+    <BlocEcrit
+      rangee={rangee}
+      forme={forme}
+      erreur={erreur}
+      verrouille={verrouillee}
+      liens={liens}
+      menuOuvert={menuOuvert}
+      ouvert={props.ouvert}
+      suivreLaCellule={setCellule}
+      invite={invite}
+      joindre={joindre}
+      integrer={integrer}
+      pliOuvert={props.pliOuvert}
+    />
   ) : (
     <RenduDUnBloc bloc={bloc} Lien="a" hrefDuChemin={(chemin) => `${liens.prefixe}${chemin}`} cibles={liens.cibles} rendu={rendu} />
   )
@@ -331,6 +363,8 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
   return (
     <BlockRow
       data-cle={cle}
+      // Dans la section d'un titre replié : la rangée reste montée, son état gardé, sans se montrer (`editeur.css`).
+      hidden={props.cachee}
       {...depot}
       // La rangée qu'on glisse garde sa gouttière révélée : une présence, puis la teinte du design system (`blocks.css`).
       state={tenue ? "moving" : undefined}

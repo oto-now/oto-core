@@ -15,7 +15,7 @@
 // Repris de la maquette (`mcp-test/src/proto/services/sections.ts`, `sameTitle`) : titres comparés
 // sans casse, sans accent et sans espace de bord. Retiré : les sections `{title, body}` en markdown
 // (→ plages de blocs).
-import { blockInputSchema, chars, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
+import { blockInputSchema, chars, COLLAPSIBLE_MARKER, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
 import { fileBaseName } from "./csv"
 import { filePath, fileSizeText, fileTypeOf } from "./files"
 import { frontmatterHead, splitFrontmatter } from "./frontmatter"
@@ -165,7 +165,7 @@ function renderBody<B extends BlockLike>(block: B, options: RenderOptions<B>): s
   if (valid === null) return `<!-- block ${block.type} not shown: this platform version does not know it -->`
   switch (valid.type) {
     case "heading":
-      return `${"#".repeat(Math.min(HASHES_MAX, (options.headingBase ?? DEFAULT_HEADING_BASE) + valid.data.level - 1))} ${valid.text}`
+      return `${"#".repeat(Math.min(HASHES_MAX, (options.headingBase ?? DEFAULT_HEADING_BASE) + valid.data.level - 1))} ${valid.text}${valid.data.collapsible === true ? ` ${COLLAPSIBLE_MARKER}` : ""}`
     case "paragraph":
       return valid.text
     case "list":
@@ -235,15 +235,15 @@ export function renderBlocks<B extends BlockLike>(blocks: readonly B[], options:
 
 // ------------------------------------------------------------------------------------- Sections
 
-/** Niveau et texte d'un titre que le schéma partagé accepte ; `null` pour tout autre bloc. */
-function headingOf(block: BlockLike): { level: 1 | 2 | 3 | 4 | 5; text: string } | null {
+/** Niveau et texte d'un titre que le schéma partagé accepte ; `null` pour tout autre bloc ; lu aussi par `folds.ts`. */
+export function headingOf(block: BlockLike): { level: 1 | 2 | 3 | 4 | 5; text: string } | null {
   if (block.type !== "heading") return null
   const valid = validated(block)
   return valid?.type === "heading" ? { level: valid.data.level, text: valid.text } : null
 }
 
-/** Fin (exclue) de la section ouverte par le titre d'indice `start` : le prochain titre de niveau ≤. */
-function sectionEnd(levels: readonly (number | null)[], start: number): number {
+/** Fin (exclue) de la section ouverte par le titre d'indice `start` : le prochain titre de niveau ≤ ; lue aussi par `folds.ts`. */
+export function sectionEnd(levels: readonly (number | null)[], start: number): number {
   const level = levels[start] ?? 0
   let end = start + 1
   while (end < levels.length) {

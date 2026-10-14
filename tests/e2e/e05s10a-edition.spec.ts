@@ -86,7 +86,7 @@ test.describe("édition sans friction (E05-S10, partie a)", () => {
         await poignee.focus()
         await page.keyboard.press("Enter")
         await attendre(page.getByRole("menu")).toBeVisible()
-        await expect(page.getByRole("menu").getByRole("menuitemradio", { name: "Titre" })).toBeVisible()
+        await expect(page.getByRole("menu").getByRole("menuitemradio", { name: "Grand titre" })).toBeVisible()
         await capturer(page, testInfo, `menu-${nom}`)
         await page.keyboard.press("Escape")
         await expect(page.getByRole("menu")).toHaveCount(0)

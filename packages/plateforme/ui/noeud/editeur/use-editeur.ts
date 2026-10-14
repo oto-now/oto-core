@@ -13,6 +13,7 @@ import type { BlockView } from "../../../schemas"
 import { actionsDeLEditeur, aEnvoyer } from "./actions"
 import { useFichiersDeLEditeur } from "./envoi-de-fichier"
 import { useFileDOperations } from "./file-d-operations"
+import { placeDansLeChamp } from "./liens-masques"
 import type { BlocEdite, Focus, Rangee } from "./modele"
 import { estLaPageVide, modeleDeLaPage } from "./page-vide"
 import { useEnvois, type Identite } from "./use-envois"
@@ -42,9 +43,11 @@ type Parametres = {
   revisionServie: number
   /** Le Texte d'une page vide prend le focus à l'ouverture (AC-g2) ; sinon le titre le garde. */
   focusALOuverture?: boolean
+  /** Le focus va à une rangée cachée sous un titre replié : ses titres s'ouvrent (`plis-de-l-editeur.ts`). */
+  reveler?: (cle: string, modele: readonly Rangee[]) => void
 }
 
-export function useEditeur({ blocs, revisionServie, focusALOuverture = false }: Parametres) {
+export function useEditeur({ blocs, revisionServie, focusALOuverture = false, reveler }: Parametres) {
   const file = useFileDOperations()
   const [modele, setModele] = useState<Rangee[]>(() => modeleDeLaPage(blocs))
   const modeleLu = useRef(modele)
@@ -139,14 +142,20 @@ export function useEditeur({ blocs, revisionServie, focusALOuverture = false }: 
     setFocus(null)
     if (focus.cible !== "rangee") setActif(focus.cle)
     const rangee = racine.current?.querySelector(`[data-cle="${focus.cle}"]`)
+    // Une rangée cachée ne prend pas le focus : ses titres s'ouvrent, et le focus se pose au rendu suivant.
+    if (rangee instanceof HTMLElement && rangee.hidden && reveler) {
+      reveler(focus.cle, modeleLu.current)
+      return setFocus(focus)
+    }
     // Le champ de la rangée ; sinon sa poignée (AC4).
     const champ = focus.cible === "rangee" ? null : rangee?.querySelector<HTMLElement>("[data-champ]")
     if (!champ) return void rangee?.querySelector<HTMLButtonElement>('[data-geste="poignee"]')?.focus()
     champ.focus()
     if (focus.curseur === null || !(champ instanceof HTMLTextAreaElement || champ instanceof HTMLInputElement)) return
-    const position = Math.min(focus.curseur, champ.value.length)
+    // Le curseur d'un geste est une place de la source ; le champ montre ses liens réduits (story `liens-en-edition`).
+    const position = Math.min(placeDansLeChamp(champ, focus.curseur), champ.value.length)
     champ.setSelectionRange(position, position)
-  }, [focus])
+  }, [focus, reveler])
 
   const aProteger = modifies || file.occupee
   useEffect(() => {

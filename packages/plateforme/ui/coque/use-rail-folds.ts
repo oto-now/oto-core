@@ -6,26 +6,11 @@
 // complet ; un stockage refusé (navigation privée) garde le défaut. Changé : la préférence se lit après
 // le montage, le rendu du serveur et l'hydratation s'accordent (portage-ecrans.md § 2) ; un seul hook.
 import { useCallback, useEffect, useState } from "react"
+import { ecrireLaListe, lireLaListe } from "../components/liste-gardee"
 
 const CLE_DE_STOCKAGE = "oto-rail-plis"
-const SEPARATEUR = "\n"
-
-function lire(): string[] {
-  try {
-    return (window.localStorage.getItem(CLE_DE_STOCKAGE) ?? "").split(SEPARATEUR).filter(Boolean)
-  } catch {
-    // Stockage indisponible : aucune section repliée pour cette session.
-    return []
-  }
-}
-
-function ecrire(sections: string[]): void {
-  try {
-    window.localStorage.setItem(CLE_DE_STOCKAGE, sections.join(SEPARATEUR))
-  } catch {
-    // Le pli vaut pour la session en cours ; il ne survivra simplement pas au rechargement.
-  }
-}
+const lire = () => lireLaListe(CLE_DE_STOCKAGE)
+const ecrire = (sections: string[]) => ecrireLaListe(CLE_DE_STOCKAGE, sections)
 
 export type RailFolds = {
   /** Vrai quand la section est repliée ; une section inconnue du stockage est dépliée. */

@@ -46,18 +46,20 @@ export const DIAGRAMME = {
 /** Le nom du cadre d'un tableau lu, qui défile en largeur et se prend donc au clavier : un tableau simple, un tableau écrit en texte. */
 export const CADRE_DU_TABLEAU = { simple: "Tableau", texte: "Tableau en texte" } as const
 
-/** Les formes qu'écrit l'écran (E05-S10, AC-a2 : un seul niveau de titre), leur libellé et le nom du champ ouvert (AC10). */
+/** Les formes qu'écrit l'écran (E05-S10, AC-a2), trois titres comme Notion, leur libellé et le nom du champ ouvert (AC10). */
 export const FORMES = {
   texte: { libelle: "Texte", champ: "ce texte" },
-  titre: { libelle: "Titre", champ: "ce titre" },
+  grandTitre: { libelle: "Grand titre", champ: "ce titre" },
+  moyenTitre: { libelle: "Moyen titre", champ: "ce titre" },
+  petitTitre: { libelle: "Petit titre", champ: "ce titre" },
   puces: { libelle: "Liste à puces", champ: "cette liste" },
   numerotee: { libelle: "Liste numérotée", champ: "cette liste numérotée" },
   cases: { libelle: "Liste à cocher", champ: "cette liste à cocher" },
   citation: { libelle: "Citation", champ: "cette citation" },
   code: { libelle: "Code", champ: "ce code" },
   diagramme: { libelle: "Diagramme", champ: "ce diagramme" },
-  // E10-S06 (AC-a1, AC-a3) : le repli au menu « Style » ; le tableau simple s'insère seulement.
-  repli: { libelle: "Repli", champ: "ce repli" },
+  // E10-S06 (AC-a1, AC-a3) : le repli au menu « Style », « Menu dépliant » comme Notion ; le tableau simple s'insère seulement.
+  repli: { libelle: "Menu dépliant", champ: "ce menu dépliant" },
   tableau: { libelle: "Tableau simple", champ: "ce tableau" },
 } as const
 
@@ -101,12 +103,18 @@ export const TABLEAU_EDITE = {
   alignements: { aucun: "Aucun", left: "Gauche", center: "Centre", right: "Droite" },
 } as const
 
-/** Un repli dans l'éditeur (E10-S06, AC-b4) : ses deux champs et son chevron. */
+/** Un menu dépliant dans l'éditeur (E10-S06, AC-b4) : ses deux champs et son chevron. */
 export const REPLI_EDITE = {
-  resume: (mots: string) => `Résumé du repli — ${mots}`,
-  corps: (mots: string) => `Corps du repli — ${mots}`,
+  resume: (mots: string) => `Résumé du menu dépliant — ${mots}`,
+  corps: (mots: string) => `Corps du menu dépliant — ${mots}`,
   /** Le chevron du repli dans l'éditeur, nommé par ce qu'il fera, comme celui d'une branche de l'arbre. */
   plier: (ouvert: boolean, mots: string) => `${ouvert ? "Replier" : "Déplier"} le corps — ${mots}`,
+} as const
+
+/** Les plis d'une page : la case « Repliable » d'un titre, et le chevron qui replie ou déplie sa section. */
+export const PLIS = {
+  repliable: "Repliable",
+  section: (ouvert: boolean, titre: string) => `${ouvert ? "Replier" : "Déplier"} la section — ${titre}`,
 } as const
 
 /** Les annonces des niveaux de liste (E10-S06, AC-a6) : rien n'a changé, et pourquoi ; la borne est celle du contrôle (`MESSAGES_DU_BLOC`). */

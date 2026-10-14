@@ -1,6 +1,7 @@
 // Les formes qu'E10-S06 apprend à l'éditeur, en fonctions pures : le tableau simple (cellules, rangées, colonnes,
 // alignement, collage d'un tableur, cellules telles qu'elles partent), le repli (résumé et corps), le niveau d'une
-// ligne de liste (`Tab`, `Maj+Tab`) et les numéros de la gouttière d'une liste numérotée. Les bornes sont celles du
+// ligne de liste (`Tab`, `Maj+Tab`) et les numéros de la gouttière d'une liste numérotée ; puis les trois titres et leur
+// option « Repliable ». Les bornes sont celles du
 // schéma partagé (`schemas/blocks.ts`). Sans lui, `modele.ts` dépasserait les 300 lignes d'ESLint
 // (`coding-standards.md § Complexité`).
 import {
@@ -13,6 +14,7 @@ import {
   type SimpleTable,
   type SimpleTableAlign,
 } from "../../../schemas/blocks"
+import type { BlocEdite, Forme } from "./modele"
 
 export type Alignement = SimpleTableAlign
 
@@ -213,4 +215,17 @@ export function positionDansLaLigne(texte: string, ligne: number, colonne: numbe
 export function numerosDeGouttiere(texte: string, debut: number): string[] {
   let numero = debut
   return profondeurs(texte.split("\n")).map((profondeur) => (profondeur === 0 ? `${numero++}.` : ""))
+}
+
+/** Les trois titres, et le niveau que chacun écrit ; un titre de niveau 4 ou 5 écrit par un assistant se lit « Petit titre ». */
+export const NIVEAUX_DES_TITRES = { grandTitre: 1, moyenTitre: 2, petitTitre: 3 } as const
+
+export type Titre = keyof typeof NIVEAUX_DES_TITRES
+
+export const estUnTitre = (forme: Forme | null): forme is Titre => forme !== null && forme in NIVEAUX_DES_TITRES
+
+/** Le titre rendu repliable (`collapsible`), ou qui ne l'est plus : la clé part, la relecture du markdown ne la rend pas fausse. */
+export function avecRepliable(bloc: BlocEdite, repliable: boolean): BlocEdite {
+  const data = Object.fromEntries(Object.entries(bloc.data).filter(([champ]) => champ !== "collapsible"))
+  return { ...bloc, data: repliable ? { ...data, collapsible: true } : data }
 }

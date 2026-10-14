@@ -229,6 +229,11 @@ test de ce focus joue une réponse immédiate (`fetch` simulé résolu sans atte
 `bg-card`, `text-primary-foreground` sur `bg-primary` — pas sur les tokens pris isolément.
 Un token « prévu pour » ne garantit rien : la paire se mesure.
 
+**Une règle CSS ajoutée sous `.oto` qui colore un texte porte en commentaire le ratio de sa paire** sur son fond, le plus
+bas des huit teintes, jour et nuit, calculé sur les jetons d'`ui/styles/oto.css` : un jeton du jeu n'est pas lisible
+partout (`--faint` tient 3,4 à 4,2:1 sur l'îlot, sous les 4,5:1 d'un texte). **Vérifiable en revue :** une couleur de
+texte ajoutée sans ratio dans son commentaire se mesure avant d'être acceptée.
+
 **À relancer après tout changement de token de couleur** dans `src/app/globals.css`, et dans les
 **deux thèmes**. Une paire qui passe de justesse (4.4:1) est invisible à l'œil et indétectable en
 relisant les tokens — seule la mesure la voit.

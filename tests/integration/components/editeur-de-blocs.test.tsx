@@ -307,7 +307,7 @@ describe("EditeurDeBlocs, clavier (AC3)", () => {
 })
 
 describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
-  it("should open under the handle a menu to move, restyle among one « Titre » and eight styles, duplicate and delete, with no such button outside it", async () => {
+  it("should open under the handle a menu to move, restyle among three titles and eight styles, duplicate and delete, with no such button outside it", async () => {
     monter()
     expect(screen.queryByRole("button", { name: /^(Monter|Descendre|Supprimer|Dupliquer)$/ })).toBeNull()
     ajouterUnTexteApres("Objet de la relance")
@@ -320,7 +320,9 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
     expect(screen.getByRole("menu")).toHaveAttribute("data-side", "bottom")
     expect(menu.getAllByRole("menuitemradio").map((choix) => [choix.textContent, choix.getAttribute("aria-checked")])).toEqual([
       ["Texte", "true"],
-      ["Titre", "false"],
+      ["Grand titre", "false"],
+      ["Moyen titre", "false"],
+      ["Petit titre", "false"],
       ["Liste à puces", "false"],
       ["Liste numérotée", "false"],
       ["Liste à cocher", "false"],
@@ -328,12 +330,14 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
       ["Code", "false"],
       // 1.1.3 : « Diagramme » s'ajoute.
       ["Diagramme", "false"],
-      // E10-S06 (AC-a3) : « Repli » s'ajoute ; les blocs « Insérer » n'y figurent pas.
-      ["Repli", "false"],
+      // E10-S06 (AC-a3) : le repli, « Menu dépliant », s'ajoute ; les blocs « Insérer » n'y figurent pas.
+      ["Menu dépliant", "false"],
     ])
     expect(menu.getAllByRole("menuitem").map((geste) => geste.querySelector(".oto-menu-label")?.textContent)).toEqual(["Monter", "Descendre", "Dupliquer", "Supprimer"])
     // Un bloc neuf vide qui change de style ne part pas : il part avec son texte.
-    fireEvent.click(menu.getByRole("menuitemradio", { name: "Titre" }))
+    // Un Texte n'a pas de case « Repliable ».
+    expect(menu.queryByRole("menuitemcheckbox")).toBeNull()
+    fireEvent.click(menu.getByRole("menuitemradio", { name: "Grand titre" }))
     const titre = champ("Modifier ce titre — bloc vide")
     await waitFor(() => expect(document.activeElement).toBe(titre))
     expect(api.envoyes).toHaveLength(0)
@@ -390,15 +394,40 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
     expect(api.envoyes[2].ops).toEqual([{ op: "insert_after", block: ID.objet, input: { type: "reference", data: { path: "ventes/suivi" } } }])
   })
 
-  it("should read a heading of level 2 or 3 as « Titre », in the element of its level, without rewriting its level", async () => {
-    const ancien = { ...bloc("a7000000-0000-4000-8000-000000000007", "heading", "Suite", { level: 3 }), revision: 2 }
+  it("should read a heading of level 4 as « Petit titre », in the element of its level, without rewriting its level", async () => {
+    const ancien = { ...bloc("a7000000-0000-4000-8000-000000000007", "heading", "Suite", { level: 4 }), revision: 2 }
     monter({ blocs: [ancien] })
-    expect(screen.getByRole("textbox", { name: "Modifier ce titre — Suite" }).closest("h4")).not.toBeNull()
-    expect(menuDu("Suite").getByRole("menuitemradio", { name: "Titre" })).toHaveAttribute("aria-checked", "true")
+    expect(screen.getByRole("textbox", { name: "Modifier ce titre — Suite" }).closest("h5")).not.toBeNull()
+    expect(menuDu("Suite").getByRole("menuitemradio", { name: "Petit titre" })).toHaveAttribute("aria-checked", "true")
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
     ecrireEtEchapper(ouvrirLeChamp("Modifier ce titre — Suite"), "Suite revue")
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
-    expect(api.envoyes[0].ops?.[0]).toMatchObject({ input: { type: "heading", text: "Suite revue", data: { level: 3 } } })
+    expect(api.envoyes[0].ops?.[0]).toMatchObject({ input: { type: "heading", text: "Suite revue", data: { level: 4 } } })
+  })
+
+  // Story `titres-et-replis` (AC-b, AC-c) : un titre repliable servi est replié, son chevron déplie sa section, sa case se décoche.
+  it("should hide the section of a served collapsible title until its chevron unfolds it, remember it, and send the option unchecked from the menu", async () => {
+    const annexes = { ...bloc("a8000000-0000-4000-8000-000000000008", "heading", "Annexes", { level: 1, collapsible: true }), revision: 2 }
+    const detail = bloc("a9000000-0000-4000-8000-000000000009", "paragraph", "Détail des annexes")
+    const suite = bloc("aa000000-0000-4000-8000-00000000000a", "heading", "Suite", { level: 1 })
+    monter({ blocs: [annexes, detail, suite] })
+    const rangee = (id: string) => document.querySelector<HTMLElement>(`[data-cle="${id}"]`)
+    expect(rangee(detail.id)).not.toBeVisible()
+    expect(rangee(suite.id)).toBeVisible()
+    const chevron = bouton("Déplier la section — Annexes")
+    expect(chevron).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(chevron)
+    expect(rangee(detail.id)).toBeVisible()
+    expect(window.localStorage.getItem("oto-plis-ouverts")).toBe(annexes.id)
+    expect(api.envoyes).toEqual([])
+    const menu = menuDu("Annexes")
+    const repliable = menu.getByRole("menuitemcheckbox", { name: "Repliable" })
+    expect(repliable).toHaveAttribute("aria-checked", "true")
+    fireEvent.click(repliable)
+    await waitFor(() => expect(api.envoyes).toHaveLength(1))
+    expect(api.envoyes[0].ops?.[0]).toMatchObject({ op: "replace_block", input: { type: "heading", text: "Annexes", data: { level: 1 } } })
+    expect(screen.queryByRole("button", { name: /la section — Annexes/ })).toBeNull()
+    window.localStorage.clear()
   })
 
   it("should show a nested list one item per line, two spaces per level, and send the typing with its children, ordered and start kept (E10-S04, AC-b2)", () => {
@@ -794,7 +823,7 @@ describe("EditeurDeBlocs, liens d'un bloc (E05-S10, AC-a8, AC-a9 ; E05-S11, AC-2
     fireEvent.keyDown(texte, { key: "Enter" })
     await screen.findByRole("textbox", { name: "Modifier ce texte — Voir Grille tarifaire" })
     const lie = champ("Modifier ce texte — Voir Grille tarifaire")
-    expect(lie).toHaveValue("Voir [[ventes/grille_tarifaire|Grille tarifaire]]")
+    expect(lie).toHaveValue("Voir [[Grille tarifaire]]")
     expect(screen.queryByRole("listbox")).toBeNull()
     await waitFor(() => expect(document.activeElement).toBe(lie))
     expect(lie).toHaveProperty("selectionStart", lie.value.length)
@@ -820,7 +849,7 @@ describe("EditeurDeBlocs, liens d'un bloc (E05-S10, AC-a8, AC-a9 ; E05-S11, AC-2
     ecrire(liste, "Lire le devis\nÉcrire @gri")
     await screen.findByRole("option")
     expect(fireEvent.keyDown(liste, { key: "Tab" })).toBe(false)
-    await waitFor(() => expect(champ("Modifier cette liste — Lire le devis Écrire")).toHaveValue("Lire le devis\nÉcrire [[ventes/grille_tarifaire|Grille tarifaire]]"))
+    await waitFor(() => expect(champ("Modifier cette liste — Lire le devis Écrire")).toHaveValue("Lire le devis\nÉcrire [[Grille tarifaire]]"))
     expect(screen.queryByRole("listbox")).toBeNull()
   })
 

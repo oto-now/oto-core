@@ -2,6 +2,7 @@
 // `span` nommé comme le champ, `role="textbox"`) ; son focus monte le `<textarea>`, qui prend le focus, curseur à la fin.
 // Sans ces aides, chaque suite de l'éditeur réécrivait le même geste d'ouverture et la même lecture du texte d'un bloc.
 import { act, screen, within } from "@testing-library/react"
+import { sourceDuChamp } from "../../packages/plateforme/ui/noeud/editeur/liens-masques"
 
 /** Le bloc nommé `nom`, lu ou déjà ouvert : l'élément `role="textbox"` qui porte son nom. */
 function leBloc(nom: string | RegExp, dans?: HTMLElement): HTMLElement {
@@ -18,10 +19,13 @@ export function ouvrirLeChamp(nom: string | RegExp, dans?: HTMLElement): HTMLTex
   return champ
 }
 
-/** Le texte brut d'un bloc, sans l'ouvrir : la valeur de son champ ouvert, sinon le texte du bloc lu. */
+/**
+ * Le texte brut d'un bloc, sans l'ouvrir : la source de son champ ouvert (qui montre ses liens réduits à leur titre,
+ * story `liens-en-edition`), sinon le texte du bloc lu.
+ */
 export function texteDuBloc(nom: string | RegExp, dans?: HTMLElement): string {
   const element = leBloc(nom, dans)
-  if (element instanceof HTMLTextAreaElement) return element.value
+  if (element instanceof HTMLTextAreaElement) return sourceDuChamp(element)
   const premier = element.firstChild
   return premier?.nodeType === Node.TEXT_NODE ? (premier.textContent ?? "") : ""
 }

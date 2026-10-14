@@ -31,6 +31,7 @@ import { IndicationDEnregistrement } from "./editeur/lignes-d-etat"
 import { cheminsCitesDans, type CiblesDesLiens } from "./en-ligne"
 import { ECRAN, genreDuNoeud, PAGE_VIDE } from "./libelles"
 import { Publication } from "./publication"
+import { BlocsRepliables } from "./blocs-repliables"
 import { RenduDUnBloc } from "./rendu-des-blocs"
 
 /** Le niveau d'écriture de l'écran (AC9) : celui d'un rédacteur hors de la version publiée, sinon aucun. */
@@ -94,7 +95,10 @@ function Lecture({ blocs, Lien, hrefDuChemin, referencesRendues, cibles, liens }
       {blocs.length === 0 ? (
         <EmptyState title={PAGE_VIDE} />
       ) : (
-        blocs.map((bloc) => <RenduDUnBloc key={bloc.id} bloc={bloc} Lien={Lien} hrefDuChemin={hrefDuChemin} cibles={cibles} lecture={liens} rendu={referencesRendues?.[bloc.id]} />)
+        <BlocsRepliables
+          blocs={blocs}
+          rendre={(bloc) => <RenduDUnBloc bloc={bloc} Lien={Lien} hrefDuChemin={hrefDuChemin} cibles={cibles} lecture={liens} rendu={referencesRendues?.[bloc.id]} />}
+        />
       )}
     </Reader>
   )

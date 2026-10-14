@@ -356,7 +356,9 @@ type ActionsDuGroupe = Omit<ReturnType<typeof gestesDuGroupe>, "annulerLeGroupe"
  */
 export function actionsDeLEditeur(
   etat: EtatDeLEditeur,
-): Omit<Gestes, "poignee" | "selectionner" | "fermerLeMenu" | "toutSelectionnerLesBlocs" | "cliquerLaPoignee" | "ouvrirLeChamp" | "activerLeChamp"> & ActionsPropres & ActionsDuGroupe {
+): Omit<Gestes, "poignee" | "selectionner" | "fermerLeMenu" | "toutSelectionnerLesBlocs" | "cliquerLaPoignee" | "ouvrirLeChamp" | "activerLeChamp" | "basculerLePli" | "rendreRepliable"> &
+  ActionsPropres &
+  ActionsDuGroupe {
   const supprimer = suppression(etat)
   const { envoyerLeTexte, retirerSiVide } = textes(etat, supprimer)
   const { retablirSuppression, fondre, ...struct } = structure(etat, envoyerLeTexte)

@@ -87,12 +87,9 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - Sans les cinq variables, `org:export` d'une organisation qui a des fichiers `ready` échoue après sa lecture, avant le JSON et `<fichier>.files/`, et `org:import` d'un document qui porte des fichiers juste après la lecture des variables, avant toute connexion : message qui nomme les cinq (`requireTransferStore`), code 1 ; sans fichier, le transfert passe sans elles. Un objet absent est nommé, jamais une erreur ; une panne du stockage à l'export lève avant le JSON ; à l'import, les objets partent après le commit des lignes, un envoi en échec est nommé, code 1 (HN-E10S02-87).
 - À l'import, un ancien identifiant de fichier qui n'est pas un uuid est refusé avant de bâtir son chemin (nommé, code 1) ; à l'export, un dossier `<fichier>.files/` déjà là arrête le script comme le JSON (« relancez avec --force »), et `--force` le vide avant l'écriture (HN-E10S02-112).
 
-### Lecteurs de format (décidé le 08/10, pas encore écrit)
+### Lecteurs de format
 
-- Un fichier envoyé à oto peut être **lu** : un lecteur propre à son format en tire une structure lisible par un agent (premier cas : un plan DWG ou DXF, avec ses calques, surfaces, cotes et textes ; le texte d'un PDF ou d'un document bureautique suivra). Ce n'est pas un connecteur : la capacité porte sur les fichiers d'oto, pas sur un service tiers.
-- La lecture a lieu **à l'envoi** : à la confirmation d'un fichier d'un format lu, le paquet la demande et range la structure à côté du fichier ; l'agent la lit ensuite sans relire les octets, et un fichier illisible est signalé tout de suite.
-- Le paquet n'exécute aucun lecteur : il a un **port lecteur**, comme le port de stockage, que l'hôte branche par une variable vers un service de lecture. Le service est isolé (processus jetable, sans réseau sortant ni privilèges, temps et mémoire bornés), parce qu'un lecteur exécute un analyseur sur des fichiers arbitraires et qu'un convertisseur peut être sous une licence incompatible avec ce dépôt ; il lit lui-même le fichier dans le stockage, désigné par sa référence, jamais par une URL fournie par l'appelant.
-- Fermé par défaut : la lecture d'un format s'active par organisation.
+- Ce qu'un assistant lit d'un fichier joint (aperçu au dépôt, texte par `read {file}`, lecteurs du paquet et port lecteur de l'hôte) est dans [lecture des fichiers par un assistant](lecture-des-fichiers.md).
 
 ## Décisions et alternatives écartées
 
@@ -118,8 +115,6 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - M98 : test d'expiration sensible à l'écart d'horloge entre la base et le poste.
 
 ## Questions ouvertes
-
-- Lecteurs de format : forme de la structure rangée (colonne, objet du stockage ou nœud), contrat du port lecteur, limites par format, et où vit le code du service de lecture.
 
 Aucune à ce jour.
 

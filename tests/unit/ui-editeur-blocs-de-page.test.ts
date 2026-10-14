@@ -49,7 +49,9 @@ describe("choix du « + » et de « / » (AC-a1, AC-a2)", () => {
     const rangees = rangeesDepuis([PARAGRAPHE])
     const attendus: [Choix, Record<string, unknown>][] = [
       ["texte", { type: "paragraph", text: "", data: {} }],
-      ["titre", { type: "heading", text: "", data: { level: 1 } }],
+      ["grandTitre", { type: "heading", text: "", data: { level: 1 } }],
+      ["moyenTitre", { type: "heading", text: "", data: { level: 2 } }],
+      ["petitTitre", { type: "heading", text: "", data: { level: 3 } }],
       ["puces", { type: "list", text: null, data: { items: [""] } }],
       ["numerotee", { type: "list", text: null, data: { items: [""], ordered: true } }],
       ["cases", { type: "checklist", text: null, data: { items: [{ text: "", checked: false }] } }],
@@ -69,7 +71,7 @@ describe("choix du « + » et de « / » (AC-a1, AC-a2)", () => {
 
   it("should turn a Texte into the chosen block in its place, its id, reference and revision kept", () => {
     const [vide] = rangeesDepuis([VIDE])
-    expect(remplacerParChoix([vide], vide.cle, "titre").modele[0].bloc).toEqual({ id: VIDE.id, ref: VIDE.ref, revision: 3, type: "heading", text: "", data: { level: 1 }, key: null })
+    expect(remplacerParChoix([vide], vide.cle, "grandTitre").modele[0].bloc).toEqual({ id: VIDE.id, ref: VIDE.ref, revision: 3, type: "heading", text: "", data: { level: 1 }, key: null })
     expect(remplacerParChoix([vide], vide.cle, "separateur")).toEqual({
       modele: [{ cle: vide.cle, bloc: { id: VIDE.id, ref: VIDE.ref, revision: 3, type: "divider", text: null, data: {}, key: null } }],
       focus: { cle: vide.cle, curseur: null, cible: "rangee" },
@@ -78,17 +80,23 @@ describe("choix du « + » et de « / » (AC-a1, AC-a2)", () => {
 })
 
 describe("préfixes de titre (AC-a5)", () => {
-  it("should give a heading of level 1, 1, 2, 3, 4, 5 for # to ###### typed at the start of a Texte, the prefix gone", () => {
+  it("should give a large, medium and small title for #, ## and ### typed at the start of a Texte, a small one beyond, the prefix gone", () => {
     const [paragraphe] = rangeesDepuis([PARAGRAPHE])
     const niveaux = [1, 2, 3, 4, 5, 6].map((nombre) => {
       const { modele, focus } = ecrireTexte([paragraphe], paragraphe.cle, `${"#".repeat(nombre)} Budget`)
       expect(modele[0].bloc).toMatchObject({ id: PARAGRAPHE.id, type: "heading", text: "Budget" })
       expect(focus).toEqual({ cle: paragraphe.cle, curseur: 0 })
-      expect(formeDe(modele[0].bloc)).toBe("titre")
       expect(accepte(modele[0].bloc)).toBe(true)
-      return modele[0].bloc.data.level
+      return [formeDe(modele[0].bloc), modele[0].bloc.data.level]
     })
-    expect(niveaux).toEqual([1, 1, 2, 3, 4, 5])
+    expect(niveaux).toEqual([
+      ["grandTitre", 1],
+      ["moyenTitre", 2],
+      ["petitTitre", 3],
+      ["petitTitre", 3],
+      ["petitTitre", 3],
+      ["petitTitre", 3],
+    ])
     // Sept `#` ne sont pas un titre (CommonMark) : le texte reste.
     expect(ecrireTexte([paragraphe], paragraphe.cle, "####### Budget").modele[0].bloc).toMatchObject({ type: "paragraph", text: "####### Budget" })
   })

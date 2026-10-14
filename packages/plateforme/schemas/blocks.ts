@@ -87,10 +87,21 @@ const heading = z.object({
   text: blockText
     .refine((value) => within(1, 200)(btrim(value)), "Heading: 1 to 200 characters.")
     .refine((value) => !/[\r\n]/.test(value), "Heading: a single line."),
-  // Cinq niveaux, `##` à `######` sous le titre du nœud (E10-S04, AC-b3).
-  data: z.looseObject({ level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]) }),
+  // Cinq niveaux, `##` à `######` sous le titre du nœud (E10-S04, AC-b3) ; `collapsible`, un titre qui replie sa section
+  // à l'écran (`COLLAPSIBLE_MARKER`).
+  data: z.looseObject({ level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]), collapsible: z.boolean().optional() }),
   key: optionalKey,
 })
+
+/**
+ * Ce qui finit la ligne markdown d'un titre repliable (`## Titre <!-- toggle -->`) : un commentaire, que l'export d'un
+ * `.md` affiche sans lui. Écrit par le rendu (`blocks-render.ts`), lu par `parseMarkdown`, jamais dans le texte du titre.
+ */
+export const COLLAPSIBLE_MARKER = "<!-- toggle -->"
+
+/** Le titre replie sa section à l'écran : la case « Repliable » de l'éditeur, ou le marqueur écrit par un assistant. */
+export const isCollapsible = (block: { type: string; data?: unknown }): boolean =>
+  block.type === "heading" && typeof block.data === "object" && block.data !== null && "collapsible" in block.data && block.data.collapsible === true
 
 const paragraph = z.object({ type: z.literal("paragraph"), text: blockText, data: anyData.optional(), key: optionalKey })
 
