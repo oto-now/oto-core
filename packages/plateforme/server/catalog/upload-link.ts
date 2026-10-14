@@ -115,7 +115,7 @@ export const uploadLink = defineFunction({
     { path: "ventes/notes_salon", kind: "md", mode: "create", title: "Notes du salon", summary: "Les notes prises au salon.", source_url: "https://example.com/notes_salon.md" },
   ],
   refusals: [
-    'create on a path already taken (conflict: "Path … is not available: choose another path."), under a missing parent (not_found), or without the write level on the parent (forbidden, with whom to ask).',
+    'create on a path already taken (conflict: "Path … is not available: … Choose another path."), under a missing parent (not_found), or without the write level on the parent (forbidden, with whom to ask).',
     "attach, replace or merge on an unknown path (not_found), a node of another kind (a file or a markdown file goes into a page, a CSV into a table), without the write level (forbidden), or with a base_revision that is not the current one (stale_revision).",
     "kind file on a platform without file storage (not_enabled), a name whose extension is not admitted, or files of the organisation beyond 10 GB (too_large).",
     "When the file arrives: the link unknown, expired or already used (not_found, the same answer), a request from a browser or by another method than POST (forbidden), more than 1 MB (too_large), a markdown file or a CSV that is not UTF-8, a markdown file that is an HTML page, a CSV that does not fit the table (invalid_arguments), or anything that changed since the link (rights, path, revision).",

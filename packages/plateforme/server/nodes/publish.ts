@@ -17,6 +17,7 @@ import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { fromDatabaseError, inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { procedureAdvice } from "../procedure-advice"
 import { checkProcedureBlocks, procedurePublicationError } from "../procedures-check"
 import { finishTablePublication, prepareTablePublication, type TablePublication } from "../tables/evolution-publish"
 import { samePublishedContent } from "./diff"
@@ -154,7 +155,7 @@ export async function publishNode(
     sections: splitSections(blocks).length - 1,
     blocks: blocks.length,
     rulesChanged,
-    warnings: [...(links?.warnings ?? []), ...(evolved?.texts ?? [])],
+    warnings: [...(links?.warnings ?? []), ...(evolved?.texts ?? []), ...(kind === "procedure" ? procedureAdvice(blocks) : [])],
     ...(evolved ? { table: evolved } : {}),
     ...(renamed ? { renamed } : {}),
   }

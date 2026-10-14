@@ -652,3 +652,14 @@
 
 /* E05-S10 (partie b, AC-b7) — la ligne du rail qui recevra le nœud glissé : le fond du survol et un filet de la pastille (`--rail-on-bg`, le rail est une surface sombre même en mode clair). */
 .oto-rail-item[data-depot] { background: var(--rail-hover); box-shadow: inset 0 0 0 2px var(--rail-on-bg); }
+
+/* La place d'un nœud glissé entre deux lignes du rail (E05-S10, AC-b9) : une barre droite, de l'accent du rail, entre les deux lignes, avec une pastille à son départ, et non un filet qui suit l'arrondi de la ligne ; cernées du fond du rail, elles se lisent aussi contre la ligne courante, qui porte l'accent en fond ; hors du flux, rien ne bouge, le pointeur passe au travers. */
+.oto-rail-item[data-rang] { position: relative; }
+.oto-rail-item[data-rang]::before,
+.oto-rail-item[data-rang]::after { content: ""; position: absolute; pointer-events: none; background: var(--rail-on-bg); box-shadow: 0 0 0 1px var(--rail-bg); }
+.oto-rail-item[data-rang]::before { inset-inline: var(--space-2) 0; block-size: 2px; border-radius: 1px; }
+.oto-rail-item[data-rang]::after { inset-inline-start: calc(var(--space-2) - 3px); inline-size: 8px; block-size: 8px; border-radius: 50%; }
+.oto-rail-item[data-rang="avant"]::before { inset-block-start: -1px; }
+.oto-rail-item[data-rang="avant"]::after { inset-block-start: -4px; }
+.oto-rail-item[data-rang="apres"]::before { inset-block-end: -1px; }
+.oto-rail-item[data-rang="apres"]::after { inset-block-end: -4px; }

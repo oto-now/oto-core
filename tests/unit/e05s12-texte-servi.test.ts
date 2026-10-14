@@ -176,11 +176,13 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 })
 
 describe("How this workspace works (E05-S12, AC-10)", () => {
-  it("should hold 14 lines and 1,900 characters at most with a 10-character prefix, the same for everyone", () => {
+  // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB).
+  it("should hold 16 lines and 3,100 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
-    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(14)
-    expect(rules.length).toBeLessThanOrEqual(1_900)
+    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(16)
+    expect(rules.length).toBeLessThanOrEqual(3_100)
+    for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
     expect(rules.split("\n")[0]).toBe("## How this workspace works")
     expect(rules).toContain("abcdefghij_context (first, once per conversation), abcdefghij_find, abcdefghij_read, abcdefghij_call, abcdefghij_write, abcdefghij_feedback.")
     // Aucune donnée d'une identité, aucun nom de produit ni de client : seul le préfixe varie.

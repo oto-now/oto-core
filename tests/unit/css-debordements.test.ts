@@ -22,6 +22,11 @@ describe("overflows of the screens kept closed by their CSS", () => {
     expect(lead).not.toMatch(/(^|[^-])inline-size:\s*20px/)
   })
 
+  it("should keep the raw text of a rendered field, longer with its links, out of the height of its block at rest", () => {
+    const editeur = css("components/css/editeur.css")
+    expect(editeur).toMatch(/@media not \(forced-colors: active\) \{\s*\.oto-block-pile > :is\(\.oto-block-field, \.oto-inline-field\)\[data-rendu\]:not\(:focus\) \{[^}]*position: absolute;[^}]*inset: 0;/)
+  })
+
   it("should show every entry of the « + » and of « / » without a scroll bar, the « + » bounded by the window only", () => {
     const editeur = css("components/css/editeur.css")
     expect(regle(editeur, ".oto-pop.oto-menu-du-plus > .oto-menu")).toMatch(/max-block-size:\s*calc\(100dvh/)

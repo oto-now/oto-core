@@ -41,7 +41,7 @@ export type ExportReport = {
 type Collected = { pivot: TreePivot; report: ExportReport }
 
 /** Les descendants vivants d'une racine que la personne lit, chacun sous un parent gardé, un parent avant ses enfants. */
-async function readableSubtree(db: PlatformDb, identity: Identity, root: NodeRow): Promise<NodeRow[]> {
+export async function readableSubtree(db: PlatformDb, identity: Identity, root: NodeRow): Promise<NodeRow[]> {
   const rows = await inTransaction(db, "export: subtree", (sql) => sql<NodeRow[]>`
     select ${sql(NODE_SQL_COLUMNS)}
       from platform.nodes
@@ -60,7 +60,7 @@ async function readableSubtree(db: PlatformDb, identity: Identity, root: NodeRow
 }
 
 /** Les chemins que citent les textes d'un bloc : ses liens `[[…]]` et le chemin d'un bloc de référence. */
-function citedPaths(block: PivotBlock): string[] {
+export function citedPaths(block: PivotBlock): string[] {
   const texts: string[] = []
   if (typeof block.text === "string") texts.push(block.text)
   const items = block.data.items
@@ -113,13 +113,10 @@ async function pivotNode(db: PlatformDb, node: NodeRow, relative: string, report
     const rows = blocks.map((block) => pivotRow(toReadRow(block, published.header, new Map(), { provenance: true })))
     return { ...head, kind: "table", table: { header: published.header, rows } }
   }
-  if (node.revision === 0) {
-    report.skipped.push({ path: node.path, reason: "never published" })
-    return null
-  }
-  // Un Contexte voyage en page : à la destination, son chemin ne désigne pas forcément le Contexte d'une équipe.
+  // Un Contexte voyage en page : à la destination, son chemin ne désigne pas forcément le Contexte d'une équipe. Une page
+  // jamais publiée (la racine d'une équipe, souvent) voyage vide, pour que ses descendants aient un parent.
   const kind = node.kind === "procedure" ? "procedure" : "page"
-  return { ...head, kind, blocks: pivotBlocks(await loadBlocks(db, node.id, "published")) }
+  return { ...head, kind, blocks: node.revision === 0 ? [] : pivotBlocks(await loadBlocks(db, node.id, "published")) }
 }
 
 /**
@@ -192,7 +189,7 @@ export async function collectTree(
     format: TREE_FORMAT,
     version: TREE_FORMAT_VERSION,
     exported_at: new Date().toISOString(),
-    source: { org: identity.org.slug, ...(options.origin ? { origin: options.origin } : {}) },
+    source: { org: identity.org.slug, prefix: identity.org.prefix, ...(options.origin ? { origin: options.origin } : {}) },
     roots: roots.map((root) => ({ path: root.node.path, name: root.name })),
     nodes,
     ...(files.length > 0 ? { files } : {}),

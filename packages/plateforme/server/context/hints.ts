@@ -1,0 +1,43 @@
+// Ce que `context` propose quand aucune procédure ne convient à la demande (1.4.3) : les fonctions dont la description y
+// répond (`searchFunctions`, trois au plus) et la section du guide de la plateforme la plus proche (`help`). Sans lui,
+// « exporte toutes les pages de l'équipe SAV » répondait « no procedure matches », alors que `node.export_tree` le fait.
+import { catalogFunctions, isActive, searchFunctions } from "../catalog/registry"
+import { loadActiveConnectors } from "../connectors/activations"
+import type { PlatformDb } from "../db"
+import { firstSentence } from "../find"
+import { closestHelpSection } from "../help"
+import type { Identity } from "../identity"
+
+/** La part des mots de la demande qu'une fonction doit couvrir pour être proposée : un mot sur quatre. */
+const FUNCTION_SCORE_MIN = 0.25
+
+export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string } | null }
+
+/**
+ * Les fonctions actives de l'organisation qui répondent à la demande, et la section du guide la plus proche ; une panne de
+ * lecture des connecteurs ne prive que des fonctions.
+ */
+export async function routingHints(db: PlatformDb, identity: Identity, phrase: string): Promise<RoutingHints> {
+  const active = await loadActiveConnectors(db, identity.org.id).catch((error: unknown) => {
+    console.error("[platform] context: active connectors read failed", error)
+    return null
+  })
+  const functions =
+    active === null
+      ? []
+      : searchFunctions(catalogFunctions().filter((fn) => isActive(fn, active)), phrase, 3)
+          .filter(({ score }) => score >= FUNCTION_SCORE_MIN)
+          .map(({ fn }) => ({ name: fn.name, sentence: firstSentence(fn.description) }))
+  return { functions, help: closestHelpSection(phrase) }
+}
+
+/** Les lignes des propositions, après la ligne du routage ; rien quand il n'y a rien à proposer. */
+export function hintLines(hints: RoutingHints | undefined, prefix: string): string[] {
+  if (!hints) return []
+  const functions =
+    hints.functions.length === 0
+      ? []
+      : [`Functions that may do it (read a contract with ${prefix}_read path <function>, run it with ${prefix}_call):`, ...hints.functions.map((one) => `- ${one.name}: ${one.sentence}`)]
+  const help = hints.help ? [`Platform guide: ${prefix}_read {"path": "help", "section": "${hints.help.id}"} (${hints.help.title}).`] : []
+  return [...functions, ...help]
+}

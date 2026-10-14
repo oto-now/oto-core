@@ -18,7 +18,6 @@ import { Table } from "@phosphor-icons/react/dist/csr/Table"
 import { titreDeContexte } from "../arbre/depuis-l-arbre"
 import type { NatureDeNoeud, NoeudDArbre } from "../arbre/types"
 import { AnimatedIcon, type Glyphe } from "../ds/react/icon"
-import { cx } from "../ds/react/outils"
 import type { RailTreeNode } from "../ds/react/rail-tree"
 import { useHote } from "../hote/navigation"
 import { useGlisserDansLeRail, type GlisserDuRail } from "./deplacement-dans-le-rail"
@@ -77,13 +76,6 @@ export function versArbreDuRail(noeuds: readonly NoeudDArbre[], traduction: Trad
 
 /** Le type du nœud glissé dans le transfert : Firefox ne commence aucun glisser sans donnée posée. */
 const TYPE_DU_GLISSER = "application/x-oto-chemin"
-
-/**
- * Le repère d'un dépôt entre deux lignes (AC-b9) : un trait de l'accent du rail au-dessus ou au-dessous de la
- * ligne, hors d'elle (la ligne courante porte déjà cet accent en fond) ; le dépôt dedans garde le cadre du
- * design system (`data-depot`).
- */
-const REPERE_DU_RANG = "data-[rang=avant]:shadow-[0_-2px_0_0_var(--rail-on-bg)] data-[rang=apres]:shadow-[0_2px_0_0_var(--rail-on-bg)]"
 
 /** La zone de la ligne sous le pointeur, de sa position dans la hauteur de la ligne. */
 function zoneDuSurvol(glisser: GlisserDuRail, chemin: string, evenement: DragEvent<HTMLAnchorElement>): Zone {
@@ -154,5 +146,6 @@ export function LigneDuRail({ href, onClick, className, ...reste }: AnchorHTMLAt
     deplier?.(href)
     onClick?.(evenement)
   }
-  return <Lien href={href} className={chemin === null ? className : cx(className, REPERE_DU_RANG)} {...reste} {...gestes} onClick={surClic} />
+  // Le repère d'un dépôt, dedans (`data-depot`) ou entre deux lignes (`data-rang`, une barre droite), vient du design system (`product.css`).
+  return <Lien href={href} className={className} {...reste} {...gestes} onClick={surClic} />
 }

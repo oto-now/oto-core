@@ -126,7 +126,7 @@ describe.skipIf(!sqlConfigured)(portable("table.import and POST tables/import on
     expect(await refusal({ table: "ventes/sans_cle", csv: "a;b\nx;1\nx;1", create: { title: "Sans clé", summary: "Aucune clé." } })).toBe(
       "no column has a value on every line, all distinct: pass key, the column that identifies a row",
     )
-    expect(await refusal({ table: PROSPECTS.path, csv: "a\nx", create: { title: "Pris", summary: "Chemin pris." } })).toBe("Path ventes/suivi_prospects is not available: choose another path.")
+    expect(await refusal({ table: PROSPECTS.path, csv: "a\nx", create: { title: "Pris", summary: "Chemin pris." } })).toBe("Path ventes/suivi_prospects is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path.")
     expect(await refusal({ table: "ventes/inconnu", csv: "a\nx" })).toMatch(/^Unknown table ventes\/inconnu\. Tables you can read: /)
     expect(await refusal({ table: CLIENTS, csv: `nom\n${"x".repeat(40_000)}` })).toBe(
       "csv is 40,004 characters; 40,000 at most per call: send it in pieces of about 20,000 characters, each starting with the header line.",

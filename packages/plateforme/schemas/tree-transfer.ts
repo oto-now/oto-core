@@ -126,7 +126,8 @@ export const treePivotSchema = z.strictObject({
   format: z.literal(TREE_FORMAT),
   version: z.literal(TREE_FORMAT_VERSION),
   exported_at: z.string(),
-  source: z.strictObject({ org: z.string(), origin: z.string().optional() }),
+  /** L'organisation source : son slug, son adresse, et le préfixe de ses outils, que l'import remplace dans les textes. */
+  source: z.strictObject({ org: z.string(), origin: z.string().optional(), prefix: z.string().optional() }),
   /** Chaque racine : son chemin à la source, absolu, et le nom qu'elle porte dans `nodes` ; un lien vers elle ou sous elle se recolle à l'import. */
   roots: z.array(z.strictObject({ path: nodePathSchema, name: nodePathSchema })).min(1).max(TREE_ROOTS_MAX),
   nodes: z.array(pivotNodeSchema).max(TREE_NODES_MAX),

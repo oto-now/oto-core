@@ -16,6 +16,7 @@ import { ACCESS_LEVELS, describeOwner, requireNodeLevel, reservedTo, type Access
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, PlatformError } from "../errors"
 import { FUNCTIONS_PATH } from "../find"
+import { HELP_PATH } from "../help"
 import type { Identity } from "../identity"
 import { wellFormed } from "../journal"
 import { JOURNAL_PATH } from "../../schemas/journal"
@@ -81,6 +82,8 @@ export function checkPath(identity: Identity, path: string): void {
   if (path === JOURNAL_PATH) throw new PlatformError("invalid_arguments", "journal is reserved: it serves the call journal. Choose another path.")
   // E11-S19 (AC-e3) : `read` y liste les fonctions que la personne peut appeler.
   if (path === FUNCTIONS_PATH) throw new PlatformError("invalid_arguments", "functions is reserved: it lists the functions you can run. Choose another path.")
+  // 1.4.3 : `read` y sert le guide de la plateforme.
+  if (path === HELP_PATH) throw new PlatformError("invalid_arguments", "help is reserved: it serves the platform guide. Choose another path.")
   refuseUnderRoot(path)
   const space = /^private\/([^/]+)$/.exec(path)
   const handle = identity.member.profile.handle

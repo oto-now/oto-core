@@ -109,6 +109,9 @@ describe("catalog (AC23)", () => {
       // Transfert d'une arborescence d'un MCP Oto à un autre.
       "node.export_tree",
       "node.import_tree",
+      // 1.4.3 : inventaire et contrôle d'une arborescence.
+      "node.tree",
+      "node.check",
       // E10-S02 (lot f) : le dépôt par lien à usage unique.
       "upload.link",
     ])

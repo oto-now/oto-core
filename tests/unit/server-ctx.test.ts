@@ -60,9 +60,18 @@ describe("messages (H27)", () => {
 
   // L'avis d'un Contexte changé : le nouveau code, la consigne de ne pas rejouer l'appel, puis les Contextes changés.
   it("should give the new ctx, the instruction not to repeat the call, then the changed contexts", () => {
-    expect(changedCtxMessage("acme", ["ventes/contexte"], "7K3Q-M2XA", "## Context: team Ventes (ventes/contexte)\nTutoie.")).toBe(
+    expect(changedCtxMessage("acme", { paths: ["ventes/contexte"], code: "7K3Q-M2XA", served: "## Context: team Ventes (ventes/contexte)\nTutoie." })).toBe(
       "context has changed (ventes/contexte). New ctx: 7K3Q-M2XA: pass it to every acme_ tool from now on. The call below ran with it: do not repeat it because of this notice. The changed contexts, as served now:\n\n## Context: team Ventes (ventes/contexte)\nTutoie.",
     )
+  })
+
+  // 1.4.3 : sous un refus, l'avis dit que rien n'a été écrit ; sous une panne, que le journal dit ce qui a couru.
+  it("should say that a refused call wrote nothing, and send a failed one to the journal", () => {
+    const change = { paths: ["ventes/contexte"], code: "7K3Q-M2XA", served: "x" }
+    const refused = changedCtxMessage("acme", change, "refused")
+    expect(refused).toContain("The call below was refused: nothing was written by it; fix it as the refusal says, with the new ctx.")
+    expect(refused).not.toContain("ran with it")
+    expect(changedCtxMessage("acme", change, "failed")).toContain("The call below failed: it may have done part of its work; read acme_read path journal before repeating it, with the new ctx.")
   })
 })
 

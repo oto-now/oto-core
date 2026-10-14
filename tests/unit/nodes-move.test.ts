@@ -272,7 +272,7 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
       const refused = async (code: string) => (await move("claire", toB2, onUpdate([{ code, message: `database says ${code}` }]))).error
       await content(tree())
       // Le nœud qui occupe le chemin, ou dont c'est l'ancien chemin, reste caché au service (RLS de niveau avant E01-S08, course).
-      expect(await refused("23505")).toMatchObject({ code: "conflict", message: "Path ventes/b2 is not available: choose another path." })
+      expect(await refused("23505")).toMatchObject({ code: "conflict", message: "Path ventes/b2 is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path." })
       // La décision rejouée passe : le refus ne renvoie la responsable vers personne, pas même elle-même (N25).
       expect(await refused("42501")).toMatchObject({ code: "forbidden", message: "Cannot move ventes/b to ventes/b2: the access rules of Acme Test refuse it there. Choose another path." })
       expect(await refused("23514")).toMatchObject({ code: "invalid_arguments", message: "Cannot move ventes/b to ventes/b2: the tree refuses this place. Choose another path." })
@@ -285,7 +285,7 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
         if (isNodeUpdate(call)) await ref.write({ nodes: [{ ...concurrent, id: "node:concurrent", path: "ventes/b2" }] })
         return null
       })
-      expect(raced.error).toMatchObject({ code: "conflict", message: "Path ventes/b2 is not available: choose another path." })
+      expect(raced.error).toMatchObject({ code: "conflict", message: "Path ventes/b2 is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path." })
       expect(log).toHaveBeenCalledWith("[platform] move: refused by the database", "23505")
 
       await content(tree())
@@ -353,7 +353,7 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
       await content(confidential())
       const byService = spyDb(await ref.db("lea"))
       const refusedCreate = await settle(writeNode(byService.db, lea, create, AGENT))
-      expect(refusedCreate.error).toMatchObject({ code: "conflict", message: "Path ventes/old is not available: choose another path." })
+      expect(refusedCreate.error).toMatchObject({ code: "conflict", message: "Path ventes/old is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path." })
       expect(nodeInserts(byService.calls)).toEqual([])
 
       // Un alias que le service ne lirait pas (RLS de niveau avant E01-S08) : `nodes_aliases_sync` refuse
@@ -364,7 +364,7 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
       const byBase = spyDb(await ref.db("lea"), (call) => (nodeInserts([call]).length > 0 ? { code: "23505", message: "path is the former path of another node" } : null))
       expect((await settle(writeNode(byBase.db, lea, create, AGENT))).error).toMatchObject({
         code: "conflict",
-        message: "Path ventes/old is not available: choose another path.",
+        message: "Path ventes/old is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path.",
       })
 
       await content(confidential())

@@ -184,7 +184,7 @@ describe("activation hides the functions (AC4, AC22)", () => {
     expect(isActive(fn("erp.list_invoices", "read", "erp"), none)).toBe(true)
     // Les fonctions natives des tableaux (E07-S01), celles qui suppriment (E11-S02, HN-E11S02-1) et le dépôt par lien
     // (E10-S02 lot f) sont toujours actives.
-    const native = ["table.schema", "table.rows", "table.aggregate", "table.write", "table.claim", "table.release", "table.import", "table.delete_rows", "node.discard_draft", "node.trash", "node.move", "node.write_many", "node.export_tree", "node.import_tree", "upload.link"]
+    const native = ["table.schema", "table.rows", "table.aggregate", "table.write", "table.claim", "table.release", "table.import", "table.delete_rows", "node.discard_draft", "node.trash", "node.move", "node.write_many", "node.export_tree", "node.import_tree", "node.tree", "node.check", "upload.link"]
     expect(catalogFunctions().filter((candidate) => isActive(candidate, none)).map((candidate) => candidate.name)).toEqual(native)
     expect(catalogFunctions().filter((candidate) => isActive(candidate, mail)).map((candidate) => candidate.name)).toEqual([
       "mail.create_draft",

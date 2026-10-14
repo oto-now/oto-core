@@ -12,6 +12,7 @@ import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
 import { functionCatalog, FUNCTIONS_PATH } from "../find"
+import { helpGuide, HELP_PATH } from "../help"
 import type { Identity } from "../identity"
 import { readJournal } from "../journal-model"
 import { JOURNAL_PATH } from "../../schemas/journal"
@@ -143,7 +144,7 @@ function pendingOf(draft: Context["draft"]): PendingDraft | null {
 
 /**
  * `read` (AC4 à AC18) : un nom de fonction sert son contrat ; `journal` sert le journal des appels
- * (E05-S05) ; `functions`, toutes les fonctions actives (E11-S19) ; un chemin sert l'en-tête du nœud et ses blocs rendus selon le mode demandé, coupés en
+ * (E05-S05) ; `functions`, toutes les fonctions actives (E11-S19) ; `help`, le guide de la plateforme (1.4.3) ; un chemin sert l'en-tête du nœud et ses blocs rendus selon le mode demandé, coupés en
  * parties au-delà de 45 000 caractères. Un nœud invisible répond comme un chemin inconnu (H68).
  * `origin` (E10-S02, AC-d1) : l'origine de la requête MCP, qui rend absolue l'adresse d'un fichier joint ;
  * `file` (AC-d2) : le texte d'un fichier joint au nœud. `views` : les widgets sont allumés, une page servie
@@ -158,6 +159,8 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
     const active = await loadActiveConnectors(db, identity.org.id)
     return functionCatalog(catalogFunctions().filter((fn) => isActive(fn, active)), contractNames(), prefix)
   }
+  // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
+  if (path === HELP_PATH) return helpGuide(input.section, prefix)
   checkRequest(input, path)
   const found = await findNode(db, identity, path)
   if (!found) throw unknownNode(path, prefix)

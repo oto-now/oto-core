@@ -171,7 +171,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         }
         expect({ disabled: disabled.isError, starts: disabled.text.startsWith("Files are not enabled on this platform") }).toEqual({ disabled: true, starts: true })
         expect(Object.fromEntries(Object.entries(outcomes).map(([key, outcome]) => [key, { isError: outcome.isError, text: outcome.text.split("\n")[0] }]))).toEqual({
-          taken: { isError: true, text: `Path ${page} is not available: choose another path.` },
+          taken: { isError: true, text: `Path ${page} is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path.` },
           noParent: { isError: true, text: "Cannot create ventes/nulle_part/r: its parent ventes/nulle_part does not exist." },
           readOnly: { isError: true, text: expect.stringMatching(/^Writing under ventes is reserved to /) },
           stale: { isError: true, text: `stale revision: ${page} is at revision 1, not 0. Nothing was written. Read it again, then ask for a new link with base_revision 1.` },
@@ -180,7 +180,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         })
         expect(await ticketsOf(o.people.claire.id)).toEqual(before)
         // FB-0014 : le chemin pris est `conflict`, le code du contrat ; la porte MCP n'en sert que le message, le journal le code.
-        expect(claire.journal.find((line) => line.error?.includes(`Path ${page} is not available`))?.error).toBe(`conflict: Path ${page} is not available: choose another path.`)
+        expect(claire.journal.find((line) => line.error?.includes(`Path ${page} is not available`))?.error).toBe(`conflict: Path ${page} is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path.`)
       } finally {
         await fx.admin`delete from platform.access_rules where id = ${reads}`
       }

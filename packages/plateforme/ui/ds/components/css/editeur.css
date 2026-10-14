@@ -106,9 +106,20 @@
   color: var(--ink);
 }
 
-/* ── le texte au repos (E05-S11, AC-26) : le champ et son rendu dans la même case d'une grille, la case prend le plus haut des deux ; le rendu, par-dessus, porte les classes du champ (sa géométrie, son corps), sans fond ni bordure visibles. */
+/* ── le texte au repos (E05-S11, AC-26) : le champ et son rendu dans la même case d'une grille ; le rendu, par-dessus, porte les classes du champ (sa géométrie, son corps), sans fond ni bordure visibles. */
 .oto-block-pile {
   display: grid;
+  position: relative;
+}
+
+/* Hors du focus, le texte brut d'un champ rendu (ses liens [[…]] plus longs que leur titre) ne compte pas dans la hauteur : il couvre la case du rendu, pour garder le clic, sans la grandir ; sans quoi un texte à plusieurs liens laissait un grand vide sous son rendu. Au focus, il reprend sa place et sa hauteur. En couleurs forcées, le rendu se retire : le champ garde la sienne. */
+@media not (forced-colors: active) {
+  .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-rendu]:not(:focus) {
+    position: absolute;
+    inset: 0;
+    block-size: 100% !important;
+    overflow: hidden;
+  }
 }
 
 .oto-block-pile > * {

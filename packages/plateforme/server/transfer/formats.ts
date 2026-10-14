@@ -45,6 +45,8 @@ export type ImportPlan = {
   nodes: PlanNode[]
   roots: string[]
   relink: (sourcePath: string) => string | null
+  /** Le préfixe des outils de l'organisation source, quand la source le dit (le pivot) : l'import le remplace dans les textes. */
+  sourcePrefix?: string
   /** Ce que la lecture a laissé, dit au rapport. */
   notes: string[]
 }
@@ -138,7 +140,7 @@ function pivotPlan(bytes: Uint8Array): ImportPlan {
     const root = pivot.roots.find((candidate) => sourcePath === candidate.path || sourcePath.startsWith(`${candidate.path}/`))
     return root ? `${root.name}${sourcePath.slice(root.path.length)}` : null
   }
-  return { nodes, roots: pivot.roots.map((root) => root.name), relink, notes: [] }
+  return { nodes, roots: pivot.roots.map((root) => root.name), relink, notes: [], ...(pivot.source.prefix ? { sourcePrefix: pivot.source.prefix } : {}) }
 }
 
 /** Le nom d'une entrée de ZIP, barres obliques normalisées ; `null` pour un dossier ou un fichier caché (`.git/…`, `__MACOSX/…`). */
