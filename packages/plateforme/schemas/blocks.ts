@@ -1,4 +1,4 @@
-// Blocs du contenu (ADR-011 § 2, E01-S06) : les quatorze types, la clé d'un bloc, la forme minimale de
+// Blocs du contenu (ADR-011 § 2, E01-S06) : les seize types, la clé d'un bloc, la forme minimale de
 // `text` et de `data` par type, et la référence courte d'un bloc. Mêmes bornes que la base
 // (`blocks_shape_check`, colonnes `text` et `key`), pas plus : le test de parité (AC36) confronte les
 // deux. `position`, `revision`, `provenance`, `org_id` et l'identité sont posées par le service et la
@@ -30,6 +30,8 @@ export const BLOCK_TYPES = [
   "toggle",
   // E10-S02 : un fichier joint à la page (ADR-016).
   "file",
+  // 1.4.3 : un cadre intégré, la page `https` d'un autre site montrée dans la page.
+  "embed",
 ] as const
 
 export const blockTypeSchema = z.enum(BLOCK_TYPES)
@@ -207,6 +209,28 @@ const file = z.object({
   key: optionalKey,
 })
 
+/** Les hauteurs d'un cadre intégré (1.4.3) ; sans hauteur, `medium`. */
+export const EMBED_HEIGHTS = ["small", "medium", "large"] as const
+
+export type EmbedHeight = (typeof EMBED_HEIGHTS)[number]
+
+/** Ce qu'une adresse intégrée ne contient pas : un blanc, ou ce qui fermerait l'attribut `src` (`"`, `'`, `<`, `>`). */
+const outOfUrl = (char: string) => char.trim() === "" || [`"`, "'", "<", ">"].includes(char)
+
+/** L'adresse d'un cadre intégré : `https`, 9 à 2 000 caractères, sans blanc ni guillemet (`blocks_shape_check`). */
+export const embedUrlSchema = z
+  .string()
+  .refine(within(9, 2000), "Embed: an address of 9 to 2 000 characters.")
+  .refine((value) => value.startsWith("https://") && ![...value].some(outOfUrl), "Embed: an https address, without spaces nor quotes.")
+
+/** Un cadre intégré (1.4.3) : la page `https` d'un autre site, montrée dans une iframe isolée ; sa hauteur, facultative. */
+const embed = z.object({
+  type: z.literal("embed"),
+  text: noText,
+  data: z.looseObject({ url: embedUrlSchema, height: z.enum(EMBED_HEIGHTS).optional() }),
+  key: optionalKey,
+})
+
 const callout = z.object({
   type: z.literal("callout"),
   text: blockText,
@@ -350,6 +374,7 @@ export const blockInputSchema = z.discriminatedUnion("type", [
   divider,
   toggle,
   file,
+  embed,
 ])
 
 export type BlockInput = z.infer<typeof blockInputSchema>

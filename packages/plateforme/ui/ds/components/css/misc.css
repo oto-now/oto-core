@@ -112,6 +112,12 @@
 .oto-separator { border: 0; background: var(--hair); flex: none; }
 .oto-separator[data-orientation="horizontal"] { block-size: 1px; inline-size: 100%; margin-block: var(--space-3); }
 .oto-separator[data-orientation="vertical"]   { inline-size: 1px; block-size: 100%; align-self: stretch; margin-inline: var(--space-2); }
+
+/* Le cadre d'un bloc « Intégration » (1.4.3) : pleine largeur, à la hauteur choisie (Moyenne par défaut), le bord et l'arrondi d'une carte ; le fond d'une carte tant que la page intégrée n'est pas là. */
+.oto-integration-cadre { display: block; inline-size: 100%; block-size: 480px; border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--card); }
+.oto-integration[data-height="small"] > .oto-integration-cadre { block-size: 320px; }
+.oto-integration[data-height="large"] > .oto-integration-cadre { block-size: 720px; }
+.oto-integration > figcaption { margin-block-start: var(--space-1); }
 .oto-separator[data-strong] { background: var(--island-bd); }
 
 /* Des étapes numérotées séparées d'un filet (le guide de branchement, E11-S15, AC-a5) : porté par l'élément, un `<hr>` n'entrant pas entre deux `<li>` ; le numéro suit la première ligne, sous le filet. `--island-bd` et non `--hair` : dans l'îlot, le filet intérieur ne se voyait pas entre deux étapes longues. */

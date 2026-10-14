@@ -1,7 +1,7 @@
 # Procédures
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
@@ -56,6 +56,8 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 
 - Un Contexte s'édite sur son écran de nœud (`/n/<chemin>`), ses annexes à droite (qui le reçoit, ce que le modèle recevra) ; aucune route `/contexte`, aucun lien de navigation « Contexte » (HN-E05S04-6). Publier un Contexte vide demande confirmation (« Publier quand même »), sans prendre le focus de qui écrit (HN-E05S04-10). Le Contexte Perso d'une autre personne se dit reçu par « la personne de cet espace seulement » et « Personne d'autre ne le reçoit, vous non plus. » ; il se reconnaît à l'absence de « Ma fiche » (HN-E05S04-22). Ce que sert un Contexte : [contexte servi](contexte-servi.md).
 - « Ma fiche » vit dans les annexes du Contexte Perso de la personne, sur le sien seulement (HN-E05S04-7). Elle s'écrit par `PATCH /api/platform/profile`, puis `update_my_profile(p_org, p_patch)` : seuls les champs changés partent ; une personne peut vider un champ, un agent non (HN-E05S04-4). Les langues de la fiche sont `fr` et `en` (HN-E05S04-5). `updateProfile` refuse avant sa requête un appelant sans ligne `members` (entré par un accès plateforme) : `forbidden` `Only members of <org> have a profile here.` (HN-E05S04-12).
+
+- Avertissements à la publication (1.4.3, `server/procedure-advice.ts`), jamais des refus : une procédure sans partie « Quand l'utiliser » (« When to use it »), une procédure qui nomme ses outils avec le préfixe d'une organisation. Une dépendance à un connecteur de l'assistant, hors de la plateforme, s'écrit dans une partie « Prérequis » (« Prerequisites »), servie avec les étapes : l'assistant qui ne l'a pas le dit à la personne au lieu d'échouer à l'étape. Les règles de qualité se lisent au guide de la plateforme, section `procedures`.
 
 ## Décisions et alternatives écartées
 

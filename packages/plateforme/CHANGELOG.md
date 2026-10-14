@@ -17,6 +17,30 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.3 — 2026-10-14
+
+### Assistants
+- A page can show the page of another site: the block `embed` is written as a fence ```embed with the https address, then {"height": "small" | "medium" | "large"}.
+- `node.import_tree` points the paths named in the call blocks of an imported procedure to the arrival, and keeps a procedure whose publication is refused as a draft, listed in `drafts`.
+- The rules served by `<p>_context` now point to the references (`read path functions`, `read path help`, `write.procedure`, `write.table`, `table.schema`) and name the costly pitfalls.
+- `<p>_read path help` serves the platform guide, the same everywhere: pages and blocks, tables, procedures, paths, import and export, known pitfalls; one section at a time.
+- Without a procedure for a request, `<p>_context` proposes the functions that may do it and the closest section of the guide.
+- `node.tree` lists a root and everything under it that you can read; `node.check` finds broken links, refused calls, cells naming a missing path, tools of another organisation.
+- `node.import_tree` also rewrites table cells naming an imported path and source tool names, places a node next to a held path, gives whole refusals and runs `node.check` at the end.
+- Publishing a procedure warns, without refusing, about a missing « When to use it » part and tools named with a prefix.
+- A result under a stale ctx says whether the call ran or was refused, nothing written.
+
+### Hosts
+- Install: upgrade to 1.4.3, run `oto-platform migrations sync` and apply `20261014120000_platform_bloc_integration.sql` before deploying (the block type `embed` and its shape; additive). Published from 1.4.2, without what main carries for 1.5.0.
+- Migrations: `20261014120000_platform_bloc_integration.sql` sets `blocks_type_check` and `blocks_shape_check` again, `embed` added; no table, column nor function.
+- UI: « Intégration » in the « + » and « / » of the editor opens the address of the page to show; the frame is an `iframe` with `sandbox`, at the height chosen in its menu, and a link opens the page in a new tab. A host that sends a `Content-Security-Policy` with `frame-src` or `child-src` must admit the sites its pages embed.
+- UI: the list of « / » offers the same blocks as the « + », « Image » and « Fichier » included when files are enabled; both show all their entries without a scroll bar; the prompt of an empty page cites « / » and « @ ».
+- Migrations: apply `20261014130000_platform_chemin_help.sql` too: it adds `help` to `teams_slug_reserved` (the platform guide is read at this path); rename a team whose slug is `help` before.
+- Server: `read` serves `help` before any node; `write` refuses this path, and no team takes this slug. A node already at `help` is no longer read by `read`.
+- Server: « Path … is not available » now says its possible causes, never which one: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved.
+- UI: a text block with links no longer leaves a gap under its rendering at rest: its raw text, longer, takes its height only while edited.
+- UI: dragging a node in the rail between two rows shows a straight bar with a dot where it lands, instead of an edge following the rounded row.
+
 ## 1.4.2 — 2026-10-13
 
 ### Assistants

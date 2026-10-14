@@ -21,6 +21,7 @@ import { tableRows } from "../tables/rows"
 import { tableSchema } from "../tables/schema"
 import { tableWrite } from "../tables/write"
 import { nodeExportTree, nodeImportTree } from "../transfer/functions"
+import { nodeCheck, nodeTree } from "../transfer/inspect"
 import type { CatalogFunction } from "./define"
 import { erpFunctions } from "./erp-source"
 import { uploadLink } from "./upload-link"
@@ -52,6 +53,8 @@ export function catalogFunctions(): CatalogFunction[] {
     nodeWriteMany,
     nodeExportTree,
     nodeImportTree,
+    nodeTree,
+    nodeCheck,
     uploadLink,
     ...erpFunctions(),
   ]

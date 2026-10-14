@@ -23,6 +23,7 @@ import { purgeExpiredExports } from "../../packages/plateforme/server/transfer/f
 import { importPlan } from "../../packages/plateforme/server/transfer/formats"
 import { nodeExportTree, nodeImportTree, setTreeFetchDeps } from "../../packages/plateforme/server/transfer/functions"
 import { runImport } from "../../packages/plateforme/server/transfer/import"
+import { nodeCheck, nodeTree } from "../../packages/plateforme/server/transfer/inspect"
 import type { SourceAnswer } from "../../packages/plateforme/server/uploads-fetch"
 import { hex } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
@@ -298,6 +299,88 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it("should point the paths of the call blocks of a procedure to the arrival, and keep as a draft a procedure whose publication is refused", async () => {
+    const source = `proc_${root}`
+    await write({ path: source, kind: "page", title: "Procédures", summary: "Les procédures." })
+    await write({ path: `${source}/tickets`, kind: "table", title: "Tickets", summary: "Les tickets.", header: { columns: [{ name: "ticket", type: "text" }], key: "ticket" } })
+    const appel = ["```call", `table.rows {"table":"${source}/tickets"}`, "```"].join("\n")
+    await write({ path: `${source}/traiter`, kind: "procedure", title: "Traiter", summary: "Traiter un ticket.", ops: [{ op: "set_markdown", text: `Lire les tickets.\n\n${appel}` }] })
+    await write({ path: `support/proc_${root}`, kind: "page", title: "Arrivée", summary: "L'arrivée." })
+    const output = await importTree({ source_url: String((await exportTree({ paths: [source] })).data?.url), parent: `support/proc_${root}` })
+    expect(output.data?.refused).toEqual([])
+    expect((await texts(`support/proc_${root}/${source}/traiter`)).join("\n")).toContain(`support/proc_${root}/${source}/tickets`)
+
+    const inconnu = ["---", "title: Appeler le PMO", "summary: Une fonction que ce catalogue n'a pas.", "kind: procedure", "---", "", "```call", "pmo.list_tickets {}", "```"].join("\n")
+    served.set("https://exemple.test/pmo.md", { bytes: strToU8(inconnu), type: "text/markdown" })
+    const refusee = await importTree({ source_url: "https://exemple.test/pmo.md", parent: `support/proc_${root}` })
+    expect(refusee.data?.drafts).toEqual([{ path: `support/proc_${root}/pmo`, reason: expect.any(String) }])
+    expect(String(refusee.text)).toContain("Kept as drafts")
+  })
+
+  it("should replay the reference copy: a Contexte held at the arrival placed beside with its children, table cells and tool names of the source rewritten, the counts said", async () => {
+    // La source : une racine jamais publiée, un Contexte (servi en page par l'export) et sa table, une fiche, un index dont
+    // une cellule vaut le chemin de la fiche, une page qui nomme les outils de l'organisation source.
+    const source = `ref_${root}`
+    await write({ path: source, kind: "page", title: "Référence", summary: "La copie de référence.", publish: false })
+    await write({ path: `${source}/fiche`, kind: "page", title: "Fiche", summary: "Une fiche.", ops: [{ op: "set_markdown", text: "Lire avec demo_read, puis demo_write ; demo_reader reste." }] })
+    await write({ path: `${source}/index`, kind: "table", title: "Index", summary: "L'index.", header: { columns: [{ name: "titre", type: "text" }, { name: "chemin", type: "text" }], key: "titre" } })
+    await tableWrite.run(context(), tableWriteArgsSchema.parse({ table: `${source}/index`, rows: [{ key: "Fiche", set: { chemin: `${source}/fiche` } }] }) as never)
+    const exported = await exportTree({ paths: [source] })
+    const pivot = treePivotSchema.parse(JSON.parse(await (await memory.fetch(String(exported.data?.url))).text()))
+    expect(pivot.nodes.map((node) => node.path)).toEqual([source, `${source}/fiche`, `${source}/index`])
+    // Le Contexte d'une équipe de la source et sa table, comme l'export d'une équipe les sert ; l'organisation source « demo ».
+    const contexte = { path: `${source}/contexte`, kind: "page" as const, title: "Contexte", summary: "Le contexte de l'équipe.", blocks: [{ type: "paragraph", text: "Règles de l'équipe.", data: {}, key: null }] }
+    const journal = { path: `${source}/contexte/journal`, kind: "page" as const, title: "Journal", summary: "Le journal.", blocks: [] }
+    const modified = { ...pivot, source: { ...pivot.source, prefix: "demo" }, nodes: [...pivot.nodes, contexte, journal] }
+    served.set("https://exemple.test/reference.json", { bytes: strToU8(JSON.stringify(modified)), type: "application/json" })
+
+    // Déversé sous le dossier de l'équipe support : `support/contexte` est son Contexte, qu'aucun import ne remplace.
+    const output = await importTree({ source_url: "https://exemple.test/reference.json", parent: "support", root_folder: false })
+    expect(output.data?.refused).toEqual([])
+    expect(output.data?.created).toEqual(expect.arrayContaining(["support/fiche", "support/index", "support/contexte_2", "support/contexte_2/journal"]))
+    expect(String(output.text)).toContain("support/contexte is a Contexte")
+    expect(output.data?.rewritten).toEqual({ paths: 1, prefixes: 2 })
+    expect(String(output.text)).toContain("The source holds 5 node(s)")
+    expect(output.data?.problems).toEqual([])
+    expect(String(output.text)).toContain("node.check on what arrived: nothing to fix.")
+    expect((await tableOf("support/index")).rows.map((row) => row.set.chemin)).toEqual(["support/fiche"])
+    expect((await texts("support/fiche")).join("\n")).toBe(`Lire avec ${o.org.prefix}_read, puis ${o.org.prefix}_write ; demo_reader reste.`)
+    const contexteServi = await findNode(ada.db, ada.identity, "support/contexte")
+    expect(contexteServi?.node.kind).toBe("context")
+  })
+
+  it("should give the whole refusal of a procedure, one line, and say an empty node created for it holds its text as a draft", async () => {
+    const inconnu = ["---", "title: Deux appels inconnus", "summary: Deux fonctions que ce catalogue n'a pas.", "kind: procedure", "---", "", "```call", "pmo.list_tickets {}", "```", "", "```call", "pmo.close_ticket {}", "```"].join("\n")
+    served.set("https://exemple.test/deux.md", { bytes: strToU8(inconnu), type: "text/markdown" })
+    await write({ path: `support/deux_${root}`, kind: "page", title: "Deux", summary: "Deux." })
+    const output = await importTree({ source_url: "https://exemple.test/deux.md", parent: `support/deux_${root}` })
+    const [draft] = output.data?.drafts as { path: string; reason: string }[]
+    expect(draft.reason).toMatch(/^created empty, its text kept as a draft: invalid_arguments: /)
+    expect(draft.reason).toContain("pmo.list_tickets")
+    expect(draft.reason).toContain("pmo.close_ticket")
+  })
+
+  it("should list a tree with node.tree, and find with node.check a broken link, a cell naming a missing path, a call refused and another organisation's tools", async () => {
+    const tree = await nodeTree.run(context(), { path: root } as never)
+    expect(tree.data?.nodes).toEqual([
+      expect.objectContaining({ path: root, kind: "page" }),
+      expect.objectContaining({ path: `${root}/fiches` }),
+      expect.objectContaining({ path: `${root}/fiches/retour` }),
+      expect.objectContaining({ path: `${root}/suivi`, kind: "table" }),
+    ])
+    const lieu = `controle_${root}`
+    await write({ path: lieu, kind: "page", title: "Contrôle", summary: "À contrôler.", ops: [{ op: "set_markdown", text: `Voir [[${lieu}/absente]] et [[ventes]] ; lire avec zzz_read, écrire avec zzz_write.` }] })
+    await write({ path: `${lieu}/index`, kind: "table", title: "Index", summary: "L'index.", header: { columns: [{ name: "titre", type: "text" }, { name: "chemin", type: "text" }], key: "titre" } })
+    await tableWrite.run(context(), tableWriteArgsSchema.parse({ table: `${lieu}/index`, rows: [{ key: "A", set: { chemin: `${lieu}/perdue` } }, { key: "B", set: { chemin: `${lieu}/index` } }] }) as never)
+    const checked = await nodeCheck.run(context(), { path: lieu } as never)
+    expect(checked.data?.problems).toEqual([
+      `${lieu}: names tools of another organisation (zzz_…): write read, write, find, call without prefix`,
+      `${lieu}: links to ${lieu}/absente, which does not exist`,
+      `${lieu}/index: links to ${lieu}/perdue, which does not exist`,
+    ])
+    expect((await nodeCheck.run(context(), { path: root } as never)).data?.problems).toEqual([])
   })
 
   it("should remove the exports whose address expired, and only them", async () => {

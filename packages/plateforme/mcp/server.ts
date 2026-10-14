@@ -23,7 +23,7 @@ import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
 import { callExamples, catalogFunctions, findFunction } from "../server/catalog/registry"
 import { buildContext } from "../server/context"
-import { changedCtxMessage, requireCtx, type CtxChange } from "../server/ctx"
+import { changedCtxMessage, requireCtx, type CallOutcome, type CtxChange } from "../server/ctx"
 import type { PlatformDb } from "../server/db"
 import { isPlatformError, PlatformError, type PlatformErrorCode } from "../server/errors"
 import { recordFeedback } from "../server/feedback"
@@ -86,11 +86,12 @@ const RESULT_HEADING = "## Result of this call"
 
 /**
  * `text` précédé de l'avis d'un Contexte changé (`changedCtxMessage`) quand le code de l'appel était périmé : l'appel a
- * couru sous le nouveau code, et le modèle lit d'abord le code à passer désormais et ce qui a changé.
+ * couru sous le nouveau code, a été refusé ou est tombé en panne (`outcome`), et le modèle lit d'abord le code à passer
+ * désormais, ce qu'est devenu l'appel et ce qui a changé.
  */
-function withCtxNotice(text: string, prefix: string, ctx: ValidCtx | null): string {
+function withCtxNotice(text: string, prefix: string, ctx: ValidCtx | null, outcome: CallOutcome = "ran"): string {
   if (!ctx?.changed) return text
-  return `${changedCtxMessage(prefix, ctx.changed.paths, ctx.code, ctx.changed.served)}\n\n${RESULT_HEADING}\n\n${text}`
+  return `${changedCtxMessage(prefix, { paths: ctx.changed.paths, code: ctx.code, served: ctx.changed.served }, outcome)}\n\n${RESULT_HEADING}\n\n${text}`
 }
 type Service<K extends ToolKey> = (deps: MemberDeps, input: ToolInput<K>, ctx: ValidCtx | null) => Promise<ToolOutput>
 /** Un appel d'outil tel que reçu ; `size` : ses arguments sérialisés, en caractères. */
@@ -218,7 +219,8 @@ async function runTool(
     return result
   } catch (error) {
     const failure = failureOf(error, deps.org.prefix)
-    const result = formatError(withCtxNotice(failure.message, deps.org.prefix, validated.ctx))
+    // Un refus d'un service n'a rien écrit ; une panne a pu courir en partie : l'avis le dit autrement.
+    const result = formatError(withCtxNotice(failure.message, deps.org.prefix, validated.ctx, failure.code === "internal" ? "failed" : "refused"))
     Object.assign(entry, {
       ctx: validated.ctx?.code ?? entry.ctx,
       host: validated.ctx?.host ?? null,

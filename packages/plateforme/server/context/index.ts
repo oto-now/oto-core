@@ -37,6 +37,7 @@ import { proceduresBlock } from "./blocks/procedures"
 import { recentBlock } from "./blocks/recent"
 import { teamFacts } from "./blocks/team"
 import { CONTEXT_BUDGET, daysAgo, renderContext, type BlockReport, type ContextBlock } from "./engine"
+import { routingHints } from "./hints"
 
 /** Ce que le routage a trouvé ; `candidates` nul : le routage n'a pas abouti (AC18, N30). */
 type Routing = {
@@ -163,8 +164,9 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
   ])
   const { candidates, served, kind, procedure, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
+  const hints = phrase !== undefined && served === null ? await routingHints(db, identity, phrase) : undefined
   const blocks = [
-    codeBlock({ prefix: identity.org.prefix, code, phrase, candidates, served, kind, settings }),
+    codeBlock({ prefix: identity.org.prefix, code, phrase, candidates, served, kind, settings, hints }),
     ...(procedure ? [procedure.block] : []),
     ...contextParts(identity, facts, bodies),
     ...[news, procedures, recent].filter((block) => block !== null),
@@ -204,7 +206,8 @@ async function lightContext(
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
   ])
   const { candidates, kind, settings } = routing
-  const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed } })
+  const hints = phrase !== undefined && routing.served === null ? await routingHints(db, identity, phrase) : undefined
+  const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed }, hints })
   const blocks = [code, ...(routing.procedure ? [routing.procedure.block] : []), ...parts]
   return {
     text: renderContext(blocks, CONTEXT_BUDGET, identity.org.prefix).text,

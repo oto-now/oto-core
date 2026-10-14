@@ -1,7 +1,7 @@
 # Fichiers et stockage
 
 - **Statut** : validé avec JB le 28/09/2026
-- **Dernière révision** : 2026-10-13
+- **Dernière révision** : 2026-10-14
 
 ## Résumé
 
@@ -58,7 +58,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 ### Le dépôt à l'écran
 
 - L'écran apprend l'état du stockage par `GET files` plutôt que par une propriété de l'hôte, pour n'ajouter aucun fichier à l'hôte (HN-E10S02-6), au premier geste qui en a besoin (« + » survolé ou atteint au clavier, collage, dépôt), jamais au montage ; un échec n'est pas retenu ; tant qu'il ne le sait pas, « Image » et « Fichier » n'apparaissent pas (HN-E10S02-37).
-- « Image » et « Fichier » sont au « + » seul, groupe « Insérer », pas dans « / » (HN-E10S02-38) ; ils ouvrent un `Dialog` (zone de dépôt d'E10-S01, `accepte`) qui dit types et limites avant la sélection (HN-E10S02-39). L'écran propose les fichiers dans tout nœud qu'il écrit : page, procédure, Contexte (HN-E10S02-50, tranchée par HN-E10S02-74).
+- « Image » et « Fichier » terminent le groupe « Insérer » du « + » et la liste de « / », qui montrent les mêmes entrées (HN-E10S02-38, revue par JB) ; choisis par « / », le Texte se vide de sa barre et le fichier se joint après lui ; ils ouvrent un `Dialog` (zone de dépôt d'E10-S01, `accepte`) qui dit types et limites avant la sélection (HN-E10S02-39). L'écran propose les fichiers dans tout nœud qu'il écrit : page, procédure, Contexte (HN-E10S02-50, tranchée par HN-E10S02-74).
 - Le genre vient de l'extension : une image (`png`, `jpeg`, `jpg`, `gif`, `webp`, `svg`) devient un bloc `image`, même choisie par « Fichier » ; tout autre type admis, un bloc `file` (HN-E10S02-36).
 - Un dépôt ou un collage joint le premier fichier seul (HN-E10S02-40). Un fichier lâché sur une rangée est reçu par la rangée (`rangee-de-bloc.tsx`) ; stockage désactivé, le comportement d'E10-S01 ; extension non admise, le refus nomme les formats admis, sous le bloc (HN-E10S02-41). Lâché ou collé sur le Texte local d'une page vide, il se joint après ce Texte, qui reste (HN-E10S02-79).
 - Un CSV importé en tableau depuis une page prend la première adresse libre `<page>/<segment du nom>` (`adressesAEssayer`) (HN-E10S02-48).
@@ -123,3 +123,4 @@ Aucune à ce jour.
 - 2026-09-30 : taille seule comparée à la confirmation, `HEAD` en `identity` et repli `content-range` (versions 1.1.3 et 1.1.4) — option du pilote (source : HN-E10S02-114, HN-E10S02-124).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-016, les fiches D113, D118, D148, D149 et les choix HN-E10S02 du stockage — décidé par Alexis, accord de JB.
 - 2026-10-13 : sixième et septième opérations du port, `put` et `list`, et URL de lecture d'une heure pour l'export d'une arborescence et ses fichiers joints — décidé par JB (source : cahier des charges du transfert d'arborescence, session du 13/10/2026).
+- 2026-10-14 : « Image » et « Fichier » aussi dans la liste de « / », comme au « + » — décidé par JB (source : retour sur l'éditeur, session du 14/10/2026).

@@ -138,6 +138,20 @@ export function gestesDesFichiers(etat: EtatDeLEditeur, deposerDuMarkdown: (cle:
       if (ouvert?.genre === "import" && !verrouille(etat)) ecrireApres(ouvert.cle, { type: "reference", text: null, data: { path: chemin }, key: null }, false)
     },
     convertirLeCsv: (cle: string) => void convertirLeCsv(cle),
+    /** « Intégration » du « + » ou de « / », ou « Modifier l'adresse » d'un cadre (1.4.3) : le dialogue de son adresse. */
+    ouvrirLIntegration: (cle: string, modifier = false, adresse = "") => (verrouille(etat) ? undefined : fichiers.setDialogue({ genre: "integration", cle, modifier, adresse })),
+    /** L'adresse validée : un cadre neuf après la rangée, qui part tout de suite ; ou le cadre de la rangée, à sa nouvelle adresse. */
+    integrer(url: string) {
+      const ouvert = fichiers.dialogue
+      fermer()
+      if (ouvert?.genre !== "integration" || verrouille(etat)) return
+      if (!ouvert.modifier) return ecrireApres(ouvert.cle, { type: "embed", text: null, data: { url }, key: null }, false)
+      const avant = modele.current.find((rangee) => rangee.cle === ouvert.cle)?.bloc
+      if (avant?.type !== "embed") return
+      changerModele(modeleDEdition.remplacerLeBloc(modele.current, ouvert.cle, { ...avant, data: { ...avant.data, url } }))
+      etat.differer(ouvert.cle)
+      frapper()
+    },
     fermerLeDialogue: fermer,
   }
 }

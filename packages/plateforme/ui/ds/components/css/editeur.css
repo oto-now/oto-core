@@ -54,6 +54,9 @@
   max-inline-size: min(420px, 100%);
 }
 
+/* La liste de « / » montre toutes ses entrées, comme le « + » : posée dans le flux, elle pousse la page au lieu de défiler. */
+.oto-pop.oto-choix-de-bloc > .oto-menu { max-block-size: none; }
+
 /* Le titre d'abord ; le chemin dessous, en légende : côte à côte, à 375 px, le chemin rognait le titre à une lettre (contrôle visuel). */
 .oto-citer .oto-menu-item {
   flex-wrap: wrap;
@@ -103,9 +106,20 @@
   color: var(--ink);
 }
 
-/* ── le texte au repos (E05-S11, AC-26) : le champ et son rendu dans la même case d'une grille, la case prend le plus haut des deux ; le rendu, par-dessus, porte les classes du champ (sa géométrie, son corps), sans fond ni bordure visibles. */
+/* ── le texte au repos (E05-S11, AC-26) : le champ et son rendu dans la même case d'une grille ; le rendu, par-dessus, porte les classes du champ (sa géométrie, son corps), sans fond ni bordure visibles. */
 .oto-block-pile {
   display: grid;
+  position: relative;
+}
+
+/* Hors du focus, le texte brut d'un champ rendu (ses liens [[…]] plus longs que leur titre) ne compte pas dans la hauteur : il couvre la case du rendu, pour garder le clic, sans la grandir ; sans quoi un texte à plusieurs liens laissait un grand vide sous son rendu. Au focus, il reprend sa place et sa hauteur. En couleurs forcées, le rendu se retire : le champ garde la sienne. */
+@media not (forced-colors: active) {
+  .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-rendu]:not(:focus) {
+    position: absolute;
+    inset: 0;
+    block-size: 100% !important;
+    overflow: hidden;
+  }
 }
 
 .oto-block-pile > * {
@@ -310,8 +324,9 @@
   border-color: var(--island-bd);
 }
 
-/* ── le menu de la poignée (E11-S15, AC-b5) : sa hauteur suit ses entrées, celles d'un tableau comprises, sans barre de défilement ; bornée à la fenêtre, moins les 8 px que `useAnchor` laisse de chaque côté et le filet du panneau. */
-.oto-pop.oto-menu-de-poignee > .oto-menu {
+/* ── le menu de la poignée (E11-S15, AC-b5) et celui du « + » : leur hauteur suit leurs entrées, celles d'un tableau ou « Image » et « Fichier » comprises, sans barre de défilement ; bornée à la fenêtre, moins les 8 px que `useAnchor` laisse de chaque côté et le filet du panneau. */
+.oto-pop.oto-menu-de-poignee > .oto-menu,
+.oto-pop.oto-menu-du-plus > .oto-menu {
   max-block-size: calc(100dvh - var(--space-5));
 }
 

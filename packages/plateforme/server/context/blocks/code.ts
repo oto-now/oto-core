@@ -11,10 +11,12 @@ import { boundedList } from "../../errors"
 import { clip, MAX_TARGET_CHARS } from "../../journal"
 import { formatScore, wordsInCommon, type Candidate, type RequestKind, type RoutingSettings } from "../../routing"
 import type { ContextBlock } from "../engine"
+import { hintLines, type RoutingHints } from "../hints"
 
 /**
  * « Règles Oto » (E05-S12, AC-9, AC-10, HN-E05S12-7, -8) : le texte de la story, mot pour mot, que JB peut
- * encore corriger ici seulement ; `<p>` devient le préfixe de l'organisation, rien d'autre ne varie. Sans
+ * encore corriger ici seulement ; 1.4.3 : les pointeurs vers les références (`functions`, `help`, contrats, `table.schema`)
+ * et les pièges qui coûtent le plus (titre qui déplace le chemin, `node.move`, `contexte`, outils sans préfixe) ; `<p>` devient le préfixe de l'organisation, rien d'autre ne varie. Sans
  * lui, l'assistant ne lit nulle part comment l'espace fonctionne (la notice n'est plus servie, § 10). E05-S13
  * (AC-16) : l'en-tête vient de `SERVED_RULES`, que l'écran relit ; exporté pour le test qui compte ses règles contre
  * leur traduction à l'écran.
@@ -27,10 +29,12 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Access is set per content, for the organisation, a team or a person: read, write or manage. A refusal says who to ask: never work around it.
 - <p>_write publishes at once; publish: false keeps an unpublished draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
 - A renamed or moved content keeps its old path: it still leads there.
-- In a text, [[path]] or [[path|title]] links to another content.
+- In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - When a request matches a procedure, its steps come right after this part: follow them in order. Otherwise the closest procedures are listed there: use the one that fits, or search; ask the user when nothing fits.
 - <p>_read with path journal shows what was done, call by call: trust it over memory.
+- Reference: <p>_read path functions lists every function (path <function>: its contract); path help is the platform guide (pages and blocks, tables, procedures, paths, import and export), one section at a time; read path write.procedure or write.table before writing one, and <p>_call table.schema before writing rows.
+- Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash. contexte is the context page of the organisation, a team or your space: give no other page that name.
 - Never invent a path, a figure or a result: read it, or say you could not.`
 
 /** La section des règles pour l'organisation de préfixe `prefix`. */
@@ -54,6 +58,8 @@ type CodeBlockInput = {
    * sont pas redites, la ligne de `sinceLine` les remplace.
    */
   since?: { code: string; changed: readonly string[] }
+  /** Sans procédure servie (1.4.3) : les fonctions qui répondent à la demande et la section du guide la plus proche. */
+  hints?: RoutingHints
 }
 
 /** Les mots de la demande trouvés dans une candidate (E11-S19, AC-d2) : ce qu'un auteur ajouterait au résumé. */
@@ -126,6 +132,7 @@ export function codeBlock(input: CodeBlockInput): ContextBlock {
     phrase
       ? routingLine({ ...input, phrase })
       : `No request given: call ${prefix}_context again with the user's request as phrase to get the matching procedure.`,
+    ...(phrase && !input.served ? hintLines(input.hints, prefix) : []),
   ]
   return { name: "code", text: lines.join("\n") }
 }

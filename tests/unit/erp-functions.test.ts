@@ -280,7 +280,8 @@ describe.skipIf(!sqlConfigured)(portable("ERP functions on a real database (E08-
       await resetProcedure()
       const accepted = await session("claire")
       const published = await accepted.run("write", { path: PROCEDURE, base_revision: 1, publish: true })
-      expect([published.isError, published.text]).toEqual([false, `Published ${PROCEDURE} revision 2 (1 section, 3 blocks). Next write: base_revision 2.`])
+      // 1.4.3 : une procédure sans partie « Quand l'utiliser » se publie, avec un avertissement.
+      expect([published.isError, published.text]).toEqual([false, `Published ${PROCEDURE} revision 2 (1 section, 3 blocks). Next write: base_revision 2.\nWarnings:\n- Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).`])
       expect(publishCalls(accepted.requests)).toHaveLength(1)
 
       await resetProcedure({ client: "C-001", amount: 100 })

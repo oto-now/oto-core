@@ -434,7 +434,7 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
     expect(screen.queryByText("Cette page n'a pas encore de contenu.")).toBeNull()
     expect(screen.queryByRole("button", { name: "Commencer à écrire" })).toBeNull()
     // Lu, il dit son invite ; ouvert, son champ la porte.
-    const invite = "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)"
+    const invite = "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace"
     expect(screen.getByRole("textbox", { name: "Modifier ce texte — bloc vide" })).toHaveAttribute("aria-placeholder", invite)
     expect(ouvrirLeChamp("Modifier ce texte — bloc vide")).toHaveAttribute("placeholder", invite)
     // Vide, quitté, il ne part pas et reste là.
@@ -453,7 +453,7 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
     expect(api.envoyes[0].ops).toEqual([{ op: "delete_block", block: ID.objet, revision: 3 }])
     // Le focus l'ouvre : son champ porte l'invite.
     await waitFor(() => expect(document.activeElement).toBe(champ("Modifier ce texte — bloc vide")))
-    expect(champ("Modifier ce texte — bloc vide")).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)")
+    expect(champ("Modifier ce texte — bloc vide")).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace")
   })
 
   it("should open the choice of « / » on the Texte of an empty page, and insert after it from its « + » (AC-g2)", () => {

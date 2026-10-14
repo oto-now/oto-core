@@ -196,7 +196,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
         code: "forbidden",
         message: "Writing under conseil is reserved to the administrators of Acme Test (Ada Martin). Ask them for access.",
       })
-      const occupied = { code: "conflict", message: "Path ventes/confidentiel is not available: choose another path." }
+      const occupied = { code: "conflict", message: "Path ventes/confidentiel is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path." }
       await content(base([{ path: "ventes/confidentiel" }], [{ node: "ventes/confidentiel", user: "lea", level: "none" }]))
       expect(await refused("lea", create("ventes/confidentiel"))).toMatchObject(occupied)
       // Une autre personne prend le chemin entre le contrôle du service et son insertion : la base la refuse (23505).

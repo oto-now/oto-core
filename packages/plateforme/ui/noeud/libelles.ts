@@ -71,6 +71,22 @@ export const CHOIX_DE_BLOC = {
   ajouter: (mots: string) => `Ajouter un bloc après — ${mots}`,
 } as const
 
+/** Le bloc « Intégration » (1.4.3) : son entrée au « + » et à « / », le dialogue de son adresse, son menu, son cadre. */
+export const INTEGRATION = {
+  entree: "Intégration",
+  dialogue: "Intégrer une page",
+  modifier: "Modifier l'adresse",
+  adresse: "Adresse de la page",
+  aide: "Une adresse https d'un autre site : une vidéo, une maquette, un document partagé, un tableau de bord. Préférez l'adresse d'intégration que le site propose (« Intégrer », « Embed »).",
+  invalide: "Une adresse https, sans espace ni guillemet.",
+  valider: "Intégrer",
+  annuler: "Annuler",
+  hauteur: "Hauteur",
+  hauteurs: { small: "Petite", medium: "Moyenne", large: "Grande" },
+  titre: (hote: string) => `Contenu intégré de ${hote}`,
+  ouvrir: (hote: string) => `Ouvrir ${hote} dans un nouvel onglet`,
+} as const
+
 /** Un tableau simple dans l'éditeur (E10-S06, AC-b1, AC-b2) : le nom de chaque cellule par son en-tête, le menu de sa poignée. */
 export const TABLEAU_EDITE = {
   enTete: (colonne: number) => `En-tête de la colonne ${colonne}`,
@@ -105,7 +121,7 @@ export const EDITEUR = {
    * L'invite du Texte seul d'une page vide (E11-S05, AC-g1, HN-E11S05-22), mot pour mot : ce qu'on fait, et « @ » ;
    * rien sur « / ».
    */
-  invite: "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)",
+  invite: "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace",
   lectureSeule: "Ce bloc se modifie par votre assistant.",
   enregistrement: "Enregistrement…",
   supprime: "Bloc supprimé.",

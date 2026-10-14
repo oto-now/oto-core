@@ -10,13 +10,14 @@
 // (`overlays.tsx`, ses groupes) ; la liste reprend celle de « @ » (`citer.tsx` : `oto-pop`, `oto-menu-item`, option
 // désignée par le champ, région montée vide) ; le filtre, `fuzzyScore` de la palette ⌘K, sans casse ni accent.
 //
-// E10-S02 (lot b) : le groupe « Insérer » du « + » propose aussi « Image » et « Fichier » quand le stockage est activé
-// (AC-b1, AC-b2, AC-b7) ; « / » ne les propose pas : il change un Texte en bloc, un fichier se joint après un bloc.
+// E10-S02 (lot b) : le groupe « Insérer » propose aussi « Image » et « Fichier » quand le stockage est activé (AC-b1, AC-b2,
+// AC-b7), au « + » comme à « / » : les deux listes montrent les mêmes entrées. Choisis par « / », le Texte se vide de sa
+// barre et le fichier se joint après lui. 1.4.3 : « Intégration » les suit, partout : elle ouvre le dialogue de son adresse.
 import { useEffect, useState, type KeyboardEvent } from "react"
 import { normalizeTitle } from "../../../schemas/nodes"
 import { fuzzyScore } from "../../ds/react/command-palette"
 import type { MenuItem } from "../../ds/react/overlays"
-import { CHOIX_DE_BLOC, FORMES } from "../libelles"
+import { CHOIX_DE_BLOC, FORMES, INTEGRATION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { idDOption } from "./citer"
 import type { Genre } from "./envoi-de-fichier"
@@ -28,19 +29,30 @@ const GROUPES: readonly { titre: string; choix: readonly Choix[] }[] = [
   { titre: CHOIX_DE_BLOC.inserer, choix: ["tableau", "separateur"] },
 ]
 
-const libelleDe = (choix: Choix) => (choix === "separateur" ? CHOIX_DE_BLOC.separateur : FORMES[choix].libelle)
+/** Une entrée de « / » : un bloc, un fichier à joindre (« Image », « Fichier »), ou un cadre à intégrer. */
+export type ChoixDeBarre = Choix | Genre | "integration"
+
+const FICHIERS_JOINTS: readonly Genre[] = ["image", "fichier"]
+
+const estUnFichier = (choix: ChoixDeBarre): choix is Genre => choix === "image" || choix === "fichier"
+
+const libelleDe = (choix: ChoixDeBarre) =>
+  choix === "integration" ? INTEGRATION.entree : estUnFichier(choix) ? FICHIERS[choix] : choix === "separateur" ? CHOIX_DE_BLOC.separateur : FORMES[choix].libelle
 
 /**
  * Le menu du « + » (AC-a1) : les deux groupes ; choisir insère le bloc après la rangée. `joindre` : le stockage est
  * activé, « Image » et « Fichier » terminent « Insérer » (E10-S02, AC-b7).
  */
-export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void): MenuItem[] {
-  const fichiers: MenuItem[] = joindre
-    ? [
-        { label: FICHIERS.image, onSelect: () => joindre("image") },
-        { label: FICHIERS.fichier, onSelect: () => joindre("fichier") },
-      ]
-    : []
+export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void, integrer?: () => void): MenuItem[] {
+  const fichiers: MenuItem[] = [
+    ...(joindre
+      ? [
+          { label: FICHIERS.image, onSelect: () => joindre("image") },
+          { label: FICHIERS.fichier, onSelect: () => joindre("fichier") },
+        ]
+      : []),
+    ...(integrer ? [{ label: INTEGRATION.entree, onSelect: integrer }] : []),
+  ]
   return GROUPES.flatMap(({ titre, choix }, rang) => [
     { group: titre },
     ...choix.map((un) => ({ label: libelleDe(un), onSelect: () => choisir(un) })),
@@ -48,9 +60,12 @@ export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: G
   ])
 }
 
-/** Les entrées que retient ce qui est tapé après « / » (AC-a2) : toutes sans rien, sinon les meilleures d'abord, sans casse ni accent. */
-export function choixRetenus(requete: string): Choix[] {
-  const tous = GROUPES.flatMap(({ choix }) => choix)
+/**
+ * Les entrées que retient ce qui est tapé après « / » (AC-a2) : toutes sans rien, sinon les meilleures d'abord, sans casse
+ * ni accent. `fichiers` : le stockage est activé, « Image » et « Fichier » terminent la liste, comme au « + ».
+ */
+export function choixRetenus(requete: string, fichiers = false, integrer = false): ChoixDeBarre[] {
+  const tous: ChoixDeBarre[] = [...GROUPES.flatMap(({ choix }) => choix), ...(fichiers ? FICHIERS_JOINTS : []), ...(integrer ? (["integration"] as const) : [])]
   if (requete === "") return tous
   const cherche = normalizeTitle(requete)
   return tous
@@ -65,10 +80,10 @@ export function choixRetenus(requete: string): Choix[] {
  * parcourent, Entrée ou Tab choisit et remplace le Texte par le bloc choisi ; Échap la ferme, le texte reste. Un « / »
  * tapé ailleurs reste du texte.
  */
-export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void) {
+export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void, joindre?: (quoi: Genre) => void, integrer?: () => void) {
   const [ouverte, setOuverte] = useState(false)
   const [actif, setActif] = useState(0)
-  const retenus = ouverte ? choixRetenus(texte.slice(1)) : []
+  const retenus = ouverte ? choixRetenus(texte.slice(1), joindre !== undefined, integrer !== undefined) : []
   const fermer = () => setOuverte(false)
   /** La frappe d'un Texte : `avant`, son texte d'avant ; rend `true` si la liste reste ouverte après elle. */
   const suivre = (avant: string, apres: string, unTexte: boolean): boolean => {
@@ -77,9 +92,11 @@ export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void)
     setOuverte(reste)
     return reste
   }
-  const prendre = (choix: Choix) => {
+  const prendre = (choix: ChoixDeBarre) => {
     fermer()
-    choisir(choix)
+    if (choix === "integration") return integrer?.()
+    if (!estUnFichier(choix)) return choisir(choix)
+    joindre?.(choix)
   }
   /** Le clavier de la liste ouverte : `true` si la touche est prise. */
   const toucher = (evenement: KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -104,7 +121,7 @@ export function useChoixParBarre(texte: string, choisir: (choix: Choix) => void)
   return { ouverte, retenus, actif: Math.min(actif, Math.max(retenus.length - 1, 0)), suivre, fermer, prendre, toucher }
 }
 
-type ListeDesChoixProps = { id: string; retenus: readonly Choix[]; actif: number; prendre: (choix: Choix) => void }
+type ListeDesChoixProps = { id: string; retenus: readonly ChoixDeBarre[]; actif: number; prendre: (choix: ChoixDeBarre) => void }
 
 function Options({ id, retenus, actif, prendre }: ListeDesChoixProps) {
   return retenus.map((choix, rang) => (
@@ -130,7 +147,7 @@ export function ListeDesChoix(props: ListeDesChoixProps) {
   const [montee, setMontee] = useState(false)
   useEffect(() => setMontee(true), [])
   return (
-    <div className="oto-pop oto-citer">
+    <div className="oto-pop oto-citer oto-choix-de-bloc">
       <p role="status" className="oto-caption px-2 py-1 empty:hidden">
         {montee && props.retenus.length === 0 ? CHOIX_DE_BLOC.aucun : ""}
       </p>

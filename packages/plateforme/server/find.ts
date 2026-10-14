@@ -103,7 +103,7 @@ function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; moreNod
 }
 
 /** Première phrase d'une description : jusqu'au premier point suivi d'une espace ou de la fin, point final redit. */
-function firstSentence(description: string): string {
+export function firstSentence(description: string): string {
   const end = description.search(/\.(?:\s|$)/)
   return `${(end === -1 ? description : description.slice(0, end)).trim()}.`
 }

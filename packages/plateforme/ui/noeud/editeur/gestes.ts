@@ -80,6 +80,10 @@ export type Gestes = {
   tableauImporte: (chemin: string) => void
   /** « Convertir en tableau » d'un CSV joint (AC-b6). */
   convertirLeCsv: (cle: string) => void
+  /** « Intégration » du « + » ou de « / », ou « Modifier l'adresse » d'un cadre (1.4.3) : le dialogue de son adresse. */
+  ouvrirLIntegration: (cle: string, modifier?: boolean, adresse?: string) => void
+  /** L'adresse validée du dialogue : le cadre s'écrit après la rangée, ou prend cette adresse (1.4.3). */
+  integrer: (url: string) => void
   /** Échap, « Annuler » ou « Fermer » d'un dialogue de fichier : rien ne s'écrit. */
   fermerLeDialogue: () => void
   /** La sélection d'un champ a changé : `totale`, elle couvre tout son texte non vide, le menu de sa poignée s'ouvre (E05-S11, AC-28). */

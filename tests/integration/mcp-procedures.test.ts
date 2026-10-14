@@ -96,7 +96,8 @@ describe.skipIf(!sqlConfigured || privatePending)(
       })
       expect(created.isError, created.text).toBe(false)
       const published = await claire.call("write", { path, base_revision: 0, publish: true })
-      expect(published.text).toBe(`Published ${path} revision 1 (1 section, 5 blocks). Next write: base_revision 1.`)
+      // 1.4.3 : une procédure sans partie « Quand l'utiliser » se publie, avec un avertissement.
+      expect(published.text).toBe(`Published ${path} revision 1 (1 section, 5 blocks). Next write: base_revision 1.\nWarnings:\n- Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).`)
       const node = await fx.nodeId(ref.org.id, path)
       const blocks = await admin<{ type: string; text: string | null; data: unknown }[]>`
         select type, text, data from platform.blocks where node_id = ${node} and state = 'published' order by position`

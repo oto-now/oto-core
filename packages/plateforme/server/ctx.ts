@@ -47,13 +47,24 @@ export function staleCtxMessage(prefix: string, paths: readonly string[] = []): 
   return `context has changed${changed}: call ${prefix}_context again with the same request, then retry this call.`
 }
 
+/** Ce qu'est devenu un appel passé sous un code périmé : couru, refusé par un service (rien d'écrit), ou en panne. */
+export type CallOutcome = "ran" | "refused" | "failed"
+
+const OUTCOMES: Record<CallOutcome, (prefix: string) => string> = {
+  ran: () => "The call below ran with it: do not repeat it because of this notice.",
+  refused: () => "The call below was refused: nothing was written by it; fix it as the refusal says, with the new ctx.",
+  failed: (prefix) => `The call below failed: it may have done part of its work; read ${prefix}_read path journal before repeating it, with the new ctx.`,
+}
+
 /**
- * L'avis d'un code périmé, dit en tête du résultat de l'appel, qui a couru : les chemins changés, bornés, le nouveau
- * code, la consigne de ne pas rejouer l'appel (une création rejouée ferait un doublon), puis `served`, les parties des
- * Contextes changés telles que `context` les sert.
+ * L'avis d'un code périmé, dit en tête du résultat de l'appel : les chemins changés, bornés, le nouveau code, puis ce
+ * qu'est devenu l'appel — il a couru (ne pas le rejouer : une création rejouée ferait un doublon), il a été refusé par un
+ * service (rien n'a été écrit par lui : les écritures d'un assistant sont entières ou rien), ou il est tombé en panne
+ * (une partie a pu courir : le journal le dit) —, puis `served`, les parties des Contextes changés telles que `context` les
+ * sert. Sans cette ligne, un refus lu sous « the call ran » laissait croire à une écriture.
  */
-export function changedCtxMessage(prefix: string, paths: readonly string[], code: string, served: string): string {
-  return `context has changed (${boundedList(paths)}). New ctx: ${code}: pass it to every ${prefix}_ tool from now on. The call below ran with it: do not repeat it because of this notice. The changed contexts, as served now:\n\n${served}`
+export function changedCtxMessage(prefix: string, change: { paths: readonly string[]; code: string; served: string }, outcome: CallOutcome = "ran"): string {
+  return `context has changed (${boundedList(change.paths)}). New ctx: ${change.code}: pass it to every ${prefix}_ tool from now on. ${OUTCOMES[outcome](prefix)} The changed contexts, as served now:\n\n${change.served}`
 }
 
 /** Un Contexte publié à l'un des chemins attendus : son nœud et sa révision (≥ 1). */

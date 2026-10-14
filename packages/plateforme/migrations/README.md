@@ -157,6 +157,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   Elle commence par un appel à `extensions.similarity`, qui charge la bibliothèque de `pg_trgm` dans la session :
   sans lui, `supabase db push` refuse la clause `set "pg_trgm.similarity_threshold"` de la fonction sur un projet
   Supabase (42501). Aucune table, colonne ni index.
+- `20261014120000_platform_bloc_integration.sql` (version 1.4.3, bloc « Intégration ») : `blocks_type_check` admet
+  `embed` ; `blocks_shape_check` lui ajoute sa forme (texte nul, `url` en `https://` de 9 à 2 000 caractères sans blanc
+  ni guillemet, `height` facultative parmi `small`, `medium`, `large`). Les deux contraintes sont retirées puis reposées
+  telles que les écrit la partie 3 de `20260930100000_v1_1_0.sql`, le type nouveau en plus : aucun bloc existant ne
+  change. Aucune table, colonne ni fonction.
+- `20261014130000_platform_chemin_help.sql` (version 1.4.3, guide de la plateforme) : `teams_slug_reserved` admet aussi
+  `help`, le chemin où `read` sert le guide : une équipe dont le slug est déjà `help` fait échouer la migration, à renommer
+  avant. Fichier à part de `20261014120000`, déjà poussée. Aucune table, colonne ni fonction.
 
 ## Installer sur un hôte neuf
 

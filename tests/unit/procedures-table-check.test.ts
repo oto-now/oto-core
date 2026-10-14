@@ -94,7 +94,8 @@ describe.skipIf(!sqlConfigured)(portable("publishing a procedure that releases r
     // Le bloc `call` corrigé dans le brouillon : « à revoir ».
     await seed.admin`update platform.blocks set data = jsonb_set(data, '{args,state}', to_jsonb(${"à revoir"}::text)) where id = ${callId} and state = 'draft'`
     const published = await writeNode(spied.db, claire, { path: PATH, base_revision: 1, publish: true }, { kind: "agent", ctx: null })
-    expect(published.text).toBe(`Published ${PATH} revision 2 (1 section, 4 blocks). Next write: base_revision 2.`)
+    // 1.4.3 : une procédure sans partie « Quand l'utiliser » se publie, avec un avertissement.
+    expect(published.text).toBe(`Published ${PATH} revision 2 (1 section, 4 blocks). Next write: base_revision 2.\nWarnings:\n- Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).`)
     expect(publishCalls(spied.calls)).toHaveLength(1)
     const [node] = await seed.admin<{ revision: number }[]>`select revision from platform.nodes where id = ${ref.nodeId(PATH)}`
     expect(node).toMatchObject({ revision: 2 })

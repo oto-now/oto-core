@@ -271,7 +271,7 @@ test.describe("page d'un nœud", () => {
         // E11-S05 (AC-g1, AC-g2) : Entrée mène au Texte vide de la page, qui porte l'invite, sans « Commencer à écrire ».
         const texteVide = page.getByRole("textbox", { name: /^Modifier ce texte — / })
         await attendre(texteVide).toBeFocused()
-        await expect(texteVide).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)")
+        await expect(texteVide).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace")
         await expect(page.getByRole("button", { name: "Commencer à écrire" })).toHaveCount(0)
         await expect(page.getByText("Cette page n'a pas encore de contenu.")).toHaveCount(0)
         await capturer(page, testInfo, `page-vide-${mode}`)

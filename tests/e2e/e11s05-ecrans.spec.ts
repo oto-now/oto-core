@@ -18,7 +18,7 @@ const email = process.env.E2E_USER_EMAIL ?? ""
 const password = process.env.E2E_USER_PASSWORD ?? ""
 const MODES = ["light", "dark"] as const
 const LARGEURS = [375, 1_280] as const
-const INVITE = "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)"
+const INVITE = "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace"
 
 // Les passages écrivent les mêmes pages jetables : l'un après l'autre.
 test.describe.configure({ mode: "serial" })

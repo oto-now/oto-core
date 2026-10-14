@@ -98,6 +98,12 @@ que cela, sans erreur. Elle passe par une fonction appelée dans du code servi (
 « Invalid input »). **Vérifiable :** aucun `import "<module>"` sans nom dans `packages/plateforme/`
 hors feuilles de style (`rg -n '^import "' packages/plateforme`).
 
+Un module que le registre du catalogue importe (une fonction de `call`, et ce qu'elle importe) n'importe ni `nodes/write.ts`
+ni `procedures-check.ts` statiquement : ceux-ci relisent le registre, et le cycle fait charger deux registres sous le
+`vi.mock` d'un test, l'un sans les fonctions que l'autre a reçues. Il passe par `writeNodeLazily` ou un import dynamique à
+l'appel. **Vérifiable :** `tests/unit/connectors-services.test.ts` et `tests/unit/procedures-service.test.ts`, qui
+remplacent le registre, échouent sur un tel cycle.
+
 ## Error Handling
 
 - Jamais de catch vide

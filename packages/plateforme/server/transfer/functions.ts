@@ -21,6 +21,7 @@ import { fetchSource } from "../uploads-fetch"
 import { collectTree, type ExportReport } from "./collect"
 import { exportKey, purgeExpiredExports, treeFetchDeps } from "./files"
 import { detectFormat, importPlan, pivotZip } from "./formats"
+import { checkTree } from "./inspect"
 import { reportLines, runImport, type ImportReport } from "./import"
 
 /** Les lignes d'une liste nommée du rapport, ou rien quand elle est vide. */
@@ -96,19 +97,52 @@ function fileNameOf(address: string): string {
   }
 }
 
-function importText(run: Awaited<ReturnType<typeof runImport>>, args: TreeImportArgs): string {
+/** Le compte de ce que l'appel a fait des nœuds de la source, et de ce qu'il a réécrit. */
+function countsLine(run: Awaited<ReturnType<typeof runImport>>): string {
+  const { report } = run
+  const counts = `${report.created.length} created, ${report.updated.length} updated, ${report.skipped.length} kept or left out, ${report.refused.length} refused, ${report.drafts.length} kept as drafts`
+  const rewritten = report.rewritten.paths + report.rewritten.prefixes > 0 ? `; rewritten: ${report.rewritten.paths} path(s) in table cells, ${report.rewritten.prefixes} tool name(s) of the source organisation` : ""
+  return `The source holds ${run.nodes} node(s). This call: ${counts}${rewritten}.`
+}
+
+/** Le temps d'un appel d'import au-delà duquel le contrôle ne se lance pas : la route MCP a 60 s, le contrôle lit chaque nœud. */
+const CHECK_AFTER_MS_MAX = 20_000
+
+/**
+ * Le contrôle de ce qui est arrivé, une fois l'import fini (`node.check`) : ses problèmes, et ce qui l'a empêché (une racine
+ * que rien n'a créée, un arbre trop grand) ; quand l'import a pris trop de temps, la consigne de le lancer, sans le lancer.
+ */
+async function checkImported(context: FunctionContext, run: { roots: readonly string[]; elapsedMs: number }): Promise<{ problems: string[]; notes: string[] }> {
+  if (run.elapsedMs > CHECK_AFTER_MS_MAX) return { problems: [], notes: [`Not checked in this call (time): call node.check on ${run.roots.join(", ")}.`] }
+  const problems: string[] = []
+  const notes: string[] = []
+  for (const root of run.roots) {
+    await checkTree(context.db, context.identity, [root]).then(
+      (found) => problems.push(...found),
+      (error: unknown) => notes.push(`node.check could not run on ${root}: ${error instanceof Error ? error.message : String(error)}`),
+    )
+  }
+  return { problems, notes }
+}
+
+function importText(run: Awaited<ReturnType<typeof runImport>>, args: TreeImportArgs, checked: { problems: readonly string[]; notes: readonly string[] }): string {
   const report: ImportReport = run.report
   const head = run.next
     ? `Import under ${args.parent} stopped at step ${run.done} of ${run.total} (time limit): call node.import_tree again with the same arguments and continue_from "${run.next}".`
-    : `Import under ${args.parent} done: ${report.created.length} created, ${report.updated.length} updated, ${report.skipped.length} kept as they were, ${report.refused.length} refused.`
+    : `Import under ${args.parent} done.`
   return [
     head,
+    countsLine(run),
     ...section("Created", report.created),
     ...section("Updated", report.updated),
     ...section("Kept as they were", report.skipped.map((item) => `${item.path}: ${item.reason}`)),
     ...section("Refused", report.refused.map((item) => `${item.path}: ${item.reason}`)),
+    ...section("Kept as drafts, their publication refused (fix them, then publish)", report.drafts.map((item) => `${item.path}: ${item.reason}`)),
     ...section("Links outside the imported tree, left as they are", report.orphans.map((orphan) => `${orphan.from} → ${orphan.to}`)),
     ...report.notes,
+    ...checked.notes,
+    ...(checked.problems.length > 0 ? section("node.check on what arrived, to fix", checked.problems) : []),
+    ...(run.next || checked.notes.length > 0 || checked.problems.length > 0 ? [] : ["node.check on what arrived: nothing to fix."]),
   ].join("\n")
 }
 
@@ -140,6 +174,7 @@ async function runImportTree(context: FunctionContext, args: TreeImportArgs): Pr
   const format = detectFormat(args.format ?? "auto", fetched.bytes, fetched.type, name)
   const plan = importPlan(format, fetched.bytes, name || `import.${fileExtension(name) || format}`)
   const run = await runImport(context, plan, { ...args, source: name || "node.import_tree" })
+  const checked = run.next ? { problems: [], notes: [] } : await checkImported(context, run)
   const data = {
     parent: args.parent,
     format,
@@ -150,9 +185,13 @@ async function runImportTree(context: FunctionContext, args: TreeImportArgs): Pr
     updated: run.report.updated,
     skipped: run.report.skipped,
     refused: run.report.refused,
+    drafts: run.report.drafts,
     orphans: run.report.orphans,
+    rewritten: run.report.rewritten,
+    nodes: run.nodes,
+    ...(run.next ? {} : { problems: checked.problems }),
   }
-  return { text: importText(run, args), data, next: ["node.import_tree"] }
+  return { text: importText(run, args, checked), data, next: ["node.import_tree", "node.check"] }
 }
 
 export const nodeImportTree = defineFunction({

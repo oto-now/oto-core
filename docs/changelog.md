@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-14] — 1.4.3, partie de 1.4.2 : un agent autonome dès le premier appel, bloc « Intégration », éditeur et rail
+
+**Quoi :** publication partie de `v1.4.2` (branche `release/1.4.3`), sans le lot 1.5.0 de main : bloc `embed` et sa migration ; « / » aux mêmes entrées que le « + », menus sans barre de défilement, invite qui cite « / » ; import d'arborescence fiable (appels, cellules et outils préfixés recollés, coquilles retirées, Contexte et chemin tenu placés à côté, refus entiers, compte en tête, `node.check` à la fin) ; règles servies v2, guide `help` (migration `20261014130000` pour le slug), propositions de `context`, `node.tree`, `node.check`, avertissements des procédures, avis d'un code périmé qui dit un refus ou une panne, refus d'un chemin pris qui dit ses causes ; texte à liens sans vide au repos ; barre droite du glisser-déposer du rail. Le manifeste pointe sur le dépôt `oto-now/oto-core`, pour la provenance npm.
+**Pourquoi :** décisions de JB du 14/10/2026 : tout dans la 1.4.3, publiée de façon autonome après revue.
+**Fichiers :** ceux des commits de main `266e02e`, `0ddfff0`, `7efdd4a` et le champ `repository` de `4dcd966`.
+
 ## [2026-10-13] — Transfert d'arborescence : fichiers joints transférés, exports purgés à l'expiration, publication en 1.4.2
 
 **Quoi :** un export JSON garde les blocs `file` et images jointes de ses pages et liste dans `files` chaque fichier `ready` de la page qui le cite, à une URL signée d'une heure ; l'import relit chaque fichier (gardes de `fetchSource`, 50 Mo), le joint à la page d'arrivée par `storeFile` et repointe son lien ; un fichier qui n'arrive pas laisse sa mention, dite parmi les refus ; un export ZIP garde la seule mention. La clé d'un export porte son instant d'expiration ; les exports expirés de l'organisation sont listés (nouvelle opération `list` du port, ListObjectsV2) et retirés à chaque export, import et passage de la corbeille. Le CHANGELOG du paquet range le transfert en 1.4.2.

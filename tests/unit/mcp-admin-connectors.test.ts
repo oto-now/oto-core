@@ -181,7 +181,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       const native = catalogFunctions().filter((fn) => fn.origin === "paquet" && fn.connector === "table")
       const nodes = catalogFunctions().filter((fn) => fn.origin === "paquet" && fn.connector === "node")
       const uploads = catalogFunctions().filter((fn) => fn.origin === "paquet" && fn.connector === "upload")
-      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.write_many (write)", "node.export_tree (read)", "node.import_tree (write)"])
+      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.write_many (write)", "node.export_tree (read)", "node.import_tree (write)", "node.tree (read)", "node.check (read)"])
       expect(uploads.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["upload.link (write)"])
       expect(listed.text).toBe(
         [

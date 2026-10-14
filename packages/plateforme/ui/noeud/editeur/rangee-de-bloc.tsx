@@ -45,15 +45,16 @@ import { DotsSixVertical } from "@phosphor-icons/react/dist/csr/DotsSixVertical"
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus"
 import { Table } from "@phosphor-icons/react/dist/csr/Table"
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash"
-import { IMAGE_WIDTHS, simpleTableOf } from "../../../schemas/blocks"
+import { EMBED_HEIGHTS, IMAGE_WIDTHS, simpleTableOf, type EmbedHeight } from "../../../schemas/blocks"
 import { fileTypeOf } from "../../../schemas/files"
 import { aDesFichiers } from "../../coque/import-de-fichier"
 import { BlockRow } from "../../ds/react/block-row"
 import { AnimatedIcon } from "../../ds/react/icon"
 import { DropdownMenu, type MenuItem } from "../../ds/react/overlays"
 import { Button, IconButton } from "../../ds/react/primitives"
+import { hauteurDe } from "../cadre-integre"
 import { texteLu } from "../en-ligne"
-import { CHOIX_DE_BLOC, EDITEUR, FORMES, MENU_DU_BLOC, SELECTION } from "../libelles"
+import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, SELECTION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { baliseDuTitre, largeurDe, RenduDUnBloc } from "../rendu-des-blocs"
 import type { Position } from "./blocs-de-page"
@@ -114,6 +115,16 @@ type Menu = {
  */
 function stylesDuMenu({ cle, bloc, forme, cellule }: Menu, gestes: Gestes): MenuItem[] {
   if (bloc.type === "divider" || bloc.type === "file") return []
+  // La hauteur d'un cadre intégré et son adresse (1.4.3), comme la largeur d'une image.
+  if (bloc.type === "embed") {
+    const hauteur = hauteurDe(bloc.data.height)
+    const choisir = (une: EmbedHeight) => gestes.modifierLeBloc(cle, { ...bloc, data: { ...bloc.data, height: une } })
+    return [
+      { group: INTEGRATION.hauteur },
+      ...EMBED_HEIGHTS.map((une) => ({ label: INTEGRATION.hauteurs[une], radio: true, checked: une === hauteur, onSelect: () => choisir(une) })),
+      { label: INTEGRATION.modifier, onSelect: () => gestes.ouvrirLIntegration(cle, true, typeof bloc.data.url === "string" ? bloc.data.url : "") },
+    ]
+  }
   // La largeur d'une image (E10-S02, AC-b3), en choix `radio`, comme le style.
   if (bloc.type === "image") {
     const largeur = largeurDe(bloc.data.width)
@@ -156,10 +167,14 @@ type BlocEcritProps = {
   /** La cellule d'un tableau simple qui prend le focus : la rangée la tient pour son menu (E10-S06, AC-b2). */
   suivreLaCellule: (position: Position) => void
   invite?: string
+  /** Le stockage est activé : « / » propose « Image » et « Fichier » (E10-S02, AC-b7). */
+  joindre?: (quoi: Genre) => void
+  /** « / » propose « Intégration » (1.4.3). */
+  integrer?: () => void
 }
 
 /** Les champs d'un tableau ou d'un repli (E10-S06), ou le champ de texte de toute autre forme écrite. */
-function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, suivreLaCellule, decritPar, invite }: Omit<BlocEcritProps, "erreur"> & { decritPar?: string }) {
+function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, suivreLaCellule, decritPar, invite, joindre, integrer }: Omit<BlocEcritProps, "erreur"> & { decritPar?: string }) {
   const { cle, bloc } = rangee
   const mots = premiersMots(bloc)
   if (forme === "tableau") return <TableauEdite cle={cle} bloc={bloc} decritPar={decritPar} lectureSeule={verrouille} suivre={suivreLaCellule} />
@@ -181,6 +196,8 @@ function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, su
       menuOuvert={menuOuvert}
       ouvert={ouvert}
       invite={invite}
+      joindre={joindre}
+      integrer={integrer}
       // Hors du focus, un diagramme non vide se lit comme à la lecture ; pendant la frappe, rien ne se redessine. Sans
       // sa référence : l'ancre est déjà sur l'élément du bloc (`BlocEcrit`).
       diagrammeLu={
@@ -265,12 +282,14 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
   // Un tableau sans colonne ne se convertit pas (le schéma d'un tableau de données en veut une) : pas d'entrée.
   const tableauSimple = bloc.type === "simple_table" && simpleTableOf(bloc.data).columns.length > 0
   const menu: Menu = { cle, bloc, forme, premiere, derniere, tableauSimple, cellule }
+  const joindre = props.fichiers ? (quoi: Genre) => gestes.choisirUnFichier(cle, quoi) : undefined
+  const integrer = () => gestes.ouvrirLIntegration(cle)
   const contenu = conflit ? (
     <ConflitDeBloc conflit={conflit} />
   ) : bloc.type === "image" || bloc.type === "file" ? (
     <FichierEdite rangee={rangee} erreur={erreur} lectureSeule={verrouillee} prefixe={liens.prefixe} />
   ) : forme ? (
-    <BlocEcrit rangee={rangee} forme={forme} erreur={erreur} verrouille={verrouillee} liens={liens} menuOuvert={menuOuvert} ouvert={props.ouvert} suivreLaCellule={setCellule} invite={invite} />
+    <BlocEcrit rangee={rangee} forme={forme} erreur={erreur} verrouille={verrouillee} liens={liens} menuOuvert={menuOuvert} ouvert={props.ouvert} suivreLaCellule={setCellule} invite={invite} joindre={joindre} integrer={integrer} />
   ) : (
     <RenduDUnBloc bloc={bloc} Lien="a" hrefDuChemin={(chemin) => `${liens.prefixe}${chemin}`} cibles={liens.cibles} rendu={rendu} />
   )
@@ -309,7 +328,6 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
       <AnimatedIcon as={Plus} size="xs" />
     </IconButton>
   )
-  const joindre = props.fichiers ? (quoi: Genre) => gestes.choisirUnFichier(cle, quoi) : undefined
   return (
     <BlockRow
       data-cle={cle}
@@ -323,7 +341,7 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
       // Un clic ou ↓ dans la rangée, avant l'ouverture qu'il porte peut-être : les menus ont leurs entrées quand ils s'ouvrent.
       onClickCapture={demanderLesMenus}
       onKeyDownCapture={(evenement) => evenement.key === "ArrowDown" && demanderLesMenus()}
-      insert={<DropdownMenu side="bottom" align="start" trigger={plus} items={menusDemandes ? itemsDuChoix((choix) => gestes.inserer(cle, choix), joindre) : []} />}
+      insert={<DropdownMenu side="bottom" align="start" className="oto-menu-du-plus" trigger={plus} items={menusDemandes ? itemsDuChoix((choix) => gestes.inserer(cle, choix), joindre, integrer) : []} />}
       // Le bloc en conflit se règle dans son panneau : sa poignée n'ouvre pas de menu.
       handle={
         conflit ? (

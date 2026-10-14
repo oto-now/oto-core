@@ -26,7 +26,7 @@ import { parseId, requireAdmin, type Mutation } from "./members"
 import type { Tx } from "./sql"
 
 /** Chemins de premier niveau pris par l'arbre, par `read journal` et `read functions` (P39, P22, E11-S19 ; `teams_slug_reserved`). */
-const RESERVED_SLUGS: ReadonlySet<string> = new Set(["guide", "perso", "private", "contexte", "journal", "functions"])
+const RESERVED_SLUGS: ReadonlySet<string> = new Set(["guide", "perso", "private", "contexte", "journal", "functions", "help"])
 const MAX_SLUG = 40
 /** Au plus autant d'objets nommés par liste dans un refus `team_owns_objects` (AC14). */
 const MAX_LISTED = 20

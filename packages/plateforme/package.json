@@ -1,10 +1,10 @@
 {
   "name": "@otomata_tech/oto_platform",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/otomata-tech/oto-pkg.git",
+    "url": "git+https://github.com/oto-now/oto-core.git",
     "directory": "packages/plateforme"
   },
   "publishConfig": {

@@ -39,6 +39,7 @@ import { EmbedCard } from "../ds/react/embed-card"
 import { LinkedContent } from "../ds/react/linked-content"
 import { ReaderHeading, ReaderList, ReaderParagraph } from "../ds/react/reader"
 import { texteDUnAppel } from "../procedure/libelles"
+import { CadreIntegre } from "./cadre-integre"
 import { DiagrammeMermaid } from "./diagramme-mermaid"
 import { adresseSansIdentifiants, cibleDe, estUnTableau, libelleDUneAdresse, segmentsEnLigne, titreDuLien, type CiblesDesLiens, type Segment } from "./en-ligne"
 import { CarteDeFichier, ImageAgrandissable } from "./fichier-du-bloc"
@@ -415,6 +416,8 @@ export function RenduDUnBloc(props: RenduProps & { rendu?: ReactNode; baliseDeTi
       )
     case "reference":
       return rendu === undefined ? <ReferenceEnLien {...props} /> : <div id={bloc.ref}>{rendu}</div>
+    case "embed":
+      return <CadreIntegre id={bloc.ref} adresse={chaine(bloc.data.url)} hauteur={bloc.data.height} />
     case "file":
       return (
         <div id={bloc.ref} className={APRES}>

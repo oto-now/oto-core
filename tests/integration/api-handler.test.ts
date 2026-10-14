@@ -284,7 +284,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
         [new PlatformError("forbidden", "Writing ventes/devis is reserved to team Ventes (lead: Claire Morel). Ask them for access."), 403],
         [new PlatformError("not_found", "Unknown path ventes/devis."), 404],
         [new PlatformError("stale_revision", "stale revision: ventes/devis is at revision 4, not 2.", { revision: 4 }), 409],
-        [new PlatformError("conflict", "Path ventes/devis is not available: choose another path."), 409],
+        [new PlatformError("conflict", "Path ventes/devis is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path."), 409],
         [new PlatformError("too_large", "ventes/devis would hold 1,001 blocks."), 413],
         [new PlatformError("unavailable_in_v1", "Creating tables is not available yet in this version."), 501],
       ]
@@ -321,7 +321,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
         [new PlatformError("invalid_arguments", "Cannot move ventes/a under itself: ventes/a/x/z is inside ventes/a."), 400],
         [new PlatformError("forbidden", "Moving ventes/a is reserved to team Ventes (lead: Claire Morel). Ask them to move it."), 403],
         [new PlatformError("not_found", "Unknown path ventes/a. Use acme_find to locate it."), 404],
-        [new PlatformError("conflict", "Path ventes/b is not available: choose another path."), 409],
+        [new PlatformError("conflict", "Path ventes/b is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path."), 409],
         [new PlatformError("stale_revision", "ventes/a changed while it was being moved: read it again, then retry."), 409],
       ]
       for (const [refusal, status] of statuses) {

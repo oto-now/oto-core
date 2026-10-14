@@ -87,6 +87,8 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
       "Repli",
       "Tableau simple",
       "Séparateur",
+      // 1.4.3 : le cadre intégré.
+      "Intégration",
     ])
     expect(menu.queryByRole("menuitem", { name: /HTML/i })).toBeNull()
     // Échap ferme le menu et rend le focus au « + ».
@@ -147,7 +149,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
     const texte = await texteNeuf()
     taper(texte, "/")
     const liste = screen.getByRole("listbox", { name: "Blocs à insérer" })
-    expect(within(liste).getAllByRole("option")).toHaveLength(11)
+    expect(within(liste).getAllByRole("option")).toHaveLength(12)
     expect(texte).toHaveAttribute("aria-controls", liste.id)
     taper(texte, "/SEPAR")
     expect(within(liste).getAllByRole("option").map((option) => option.textContent)).toEqual(["Séparateur"])

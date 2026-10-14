@@ -157,10 +157,11 @@ export function unknownNode(path: string, prefix: string): PlatformError {
 
 /**
  * Un chemin pris par un nœud, visible ou non, ou ancien chemin d'un autre nœud (E03-S03 N31, E03-S07
- * AC9, AC15, M02) : le refus ne dit pas ce qui l'occupe (H68). Création et déplacement.
+ * AC9, AC15, M02) : le refus dit les causes possibles, jamais laquelle (H68 : un nœud qu'on ne voit pas ne se révèle
+ * pas). Création et déplacement.
  */
 export function notAvailable(path: string): PlatformError {
-  return new PlatformError("conflict", `Path ${path} is not available: choose another path.`)
+  return new PlatformError("conflict", `Path ${path} is not available: a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved. Choose another path.`)
 }
 
 /** Un chemin sous `guide/` (H50) : la racine n'a que des enfants sans préfixe ; `write` et le déplacement. */

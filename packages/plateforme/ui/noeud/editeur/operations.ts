@@ -75,7 +75,7 @@ function entreeDe(bloc: BlocEdite): unknown {
  * Les blocs que l'écran écrit sans champ de texte : un séparateur (E10-S06, AC-a4), une image (son texte alternatif, sa
  * largeur) et un fichier joint (E10-S02, AC-b1, AC-b3). Jamais vides, ils partent comme un texte.
  */
-export const SANS_TEXTE: ReadonlySet<string> = new Set(["divider", "image", "file"])
+export const SANS_TEXTE: ReadonlySet<string> = new Set(["divider", "image", "file", "embed"])
 
 /** Un bloc sans texte : un Texte, un titre, une liste, un tableau ou un repli vidés ; jamais un bloc de `SANS_TEXTE`. */
 export function estVide(bloc: BlocEdite): boolean {

@@ -434,7 +434,7 @@ describe("EcranDeNoeud, états (AC6, AC7)", () => {
     rendre({ noeud: { data: vueDuNoeud({ blocks: [], level: 2 }) } })
     expect(screen.queryByText("Cette page n'a pas encore de contenu.")).toBeNull()
     expect(screen.queryByRole("button", { name: "Commencer à écrire" })).toBeNull()
-    expect(screen.getByRole("textbox", { name: /^Modifier ce texte/ })).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '@' pour citer un autre contenu (page, tableau, procédure)")
+    expect(screen.getByRole("textbox", { name: /^Modifier ce texte/ })).toHaveAttribute("placeholder", "Commencer à écrire... Utilisez '/' pour afficher tous les types de blocs - Utilisez '@' pour citer un autre contenu (page, tableau, procédure) de l'espace")
     cleanup()
 
     rendre({ noeud: { data: vueDuNoeud({ kind: "table", blocks: [], level: 2 }) }, complement: <p>La grille du tableau</p> })
