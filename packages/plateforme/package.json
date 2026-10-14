@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/otomata-tech/oto-pkg.git",
+    "url": "git+https://github.com/oto-now/oto-core.git",
     "directory": "packages/plateforme"
   },
   "publishConfig": {

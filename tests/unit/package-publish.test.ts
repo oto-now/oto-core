@@ -41,7 +41,7 @@ describe("package manifest (AC1)", () => {
     expect(pkg.license).toBe("MIT")
     expect(pkg.repository).toEqual({
       type: "git",
-      url: "git+https://github.com/otomata-tech/oto-pkg.git",
+      url: "git+https://github.com/oto-now/oto-core.git",
       directory: "packages/plateforme",
     })
     expect(pkg.publishConfig).toEqual({ access: "public", provenance: true })

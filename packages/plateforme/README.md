@@ -98,7 +98,7 @@ Pour une application Next 15 (App Router) sur Supabase.
    Et `PLATFORM_VAULT_KEY` dès qu'un compte réel de connecteur se pose (« Connecteurs réels et coffre »).
 
 6. Routes à monter : celles de `src/app/` de l'application de base du dépôt
-   [`otomata-tech/oto-pkg`](https://github.com/otomata-tech/oto-pkg), qui en est la
+   [`oto-now/oto-core`](https://github.com/oto-now/oto-core), qui en est la
    référence. Les écrans s'y montent à l'un des trois niveaux de « Monter les écrans ».
 
    Toute adresse est en anglais (routes, paramètres, ancres), quelle que soit la langue de l'écran ; le
@@ -133,7 +133,7 @@ Pour une application Next 15 (App Router) sur Supabase.
    référence (`src/`) servent de modèle.
 
 7. Réglages d'Auth du projet Supabase, une fois les migrations appliquées : depuis un clone du dépôt
-   `otomata-tech/oto-pkg`, `pnpm auth:settings --to <ref> --site-url <url> --redirect <motif>`
+   `oto-now/oto-core`, `pnpm auth:settings --to <ref> --site-url <url> --redirect <motif>`
    montre l'écart avec les réglages de la plateforme (hook d'inscription, serveur OAuth, adresses,
    emails, SMTP hors mot de passe) ; `--apply` l'écrit, et la commande liste ce qui reste à poser à
    la main.
@@ -570,7 +570,7 @@ de `CHANGELOG.md`. L'application Renovate installée sur le dépôt de l'applica
 
 ```json
 {
-  "extends": ["config:recommended", "github>otomata-tech/oto-pkg//renovate/preset"]
+  "extends": ["config:recommended", "github>oto-now/oto-core//renovate/preset"]
 }
 ```
 

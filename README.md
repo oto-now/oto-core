@@ -1,4 +1,4 @@
-# oto-pkg — `@otomata_tech/oto_platform`
+# oto-core — `@otomata_tech/oto_platform`
 
 La plateforme MCP d'entreprise, en paquet npm : écrans, API, serveur MCP à six outils figés,
 services et migrations du schéma Postgres `platform`. Elle s'installe dans une application Next
