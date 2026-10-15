@@ -937,6 +937,24 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
     expect(glisserSur(lien("Tarifs"), lien("Contexte · Tout le monde"))).toBe(false)
   })
 
+  it("should put a line dropped on the bottom quarter of a Contexte just after it, first of its section, and refuse a line already first there", async () => {
+    const appels = simulerLAPI(impact({ changes: false }), { data: { path: "ventes/notes", moves: [] } }, { data: {} })
+    render(railA("/n/conseil/grille"))
+    expect(glisserA(lien("Qualifier un prospect"), lien("Contexte · Ventes"), 18)).toBe(false)
+    fireEvent.dragStart(lien("Notes"), { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+    expect(survoler("dragOver", lien("Contexte · Ventes"), 18)).toBe(false)
+    expect(lien("Contexte · Ventes")).toHaveAttribute("data-rang", "apres")
+    expect(lien("Contexte · Ventes")).not.toHaveAttribute("data-depot")
+    survoler("drop", lien("Contexte · Ventes"), 18)
+
+    await waitFor(() => expect(hote.naviguer).toHaveBeenCalledWith("/n/ventes/notes"))
+    expect(appels.map((appel) => [appel.url.split("?")[0], appel.corps])).toEqual([
+      ["/api/platform/nodes/impact", undefined],
+      ["/api/platform/nodes/move", { path: "private/claire/notes", new_path: "ventes/notes" }],
+      ["/api/platform/nodes/position", { path: "ventes/notes", after: null }],
+    ])
+  })
+
   it("should show the children of a Contexte under its line, unfolded when the open screen is under it, foldable like a page's (AC-27)", () => {
     render(sousContexte("/n/contexte/relance"))
     const pli = within(rail()).getByRole("button", { name: "Replier Contexte · Tout le monde" })

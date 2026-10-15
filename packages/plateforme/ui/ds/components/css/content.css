@@ -324,6 +324,10 @@
 .oto-depliant[open] > summary .oto-pli-chevron,
 .oto-depliant[data-open] > .oto-depliant-tete .oto-pli-chevron,
 [aria-expanded="true"] > .oto-pli-chevron { rotate: 90deg; }
+/* Un pli vide (titre sans section, menu dépliant sans corps) ne replie rien : son chevron s'efface à moitié, sous les 3:1 d'une icône, seule exception écrite (`accessibility-patterns.md § Couleurs & Contraste`). */
+.oto-pli-bouton[data-vide] > .oto-pli-chevron,
+.oto-depliant[data-vide] > summary .oto-pli-chevron,
+.oto-depliant[data-vide] > .oto-depliant-tete .oto-pli-chevron { opacity: 0.5; }
 
 /* Le menu dépliant : le résumé à la suite du chevron, dans l'encre du texte ; le corps décalé de la largeur du chevron. */
 .oto-depliant > summary,

@@ -1,7 +1,7 @@
 # Nœuds et arbre
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-15
 
 ## Résumé
 
@@ -28,7 +28,7 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 - H52 : le propriétaire s'hérite : un nœud sans propriétaire prend celui de son ancêtre le plus proche qui en porte un, et la racine appartient à l'organisation.
 - P39 : l'arbre se range en sections : l'espace commun « Tout le monde », l'espace « Privé » de chacun et chaque équipe (aucune équipe « Tout le monde » en base), chacune avec un nœud Contexte (`contexte`, `private/<handle>/contexte`, `<équipe>/contexte`) qui porte ton, préférences et règles, servi par `context` dans cet ordre ([contexte servi](contexte-servi.md)).
 - Les nœuds Contexte naissent en base avec leur équipe ou leur personne ; `platform.is_context_path` est la seule définition de leurs chemins, et un nœud `context` n'existe qu'à ces chemins (ADR-011 § 1).
-- D110 : sous un nœud Contexte se rangent d'autres contenus (page, tableau, procédure) : dans le rail, le « + » d'un Contexte et le glisser-déposer sur sa ligne créent ou rangent sous lui ; quand `context` sert ce Contexte, ses enfants sont listés en lignes d'index (jamais leur corps), avant ses pages liées.
+- D110 : sous un nœud Contexte se rangent d'autres contenus (page, tableau, procédure) : dans le rail, le « + » d'un Contexte et le glisser-déposer sur sa ligne créent ou rangent sous lui, et le quart bas de sa ligne range juste après lui, en tête de sa section (seule place à côté de lui quand la section n'a pas d'autre ligne) ; quand `context` sert ce Contexte, ses enfants sont listés en lignes d'index (jamais leur corps), avant ses pages liées.
 - P22 : les chemins racines `journal`, `functions` et `help` sont réservés : `read journal` sert le journal, `read functions` la liste des fonctions (E11-S19), `read help` le guide de la plateforme, servi par le paquet, le même partout, une section par appel (1.4.3, `server/help.ts`) ; `write` refuse d'y créer un nœud, et aucune équipe ne prend ces slugs (E11-S19, E11-S18 ; `help` dans `teams_slug_reserved` par la migration de la 1.4.3).
 - Inventaire et contrôle (1.4.3) : `node.tree` (classe `read`) liste ce qu'on lit sous une racine, 200 nœuds par réponse ; `node.check` (classe `read`) y cherche les liens vers un chemin qui n'existe pas (ni nœud ni ancien chemin : un contenu qu'on ne voit pas compte comme existant, H68), les blocs `call` que la publication refuserait, les cellules qui valent un chemin inconnu et les outils nommés avec le préfixe d'une autre organisation ; l'import d'une arborescence le lance sur ce qu'il a importé (`server/transfer/inspect.ts`).
 - Le refus d'un chemin pris dit ses causes possibles sans dire laquelle (H68) : « a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved ».
@@ -120,3 +120,4 @@ Aucune à ce jour.
 - 2026-09-30 : `node.move` derrière `call`, de classe `write` ; `functions` réservé comme `journal` — décidé par JB (source : stories E11-S18, E11-S19).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-011 § 1, § 3 et § 6, les fiches D19, D89, D110, D125, D135 et les choix H50 à H61, P12, P13, P22, P39, E03-S07, E11-S02 — décidé par Alexis, accord de JB.
 - 2026-10-14 : chemin réservé `help` (guide de la plateforme), `node.tree` et `node.check`, refus d'un chemin pris qui dit ses causes possibles — décidé par JB (source : cahier des charges « un agent autonome sur Oto dès le premier appel », session du 14/10/2026).
+- 2026-10-15 : dans le rail, le quart bas de la ligne d'un Contexte range juste après lui, en tête de sa section (D110) — décidé par JB (source : session du 15/10/2026).

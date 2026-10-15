@@ -587,49 +587,113 @@ describe("EditeurDeBlocs, glisser-déposer (E05-S10, AC-a3)", () => {
     const ORDRE_SERVI = ["Modifier ce titre — Objet", "Modifier ce texte — Objet de la relance", "Modifier ce code — select 1", "Modifier cette liste — Lire le devis Écrire"]
     const ordre = () => screen.getAllByRole("textbox").map((element) => element.getAttribute("aria-label"))
 
-    /** Ctrl+clic sur le titre et le code (deux blocs non contigus), puis le code tenu par sa poignée et glissé sous le milieu de la liste (140). */
-    function glisserLeTitreEtLeCode() {
+    /** Ctrl+clic sur le texte et la liste (deux blocs non contigus), puis le texte tenu par sa poignée et glissé sous le milieu du code (100). */
+    function glisserLeTexteEtLaListe() {
       Object.assign(window, { PointerEvent: PointerEventDeTest })
       monter()
       rangeesDe40Px()
-      fireEvent.click(bouton("Actions sur ce bloc — Objet"), { ctrlKey: true })
-      fireEvent.click(bouton("Actions sur ce bloc — select 1"), { ctrlKey: true })
-      const poignee = bouton("Actions sur ce bloc — select 1")
-      fireEvent.pointerDown(poignee, { clientY: 100, button: 0, pointerId: 1 })
+      fireEvent.click(bouton("Actions sur ce bloc — Objet de la relance"), { ctrlKey: true })
+      fireEvent.click(bouton("Actions sur ce bloc — Lire le devis Écrire"), { ctrlKey: true })
+      const poignee = bouton("Actions sur ce bloc — Objet de la relance")
+      fireEvent.pointerDown(poignee, { clientY: 50, button: 0, pointerId: 1 })
       fireEvent.pointerMove(poignee, { clientY: 150, pointerId: 1 })
       return poignee
     }
 
     it("should move the group past the middle it crosses, send one write of move_block in page order on drop, and put it back on « Annuler »", async () => {
-      const poignee = glisserLeTitreEtLeCode()
-      expect(ordre()).toEqual([ORDRE_SERVI[1], ORDRE_SERVI[3], ORDRE_SERVI[0], ORDRE_SERVI[2]])
+      const poignee = glisserLeTexteEtLaListe()
+      expect(ordre()).toEqual([ORDRE_SERVI[0], ORDRE_SERVI[2], ORDRE_SERVI[1], ORDRE_SERVI[3]])
       expect(api.envoyes).toHaveLength(0)
       fireEvent.pointerUp(poignee, { clientY: 150, pointerId: 1 })
       fireEvent.click(poignee)
       expect(screen.queryByRole("menu")).toBeNull()
       await waitFor(() => expect(api.envoyes).toHaveLength(1))
       expect(api.envoyes[0].ops).toEqual([
-        { op: "move_block", block: ID.titre, after_block: ID.liste },
-        { op: "move_block", block: ID.code, after_block: ID.titre },
+        { op: "move_block", block: ID.objet, after_block: ID.code },
+        { op: "move_block", block: ID.liste, after_block: ID.objet },
       ])
       expect(statut("2 blocs déplacés.")).toBeDefined()
 
       fireEvent.click(bouton("Annuler"))
       await waitFor(() => expect(api.envoyes).toHaveLength(2))
       expect(api.envoyes[1].ops).toEqual([
-        { op: "move_block", block: ID.titre },
-        { op: "move_block", block: ID.code, after_block: ID.objet },
+        { op: "move_block", block: ID.objet, after_block: ID.titre },
+        { op: "move_block", block: ID.liste, after_block: ID.code },
       ])
       expect(ordre()).toEqual(ORDRE_SERVI)
     })
 
     it("should put the group back in its order and send nothing when the system cancels the gesture (pointercancel)", async () => {
-      const poignee = glisserLeTitreEtLeCode()
+      const poignee = glisserLeTexteEtLaListe()
       expect(ordre()).not.toEqual(ORDRE_SERVI)
       fireEvent.pointerCancel(poignee, { pointerId: 1 })
       expect(ordre()).toEqual(ORDRE_SERVI)
       await unTour()
       expect(api.envoyes).toHaveLength(0)
+    })
+  })
+
+  // Un titre glissé emmène sa section, jusqu'au titre suivant de même niveau ; une section repliée se passe d'un tenant.
+  describe("a heading and the folds", () => {
+    const AVANT = bloc("e1000000-0000-4000-8000-000000000001", "paragraph", "Avant")
+    const PARTIE = bloc("e2000000-0000-4000-8000-000000000002", "heading", "Partie", { level: 2 })
+    const DEDANS = bloc("e3000000-0000-4000-8000-000000000003", "paragraph", "Dedans")
+    const SUITE = bloc("e4000000-0000-4000-8000-000000000004", "heading", "Suite", { level: 2 })
+    const ordre = () => screen.getAllByRole("textbox", { hidden: true }).map((element) => element.getAttribute("aria-label"))
+
+    /** Les rangées montrées font 40 px, empilées ; une rangée cachée par un pli n'a pas de boîte. */
+    const rangeesMontreesDe40Px = () =>
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const montrees = [...document.querySelectorAll<HTMLElement>("[data-cle]")].filter((rangee) => !rangee.hidden)
+        const rang = montrees.indexOf(this)
+        return rang < 0 ? new DOMRect(0, 0, 0, 0) : new DOMRect(0, rang * 40, 600, 40)
+      })
+
+    it("should move a dragged heading with its section, in one write of move_block, said with « Annuler »", async () => {
+      Object.assign(window, { PointerEvent: PointerEventDeTest })
+      monter({ blocs: [AVANT, PARTIE, DEDANS, SUITE] })
+      rangeesMontreesDe40Px()
+      const poignee = bouton("Actions sur ce bloc — Partie")
+      fireEvent.pointerDown(poignee, { clientY: 50, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(poignee, { clientY: 5, pointerId: 1 })
+      expect(ordre()).toEqual(["Modifier ce titre — Partie", "Modifier ce texte — Dedans", "Modifier ce texte — Avant", "Modifier ce titre — Suite"])
+      fireEvent.pointerUp(poignee, { clientY: 5, pointerId: 1 })
+      await waitFor(() => expect(api.envoyes).toHaveLength(1))
+      expect(api.envoyes[0].ops).toEqual([
+        { op: "move_block", block: PARTIE.id },
+        { op: "move_block", block: DEDANS.id, after_block: PARTIE.id },
+      ])
+      expect(statut("2 blocs déplacés.")).toBeDefined()
+    })
+
+    it("should mark the chevron of a heading without a section as empty, not the one of a heading with blocks under it", () => {
+      monter({ blocs: [AVANT, PARTIE, DEDANS, SUITE] })
+      expect(bouton("Replier la section — Partie")).not.toHaveAttribute("data-vide")
+      expect(bouton("Replier la section — Suite")).toHaveAttribute("data-vide")
+    })
+
+    it("should draw the selection rectangle from outside the block area, around the editor, and take the blocks it covers", () => {
+      Object.assign(window, { PointerEvent: PointerEventDeTest })
+      monter({ blocs: [AVANT, PARTIE, DEDANS, SUITE] })
+      rangeesMontreesDe40Px()
+      const zone = screen.getByRole("group", { name: "Blocs de la page" })
+      const autour = zone.parentElement
+      if (!autour) throw new Error("un parent de la zone des blocs attendu")
+      fireEvent.pointerDown(autour, { clientX: 2, clientY: 5, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(zone, { clientX: 300, clientY: 70, pointerId: 1 })
+      expect(zone).toHaveAccessibleName("2 blocs sélectionnés")
+      fireEvent.pointerUp(zone, { clientX: 300, clientY: 70, pointerId: 1 })
+    })
+
+    it("should pass a folded section whole: a block dragged up over it lands before its heading", () => {
+      Object.assign(window, { PointerEvent: PointerEventDeTest })
+      monter({ blocs: [AVANT, PARTIE, DEDANS, SUITE] })
+      rangeesMontreesDe40Px()
+      fireEvent.click(bouton("Replier la section — Partie"))
+      const poignee = bouton("Actions sur ce bloc — Suite")
+      fireEvent.pointerDown(poignee, { clientY: 90, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(poignee, { clientY: 45, pointerId: 1 })
+      expect(ordre()).toEqual(["Modifier ce texte — Avant", "Modifier ce titre — Suite", "Modifier ce titre — Partie", "Modifier ce texte — Dedans"])
     })
   })
 })

@@ -18,18 +18,20 @@ export function GlypheDuPli() {
 }
 
 /** Le bouton d'un pli, nommé par ce qu'il fera : un titre dans l'éditeur ou à la lecture. */
-export function BoutonDuPli({ ouvert, nom, controle, basculer }: { ouvert: boolean; nom: string; controle?: string; basculer: () => void }) {
+/** `vide` : un titre sans section, dont le chevron ne replie rien et s'efface à moitié (`content.css`). */
+export function BoutonDuPli({ ouvert, nom, controle, basculer, vide }: { ouvert: boolean; nom: string; controle?: string; basculer: () => void; vide?: boolean }) {
   return (
-    <IconButton size="sm" className="oto-pli-bouton" label={PLIS.section(ouvert, nom)} aria-expanded={ouvert} aria-controls={controle} onClick={basculer}>
+    <IconButton size="sm" className="oto-pli-bouton" label={PLIS.section(ouvert, nom)} aria-expanded={ouvert} aria-controls={controle} onClick={basculer} data-vide={vide ? "" : undefined}>
       <GlypheDuPli />
     </IconButton>
   )
 }
 
-type DepliantLuProps = { id?: string; ancre?: string; resume: ReactNode; children: ReactNode; className?: string }
+/** `vide` : un corps sans texte, que le chevron, effacé à moitié, ne déplie pas sur rien d'utile. */
+type DepliantLuProps = { id?: string; ancre?: string; resume: ReactNode; children: ReactNode; className?: string; vide?: boolean }
 
 /** Un menu dépliant lu : `<details>` natif (clavier et annonce du navigateur), son état gardé dans ce navigateur. */
-export function DepliantLu({ id, ancre, resume, children, className }: DepliantLuProps) {
+export function DepliantLu({ id, ancre, resume, children, className, vide }: DepliantLuProps) {
   const [ouvert, changer] = usePliGarde(id, false)
   const zone = useRef<HTMLDetailsElement>(null)
   const ouvrir = useCallback(() => changer(true), [changer])
@@ -40,6 +42,7 @@ export function DepliantLu({ id, ancre, resume, children, className }: DepliantL
       id={ancre}
       className={`oto-depliant ${className ?? ""}`.trim()}
       open={ouvert}
+      data-vide={vide ? "" : undefined}
       // Le navigateur a ouvert ou fermé le pli (clic, clavier) : l'état le suit ; un état déjà posé ne s'écrit pas deux fois.
       onToggle={(evenement) => evenement.currentTarget.open !== ouvert && changer(evenement.currentTarget.open)}
     >
@@ -52,7 +55,7 @@ export function DepliantLu({ id, ancre, resume, children, className }: DepliantL
   )
 }
 
-type Pli = { ouvert: boolean; basculer: () => void; corps: string }
+type Pli = { ouvert: boolean; basculer: () => void; corps: string; vide: boolean }
 
 const ContexteDuPli = createContext<Pli | null>(null)
 
@@ -60,13 +63,13 @@ const ContexteDuPli = createContext<Pli | null>(null)
  * La section d'un titre lu : le titre (rendu par le serveur, son `ChevronDeSection` dedans), puis les blocs de sa
  * section, cachés quand la personne la replie.
  */
-export function SectionRepliable({ id, titre, children }: { id?: string; titre: ReactNode; children: ReactNode }) {
+export function SectionRepliable({ id, titre, children, vide = false }: { id?: string; titre: ReactNode; children: ReactNode; vide?: boolean }) {
   const [ouvert, changer] = usePliGarde(id, true)
   const corps = useId()
   const zone = useRef<HTMLDivElement>(null)
   const ouvrir = useCallback(() => changer(true), [changer])
   useOuvertParLAncre(zone, ouvrir)
-  const pli = useMemo(() => ({ ouvert, basculer: () => changer(!ouvert), corps }), [ouvert, changer, corps])
+  const pli = useMemo(() => ({ ouvert, basculer: () => changer(!ouvert), corps, vide }), [ouvert, changer, corps, vide])
   return (
     <ContexteDuPli.Provider value={pli}>
       {titre}
@@ -81,5 +84,5 @@ export function SectionRepliable({ id, titre, children }: { id?: string; titre: 
 export function ChevronDeSection({ nom }: { nom: string }) {
   const pli = useContext(ContexteDuPli)
   if (!pli) return null
-  return <BoutonDuPli ouvert={pli.ouvert} nom={nom} controle={pli.corps} basculer={pli.basculer} />
+  return <BoutonDuPli ouvert={pli.ouvert} nom={nom} controle={pli.corps} basculer={pli.basculer} vide={pli.vide} />
 }

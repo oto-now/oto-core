@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from "react"
 import { SELECTION } from "../libelles"
 import type { actionsDeLEditeur } from "./actions"
-import { dansLOrdre } from "./groupe"
+import { avecLeursSections, dansLOrdre } from "./groupe"
 import type { Rangee } from "./modele"
 import { dansLaMarge, usePointeurDeLaSelection } from "./pointeur-de-la-selection"
 
@@ -120,8 +120,9 @@ export function useSelectionDeBlocs({ modele, actions, fermerLeMenu }: Parametre
   const ensemble = new Set(cles)
   // La rangée dont un champ vient de recevoir Échap : sa poignée, qui prend alors le focus, la sélectionne (AC-a3).
   const echap = useRef<string | null>(null)
-  // L'ordre des rangées au début du glissé d'un groupe, que remet un geste interrompu (AC-a8).
-  const avantDuGlisse = useRef<readonly string[] | null>(null)
+  // Au premier mouvement d'un glissé : l'ordre des rangées, que remet un geste interrompu (AC-a8), et les rangées qui se
+  // glissent, lues une fois (une section relue en route prendrait les blocs qu'elle vient de passer).
+  const glisse = useRef<{ avant: readonly string[]; cles: readonly string[] } | null>(null)
 
   const poser = (suivante: Selection) => {
     // La même sélection garde son état : aucun rendu par mouvement du pointeur dans les mêmes blocs.
@@ -152,6 +153,8 @@ export function useSelectionDeBlocs({ modele, actions, fermerLeMenu }: Parametre
   }, [vide, vider])
 
   const enGroupe = (cle: string) => ensemble.has(cle) && cles.length > 1
+  /** Ce que déplace un geste sur la rangée `cle` : la sélection si elle en est, elle seule sinon, chaque titre avec sa section. */
+  const aDeplacer = (cle: string) => avecLeursSections(modele, enGroupe(cle) ? cles : [cle])
   const suivre = (suivante: Selection) => {
     poser(suivante)
     if (suivante.tete !== null) zone.current?.querySelector<HTMLElement>(`[data-cle="${suivante.tete}"] ${POIGNEE}`)?.focus()
@@ -177,7 +180,7 @@ export function useSelectionDeBlocs({ modele, actions, fermerLeMenu }: Parametre
     else if (commande === "vider") vider()
     else if (commande === "etendre") suivre(etendre(modele, courante, pas))
     else if (commande === "avancer") suivre(avancer(modele, courante, pas))
-    else if (commande === "deplacer") actions.deplacerLeGroupe(cles, pas, garde)
+    else if (commande === "deplacer") actions.deplacerLeGroupe(avecLeursSections(modele, cles), pas, garde)
     else if (commande === "entrer") entrerDans(zone.current, courante.tete)
     else if (commande === "supprimer") actions.supprimerLeGroupe(cles)
     else if (commande === "copier") void actions.copierLeGroupe(cles)
@@ -238,26 +241,26 @@ export function useSelectionDeBlocs({ modele, actions, fermerLeMenu }: Parametre
     },
     /** « Supprimer » du menu d'un bloc sélectionné parmi d'autres : tout le groupe (AC-a6). */
     supprimer: (cle: string) => (enGroupe(cle) ? void actions.supprimerLeGroupe(cles) : actions.supprimer(cle)),
-    /** « Monter », « Descendre » du menu d'un bloc sélectionné parmi d'autres : tout le groupe (AC-a8). */
-    deplacer: (cle: string, pas: -1 | 1) => (enGroupe(cle) ? actions.deplacerLeGroupe(cles, pas, cle) : actions.deplacer(cle, pas)),
-    /** Le glissé de la poignée d'un bloc sélectionné parmi d'autres déplace le groupe (AC-a8, `glisser.ts`). */
-    groupe: (cle: string): readonly string[] => (enGroupe(cle) ? cles : [cle]),
-    glisser(cle: string, pas: -1 | 1): number | void {
-      if (!enGroupe(cle)) return actions.glisserDUnRang(cle, pas)
-      avantDuGlisse.current ??= modele.map((rangee) => rangee.cle)
-      return actions.glisserLeGroupe(cles, cle, pas)
+    /** « Monter », « Descendre » du menu d'un bloc sélectionné parmi d'autres : tout le groupe (AC-a8) ; un titre, sa section. */
+    deplacer: (cle: string, pas: -1 | 1) => (enGroupe(cle) ? actions.deplacerLeGroupe(aDeplacer(cle), pas, cle) : actions.deplacer(cle, pas)),
+    /** Le glissé de la poignée (`glisser.ts`) : le groupe d'un bloc sélectionné parmi d'autres (AC-a8), la section d'un titre. */
+    groupe: (cle: string): readonly string[] => glisse.current?.cles ?? aDeplacer(cle),
+    poser(cle: string, suivante: string | null) {
+      glisse.current ??= { avant: modele.map((rangee) => rangee.cle), cles: aDeplacer(cle) }
+      actions.poserLeGroupe(glisse.current.cles, suivante)
     },
+    /** Le dépôt : un bloc seul part en un `move_block`, un groupe ou une section en une écriture avec son « Annuler ». */
     deposer(cle: string) {
-      const avant = avantDuGlisse.current
-      avantDuGlisse.current = null
-      if (avant) actions.deposerLeGroupe(cles, avant)
-      else actions.deposer(cle)
+      const fait = glisse.current
+      glisse.current = null
+      if (!fait) return
+      if (fait.cles.length > 1) return actions.deposerLeGroupe(fait.cles, fait.avant)
+      if (modele.some((rangee, rang) => rangee.cle !== fait.avant[rang])) actions.deposer(cle)
     },
-    revenir(): boolean {
-      const avant = avantDuGlisse.current
-      avantDuGlisse.current = null
-      if (avant) actions.remettreLeGroupe(avant, cles)
-      return avant !== null
+    revenir() {
+      const fait = glisse.current
+      glisse.current = null
+      if (fait) actions.remettreLeGroupe(fait.avant, fait.cles)
     },
   }
 }

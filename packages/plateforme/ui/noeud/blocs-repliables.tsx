@@ -13,7 +13,7 @@ export function BlocsRepliables<B extends BlockLike & { id?: string }>({ blocs, 
       section === undefined ? (
         <Fragment key={block.id ?? rang}>{rendre(block)}</Fragment>
       ) : (
-        <SectionRepliable key={block.id ?? rang} id={block.id} titre={rendre(block)}>
+        <SectionRepliable key={block.id ?? rang} id={block.id} titre={rendre(block)} vide={section.length === 0}>
           {plis(section)}
         </SectionRepliable>
       ),

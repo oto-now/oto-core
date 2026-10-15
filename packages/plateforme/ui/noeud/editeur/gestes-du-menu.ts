@@ -131,10 +131,6 @@ export function gestesDuMenu(etat: EtatDeLEditeur, envoyerLeTexte: (cle: string)
       envoyerLeTexte(cle)
       frapper()
     },
-    /** Un rang pendant un glisser-déposer : le modèle seulement ; l'ordre part au dépôt. */
-    glisserDUnRang(cle: string, pas: -1 | 1) {
-      if (!envois.conflit) changerModele(modeleDEdition.deplacer(modele.current, cle, pas).modele)
-    },
     /** Le dépôt : un seul `move_block`, après le bloc écrit qui précède désormais ; un bloc neuf part avec son texte. */
     deposer(cle: string) {
       if (fixes.current.has(cle)) envois.envoyerDeplacement(cle)

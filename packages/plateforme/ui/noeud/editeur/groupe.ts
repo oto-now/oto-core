@@ -3,6 +3,7 @@
 // de `modele.ts`, qui est à sa borne de lignes (`max-lines`). Sans lui, chaque geste d'une sélection de blocs recoderait
 // sa transformation, sans test pur.
 import type { BlockInput, WriteOpBody } from "../../../schemas"
+import { headingOf, sectionEnd } from "../../../schemas/blocks-render"
 import { insererEnTete, retablir, type Focus, type Rangee, type Retiree } from "./modele"
 import { idPrecedent, operationDeplacer, operationInserer } from "./operations"
 
@@ -69,6 +70,33 @@ export function deplacerLeGroupe(modele: readonly Rangee[], cles: Iterable<strin
   // Le rang, parmi les rangées restantes, où le groupe se pose : avant la dernière de celles qui précèdent le premier, ou
   // après la première de celles qui suivent le dernier.
   const position = pas < 0 ? Math.max(premier - 1, 0) : Math.min(dernier + 2 - groupe.length, reste.length)
+  return [...reste.slice(0, position), ...groupe, ...reste.slice(position)]
+}
+
+/**
+ * Ce qui se déplace avec les rangées reçues : chaque titre emmène sa section (`sectionEnd`, celle que son chevron replie),
+ * sous-titres compris, au glisser comme à ⌥↑ / ⌥↓ et au menu. Dans l'ordre de la page ; sans titre, les rangées seules.
+ */
+export function avecLeursSections(modele: readonly Rangee[], cles: Iterable<string>): string[] {
+  const niveaux = modele.map((rangee) => headingOf(rangee.bloc)?.level ?? null)
+  const prises = new Set(cles)
+  modele.forEach((rangee, rang) => {
+    if (!prises.has(rangee.cle) || niveaux[rang] === null) return
+    for (let suite = rang + 1; suite < sectionEnd(niveaux, rang); suite++) prises.add(modele[suite].cle)
+  })
+  return dansLOrdre(modele, prises)
+}
+
+/**
+ * Poser un groupe juste avant la rangée `suivante` (en fin de page pour `null`), ses rangées dans l'ordre de la page : la
+ * cible d'un glissé, lue sous le pointeur (`glisser.ts`). Une `suivante` du groupe ou disparue le pose en fin de page.
+ */
+export function poserAvant(modele: readonly Rangee[], cles: Iterable<string>, suivante: string | null): Rangee[] {
+  const dans = new Set(cles)
+  const groupe = modele.filter((rangee) => dans.has(rangee.cle))
+  const reste = modele.filter((rangee) => !dans.has(rangee.cle))
+  const rang = suivante === null ? -1 : reste.findIndex((rangee) => rangee.cle === suivante)
+  const position = rang < 0 ? reste.length : rang
   return [...reste.slice(0, position), ...groupe, ...reste.slice(position)]
 }
 

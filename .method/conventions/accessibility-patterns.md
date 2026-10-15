@@ -225,6 +225,8 @@ test de ce focus joue une réponse immédiate (`fetch` simulé résolu sans atte
 | Grand texte (> 18px bold) | 3:1 | `pnpm audit:lh` |
 | Éléments UI (bordures, icônes) | 3:1 | contrôle manuel (hors périmètre de l'audit automatique) |
 
+**Seule exception au 3:1 d'une icône : le chevron d'un pli vide** (titre sans section, menu dépliant sans corps), à demi-opacité (`[data-vide]`, `content.css`) : il ne replie rien et reste cliquable pour ouvrir un corps à écrire ; aucune autre icône active ne descend sous 3:1.
+
 **La règle porte sur les paires réellement utilisées en markup** — `text-muted-foreground` sur
 `bg-card`, `text-primary-foreground` sur `bg-primary` — pas sur les tokens pris isolément.
 Un token « prévu pour » ne garantit rien : la paire se mesure.

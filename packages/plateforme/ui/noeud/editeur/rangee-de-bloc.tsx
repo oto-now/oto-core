@@ -103,6 +103,8 @@ type RangeeDeBlocProps = {
   cachee: boolean
   /** Un titre : sa section est dépliée. */
   pliOuvert: boolean
+  /** Un titre sans section : son chevron ne replie rien. */
+  pliVide: boolean
 }
 
 type Menu = {
@@ -181,6 +183,8 @@ type BlocEcritProps = {
   integrer?: () => void
   /** Un titre : sa section est dépliée. */
   pliOuvert: boolean
+  /** Un titre sans section : son chevron ne replie rien. */
+  pliVide: boolean
 }
 
 /** Les champs d'un tableau ou d'un repli (E10-S06), ou le champ de texte de toute autre forme écrite. */
@@ -233,7 +237,7 @@ function BlocEcrit(props: BlocEcritProps) {
       {bloc.type === "heading" ? (
         <Titre id={bloc.ref} aria-label={texteLu(texteDe(bloc))} className="oto-titre-repliable">
           {/* Le chevron du titre, avant son champ, comme à la lecture (`plis-lus.tsx`). */}
-          <BoutonDuPli ouvert={props.pliOuvert} nom={premiersMots(bloc)} basculer={() => gestes.basculerLePli(cle)} />
+          <BoutonDuPli ouvert={props.pliOuvert} nom={premiersMots(bloc)} basculer={() => gestes.basculerLePli(cle)} vide={props.pliVide} />
           {champ}
         </Titre>
       ) : (
@@ -314,6 +318,7 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
       joindre={joindre}
       integrer={integrer}
       pliOuvert={props.pliOuvert}
+      pliVide={props.pliVide}
     />
   ) : (
     <RenduDUnBloc bloc={bloc} Lien="a" hrefDuChemin={(chemin) => `${liens.prefixe}${chemin}`} cibles={liens.cibles} rendu={rendu} />

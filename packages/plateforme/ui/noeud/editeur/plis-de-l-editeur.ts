@@ -5,6 +5,7 @@
 // défaut, sauf ceux que ce navigateur a gardés repliés (`plis-gardes.ts`). L'état se tient par clé de rangée, celle d'un
 // bloc servi étant son `id` (`rangeesDepuis`), et se garde par `id` : un bloc pas encore parti n'est pas gardé.
 import { useCallback, useEffect, useState } from "react"
+import { headingOf, sectionEnd } from "../../../schemas/blocks-render"
 import { foldsAround, hiddenByFolds } from "../../../schemas/folds"
 import { garderLePli, plisGardes } from "../plis-gardes"
 import type { Rangee } from "./modele"
@@ -29,6 +30,12 @@ export function usePlisDeLEditeur() {
   /** Les rangées que cache un titre replié, par rang. */
   const cachees = (modele: readonly Rangee[]): boolean[] => hiddenByFolds(modele.map((rangee) => rangee.bloc), (_, rang) => !replies.has(modele[rang].cle))
 
+  /** Les titres sans section, par rang : leur chevron ne replie rien, et s'efface à moitié (`BoutonDuPli`). */
+  const sansSection = (modele: readonly Rangee[]): boolean[] => {
+    const niveaux = modele.map((rangee) => headingOf(rangee.bloc)?.level ?? null)
+    return niveaux.map((niveau, rang) => niveau !== null && sectionEnd(niveaux, rang) === rang + 1)
+  }
+
   /** Le focus doit aller à la rangée `cle` : chaque titre replié qui la cache s'ouvre. */
   const reveler = useCallback(
     (cle: string, modele: readonly Rangee[]) => {
@@ -45,5 +52,5 @@ export function usePlisDeLEditeur() {
     [changer],
   )
 
-  return { replies, changer, cachees, reveler }
+  return { replies, changer, cachees, sansSection, reveler }
 }

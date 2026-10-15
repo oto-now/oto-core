@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-15] — Éditeur : un titre déplacé emmène sa section, glisser à la cible, rectangle depuis le vide autour, plis vides ; rail : à côté d'un Contexte (1.4.9)
+**Quoi :** Un titre glissé, ⌥↑ / ⌥↓, « Monter » ou « Descendre » emmène sa section (`avecLeursSections`) en un geste de groupe ; le glissé d'une poignée pose le bloc d'après le pointeur, plusieurs rangs d'un coup, sur les rangées montrées et dans leur ordre sans lui (`glisser.ts`, `poserAvant`) ; le rectangle de sélection part aussi d'un élément qui contient la zone des blocs ; le chevron d'un pli vide est à demi-opacité ; dans le rail, le quart bas de la ligne d'un Contexte range juste après lui, en tête de sa section.
+**Pourquoi :** Retours de JB : un titre déplacé laissait son contenu, le glissé avançait d'un rang par mouvement et butait au-dessus d'une section repliée (rangées sans boîte), le rectangle ne partait pas d'une bordure ni des marges, et une équipe dont le Contexte était la seule ligne n'offrait aucune place à côté de lui.
+**Fichiers :** `packages/plateforme/ui/noeud/editeur/{glisser,groupe,gestes-du-groupe,gestes-du-menu,actions,selection-de-blocs,pointeur-de-la-selection,plis-de-l-editeur}.ts`, `editeur/{editeur-de-blocs,rangee-de-bloc,repli-edite}.tsx`, `ui/noeud/{plis-lus,blocs-repliables,rendu-des-blocs}.tsx`, `ui/coque/deplacement-dans-le-rail.tsx`, `ui/ds/components/css/content.css`, `docs/conception/{editeur-de-blocs,noeuds-et-arbre}.md`, `.method/conventions/{accessibility-patterns,component-registry}.md` (le chevron d'un pli vide, seule icône sous 3:1), tests
+
 ## [2026-10-15] — Méthode : projet Supabase de test partagé avec le banc MCP
 **Quoi :** Garde dans `CLAUDE.md` (§ Vérifier, commiter, pousser) : les objets du banc MCP (`public.bench_*`, schémas `proto` et `oauth_test`) et ses versions de migrations ne se suppriment ni ne se modifient depuis ce dépôt ; `database-patterns.md § Règles` : un `migration repair` ne nomme que des versions présentes dans `supabase/migrations/`.
 **Pourquoi :** Le 26/09, un `migration repair --status reverted` lancé depuis ce dépôt a effacé de l'historique commun les versions du banc (la CLI le propose devant des versions inconnues), et ses tables `bench_*` ont été supprimées : le banc est resté en panne jusqu'au 15/10, réparé depuis son dépôt.

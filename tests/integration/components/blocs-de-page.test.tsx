@@ -198,6 +198,21 @@ describe("BlocsRepliables — folds of a read page", () => {
     }
   })
 
+  it("should mark as empty the chevron of a heading without a section and of a toggle without a body, not the others", () => {
+    const { container } = rendreLaPage()
+    expect(screen.getByRole("button", { name: "Replier la section — Annexes" })).not.toHaveAttribute("data-vide")
+    expect(container.querySelector("details.oto-depliant")).not.toHaveAttribute("data-vide")
+    cleanup()
+    const vides = [bloc(id(24), "toggle", "", { summary: "Rien" }), bloc(id(25), "heading", "Seul", { level: 1 })]
+    const relu = render(
+      <Reader>
+        <BlocsRepliables blocs={vides} rendre={(un) => <RenduDUnBloc bloc={un} Lien={LienDeTest} hrefDuChemin={(chemin) => `/n/${chemin}`} />} />
+      </Reader>,
+    )
+    expect(relu.container.querySelector("details.oto-depliant")).toHaveAttribute("data-vide")
+    expect(screen.getByRole("button", { name: "Replier la section — Seul" })).toHaveAttribute("data-vide")
+  })
+
   it("should draw a toggle folded at first, its chevron first and no title box, and keep it open on the next visit", async () => {
     const { container } = rendreLaPage()
     const repli = container.querySelector("details.oto-depliant")

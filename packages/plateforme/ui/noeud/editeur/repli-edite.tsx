@@ -84,7 +84,7 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
   const champ = "oto-inline-field field-sizing-content focus-visible:ring-2 focus-visible:ring-ink"
 
   return (
-    <div className="oto-depliant" data-open={ouvert ? "" : undefined}>
+    <div className="oto-depliant" data-open={ouvert ? "" : undefined} data-vide={texteDuCorps.trim() === "" ? "" : undefined}>
       <div className="oto-depliant-tete">
         <IconButton ref={chevron} size="sm" className="oto-pli-bouton" label={REPLI_EDITE.plier(ouvert, mots)} aria-expanded={ouvert} aria-controls={idDuCorps} onClick={() => setOuvert(!ouvert)} onBlur={quitter}>
           <GlypheDuPli />
