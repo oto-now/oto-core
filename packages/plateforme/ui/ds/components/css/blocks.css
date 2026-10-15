@@ -61,14 +61,18 @@
   padding-inline-start: calc(var(--space-2) + var(--space-4));
 }
 
-/* ── le titre d'un bloc, même silhouette qu'en lecture (`--fs-lg` gras) : sans cette règle, choisir « Titre » ne changeait rien à l'écran ; pas de marge de relief, la gouttière s'aligne sur la première ligne. */
+/* ── le titre d'un bloc, même silhouette qu'en lecture (`content.css`) : un corps par niveau, la balise de son niveau autour du champ ; sans ces règles, Grand, Moyen et Petit titre ne se distinguaient pas à l'écran ; pas de marge de relief, la gouttière s'aligne sur la première ligne. */
 .oto-block-field[data-kind="heading"] {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-2xl);
   font-weight: var(--fw-bold);
   letter-spacing: -0.015em;
   line-height: var(--lh-snug);
   color: var(--title);
 }
+h3 .oto-block-field[data-kind="heading"] { font-size: var(--fs-xl); }
+h4 .oto-block-field[data-kind="heading"] { font-size: var(--fs-lg); }
+h5 .oto-block-field[data-kind="heading"] { font-size: var(--fs-md); }
+h6 .oto-block-field[data-kind="heading"] { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--tr-mono); }
 
 /* ── les deux boîtes révélées (la gouttière, le menu), une seule révélation, sinon la rangée clignote ; `pointer-events: none` au repos, le focus clavier passe quand même, et atteint le « + ». */
 

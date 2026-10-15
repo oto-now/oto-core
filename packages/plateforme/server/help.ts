@@ -21,7 +21,7 @@ const SECTIONS: readonly HelpSection[] = [
     stems: ["block", "bloc", "markdown", "section", "heading", "titre", "iframe", "embed", "intégr", "integr"],
     lines: [
       "A page is made of blocks, written in markdown with <p>_write. Each block type and how to write it:",
-      "- heading: ## Title (### to ###### for levels 2 to 5); a section is a heading and what follows, until the next heading of the same level or above; section titles are unique in a page; ## Title <!-- toggle --> folds the section on screen (shown closed to people, always served whole to you).",
+      "- heading: ## Title (### to ###### for levels 2 to 5); a section is a heading and what follows, until the next heading of the same level or above; section titles are unique in a page; on screen people can fold any section under its heading, you always read it whole.",
       "- paragraph: plain text; **bold**, *italic*, `code`, [label](https://…), [[path]] or [[path|title]] to link another content.",
       "- list: - item (or 1. item), up to three levels, two spaces per level; checklist: - [ ] to do / - [x] done.",
       "- code: a fence ```language … ```; mermaid: a fence ```mermaid … ``` (a diagram drawn on screen).",

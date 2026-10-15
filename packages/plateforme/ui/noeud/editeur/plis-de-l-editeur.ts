@@ -1,26 +1,25 @@
 "use client"
 
-// Les titres repliables dans l'éditeur : quelles rangées un titre replié cache, le chevron qui replie et déplie, et la
-// section qui s'ouvre quand le focus doit y aller (une flèche, un déplacement, « Annuler »). Repliés à l'ouverture de la
-// page, sauf ceux que ce navigateur a gardés ouverts (`plis-gardes.ts`) ; un titre qu'on vient de rendre repliable
-// reste ouvert, pour que l'auteur ne perde pas de vue ce qu'il écrit. L'état se tient par clé de rangée, celle d'un bloc
-// servi étant son `id` (`rangeesDepuis`), et se garde par `id` : un bloc pas encore parti n'est pas gardé.
+// Les titres dans l'éditeur : quelles rangées un titre replié cache, le chevron qui replie et déplie, et la section qui
+// s'ouvre quand le focus doit y aller (une flèche, un déplacement, « Annuler »). Chaque titre se replie ; ouvert par
+// défaut, sauf ceux que ce navigateur a gardés repliés (`plis-gardes.ts`). L'état se tient par clé de rangée, celle d'un
+// bloc servi étant son `id` (`rangeesDepuis`), et se garde par `id` : un bloc pas encore parti n'est pas gardé.
 import { useCallback, useEffect, useState } from "react"
 import { foldsAround, hiddenByFolds } from "../../../schemas/folds"
-import { garderLePli, plisOuverts } from "../plis-gardes"
+import { garderLePli, plisGardes } from "../plis-gardes"
 import type { Rangee } from "./modele"
 
 export function usePlisDeLEditeur() {
-  const [ouverts, setOuverts] = useState<ReadonlySet<string>>(() => new Set())
-  useEffect(() => setOuverts((avant) => new Set([...avant, ...plisOuverts()])), [])
+  const [replies, setReplies] = useState<ReadonlySet<string>>(() => new Set())
+  useEffect(() => setReplies((avant) => new Set([...avant, ...[...plisGardes()].flatMap(([id, ouvert]) => (ouvert ? [] : [id]))])), [])
 
-  /** Les titres `rangees` ouverts (`true`) ou refermés, et gardés comme tels dans ce navigateur. */
+  /** Les titres `rangees` ouverts (`true`) ou repliés, et gardés comme tels dans ce navigateur. */
   const changer = useCallback((rangees: readonly Rangee[], ouvert: boolean) => {
-    setOuverts((avant) => {
+    setReplies((avant) => {
       const suivants = new Set(avant)
       for (const { cle } of rangees) {
-        if (ouvert) suivants.add(cle)
-        else suivants.delete(cle)
+        if (ouvert) suivants.delete(cle)
+        else suivants.add(cle)
       }
       return suivants
     })
@@ -28,7 +27,7 @@ export function usePlisDeLEditeur() {
   }, [])
 
   /** Les rangées que cache un titre replié, par rang. */
-  const cachees = (modele: readonly Rangee[]): boolean[] => hiddenByFolds(modele.map((rangee) => rangee.bloc), (_, rang) => ouverts.has(modele[rang].cle))
+  const cachees = (modele: readonly Rangee[]): boolean[] => hiddenByFolds(modele.map((rangee) => rangee.bloc), (_, rang) => !replies.has(modele[rang].cle))
 
   /** Le focus doit aller à la rangée `cle` : chaque titre replié qui la cache s'ouvre. */
   const reveler = useCallback(
@@ -46,5 +45,5 @@ export function usePlisDeLEditeur() {
     [changer],
   )
 
-  return { ouverts, changer, cachees, reveler }
+  return { replies, changer, cachees, reveler }
 }

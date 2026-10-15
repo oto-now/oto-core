@@ -1,9 +1,9 @@
 "use client"
 
-// Les plis d'une page lue : le menu dépliant (bloc `toggle`, `DepliantLu`) et la section d'un titre repliable
-// (`SectionRepliable`, `ChevronDeSection`), au dessin de Notion, chevron à gauche, sans fond ni filet. Repliés à
-// l'arrivée, ouverts au geste, et gardés ouverts dans ce navigateur (`plis-gardes.ts`) ; une ancre qui vise un bloc
-// replié l'ouvre. Ils reçoivent leur contenu déjà rendu par le serveur (`portage-ecrans.md § 2`). Sans eux, une page
+// Les plis d'une page lue : le menu dépliant (bloc `toggle`, `DepliantLu`), replié à l'arrivée, et la section de chaque
+// titre (`SectionRepliable`, `ChevronDeSection`), ouverte à l'arrivée ; au dessin de Notion, chevron à gauche, sans fond
+// ni filet. Le geste de la personne est gardé dans ce navigateur (`plis-gardes.ts`) ; une ancre qui vise un bloc replié
+// l'ouvre. Ils reçoivent leur contenu déjà rendu par le serveur (`portage-ecrans.md § 2`). Sans eux, une page
 // lue ne replie rien, ou replie sans se souvenir de ce qu'on a ouvert.
 import { createContext, useCallback, useContext, useId, useMemo, useRef, type ReactNode } from "react"
 import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight"
@@ -30,7 +30,7 @@ type DepliantLuProps = { id?: string; ancre?: string; resume: ReactNode; childre
 
 /** Un menu dépliant lu : `<details>` natif (clavier et annonce du navigateur), son état gardé dans ce navigateur. */
 export function DepliantLu({ id, ancre, resume, children, className }: DepliantLuProps) {
-  const [ouvert, changer] = usePliGarde(id)
+  const [ouvert, changer] = usePliGarde(id, false)
   const zone = useRef<HTMLDetailsElement>(null)
   const ouvrir = useCallback(() => changer(true), [changer])
   useOuvertParLAncre(zone, ouvrir)
@@ -57,11 +57,11 @@ type Pli = { ouvert: boolean; basculer: () => void; corps: string }
 const ContexteDuPli = createContext<Pli | null>(null)
 
 /**
- * La section d'un titre repliable lu : le titre (rendu par le serveur, son `ChevronDeSection` dedans), puis les blocs
- * de sa section, cachés tant qu'elle est repliée.
+ * La section d'un titre lu : le titre (rendu par le serveur, son `ChevronDeSection` dedans), puis les blocs de sa
+ * section, cachés quand la personne la replie.
  */
 export function SectionRepliable({ id, titre, children }: { id?: string; titre: ReactNode; children: ReactNode }) {
-  const [ouvert, changer] = usePliGarde(id)
+  const [ouvert, changer] = usePliGarde(id, true)
   const corps = useId()
   const zone = useRef<HTMLDivElement>(null)
   const ouvrir = useCallback(() => changer(true), [changer])
@@ -77,7 +77,7 @@ export function SectionRepliable({ id, titre, children }: { id?: string; titre: 
   )
 }
 
-/** Le chevron d'un titre repliable lu, dans son titre ; hors d'une `SectionRepliable`, rien. */
+/** Le chevron d'un titre lu, dans son titre ; hors d'une `SectionRepliable` (widget, visionneuse), rien. */
 export function ChevronDeSection({ nom }: { nom: string }) {
   const pli = useContext(ContexteDuPli)
   if (!pli) return null

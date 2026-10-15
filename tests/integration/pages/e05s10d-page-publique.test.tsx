@@ -68,9 +68,9 @@ describe("/p/<jeton> public page (AC-d2, AC-d3, AC-d4)", () => {
     expect(container.querySelector(".oto")).toHaveAttribute("data-oto-theme", "ardoise")
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tarifs 2026")
     expect(screen.getByRole("heading", { level: 2, name: "Prix" })).toBeInTheDocument()
-    // Lecture seule : aucun champ, aucun bouton d'écriture ; le seul bouton télécharge (E11-S05, AC-d2).
+    // Lecture seule : aucun champ, aucun bouton d'écriture ; un bouton télécharge (E11-S05, AC-d2), le chevron d'un titre replie sa section.
     expect(screen.queryByRole("textbox")).toBeNull()
-    expect(screen.getAllByRole("button").map((bouton) => bouton.textContent)).toEqual(["Télécharger en .md"])
+    expect(screen.getAllByRole("button").map((bouton) => bouton.textContent || bouton.getAttribute("aria-label"))).toEqual(["Télécharger en .md", "Replier la section — Prix"])
   })
 
   it("should open the sub-contents by the same token, and write a link outside the share as plain text", async () => {

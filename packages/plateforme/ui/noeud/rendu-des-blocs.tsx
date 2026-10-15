@@ -28,7 +28,7 @@
 //
 // E11-S15 (AC-b1) : l'en-tête d'un tableau simple sur le fond teinté du primary (`data-simple`, `editeur.css`).
 import { Suspense, use, type ReactNode } from "react"
-import { isCollapsible, LIST_DEPTH_MAX, simpleTableOf, type ImageWidth } from "../../schemas/blocks"
+import { LIST_DEPTH_MAX, simpleTableOf, type ImageWidth } from "../../schemas/blocks"
 import { filePath } from "../../schemas/files"
 import { fencedParts } from "../../schemas/link-syntax"
 import { isRecord } from "../../schemas/tables"
@@ -369,17 +369,16 @@ function Paragraphe({ bloc, ...liens }: RenduProps) {
 export function RenduDUnBloc(props: RenduProps & { rendu?: ReactNode; baliseDeTitre?: "h3" }): ReactNode {
   const { bloc, rendu, baliseDeTitre, routeDesFichiers, ...liens } = props
   switch (bloc.type) {
-    case "heading": {
-      // Un titre repliable porte son chevron, que sa `SectionRepliable` sert (`BlocsRepliables`), puis son texte dans une case.
-      const texte = <EnLigne texte={bloc.text ?? ""} {...liens} />
-      const repliable = isCollapsible(bloc)
+    case "heading":
+      // Le chevron du titre, que sa `SectionRepliable` sert (`BlocsRepliables`), rien ailleurs ; puis son texte dans une case.
       return (
-        <ReaderHeading as={baliseDuTitre(bloc.data.level, baliseDeTitre)} id={bloc.ref} className={repliable ? "oto-titre-repliable" : undefined}>
-          {repliable && <ChevronDeSection nom={texteLu(bloc.text ?? "")} />}
-          {repliable ? <span>{texte}</span> : texte}
+        <ReaderHeading as={baliseDuTitre(bloc.data.level, baliseDeTitre)} id={bloc.ref} className="oto-titre-repliable">
+          <ChevronDeSection nom={texteLu(bloc.text ?? "")} />
+          <span>
+            <EnLigne texte={bloc.text ?? ""} {...liens} />
+          </span>
         </ReaderHeading>
       )
-    }
     case "paragraph":
       return <Paragraphe {...props} />
     case "list":

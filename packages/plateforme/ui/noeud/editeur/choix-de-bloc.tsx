@@ -13,9 +13,28 @@
 // E10-S02 (lot b) : le groupe « Insérer » propose aussi « Image » et « Fichier » quand le stockage est activé (AC-b1, AC-b2,
 // AC-b7), au « + » comme à « / » : les deux listes montrent les mêmes entrées. Choisis par « / », le Texte se vide de sa
 // barre et le fichier se joint après lui. 1.4.3 : « Intégration » les suit, partout : elle ouvre le dialogue de son adresse.
+//
+// Chaque entrée porte son glyphe devant son libellé, comme Notion, au « + » comme à « / » (`GLYPHES_DES_CHOIX`).
 import { useEffect, useState, type KeyboardEvent } from "react"
+import { Browser } from "@phosphor-icons/react/dist/csr/Browser"
+import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight"
+import { Code } from "@phosphor-icons/react/dist/csr/Code"
+import { FlowArrow } from "@phosphor-icons/react/dist/csr/FlowArrow"
+import { Image } from "@phosphor-icons/react/dist/csr/Image"
+import { ListBullets } from "@phosphor-icons/react/dist/csr/ListBullets"
+import { ListChecks } from "@phosphor-icons/react/dist/csr/ListChecks"
+import { ListNumbers } from "@phosphor-icons/react/dist/csr/ListNumbers"
+import { Minus } from "@phosphor-icons/react/dist/csr/Minus"
+import { Paperclip } from "@phosphor-icons/react/dist/csr/Paperclip"
+import { Quotes } from "@phosphor-icons/react/dist/csr/Quotes"
+import { Table } from "@phosphor-icons/react/dist/csr/Table"
+import { TextHOne } from "@phosphor-icons/react/dist/csr/TextHOne"
+import { TextHThree } from "@phosphor-icons/react/dist/csr/TextHThree"
+import { TextHTwo } from "@phosphor-icons/react/dist/csr/TextHTwo"
+import { TextT } from "@phosphor-icons/react/dist/csr/TextT"
 import { normalizeTitle } from "../../../schemas/nodes"
 import { fuzzyScore } from "../../ds/react/command-palette"
+import { Icon, type Glyphe } from "../../ds/react/icon"
 import type { MenuItem } from "../../ds/react/overlays"
 import { CHOIX_DE_BLOC, FORMES, INTEGRATION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
@@ -36,6 +55,28 @@ const FICHIERS_JOINTS: readonly Genre[] = ["image", "fichier"]
 
 const estUnFichier = (choix: ChoixDeBarre): choix is Genre => choix === "image" || choix === "fichier"
 
+/** Le glyphe de chaque entrée : un titre dit son niveau (H1, H2, H3), comme dans Notion. */
+const GLYPHES_DES_CHOIX: Record<ChoixDeBarre, Glyphe> = {
+  texte: TextT,
+  grandTitre: TextHOne,
+  moyenTitre: TextHTwo,
+  petitTitre: TextHThree,
+  puces: ListBullets,
+  numerotee: ListNumbers,
+  cases: ListChecks,
+  citation: Quotes,
+  code: Code,
+  diagramme: FlowArrow,
+  repli: CaretRight,
+  tableau: Table,
+  separateur: Minus,
+  image: Image,
+  fichier: Paperclip,
+  integration: Browser,
+}
+
+const glypheDe = (choix: ChoixDeBarre) => <Icon as={GLYPHES_DES_CHOIX[choix]} size="xs" />
+
 const libelleDe = (choix: ChoixDeBarre) =>
   choix === "integration" ? INTEGRATION.entree : estUnFichier(choix) ? FICHIERS[choix] : choix === "separateur" ? CHOIX_DE_BLOC.separateur : FORMES[choix].libelle
 
@@ -47,15 +88,15 @@ export function itemsDuChoix(choisir: (choix: Choix) => void, joindre?: (quoi: G
   const fichiers: MenuItem[] = [
     ...(joindre
       ? [
-          { label: FICHIERS.image, onSelect: () => joindre("image") },
-          { label: FICHIERS.fichier, onSelect: () => joindre("fichier") },
+          { label: FICHIERS.image, icon: glypheDe("image"), onSelect: () => joindre("image") },
+          { label: FICHIERS.fichier, icon: glypheDe("fichier"), onSelect: () => joindre("fichier") },
         ]
       : []),
-    ...(integrer ? [{ label: INTEGRATION.entree, onSelect: integrer }] : []),
+    ...(integrer ? [{ label: INTEGRATION.entree, icon: glypheDe("integration"), onSelect: integrer }] : []),
   ]
   return GROUPES.flatMap(({ titre, choix }, rang) => [
     { group: titre },
-    ...choix.map((un) => ({ label: libelleDe(un), onSelect: () => choisir(un) })),
+    ...choix.map((un) => ({ label: libelleDe(un), icon: glypheDe(un), onSelect: () => choisir(un) })),
     ...(rang === GROUPES.length - 1 ? fichiers : []),
   ])
 }
@@ -136,6 +177,7 @@ function Options({ id, retenus, actif, prendre }: ListeDesChoixProps) {
       onMouseDown={(evenement) => evenement.preventDefault()}
       onClick={() => prendre(choix)}
     >
+      {glypheDe(choix)}
       <span className="oto-menu-label">{libelleDe(choix)}</span>
     </li>
   ))

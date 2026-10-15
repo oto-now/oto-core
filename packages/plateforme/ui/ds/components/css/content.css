@@ -47,10 +47,10 @@
 
 /* Tout est scopé par `.oto-island-body[data-reading]`, et c'est obligatoire : le reset (`.oto h2`, `.oto p`, `.oto ul`, (0,1,1)) bat une simple classe, et sans le préfixe les intertitres se collent et les puces disparaissent, sans erreur. */
 
-/* L'intertitre est un vrai titre de document, `--fs-lg` gras contre un corps en `--fs-sm` ; la graisse et le corps portent la hiérarchie, `--title` garde le relief du thème. */
+/* L'intertitre est un vrai titre de document, `--fs-2xl` gras pour un grand titre contre un corps en `--fs-sm` ; la graisse et le corps portent la hiérarchie, `--title` garde le relief du thème. */
 .oto-island-body[data-reading] .oto-reader-heading {
   margin: var(--space-5) 0 var(--space-2-5);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-2xl);
   font-weight: var(--fw-bold);
   letter-spacing: -0.015em;
   /* `--lh-snug` : la ligne des titres 17-24 px, dit le jeton lui-même. */
@@ -58,10 +58,10 @@
   /* `--title` et non `--ink` : l'encre teintée des intitulés ; en `--ink`, un intertitre pèse autant que le corps qu'il coiffe, et se lit à un autre niveau que les en-têtes d'îlot voisins. */
   color: var(--title);
 }
-/* Un titre par niveau (E10-S04, AC-b3) : `h2` à `h6`, un cran de corps de moins par niveau, la graisse gardée ; `h6`, au corps du texte, se distingue par la mono capitales des intitulés. */
-.oto-island-body[data-reading] h3.oto-reader-heading { font-size: var(--fs-md); }
-.oto-island-body[data-reading] h4.oto-reader-heading { font-size: var(--fs-base); }
-.oto-island-body[data-reading] h5.oto-reader-heading { font-size: var(--fs-sm); }
+/* Un titre par niveau (E10-S04, AC-b3) : grand (`h2`) 24 px, moyen (`h3`) 20 px, petit (`h4`) 17 px, comme les écarts de Notion contre un corps de 13 px ; un cran de moins jusqu'à `h6`, au corps du texte, que la mono capitales des intitulés distingue. Les mêmes corps dans l'éditeur (`blocks.css`). */
+.oto-island-body[data-reading] h3.oto-reader-heading { font-size: var(--fs-xl); }
+.oto-island-body[data-reading] h4.oto-reader-heading { font-size: var(--fs-lg); }
+.oto-island-body[data-reading] h5.oto-reader-heading { font-size: var(--fs-md); }
 .oto-island-body[data-reading] h6.oto-reader-heading { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--tr-mono); }
 /* Le premier bloc ne décolle pas du haut de l'îlot : la marge de tête d'un intertitre sépare deux blocs, elle n'ouvre pas le corps. */
 .oto-island-body[data-reading] > :first-child { margin-block-start: 0; }
