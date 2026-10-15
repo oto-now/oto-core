@@ -8,7 +8,7 @@ Texte complet : `.method/conventions/database-patterns.md`. La fiche suffit pour
 - Aucune modification manuelle en base : tout passe par une migration. § Règles
 - Portable, Supabase comme Postgres nu : aucune clé ni lecture vers `auth.users`, aucune extension hors `pg_trgm`, `unaccent` et `ltree` ; une colonne de personne entre dans `platform.forget_user` dans sa migration ; un privilège de `service_role` ou `supabase_auth_admin` s'accorde dans un bloc `do` qui vérifie le rôle. § Règles
 - Jamais `IF NOT EXISTS` sur un schéma, une table ou un index (seule exception : `CREATE EXTENSION`) : une migration qui ne peut pas s'appliquer échoue. § Règles
-- Une migration appliquée est figée, commentaires compris : ni modifiée ni renommée, elle ne cite qu'un renvoi déjà écrit à son application ; une correction est une nouvelle migration ; un agent l'applique par `supabase db push`, jamais par `migration repair`. § Règles
+- Une migration appliquée est figée, commentaires compris : ni modifiée ni renommée, elle ne cite qu'un renvoi déjà écrit à son application ; une correction est une nouvelle migration ; un agent l'applique par `supabase db push`, jamais par `migration repair`, qui ne nomme jamais une version absente de `supabase/migrations/`. § Règles
 - Une migration qui crée une fonction posant un paramètre de `pg_trgm` commence par `DO $$ begin perform extensions.similarity('a', 'a'); end $$;` (un rôle non superutilisateur ne pose le paramètre que d'une bibliothèque chargée). § Règles
 - `CREATE POLICY` et `CREATE TRIGGER` sont précédés d'un `DROP … IF EXISTS` (la ligne de base exceptée). § Règles
 - La RLS s'active et les policies se créent dans la migration de la table ; toute policy `FOR UPDATE` déclare `WITH CHECK`. § Règles

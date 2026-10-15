@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-15] — Méthode : projet Supabase de test partagé avec le banc MCP
+**Quoi :** Garde dans `CLAUDE.md` (§ Vérifier, commiter, pousser) : les objets du banc MCP (`public.bench_*`, schémas `proto` et `oauth_test`) et ses versions de migrations ne se suppriment ni ne se modifient depuis ce dépôt ; `database-patterns.md § Règles` : un `migration repair` ne nomme que des versions présentes dans `supabase/migrations/`.
+**Pourquoi :** Le 26/09, un `migration repair --status reverted` lancé depuis ce dépôt a effacé de l'historique commun les versions du banc (la CLI le propose devant des versions inconnues), et ses tables `bench_*` ont été supprimées : le banc est resté en panne jusqu'au 15/10, réparé depuis son dépôt.
+**Fichiers :** `CLAUDE.md`, `.method/conventions/database-patterns.md`, `.method/conventions/fiches/database-patterns.md`
+
 ## [2026-10-15] — Rail : le « ⋯ » d'une équipe ; éditeur : Retour arrière dans une sous-liste (publié en 1.4.8)
 
 **Quoi :** un « ⋯ » au titre de chaque section d'équipe du rail : « Les personnes de … » (le dialogue de l'écran Équipes, sur place) et, pour qui administre, « Supprimer l'équipe… » ; lu par `GET teams/<slug>` (`server/team-panel.ts`, `teamViews` sorti de `listTeams`), relu à chaque relecture du rail. Dans une liste à puces ou numérotée, Retour arrière dans la marque d'un sous-élément ou au début de son texte remonte la ligne d'un niveau.
