@@ -10,7 +10,7 @@ import { copierLeTexte } from "../../components/presse-papiers"
 import { nombreLisible } from "../../format/nombres"
 import { SELECTION } from "../libelles"
 import { verrouille, type EtatDeLEditeur } from "./actions"
-import { dansLOrdre, deplacerLeGroupe as deplacerDansLeModele, remettre, retablirLeGroupe, retirerLeGroupe, type GesteDeGroupe } from "./groupe"
+import { dansLOrdre, deplacerLeGroupe as deplacerDansLeModele, poserAvant, remettre, retablirLeGroupe, retirerLeGroupe, type GesteDeGroupe } from "./groupe"
 import type { Retiree } from "./modele"
 import { estLaPageVide } from "./page-vide"
 
@@ -89,11 +89,10 @@ export function gestesDuGroupe(etat: EtatDeLEditeur) {
       if (garde !== null) setFocus({ cle: garde, curseur: null, cible: "rangee" })
       envoyerLeDeplacement(cles, avant)
     },
-    /** Un pas du glissé de la poignée d'un bloc sélectionné : le modèle seulement ; rend le rang où la rangée tenue est posée. */
-    glisserLeGroupe(cles: readonly string[], tenue: string, pas: -1 | 1): number {
+    /** Le glissé d'une poignée : le groupe posé juste avant la rangée `suivante` (`null` : en fin), le modèle seulement. */
+    poserLeGroupe(cles: readonly string[], suivante: string | null) {
       // Un groupe hors de la borne ne bouge pas ; le dépôt le dit.
-      if (!envois.conflit && cles.length <= BLOCKS_MAX) changerModele(deplacerDansLeModele(modele.current, cles, pas))
-      return modele.current.findIndex((rangee) => rangee.cle === tenue)
+      if (!envois.conflit && cles.length <= BLOCKS_MAX) changerModele(poserAvant(modele.current, cles, suivante))
     },
     /** Le dépôt du glissé d'un groupe : une écriture de `move_block`, sauf si l'ordre n'a pas changé. */
     deposerLeGroupe(cles: readonly string[], avant: readonly string[]) {

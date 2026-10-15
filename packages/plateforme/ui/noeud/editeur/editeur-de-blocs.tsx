@@ -93,10 +93,12 @@ type RangeesProps = {
   /** Les rangées cachées sous un titre replié, par rang ; les titres repliés, par clé. */
   cachees: readonly boolean[]
   replies: ReadonlySet<string>
+  /** Les titres sans section, par rang. */
+  sansSection: readonly boolean[]
 }
 
 /** Les rangées, une par bloc, rendues par leur clé de rendu, jamais par leur rang ; le Texte d'une page vide porte l'invite. */
-function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert, cachees, replies }: RangeesProps) {
+function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert, cachees, replies, sansSection }: RangeesProps) {
   const invite = estLaPageVide(modele) ? EDITEUR.invite : undefined
   return modele.map((rangee, rang) => (
     <RangeeDeBloc
@@ -110,6 +112,7 @@ function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, reference
       ouvert={ouvert === rangee.cle}
       cachee={cachees[rang]}
       pliOuvert={!replies.has(rangee.cle)}
+      pliVide={sansSection[rang]}
       // Un conflit ouvert : les autres champs sont en lecture seule jusqu'à son règlement (HN-E05S08-3).
       verrouillee={conflit !== null && conflit.cle !== rangee.cle}
       erreur={erreurs[rangee.cle] ?? null}
@@ -138,7 +141,7 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
   const [menuOuvert, setMenuOuvert] = useState<string | null>(null)
   const fermerLeMenu = () => setMenuOuvert(null)
   const selection = useSelectionDeBlocs({ modele: editeur.modele, actions: editeur.actions, fermerLeMenu })
-  const glisser = useGlisser({ racine: editeur.racine, glisser: selection.glisser, deposer: selection.deposer, groupe: selection.groupe, revenir: selection.revenir })
+  const glisser = useGlisser({ racine: editeur.racine, poser: selection.poser, deposer: selection.deposer, groupe: selection.groupe, revenir: selection.revenir })
   // Le même objet d'un rendu à l'autre : une rangée qui le reçoit n'est rendue à nouveau que pour son propre bloc.
   const { prefixeDesPages, cibles, liens: lecture } = props
   const liens = useMemo<LiensDesBlocs>(() => ({ prefixe: prefixeDesPages, cibles, lecture }), [prefixeDesPages, cibles, lecture])
@@ -195,6 +198,7 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
             ouvert={editeur.ouvert}
             cachees={plis.cachees(editeur.modele)}
             replies={plis.replies}
+            sansSection={plis.sansSection(editeur.modele)}
           />
           <RectangleDeSelection rectangle={selection.rectangle} />
           <p role="status" className="oto-sr-only">

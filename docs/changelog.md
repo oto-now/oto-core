@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-15] — Éditeur : un titre déplacé emmène sa section, glisser à la cible, rectangle depuis le vide autour, plis vides ; rail : à côté d'un Contexte (publié en 1.4.9)
+**Quoi :** Un titre glissé, ⌥↑ / ⌥↓, « Monter » ou « Descendre » emmène sa section (`avecLeursSections`) en un geste de groupe ; le glissé d'une poignée pose le bloc d'après le pointeur, plusieurs rangs d'un coup, sur les rangées montrées et dans leur ordre sans lui (`glisser.ts`, `poserAvant`) ; le rectangle de sélection part aussi d'un élément qui contient la zone des blocs ; le chevron d'un pli vide est à demi-opacité ; dans le rail, le quart bas de la ligne d'un Contexte range juste après lui, en tête de sa section.
+**Pourquoi :** Retours de JB : un titre déplacé laissait son contenu, le glissé avançait d'un rang par mouvement et butait au-dessus d'une section repliée (rangées sans boîte), le rectangle ne partait pas d'une bordure ni des marges, et une équipe dont le Contexte était la seule ligne n'offrait aucune place à côté de lui.
+**Fichiers :** `packages/plateforme/ui/noeud/editeur/{glisser,groupe,gestes-du-groupe,gestes-du-menu,actions,selection-de-blocs,pointeur-de-la-selection,plis-de-l-editeur}.ts`, `editeur/{editeur-de-blocs,rangee-de-bloc,repli-edite}.tsx`, `ui/noeud/{plis-lus,blocs-repliables,rendu-des-blocs}.tsx`, `ui/coque/deplacement-dans-le-rail.tsx`, `ui/ds/components/css/content.css`, `docs/conception/{editeur-de-blocs,noeuds-et-arbre}.md`, `.method/conventions/{accessibility-patterns,component-registry}.md` (le chevron d'un pli vide, seule icône sous 3:1), tests
+
 ## [2026-10-15] — Rail : le « ⋯ » d'une équipe ; éditeur : Retour arrière dans une sous-liste (publié en 1.4.8)
 
 **Quoi :** un « ⋯ » au titre de chaque section d'équipe du rail : « Les personnes de … » (le dialogue de l'écran Équipes, sur place) et, pour qui administre, « Supprimer l'équipe… » ; lu par `GET teams/<slug>` (`server/team-panel.ts`, `teamViews` sorti de `listTeams`), relu à chaque relecture du rail. Dans une liste à puces ou numérotée, Retour arrière dans la marque d'un sous-élément ou au début de son texte remonte la ligne d'un niveau.

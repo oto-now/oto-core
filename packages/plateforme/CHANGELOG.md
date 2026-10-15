@@ -17,6 +17,16 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.9 — 2026-10-15
+
+### Hosts
+- Install: upgrade to 1.4.9; no migration, no new variable, no import to change. Published from 1.4.8, without what main carries for 1.5.0.
+- UI: a title moved in the editor (dragged, Alt+↑/↓, « Monter », « Descendre ») takes its section with it, subtitles included, in one write with one « Annuler ».
+- UI: dragging a block follows the pointer, several rows at once, and passes a folded section whole; it used to step one row at a time and stuck above a folded section.
+- UI: the selection rectangle also starts from the empty space around the editor (the column, the page margins), not only from the block area.
+- UI: in the rail, the bottom quarter of a Contexte line puts the dragged line just after it, first of its section; a team whose only line was its Contexte had no place beside it.
+- UI: the chevron of an empty fold (a title without a section, a toggle without a body) is drawn at half opacity.
+
 ## 1.4.8 — 2026-10-15
 
 ### Hosts

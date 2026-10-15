@@ -105,6 +105,30 @@ export function usePointeurDeLaSelection(parametres: Parametres) {
     }
   }
 
+  /** Le rectangle part de ce point (AC-a5) : ni sélection de texte ni focus déplacé pendant le geste, la zone suit le pointeur. */
+  const commencer = (zone: HTMLDivElement, evenement: { clientX: number; clientY: number; pointerId: number; preventDefault: () => void }) => {
+    evenement.preventDefault()
+    zone.setPointerCapture?.(evenement.pointerId)
+    const repere = zone.getBoundingClientRect()
+    trace.current = { x: evenement.clientX - repere.left, y: evenement.clientY - repere.top, bouge: false }
+    lus.current.vider()
+  }
+
+  // Le vide autour de l'éditeur (la colonne, les marges de la page, une bordure) est une marge aussi : un appui sur un
+  // élément qui contient la zone des blocs, sans être elle, tire le rectangle. Sans quoi il ne partait que de la zone.
+  useEffect(() => {
+    const surAppui = (evenement: PointerEvent) => {
+      const zone = lus.current.zone.current
+      const cible = evenement.target
+      if (!zone || !(cible instanceof Element) || cible === zone || !cible.contains(zone)) return
+      const modifie = evenement.shiftKey || evenement.ctrlKey || evenement.metaKey || evenement.altKey
+      if (evenement.button !== 0 || modifie || evenement.pointerType === "touch") return
+      commencer(zone, evenement)
+    }
+    document.addEventListener("pointerdown", surAppui)
+    return () => document.removeEventListener("pointerdown", surAppui)
+  }, [])
+
   const lacher = (evenement: EvenementDuPointeur<HTMLDivElement>) => {
     const origine = trace.current
     if (!origine) return
@@ -127,12 +151,8 @@ export function usePointeurDeLaSelection(parametres: Parametres) {
         if (champ && origine !== undefined && zone.contains(champ) && !modifie) return suivreLeTexte(origine, champ)
         // Au doigt, la page défile : le rectangle se tire à la souris et au stylet (HN-E11S16-12).
         if (evenement.pointerType === "touch" || !dansLaMarge(zone, cible)) return
-        // Ni sélection de texte ni focus déplacé pendant le geste : la zone prend le focus au lâcher.
-        evenement.preventDefault()
-        zone.setPointerCapture?.(evenement.pointerId)
-        const repere = zone.getBoundingClientRect()
-        trace.current = { x: evenement.clientX - repere.left, y: evenement.clientY - repere.top, bouge: false }
-        lus.current.vider()
+        // La zone prend le focus au lâcher.
+        commencer(zone, evenement)
       },
       onPointerMove(evenement: EvenementDuPointeur<HTMLDivElement>) {
         const origine = trace.current

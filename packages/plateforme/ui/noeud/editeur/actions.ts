@@ -31,6 +31,7 @@ import type { Gestes } from "./gestes"
 import { gestesDesFichiers } from "./gestes-des-fichiers"
 import { gestesDuGroupe } from "./gestes-du-groupe"
 import { gestesDuMenu } from "./gestes-du-menu"
+import { avecLeursSections } from "./groupe"
 import * as modeleDEdition from "./modele"
 import { avecTexte, formeDe, type BlocEdite, type Choix, type Focus, type Rangee, type Retiree, type Suite } from "./modele"
 import { controler, estVide, SANS_TEXTE } from "./operations"
@@ -339,7 +340,6 @@ function sorties(etat: EtatDeLEditeur, envoyerLeTexte: (cle: string) => boolean,
 /** Ce que l'éditeur arme lui-même, en plus des gestes des rangées : le différé, le départ de la page, le glisser-déposer. */
 type ActionsPropres = {
   envoyerLeTexte: (cle: string) => boolean
-  glisserDUnRang: (cle: string, pas: -1 | 1) => void
   deposer: (cle: string) => void
 }
 
@@ -365,8 +365,17 @@ export function actionsDeLEditeur(
   const { envois } = etat
   const menu = gestesDuMenu(etat, envoyerLeTexte)
   const groupe = gestesDuGroupe(etat)
+  /** ⌥↑ / ⌥↓, « Monter », « Descendre » : un titre emmène sa section, en un geste de groupe ; un autre bloc part seul. */
+  const deplacer = (cle: string, pas: -1 | 1) => {
+    const section = avecLeursSections(etat.modele.current, [cle])
+    if (section.length === 1) return struct.deplacer(cle, pas)
+    // Le focus reste au titre, comme pour un bloc seul (`modele.deplacer`), et non à sa poignée.
+    groupe.deplacerLeGroupe(section, pas, null)
+    etat.setFocus({ cle, curseur: null })
+  }
   return {
     ...struct,
+    deplacer,
     ...groupe,
     annulerLAnnonce: () => {
       const annonce = envois.annonce
@@ -380,7 +389,7 @@ export function actionsDeLEditeur(
     ...gestesDesFichiers(etat, menu.deposerUnFichier),
     envoyerLeTexte,
     annoncer: (message: string) => envois.annoncer(message),
-    toucher: clavier(etat, { envoyerLeTexte, fondre, deplacer: struct.deplacer }),
+    toucher: clavier(etat, { envoyerLeTexte, fondre, deplacer }),
     retablir: retablirSuppression,
     relancer: envois.relancer,
     oublierLAnnonce: envois.fermerAnnonce,

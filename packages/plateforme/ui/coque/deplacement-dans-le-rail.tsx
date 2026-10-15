@@ -9,7 +9,7 @@
 // `ConfirmDialog` le dit avant l'envoi, sinon il part sans question ; ranger passe par `POST nodes/position`
 // (après le déplacement, quand le dépôt change aussi de parent : deux appels, HN-E05S10e-11). Droits décidés
 // par le service, refus dit dans le rail. Déposer sur la ligne d'un Contexte range sous lui, comme son « + »
-// (fiche D110 a). Une fois déplacé, le nœud s'ouvre : le rail le montre, déplié jusqu'à lui et sélectionné
+// (fiche D110 a) ; sur son quart bas, juste après lui, en tête de sa section. Une fois déplacé, le nœud s'ouvre : le rail le montre, déplié jusqu'à lui et sélectionné
 // (`use-depliage-du-rail.ts`) ; une fois rangé, la page se relit. Sans lui, le rail ne range rien.
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown"
@@ -92,12 +92,17 @@ function useArbreLu({ arbre, equipes }: Pick<Lecture, "arbre" | "equipes">) {
 
 type ArbreLu = ReturnType<typeof useArbreLu>
 
-/** La place d'un dépôt avant ou après une ligne (AC-b9) : jamais sur un Contexte, sous le nœud glissé ni parmi les espaces personnels. */
+/**
+ * La place d'un dépôt avant ou après une ligne (AC-b9) : jamais sous le nœud glissé ni parmi les espaces personnels. Un
+ * Contexte reste en tête de sa section (P39) : rien avant lui ; après lui, la tête de ses frères, seule place à côté de
+ * lui quand la section n'a pas d'autre ligne.
+ */
 function placeEntre(lu: ArbreLu, source: string, cible: string, zone: Exclude<Zone, "dans">): Place | null {
   const parent = parentDe(cible)
-  if (lu.parChemin.get(cible)?.kind === "context" || parent === PERSO) return null
-  if (cible === source || cible.startsWith(`${source}/`)) return null
-  return placeDuDepot(lu.freres.get(parent) ?? [], source, cible, zone)
+  if (parent === PERSO || cible === source || cible.startsWith(`${source}/`)) return null
+  const freres = lu.freres.get(parent) ?? []
+  if (lu.parChemin.get(cible)?.kind === "context") return zone === "apres" && freres[0] !== source ? { after: null } : null
+  return placeDuDepot(freres, source, cible, zone)
 }
 
 export type DeplacementDansLeRail = {
@@ -235,8 +240,9 @@ export function useDeplacementDansLeRail({ arbre, equipes, handle, prefixe, ouve
       glisse.current = null
     },
     zoneDe: (cible, fraction) => {
-      if (lu.parChemin.get(cible)?.kind === "context") return "dans"
-      return zoneDuPointeur(fraction, ouverts.has(cible) && (lu.parChemin.get(cible)?.children.length ?? 0) > 0)
+      const zone = zoneDuPointeur(fraction, ouverts.has(cible) && (lu.parChemin.get(cible)?.children.length ?? 0) > 0)
+      // Le haut de la ligne d'un Contexte reçoit dedans : rien ne se range avant lui (P39).
+      return lu.parChemin.get(cible)?.kind === "context" && zone === "avant" ? "dans" : zone
     },
     accepte: (cible, zone) => {
       const source = glisse.current

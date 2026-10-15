@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { BlockInput } from "@otomata_tech/oto_platform/schemas"
 import {
+  avecLeursSections,
   dansLOrdre,
   deplacementsDuGroupe,
   deplacerLeGroupe,
   insertionsDuGroupe,
+  poserAvant,
   remettre,
   retablirLeGroupe,
   retirerLeGroupe,
@@ -114,6 +116,23 @@ describe("group gestures of the model (AC-a6, AC-a8)", () => {
     expect(cles(deplacerLeGroupe(PAGE, ["a", "b"], -1))).toEqual(cles(PAGE))
     expect(cles(deplacerLeGroupe(PAGE, ["d", "e"], 1))).toEqual(cles(PAGE))
     expect(cles(deplacerLeGroupe(PAGE, ["a", "c"], -1))).toEqual(["a", "c", "b", "d", "e"])
+  })
+
+  it("should take each heading with its section, up to the next heading of the same or a greater level, subheadings included", () => {
+    const titre = (cle: string, level: number): Rangee => ({ cle, bloc: { ...rangee(cle).bloc, type: "heading", data: { level } } })
+    const page = [rangee("a"), titre("h2", 2), rangee("b"), titre("h3", 3), rangee("c"), titre("g2", 2), rangee("d"), titre("h1", 1), rangee("e")]
+    expect(avecLeursSections(page, ["h2"])).toEqual(["h2", "b", "h3", "c"])
+    expect(avecLeursSections(page, ["h3"])).toEqual(["h3", "c"])
+    expect(avecLeursSections(page, ["a", "g2"])).toEqual(["a", "g2", "d"])
+    expect(avecLeursSections(page, ["h1"])).toEqual(["h1", "e"])
+    expect(avecLeursSections(page, ["b"])).toEqual(["b"])
+  })
+
+  it("should set a group, gathered in page order, just before the given block, at the end for null or a block of the group", () => {
+    expect(cles(poserAvant(PAGE, ["d", "e"], "b"))).toEqual(["a", "d", "e", "b", "c"])
+    expect(cles(poserAvant(PAGE, ["a", "c"], "e"))).toEqual(["b", "d", "a", "c", "e"])
+    expect(cles(poserAvant(PAGE, ["a", "b"], null))).toEqual(["c", "d", "e", "a", "b"])
+    expect(cles(poserAvant(PAGE, ["b"], "b"))).toEqual(["a", "c", "d", "e", "b"])
   })
 
   it("should put a moved group back in the order before, a block added meanwhile kept", () => {

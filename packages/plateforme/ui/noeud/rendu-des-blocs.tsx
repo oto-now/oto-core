@@ -248,7 +248,7 @@ function TableauSimple({ bloc, ...liens }: RenduProps) {
  */
 function Repli({ bloc, ...liens }: RenduProps) {
   return (
-    <DepliantLu id={bloc.id} ancre={bloc.ref} className={APRES} resume={<EnLigne texte={chaine(bloc.data.summary)} {...liens} />}>
+    <DepliantLu id={bloc.id} ancre={bloc.ref} className={APRES} vide={(bloc.text ?? "").trim() === ""} resume={<EnLigne texte={chaine(bloc.data.summary)} {...liens} />}>
       {fencedParts(bloc.text ?? "").map((partie, rang) =>
         // Une partie n'a pas d'identité : son rang dans un corps dont l'identité est ailleurs.
         partie.code ? (
