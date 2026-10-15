@@ -22,6 +22,7 @@ import {
   type Identity,
   type PlatformDb,
 } from "@otomata_tech/oto_platform/server"
+import { teamPanel } from "../../packages/plateforme/server/team-panel"
 import { hex } from "../helpers/plateforme"
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
 import { privateFolderPending, privateFolderSuite } from "../helpers/pending-migrations"
@@ -107,6 +108,19 @@ describe.skipIf(!sqlConfigured || privatePending)(
           ["Léa Roux", "member"],
         ])
         expect(teams.map((team) => team.name)).toEqual([...teams.map((team) => team.name)].sort((a, b) => a.localeCompare(b, "fr")))
+      })
+    })
+
+    // Le « ⋯ » d'une équipe dans le rail (2026-10-15) : l'équipe, les personnes, composer pour son responsable seul.
+    describe("teamPanel", () => {
+      it("should read a team by its slug with the people of the organisation, compose for its lead only, and refuse an unknown slug", async () => {
+        const claire = await teamPanel(as("claire").db, as("claire").identity, "ventes")
+        expect(claire.team).toMatchObject({ id: o.teams.ventes, name: "Ventes" })
+        expect(claire.people.map((person) => person.name)).toEqual(expect.arrayContaining(["Claire Morel", "Léa Roux"]))
+        expect([claire.compose, claire.admin]).toEqual([true, false])
+        const lea = await teamPanel(as("lea").db, as("lea").identity, "ventes")
+        expect([lea.compose, lea.admin]).toEqual([false, false])
+        expect((await refusal(teamPanel(as("lea").db, as("lea").identity, "inconnue"))).code).toBe("not_found")
       })
     })
 

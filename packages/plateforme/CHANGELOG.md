@@ -53,6 +53,14 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
 
+## 1.4.8 — 2026-10-15
+
+### Hosts
+- Install: upgrade to 1.4.8; no migration, no new variable, no import to change. Published from 1.4.7, without what main carries for 1.5.0.
+- UI: each team section of the rail has a « ⋯ »: « Les personnes de … » opens the people dialog of the Équipes screen in place, and « Supprimer l'équipe… » its deletion, for who administers (`SectionsDuRail` takes `administre?`, `RailApplication` passes it).
+- API: `GET /api/platform/teams/<slug>` reads a team for that menu: the team, the people of the organisation, `compose` and `admin`; any member of the organisation may read it, the gestures keep their own rights.
+- UI: Backspace in the mark of a sub-item of a list, or at the start of its text, outdents the line like Shift+Tab; it used to rewrite the line with one more dash and send the caret to the end.
+
 ## 1.4.7 — 2026-10-15
 
 ### Assistants

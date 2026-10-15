@@ -67,6 +67,17 @@ export type TeamView = {
   members: { userId: string; name: string; email: string; role: "lead" | "member" }[]
 }
 
+/**
+ * Une équipe lue par le « ⋯ » de sa section du rail (`GET teams/<slug>`) : elle, les personnes de l'organisation, et ce
+ * que la personne peut y faire (composer : l'administrateur ou un responsable ; `admin` : nommer les responsables, supprimer).
+ */
+export type TeamPanel = {
+  team: TeamView
+  people: { id: string; name: string; email: string }[]
+  compose: boolean
+  admin: boolean
+}
+
 /** Un nom ou un email `null` : la personne n'est plus lisible (compte supprimé entre-temps). */
 export type PlatformAccessView = {
   id: string
