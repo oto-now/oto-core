@@ -2,6 +2,17 @@
 // écrans de la plateforme qu'il range dans ses menus (HN-E05S09-1). Une seule table, lue par la coque.
 // Aucun tiret cadratin (E05-S11, AC-18) : le titre d'un Contexte est `titreDeContexte` (« Contexte · … »).
 
+/** Le « ⋯ » d'une équipe, au titre de sa section du rail : ses personnes, sa suppression (`menu-de-l-equipe.tsx`). */
+export const MENU_DE_L_EQUIPE = {
+  actions: (nom: string) => `Actions sur l'équipe ${nom}`,
+  personnes: (nom: string) => `Les personnes de ${nom}`,
+  supprimer: "Supprimer l'équipe…",
+  chargement: "Chargement de l'équipe…",
+  echec: "L'équipe n'a pas pu être lue",
+  reessayer: "Réessayer",
+  fermer: "Fermer",
+} as const
+
 export const RAIL = {
   accueil: "Accueil",
   arbreEnPanne: "L'arbre n'a pas pu être chargé",

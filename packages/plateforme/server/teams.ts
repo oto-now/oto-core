@@ -17,12 +17,13 @@
 import { createTeamSchema, teamMemberSchema, teamRoleSchema, updateTeamSchema, type TeamView } from "../schemas"
 import { isOrgAdmin, leadsTeam } from "./access"
 import type { PlatformDb } from "./db"
-import { inTeam, leadNames, memberDirectory, teamRoster, type DirectoryEntry } from "./directory"
+import { inTeam, memberDirectory, teamRoster, type DirectoryEntry } from "./directory"
 import { changedMeanwhile, fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "./errors"
 import { teamRole, type Identity } from "./identity"
 import { limitedTx } from "./limits"
 import { slugOf } from "./nodes/segments"
 import { parseId, requireAdmin, type Mutation } from "./members"
+import { teamViews } from "./team-panel"
 import type { Tx } from "./sql"
 
 /** Chemins de premier niveau pris par l'arbre, par `read journal` et `read functions` (P39, P22, E11-S19 ; `teams_slug_reserved`). */
@@ -95,23 +96,7 @@ export async function listTeams(db: PlatformDb, identity: Identity): Promise<Tea
   const [roster, directory] = await inTransaction(db, "listTeams", () =>
     Promise.all([teamRoster(db, identity.org.id), memberDirectory(db, identity.org.id)]),
   )
-  const people = new Map(directory.map((person) => [person.userId, person]))
-  return roster.teams.map((team) => ({
-    id: team.id,
-    slug: team.slug,
-    name: team.name,
-    leadName:
-      leadNames(
-        roster.memberships.filter((link) => link.teamId === team.id && link.role === "lead").map((link) => link.userId),
-        (userId) => people.get(userId)?.name,
-      ).join(", ") || null,
-    members: roster.memberships
-      .flatMap((link) => {
-        const person = link.teamId === team.id ? people.get(link.userId) : undefined
-        return person ? [{ userId: link.userId, name: person.name, email: person.email, role: link.role }] : []
-      })
-      .sort((a, b) => Number(b.role === "lead") - Number(a.role === "lead") || a.name.localeCompare(b.name, "fr")),
-  }))
+  return teamViews(roster, directory)
 }
 
 /**

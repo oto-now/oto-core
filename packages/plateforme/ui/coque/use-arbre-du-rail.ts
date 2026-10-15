@@ -26,6 +26,12 @@ export function relireLeRail(): void {
   window.dispatchEvent(new Event(RELIRE_LE_RAIL))
 }
 
+/** Écoute chaque relecture du rail (après chaque geste) : le panneau d'une équipe s'y relit ; rend le retrait de l'écoute. */
+export function surRelectureDuRail(relire: () => void): () => void {
+  window.addEventListener(RELIRE_LE_RAIL, relire)
+  return () => window.removeEventListener(RELIRE_LE_RAIL, relire)
+}
+
 /** Une réponse qui a la forme de l'arbre servi par le layout ; toute autre compte comme un échec. */
 function estUnArbre(data: unknown): data is ArbreLu {
   return typeof data === "object" && data !== null && "tree" in data && Array.isArray(data.tree) && "truncated" in data && typeof data.truncated === "boolean"

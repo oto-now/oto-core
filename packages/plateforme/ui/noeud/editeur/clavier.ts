@@ -17,7 +17,7 @@
 import type { KeyboardEvent } from "react"
 import { NIVEAUX_DE_LISTE } from "../libelles"
 import type { EtatDeLEditeur } from "./actions"
-import { estUnTitre, niveauDeLigne, positionDansLaLigne } from "./blocs-de-page"
+import { dansLaMarqueDUnSousElement, estUnTitre, niveauDeLigne, positionDansLaLigne } from "./blocs-de-page"
 import { placeDansLaSource, sourceDuChamp } from "./liens-masques"
 import * as modeleDEdition from "./modele"
 import { formeDe, FORMES_EN_LIGNES, texteDe, type Forme } from "./modele"
@@ -111,6 +111,11 @@ export function clavier(etat: EtatDeLEditeur, actions: Clavier) {
     const tabulation = evenement.key === "Tab" && !evenement.altKey && !evenement.ctrlKey && !evenement.metaKey
     // La liste à cocher n'a pas de sous-niveaux (HN-E10S04-2) : `Tab` y garde son rôle (AC-a6).
     if (tabulation && (forme === "puces" || forme === "numerotee")) return intercepter(() => niveau(etat, cle, champ, evenement.shiftKey ? -1 : 1))
+    // Retour arrière dans la marque d'un sous-élément, ou au début de son texte : la ligne remonte d'un niveau, comme Maj+Tab.
+    const enListe = forme === "puces" || forme === "numerotee"
+    if (enListe && evenement.key === "Backspace" && debut === fin && dansLaMarqueDUnSousElement(sourceDuChamp(champ), placeDansLaSource(champ, debut ?? 0))) {
+      return intercepter(() => niveau(etat, cle, champ, -1))
+    }
     if (evenement.key === "Enter" && !evenement.shiftKey) return entree(etat, actions.envoyerLeTexte, cle, champ) ? evenement.preventDefault() : undefined
     if (evenement.key === "Enter" && estUnTitre(forme)) return evenement.preventDefault()
     if (evenement.key === "Backspace" && debut === 0 && fin === 0 && rang > 0) return intercepter(() => actions.fondre(cle))

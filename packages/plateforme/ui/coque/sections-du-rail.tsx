@@ -26,6 +26,7 @@ import { GlisserDansLeRail, useDeplacementDansLeRail, type DeplacementDansLeRail
 import { aplatir } from "./freres"
 import { useGestesDuRail, type GestesDuRail } from "./gestes-du-rail"
 import { DeposerSurLeRail } from "./import-de-fichier"
+import { MenuDeLEquipe } from "./menu-de-l-equipe"
 import { useAdresseCourante } from "./noeud-ouvert"
 import type { EquipeDuRail } from "./types"
 import { DeplierAuClic, useDepliageDuRail, type DepliageDuRail } from "./use-depliage-du-rail"
@@ -48,9 +49,11 @@ type SectionProps = {
   deplacement: DeplacementDansLeRail
   /** Le genre de chaque nœud visible, par chemin : son téléchargement (E10-S01). */
   genres: ReadonlyMap<string, NodeKind>
+  /** La personne administre l'organisation : le « ⋯ » d'une équipe propose aussi de la supprimer. */
+  administre: boolean
 }
 
-function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depliage, deplacement, genres }: SectionProps) {
+function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depliage, deplacement, genres, administre }: SectionProps) {
   const chemin = useAdresseCourante(prefixe)
   const idDeLArbre = useId()
   const cleDuPli = section.cle || "org"
@@ -74,7 +77,15 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
 
   return (
     <>
-      <RailSection label={section.titre} expanded={!replie} onToggle={() => plis.toggle(cleDuPli)} controls={idDeLArbre} addItems={itemsDeLaRacine} />
+      <RailSection
+        label={section.titre}
+        expanded={!replie}
+        onToggle={() => plis.toggle(cleDuPli)}
+        controls={idDeLArbre}
+        addItems={itemsDeLaRacine}
+        // Une équipe a son « ⋯ » : ses personnes, et sa suppression pour qui administre ; ni Tout le monde ni Perso.
+        end={section.cle !== "" && section.cle !== PERSO ? <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} /> : undefined}
+      />
       {/* La liste porte le nom de sa section, comme le navigateur d'arbre qu'elle remplace. */}
       <RailTree as={LigneDuRail} id={idDeLArbre} hidden={replie} aria-label={section.titre} nodes={lignes} addItems={addItems} moreItems={moreItems} />
     </>
@@ -89,7 +100,7 @@ type ListeProps = Omit<SectionProps, "section" | "plis" | "creation" | "gestes" 
   montrer: (noeud: TreeNode) => void
 }
 
-function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer }: ListeProps) {
+function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer, administre }: ListeProps) {
   const chemin = useAdresseCourante(prefixe)
   const plis = useRailFolds()
   // Les chemins visibles, qu'une création n'essaie pas (AC-b3) ; relus avec l'arbre seulement.
@@ -117,6 +128,7 @@ function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer }
               depliage={depliage}
               deplacement={deplacement}
               genres={genres}
+              administre={administre}
             />
           ))}
         </GlisserDansLeRail.Provider>
@@ -137,10 +149,12 @@ export type SectionsDuRailProps = {
   prefixe: string
   /** L'arbre coupé à 5 000 nœuds (`visibleTree`), dit sous les sections. */
   tronque?: boolean
+  /** `isOrgAdmin` de l'identité : le « ⋯ » d'une équipe propose de la supprimer ; absent, non. */
+  administre?: boolean
 }
 
 /** Les sections de l'arbre : Tout le monde, une par équipe, Perso ; chacune ouverte par son Contexte. */
-export function SectionsDuRail({ arbre: servi, equipes, handle, prefixe, tronque = false }: SectionsDuRailProps) {
+export function SectionsDuRail({ arbre: servi, equipes, handle, prefixe, tronque = false, administre = false }: SectionsDuRailProps) {
   const { montre: arbre, ajouter } = useArbreAvecLesCreations(servi)
   const sections = sectionsDeLArbre(arbre, equipes, handle)
   // Un rail muet se lit comme un chargement sans fin (`first-team.tsx` d'oto-frontend) : une ligne le dit,
@@ -148,7 +162,7 @@ export function SectionsDuRail({ arbre: servi, equipes, handle, prefixe, tronque
   if (sections.length === 0) return <p className="oto-rail-group">{ARBRE_VIDE}</p>
   return (
     <>
-      <ListeDesSections sections={sections} arbre={arbre} equipes={equipes} handle={handle} prefixe={prefixe} montrer={ajouter} />
+      <ListeDesSections sections={sections} arbre={arbre} equipes={equipes} handle={handle} prefixe={prefixe} montrer={ajouter} administre={administre} />
       {tronque && <Alert tone="review">{ARBRE_TRONQUE}</Alert>}
     </>
   )

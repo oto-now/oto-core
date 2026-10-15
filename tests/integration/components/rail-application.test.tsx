@@ -338,6 +338,23 @@ describe("RailApplication menus (AC-a4)", () => {
     expect(appels).toEqual([{ url: "/api/platform/nodes", methode: "POST", corps: { path: "ventes/sans_titre", ...NEUF, summary: RESUMES.table, kind: "table", ...COLONNE_CLE } }])
   })
 
+  // Le « ⋯ » d'une équipe (2026-10-15) : ses personnes, ouvertes sur place sur `GET teams/<slug>` ; sa suppression, pour qui administre.
+  it("should open « Les personnes de » a team from the « ⋯ » of its section, read by GET teams/<slug>, and offer its deletion to an administrator only", async () => {
+    const equipe = { id: "t-ventes", slug: "ventes", name: "Ventes", leadName: "Claire Morel", members: [{ userId: "u-claire", name: "Claire Morel", email: "claire@demo.test", role: "lead" }] }
+    const appels = simulerLAPI({ data: { team: equipe, people: [{ id: "u-claire", name: "Claire Morel", email: "claire@demo.test" }], compose: true, admin: true } })
+    const rail = monter()
+    expect(within(rail).queryByRole("button", { name: "Actions sur l'équipe Tout le monde" })).toBeNull()
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Supprimer l'équipe…"])
+    fireEvent.click(menu().getByRole("menuitem", { name: "Les personnes de Ventes" }))
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Les personnes de Ventes" })).toHaveTextContent("Claire Morel"))
+    expect(appels).toEqual([{ url: "/api/platform/teams/ventes", methode: "GET", corps: undefined }])
+    cleanup()
+    const autre = monter({ administre: false })
+    fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
+  })
+
   it("should offer a page, a table and a procedure from the « + » of Privé as elsewhere, and create at the first free address: a visible one skipped, a taken one tried again (AC-34)", async () => {
     // `private/claire/sans_titre` est dans l'arbre : écartée d'avance ; `…_2` est prise (invisible, ou modifiée sans révision) : la suivante.
     const arbre = { data: { tree: [noeud("guide", "page", "Guide de Démo", [noeud("private", "page", "Espaces", [noeud("private/claire", "page", "Claire", [noeud("private/claire/contexte", "context", "Contexte"), noeud("private/claire/sans_titre", "page", "Sans titre")])])])], truncated: false } }

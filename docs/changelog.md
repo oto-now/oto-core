@@ -10,6 +10,14 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-15] — Rail : le « ⋯ » d'une équipe ; éditeur : Retour arrière dans une sous-liste (publié en 1.4.8)
+
+**Quoi :** un « ⋯ » au titre de chaque section d'équipe du rail : « Les personnes de … » (le dialogue de l'écran Équipes, sur place) et, pour qui administre, « Supprimer l'équipe… » ; lu par `GET teams/<slug>` (`server/team-panel.ts`, `teamViews` sorti de `listTeams`), relu à chaque relecture du rail. Dans une liste à puces ou numérotée, Retour arrière dans la marque d'un sous-élément ou au début de son texte remonte la ligne d'un niveau.
+**Pourquoi :** demandes de JB du 2026-10-15 : composer ou supprimer une équipe depuis le rail sans quitter la page ; après `Tab`, Retour arrière ajoutait un tiret en tête de ligne et envoyait le curseur au bout.
+**Problèmes :** le tiret : Retour arrière effaçait un caractère de la marque `  - `, et la liste relue réécrivait la ligne avec sa marque, le texte gardant le tiret (`elementsLus`) ; garde : le cas « should outdent a sub-item with Backspace » d'`e10s06-editeur.test.tsx`.
+**Surfaces nouvelles :** `GET teams/<slug>` et `teamPanel` (sans eux, le rail n'a ni les personnes ni les droits d'une équipe) ; `MenuDeLEquipe` ; `surRelectureDuRail` (sans lui, le dialogue garde l'équipe d'avant un geste) ; `dansLaMarqueDUnSousElement`. Un cran plus simple écarté : ouvrir l'écran Équipes avec le dialogue (choix de JB : sur place).
+**Fichiers :** `packages/plateforme/server/{team-panel,teams}.ts`, `packages/plateforme/api/teams.ts`, `packages/plateforme/schemas/teams.ts`, `packages/plateforme/ui/coque/{menu-de-l-equipe.tsx,sections-du-rail.tsx,rail-application.tsx,use-arbre-du-rail.ts,libelles.ts}`, `packages/plateforme/ui/noeud/editeur/{blocs-de-page,clavier}.ts`, tests (`rail-application`, `equipes-services`, `e10s06-editeur`), `docs/conception/{ecrans-et-coque,editeur-de-blocs}.md`, `docs/reference/services-et-portes.md`, `.method/conventions/component-registry.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-15] — Éditeur : chaque titre se replie, ouvert par défaut ; trois corps de titre ; glyphes du « + » ; lien d'un Texte qui se suit (publié en 1.4.7)
 
 **Quoi :** chaque titre replie sa section (chevron dans le titre, à la lecture et dans l'éditeur), ouverte par défaut ; le geste se garde dans le navigateur (`oto-plis`, `<id>=1|0`, le défaut propre à chaque pli : titre ouvert, menu dépliant replié). La case « Repliable », `collapsible` et le marqueur `<!-- toggle -->` partent (l'analyse retire encore le marqueur d'une ligne de titre). Grand, moyen et petit titre à 24, 20 et 17 px, en lecture et dans l'éditeur. Un glyphe devant chaque entrée du « + » et de « / ». Le rendu au repos d'un champ passe au-dessus du champ : le clic sur un lien d'un Texte suit le lien au lieu d'ouvrir le panneau « Lien » (régression de la 1.4.3, quand le champ au repos est devenu absolu ; la copie d'une liste était déjà au-dessus).

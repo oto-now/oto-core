@@ -198,6 +198,24 @@ export function niveauDeLigne(texte: string, curseur: number, pas: 1 | -1, numer
   return { texte: [...lignes.slice(0, ligne), suivante, ...lignes.slice(ligne + 1)].join("\n"), ligne, colonne }
 }
 
+/**
+ * Le curseur est dans la marque d'un sous-élément, ou juste après elle (ses espaces, puis `- ` ou `1. `) : Retour arrière
+ * y remonte la ligne d'un niveau, comme `Maj+Tab`. Sans quoi il effaçait un caractère de la marque, et la liste,
+ * relue, réécrivait la ligne avec un tiret de plus, le curseur au bout du champ.
+ */
+export function dansLaMarqueDUnSousElement(texte: string, curseur: number): boolean {
+  const lignes = texte.split("\n")
+  let debut = 0
+  let ligne = 0
+  while (ligne < lignes.length - 1 && curseur > debut + lignes[ligne].length) {
+    debut += lignes[ligne].length + 1
+    ligne += 1
+  }
+  const profondeur = profondeurs(lignes.slice(0, ligne + 1))[ligne]
+  const colonne = curseur - debut
+  return profondeur > 0 && colonne > 0 && colonne <= enTeteDeLigne(lignes[ligne], profondeur)
+}
+
 /** Le curseur au rang `colonne` du texte de la ligne `ligne`, marque et espaces passés, dans le champ réécrit. */
 export function positionDansLaLigne(texte: string, ligne: number, colonne: number): number {
   const lignes = texte.split("\n")

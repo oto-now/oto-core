@@ -253,6 +253,24 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
     await waitFor(() => expect(annonce("Cette ligne est déjà au premier niveau.")).toBe(true))
   })
 
+  // Retour arrière au début du texte d'un sous-élément l'effaçait d'un caractère de sa marque : la liste réécrivait la
+  // ligne avec un tiret de plus, et le curseur partait au bout. Il remonte la ligne d'un niveau, comme Maj+Tab.
+  it("should outdent a sub-item with Backspace at the start of its text or inside its mark, without touching its text", async () => {
+    monter([bloc("fa000000-0000-4000-8000-00000000000a", "list", null, { items: [{ text: "Léa", children: { items: ["relancer"] } }] })])
+    const liste = ouvrirLeChamp(/^Modifier cette liste — Léa/)
+    expect(liste).toHaveValue("Léa\n  - relancer")
+    act(() => liste.focus())
+    liste.setSelectionRange(8, 8)
+    expect(fireEvent.keyDown(liste, { key: "Backspace" })).toBe(false)
+    await waitFor(() => expect(liste).toHaveValue("Léa\nrelancer"))
+    await waitFor(() => expect(liste.selectionStart).toBe(4))
+    fireEvent.keyDown(liste, { key: "Tab" })
+    await waitFor(() => expect(liste).toHaveValue("Léa\n  - relancer"))
+    liste.setSelectionRange(6, 6)
+    expect(fireEvent.keyDown(liste, { key: "Backspace" })).toBe(false)
+    await waitFor(() => expect(liste).toHaveValue("Léa\nrelancer"))
+  })
+
   it("should refuse a fourth level, keep Tab for a checklist, and let Tab choose in the list of « @ »", async () => {
     const trois = bloc("f8000000-0000-4000-8000-000000000008", "list", null, { items: [{ text: "a", children: { items: [{ text: "b", children: { items: ["c"] } }] } }] })
     const cases = bloc("f9000000-0000-4000-8000-000000000009", "checklist", null, { items: [{ text: "x", checked: false }, { text: "y", checked: false }] })
