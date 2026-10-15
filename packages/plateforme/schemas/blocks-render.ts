@@ -15,7 +15,7 @@
 // Repris de la maquette (`mcp-test/src/proto/services/sections.ts`, `sameTitle`) : titres comparés
 // sans casse, sans accent et sans espace de bord. Retiré : les sections `{title, body}` en markdown
 // (→ plages de blocs).
-import { blockInputSchema, chars, COLLAPSIBLE_MARKER, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
+import { blockInputSchema, chars, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
 import { fileBaseName } from "./csv"
 import { filePath, fileSizeText, fileTypeOf } from "./files"
 import { frontmatterHead, splitFrontmatter } from "./frontmatter"
@@ -165,7 +165,7 @@ function renderBody<B extends BlockLike>(block: B, options: RenderOptions<B>): s
   if (valid === null) return `<!-- block ${block.type} not shown: this platform version does not know it -->`
   switch (valid.type) {
     case "heading":
-      return `${"#".repeat(Math.min(HASHES_MAX, (options.headingBase ?? DEFAULT_HEADING_BASE) + valid.data.level - 1))} ${valid.text}${valid.data.collapsible === true ? ` ${COLLAPSIBLE_MARKER}` : ""}`
+      return `${"#".repeat(Math.min(HASHES_MAX, (options.headingBase ?? DEFAULT_HEADING_BASE) + valid.data.level - 1))} ${valid.text}`
     case "paragraph":
       return valid.text
     case "list":

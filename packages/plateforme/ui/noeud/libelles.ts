@@ -111,9 +111,8 @@ export const REPLI_EDITE = {
   plier: (ouvert: boolean, mots: string) => `${ouvert ? "Replier" : "Déplier"} le corps — ${mots}`,
 } as const
 
-/** Les plis d'une page : la case « Repliable » d'un titre, et le chevron qui replie ou déplie sa section. */
+/** Les plis d'une page : le chevron qui replie ou déplie la section d'un titre. */
 export const PLIS = {
-  repliable: "Repliable",
   section: (ouvert: boolean, titre: string) => `${ouvert ? "Replier" : "Déplier"} la section — ${titre}`,
 } as const
 

@@ -27,12 +27,12 @@
 // E11-S05 (AC-g1) : retirer le dernier bloc laisse un Texte vide ; le Texte d'une page vide vit dans `page-vide.ts`.
 //
 // Trois titres (Grand, Moyen, Petit : niveaux 1, 2, 3), qui remplacent le « Titre » unique d'E05-S10, et leurs préfixes
-// à la Notion ; un titre garde son option « Repliable » (`collapsible`) d'un niveau à l'autre.
+// à la Notion.
 //
 // 1.1.3 : le diagramme s'écrit (forme `diagramme`, bloc `mermaid`), en lignes comme le code, et passe de l'un à l'autre
 // avec son texte. Vide, il ne part pas, comme tout bloc vide (`estVide`) : le service refuse un `mermaid` blanc.
 import type { BlockView } from "../../../schemas"
-import { isCollapsible, simpleTableOf } from "../../../schemas/blocks"
+import { simpleTableOf } from "../../../schemas/blocks"
 import { isRecord } from "../../../schemas/tables"
 import { texteDUnAppel } from "../../procedure/libelles"
 import { texteLu } from "../en-ligne"
@@ -80,8 +80,8 @@ function nouvelleCle(): string {
   return `rangee-${compteur}`
 }
 
-/** Champs de `data` propres à une forme : un changement de forme les retire (E05-S02, § Schémas) ; `collapsible` suit d'un titre à l'autre. */
-const PROPRES_A_LA_FORME = new Set(["level", "collapsible", "items", "ordered", "start", "language", "tone", "summary", "columns", "rows", "align"])
+/** Champs de `data` propres à une forme : un changement de forme les retire (E05-S02, § Schémas). */
+const PROPRES_A_LA_FORME = new Set(["level", "items", "ordered", "start", "language", "tone", "summary", "columns", "rows", "align"])
 
 /** Les formes qui s'écrivent en lignes (un élément par ligne, ou du code) : Entrée y passe à la ligne. */
 export const FORMES_EN_LIGNES: ReadonlySet<Forme> = new Set(["puces", "numerotee", "cases", "code", "diagramme"])
@@ -271,9 +271,7 @@ export function avecForme(servi: BlocEdite, forme: Forme): BlocEdite {
   // Un Texte devenu repli : sa première ligne en résumé, coupée à 200 caractères ; les autres, le corps (E10-S06, AC-a3).
   if (forme === "repli") return avecTexte({ ...bloc, type: "toggle", text: "", data }, texte)
   if (forme === "tableau") return avecTexte({ ...bloc, type: "simple_table", text: null, data }, texte)
-  // D'un titre à l'autre, l'option « Repliable » reste.
-  const repliable = isCollapsible(bloc) ? { collapsible: true } : {}
-  return { ...bloc, type: "heading", text: texte, data: { ...data, level: NIVEAUX_DES_TITRES[forme], ...repliable } }
+  return { ...bloc, type: "heading", text: texte, data: { ...data, level: NIVEAUX_DES_TITRES[forme] } }
 }
 
 /** Les premiers mots d'un bloc, balisage retiré, pour nommer ses gestes (AC8, AC10) ; un séparateur, sans texte, par son nom. */

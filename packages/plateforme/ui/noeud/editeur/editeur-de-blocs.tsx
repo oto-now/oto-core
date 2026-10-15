@@ -31,7 +31,7 @@
 // (`selection-de-blocs.ts`) : surlignés, annoncés dans une région vivante montée vide, la zone nommée par leur nombre
 // quand elle a le focus ; le menu d'un bloc sélectionné parmi d'autres supprime et déplace le groupe.
 //
-// Il tient les titres repliables (`plis-de-l-editeur.ts`) : les rangées qu'un titre replié cache ne se montrent pas.
+// Il tient les plis des titres (`plis-de-l-editeur.ts`) : les rangées qu'un titre replié cache ne se montrent pas.
 import { useMemo, useState, type ReactNode } from "react"
 import type { BlockView, NodeKind } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
@@ -42,7 +42,6 @@ import { Publication } from "../publication"
 import { ContexteDesGestes, useGestesStables } from "./gestes"
 import { useGlisser } from "./glisser"
 import { AlerteDEdition, IndicationDEnregistrement, LigneDAnnonce } from "./lignes-d-etat"
-import { avecRepliable } from "./blocs-de-page"
 import type { Rangee } from "./modele"
 import { estLaPageVide } from "./page-vide"
 import type { LiensDesBlocs } from "./champ-de-bloc"
@@ -91,13 +90,13 @@ type RangeesProps = {
   selection: ReadonlySet<string>
   /** Le bloc touché, dont le champ est monté (1.1.3). */
   ouvert: string | null
-  /** Les rangées cachées sous un titre replié, par rang ; les titres repliables ouverts, par clé. */
+  /** Les rangées cachées sous un titre replié, par rang ; les titres repliés, par clé. */
   cachees: readonly boolean[]
-  plisOuverts: ReadonlySet<string>
+  replies: ReadonlySet<string>
 }
 
 /** Les rangées, une par bloc, rendues par leur clé de rendu, jamais par leur rang ; le Texte d'une page vide porte l'invite. */
-function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert, cachees, plisOuverts }: RangeesProps) {
+function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, referencesRendues, fichiers, depots, selection, ouvert, cachees, replies }: RangeesProps) {
   const invite = estLaPageVide(modele) ? EDITEUR.invite : undefined
   return modele.map((rangee, rang) => (
     <RangeeDeBloc
@@ -110,7 +109,7 @@ function Rangees({ modele, tenue, menuOuvert, erreurs, conflit, liens, reference
       menuOuvert={menuOuvert === rangee.cle}
       ouvert={ouvert === rangee.cle}
       cachee={cachees[rang]}
-      pliOuvert={plisOuverts.has(rangee.cle)}
+      pliOuvert={!replies.has(rangee.cle)}
       // Un conflit ouvert : les autres champs sont en lecture seule jusqu'à son règlement (HN-E05S08-3).
       verrouillee={conflit !== null && conflit.cle !== rangee.cle}
       erreur={erreurs[rangee.cle] ?? null}
@@ -161,16 +160,7 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
     activerLeChamp: editeur.activerLeChamp,
     basculerLePli: (cle) => {
       const rangee = editeur.modele.find((une) => une.cle === cle)
-      if (rangee) plis.changer([rangee], !plis.ouverts.has(cle))
-    },
-    rendreRepliable: (cle, repliable) => {
-      const rangee = editeur.modele.find((une) => une.cle === cle)
-      if (!rangee) return
-      // L'option part tout de suite, comme un changement de style.
-      editeur.actions.modifierLeBloc(cle, avecRepliable(rangee.bloc, repliable))
-      editeur.actions.envoyerLeTexte(cle)
-      // Un titre qu'on vient de rendre repliable reste ouvert : l'auteur garde sous les yeux ce qu'il écrit.
-      if (repliable) plis.changer([rangee], true)
+      if (rangee) plis.changer([rangee], plis.replies.has(cle))
     },
   })
   return (
@@ -204,7 +194,7 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
             selection={selection.ensemble}
             ouvert={editeur.ouvert}
             cachees={plis.cachees(editeur.modele)}
-            plisOuverts={plis.ouverts}
+            replies={plis.replies}
           />
           <RectangleDeSelection rectangle={selection.rectangle} />
           <p role="status" className="oto-sr-only">

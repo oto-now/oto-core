@@ -17,6 +17,18 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.4.7 — 2026-10-15
+
+### Assistants
+- Every heading now folds its section on screen, open by default; write headings plainly (`## Title`), the `<!-- toggle -->` marker is no longer needed and is dropped when read.
+
+### Hosts
+- Install: upgrade to 1.4.7; no migration, no new variable, no import to change. Published from 1.4.6, without what main carries for 1.5.0.
+- UI: every title folds its section from a chevron, open by default; what a person folds is kept in their browser (`localStorage` key `oto-plis`, replacing `oto-plis-ouverts`); the « Repliable » checkbox and the `collapsible` data of a heading are gone. A toggle block still opens folded.
+- UI: large, medium and small titles now differ: 24, 20 and 17 px, in reading and in the editor.
+- UI: each entry of the « + » and « / » block lists has its icon.
+- UI: a click on a link of a Texte block at rest follows the link again (since 1.4.3 it opened the link panel); lists were not affected.
+
 ## 1.4.6 — 2026-10-14
 
 ### Hosts

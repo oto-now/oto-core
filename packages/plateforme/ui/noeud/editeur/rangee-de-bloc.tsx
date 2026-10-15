@@ -38,8 +38,8 @@
 // « Voir le code » replié (1.1.4, `DiagrammeAuRepos`). La rangée est mémoïsée : une frappe ne rend que la sienne ;
 // les entrées de ses menus se construisent au premier geste qui peut les ouvrir.
 //
-// Trois titres au menu « Style », et la case « Repliable » d'un titre : son chevron replie sa section, dont les rangées
-// restent montées sans se montrer.
+// Trois titres au menu « Style » ; le chevron de chaque titre replie sa section, dont les rangées restent montées sans
+// se montrer.
 import { memo, useId, useState, type DragEvent, type ReactNode } from "react"
 import { ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown"
 import { ArrowUp } from "@phosphor-icons/react/dist/csr/ArrowUp"
@@ -48,7 +48,7 @@ import { DotsSixVertical } from "@phosphor-icons/react/dist/csr/DotsSixVertical"
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus"
 import { Table } from "@phosphor-icons/react/dist/csr/Table"
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash"
-import { EMBED_HEIGHTS, IMAGE_WIDTHS, isCollapsible, simpleTableOf, type EmbedHeight } from "../../../schemas/blocks"
+import { EMBED_HEIGHTS, IMAGE_WIDTHS, simpleTableOf, type EmbedHeight } from "../../../schemas/blocks"
 import { fileTypeOf } from "../../../schemas/files"
 import { aDesFichiers } from "../../coque/import-de-fichier"
 import { BlockRow } from "../../ds/react/block-row"
@@ -57,11 +57,11 @@ import { DropdownMenu, type MenuItem } from "../../ds/react/overlays"
 import { Button, IconButton } from "../../ds/react/primitives"
 import { hauteurDe } from "../cadre-integre"
 import { texteLu } from "../en-ligne"
-import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, PLIS, SELECTION } from "../libelles"
+import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, SELECTION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { BoutonDuPli } from "../plis-lus"
 import { baliseDuTitre, largeurDe, RenduDUnBloc } from "../rendu-des-blocs"
-import { estUnTitre, type Position } from "./blocs-de-page"
+import type { Position } from "./blocs-de-page"
 import { ChampDeBloc, type LiensDesBlocs } from "./champ-de-bloc"
 import { itemsDuChoix } from "./choix-de-bloc"
 import { sortirDuBlocAuClavier } from "./clavier"
@@ -101,7 +101,7 @@ type RangeeDeBlocProps = {
   depot?: Depot
   /** La rangée est dans la section d'un titre replié : elle ne se montre pas. */
   cachee: boolean
-  /** Un titre repliable : sa section est dépliée. */
+  /** Un titre : sa section est dépliée. */
   pliOuvert: boolean
 }
 
@@ -141,13 +141,7 @@ function stylesDuMenu({ cle, bloc, forme, cellule }: Menu, gestes: Gestes): Menu
   }
   if (forme === "tableau") return itemsDuTableau(cle, bloc, cellule, gestes)
   if (!forme) return [{ group: EDITEUR.lectureSeule }]
-  // Un titre a sa case « Repliable », sous ses formes ; aucun autre bloc ne l'a.
-  const repliable = isCollapsible(bloc)
-  return [
-    { group: MENU_DU_BLOC.style },
-    ...FORMES_ECRITES.map((une) => ({ label: FORMES[une].libelle, radio: true, checked: une === forme, onSelect: () => gestes.changerDeForme(cle, une) })),
-    ...(estUnTitre(forme) ? [{ separator: true }, { label: PLIS.repliable, checked: repliable, onSelect: () => gestes.rendreRepliable(cle, !repliable) }] : []),
-  ]
+  return [{ group: MENU_DU_BLOC.style }, ...FORMES_ECRITES.map((une) => ({ label: FORMES[une].libelle, radio: true, checked: une === forme, onSelect: () => gestes.changerDeForme(cle, une) }))]
 }
 
 /** Le menu de la poignée (E05-S10, AC-a2) : monter, descendre, le style, dupliquer, supprimer. */
@@ -185,7 +179,7 @@ type BlocEcritProps = {
   joindre?: (quoi: Genre) => void
   /** « / » propose « Intégration » (1.4.3). */
   integrer?: () => void
-  /** Un titre repliable : sa section est dépliée. */
+  /** Un titre : sa section est dépliée. */
   pliOuvert: boolean
 }
 
@@ -234,13 +228,12 @@ function BlocEcrit(props: BlocEcritProps) {
   // Un titre garde au repos la balise de son niveau, comme à l'écran de lecture (E10-S04, AC-b3).
   const Titre = baliseDuTitre(bloc.data.level)
   const champ = <ChampsDuBloc {...props} decritPar={erreur ? id : undefined} />
-  const repliable = isCollapsible(bloc)
   return (
     <>
       {bloc.type === "heading" ? (
-        <Titre id={bloc.ref} aria-label={texteLu(texteDe(bloc))} className={repliable ? "oto-titre-repliable" : undefined}>
-          {/* Le chevron d'un titre repliable, avant son champ, comme à la lecture (`plis-lus.tsx`). */}
-          {repliable && <BoutonDuPli ouvert={props.pliOuvert} nom={premiersMots(bloc)} basculer={() => gestes.basculerLePli(cle)} />}
+        <Titre id={bloc.ref} aria-label={texteLu(texteDe(bloc))} className="oto-titre-repliable">
+          {/* Le chevron du titre, avant son champ, comme à la lecture (`plis-lus.tsx`). */}
+          <BoutonDuPli ouvert={props.pliOuvert} nom={premiersMots(bloc)} basculer={() => gestes.basculerLePli(cle)} />
           {champ}
         </Titre>
       ) : (

@@ -1,33 +1,36 @@
 "use client"
 
-// Les titres repliables et les menus dépliants qu'une personne a ouverts, gardés dans CE navigateur par l'`id` de
-// leur bloc (`liste-gardee.ts`), ni en base ni dans l'adresse : replié par défaut, à la lecture comme dans l'éditeur,
-// un pli ouvert le reste au rechargement. La liste porte les plis OUVERTS, le défaut étant replié, et garde les
-// 500 derniers ouverts : elle ne grandit pas sans fin. Chaque geste relit la liste avant de l'écrire, plusieurs plis
-// d'une page l'écrivant chacun. L'état se lit après le montage : le rendu du serveur et l'hydratation s'accordent.
+// Les titres et les menus dépliants qu'une personne a ouverts ou repliés, gardés dans CE navigateur par l'`id` de leur
+// bloc (`liste-gardee.ts`), ni en base ni dans l'adresse : un titre est ouvert par défaut, un menu dépliant replié, et
+// le geste de la personne survit au rechargement. Chaque entrée dit l'état choisi (`<id>=1` ouvert, `<id>=0` replié),
+// les 500 dernières gardées : la liste ne grandit pas sans fin. Chaque geste relit la liste avant de l'écrire, plusieurs
+// plis d'une page l'écrivant chacun. L'état se lit après le montage : le rendu du serveur et l'hydratation s'accordent.
 import { useCallback, useEffect, useState, type RefObject } from "react"
 import { ecrireLaListe, lireLaListe } from "../components/liste-gardee"
 
-const CLE_DE_STOCKAGE = "oto-plis-ouverts"
+const CLE_DE_STOCKAGE = "oto-plis"
 const PLAFOND = 500
 
-/** Les `id` des blocs ouverts dans ce navigateur. */
-export const plisOuverts = (): ReadonlySet<string> => new Set(lireLaListe(CLE_DE_STOCKAGE))
+/** L'état choisi pour chaque bloc dans ce navigateur : `true` ouvert, `false` replié ; un bloc absent garde son défaut. */
+export function plisGardes(): ReadonlyMap<string, boolean> {
+  return new Map(lireLaListe(CLE_DE_STOCKAGE).map((entree) => [entree.slice(0, -2), entree.endsWith("=1")]))
+}
 
-/** Le pli du bloc `id` ouvert ou refermé, écrit tout de suite. */
+/** Le pli du bloc `id` ouvert ou replié, écrit tout de suite. */
 export function garderLePli(id: string, ouvert: boolean): void {
-  const autres = lireLaListe(CLE_DE_STOCKAGE).filter((un) => un !== id)
-  ecrireLaListe(CLE_DE_STOCKAGE, ouvert ? [...autres, id].slice(-PLAFOND) : autres)
+  const autres = lireLaListe(CLE_DE_STOCKAGE).filter((entree) => entree.slice(0, -2) !== id)
+  ecrireLaListe(CLE_DE_STOCKAGE, [...autres, `${id}=${ouvert ? 1 : 0}`].slice(-PLAFOND))
 }
 
 /**
- * L'état d'un pli : `defaut` au premier rendu (replié pour un bloc servi, ouvert pour un bloc qu'on vient d'écrire), puis
- * ouvert si ce navigateur l'a gardé ouvert ; un bloc sans `id` n'est pas gardé.
+ * L'état d'un pli : `defaut` au premier rendu, puis celui que ce navigateur a gardé pour le bloc ; un bloc sans `id`
+ * (pas encore écrit) n'est pas gardé.
  */
-export function usePliGarde(id: string | undefined, defaut = false): [boolean, (ouvert: boolean) => void] {
+export function usePliGarde(id: string | undefined, defaut: boolean): [boolean, (ouvert: boolean) => void] {
   const [ouvert, setOuvert] = useState(defaut)
   useEffect(() => {
-    if (id !== undefined && plisOuverts().has(id)) setOuvert(true)
+    const garde = id === undefined ? undefined : plisGardes().get(id)
+    if (garde !== undefined) setOuvert(garde)
   }, [id])
   const changer = useCallback(
     (suivant: boolean) => {

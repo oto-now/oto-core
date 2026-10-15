@@ -132,10 +132,11 @@ describe("RenduDUnBloc — page markdown forms (E10-S04)", () => {
   })
 })
 
-// Story `titres-et-replis` (AC-b, AC-c, AC-e) : les plis d'une page lue, repliés à l'arrivée, gardés ouverts dans ce navigateur.
+// Les plis d'une page lue : chaque titre replie sa section, ouverte à l'arrivée ; un menu dépliant, replié à l'arrivée ; le
+// geste de la personne gardé dans ce navigateur.
 describe("BlocsRepliables — folds of a read page", () => {
   const page = () => [
-    bloc(id(20), "heading", "Annexes", { level: 1, collapsible: true }),
+    bloc(id(20), "heading", "Annexes", { level: 1 }),
     bloc(id(21), "paragraph", "Détail des annexes"),
     bloc(id(22), "heading", "Suite", { level: 1 }),
     bloc(id(23), "toggle", "Corps caché", { summary: "Voir" }),
@@ -147,21 +148,22 @@ describe("BlocsRepliables — folds of a read page", () => {
       </Reader>,
     )
 
-  it("should fold the section of a collapsible title, the chevron in the title unfolding it, and keep it open on the next visit", async () => {
+  it("should open every section at first, fold one from the chevron in its title, and keep it folded on the next visit", async () => {
     rendreLaPage()
     const titre = screen.getByRole("heading", { name: /Annexes/ })
-    const chevron = within(titre).getByRole("button", { name: "Déplier la section — Annexes" })
-    expect(screen.getByText("Détail des annexes")).not.toBeVisible()
-    expect(screen.getByRole("heading", { name: "Suite" })).toBeVisible()
-    fireEvent.click(chevron)
-    expect(chevron).toHaveAttribute("aria-expanded", "true")
+    const chevron = within(titre).getByRole("button", { name: "Replier la section — Annexes" })
+    expect(within(screen.getByRole("heading", { name: /Suite/ })).getByRole("button", { name: "Replier la section — Suite" })).toBeVisible()
     expect(screen.getByText("Détail des annexes")).toBeVisible()
+    fireEvent.click(chevron)
+    expect(chevron).toHaveAttribute("aria-expanded", "false")
+    expect(screen.getByText("Détail des annexes")).not.toBeVisible()
+    expect(screen.getByRole("heading", { name: /Suite/ })).toBeVisible()
     cleanup()
     rendreLaPage()
-    await waitFor(() => expect(screen.getByText("Détail des annexes")).toBeVisible())
+    await waitFor(() => expect(screen.getByText("Détail des annexes")).not.toBeVisible())
   })
 
-  it("should keep the folded default and still unfold when the browser refuses its storage", () => {
+  it("should keep the open default and still fold when the browser refuses its storage", () => {
     const lire = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new DOMException("refusé", "SecurityError")
     })
@@ -170,9 +172,9 @@ describe("BlocsRepliables — folds of a read page", () => {
     })
     try {
       rendreLaPage()
-      expect(screen.getByText("Détail des annexes")).not.toBeVisible()
-      fireEvent.click(screen.getByRole("button", { name: "Déplier la section — Annexes" }))
       expect(screen.getByText("Détail des annexes")).toBeVisible()
+      fireEvent.click(screen.getByRole("button", { name: "Replier la section — Annexes" }))
+      expect(screen.getByText("Détail des annexes")).not.toBeVisible()
     } finally {
       lire.mockRestore()
       ecrire.mockRestore()
@@ -180,6 +182,7 @@ describe("BlocsRepliables — folds of a read page", () => {
   })
 
   it("should open a folded section when the address anchor targets one of its blocks", async () => {
+    window.localStorage.setItem("oto-plis", `${id(20)}=0`)
     // jsdom ne fait pas défiler : l'ancre montrée se lit sur un espion.
     const avant = Element.prototype.scrollIntoView
     const defiler = vi.fn()
@@ -187,22 +190,23 @@ describe("BlocsRepliables — folds of a read page", () => {
     try {
       window.history.replaceState(null, "", "#00000021")
       rendreLaPage()
-      await waitFor(() => expect(screen.getByText("Détail des annexes")).toBeVisible())
       await waitFor(() => expect(defiler).toHaveBeenCalledTimes(1))
+      expect(screen.getByText("Détail des annexes")).toBeVisible()
     } finally {
       Element.prototype.scrollIntoView = avant
       act(() => window.history.replaceState(null, "", "#"))
     }
   })
 
-  it("should draw a toggle with its chevron first and no title box, and keep it open on the next visit", async () => {
+  it("should draw a toggle folded at first, its chevron first and no title box, and keep it open on the next visit", async () => {
     const { container } = rendreLaPage()
     const repli = container.querySelector("details.oto-depliant")
+    expect(repli).not.toHaveAttribute("open")
     const resume = repli?.querySelector("summary")
     expect(resume?.firstElementChild).toHaveClass("oto-pli-chevron")
     expect(resume?.querySelector("strong")).toBeNull()
     if (resume) fireEvent.click(resume)
-    await waitFor(() => expect(window.localStorage.getItem("oto-plis-ouverts")).toBe(id(23)))
+    await waitFor(() => expect(window.localStorage.getItem("oto-plis")).toBe(`${id(23)}=1`))
     cleanup()
     const relu = rendreLaPage().container.querySelector("details.oto-depliant")
     await waitFor(() => expect(relu).toHaveAttribute("open"))

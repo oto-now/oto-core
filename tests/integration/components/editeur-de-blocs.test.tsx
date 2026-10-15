@@ -405,28 +405,21 @@ describe("EditeurDeBlocs, menu de la poignée (E05-S10, AC-a2, AC-a5)", () => {
     expect(api.envoyes[0].ops?.[0]).toMatchObject({ input: { type: "heading", text: "Suite revue", data: { level: 4 } } })
   })
 
-  // Story `titres-et-replis` (AC-b, AC-c) : un titre repliable servi est replié, son chevron déplie sa section, sa case se décoche.
-  it("should hide the section of a served collapsible title until its chevron unfolds it, remember it, and send the option unchecked from the menu", async () => {
-    const annexes = { ...bloc("a8000000-0000-4000-8000-000000000008", "heading", "Annexes", { level: 1, collapsible: true }), revision: 2 }
+  // Chaque titre se replie, ouvert à l'arrivée : son chevron cache sa section sans rien envoyer, et ce navigateur s'en souvient.
+  it("should give every title a chevron that folds its section without sending, remembered by this browser", async () => {
+    const annexes = { ...bloc("a8000000-0000-4000-8000-000000000008", "heading", "Annexes", { level: 1 }), revision: 2 }
     const detail = bloc("a9000000-0000-4000-8000-000000000009", "paragraph", "Détail des annexes")
     const suite = bloc("aa000000-0000-4000-8000-00000000000a", "heading", "Suite", { level: 1 })
     monter({ blocs: [annexes, detail, suite] })
     const rangee = (id: string) => document.querySelector<HTMLElement>(`[data-cle="${id}"]`)
+    expect(rangee(detail.id)).toBeVisible()
+    expect(bouton("Replier la section — Suite")).toHaveAttribute("aria-expanded", "true")
+    fireEvent.click(bouton("Replier la section — Annexes"))
     expect(rangee(detail.id)).not.toBeVisible()
     expect(rangee(suite.id)).toBeVisible()
-    const chevron = bouton("Déplier la section — Annexes")
-    expect(chevron).toHaveAttribute("aria-expanded", "false")
-    fireEvent.click(chevron)
-    expect(rangee(detail.id)).toBeVisible()
-    expect(window.localStorage.getItem("oto-plis-ouverts")).toBe(annexes.id)
+    expect(window.localStorage.getItem("oto-plis")).toBe(`${annexes.id}=0`)
+    expect(menuDu("Annexes").queryByRole("menuitemcheckbox")).toBeNull()
     expect(api.envoyes).toEqual([])
-    const menu = menuDu("Annexes")
-    const repliable = menu.getByRole("menuitemcheckbox", { name: "Repliable" })
-    expect(repliable).toHaveAttribute("aria-checked", "true")
-    fireEvent.click(repliable)
-    await waitFor(() => expect(api.envoyes).toHaveLength(1))
-    expect(api.envoyes[0].ops?.[0]).toMatchObject({ op: "replace_block", input: { type: "heading", text: "Annexes", data: { level: 1 } } })
-    expect(screen.queryByRole("button", { name: /la section — Annexes/ })).toBeNull()
     window.localStorage.clear()
   })
 

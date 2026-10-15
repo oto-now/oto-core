@@ -126,8 +126,10 @@
   grid-area: 1 / 1;
 }
 
-/* Le rendu laisse passer le pointeur jusqu'au champ, sauf sur un lien, qui se suit ; il ne rogne pas l'anneau d'un lien. */
+/* Le rendu laisse passer le pointeur jusqu'au champ, sauf sur un lien, qui se suit ; il ne rogne pas l'anneau d'un lien. Positionné, il passe au-dessus du champ, que le repos rend absolu (plus haut) : sans quoi le clic sur un lien tombait dans le champ et ouvrait le panneau « Lien ». */
 .oto-block-pile > .oto-block-rendu {
+  position: relative;
+  z-index: 1;
   pointer-events: none;
   background-image: none;
   background-color: transparent;

@@ -162,9 +162,8 @@ function headingAt(line: string, number: number, mode: ParseMode): BlockInput | 
   if (!match || match[1].length > HEADING_LEVELS.length + 1) return null
   const rest = line.slice(match[0].length)
   const written = trimBlanks(rest)
-  // Un titre repliable finit par son marqueur, qui n'entre pas dans son texte.
-  const collapsible = written.endsWith(COLLAPSIBLE_MARKER)
-  const text = collapsible ? trimBlanks(written.slice(0, -COLLAPSIBLE_MARKER.length)) : written
+  // Le marqueur d'un titre repliable de la 1.4.5 n'entre pas dans le texte : chaque titre se replie désormais.
+  const text = written.endsWith(COLLAPSIBLE_MARKER) ? trimBlanks(written.slice(0, -COLLAPSIBLE_MARKER.length)) : written
   if (text === "" || LINE_SEPARATORS.test(rest)) return null
   const hashes = match[1].length
   if (hashes === 1 && !mode.tolerant) refuse(`line ${number} « ${quoted(line)} » is the level of the page title; headings start at ##.`)
@@ -172,7 +171,7 @@ function headingAt(line: string, number: number, mode: ParseMode): BlockInput | 
     refuseOrKeep(mode, `line ${number}: a heading holds ${formatCount(HEADING_TEXT_MAX)} characters at most (${formatCount(charCount(text))}).`)
     return null
   }
-  return { type: "heading", text, data: { level: HEADING_LEVELS[Math.max(hashes - 2, 0)], ...(collapsible ? { collapsible: true } : {}) } }
+  return { type: "heading", text, data: { level: HEADING_LEVELS[Math.max(hashes - 2, 0)] } }
 }
 
 /**
