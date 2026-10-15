@@ -1,7 +1,7 @@
 # Lecture des fichiers par un assistant
 
-- **Statut** : proposé
-- **Dernière révision** : 2026-10-14
+- **Statut** : validé avec Alexis le 15/10/2026
+- **Dernière révision** : 2026-10-15
 
 ## Résumé
 
@@ -74,27 +74,31 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - **Le texte** se recalcule à chaque `read {file, section}`, depuis l'objet : rien d'autre à stocker, donc rien de plus à copier à la duplication, à purger avec la corbeille ni à transférer avec une organisation.
 - Un fichier déposé avant cette version reçoit son aperçu à sa première lecture par `read {file}` ; jusque-là, sa ligne dans la page reste « nom, taille, type ».
 - Une duplication copie l'aperçu avec la ligne ; un transfert d'organisation le porte comme les autres colonnes de `files`.
-- L'aperçu est borné à 300 caractères ; le plan rangé, à 200 parties (au-delà, les suivantes se disent par leur nombre) ; `read` d'une page montre l'aperçu des 20 premiers fichiers, les suivants par leur nom seul. Un fichier illisible porte un statut terminal (`unsupported`, `encrypted`, `empty`, `failed`, repris d'oto 1), dit dans son aperçu, et le dépôt lui-même n'échoue jamais pour une lecture ratée.
+- Un fichier rendu par une fonction de connecteur est un fichier en transit ([fichiers et stockage](fichiers-et-stockage.md)) : il se lit par `read {file}` comme un fichier joint tant qu'il existe, et son aperçu se calcule à sa première lecture ; rien n'est gardé après son effacement.
+- L'aperçu est borné à 300 caractères ; le plan rangé, à 200 parties (au-delà, les suivantes se disent par leur nombre) ; `read` d'une page montre l'aperçu des 20 premiers fichiers, les suivants par leur nom seul. Un fichier illisible porte un statut terminal (`unsupported`, `encrypted`, `empty`, `too_large`, `rejected_dtd`, `failed`, repris d'oto 1), dit dans son aperçu, et le dépôt lui-même n'échoue jamais pour une lecture ratée. Seul `failed` se retente, à la lecture suivante.
 - L'aperçu (titre, résumé, noms des parties) entre dans `find` ; le texte complet n'y entre pas.
 
 ### Le registre des lecteurs
 
 - Un lecteur s'inscrit par `defineReader({ types, read })`, sur le modèle de `defineFunction` ; il rend `{ title, summary, parts: [{ name, chars }], text(part) }`, ou un statut terminal. Le registre vit dans le paquet, en TypeScript : l'hôte est toujours une application Next qui monte le paquet ; un ERP Python fournit son lecteur par un service qu'un lecteur TypeScript de l'hôte appelle.
 - **Le paquet inscrit** les lecteurs des formats texte, des formats faits de XML dans un ZIP et du PDF, dans `server/files/readers/`. `fflate` (déjà dépendance du paquet, pour l'import d'une arborescence) ouvre l'archive, un lecteur XML écrit pour le paquet en tire les éléments ; un xlsx ne décompresse que la feuille demandée et ses chaînes partagées. La couche de texte d'un PDF se lit par pdf.js, page par page, sans rendu.
-- **L'hôte inscrit** les formats qui demandent un programme tiers (plans DWG/DXF, modèles 3D, reconnaissance de caractères d'un scan). Son lecteur appelle le service qu'il veut, isolé s'il le faut (processus jetable, sans réseau sortant, temps et mémoire bornés) : l'isolation est sa responsabilité, le paquet ne porte aucun contrat de service. Sans lecteur inscrit, un format reste « nom, taille, type ».
+- **L'hôte inscrit** les formats qui demandent un programme tiers (plans DWG/DXF, modèles 3D, reconnaissance de caractères d'un scan). Son lecteur appelle le service qu'il veut, isolé s'il le faut (processus jetable, sans réseau sortant, temps et mémoire bornés) : l'isolation est sa responsabilité, le paquet ne porte aucun contrat de service. Un plan ou un modèle 3D rend la même forme `{ title, summary, parts, text }`. Sans lecteur inscrit, un format reste « nom, taille, type ».
 - **Paramétrer une lecture** : `section` choisit la partie ; filtrer ou croiser des lignes passe par l'import de la feuille en tableau puis `table.rows`, pas par des arguments du lecteur.
 
 ### Bornes
 
 - Un fichier texte reste borné à 4 Mo (HN-E10S02-9). Un format binaire se lit jusqu'à 50 Mo, la taille admise d'un fichier : le serveur lit l'objet, la réponse ne porte que le texte.
-- Décompression bornée à 64 Mo en tout, comptée à la taille que l'archive déclare puis vérifiée pendant la lecture (comme `TREE_UNZIPPED_BYTES_MAX`) ; lecture bornée à 10 secondes ; texte d'un fichier borné à 2 millions de caractères, au-delà coupé par une ligne qui le dit.
+- Décompression bornée à 64 Mo en tout, comptée à la taille que l'archive déclare puis vérifiée pendant la lecture (comme `TREE_UNZIPPED_BYTES_MAX`) ; lecture bornée à 10 secondes ; texte d'un fichier borné à 2 millions de caractères, au-delà coupé par une ligne qui le dit. Un texte au-delà des bornes rend `too_large`.
+- Le caractère NUL (U+0000) est retiré du texte et de l'aperçu avant toute écriture : Postgres le refuse dans `text` comme dans `jsonb`.
 
 ## Décisions et alternatives écartées
 
-- **Un port lecteur vers un service isolé, branché par une variable** (décision du 08/10) : aucun format ne serait lisible tant que l'hôte n'a pas construit et hébergé un service, et le paquet porterait un contrat de service. Remplacé par le registre : ses deux raisons (programme tiers exposé aux fichiers piégés, licence incompatible) ne valent ni pour un ZIP de XML lu par `fflate`, ni pour la couche de texte d'un PDF ; pour un DWG, le lecteur que l'hôte inscrit isole son programme.
+- **Un port lecteur vers un service isolé, branché par une variable** (décision du 08/10, abandonnée avec Alexis le 15/10/2026) : aucun format ne serait lisible tant que l'hôte n'a pas construit et hébergé un service, et le paquet porterait un contrat de service. Remplacé par le registre : ses deux raisons (programme tiers exposé aux fichiers piégés, licence incompatible) ne valent ni pour un ZIP de XML lu par `fflate`, ni pour la couche de texte d'un PDF ; pour un DWG, le lecteur que l'hôte inscrit isole son programme.
 - **Le registre dans `connectors`, partagé entre Python et TypeScript** : écarté, aucun consommateur Python ne lit les fichiers d'oto ; un lecteur Python s'appelle depuis un lecteur TypeScript de l'hôte.
 - **Des colonnes et des filtres en arguments du lecteur** : écarté, ce serait réécrire `table.rows` ; la feuille s'importe en tableau.
 - **Calculer l'aperçu dans la confirmation du dépôt** : écarté, la personne attendrait la lecture d'un gros fichier et la fonction risquerait son délai.
+- **Une file de fond sondée** (oto 1 : toutes les 30 secondes, par lots de 5) : écartée, `after()` calcule hors du temps de réponse sans tâche planifiée, que le paquet n'a pas, et la première lecture rattrape un aperçu manqué.
+- **Ranger un fichier rendu par un connecteur sous une page que la fonction désigne** : écarté avec Alexis le 15/10/2026, les pièces s'accumuleraient sans geste de personne ; le fichier est en transit, et le garder est un geste explicite.
 - **Servir tout le texte d'un coup, découpé par le curseur seul** (le `read {file}` d'aujourd'hui) : écarté, l'assistant lit depuis le début jusqu'à la partie qui l'intéresse ; le plan puis `section` le mène droit à elle.
 - **Bibliothèques par format** (`mammoth` pour docx, `exceljs` pour xlsx, SheetJS) : écartées, deux dépendances lourdes pour l'extraction de texte qu'un lecteur XML court fait ; la version npm de SheetJS n'est plus tenue à jour.
 - **Retirer les balises d'un HTML par expression rationnelle** : écarté, perd les tableaux et les liens, et décode mal les entités.
@@ -107,7 +111,7 @@ Read one part with section: "<name>"; the whole text with section: "*".
 
 - Rien du fichier n'est exécuté : ni script d'un HTML, ni macro d'Office (les formats à macros ne sont pas admis), ni formule recalculée. pdf.js a permis d'exécuter du JavaScript par une police piégée (CVE-2024-4367, corrigée en 4.2.67) : version épinglée au-delà, `isEvalSupported: false`, extraction de texte seule, sans rendu.
 - L'URL de `raw` d'un format binaire donne le fichier à qui la détient pendant 5 minutes ; elle n'est jamais journalisée en clair.
-- Le lecteur XML ignore toute déclaration `<!DOCTYPE>` et n'interprète que les cinq entités prédéfinies et les références numériques : pas d'expansion d'entités, pas d'entité externe.
+- Le lecteur XML refuse un document dont le `<!DOCTYPE>` déclare des entités (statut `rejected_dtd`) et n'interprète que les cinq entités prédéfinies et les références numériques : pas d'expansion d'entités, pas d'entité externe.
 - Bornes de décompression, de temps et de taille du texte contre les archives piégées ; un fichier Office chiffré n'est pas un ZIP et se dit illisible, un PDF chiffré aussi.
 - L'aperçu est écrit par le service sous la session de qui dépose ; la mise à jour de `files`, aujourd'hui limitée à `status` (HN-E10S02-29), s'étend à la seule colonne de l'aperçu.
 - `read {file}` garde le droit de lecture du nœud, relu avant de lire l'objet ; l'aperçu se lit avec la page, au même droit.
@@ -120,8 +124,6 @@ Read one part with section: "<name>"; the whole text with section: "*".
 ## Questions ouvertes
 
 - Poids de `pdfjs-dist` dans le build d'un hôte et sa tenue dans une fonction serverless, face à `unpdf` (build de pdf.js prévu pour le serverless) : à mesurer avant d'en ajouter un.
-- Fichiers rendus par une fonction de connecteur : rangés en fichier joint (`storeFile`) dont la fonction rend l'identifiant, ou lus dans le résultat sans être stockés.
-- Le lecteur d'un modèle 3D rend-il une structure que `{ title, summary, parts, text }` ne porte pas ?
 - Images matricielles : `read {file}` peut-il rendre l'image elle-même (contenu `image` d'un résultat MCP), que l'assistant verrait, et sous quelle taille ; tous les hosts (claude.ai, ChatGPT) l'affichent-ils ?
 - Forme de la colonne d'aperçu et de plan : un `jsonb` (`title`, `summary`, `parts`, `chars`, `reader`, `error`) ou deux colonnes.
 
@@ -129,3 +131,4 @@ Read one part with section: "<name>"; the whole text with section: "*".
 
 - 2026-10-08 : lecteurs de format sur les fichiers envoyés à oto, lus à l'envoi et rangés, par un port lecteur branché par l'hôte vers un service isolé ; activés par organisation — décidé par Alexis, à valider avec JB (source : conception de fichiers et stockage).
 - 2026-10-14 : lecture de tout format par `read {file}`, en entier ou par partie, au plus léger ; formats texte, XML en ZIP et PDF lus par le paquet, les formats qui demandent un programme tiers laissés à l'hôte ; aperçu au dépôt, texte à la demande ; la vue d'une personne hors sujet — décidé par JB (source : session du 14/10/2026). Registre de lecteurs complété par l'hôte, original atteignable — proposé par Alexis (source : issue des lecteurs de fichiers, 14/10/2026), à confirmer avec lui.
+- 2026-10-15 : proposition validée (aperçu, plan, partie ou tout, `defineReader`, `raw`) ; port lecteur du 08/10 abandonné ; aperçu après la réponse, à défaut à la première lecture ; statuts `too_large` et `rejected_dtd`, seul `failed` retenté ; NUL retiré ; un fichier rendu par un connecteur est en transit, pas rangé — décidé par Alexis et JB (source : issue des lecteurs de fichiers, 15/10/2026).

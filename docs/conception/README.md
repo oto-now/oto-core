@@ -64,7 +64,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Fichiers et stockage](fichiers-et-stockage.md) | Où vivent les octets d'un fichier joint, et comment se déposent-ils, se copient-ils et se purgent-ils ? | validé avec JB le 28/09/2026 |
 | [Dépôt par lien](depot-par-lien.md) | Comment un assistant dépose-t-il un fichier sans le faire passer par la conversation ? | validé avec JB le 28/09/2026 |
 | [Contenu HTML isolé et lecture des fichiers](contenu-html-isole.md) | Comment voit-on un fichier HTML, `.md` ou PDF sans exposer l'hôte, et comment un assistant en lit-il le texte ? | validé avec JB le 30/09/2026 |
-| [Lecture des fichiers par un assistant](lecture-des-fichiers.md) | Que voit un assistant d'un fichier joint, et comment en lit-il le contenu, quel qu'en soit le format ? | proposé |
+| [Lecture des fichiers par un assistant](lecture-des-fichiers.md) | Que voit un assistant d'un fichier joint, et comment en lit-il le contenu, quel qu'en soit le format ? | validé avec Alexis le 15/10/2026 |
 | [Partage public](partage-public.md) | Comment un contenu s'ouvre-t-il à qui n'a pas de compte, et que montre son lien ? | validé avec JB le 27/09/2026 |
 | [Transfert d'une arborescence](transfert-d-arborescence.md) | Comment une base, un dossier ou des procédures passent-ils d'une plateforme Oto à une autre, ou d'un dossier de `.md` à une plateforme ? | proposé |
 

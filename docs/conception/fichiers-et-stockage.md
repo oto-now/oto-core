@@ -1,7 +1,7 @@
 # Fichiers et stockage
 
 - **Statut** : validé avec JB le 28/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-15
 
 ## Résumé
 
@@ -79,6 +79,13 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - Les fichiers copiés comptent au quota (D149) : `requireQuota` relit la somme sous le verrou 7501 dans la transaction de la duplication ; au-delà de 10 Go, `too_large` (raison `quota`), rien n'est écrit, copie de page comprise (HN-E10S02-89).
 - Après le commit, les copies d'objets partent ensemble, par lots de 8 (`COPIES_AT_ONCE`), un échec n'arrêtant pas les lots suivants (HN-E10S02-113) ; puis une seule mise à jour sous la session passe les lignes copiées à `ready` ; sans stockage, elles restent `pending`, nommées au log (`[platform] files: copy left pending <clé>`) (HN-E10S02-91). Le lien public d'une copie sert le fichier copié, jamais celui de l'original (HN-E10S02-94).
 
+### Fichier en transit (décidé le 15/10, pas encore écrit)
+
+- Un fichier qui va d'un connecteur à un autre passe par oto, de serveur à serveur, sans transiter par l'assistant : il y devient un **fichier en transit**, une ligne `files` et un objet comme un fichier joint, donc sous les droits, le plafond et les [lecteurs](lecture-des-fichiers.md) d'oto, mais rattaché à aucune page et effacé après le transfert. Rien de durable par défaut.
+- Toute source produit un fichier d'oto (une adresse publique et un fichier du poste le font déjà par le [dépôt par lien](depot-par-lien.md) ; une sortie de connecteur déclarée fichier, un contenu tenu par l'assistant restent à faire) ; toute destination de connecteur ne reçoit qu'un identifiant de fichier d'oto, joint ou en transit. Le compte de la source se résout une fois, à l'entrée, par la résolution habituelle ([connecteurs et comptes](connecteurs-et-comptes.md)).
+- La source et la destination sont deux appels : entre les deux, l'assistant peut lire le fichier par `read {file}`.
+- Garder la pièce est un geste explicite de l'assistant : la joindre à une page, où elle devient un fichier joint et vit avec son nœud.
+
 ### Partage public et transfert (ADR-016 § 7 et § 8)
 
 - `GET /api/platform/public/<jeton>/files/<id>` passe par `public_file_by_token`, `security definer` sous `anon`, sans fichier de l'hôte : seul un fichier cité par un bloc **publié** d'un nœud couvert par le lien, dans ce que l'auteur du lien lit à cet instant ([partage public](partage-public.md) ; détail des routes dans [contenu HTML isolé](contenu-html-isole.md)).
@@ -89,7 +96,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 
 ### Lecteurs de format
 
-- Ce qu'un assistant lit d'un fichier joint (aperçu au dépôt, texte par `read {file}`, lecteurs du paquet et port lecteur de l'hôte) est dans [lecture des fichiers par un assistant](lecture-des-fichiers.md).
+- Ce qu'un assistant lit d'un fichier joint (aperçu au dépôt, texte par `read {file}`, registre des lecteurs, complété par l'hôte) est dans [lecture des fichiers par un assistant](lecture-des-fichiers.md).
 
 ## Décisions et alternatives écartées
 
@@ -113,10 +120,11 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - M88 : la CI n'a pas de MinIO pour l'adaptateur S3 réel (SigV4, `copy`, URL signées).
 - HN-E10S02-115 : sur le bucket de l'hôte de démo en 1.1.2, `.md`, `.txt` et `.svg` échouaient ; seul l'échec de `html` est expliqué (comparaison de type), la cause des trois autres n'est pas établie sans le bucket réel (hypothèse : types MIME admis du bucket, ou refus du `PUT`) ; les messages d'HN-E10S02-116 et le log serveur la diront. Un ticket public de Supabase Storage décrit la perte du `charset`, correctif non fusionné.
 - M98 : test d'expiration sensible à l'écart d'horloge entre la base et le poste.
+- Le fichier en transit n'est pas écrit : un fichier vit toujours avec son nœud, et le moteur de connecteurs n'envoie ni ne reçoit d'octets hors JSON (ni multipart, ni réponse binaire).
 
 ## Questions ouvertes
 
-Aucune à ce jour.
+- Fichier en transit : durée de vie, forme d'un fichier sans nœud (droit de lecture, quota) et plafond, à trancher en issue avec le transfert de fichier entre connecteurs.
 
 ## Historique
 
@@ -129,3 +137,4 @@ Aucune à ce jour.
 - 2026-10-08 : lecteurs de format sur les fichiers envoyés à oto, lus à l'envoi et rangés, par un port lecteur branché par l'hôte vers un service isolé qui lit le fichier par sa référence ; activés par organisation — décidé par Alexis, à valider avec JB.
 - 2026-10-13 : sixième et septième opérations du port, `put` et `list`, et URL de lecture d'une heure pour l'export d'une arborescence et ses fichiers joints — décidé par JB (source : cahier des charges du transfert d'arborescence, session du 13/10/2026).
 - 2026-10-14 : « Image » et « Fichier » aussi dans la liste de « / », comme au « + » — décidé par JB (source : retour sur l'éditeur, session du 14/10/2026).
+- 2026-10-15 : un fichier qui va d'un connecteur à un autre passe par oto en fichier en transit, effacé après le transfert ; toute destination ne reçoit qu'un identifiant de fichier d'oto ; garder la pièce est un geste explicite — proposé par JB, décidé avec Alexis (source : issue du transfert de fichier entre connecteurs, 14 et 15/10/2026). Port lecteur du 08/10 abandonné au profit du registre des lecteurs — décidé avec Alexis (source : issue des lecteurs de fichiers, 15/10/2026).
