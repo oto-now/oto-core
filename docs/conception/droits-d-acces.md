@@ -66,6 +66,18 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 - Portabilité : colonne et contrainte dans `platform` ; calcul dans le service et dans `node_level_of`, le seul corps SQL du niveau, que gardent la recherche (`node_level_for`) et la lecture publique (ADR-012 § 3, ADR-013) ; aucune dépendance à Supabase (ADR-014 § 5).
 - Les droits se règlent dans « Partager » : « Règles d'accès » et « Accès plateforme » ont quitté l'écran Équipes & accès, l'accès du support d'Oto passant par la console admin ; l'espace Démo est vidé de ses contenus et de ses équipes à la fin, les tests de bout en bout semant leurs propres données (D127, JB, 2026-09-28).
 
+### Partage d'un compte de connecteur (décidé le 16/10, pas encore écrit)
+
+Origine : un incident d'oto 1, où une personne sans compte propre a écrit dans la boîte d'une collègue sans le savoir ; la règle d'oto 1 du 15/10 (`partage-de-compte.md` d'oto-backend) est reprise, partie d'un seul geste.
+
+- **Sujets** : un compte personnel se partage à une personne, à une équipe ou à l'organisation entière. Cela lève, pour les comptes, « une règle d'organisation ne vise qu'un nœud » (ADR-014 § 1).
+- **Servir** : son propre compte personnel sert sans être nommé, en tête, avant le compte de l'équipe porteuse et celui de l'organisation. Le compte personnel d'un autre, même partagé, ne sert que nommé.
+- **Refus** : faute de compte, le refus nomme les comptes personnels partagés avec l'appelant et leur propriétaire. Chaque réponse dit à qui est le compte qui a servi (l'équivalent du `lent_by` d'oto 1).
+- **Départ** : quand une personne quitte l'organisation, son compte cesse aussitôt de servir à ceux à qui elle l'avait partagé. C'est relu à chaque appel, rien n'est supprimé, et le refus le nomme. Même règle pour une future pause.
+- **Niveaux** : les droits d'un compte se règlent par classe, par compte et par personne ou équipe : lecture, écriture, et un niveau sensible distinct de l'écriture (aujourd'hui `write` et `sensitive` exigent le même niveau 2). Pas de droit fonction par fonction.
+- **Journal** : chaque règle posée ou retirée sur un compte est journalisée (qui, quel compte, vers qui, quand), et le propriétaire la lit à l'écran dès le premier lot.
+- **Plus tard** : une organisation pourra interdire les comptes personnels d'un connecteur, partage compris.
+
 ### Propriétaires, déplacements, personnel
 
 - Un nœud à propriétaire hérité (`owner_kind` NULL) ne porte ni `owner_team_id` ni `owner_user_id` (contrainte `nodes_owner_inherited_check`, écrite sans comparaison qui puisse valoir NULL) (E01-S04 N32).
@@ -124,6 +136,7 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 ## Écart avec le code
 
 - `default_team_id` et `lead_user_id` vidés restent en base, à retirer en 1.1 ; services et API des règles d'accès et des accès plateforme sans écran client (M73).
+- Le partage d'un compte décidé le 16/10 n'est pas écrit : `access_rules_one_subject` refuse une règle d'organisation sur un compte ; `chooseAccount` (`resolution.ts`) ne prend un compte personnel, même le sien, que nommé ; le refus ne nomme pas les comptes partagés ; `members_cleanup` laisse servir le compte d'une personne partie ; `write` et `sensitive` exigent le même niveau ; aucun journal propre aux règles d'un compte (issue « Partage des comptes », oto-now/oto-core#68).
 - Upsert et vue du sujet des règles (`server/rules.ts`), curseur au-delà de 200 éléments (M18b) ; `DirectoryEntry.email` et `StaffEntry` en `string | null`, `server/admin/grants.ts` sur `sameEmail` (M20b) ; commentaires de `server/` rendus faux par l'isolation par organisation (M15b).
 
 ## Questions ouvertes
@@ -138,3 +151,4 @@ Aucune à ce jour.
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-014, les fiches D2, D4, D5, D17, D18, D20, D94, D101, D127, D128 et les choix H, P et de story — décidé par Alexis, accord de JB.
 - 2026-10-05 : autorisation répartie et recalculée au front écartée, leçon d'oto 1 (ADR 0053, 0066) — décidé par Alexis (source : tri des issues d'oto-enterprise du 05/10).
 - 2026-10-14 : l'équipe plateforme nomme le premier administrateur de l'organisation qu'elle crée (elle-même, membre sans email, ou le client invité) au lieu de l'inviter ensuite — décidé par Alexis (source : [administration et cellule](administration-et-cellule.md)).
+- 2026-10-16 : partage d'un compte de connecteur — à l'organisation ou à une équipe ; son propre compte sans le nommer ; refus qui nomme les comptes partagés et leur propriétaire ; extinction au départ ; niveau sensible distinct ; journal des règles d'un compte — décidé par Alexis (source : revue des connecteurs d'oto 2 du 16/10, issue oto-now/oto-core#68).

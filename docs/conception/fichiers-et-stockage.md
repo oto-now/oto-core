@@ -85,6 +85,9 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - Toute source produit un fichier d'oto (une adresse publique et un fichier du poste le font déjà par le [dépôt par lien](depot-par-lien.md) ; une sortie de connecteur déclarée fichier, un contenu tenu par l'assistant restent à faire) ; toute destination de connecteur ne reçoit qu'un identifiant de fichier d'oto, joint ou en transit. Le compte de la source se résout une fois, à l'entrée, par la résolution habituelle ([connecteurs et comptes](connecteurs-et-comptes.md)).
 - La source et la destination sont deux appels : entre les deux, l'assistant peut lire le fichier par `read {file}`.
 - Garder la pièce est un geste explicite de l'assistant : la joindre à une page, où elle devient un fichier joint et vit avec son nœud.
+- Un fichier en transit est effacé à sa consommation, et au plus tard une heure après sa création s'il n'est jamais consommé (16/10).
+- Il reste hors de l'arbre : sa ligne `files` n'a pas de nœud (`node_id` nul) et porte une échéance, plutôt qu'un nœud caché (16/10).
+- Un seul plafond : 50 Mo par fichier, comme un fichier joint (D113) (16/10).
 
 ### Partage public et transfert (ADR-016 § 7 et § 8)
 
@@ -124,7 +127,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 
 ## Questions ouvertes
 
-- Fichier en transit : durée de vie, forme d'un fichier sans nœud (droit de lecture, quota) et plafond, à trancher en issue avec le transfert de fichier entre connecteurs.
+- Fichier en transit : qui peut lire un fichier sans nœud, et s'il compte au quota de l'organisation, à trancher avec son écriture (sa durée de vie, sa forme et son plafond sont décidés le 16/10).
 
 ## Historique
 
@@ -138,3 +141,4 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - 2026-10-13 : sixième et septième opérations du port, `put` et `list`, et URL de lecture d'une heure pour l'export d'une arborescence et ses fichiers joints — décidé par JB (source : cahier des charges du transfert d'arborescence, session du 13/10/2026).
 - 2026-10-14 : « Image » et « Fichier » aussi dans la liste de « / », comme au « + » — décidé par JB (source : retour sur l'éditeur, session du 14/10/2026).
 - 2026-10-15 : un fichier qui va d'un connecteur à un autre passe par oto en fichier en transit, effacé après le transfert ; toute destination ne reçoit qu'un identifiant de fichier d'oto ; garder la pièce est un geste explicite — proposé par JB, décidé avec Alexis (source : issue du transfert de fichier entre connecteurs, 14 et 15/10/2026). Port lecteur du 08/10 abandonné au profit du registre des lecteurs — décidé avec Alexis (source : issue des lecteurs de fichiers, 15/10/2026).
+- 2026-10-16 : fichier en transit effacé à sa consommation et au plus tard au bout d'une heure, sans nœud et avec une échéance, plafond de 50 Mo — décidé par Alexis (source : revue des connecteurs d'oto 2 du 16/10, issue oto-now/oto-core#3).
