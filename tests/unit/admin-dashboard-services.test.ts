@@ -74,7 +74,7 @@ describe.skipIf(!sqlConfigured)(portable("dashboard views of the connector servi
   }, 180_000)
 
   /** Ce que la vue d'un compte dit d'un secret jamais posé. */
-const NO_SECRET = { secret: { fields: [], updatedAt: null }, settings: {} }
+const NO_SECRET = { secret: { fields: [], updatedAt: null }, settings: {}, statusReason: null }
 
 describe("deactivationImpact (AC11, H123)", () => {
     it("should name and count only the published procedures the caller reads, whose published call block calls the connector", async () => {

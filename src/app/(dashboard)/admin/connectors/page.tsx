@@ -58,7 +58,7 @@ async function lire(db: PlatformDb, identity: Identity): Promise<DonneesDesConne
   }
 }
 
-export default async function ConnecteursPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+export default async function ConnecteursPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   // La session et l'appartenance se revérifient ici, hors de tout `try` : le layout n'est pas une
   // frontière (`nextjs-patterns.md § Un layout n'est JAMAIS une frontière d'autorisation`).
   const identite = await getPlatformIdentitySafely("admin/connectors")

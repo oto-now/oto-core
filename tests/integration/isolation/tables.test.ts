@@ -73,6 +73,8 @@ const CREATION: Readonly<Record<string, Row>> = {
   files: { status: "pending" },
   // Un ticket de dépôt porte deux empreintes uniques (E10-S02 lot f) : le clone en prend des neuves, que seule l'organisation refuse.
   upload_tickets: { token_hash: "0".repeat(64), form_token_hash: "1".repeat(64) },
+  // Une demande de consentement est gardée par une empreinte de 64 caractères hexadécimaux : le clone en prend une neuve.
+  connector_consents: { state_hash: "2".repeat(64) },
 }
 
 type Failure = { code?: string; message?: string }

@@ -278,7 +278,7 @@ async function one<T>(query: PromiseLike<readonly T[]>, what: string): Promise<T
 
 /**
  * Une ligne de B dans chaque table que le script Démo ne remplit pas (AC3) : ancien chemin, invitation,
- * accès plateforme révoqué de `p`, journal admin, `ctx` et journal, envoi simulé, quatrième retour
+ * accès plateforme révoqué de `p`, journal admin, `ctx` et journal, envoi simulé, demande de consentement, quatrième retour
  * (le script en pose trois dans chaque organisation : `FB-0004` n'existe que chez B).
  */
 async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; people: Record<Who, SqlUser> }) {
@@ -318,6 +318,11 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`
     insert into platform.upload_tickets (org_id, user_id, token_hash, form_token_hash, kind, mode, target_path, expires_at)
     values (${b.id}, ${people.b.id}, ${hex(32)}, ${hex(32)}, 'csv', 'merge', 'ventes/suivi_prospects', now() + interval '15 minutes')`
+  // Une demande de consentement en cours de B (`oauth2_user`, connecteurs et comptes) : l'empreinte de son `state`
+  // seule, tirée à chaque passage (clé de toute la table, suites parallèles).
+  await admin`
+    insert into platform.connector_consents (state_hash, org_id, user_id, connector, return_to, expires_at)
+    values (${hex(32)}, ${b.id}, ${people.b.id}, 'mail', '/admin/connectors', now() + interval '10 minutes')`
   // Une personne retirée de B (entrée sans invitation) : son exclusion.
   await admin`insert into platform.member_exclusions (org_id, user_id, excluded_by) values (${b.id}, gen_random_uuid(), ${people.b.id})`
   // L'accès général de B (ADR-014) : toute l'organisation B peut modifier son tableau.

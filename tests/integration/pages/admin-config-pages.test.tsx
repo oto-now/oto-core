@@ -89,7 +89,7 @@ const SERVICES = [readOrgView, listConnectorsForOrg, listOrgAccounts, listTeams,
 // `fil` : Connecteurs n'est plus rangé dans le menu de l'entreprise mais au pied du rail (E05-S11, AC-32) : sans groupe, sans fil.
 const PAGES = [
   { nom: "/admin/organization", rendre: () => organisation(), titre: "Organisation", lecture: readOrgView, fil: true },
-  { nom: "/admin/connectors", rendre: ConnecteursPage, titre: "Connecteurs", lecture: listConnectorsForOrg, fil: false },
+  { nom: "/admin/connectors", rendre: () => ConnecteursPage({}), titre: "Connecteurs", lecture: listConnectorsForOrg, fil: false },
 ]
 
 beforeEach(() => {
@@ -172,7 +172,7 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
 
   it("should read the impact of deactivating each active connector for the connectors page, and put it in the question", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
-    render(await ConnecteursPage())
+    render(await ConnecteursPage({}))
     expect(deactivationImpact).toHaveBeenCalledWith(SESSION.db, identite("admin"), "mail")
     expect(listOrgAccounts).toHaveBeenCalledWith(SESSION.db, identite("admin"))
 
