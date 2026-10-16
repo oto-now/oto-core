@@ -1,8 +1,10 @@
-// « Connecteurs » du tableau de bord (E08-S03, AC4 à AC7, AC12 ; comptes à plusieurs champs) : les connecteurs
-// activables et leur état, qu'on active ou désactive ; les comptes de l'organisation, simulés ou réels, qu'on crée ou
-// désactive, et le secret et les réglages d'un compte réel, saisis sous sa ligne. Server Component : les gestes sont
-// les `ActionPlateforme` d'E05-S03, la question d'une désactivation composée ici depuis son impact ; le formulaire de
-// création et la saisie d'un compte sont des îlots clients.
+// « Connecteurs » du tableau de bord (E08-S03, AC4 à AC7, AC12 ; comptes à plusieurs champs ; consentement d'une
+// personne) : les connecteurs activables et leur état, qu'on active ou désactive ; les comptes de l'organisation,
+// simulés ou réels, qu'on crée ou désactive, et le secret et les réglages d'un compte réel, saisis sous sa ligne ; pour
+// un connecteur à consentement (`oauth2_user`), « Connecter mon compte » (ou « Reconnecter » sous un compte à
+// reconnecter), et l'issue du retour du tiers. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
+// la question d'une désactivation composée ici depuis son impact ; le formulaire de création, la saisie d'un compte et
+// la connexion par consentement sont des îlots clients.
 //
 // Porté d'oto-frontend (`components/connecteurs/liste-connecteurs.tsx` l. 196-234, 405-432, 480-511, et la
 // capture de `/connectors`), E05-S09 partie d2. Repris : l'en-tête, deux colonnes, l'îlot des connecteurs au
@@ -15,6 +17,7 @@ import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
 import { limitReached, type AccountMode, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
+import { Alert } from "../../ds/react/primitives"
 import { EmptyState } from "../../ds/react/empty-state"
 import { Icon } from "../../ds/react/icon"
 import { Row, RowList } from "../../ds/react/row-list"
@@ -26,6 +29,7 @@ import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
 import { questionDeDesactivation, questionDeDesactivationDuCompte } from "../textes"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
+import { ConnexionParConsentement } from "./connexion-par-consentement"
 import { CreationDeCompte } from "./creation-de-compte"
 import { SaisieDuCompte } from "./saisie-du-compte"
 
@@ -42,13 +46,45 @@ export type DonneesDesConnecteurs = {
   formulaires?: ConnectorAccountForm[]
 }
 
+/** L'issue d'un consentement, lue dans l'adresse où le tiers ramène la personne (`issueDuConsentement`). */
+export type IssueDuConsentement = { issue: "connected"; compte: string } | { issue: "failed"; raison: string }
+
 export type EcranConnecteursProps = {
   resultat: Resultat<DonneesDesConnecteurs>
   Lien: LienDeLAdministration
-  /** L'adresse de l'écran dans l'hôte : « Réessayer » d'une lecture en échec y ramène. */
+  /** L'adresse de l'écran dans l'hôte : « Réessayer » d'une lecture en échec y ramène, un consentement y revient. */
   ici: string
   /** Le fil de l'en-tête : les adresses que l'hôte donne au rail et le droit de la personne ; sans lui, pas de fil. */
   fil?: FilDeLEcran
+  /** L'issue du consentement dont la personne revient ; absente hors d'un retour. */
+  consentement?: IssueDuConsentement
+}
+
+/**
+ * L'issue d'un consentement lue dans la query de l'écran (`?consent=connected&account=…` ou
+ * `?consent=failed&reason=<code>`, posée par l'adresse de retour du paquet) ; `undefined` hors d'un retour.
+ */
+export function issueDuConsentement(query: Readonly<Record<string, string | string[] | undefined>>): IssueDuConsentement | undefined {
+  const lu = (nom: string) => {
+    const valeur = query[nom]
+    return typeof valeur === "string" ? valeur : undefined
+  }
+  if (lu("consent") === "connected") return { issue: "connected", compte: lu("account") ?? "" }
+  if (lu("consent") === "failed") return { issue: "failed", raison: lu("reason") ?? "" }
+  return undefined
+}
+
+/** Ce que dit l'échec d'un consentement, par le code du refus. */
+const ECHECS_DU_CONSENTEMENT: Readonly<Record<string, string>> = {
+  invalid_arguments: "La connexion n'a pas abouti : refusée, annulée, expirée ou déjà servie. Recommencez.",
+  upstream_error: "Le service tiers n'a pas pu terminer la connexion. Réessayez plus tard.",
+  not_enabled: "La connexion à ce service n'est pas configurée sur cette application.",
+  conflict: "Un autre compte de l'organisation porte déjà ce nom.",
+}
+
+function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsentement }) {
+  if (consentement.issue === "connected") return <Alert tone="ok" title={`Compte « ${consentement.compte} » connecté.`} />
+  return <Alert tone="fail" title={ECHECS_DU_CONSENTEMENT[consentement.raison] ?? "La connexion du compte a échoué. Réessayez."} />
 }
 
 /** Les titres des deux listes : le focus y va quand un geste emporte sa ligne. */
@@ -129,15 +165,20 @@ function proprietaire(owner: AccountView["owner"]): string {
   return owner.kind === "org" ? "organisation" : "personnel"
 }
 
-/** Ce que la ligne dit du secret d'un compte réel, jamais sa valeur. */
-function etatDuSecret(compte: AccountView): string | null {
+/** Ce que la ligne dit du secret d'un compte réel, jamais sa valeur ; d'un consentement, ses jetons ou sa raison. */
+function etatDuSecret(compte: AccountView, consentement: boolean): string | null {
   if (compte.mode !== "reel") return null
   const date = compte.secret?.updatedAt ? dateLisible(compte.secret.updatedAt) : null
+  if (consentement) {
+    if (compte.status === "error") return `à reconnecter${compte.statusReason ? ` : ${compte.statusReason}` : ""}`
+    return date ? `jetons du ${date}` : "pas encore connecté"
+  }
   return date ? `secret posé le ${date}` : "sans secret"
 }
 
-function LigneDeCompte({ compte, formulaire }: { compte: AccountView; formulaire: ConnectorAccountForm | undefined }) {
-  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], etatDuSecret(compte)]
+function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formulaire: ConnectorAccountForm | undefined; ici: string }) {
+  const consentement = formulaire?.consent === true
+  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], etatDuSecret(compte, consentement)]
   return (
     <Row className="flex-wrap gap-3">
       <span className="min-w-0 flex-1">{parties.filter((partie) => partie !== null).join(" · ")}</span>
@@ -150,50 +191,69 @@ function LigneDeCompte({ compte, formulaire }: { compte: AccountView; formulaire
           ancre={ANCRE_DES_COMPTES}
         />
       )}
-      {compte.mode === "reel" && compte.status !== "disabled" && formulaire && <SaisieDuCompte compte={compte} formulaire={formulaire} />}
+      {compte.mode === "reel" && compte.status !== "disabled" && formulaire && !consentement && <SaisieDuCompte compte={compte} formulaire={formulaire} />}
+      {consentement && compte.status === "error" && formulaire && (
+        <ConnexionParConsentement connecteur={formulaire.connector} libelle="Reconnecter" nomAccessible={`Reconnecter le compte ${compte.label}`} retour={ici} />
+      )}
     </Row>
   )
 }
 
-type ComptesProps = { comptes: AccountView[]; connecteurs: string[]; equipes: DonneesDesConnecteurs["options"]["teams"]; formulaires: ConnectorAccountForm[] }
+type ComptesProps = { comptes: AccountView[]; connecteurs: string[]; equipes: DonneesDesConnecteurs["options"]["teams"]; formulaires: ConnectorAccountForm[]; ici: string }
 
-/** Les annexes : les comptes, puis l'îlot où l'on en crée un. */
-function Comptes({ comptes, connecteurs, equipes, formulaires }: ComptesProps) {
+/**
+ * Les annexes : les comptes, la connexion de son propre compte à un connecteur à consentement, puis l'îlot où l'on
+ * crée un compte (jamais d'un connecteur à consentement : chacun y connecte le sien).
+ */
+function Comptes({ comptes, connecteurs, equipes, formulaires, ici }: ComptesProps) {
+  const parConsentement = formulaires.filter((formulaire) => formulaire.consent === true)
+  const aCreer = connecteurs.filter((connecteur) => !parConsentement.some((formulaire) => formulaire.connector === connecteur))
   return (
     <>
       <Ilot id={ANCRE_DES_COMPTES} titre="Comptes" compte={pluriel(comptes.length, "compte", "comptes")}>
         <RowList rules empty={<EmptyState compact>Aucun compte. Créez un compte pour qu&apos;une procédure puisse appeler un connecteur.</EmptyState>}>
           {comptes.map((compte) => (
-            <LigneDeCompte key={compte.id} compte={compte} formulaire={formulaires.find((formulaire) => formulaire.connector === compte.connector)} />
+            <LigneDeCompte key={compte.id} compte={compte} formulaire={formulaires.find((formulaire) => formulaire.connector === compte.connector)} ici={ici} />
           ))}
         </RowList>
       </Ilot>
+      {parConsentement.length > 0 && (
+        <Ilot id="admin-connecter-mon-compte" titre="Connecter mon compte">
+          <div className="flex flex-col gap-3">
+            <p className="oto-caption">Ces services se connectent personne par personne : chacun y connecte son propre compte, qui devient l&apos;un de ses comptes personnels.</p>
+            {parConsentement.map((formulaire) => (
+              <ConnexionParConsentement key={formulaire.connector} connecteur={formulaire.connector} libelle={`Connecter mon compte ${formulaire.label}`} retour={ici} />
+            ))}
+          </div>
+        </Ilot>
+      )}
       <Ilot id="admin-creer-un-compte" titre="Créer un compte">
-        {connecteurs.length === 0 ? (
+        {aCreer.length === 0 ? (
           <p>Aucun connecteur ne demande de compte dans cette version de la plateforme.</p>
         ) : (
-          <CreationDeCompte connecteurs={connecteurs} equipes={equipes} formulaires={formulaires} />
+          <CreationDeCompte connecteurs={aCreer} equipes={equipes} formulaires={formulaires} />
         )}
       </Ilot>
     </>
   )
 }
 
-function Donnees({ donnees }: { donnees: DonneesDesConnecteurs }) {
+function Donnees({ donnees, ici }: { donnees: DonneesDesConnecteurs; ici: string }) {
   const connecteurs = donnees.connectors.map((connecteur) => connecteur.connector)
   return (
-    <TwoColumns aside={<Comptes comptes={donnees.accounts} connecteurs={connecteurs} equipes={donnees.options.teams} formulaires={donnees.formulaires ?? []} />}>
+    <TwoColumns aside={<Comptes comptes={donnees.accounts} connecteurs={connecteurs} equipes={donnees.options.teams} formulaires={donnees.formulaires ?? []} ici={ici} />}>
       <Connecteurs connecteurs={donnees.connectors} impacts={donnees.impacts} limites={donnees.limites} />
     </TwoColumns>
   )
 }
 
-export function EcranConnecteurs({ resultat, Lien, ici, fil }: EcranConnecteursProps) {
+export function EcranConnecteurs({ resultat, Lien, ici, fil, consentement }: EcranConnecteursProps) {
   // Une lecture nourrit les îlots : son échec, ou la réserve d'un non-administrateur (AC1), se dit une fois.
   return (
     <>
       <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} />
-      {resultat.error !== undefined ? <ErreurDeLecture message={resultat.error} href={ici} Lien={Lien} /> : <Donnees donnees={resultat.data} />}
+      {consentement && <AnnonceDuConsentement consentement={consentement} />}
+      {resultat.error !== undefined ? <ErreurDeLecture message={resultat.error} href={ici} Lien={Lien} /> : <Donnees donnees={resultat.data} ici={ici} />}
     </>
   )
 }

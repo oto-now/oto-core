@@ -2,7 +2,7 @@ import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement, EcranConnecteurs, EcranConnecteursChargement, type DonneesDesConnecteurs } from "@otomata_tech/oto_platform/ui"
+import { ContexteDeRafraichissement, EcranConnecteurs, EcranConnecteursChargement, issueDuConsentement, type DonneesDesConnecteurs } from "@otomata_tech/oto_platform/ui"
 import { choisirDansLaListe } from "../../helpers/liste-de-choix"
 
 // L'écran « Connecteurs » du tableau de bord (E08-S03 : AC4 à AC7, AC12 ; comptes-a-plusieurs-champs : saisie du
@@ -256,6 +256,62 @@ describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-
       ["/api/platform/admin/accounts", { connector: "crm", owner_kind: "org", label: "Crm Support", mode: "reel" }],
       [`/api/platform/admin/accounts/${COMPTE}/secret`, { secret: { client_id: "id-1", client_secret: "s3cr3t" }, settings: { region: "us" } }],
     ])
+  })
+})
+
+const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
+const MS: OrgConnector = { connector: "microsoft", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }] }
+const MON_COMPTE_MS: AccountView = {
+  id: COMPTE,
+  label: "lea@contoso.test (microsoft)",
+  connector: "microsoft",
+  owner: { kind: "user" },
+  mode: "reel",
+  status: "active",
+  secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" },
+  settings: {},
+}
+
+describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
+  it("should offer « Connecter mon compte », start the consent and send the browser to the address it gets, never offering to create such an account by hand", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://login.example.test/authorize?state=s" } }))
+    rendre({ connectors: [MAIL_ACTIF, MS], formulaires: [FORMULAIRE_MS], accounts: [MON_COMPTE_MS] })
+
+    expect(screen.getByText("lea@contoso.test (microsoft) · microsoft · personnel · réel · actif · jetons du 16 octobre 2026")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Secret et réglages/ })).toBeNull()
+    expect(within(screen.getByLabelText("Connecteur")).queryByRole("option", { name: "microsoft" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Microsoft 365" }))
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
+    expect(envoi()).toEqual({ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: "/admin/connectors" } })
+  })
+
+  it("should offer to reconnect an account to connect again, with its reason, and say a refused start", async () => {
+    fetchMock.mockResolvedValue(reponse(403, { error: { code: "not_enabled", message: "server text" } }))
+    rendre({ connectors: [MS], formulaires: [FORMULAIRE_MS], accounts: [{ ...MON_COMPTE_MS, status: "error", statusReason: "Microsoft 365 no longer accepts its authorization (expired or revoked)" }] })
+    expect(screen.getByText(/en erreur · à reconnecter : Microsoft 365 no longer accepts its authorization/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Reconnecter le compte lea@contoso.test (microsoft)" }))
+    expect(await screen.findAllByRole("alert")).not.toHaveLength(0)
+    expect(envoi().corps).toEqual({ connector: "microsoft", return_to: "/admin/connectors" })
+  })
+
+  it("should say the outcome of a return from the third party", () => {
+    render(
+      <ContexteDeRafraichissement.Provider value={rafraichir}>
+        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ consent: "connected", account: "lea@contoso.test (microsoft)" })} />
+      </ContexteDeRafraichissement.Provider>,
+    )
+    expect(screen.getByText("Compte « lea@contoso.test (microsoft) » connecté.")).toBeInTheDocument()
+    cleanup()
+    render(
+      <ContexteDeRafraichissement.Provider value={rafraichir}>
+        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ consent: "failed", reason: "invalid_arguments" })} />
+      </ContexteDeRafraichissement.Provider>,
+    )
+    expect(screen.getByRole("alert")).toHaveTextContent("La connexion n'a pas abouti : refusée, annulée, expirée ou déjà servie. Recommencez.")
+    expect(issueDuConsentement({})).toBeUndefined()
   })
 })
 

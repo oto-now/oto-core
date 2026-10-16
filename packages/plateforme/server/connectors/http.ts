@@ -151,6 +151,11 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
     console.error(`[platform] connector ${api.label}: status ${answer.status}`)
     throw errorOf(api, answer.status)
   }
+  return readAnswer(api, answer)
+}
+
+/** Le JSON d'une réponse, borné à 4 Mo, `null` pour une réponse vide ; trop grosse ou illisible : `upstream_error`. */
+async function readAnswer(api: ConnectorApi, answer: Response): Promise<unknown> {
   let bytes: Uint8Array | null
   try {
     bytes = answer.body ? await readBounded(answer.body, MAX_ANSWER_BYTES, () => null) : new Uint8Array()
@@ -166,4 +171,37 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
     console.error(`[platform] connector ${api.label}: answer is not JSON`)
     throw new PlatformError("upstream_error", `${api.label} sent an unreadable answer. Retry later.`)
   }
+}
+
+/** La réponse d'un point de jeton : son JSON, ou son statut et le code d'erreur OAuth qu'elle porte (`invalid_grant`). */
+export type TokenAnswer = { ok: true; answer: unknown } | { ok: false; status: number; error: string | null }
+
+/** Un code d'erreur OAuth (RFC 6749 § 5.2) n'a que ces caractères ; autre chose ne se lit pas. */
+const OAUTH_ERROR = /^[\x20-\x21\x23-\x5B\x5D-\x7E]{1,64}$/
+
+/**
+ * Une requête au point de jeton d'un consentement (`consent.ts`) : comme `requestJson` (délai, rythme, 429), mais une
+ * réponse hors 2xx rend son statut et le code `error` de son corps (RFC 6749 § 5.2), pour distinguer un consentement
+ * révoqué (`invalid_grant`) d'une application refusée ou d'une panne. Rien d'autre du corps n'est lu ni journalisé.
+ */
+export async function requestToken(api: ConnectorApi, request: ApiRequest, fetcher: Fetch): Promise<TokenAnswer> {
+  let answer = await send(api, request, fetcher)
+  for (let retry = 0; answer.status === 429 && retry < MAX_RETRIES; retry++) {
+    const ms = retryWait(answer)
+    if (ms === null) break
+    await answer.body?.cancel()
+    await wait(ms)
+    answer = await send(api, request, fetcher)
+  }
+  if (answer.ok) return { ok: true, answer: await readAnswer(api, answer) }
+  console.error(`[platform] connector ${api.label}: token endpoint status ${answer.status}`)
+  let error: string | null = null
+  try {
+    const body: unknown = await readAnswer(api, answer)
+    const code = typeof body === "object" && body !== null && "error" in body ? body.error : undefined
+    error = typeof code === "string" && OAUTH_ERROR.test(code) ? code : null
+  } catch {
+    // Un corps d'erreur illisible ne dit rien de plus que son statut.
+  }
+  return { ok: false, status: answer.status, error }
 }

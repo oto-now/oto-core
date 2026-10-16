@@ -13,6 +13,7 @@ import type { Identity } from "../server/identity"
 import { journalError, loggedArgs, writeJournal } from "../server/journal"
 import { brandRoutes } from "./brand"
 import { cellRoutes } from "./cell"
+import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
 import { filesRoutes } from "./files"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
@@ -53,8 +54,11 @@ type RouteContext = {
 type RouteResult = {
   status: number
   data: unknown
-  /** Ce que le service rend pour le journal : sa cible et son équipe. */
-  journal?: { target?: string | null; teamId?: string | null }
+  /**
+   * Ce que le service rend pour le journal : sa cible et son équipe ; `error`, le refus qu'une route sert autrement
+   * qu'en erreur (le retour d'un consentement, une redirection), journalisé comme un échec.
+   */
+  journal?: { target?: string | null; teamId?: string | null; error?: PlatformError }
   /**
    * Une redirection (`status` 302) vers cette adresse, sans corps et jamais gardée en cache (`private, no-store`) :
    * la lecture d'un fichier, vers son URL présignée (E10-S02, AC-a5). `data` n'est alors pas servi.
@@ -74,6 +78,8 @@ type Route = {
   handle: (context: RouteContext) => Promise<RouteResult>
   /** Cible journalisée quand le service échoue : celle de la requête validée, sinon `null`. */
   target?: (request: { params: string[]; body: unknown }) => string | null
+  /** Une lecture (`GET`) qui écrit pourtant : sa ligne de journal part comme celle d'une mutation. */
+  journaled?: boolean
 }
 
 // Les routes `admin/*` du tableau de bord (E08-S03) vivent dans quatre fichiers et se réunissent ici.
@@ -108,6 +114,8 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   shares: sharesRoutes,
   // E10-S02 : les fichiers joints (ADR-016).
   files: filesRoutes,
+  // Le consentement d'une personne à un connecteur `oauth2_user` : son départ, et l'adresse de retour du tiers.
+  "connector-consent": connectorConsentRoutes,
 }
 
 type PlatformRequestOptions = {
@@ -217,7 +225,7 @@ async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" |
     const result = await match.route.handle({ ...context, params: match.params, body })
     return {
       response: result.redirect ? redirection(result.redirect, result.status) : Response.json({ data: result.data }, { status: result.status }),
-      failure: null,
+      failure: result.journal?.error ?? null,
       target: result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null,
       teamId: result.journal?.teamId ?? null,
       args: body === undefined ? null : loggedArgs(body),
@@ -298,7 +306,7 @@ export async function handlePlateforme(request: Request, options: PlatformReques
     }
 
     const served = await serve(match, { db, identity, request, origin })
-    if (MUTATIONS.has(method)) {
+    if (MUTATIONS.has(method) || match.route.journaled) {
       const userAgent = request.headers.get("user-agent")
       const line = journalLine(served, { method, tool: match.tool, identity, started, userAgent })
       // L'écrivain commun des portes (H07) : il ne lève jamais, un journal en panne ne change rien.

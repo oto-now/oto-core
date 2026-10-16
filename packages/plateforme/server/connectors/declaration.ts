@@ -14,7 +14,7 @@ import { issuesText, PlatformError } from "../errors"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
-import type { ConnectorDefinition, ConnectorFunctionDefinition } from "./definition"
+import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { addressProblem, baseAddress, settingProblem } from "./settings"
 
@@ -56,9 +56,15 @@ function connectorProblem(definition: ConnectorDefinition, reserved: ReadonlySet
   return null
 }
 
-/** Le problème de ce qu'est un compte : les champs du secret, puis les réglages ; `null` : aucun. */
+/**
+ * Le problème de ce qu'est un compte : les champs du secret, puis les réglages ; `null` : aucun. Un compte `oauth2_user`
+ * n'a aucun champ : ses jetons viennent du consentement, son application OAuth de l'hôte.
+ */
 function accountProblem(definition: ConnectorDefinition): string | null {
   const { name, credential } = definition
+  if (definition.auth?.kind === "oauth2_user") {
+    return Array.isArray(credential) && credential.length === 0 ? null : `${name}: credential must be empty with oauth2_user: the tokens of a consent are not fields, and the OAuth application is the host's.`
+  }
   const fields = Array.isArray(credential) ? credential : []
   const badField = fields.find((field) => typeof field?.name !== "string" || !/^[a-z][a-z0-9_]{0,39}$/.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
   if (fields.length === 0 || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
@@ -180,9 +186,13 @@ function compiledFunction(definition: ConnectorDefinition, fn: ConnectorFunction
 
 /** Les refus que `read` sert : ceux de la fonction, le compte, puis la table du connecteur. */
 function refusalLines(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string[] {
+  const account =
+    definition.auth.kind === "oauth2_user"
+      ? `No ${definition.name} account connected for you, or one to connect again: each person connects their own, the refusal says how.`
+      : `No ${definition.name} account you can use, or one without its secret: the refusal says whom to ask.`
   return [
     ...fn.refusals.map((refusal) => `${refusal.code}: ${refusal.message}${typeof refusal.when === "number" ? ` (HTTP ${refusal.when})` : ""}`),
-    `No ${definition.name} account you can use, or one without its secret: the refusal says whom to ask.`,
+    account,
     ...definition.errors.map((error) => `${error.code}: ${error.message}`),
   ]
 }
@@ -226,8 +236,17 @@ function probeProblem(definition: ConnectorDefinition): string | null {
   return null
 }
 
+/** L'identité d'un consentement (`oauth2_user`) : une lecture du connecteur, sans argument requis, comme la sonde. */
+function identityProblem(definition: ConnectorDefinition, auth: PreparedAuth): string | null {
+  if (auth.kind !== "user_consent") return null
+  const fn = definition.functions.find((candidate) => candidate.name === auth.identity.function)
+  const required = fn && Array.isArray(fn.schema.required) ? fn.schema.required : []
+  if (!fn || fn.class !== "read" || required.length > 0) return `${definition.name}: identity must name a read function of the connector without required arguments.`
+  return null
+}
+
 /** Un connecteur contrôlé et préparé ; au premier problème, `CatalogRegistrationError`. */
-function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>): DeclaredConnector {
+function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, application: OAuthApplication | null): DeclaredConnector {
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
   const problem = connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition)
@@ -240,6 +259,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   if (typeof auth === "string") throw new CatalogRegistrationError(auth)
   seen.add(definition.name)
   let probe: PreparedFunction | null = null
+  let identity: PreparedFunction | null = null
   const functions = definition.functions.map((fn) => {
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
@@ -250,11 +270,37 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const api = { label: definition.label, timeoutMs: definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
     const prepared: PreparedFunction = { connector: definition, fn, api, address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
     if (fn.name === definition.probe?.function) probe = prepared
+    if (auth.kind === "user_consent" && fn.name === auth.identity.function) identity = prepared
     return catalogFunction(prepared, schema)
   })
-  const problemOfProbe = probeProblem(definition)
+  const problemOfProbe = probeProblem(definition) ?? identityProblem(definition, auth)
   if (problemOfProbe) throw new CatalogRegistrationError(problemOfProbe)
-  return { definition, auth, functions, probe }
+  return { definition, auth, functions, probe, identity, application: auth.kind === "user_consent" ? application : null }
+}
+
+/** Ce que l'hôte passe à `registerConnectors` en plus de ses définitions. */
+export type ConnectorOptions = {
+  /**
+   * L'application OAuth de chaque connecteur `oauth2_user`, par nom de connecteur : l'identifiant et le secret du client
+   * que l'hôte a enregistrés chez le tiers, lus par l'hôte (son environnement, son coffre), jamais par le paquet. Sans
+   * elle, la connexion d'un compte et l'appel sont refusés nommément.
+   */
+  oauthApplications?: Readonly<Record<string, OAuthApplication>>
+}
+
+/** Les applications OAuth contrôlées : chacune d'un connecteur `oauth2_user` déclaré, identifiant et secret non vides. */
+function checkedApplications(definitions: readonly ConnectorDefinition[], given: ConnectorOptions["oauthApplications"]): Map<string, OAuthApplication> {
+  const applications = new Map<string, OAuthApplication>()
+  for (const [name, application] of Object.entries(given ?? {})) {
+    const definition = definitions.find((candidate) => candidate.name === name)
+    if (definition?.auth.kind !== "oauth2_user") throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
+    const filled = (value: unknown): value is string => typeof value === "string" && value.trim() !== ""
+    if (!isJsonObject(application) || !filled(application.clientId) || !filled(application.clientSecret)) {
+      throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)
+    }
+    applications.set(name, { clientId: application.clientId, clientSecret: application.clientSecret })
+  }
+  return applications
 }
 
 /**
@@ -262,17 +308,19 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
  * chaque route qui monte une porte du paquet, comme `registerFunctions`. Toute la liste est contrôlée d'abord : nom du
  * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs, champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
- * `oauth2_client_credentials` ; `oauth2_user` refusé nommément) ; puis chaque fonction : nom, classe,
- * description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible ; enfin la sonde. Au premier refus, `CatalogRegistrationError` et rien n'est
- * déclaré ; sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
+ * `oauth2_client_credentials`, `oauth2_user`) ; puis chaque fonction : nom, classe, description, schéma strict et
+ * compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles, récapitulatif d'une fonction sensible ;
+ * enfin la sonde et l'identité d'un consentement. `options.oauthApplications` : l'application OAuth de chaque
+ * connecteur `oauth2_user`, fournie par l'hôte. Au premier refus, `CatalogRegistrationError` et rien n'est déclaré ;
+ * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
-export function registerConnectors(definitions: readonly ConnectorDefinition[]): void {
+export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {
   const current = new Set(declaredConnectors().flatMap((connector) => connector.functions))
   const others = catalogFunctions().filter((fn) => !current.has(fn))
   const reserved = new Set([...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf))
   const seen = new Set<string>()
-  const connectors = definitions.map((definition) => declared(definition, reserved, seen))
+  const applications = checkedApplications(definitions, options.oauthApplications)
+  const connectors = definitions.map((definition) => declared(definition, reserved, seen, applications.get(definition.name) ?? null))
   replaceDeclaredConnectors(connectors)
 }
 

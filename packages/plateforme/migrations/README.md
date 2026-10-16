@@ -198,6 +198,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
 - `20261014130000_platform_chemin_help.sql` (version 1.4.3, guide de la plateforme) : `teams_slug_reserved` admet aussi
   `help`, le chemin où `read` sert le guide : une équipe dont le slug est déjà `help` fait échouer la migration, à renommer
   avant. Fichier à part de `20261014120000`, déjà poussée. Aucune table, colonne ni fonction.
+- `20261016090000_platform_consentement.sql` (consentement d'une personne, `oauth2_user`) : `accounts.granted_scopes`
+  (les droits accordés au dernier consentement ou renouvellement, en clair) ; la table `connector_consents`, les
+  demandes de consentement en cours (empreinte SHA-256 du `state`, jamais le `state` ; personne, organisation,
+  connecteur, écran de retour ; dix minutes, consommées une fois), sous RLS : chacun pose, lit et consomme les siennes,
+  tout membre purge les échues. Les jetons se rangent dans les colonnes de `20261008090000`.
 
 ## Installer sur un hôte neuf
 

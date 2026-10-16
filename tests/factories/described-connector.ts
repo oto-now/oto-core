@@ -3,8 +3,9 @@
 // authentification `bearer`, en-tête constant, listes en query (`brackets`), argument encodé en JSON, pagination par
 // curseur, sortie taillée, refus propre à une fonction, contrôle avant l'appel (`equal_sums`) et sur la réponse
 // (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde.
-import type { StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
+import type { ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
+import { PlatformError } from "../../packages/plateforme/server/errors"
 
 const ID = { type: "string", pattern: "^[a-z0-9_-]{1,40}$" }
 
@@ -144,6 +145,53 @@ export function describedConnector(name = "crm"): ConnectorDefinition {
     probe: { function: `${name}.get_company`, nonEmpty: ["scopes"] },
     functions: functions(name),
   }
+}
+
+/** L'application OAuth de test d'un connecteur à consentement : identifiant et secret tirés par le test. */
+export const TEST_APPLICATION = { clientId: "client-test", clientSecret: "secret-test" }
+
+/**
+ * Le connecteur décrit de test sous le consentement d'une personne (`oauth2_user`), de la forme que rend la fabrique :
+ * sans champ, l'identité lue par `get_company` (son `email`), rotation du jeton de rafraîchissement.
+ */
+export function consentConnector(name = "crm"): ConnectorDefinition {
+  return {
+    ...describedConnector(name),
+    credential: [],
+    auth: {
+      kind: "oauth2_user",
+      authorizeUrl: "https://login.crm.example.test/authorize",
+      tokenUrl: "https://login.crm.example.test/token",
+      clientAuth: "body",
+      scopes: ["offline_access", "contacts.read"],
+      authorizeParams: { prompt: "select_account" },
+      refresh: "refresh_token",
+      rotates: true,
+      expiresInDefault: 3600,
+      identity: { function: `${name}.get_company`, path: "email" },
+    },
+  }
+}
+
+/** Le consentement d'un compte gardé par le test : `renewals` relève chaque renouvellement, `revocations` chaque raison. */
+export function memoryConsent(refreshToken: string | null): ConsentCredential & { renewals: { token: string; rotated: string | null; scopes: string[] | null }[]; revocations: string[] } {
+  const renewals: { token: string; rotated: string | null; scopes: string[] | null }[] = []
+  const revocations: string[] = []
+  const consent = {
+    application: TEST_APPLICATION,
+    refreshToken,
+    renewals,
+    revocations,
+    renewed: async (token: StoredToken, rotated: string | null, scopes: string[] | null) => {
+      renewals.push({ token: token.token, rotated, scopes })
+      if (rotated) consent.refreshToken = rotated
+    },
+    revoked: async (reason: string) => {
+      revocations.push(reason)
+      return new PlatformError("not_enabled", `to connect again: ${reason}`)
+    },
+  }
+  return consent
 }
 
 /** Le jeton d'un échange gardé par le test à la place de la ligne du compte ; `written` relève chaque écriture. */

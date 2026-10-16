@@ -3,6 +3,7 @@
 // seul appel au tiers. Le format vit dans `cli/vault.mjs`, partagé avec la commande `oto-platform accounts secret` ; ce
 // module lit la clé de l'hôte à l'usage (jamais au démarrage : un hôte sans connecteur réel ne la pose pas) et traduit
 // les refus du coffre en erreurs du paquet. Pas de Supabase Vault : le paquet reste portable sur un Postgres nu (ADR-012).
+import { createHmac } from "node:crypto"
 import { open, openCredential, parseVaultKey, seal, sealCredential, TOKEN_COLUMN, VAULT_KEY_VARIABLE, VaultError } from "../../cli/vault.mjs"
 import { PlatformError } from "../errors"
 import { PlatformConfigError } from "../sql"
@@ -56,4 +57,12 @@ export function encryptToken(accountId: string, token: string, env: Env = proces
 export function decryptToken(accountId: string, ciphertext: string, env: Env = process.env): string {
   const key = vaultKey(env)
   return opened(accountId, "token", () => open(key, accountId, TOKEN_COLUMN, ciphertext).text)
+}
+
+/**
+ * La preuve PKCE (`code_verifier`) d'un consentement, tirée de son `state` par la clé de l'hôte (HMAC-SHA-256, préfixe
+ * `pkce/`) : 43 caractères base64url, rien à garder en base, et nul ne la refait sans la clé.
+ */
+export function consentVerifier(state: string, env: Env = process.env): string {
+  return createHmac("sha256", vaultKey(env)).update(`pkce/${state}`, "utf8").digest("base64url")
 }

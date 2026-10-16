@@ -116,7 +116,11 @@ export { connectorAccountForms, setAccountSecret } from "./connectors/account-se
 // Moteur des connecteurs décrits : l'hôte déclare les connecteurs qu'il utilise, partagés ou propres, au montage de ses
 // routes ; la sonde d'un compte, pour qui le gère.
 export { registerConnectors } from "./connectors/declaration"
-export type { ConnectorDefinition, ConnectorFunctionDefinition } from "./connectors/definition"
+export type { ConnectorOptions } from "./connectors/declaration"
+export type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./connectors/definition"
+// Le consentement d'une personne à un connecteur `oauth2_user` : son départ pour la personne connectée (l'adresse
+// d'autorisation où l'envoyer), et l'adresse de retour à déclarer chez le tiers, servie par la porte du paquet.
+export { CONNECTOR_CONSENT_CALLBACK_PATH, connectorConsentRedirectUri, startConnectorConsent } from "./connectors/consent"
 export { probeAccount } from "./connectors/account-secret"
 export type { AccountHealth } from "./connectors/account-secret"
 // Une fonction du catalogue lancée par le serveur de l'hôte, sous la personne connectée : contrôles et journal de

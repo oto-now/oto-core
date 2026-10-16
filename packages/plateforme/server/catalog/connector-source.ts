@@ -3,16 +3,24 @@
 // part, sans import à l'exécution, comme `erp-source.ts` : logée dans `declaration.ts`, qui lit le registre pour
 // valider, elle ferait s'importer registre et déclaration.
 import type { PreparedAuth } from "../connectors/auth"
-import type { ConnectorDefinition } from "../connectors/definition"
+import type { ConnectorDefinition, OAuthApplication } from "../connectors/definition"
 import type { PreparedFunction } from "../connectors/engine"
 import type { CatalogFunction } from "./define"
 
 /**
  * Un connecteur déclaré : sa définition telle que l'hôte l'a passée, son authentification préparée (les champs du compte
  * qu'elle exige), ses fonctions au contrat du catalogue, et la fonction préparée de sa sonde (`probeAccount`), `null`
- * sans sonde.
+ * sans sonde. Pour `oauth2_user` : la fonction préparée qui nomme qui a consenti (`identity`) et l'application OAuth
+ * que l'hôte a fournie (`application`, `null` sans elle) ; `null` toutes deux pour une autre authentification.
  */
-export type DeclaredConnector = { definition: ConnectorDefinition; auth: PreparedAuth; functions: readonly CatalogFunction[]; probe: PreparedFunction | null }
+export type DeclaredConnector = {
+  definition: ConnectorDefinition
+  auth: PreparedAuth
+  functions: readonly CatalogFunction[]
+  probe: PreparedFunction | null
+  identity: PreparedFunction | null
+  application: OAuthApplication | null
+}
 
 let declared: readonly DeclaredConnector[] = []
 

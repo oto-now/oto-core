@@ -14,6 +14,7 @@ import { cut } from "../journal"
 import { connectorAccounts, type ConnectorAccount, type LevelName } from "./accounts"
 import { activableConnectors, loadActiveConnectors } from "./activations"
 import { modeLabel } from "./modes"
+import { consentOwnerOf } from "./consent-accounts"
 import { chooseAccount, type TeamRef } from "./resolution"
 
 /** Une ligne par connecteur, jamais plus (le moteur de blocs coupe le bloc, H30). */
@@ -26,6 +27,8 @@ export type NeedOutcome =
   | { kind: "no_account"; team: TeamRef | null }
   | { kind: "read_only"; team: TeamRef | null; labels: string[] }
   | { kind: "several_accounts"; team: TeamRef | null; labels: string[] }
+  /** Connecteur à consentement : la personne n'a pas de compte actif à elle ; elle connecte le sien. */
+  | { kind: "to_connect"; team: TeamRef | null }
 
 export type ConnectorOutlook = { connector: string; read?: NeedOutcome; write?: NeedOutcome }
 
@@ -34,8 +37,8 @@ type Need = "read" | "write"
 const NEEDS: Need[] = ["read", "write"]
 
 /** Ce qu'obtient un appel que porte `team` (`null` : aucune équipe), pour la fonction donnée. */
-function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[], team: TeamRef | null): NeedOutcome {
-  const choice = chooseAccount({ fn, accounts, team })
+function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[], team: TeamRef | null, consentOwner: string | undefined): NeedOutcome {
+  const choice = chooseAccount({ fn, accounts, team, consentOwner })
   if (choice.kind === "account") {
     const { label, mode, level } = choice.account
     return { kind: "account", team, account: { label, mode, level } }
@@ -43,6 +46,7 @@ function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[],
   if (choice.kind === "ambiguous_step") return { kind: "several_accounts", team, labels: choice.accounts.map((account) => account.label) }
   // Comptes visibles mais sous le niveau exigé : le remède est un accès, pas un compte de plus (N39).
   if (choice.kind === "below_level") return { kind: "read_only", team, labels: choice.accounts.map((account) => account.label) }
+  if (choice.kind === "consent_needed") return { kind: "to_connect", team }
   return { kind: "no_account", team }
 }
 
@@ -56,11 +60,13 @@ export function connectorOutlook(input: {
   functions: readonly CatalogFunction[]
   accounts: readonly ConnectorAccount[]
   team: TeamRef | null
+  /** La personne dont le compte porte un connecteur à consentement (`consentOwnerOf`). */
+  consentOwner?: string
 }): ConnectorOutlook {
   const outlook: ConnectorOutlook = { connector: input.connector }
   for (const need of NEEDS) {
     const fn = input.functions.find((candidate) => (candidate.class === "read") === (need === "read"))
-    if (fn) outlook[need] = needOutcome(fn, input.accounts, input.team)
+    if (fn) outlook[need] = needOutcome(fn, input.accounts, input.team, input.consentOwner)
   }
   return outlook
 }
@@ -87,6 +93,8 @@ function wholeLine(outcome: NeedOutcome): string {
       return `no account you can use${outcome.team ? ` (${teamWords(outcome.team)})` : ""}: calls will be refused until you are given write access; you can only read ${labelList(outcome.labels)}.`
     case "several_accounts":
       return `${outcome.team ? `${teamWords(outcome.team)}, several accounts` : "several organisation accounts"}; ask the user which one and pass account in the call: ${labelList(outcome.labels)}.`
+    case "to_connect":
+      return "no account of yours: calls will be refused until the user connects their own account (Connect my account)."
   }
 }
 
@@ -101,6 +109,8 @@ function needPart(need: Need, outcome: NeedOutcome): string {
       return `${need}: read access only${outcome.team ? ` (${teamWords(outcome.team)})` : ""}`
     case "several_accounts":
       return `${need}: several accounts (${labelList(outcome.labels)})`
+    case "to_connect":
+      return `${need}: no account of yours`
   }
 }
 
@@ -149,7 +159,7 @@ export async function teamConnectorLines(db: PlatformDb, identity: Identity): Pr
       const outlook = connectorOutlook({ connector, functions, accounts, team: { id, slug, name } })
       lines.teams.set(id, [...(lines.teams.get(id) ?? []), ...connectorLines([outlook])])
     }
-    if (owning.length === 0) lines.everyone.push(...connectorLines([connectorOutlook({ connector, functions, accounts, team: null })]))
+    if (owning.length === 0) lines.everyone.push(...connectorLines([connectorOutlook({ connector, functions, accounts, team: null, consentOwner: consentOwnerOf(connector, identity) })]))
   }
   return lines
 }

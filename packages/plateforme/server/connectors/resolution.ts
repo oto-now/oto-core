@@ -20,6 +20,7 @@ import { memberDirectory } from "../directory"
 import { boundedList, inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { connectorAccounts, levelName, type AccountOwner, type ConnectorAccount, type LevelName } from "./accounts"
+import { consentOwnerOf, consentRefusal, ownAccount } from "./consent-accounts"
 import { modeLabel } from "./modes"
 
 /** Lignes du journal du `ctx` relues pour trouver la dernière procédure, les plus récentes d'abord (N11). */
@@ -42,7 +43,7 @@ export type ResolvedAccount = {
   mode: AccountMode
   owner: AccountOwner
   level: LevelName
-  source: "named" | "team" | "organisation"
+  source: "named" | "team" | "organisation" | "personal"
 }
 
 /** Ce que les décisions lisent d'une fonction du catalogue. */
@@ -74,6 +75,11 @@ export type AccountChoiceInput = {
   team: TeamRef | null
   /** `call.account` : libellé (sans casse ni accent) ou identifiant (N3). */
   account?: string
+  /**
+   * La personne dont le compte personnel porte l'appel d'un connecteur à consentement (`oauth2_user`) : ses comptes ne
+   * servent qu'à elle, ni équipe ni organisation n'en ont (`consentOwnerOf`).
+   */
+  consentOwner?: string
 }
 
 export type AccountRefusal =
@@ -84,6 +90,8 @@ export type AccountRefusal =
   | { kind: "ambiguous_step"; team: TeamRef | null; accounts: ConnectorAccount[] }
   | { kind: "below_level"; accounts: ConnectorAccount[] }
   | { kind: "none"; team: TeamRef | null }
+  /** Connecteur à consentement : aucun compte de la personne (`account` nul), ou le sien est à reconnecter. */
+  | { kind: "consent_needed"; account: ConnectorAccount | null }
 
 export type AccountChoice = { kind: "account"; account: ResolvedAccount } | AccountRefusal
 
@@ -191,11 +199,14 @@ function namedAccount(input: AccountChoiceInput, wanted: string, needed: AccessL
  * Compte d'un appel (H83) : le compte nommé, sinon celui de l'équipe porteuse, sinon celui de
  * l'organisation (plus d'étape de slot, P37). À chaque étape, seul compte un compte actif dont le
  * niveau atteint celui de la classe (H67) ; deux à la même étape → ambiguïté, jamais de choix
- * silencieux (N5). Un compte personnel ne sert que nommé.
+ * silencieux (N5). Un compte personnel ne sert que nommé, sauf à sa personne celui d'un connecteur à consentement
+ * (`oauth2_user`) : sans compte nommé, son appel prend le sien (`consentOwner`), jamais un autre ; partagé, il sert
+ * aux autres nommé, comme tout compte personnel.
  */
 export function chooseAccount(input: AccountChoiceInput): AccountChoice {
   const needed = requiredLevel(input.fn.class)
   if (input.account !== undefined) return namedAccount(input, input.account.trim(), needed)
+  if (input.consentOwner !== undefined) return ownAccount(input.accounts, input.consentOwner)
   const { team } = input
   const steps = [
     ...(team ? [input.accounts.filter((account) => account.owner.kind === "team" && account.owner.teamId === team.id)] : []),
@@ -247,7 +258,8 @@ export function accountRefusal(refusal: AccountRefusal, fn: FunctionTraits, word
           : `Account « ${refusal.account.label} » is disabled. Ask ${words.ask} to enable it, or name another account.`,
       )
     case "ambiguous_step": {
-      const whose = refusal.team ? `of team ${refusal.team.name}` : "of the organisation"
+      const personal = refusal.accounts.every((account) => account.owner.kind === "user")
+      const whose = refusal.team ? `of team ${refusal.team.name}` : personal ? "of yours" : "of the organisation"
       const labels = boundedList(refusal.accounts.map((account) => `« ${account.label} »`))
       return new PlatformError(
         "ambiguous_account",
@@ -271,8 +283,11 @@ export function accountRefusal(refusal: AccountRefusal, fn: FunctionTraits, word
         `No ${fn.connector} account is connected for you (${steps}). Ask an administrator of ${words.orgName}${names} to connect one on the dashboard: ${words.origin}/admin/connectors.`,
       )
     }
+    case "consent_needed":
+      return consentRefusal(fn.connector, refusal.account)
   }
 }
+
 
 /**
  * Qui gère les comptes d'un refus (`describeOwner`, une fois par propriétaire : deux au plus, l'équipe
@@ -304,7 +319,7 @@ export async function resolveAccount(
   input: { fn: FunctionTraits; team: TeamRef | null; account?: string; origin: string },
 ): Promise<ResolvedAccount> {
   const accounts = await connectorAccounts(db, identity, input.fn.connector)
-  const choice = chooseAccount({ fn: input.fn, accounts, team: input.team, account: input.account })
+  const choice = chooseAccount({ fn: input.fn, accounts, team: input.team, account: input.account, consentOwner: consentOwnerOf(input.fn.connector, identity) })
   if (choice.kind === "account") return choice.account
   throw accountRefusal(choice, input.fn, await refusalWords(db, identity, choice, input.origin))
 }

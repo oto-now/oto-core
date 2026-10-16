@@ -84,11 +84,6 @@ describe("registerConnectors", () => {
     ["a duplicate", () => [describedConnector(), describedConnector()], "Duplicate connector crm in registerConnectors."],
     ["an http address", () => [{ ...describedConnector(), baseUrl: "http://crm.example.test" }], "crm: baseUrl must start with https:// or with a url setting."],
     [
-      "a person's consent (oauth2_user), next batch",
-      () => [{ ...describedConnector(), credential: [], auth: { kind: "oauth2_user", authorizeUrl: "https://crm.example.test/authorize", tokenUrl: "https://crm.example.test/token" } }],
-      "crm: auth oauth2_user (a person's consent) is not supported yet: it comes with the next batch of the package.",
-    ],
-    [
       "basic authentication on a field the credential does not declare",
       () => [{ ...describedConnector(), auth: { kind: "basic", username: "api_id", password: "api_key" } }],
       "crm: auth basic must name two credential fields (username, password).",

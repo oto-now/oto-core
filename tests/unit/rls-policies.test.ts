@@ -109,6 +109,9 @@ ADDED.push("member_exclusions_select_member", "member_exclusions_insert_member")
 ADDED.push("ctx_update_own")
 // Les connecteurs de l'hôte (prise des connecteurs) : une liste de noms sans organisation, lue par toute session.
 ADDED.push("connectors_select_authenticated")
+// Les demandes de consentement à un connecteur `oauth2_user` : isolation par organisation, attribution à l'appelant,
+// consommation par la personne, ménage des expirées.
+ADDED.push("connector_consents_select_own", "connector_consents_insert_own", "connector_consents_delete_own_or_expired")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

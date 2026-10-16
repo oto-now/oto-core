@@ -136,7 +136,7 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 ## Écart avec le code
 
 - `default_team_id` et `lead_user_id` vidés restent en base, à retirer en 1.1 ; services et API des règles d'accès et des accès plateforme sans écran client (M73).
-- Le partage d'un compte décidé le 16/10 n'est pas écrit : `access_rules_one_subject` refuse une règle d'organisation sur un compte ; `chooseAccount` (`resolution.ts`) ne prend un compte personnel, même le sien, que nommé ; le refus ne nomme pas les comptes partagés ; `members_cleanup` laisse servir le compte d'une personne partie ; `write` et `sensitive` exigent le même niveau ; aucun journal propre aux règles d'un compte (issue « Partage des comptes », oto-now/oto-core#68).
+- Le partage d'un compte décidé le 16/10 n'est pas écrit : `access_rules_one_subject` refuse une règle d'organisation sur un compte ; `chooseAccount` (`resolution.ts`) ne prend un compte personnel, même le sien, que nommé, sauf le sien d'un connecteur à consentement `oauth2_user` ([connecteurs et comptes](connecteurs-et-comptes.md) § Consentement d'une personne) ; le refus ne nomme pas les comptes partagés ; `members_cleanup` laisse servir le compte d'une personne partie ; `write` et `sensitive` exigent le même niveau ; aucun journal propre aux règles d'un compte (issue « Partage des comptes », oto-now/oto-core#68).
 - Upsert et vue du sujet des règles (`server/rules.ts`), curseur au-delà de 200 éléments (M18b) ; `DirectoryEntry.email` et `StaffEntry` en `string | null`, `server/admin/grants.ts` sur `sameEmail` (M20b) ; commentaires de `server/` rendus faux par l'isolation par organisation (M15b).
 
 ## Questions ouvertes

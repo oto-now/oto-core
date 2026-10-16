@@ -30,6 +30,7 @@ import {
   type AccessLevel,
   type Owner,
 } from "../access"
+import { declaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
 import { leadNames, leadWord, memberDirectory, teamsWithLeads } from "../directory"
@@ -49,8 +50,11 @@ export type AccountOwner = Owner & { description: string }
 /** Un compte tel que les services le rendent : jamais de secret. */
 export type AccountSummary = { id: string; label: string; connector: string; mode: AccountMode; owner: AccountOwner }
 
-/** Un compte visible de la personne, avec son état et son niveau : ce que lisent les résolutions. */
-export type ConnectorAccount = AccountSummary & { status: string; level: AccessLevel }
+/**
+ * Un compte visible de la personne, avec son état, la raison d'un état `error` (un consentement à reconnecter) et son
+ * niveau : ce que lisent les résolutions.
+ */
+export type ConnectorAccount = AccountSummary & { status: string; statusReason?: string | null; level: AccessLevel }
 
 /**
  * Un compte lu, et le nom de son équipe propriétaire (`team_name`, sous RLS : `null` quand elle ne se lit pas) ; ses
@@ -69,6 +73,7 @@ export type AccountRow = {
   settings: Record<string, string>
   secret_fields: string[]
   secret_updated_at: string | null
+  status_reason: string | null
 }
 
 /**
@@ -79,7 +84,7 @@ export type AccountRow = {
 export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string } = {}) {
   return sql<AccountRow[]>`
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
-           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at
+           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
        and a.connector = coalesce(${only.connector ?? null}, a.connector)
@@ -114,7 +119,7 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
   return (
     rows
-      .map((row) => ({ ...summary(row), status: row.status, level: levels.get(row.id) ?? ACCESS_LEVELS.none }))
+      .map((row) => ({ ...summary(row), status: row.status, statusReason: row.status_reason, level: levels.get(row.id) ?? ACCESS_LEVELS.none }))
       // Niveau 0 : un compte que la personne ne voit pas n'est ni servi, ni retenu, ni nommé (H83).
       .filter((account) => account.level >= ACCESS_LEVELS.read)
       .sort((a, b) => a.label.localeCompare(b.label, "fr"))
@@ -170,6 +175,16 @@ function requireCreatableMode(connector: string, mode: AccountMode): void {
 }
 
 /**
+ * Un connecteur à consentement (`oauth2_user`) n'a pas de compte créé à la main, quel qu'en soit le titulaire : ses
+ * jetons ne naissent que du consentement d'une personne, qui en fait un compte personnel. Ce compte se partage ensuite
+ * comme tout compte personnel (règles d'accès, sans règle propre).
+ */
+export function requireNotConsent(connector: string): void {
+  if (declaredConnector(connector)?.auth.kind !== "user_consent") return
+  throw new PlatformError("invalid_arguments", `Accounts of ${connector} are not created by hand: each person connects their own by consenting (Connect my account), then may share it like any personal account.`)
+}
+
+/**
  * Crée un compte pour un connecteur activable, actif ou non (N12), au mode que son connecteur admet
  * (`requireCreatableMode`). Le mode est posé explicitement : le défaut de la colonne est `reel`. Un libellé déjà
  * pris dans l'organisation, sans casse, tous connecteurs et comptes invisibles compris, est refusé par l'index
@@ -180,6 +195,7 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   if (!parsed.success) throw invalidInput(parsed.error)
   const account = parsed.data
   requireActivable(account.connector, catalogFunctions())
+  requireNotConsent(account.connector)
   requireCreatableMode(account.connector, account.mode)
   await requireCreationRight(db, identity, account)
   const teamId = account.owner_kind === "team" ? (account.team_id ?? null) : null
@@ -228,6 +244,7 @@ function accountView(row: AccountRow): AccountView {
     status: accountStatus(row.status),
     secret: { fields: row.secret_fields, updatedAt: row.secret_updated_at },
     settings: row.settings,
+    statusReason: row.status_reason,
   }
 }
 

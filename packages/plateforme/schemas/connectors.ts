@@ -52,6 +52,26 @@ export const createAccountSchema = z
 
 export const disableAccountSchema = z.object({ account_id: z.uuid() })
 
+/** Le chemin d'un écran de l'hôte où revenir après un consentement : relatif, jamais vers une autre adresse. */
+const returnPathSchema = z
+  .string()
+  .max(500)
+  .regex(/^\/(?![/\\])[\x21-\x7E]*$/, "a path of this address, starting with a single /")
+
+/**
+ * Le consentement d'une personne à un connecteur `oauth2_user` (`startConnectorConsent`, `POST connector-consent`) :
+ * le connecteur, et l'écran de l'hôte où revenir ensuite (`return_to`, l'écran Connecteurs par défaut).
+ */
+export const connectorConsentSchema = z.object({ connector: connectorNameSchema, return_to: returnPathSchema.optional() }).strict()
+export type ConnectorConsentInput = z.input<typeof connectorConsentSchema>
+
+/** Le retour du tiers sur l'adresse de retour (`GET connector-consent/callback`) : la query qu'il pose. */
+export const connectorConsentReturnSchema = z.object({
+  state: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
+  code: z.string().min(1).max(4000).optional(),
+  error: z.string().max(200).optional(),
+})
+
 /** Le nom d'un champ du secret ou d'un réglage, comme la déclaration d'un connecteur l'écrit. */
 const accountKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, "a field or setting name: lowercase letters, digits and _")
 
@@ -113,16 +133,20 @@ export type AccountView = {
   secret?: { fields: string[]; updatedAt: string | null }
   /** Les réglages saisis, en clair (une région, une adresse). */
   settings?: Record<string, string>
+  /** La raison d'un état `error` : un consentement à reconnecter. */
+  statusReason?: string | null
 }
 
 /**
  * Le formulaire d'un compte d'un connecteur réel déclaré, tiré de sa déclaration (`connectorAccountForms`) : les
  * champs du secret (saisie masquée pour un champ `secret`), puis les réglages. L'écran Connecteurs le lit pour créer un
- * compte réel et pour en saisir le secret.
+ * compte réel et pour en saisir le secret, ou, pour un connecteur à consentement, pour proposer « Connecter mon compte ».
  */
 export type ConnectorAccountForm = {
   connector: string
   label: string
+  /** Vrai pour un connecteur `oauth2_user` : ni champ ni réglage, chacun y connecte son compte par son consentement. */
+  consent?: boolean
   fields: { name: string; label: string; secret: boolean }[]
   settings: (
     | { name: string; label: string; type: "choice"; choices: string[]; default?: string }

@@ -14,6 +14,7 @@ import {
 } from "@otomata_tech/oto_platform/server"
 import {
   EcranConnecteurs,
+  issueDuConsentement,
   reserveAuxAdministrateurs,
   resultatDe,
   type DonneesDesConnecteurs,
@@ -26,7 +27,8 @@ import { ADRESSES } from "../adresses"
 // `isOrgAdmin` avant tout appel (AC1, N1) ; chaque service redécide son droit. La page lit le
 // catalogue, les comptes et les équipes avec le jeton de la session, puis l'impact de la désactivation
 // de chaque connecteur actif, et le formulaire de compte de chaque connecteur réel déclaré ; l'écran écrit par
-// `/api/platform/admin/*`.
+// `/api/platform/admin/*`, et connecte un compte à consentement par `/api/platform/connector-consent`, dont le retour
+// ramène ici avec son issue en query.
 export const metadata: Metadata = {
   title: "Connecteurs",
   robots: { index: false },
@@ -56,7 +58,7 @@ async function lire(db: PlatformDb, identity: Identity): Promise<DonneesDesConne
   }
 }
 
-export default async function ConnecteursPage() {
+export default async function ConnecteursPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   // La session et l'appartenance se revérifient ici, hors de tout `try` : le layout n'est pas une
   // frontière (`nextjs-patterns.md § Un layout n'est JAMAIS une frontière d'autorisation`).
   const identite = await getPlatformIdentitySafely("admin/connectors")
@@ -67,5 +69,6 @@ export default async function ConnecteursPage() {
   let resultat: EcranConnecteursProps["resultat"] = ECHEC
   if (identite && !administre) resultat = { error: reserveAuxAdministrateurs(identite.data.identity.org.name) }
   else if (identite) resultat = await resultatDe(lire(identite.data.session.db, identite.data.identity))
-  return <EcranConnecteurs resultat={resultat} Lien={Link} ici={ICI} fil={{ adresses: ADRESSES, administre }} />
+  const consentement = searchParams ? issueDuConsentement(await searchParams) : undefined
+  return <EcranConnecteurs resultat={resultat} Lien={Link} ici={ICI} fil={{ adresses: ADRESSES, administre }} consentement={consentement} />
 }

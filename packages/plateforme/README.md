@@ -408,16 +408,39 @@ registerFunctions([/* fonctions de l'ERP */])
   d'erreurs, fonctions avec leur JSON Schema d'entrée strict, exemples, requête).
 - **Ce que le moteur exécute** : authentification `api_key` (en en-tête ou en query, la clé alors absente de tout
   log), `bearer`, `basic`, `oauth2_client_credentials` (jeton échangé, rangé chiffré sur la ligne du compte, renouvelé
-  à son échéance et une fois après un 401) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
+  à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
   (`https://{domain}.example.net`, `{server}/v1`), une adresse saisie ne joignant jamais un hôte interne ; `GET`, `POST`, `PUT`, `PATCH`, `DELETE` ; en-têtes et constantes ; listes en query ; arguments encodés
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429. Le JSON Schema d'entrée est validé et servi tel quel.
-- **Refus** : une définition invalide (consentement d'une personne `oauth2_user`, prévu au lot suivant ; champ ou
-  réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…) lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et
-  rien n'est déclaré.
+- **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
+  lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa
   première activation ou à son premier compte (migration `20261007090000_platform_connecteurs_declares.sql`) ; les
   champs, réglages et jeton d'un compte vivent sur sa ligne (migration `20261008090000_platform_comptes_a_champs.sql`).
+
+### Consentement d'une personne (`oauth2_user`)
+
+Un connecteur `oauth2_user` (Microsoft 365, par exemple) court sur le compte de chaque personne, connecté par son
+consentement chez le tiers ; ses appels le prennent sans le nommer, et elle peut le partager comme tout compte
+personnel (qui le reçoit le nomme dans `account`). L'application
+OAuth (identifiant et secret du client) est la vôtre : enregistrez-la chez le tiers, puis passez-la à
+`registerConnectors`, lue par vous, jamais par le paquet :
+
+```ts
+registerConnectors([microsoft.connector], {
+  oauthApplications: { microsoft: { clientId: process.env.MICROSOFT_CLIENT_ID!, clientSecret: process.env.MICROSOFT_CLIENT_SECRET! } },
+})
+```
+
+- **Adresse de retour** à déclarer chez le tiers, pour chaque adresse qui sert le consentement :
+  `https://<adresse de l'organisation>/api/platform/connector-consent/callback` (`connectorConsentRedirectUri(origin)`).
+  La porte du paquet la sert : votre route `/api/platform/[...route]` doit répondre aux `GET` avec la session.
+- **Départ** : `startConnectorConsent(db, identity, { connector, return_to? }, { origin })` (face `server`), ou
+  `POST /api/platform/connector-consent`, rend `{ url }` ; envoyez-y le navigateur. Au retour, la personne revient à
+  `return_to` (un chemin de votre application ; l'écran Connecteurs par défaut) avec `?consent=connected&account=…`
+  ou `?consent=failed&reason=<code>`.
+- **Écran** : le vôtre ; l'écran Connecteurs du paquet n'en porte que le bouton par défaut « Connecter mon compte ».
+- **Base** : migration `20261016090000_platform_consentement.sql` (demandes en cours, droits accordés).
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
   qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }`.
 

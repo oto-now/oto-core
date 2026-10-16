@@ -13,10 +13,12 @@ import { declaredConnector, declaredConnectors, type DeclaredConnector } from ".
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, isPlatformError, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { cut } from "../journal"
 import { accountOwner, managedAccount, summary, type AccountOwner, type AccountSummary } from "./accounts"
-import { requiredFields, type AccountCredential, type StoredToken, type TokenStore } from "./auth"
+import { requiredFields, type AccountCredential, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
 import { executeDescribed, nonEmpty, valueAt } from "./engine"
 import { accountMode } from "./modes"
+import { reconnectRefusal } from "./consent-accounts"
 import { accountSettings, settingValueProblem } from "./settings"
 import { decryptCredential, decryptToken, encryptCredential, encryptToken, type OpenedCredential } from "./vault"
 
@@ -76,6 +78,9 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
   const row = await managedAccount(db, identity, id, { service: "setAccountSecret", gesture: "Setting the secret of" })
   if (accountMode(row.mode) === "simule") throw new PlatformError("invalid_arguments", `Account « ${row.label} » is simulated: it has no secret.`)
   const declared = declaredOf(row.connector)
+  if (declared.auth.kind === "user_consent") {
+    throw new PlatformError("invalid_arguments", `Account « ${row.label} » holds the tokens of a person's consent: it has no secret to set. Connect it again instead.`)
+  }
   const fieldNames = declared.definition.credential.map((field) => field.name)
   const secret = parsed.data.input.secret ?? {}
   const unknown = Object.keys(secret).find((name) => !fieldNames.includes(name))
@@ -103,19 +108,22 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
 
 /**
  * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les champs du secret, puis les
- * réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret. Sans lecture de base.
+ * réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret. Un connecteur
+ * `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par son consentement. Sans lecture
+ * de base.
  */
 export function connectorAccountForms(): ConnectorAccountForm[] {
   return declaredConnectors().map(({ definition }) => ({
     connector: definition.name,
     label: definition.label,
+    consent: definition.auth.kind === "oauth2_user",
     fields: definition.credential.map(({ name, label, secret }) => ({ name, label, secret })),
     settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
   }))
 }
 
 /** Le jeton d'un échange, lu et écrit sur la ligne du compte, chiffré à part du secret saisi. */
-function tokenStore(db: PlatformDb, accountId: string): TokenStore {
+export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
   return {
     async read() {
       const [row] = await inTransaction(db, "tokenStore: account_token", (sql) => sql<{ token: string | null; expires_at: string | null }[]>`
@@ -137,11 +145,76 @@ function missingField(declared: DeclaredConnector, present: readonly string[]): 
   return name === undefined ? null : (declared.definition.credential.find((field) => field.name === name)?.label ?? name)
 }
 
+/** Le refus d'un connecteur `oauth2_user` dont l'hôte n'a pas fourni l'application OAuth (`registerConnectors`). */
+export function applicationMissing(label: string): PlatformError {
+  console.error(`[platform] connector ${label}: no OAuth application given to registerConnectors`)
+  return new PlatformError("not_enabled", `Connecting ${label} needs the OAuth application of this application, which is not configured. Ask whoever runs this application to configure it.`)
+}
+
+/**
+ * Le consentement d'un compte `oauth2_user`, ouvert pour un appel : l'application OAuth de l'hôte, le jeton de
+ * rafraîchissement (le secret du compte, `secret_ciphertext`), le jeton d'accès (`token_ciphertext`), et leurs
+ * écritures. Un jeton de rafraîchissement rendu ne remplace celui qu'on a lu que s'il est encore en place
+ * (`secret_updated_at` inchangé) ; sinon un autre renouvellement l'a déjà remplacé, et le sien est gardé. Un
+ * consentement qui ne vaut plus passe le compte en `error`, la raison dans `status_reason`, sauf si une reconnexion
+ * l'a déjà remplacé.
+ */
+function consentOpener(db: PlatformDb, account: CallAccount & { own: boolean }, declared: DeclaredConnector, row: SecretRow | undefined): () => Promise<AccountCredential> {
+  const { definition, application } = declared
+  if (!application) throw applicationMissing(definition.label)
+  const { own } = account
+  if (!row?.secret) {
+    const remedy = own ? `Ask the user to connect their ${definition.label} account` : "Only its owner can connect it: ask them"
+    throw new PlatformError("not_enabled", `Account « ${account.label} » is not connected yet. ${remedy} (Connect my account).`)
+  }
+  const ciphertext = row.secret
+  const id = account.id
+  let version = row.secret_updated_at
+  return async () => {
+    const opened = decryptCredential(id, ciphertext)
+    const fields = "fields" in opened ? opened.fields : {}
+    const consent: ConsentCredential = {
+      application,
+      refreshToken: fields.refresh_token ?? null,
+      async renewed(token, rotated, scopes) {
+        const access = encryptToken(id, token.token)
+        if (rotated === null) {
+          await inTransaction(db, "consent: renewed", (sql) => sql`
+            update platform.accounts set token_ciphertext = ${access}, token_expires_at = ${token.expiresAt}, granted_scopes = coalesce(${scopes}::text[], granted_scopes)
+             where id = ${id}`)
+          return
+        }
+        const secret = encryptCredential(id, { refresh_token: rotated })
+        const [written] = await inTransaction(db, "consent: rotated", (sql) => sql<{ version: string }[]>`
+          update platform.accounts
+             set secret_ciphertext = ${secret}, secret_fields = ${["refresh_token"]}::text[], secret_updated_at = now(),
+                 token_ciphertext = ${access}, token_expires_at = ${token.expiresAt}, granted_scopes = coalesce(${scopes}::text[], granted_scopes)
+           where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
+           returning to_json(secret_updated_at) #>> '{}' as version`)
+        if (!written) {
+          console.error(`[platform] connector ${definition.name}: account ${id} renewed meanwhile, its newer refresh token kept`)
+          return
+        }
+        version = written.version
+        consent.refreshToken = rotated
+      },
+      async revoked(reason) {
+        await inTransaction(db, "consent: revoked", (sql) => sql`
+          update platform.accounts set status = 'error', status_reason = ${cut(reason, 500)}
+           where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz`)
+        console.error(`[platform] connector ${definition.name}: the consent of account ${id} no longer holds, account to connect again`)
+        return reconnectRefusal(definition.name, account.label, reason, own)
+      },
+    }
+    return { fields: {}, settings: {}, tokens: tokenStore(db, id), consent }
+  }
+}
+
 /**
  * Le compte d'un appel à un connecteur réel déclaré, lu après sa résolution et avant tout récapitulatif ; rend de quoi
  * l'ouvrir pour `run` seul, au dernier moment. Refus nommés, la fonction non appelée (`not_enabled`, qui dit à qui
  * demander) : un compte simulé ; un compte sans secret, ou sans un champ qu'exige l'authentification ; un réglage
- * manquant ou devenu invalide.
+ * manquant ou devenu invalide ; un compte `oauth2_user` sans consentement, ou sans l'application OAuth de l'hôte.
  */
 export async function liveCredential(db: PlatformDb, identity: Identity, account: CallAccount, connector: string): Promise<() => Promise<AccountCredential>> {
   const who = () => describeOwner(db, identity, account.owner)
@@ -157,6 +230,11 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
     throw new PlatformError("internal", "Internal error.")
   }
   const row = await secretRow(db, "liveCredential", account.id)
+  if (declared.auth.kind === "user_consent") {
+    // Un compte partagé (règle d'accès) sert aussi à d'autres que sa personne : seule elle peut le (re)connecter.
+    const own = account.owner.kind === "user" && account.owner.userId === identity.user.id
+    return consentOpener(db, { ...account, own }, declared, row)
+  }
   if (!row?.secret) throw new PlatformError("not_enabled", `Account « ${account.label} » has no secret yet. Ask ${await who()} to set it.`)
   const checked = accountSettings(declared.definition, row.settings)
   if ("problem" in checked) {

@@ -1,22 +1,23 @@
-// L'authentification d'un connecteur décrit (`connecteurs-et-comptes.md` § Comptes à plusieurs champs et réglages) :
-// contrôlée à la déclaration, puis posée sur chaque requête depuis les champs du compte. `api_key` en en-tête ou en
-// query, `bearer`, `basic`, et `oauth2_client_credentials` : le jeton échangé contre l'identifiant et le secret du
-// client, rangé en base (chiffré, `token_ciphertext`) et non dans la mémoire du processus, renouvelé à son échéance,
-// et une fois de plus après un 401. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun secret ne
-// sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
+// L'authentification d'un connecteur décrit (`connecteurs-et-comptes.md` § Comptes à plusieurs champs et réglages,
+// § Consentement d'une personne) : contrôlée à la déclaration, puis posée sur chaque requête depuis le compte. `api_key`
+// en en-tête ou en query, `bearer`, `basic`, `oauth2_client_credentials` : le jeton échangé contre l'identifiant et le
+// secret du client, rangé en base (chiffré, `token_ciphertext`) et non dans la mémoire du processus, renouvelé à son
+// échéance, et une fois de plus après un 401 ; `oauth2_user` : le jeton d'accès du consentement d'une personne, rangé
+// de même, renouvelé par `oauth-user.ts`. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
+// secret ne sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import { PlatformError } from "../errors"
 import { isJsonObject } from "../json"
-import type { ConnectorDefinition, ConnectorSetting } from "./definition"
+import type { ConnectorDefinition, ConnectorSetting, OAuthApplication } from "./definition"
 import { requestJson, type ApiRequest, type Fetch } from "./http"
+import { consentAccessToken, EXPIRY_MARGIN_MS, prepareUserConsent, type UserConsentAuth } from "./oauth-user"
 import { addressProblem, resolveAddress, type AccountSettings, type AddressSpec } from "./settings"
+import { basicOf, clientPlacement, expiryOf } from "./token-endpoint"
 
 const HEADER_NAME = /^[A-Za-z0-9-]+$/
 const QUERY_NAME = /^[A-Za-z0-9_.-]+$/
-/** Un jeton dont l'échéance tombe dans cette marge est renouvelé avant l'appel. */
-const EXPIRY_MARGIN_MS = 60_000
 
 /** Les sortes d'authentification que le moteur exécute. */
-export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials"]
+export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials", "oauth2_user"]
 
 /** L'authentification déclarée, prête pour l'appel : les noms des champs du compte qu'elle lit. */
 export type PreparedAuth =
@@ -33,6 +34,7 @@ export type PreparedAuth =
       scope: string | null
       expiresInDefault: number | null
     }
+  | UserConsentAuth
 
 /** Le jeton d'un échange tel que le garde un compte. */
 export type StoredToken = { token: string; expiresAt: Date | null }
@@ -40,8 +42,24 @@ export type StoredToken = { token: string; expiresAt: Date | null }
 /** Où le jeton d'un échange se lit et s'écrit : la ligne du compte, chiffré (`token_ciphertext`). */
 export type TokenStore = { read: () => Promise<StoredToken | null>; write: (token: StoredToken) => Promise<void> }
 
-/** Le compte d'un appel : ses champs déchiffrés, ses réglages, son jeton. */
-export type AccountCredential = { fields: Readonly<Record<string, string>>; settings: AccountSettings; tokens: TokenStore }
+/**
+ * Le consentement d'un compte `oauth2_user`, ouvert pour un appel : l'application OAuth de l'hôte, le jeton de
+ * rafraîchissement lu, et les deux écritures d'un renouvellement.
+ */
+export type ConsentCredential = {
+  application: OAuthApplication
+  refreshToken: string | null
+  /**
+   * Range un renouvellement : le jeton d'accès et son échéance, les droits accordés s'ils sont dits, et le jeton de
+   * rafraîchissement rendu (`rotated`) à la place de celui qu'on a lu, seulement s'il est encore en place.
+   */
+  renewed: (token: StoredToken, rotated: string | null, scopes: string[] | null) => Promise<void>
+  /** Le consentement ne vaut plus : le compte passe à reconnecter, avec la raison ; rend le refus nommé à lever. */
+  revoked: (reason: string) => Promise<PlatformError>
+}
+
+/** Le compte d'un appel : ses champs déchiffrés, ses réglages, son jeton ; son consentement pour `oauth2_user`. */
+export type AccountCredential = { fields: Readonly<Record<string, string>>; settings: AccountSettings; tokens: TokenStore; consent?: ConsentCredential }
 
 /** Ce que l'authentification pose sur une requête. */
 export type Signature = { headers: Record<string, string>; query: [string, string][] }
@@ -73,7 +91,8 @@ function clientCredentials(definition: ConnectorDefinition, auth: Record<string,
 
 /**
  * L'authentification déclarée prête pour l'appel, ou le problème qui la refuse : chaque valeur qui désigne un secret
- * nomme un champ de `credential`. `oauth2_user` (consentement d'une personne) et toute autre sorte sont refusés.
+ * nomme un champ de `credential` ; `oauth2_user` (consentement d'une personne) n'en nomme aucun. Toute autre sorte
+ * (`none`) est refusée.
  */
 export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | string {
   const auth: Record<string, unknown> = { ...definition.auth }
@@ -93,14 +112,15 @@ export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | str
     return { kind: "header", header: auth.name.toLowerCase(), prefix: auth.prefix ?? "", field: auth.key }
   }
   if (auth.kind === "oauth2_client_credentials") return clientCredentials(definition, auth)
-  if (auth.kind === "oauth2_user") return `${head} (a person's consent) is not supported yet: it comes with the next batch of the package.`
-  return `${head} is not supported; the package runs api_key, bearer, basic and oauth2_client_credentials.`
+  if (auth.kind === "oauth2_user") return prepareUserConsent(definition, auth)
+  return `${head} is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials and oauth2_user.`
 }
 
 /** Les champs du compte que l'authentification lit : chacun est exigé à l'appel. */
 export function requiredFields(auth: PreparedAuth): string[] {
   if (auth.kind === "basic") return [auth.username, auth.password]
   if (auth.kind === "client_credentials") return [auth.clientId, auth.clientSecret]
+  if (auth.kind === "user_consent") return []
   return [auth.field]
 }
 
@@ -108,15 +128,6 @@ export function requiredFields(auth: PreparedAuth): string[] {
 export function authHeader(auth: PreparedAuth): string | null {
   if (auth.kind === "query") return null
   return auth.kind === "header" ? auth.header : "authorization"
-}
-
-const basicOf = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`
-
-/** L'échéance d'un jeton : `expires_in` de la réponse (secondes), sinon `expiresInDefault`, sinon aucune. */
-function expiryOf(answer: Record<string, unknown>, fallback: number | null, now: number): Date | null {
-  const given = typeof answer.expires_in === "string" ? Number(answer.expires_in) : answer.expires_in
-  const seconds = typeof given === "number" && Number.isFinite(given) && given > 0 ? given : fallback
-  return seconds === null ? null : new Date(now + seconds * 1000)
 }
 
 type Exchange = { auth: Extract<PreparedAuth, { kind: "client_credentials" }>; label: string; timeoutMs: number; accountId: string; fetcherFor: (guarded: boolean) => Fetch }
@@ -127,12 +138,13 @@ async function exchangeToken(exchange: Exchange, credential: AccountCredential, 
   const address = resolveAddress(auth.token, credential.settings, settings)
   const id = credential.fields[auth.clientId]
   const secret = credential.fields[auth.clientSecret]
-  const pairs: [string, string][] = [["grant_type", "client_credentials"], ...(auth.clientAuth === "body" ? ([["client_id", id], ["client_secret", secret]] as [string, string][]) : []), ...(auth.scope ? ([["scope", auth.scope]] as [string, string][]) : [])]
+  const client = clientPlacement(auth.clientAuth, id, secret)
+  const pairs: [string, string][] = [["grant_type", "client_credentials"], ...client.pairs, ...(auth.scope ? ([["scope", auth.scope]] as [string, string][]) : [])]
   const refused = { code: "upstream_error" as const, message: `${label} refused the client credentials of this account: check its client id and secret.` }
   const request: ApiRequest = {
     method: "POST",
     path: "",
-    headers: auth.clientAuth === "basic" ? { authorization: basicOf(id, secret) } : {},
+    headers: client.headers,
     ...(auth.tokenRequest === "form" ? { form: pairs } : { body: Object.fromEntries(pairs) }),
     pacingKey: `token:${exchange.accountId}`,
   }
@@ -161,6 +173,7 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   if (auth.kind === "header") return { headers: { [auth.header]: `${auth.prefix}${field(auth.field)}` }, query: [] }
   if (auth.kind === "query") return { headers: {}, query: [[auth.param, field(auth.field)]] }
   if (auth.kind === "basic") return { headers: { authorization: basicOf(field(auth.username), field(auth.password)) }, query: [] }
+  if (auth.kind === "user_consent") return { headers: { authorization: `Bearer ${await consentAccessToken({ ...signer, auth }, fresh)}` }, query: [] }
   const kept = fresh ? null : await credential.tokens.read()
   const usable = kept !== null && (kept.expiresAt === null || kept.expiresAt.getTime() - EXPIRY_MARGIN_MS > Date.now())
   const exchange = { auth, label: signer.definition.label, timeoutMs: signer.definition.timeoutMs, accountId: signer.accountId, fetcherFor: signer.fetcherFor }
@@ -168,5 +181,8 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   return { headers: { authorization: `Bearer ${token}` }, query: [] }
 }
 
-/** Vrai si un 401 se rejoue une fois sur un jeton neuf : un échange seulement, dont le jeton vient d'un compte. */
-export const renewsOnUnauthorized = (auth: PreparedAuth): boolean => auth.kind === "client_credentials"
+/**
+ * Vrai si un 401 se rejoue une fois sur un jeton neuf : un échange, ou un consentement qui se renouvelle (`refresh`
+ * autre que `none`), dont le jeton vient d'un compte.
+ */
+export const renewsOnUnauthorized = (auth: PreparedAuth): boolean => auth.kind === "client_credentials" || (auth.kind === "user_consent" && auth.refresh !== "none")
