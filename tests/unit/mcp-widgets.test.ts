@@ -61,7 +61,7 @@ function deps(options: { widgets?: boolean; identity?: Identity } = {}): McpDeps
 /** `call table.rows` sous un `ctx` accepté, `runCall` rendant une ligne et la vue `record`. */
 async function callRows(session: Awaited<ReturnType<typeof connectDeps>>) {
   vi.mocked(requireCtx).mockResolvedValueOnce({ code: CTX, host: null })
-  vi.mocked(runCall).mockResolvedValueOnce({ text: "ventes/prospects: 1 row(s) match; rows 1-1.", data: ROWS, view: "record" })
+  vi.mocked(runCall).mockResolvedValueOnce({ text: "ventes/prospects: 1 row(s) match; rows 1-1.", data: ROWS, nextActions: [], view: "record" })
   const { result } = await session.call("call", { ctx: CTX, function: "table.rows", arguments: { table: "ventes/prospects" } })
   return result.structuredContent
 }

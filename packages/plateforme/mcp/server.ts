@@ -29,8 +29,7 @@ import { isPlatformError, PlatformError, type PlatformErrorCode } from "../serve
 import { recordFeedback } from "../server/feedback"
 import { find } from "../server/find"
 import type { Identity, IdentityOrg } from "../server/identity"
-import { clip, journalError, loggedArgs, type JournalEntry } from "../server/journal"
-import { isJsonObject } from "../server/json"
+import { clip, failedEntry, journalError, openedEntry, servedEntry, type JournalEntry } from "../server/journal"
 import { preferredTheme } from "../server/language"
 import { readNode } from "../server/nodes/read"
 import { writeNode } from "../server/nodes/write"
@@ -130,16 +129,9 @@ export function serverOptions(org: ToolOrg, options: { widgets?: boolean } = {})
   }
 }
 
-/** Ligne de journal d'une requête d'un membre : qui, quoi, arguments masqués et bornés. */
+/** Ligne de journal d'une requête d'un membre : qui, quoi, arguments masqués et bornés (`openedEntry`). */
 function openEntry(deps: MemberDeps, method: string, params: unknown): JournalEntry & { args_chars: number } {
-  return {
-    org_id: deps.identity.org.id,
-    user_id: deps.identity.user.id,
-    user_agent: deps.userAgent,
-    method,
-    args: loggedArgs(params ?? {}),
-    args_chars: JSON.stringify(params ?? {}).length,
-  }
+  return openedEntry(deps.identity, { method, params, userAgent: deps.userAgent })
 }
 
 /** Code de l'argument `ctx` s'il en a la forme, sinon `null` (AC16). */
@@ -205,31 +197,13 @@ async function runTool(
     // `call` : l'outil que le widget appelle (page suivante, vue de l'ERP), sous le préfixe de l'organisation.
     const view = deps.widgets && output.view ? { kind: output.view, theme: preferredTheme(member.identity), call: `${deps.org.prefix}_call` } : undefined
     const result = formatResult(output, (next) => findFunction(functions, next)?.class === "sensitive", view)
-    Object.assign(entry, {
-      ctx: output.ctx ?? validated.ctx?.code ?? entry.ctx,
-      host: output.host ?? validated.ctx?.host ?? null,
-      target: output.target ?? null,
-      team_id: output.teamId ?? null,
-      account_id: output.accountId ?? null,
-      result_chars: result.content[0].text.length,
-    })
-    // Ce qu'une fonction a fait, en clé réservée des arguments, après leur masquage et leur coupe (E11-S02,
-    // AC-h2, HN-E11S02-16) : le fil de l'accueil le relit.
-    if (output.outcome && isJsonObject(entry.args)) entry.args = { ...entry.args, _outcome: output.outcome }
+    servedEntry(entry, output, { ctx: validated.ctx?.code ?? entry.ctx ?? null, host: validated.ctx?.host ?? null, resultChars: result.content[0].text.length })
     return result
   } catch (error) {
     const failure = failureOf(error, deps.org.prefix)
     // Un refus d'un service n'a rien écrit ; une panne a pu courir en partie : l'avis le dit autrement.
     const result = formatError(withCtxNotice(failure.message, deps.org.prefix, validated.ctx, failure.code === "internal" ? "failed" : "refused"))
-    Object.assign(entry, {
-      ctx: validated.ctx?.code ?? entry.ctx,
-      host: validated.ctx?.host ?? null,
-      team_id: trace.teamId ?? null,
-      account_id: trace.accountId ?? null,
-      is_error: true,
-      error: journalError(failure.code, failure.message),
-      result_chars: result.content[0].text.length,
-    })
+    failedEntry(entry, failure, { ctx: validated.ctx?.code ?? entry.ctx ?? null, host: validated.ctx?.host ?? null, trace, resultChars: result.content[0].text.length })
     return result
   } finally {
     entry.duration_ms = Date.now() - started

@@ -45,6 +45,24 @@ export type CallInput = {
  */
 export type CallTrace = Pick<ToolOutput, "teamId" | "accountId">
 
+/** L'équipe sous laquelle l'appel court (F8), telle que ses données la rendent. */
+export type CallTeam = { slug: string; name: string }
+
+/** Le compte d'une fonction de connecteur et son mode (F5), tels que les données de l'appel le rendent. */
+export type CallAccount = { id: string; label: string; mode: ResolvedAccount["mode"] }
+
+/**
+ * Données en champs d'un `call` (F7) : la fonction, l'équipe, le compte d'une fonction de connecteur, puis le résultat
+ * de l'exécution, ou le récapitulatif d'une fonction sensible appelée sans `confirm` (H86), où rien n'a couru.
+ */
+export type CallData = { function: string; team: CallTeam | null; account?: CallAccount } & (
+  | { status: "needs_confirmation"; summary: Record<string, unknown> }
+  | { status?: never; result: Record<string, unknown> }
+)
+
+/** Ce que rend `runCall` : une sortie d'outil aux données d'un `call` et à ses suites proposées. */
+export type CallOutput = ToolOutput & { data: CallData; nextActions: string[] }
+
 export type CallDeps = {
   db: PlatformDb
   identity: Identity
@@ -112,7 +130,7 @@ function nextActions(names: readonly string[], functions: readonly CatalogFuncti
 }
 
 /** Données en champs (F7) : la fonction, l'équipe de l'appel, et le compte d'une fonction de connecteur (AC4, AC13). */
-function callData(fn: CatalogFunction, team: RunningTeam | null, account: ResolvedAccount | undefined): Record<string, unknown> {
+function callData(fn: CatalogFunction, team: RunningTeam | null, account: ResolvedAccount | undefined): Pick<CallData, "function" | "team" | "account"> {
   return {
     function: fn.name,
     team: team ? { slug: team.slug, name: team.name } : null,
@@ -145,7 +163,7 @@ async function confirmationRequest(fn: CatalogFunction, context: FunctionContext
  * `confirm`) ou exécution. Chaque refus est levé tel que le service qui le décide l'a écrit ; `trace`
  * garde l'équipe et le compte établis avant lui. `confirm` ne sert qu'aux fonctions sensibles (N2).
  */
-export async function runCall(deps: CallDeps, input: CallInput): Promise<ToolOutput> {
+export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOutput> {
   const { db, identity } = deps
   const prefix = identity.org.prefix
   const functions = deps.functions ?? catalogFunctions()

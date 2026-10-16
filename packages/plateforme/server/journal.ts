@@ -12,6 +12,8 @@ import type { StaffCaller } from "./admin/context"
 import type { Database, Json } from "./database"
 import type { PlatformDb } from "./db"
 import type { Identity } from "./identity"
+import { isJsonObject } from "./json"
+import type { ToolOutput } from "./tool-output"
 
 export type JournalEntry = Database["platform"]["Tables"]["journal"]["Insert"]
 
@@ -117,6 +119,64 @@ export function loggedArgs(args: unknown): Json {
   const text = JSON.stringify(maskSecretArgs(args)) ?? "null"
   if (text.length <= MAX_LOGGED_ARGS_CHARS) return wellFormed(JSON.parse(text))
   return { _truncated: true, head: clip(text, MAX_LOGGED_ARGS_CHARS) }
+}
+
+/**
+ * Le début de la ligne d'une requête d'un membre (H07) : qui, quoi, arguments masqués et bornés, et leur taille réelle.
+ * Commun à la porte MCP et à l'appel d'une fonction par le serveur de l'hôte (`callFunction`).
+ */
+export function openedEntry(identity: Identity, request: { method: string; params: unknown; userAgent: string | null }): JournalEntry & { args_chars: number } {
+  return {
+    org_id: identity.org.id,
+    user_id: identity.user.id,
+    user_agent: request.userAgent,
+    method: request.method,
+    args: loggedArgs(request.params ?? {}),
+    args_chars: JSON.stringify(request.params ?? {}).length,
+  }
+}
+
+/**
+ * Où un outil a été servi, pour sa ligne : le `ctx` et le client (`host`) de la conversation, nuls hors d'une
+ * conversation d'assistant, et la taille de ce qui a été rendu.
+ */
+export type ServedEntry = { ctx: string | null; host: string | null; resultChars: number }
+
+/**
+ * La ligne d'un outil qui a répondu (H07) : `ctx` et client rendus par le service, sinon ceux de l'appel ; fonction,
+ * chemin ou phrase touchés ; équipe et compte (E03-S04, AC16) ; et ce qu'une fonction de `call` a fait, en clé réservée
+ * des arguments après leur masquage et leur coupe (E11-S02, AC-h2, HN-E11S02-16), que le fil de l'accueil relit.
+ */
+export function servedEntry(entry: JournalEntry, output: ToolOutput, served: ServedEntry): void {
+  Object.assign(entry, {
+    ctx: output.ctx ?? served.ctx,
+    host: output.host ?? served.host,
+    target: output.target ?? null,
+    team_id: output.teamId ?? null,
+    account_id: output.accountId ?? null,
+    result_chars: served.resultChars,
+  })
+  if (output.outcome && isJsonObject(entry.args)) entry.args = { ...entry.args, _outcome: output.outcome }
+}
+
+/**
+ * La ligne d'un outil refusé ou en panne (H07) : l'équipe et le compte qu'un `call` avait établis avant d'échouer
+ * (`trace`, E03-S04 AC16), le code et le message de l'erreur (`journalError`).
+ */
+export function failedEntry(
+  entry: JournalEntry,
+  failure: { code: string; message: string },
+  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId"> },
+): void {
+  Object.assign(entry, {
+    ctx: served.ctx,
+    host: served.host,
+    team_id: served.trace.teamId ?? null,
+    account_id: served.trace.accountId ?? null,
+    is_error: true,
+    error: journalError(failure.code, failure.message),
+    result_chars: served.resultChars,
+  })
 }
 
 function signaturePart(value: unknown): string {

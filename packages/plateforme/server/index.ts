@@ -119,6 +119,11 @@ export { registerConnectors } from "./connectors/declaration"
 export type { ConnectorDefinition, ConnectorFunctionDefinition } from "./connectors/definition"
 export { probeAccount } from "./connectors/account-secret"
 export type { AccountHealth } from "./connectors/account-secret"
+// Une fonction du catalogue lancée par le serveur de l'hôte, sous la personne connectée : contrôles et journal de
+// `<p>_call`, `method` `api` au journal.
+export { callFunction, HOST_CALL_JOURNAL } from "./function-call"
+export type { FunctionCallInput, FunctionCallOptions, FunctionCallResult } from "./function-call"
+export type { CallAccount, CallTeam } from "./calls"
 export { CatalogRegistrationError, defineErpFunction, registerFunctions, registerWidgetViews } from "./catalog/erp"
 export type { ErpFunction, ErpFunctionContext } from "./catalog/erp"
 // E07-S03 : la grille, son résumé et la file de revue d'un tableau, la décision de la revue, les blocs

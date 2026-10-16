@@ -1,7 +1,7 @@
 # Journal et retours
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-16
 
 ## Résumé
 
@@ -29,7 +29,7 @@ il faut que l'assistant puisse dire ce qui l'a gêné, et que l'administrateur v
 ### Écriture du journal
 
 - Les portes écrivent le journal après la réponse, sous l'appelant : une ligne par appel MCP, une par mutation de l'API ; arguments bornés à 2 048 caractères, clés de secret masquées ; une panne du journal ne change jamais la réponse (H07). Colonnes : [schéma `platform`](../reference/schema-platform.md) (`journal`, `admin_journal`, `feedback`).
-- `journal.tool` porte le nom préfixé (`demo_context`), la forme nue est lue aussi ; une ligne `api` porte `<VERBE> <ressource>`, la cible du service et `error` `<code>: <message>`, hors de la vue par conversation (HN-E05S05-6).
+- `journal.tool` porte le nom préfixé (`demo_context`), la forme nue est lue aussi ; une ligne `api` porte `<VERBE> <ressource>`, la cible du service et `error` `<code>: <message>`, hors de la vue par conversation (HN-E05S05-6). Un appel de fonction par le serveur de l'hôte (`callFunction`, [connecteurs et comptes](connecteurs-et-comptes.md)) écrit une ligne `api` d'outil `call`, aux colonnes d'un `call` (cible, équipe, compte, `_outcome`), sans `ctx` ni `host`.
 - La ligne de journal d'un `call` ne porte l'équipe (porteuse, ou rendue par la fonction) que si la personne en est membre, sinon aucune : un responsable ne lit pas les arguments d'une personne hors de son équipe (D38).
 - Les exports d'une page en `.md` et d'un tableau en `.csv` (`GET nodes/export`, `GET tables/export`) ne sont pas journalisés, comme toute lecture ; ils restent décidés par le droit de lecture et bornés à 5 000 lignes (D138, HN-E10S01-18).
 - L'ordre d'écriture du journal est l'`id` : une conversation se lit par `id` croissant, les 2 000 lignes les plus récentes sont les plus grands `id` de la période, la fenêtre gelée est bornée par le plus grand `id` de la première page (HN-E05S05-10).
@@ -106,3 +106,4 @@ Les procédures publiées lisibles se servent aussi en prompts MCP ([procédures
 - 2026-09-28 : « Usage » caché, retours réservés à l'équipe plateforme à l'écran — décidé par JB (source : fiche D128, story E05-S13).
 - 2026-09-29 : les exports `.md` et `.csv` ne sont pas journalisés — décidé par JB (source : fiche D138).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend les fiches D38, D44, D52, D138 et les choix H07, H74 et des stories E03-S05, E05-S05, E08-S09 — décidé par Alexis, accord de JB.
+- 2026-10-16 : un appel de fonction par le serveur de l'hôte se journalise comme un `call`, en ligne `api` d'outil `call` — décidé par Alexis.

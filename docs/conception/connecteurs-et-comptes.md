@@ -1,7 +1,7 @@
 # Connecteurs et comptes
 
 - **Statut** : validé avec JB le 30/09/2026
-- **Dernière révision** : 2026-10-08
+- **Dernière révision** : 2026-10-16
 
 ## Résumé
 
@@ -58,6 +58,7 @@ Le paquet porte un connecteur simulé, `mail`, les fonctions natives `table.*` e
 - E03-S04 N4 : le compte-rendu d'une fonction avec compte finit par « Team X · account « Y » (mode). » (« No team » sans équipe porteuse) ; une fonction native ou ERP ne le porte pas.
 - E03-S04 N9 : le code `ctx` de l'appel passe dans le contexte d'exécution (`FunctionContext.ctx`) : une écriture faite par un assistant le porte dans sa provenance.
 - E03-S04 N7, E03-S04 N19 : la cible au journal d'un `call` est, sur un succès, le nom canonique de la fonction ; sur un refus, la fonction envoyée, sans espace de bord, coupée à 200 caractères, posée par la porte avant ses gardes ; `team_id` et `account_id` restent nuls quand le refus précède leur choix. E03-S04 N8 : l'équipe que rend la fonction (`teamId` de `FunctionOutput`) prime sur l'équipe calculée pour la ligne de journal : `table.*` rend celle du tableau chargé, alias compris. Voir [journal et retours](journal-et-retours.md).
+- Appel depuis le serveur de l'hôte : `callFunction(db, identity, { function, arguments?, confirm?, team?, account? }, { origin, accessToken?, userAgent?, defer? })` (face `server`) court une fonction sous la personne connectée, pour un écran de l'hôte (des contrôles automatiques d'un dossier, par exemple). Il enveloppe `runCall` et relit les connecteurs actifs à chaque appel : mêmes contrôles que `call` (activation, arguments, équipe, compte et son niveau, la classe `write` comprise, secret), mêmes refus levés tels quels, et une fonction sensible sans `confirm: true` rend son récapitulatif (`status: "needs_confirmation"`) sans rien exécuter. Sa sortie est typée (`FunctionCallResult` : `done` avec `result` et `nextActions`, ou `needs_confirmation` avec `summary`). Sa ligne de journal est celle de `call` (mêmes fonctions d'écriture que la porte MCP : cible, équipe, compte, `_outcome`, refus), à l'origine près : `method` `api`, celle des portes des écrans, au lieu de `tools/call`, outil `call`, ni `ctx` ni `host`. L'usage des assistants (`method` `tools/call`) ne la compte donc pas, et le fil de l'accueil ne la classe pas.
 
 ### Équipe porteuse
 
@@ -183,3 +184,4 @@ Le paquet porte un connecteur simulé, `mail`, les fonctions natives `table.*` e
 - 2026-10-06 : prise des connecteurs : origine `connecteur` (remplace `service_connecteurs`), table `connectors` et clés étrangères, coffre du paquet (AES-256-GCM, `PLATFORM_VAULT_KEY`, sans Supabase Vault), secret posé par l'outillage et déchiffré pour le seul `run`, comptes réels pour un connecteur réel, codes `rate_limited` et `upstream_error`, témoin `notion` (H85 et E03-S04 N5 révisés) — décidé par Alexis (source : cadrage de la prise des connecteurs, 06/10).
 - 2026-10-07 : moteur générique sans connecteur : l'hôte déclare ses connecteurs décrits (`registerConnectors`), le paquet ne dépend pas du dépôt `connectors` et définit le type qu'il accepte ; JSON Schema validé et servi tel quel (Ajv 2020) ; liste `platform.connectors` tenue depuis la déclaration (`declare_connector`) ; sonde d'un compte en service ; témoin `notion` retiré — décidé par Alexis (source : décisions des 06 et 07/10).
 - 2026-10-08 : comptes à plusieurs champs et réglages : saisie du secret à l'écran Connecteurs par qui gère le compte (route de même origine, jamais relu), champs multiples chiffrés ensemble, réglages en clair, `basic`, clé en query masquée, échange de jeton rangé chiffré en base, adresse libre gardée à chaque connexion, coffre v2 (identifiant de clé, données associées compte et colonne) ; corrige la phrase qui fixait la saisie à l'outillage seul, choix d'implémentation et non décision — décidé par Alexis (source : décisions des 07 et 08/10).
+- 2026-10-16 : l'hôte appelle une fonction du catalogue depuis son serveur, sous la personne connectée (`callFunction`) : mêmes contrôles et même journal que `call`, `method` `api` au journal — décidé par Alexis.
