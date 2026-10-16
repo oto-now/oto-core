@@ -32,10 +32,10 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - Pas d'outil par famille d'objets (ADR-002 § 6) : tableaux, journal et contrats passent par `call` et `read`.
 - Le connecteur admin (`/api/mcp-admin`) n'est pas soumis au gel ([administration et cellule](administration-et-cellule.md)).
 
-### Lire et engager : la paire `<connecteur>` / `<connecteur>_act` (décidé le 17/10, pas encore écrit)
+### Lire et engager : la paire `<connecteur>` / `<connecteur>_act` (décidé le 17/10, noms pas encore servis)
 
-- Chaque connecteur à effet se partage en deux : `<connecteur>` pour lire et simuler, brouillon compris, et `<connecteur>_act` pour tout ce qui engage ou détruit (envoi, corbeille, archive, déplacement). Le découpage couvre l'écriture et la destruction, pas seulement les fonctions `sensitive`, et reprend celui d'oto 1. But : qu'une autorisation durable donnée par la personne à la lecture ne couvre jamais un engagement.
-- Sa forme dans un serveur aux outils figés reste à fixer et à mesurer au banc : comment une fonction se range du côté `_act`, comment ce côté est servi au host (un outil ajouté, seule évolution permise, ou un nom de fonction), comment il s'active ([connecteurs et comptes](connecteurs-et-comptes.md)).
+- Chaque connecteur à effet se partage en deux : `<connecteur>` pour lire et simuler, brouillon compris, et `<connecteur>_act` pour tout ce qui engage ou détruit (envoi, corbeille, archive, déplacement). Le découpage couvre l'écriture et la destruction, pas seulement les fonctions `sensitive`, et reprend celui d'oto 1.
+- Tout reste sous `call` : `find` et `read` servent une fonction qui engage sous le nom `<connecteur>_act.<fonction>`, une fonction qui lit ou simule sous `<connecteur>.<fonction>`. Une seule description, un seul compte, une seule activation ; ce qu'une personne peut engager se règle par les droits du compte, par classe ([droits d'accès](droits-d-acces.md)). Le rangement d'une fonction est un champ `act` de sa description, déduit de sa classe ([format de description](https://github.com/otomata-tech/connectors/blob/main/docs/conception/format-de-description.md)). Les fonctions sensibles gardent leurs deux temps (`confirm`).
 
 ### Préfixe et descriptions (ADR-002 § 3, § 5)
 
@@ -118,6 +118,7 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - **Deux bundles (paquet, ERP)** : deux widgets, donc un choix d'outil par fonction ; écarté sans mesure. **Vite en dépendance du paquet** : chaque hôte l'aurait téléchargé, même sans vue de l'ERP ; écarté pour des dépendances paires facultatives.
 - **Suite appelée par le widget** : une suite n'a pas d'arguments, l'appel serait refusé ; écartée pour un message à l'assistant, qui garde aussi la confirmation en deux temps.
 - **Exceptions au gel, sans client** (stade R&D) : en 1.1.0, les descriptions de `write` et des fonctions de tableau ont été réécrites en place et non seulement allongées, les hosts rafraîchissant la liste à la mise à jour (fiche D131, stories E11-S01, E11-S03) ; le défaut de `publish` de `write` est passé de `false` à `true`, `publish: false` gardant le sens d'avant (fiche D135, story E11-S02). Toute exception future demande la même absence de client.
+- **Un septième outil `act` pour les fonctions qui engagent** : écarté le 17/10 par Alexis. La paire se lit par le nom servi, pas par un outil. Coût accepté : « toujours autoriser `call` » couvre aussi un envoi ; la garde des fonctions sensibles reste leurs deux temps (`confirm`).
 - Coût accepté : tout passe par six schémas génériques (la qualité des descriptions de fonctions servies par `read` devient critique), et le préfixe est irréversible (une erreur de nommage se paie par une nouvelle organisation). Aucun push : une nouveauté n'atteint le modèle qu'à la conversation suivante ou au prochain appel.
 
 ## Sécurité et confidentialité
@@ -133,11 +134,10 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - ADR-009 § 3 révisé au statut proposé : le code le suit, l'interrupteur reste éteint par défaut jusqu'à la mesure du banc (lignes W1 à W6 de [les requêtes de référence](../reference/mcp-golden-queries.md)). L'hôte de référence l'allume par `PLATFORM_MCP_WIDGETS=on`.
 - Bundle de 997 Ko, 307 Ko compressé (sortie de `pnpm widgets:build`), au-delà de la cible de `mcp-patterns.md § 5.3` ; accepté pour le banc.
 - Les cas de test du contrat figé et du routage sont dans [les requêtes de référence](../reference/mcp-golden-queries.md).
-- La paire `<connecteur>` / `<connecteur>_act` décidée le 17/10 n'est pas écrite : toute fonction passe par `call`, quelle que soit sa classe, et « toujours autoriser » `call` laisse partir un envoi sans que le host demande (issue « `call` porte aussi les envois », oto-now/oto-core#61).
+- Les noms `<connecteur>_act.<fonction>` décidés le 17/10 ne sont pas servis : `find` et `read` nomment toute fonction `<connecteur>.<fonction>`, quelle que soit sa classe (issue « `call` porte aussi les envois », oto-now/oto-core#61).
 
 ## Questions ouvertes
 
-- La paire `<connecteur>` / `<connecteur>_act` : classement d'une fonction (sa classe, ou un champ explicite), service au host (un outil ajouté, ou un nom de fonction sous `call`), activation ; à mesurer au banc.
 - Ce qui rouvrirait ADR-009 § 1 et § 2 : un besoin de notification du serveur vers le client (inopérant de toute façon sur claude.ai et ChatGPT).
 - ADR-009 § 3 (proposé) : un résultat sans vue ouvre-t-il un cadre visible sur Claude et ChatGPT ? Oui : repli sur un outil `view` dédié. Non : l'interrupteur peut passer à vrai par défaut. À trancher par JB après le banc, avec le poids du bundle.
 
@@ -149,4 +149,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-002 (§ 1, § 3 à § 7), ADR-009, D8, H21 à H23, H25, H26, H29, les choix d'E03-S01 et ceux d'E11-S03 et E11-S19 sur les textes servis — décidé par Alexis, accord de JB.
 - 2026-10-02 : ADR-009 § 3 révisé au statut proposé — widget routeur sur `call` et `read` derrière l'interrupteur `widgets`, vues du paquet et de l'ERP, appels du widget sans `confirm` ; mesure du banc à reporter — proposé par la session de la story widgets-dans-la-conversation, à valider par JB.
 - 2026-10-01 : `context` se charge une fois par conversation quand les préférences de la personne le demandent, les autres outils restent réservés au travail ; la borne de la description et le champ `phrase` le disent, mesure sur les assistants après publication — décidé par JB (source : demande du responsable d'Oto).
-- 2026-10-17 : chaque connecteur à effet se partage en `<connecteur>` (lire, simuler, brouillon compris) et `<connecteur>_act` (engager ou détruire), comme dans oto 1 ; remplace le verbe réservé aux seules fonctions sensibles envisagé le 16/10 — décidé par Alexis (source : issue oto-now/oto-core#61).
+- 2026-10-17 : chaque connecteur à effet se partage en `<connecteur>` (lire, simuler, brouillon compris) et `<connecteur>_act` (engager ou détruire), comme dans oto 1 ; tout reste sous `call`, la paire se lit par le nom servi, sans septième outil ; remplace le verbe réservé aux seules fonctions sensibles envisagé le 16/10 — décidé par Alexis (source : issue oto-now/oto-core#61).
