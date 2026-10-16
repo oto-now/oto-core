@@ -16,6 +16,7 @@ import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
+import { isScopeList, type UserConsentAuth } from "./oauth-user"
 import { addressProblem, baseAddress, settingProblem } from "./settings"
 
 /** La contrainte de `platform.connectors.name`. */
@@ -125,15 +126,19 @@ function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDe
   return null
 }
 
-/** L'argument qui porte le curseur (`requestParam`, nom côté API en query ou en corps), ou le problème. */
+/**
+ * L'argument qui porte le curseur (`requestParam`, un argument de la fonction, comme la fabrique l'exige), placé en
+ * query ou en corps ; ou le problème.
+ */
 function cursorArgument(fn: ConnectorFunctionDefinition): string | null | { problem: string } {
   const pagination = fn.pagination
   if (pagination === undefined) return null
   if (!["cursor", "page"].includes(pagination.kind) || typeof pagination.next !== "string" || !isPositiveInteger(pagination.maxPages)) {
     return { problem: `${fn.name}: pagination needs kind cursor or page, next and a positive maxPages.` }
   }
-  const argument = fn.request.query[pagination.requestParam] ?? fn.request.body[pagination.requestParam]
-  return argument ?? { problem: `${fn.name}: pagination requestParam ${pagination.requestParam} is neither a query nor a body parameter.` }
+  const argument = pagination.requestParam
+  const placed = Object.values(fn.request.query).includes(argument) || Object.values(fn.request.body).includes(argument)
+  return placed ? argument : { problem: `${fn.name}: pagination requestParam ${argument} is not an argument placed in the query or the body.` }
 }
 
 /** Le problème des contrôles (`checks`, `expect`) et du récapitulatif d'une fonction sensible ; `null` : aucun. */
@@ -236,13 +241,47 @@ function probeProblem(definition: ConnectorDefinition): string | null {
   return null
 }
 
-/** L'identité d'un consentement (`oauth2_user`) : une lecture du connecteur, sans argument requis, comme la sonde. */
+/**
+ * L'identité d'un consentement (`oauth2_user`) par une fonction : une lecture du connecteur, sans argument requis, comme
+ * la sonde. Celle à une adresse est contrôlée avec l'authentification (`oauth-user.ts`).
+ */
 function identityProblem(definition: ConnectorDefinition, auth: PreparedAuth): string | null {
-  if (auth.kind !== "user_consent") return null
-  const fn = definition.functions.find((candidate) => candidate.name === auth.identity.function)
+  if (auth.kind !== "user_consent" || !("function" in auth.identity)) return null
+  const name = auth.identity.function
+  const fn = definition.functions.find((candidate) => candidate.name === name)
   const required = fn && Array.isArray(fn.schema.required) ? fn.schema.required : []
   if (!fn || fn.class !== "read" || required.length > 0) return `${definition.name}: identity must name a read function of the connector without required arguments.`
   return null
+}
+
+/**
+ * Les droits qu'une fonction exige (`scopes`) : exigés dans un connecteur à niveaux d'accès, refusés ailleurs, comme le
+ * format le dit. Gardés sans être appliqués (issue oto-now/oto-core#71).
+ */
+function functionScopesProblem(fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
+  const levels = auth.kind === "user_consent" ? auth.accessLevels : null
+  if (levels === null) return fn.scopes === undefined ? null : `${fn.name}: scopes need the connector's accessLevels.`
+  return isScopeList(fn.scopes, true) ? null : `${fn.name}: scopes must list the scopes the function needs, in a connector with access levels.`
+}
+
+/**
+ * L'identité lue à une adresse complète, préparée comme une lecture sans argument : un `GET` sur l'adresse, avec le
+ * jeton d'accès, par le même moteur qu'une fonction (client HTTP, redirection refusée, délai, table d'erreurs du
+ * connecteur, renouvellement sur un 401). Elle n'entre pas au catalogue : l'agent ne l'appelle jamais.
+ */
+function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth, url: string): PreparedFunction {
+  const fn: ConnectorFunctionDefinition = {
+    name: `${definition.name}.identity`,
+    connector: definition.name,
+    class: "read",
+    description: "Who consented, read at the identity address.",
+    schema: { type: "object", additionalProperties: false, properties: {} },
+    examples: [{ title: "Who consented", input: {} }],
+    refusals: [],
+    request: { method: "GET", path: "", pathParams: [], query: {}, body: {}, headers: {} },
+  }
+  const api = { label: definition.label, timeoutMs: definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
+  return { connector: definition, fn, api, address: { template: url }, auth, cursorArgument: null }
 }
 
 /** Un connecteur contrôlé et préparé ; au premier problème, `CatalogRegistrationError`. */
@@ -264,17 +303,18 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const api = { label: definition.label, timeoutMs: definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
     const prepared: PreparedFunction = { connector: definition, fn, api, address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
     if (fn.name === definition.probe?.function) probe = prepared
-    if (auth.kind === "user_consent" && fn.name === auth.identity.function) identity = prepared
+    if (auth.kind === "user_consent" && "function" in auth.identity && fn.name === auth.identity.function) identity = prepared
     return catalogFunction(prepared, schema)
   })
   const problemOfProbe = probeProblem(definition) ?? identityProblem(definition, auth)
   if (problemOfProbe) throw new CatalogRegistrationError(problemOfProbe)
+  if (auth.kind === "user_consent" && "url" in auth.identity) identity = identityAddress(definition, auth, auth.identity.url)
   return { definition, auth, functions, probe, identity, application: auth.kind === "user_consent" ? application : null }
 }
 
@@ -308,9 +348,10 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * chaque route qui monte une porte du paquet, comme `registerFunctions`. Toute la liste est contrôlée d'abord : nom du
  * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs, champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
- * `oauth2_client_credentials`, `oauth2_user`) ; puis chaque fonction : nom, classe, description, schéma strict et
- * compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles, récapitulatif d'une fonction sensible ;
- * enfin la sonde et l'identité d'un consentement. `options.oauthApplications` : l'application OAuth de chaque
+ * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
+ * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux ; enfin la sonde et l'identité d'un
+ * consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user`, fournie par l'hôte. Au premier refus, `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */

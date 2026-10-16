@@ -6,8 +6,9 @@
 // l'appel par `callFunction` sur le compte de la personne sans le nommer ; le renouvellement à l'échéance et après un
 // 401, la rotation du jeton de rafraîchissement ; un renouvellement refusé qui passe le compte à reconnecter, et la
 // reconnexion ; le compte partagé, qui suit le chemin de tout compte personnel ; le compte fait à la main et la saisie
-// d'un secret refusés. Un fournisseur OAuth simulé tient lieu du tiers :
-// `fetch` remplacé, aucun réseau. Jetons et secrets tirés à l'exécution.
+// d'un secret refusés ; un connecteur à niveaux d'accès (droits de `full` demandés) dont l'identité se lit à une
+// adresse complète, et son refus quand la réponse ne dit pas qui a consenti. Un fournisseur OAuth simulé tient lieu du
+// tiers : `fetch` remplacé, aucun réseau. Jetons et secrets tirés à l'exécution.
 import { createHash, randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
@@ -18,7 +19,7 @@ import { decryptCredential, decryptToken } from "../../packages/plateforme/serve
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { resolveIdentity, type Identity } from "../../packages/plateforme/server/identity"
-import { consentConnector, TEST_APPLICATION } from "../factories/described-connector"
+import { consentConnector, leveledConsentConnector, TEST_APPLICATION } from "../factories/described-connector"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { hex } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
@@ -28,7 +29,10 @@ const VERSION = "20261016090000"
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const CONNECTOR = `t${hex(4)}`
+/** Le connecteur à niveaux d'accès, son identité lue à une adresse complète. */
+const LEVELED = `t${hex(4)}`
 const TOKEN_URL = "https://login.crm.example.test/token"
+const IDENTITY_URL = "https://id.crm.example.test/v1/userinfo"
 const API = "https://crm.example.test/v2"
 type Caller = "ada" | "lea" | "claire"
 type Task = () => Promise<void>
@@ -50,6 +54,7 @@ function oauthProvider() {
   const issued: string[] = []
   let last: [string, string] = ["", ""]
   let unauthorizedOnce = false
+  let identityWithoutEmail = false
   const issue = (who: string) => {
     const [accessToken, refreshToken] = [secret("at"), secret("rt")]
     access.set(accessToken, who)
@@ -83,6 +88,7 @@ function oauthProvider() {
       return json({ error: "unauthorized" }, 401)
     }
     if (url === `${API}/me`) return json({ email: who, scopes: ["contacts.read"] })
+    if (url === IDENTITY_URL) return json(identityWithoutEmail ? { sub: who } : { sub: who, email: who })
     if (url.startsWith(`${API}/contacts`)) return json({ items: [{ id: "c-1", owner: who }], has_more: false })
     return json({}, 404)
   }
@@ -99,6 +105,10 @@ function oauthProvider() {
     revokeAll: () => refresh.clear(),
     unauthorizedOnce: () => {
       unauthorizedOnce = true
+    },
+    /** L'adresse d'identité répond sans dire l'adresse de qui a consenti. */
+    identityWithoutEmail: () => {
+      identityWithoutEmail = true
     },
     /** Le dernier jeton d'accès et le dernier jeton de rafraîchissement émis. */
     latest: () => last,
@@ -131,7 +141,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
   const label = (caller: Caller) => `${who(caller)} (${CONNECTOR})`
 
   const register = (withApplication = true) =>
-    registerConnectors([consentConnector(CONNECTOR)], withApplication ? { oauthApplications: { [CONNECTOR]: TEST_APPLICATION } } : {})
+    registerConnectors([consentConnector(CONNECTOR), leveledConsentConnector(LEVELED)], withApplication ? { oauthApplications: { [CONNECTOR]: TEST_APPLICATION, [LEVELED]: TEST_APPLICATION } } : {})
 
   async function gate(caller: Caller, method: string, path: string, body?: unknown): Promise<Response> {
     const tasks: Task[] = []
@@ -163,11 +173,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     return back(caller, provider.authorize(url, as))
   }
 
-  const accountOf = async (caller: Caller) =>
+  const accountOf = async (caller: Caller, connector = CONNECTOR) =>
     (
       await admin<{ id: string; label: string; owner_kind: string; owner_user_id: string; mode: string; status: string; status_reason: string | null; granted_scopes: string[] | null; secret_ciphertext: string; token_ciphertext: string; secret_fields: string[] }[]>`
         select id, label, owner_kind, owner_user_id, mode, status, status_reason, granted_scopes, secret_ciphertext, token_ciphertext, secret_fields
-          from platform.accounts where org_id = ${o.org.id} and connector = ${CONNECTOR} and owner_user_id = ${o.people[caller].id}`
+          from platform.accounts where org_id = ${o.org.id} and connector = ${connector} and owner_user_id = ${o.people[caller].id}`
     )[0]
   const call = (caller: Caller, account?: string) => {
     const person = people.get(caller)
@@ -200,7 +210,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     else process.env.PLATFORM_VAULT_KEY = savedKey
     try {
       await fx?.cleanup()
-      await admin`delete from platform.connectors where name = ${CONNECTOR}`
+      await admin`delete from platform.connectors where name in (${CONNECTOR}, ${LEVELED})`
     } finally {
       await admin?.end({ timeout: 5 })
     }
@@ -364,6 +374,28 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const secretSet = await refusal(setAccountSecret(lea.db, lea.identity, { account_id: id, input: { settings: { region: null } } }))
     expect([forOrg.code, own.code, secretSet.code]).toEqual(["invalid_arguments", "invalid_arguments", "invalid_arguments"])
     expect(own.message).toBe(`Accounts of ${CONNECTOR} are not created by hand: each person connects their own by consenting (Connect my account), then may share it like any personal account.`)
+  })
+
+  it("should connect a connector with access levels: the scopes of full and of the identity address asked, the identity read at its address with the new token", async () => {
+    const { url } = await start("ada", { connector: LEVELED })
+    expect(new URL(url).searchParams.get("scope")).toBe("offline_access contacts.write entries.write openid email")
+    const location = await back("ada", provider.authorize(url, who("ada")))
+    expect(Object.fromEntries(location.searchParams)).toEqual({ consent: "connected", account: `${who("ada")} (${LEVELED})` })
+    expect(provider.sent.map((request) => [request.url, request.authorization])).toEqual([
+      [TOKEN_URL, null],
+      [IDENTITY_URL, `Bearer ${provider.latest()[0]}`],
+    ])
+    // Les droits accordés sont ceux que dit la réponse de jeton, gardés comme pour tout consentement.
+    expect(await accountOf("ada", LEVELED)).toMatchObject({ label: `${who("ada")} (${LEVELED})`, owner_kind: "user", status: "active", granted_scopes: ["offline_access", "contacts.read"] })
+  })
+
+  it("should refuse an identity address whose answer does not say who consented, saving nothing", async () => {
+    provider.identityWithoutEmail()
+    const { url } = await start("claire", { connector: LEVELED })
+    const location = await back("claire", provider.authorize(url, who("claire")))
+    expect([location.pathname, Object.fromEntries(location.searchParams)]).toEqual(["/admin/connectors", { consent: "failed", reason: "upstream_error" }])
+    expect(provider.sent.map((request) => request.url)).toEqual([TOKEN_URL, IDENTITY_URL])
+    expect(await accountOf("claire", LEVELED)).toBeUndefined()
   })
 
   it("should refuse a consent and a call without the host's OAuth application, by name", async () => {

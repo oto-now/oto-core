@@ -1,6 +1,7 @@
 // Le consentement d'une personne, `oauth2_user` (`connecteurs-et-comptes.md` § Consentement d'une personne) : ce que le
 // moteur en exécute à partir de la seule description. Contrôle de la description à la déclaration ; adresse
-// d'autorisation (scopes joints par des espaces, `authorizeParams`, `state`, PKCE S256) ; échange du code contre les
+// d'autorisation (scopes joints par des espaces, ceux du niveau `full` pour un connecteur à niveaux d'accès,
+// `authorizeParams`, `state`, PKCE S256) ; échange du code contre les
 // jetons au point de jeton, en formulaire, avec l'application OAuth que fournit l'hôte ; puis, à chaque appel, le jeton
 // d'accès gardé tant qu'il n'est pas échu, renouvelé selon `refresh` (jeton de rafraîchissement, rotation comprise, ou
 // échange du jeton courant). Un renouvellement refusé (`invalid_grant`) passe le compte à reconnecter ; une
@@ -23,6 +24,14 @@ const PARAM_NAME = /^[A-Za-z0-9_.-]+$/
 const GRANT_TYPE = /^[A-Za-z0-9_.:-]+$/
 /** Un scope n'a ni espace ni guillemet (RFC 6749 § 3.3). */
 const SCOPE = /^[\x21\x23-\x5B\x5D-\x7E]+$/
+const LEVEL_NAME = /^[a-z][a-z0-9_]{0,39}$/
+
+/** Une liste de scopes sans espace ; `nonEmpty` : au moins un. */
+export const isScopeList = (value: unknown, nonEmpty: boolean): value is string[] =>
+  Array.isArray(value) && (!nonEmpty || value.length > 0) && value.every((scope) => typeof scope === "string" && SCOPE.test(scope))
+
+/** Qui a consenti : une fonction du connecteur, ou une adresse complète lue avec le jeton, et ses droits. */
+export type ConsentIdentity = { function: string; path: string } | { url: string; path: string; scopes: string[] }
 
 /** Le consentement déclaré, prêt pour l'appel : ses adresses, ses scopes, son renouvellement, l'identité à lire. */
 export type UserConsentAuth = {
@@ -30,12 +39,23 @@ export type UserConsentAuth = {
   authorize: AddressSpec
   token: AddressSpec
   clientAuth: "body" | "basic"
+  /**
+   * Les droits que le consentement demande : `scopes` sans niveaux, ceux du niveau `full` avec niveaux, puis ceux de
+   * l'identité lue à une adresse qui n'y sont pas déjà.
+   */
   scopes: string[]
+  /**
+   * Les niveaux d'accès déclarés, par nom, `full` compris ; `null` : sans niveaux. Gardés sans être appliqués : ni
+   * filtrage des fonctions, ni niveau choisi, le consentement demande `full` (issue oto-now/oto-core#71).
+   */
+  accessLevels: Record<string, string[]> | null
+  /** Un droit et ceux qu'il couvre, tels que le fournisseur le définit ; vide sans niveaux. */
+  scopeImplies: Record<string, string[]>
   authorizeParams: Record<string, string>
   refresh: "refresh_token" | "exchange" | "none"
   exchange: { grantType: string; tokenParam: string } | null
   expiresInDefault: number | null
-  identity: { function: string; path: string }
+  identity: ConsentIdentity
 }
 
 /** Les jetons qu'un point de jeton rend : le jeton d'accès, celui de rafraîchissement, l'échéance, les droits accordés. */
@@ -55,10 +75,46 @@ function refreshOf(head: string, auth: Record<string, unknown>): Pick<UserConsen
   return { refresh: "exchange", exchange: { grantType: exchange.grantType, tokenParam: exchange.tokenParam } }
 }
 
+/** Les droits déclarés : `scopes` sans niveaux, ou `accessLevels` (`full` exigé) et `scopeImplies` ; ou le problème. */
+function scopesOf(head: string, auth: Record<string, unknown>): Pick<UserConsentAuth, "scopes" | "accessLevels" | "scopeImplies"> | string {
+  const { scopes, accessLevels, scopeImplies } = auth
+  if (accessLevels === undefined) {
+    if (scopeImplies !== undefined) return `${head}: scopeImplies needs accessLevels.`
+    if (scopes !== undefined && !isScopeList(scopes, false)) return `${head}: scopes must list texts without spaces.`
+    return { scopes: [...((scopes as string[] | undefined) ?? [])], accessLevels: null, scopeImplies: {} }
+  }
+  if (scopes !== undefined) return `${head}: scopes and accessLevels exclude each other; a connector with access levels asks the scopes of a level.`
+  if (!isJsonObject(accessLevels) || !isJsonObject(accessLevels.full)) return `${head}: accessLevels needs the level full.`
+  const levels: Record<string, string[]> = {}
+  for (const [name, level] of Object.entries(accessLevels)) {
+    if (!LEVEL_NAME.test(name) || !isJsonObject(level) || !isScopeList(level.scopes, true)) {
+      return `${head}: access level ${JSON.stringify(name)} needs a name in lowercase ASCII letters, digits and _, and a non-empty list of scopes without spaces.`
+    }
+    levels[name] = [...level.scopes]
+  }
+  const implies = scopeImplies ?? {}
+  if (!isJsonObject(implies) || Object.entries(implies).some(([scope, implied]) => !SCOPE.test(scope) || !isScopeList(implied, true))) {
+    return `${head}: scopeImplies must map a scope to the non-empty list of scopes it covers.`
+  }
+  return { scopes: levels.full, accessLevels: levels, scopeImplies: Object.fromEntries(Object.entries(implies).map(([scope, implied]) => [scope, [...(implied as string[])]])) }
+}
+
+/** L'identité déclarée : `{ function, path }`, ou `{ url, path, scopes }`, une adresse `https` fixe ; ou le problème. */
+function identityOf(definition: ConnectorDefinition, head: string, identity: unknown): ConsentIdentity | string {
+  const missing = `${head} needs identity {function, path} or {url, path, scopes}: what names who consented.`
+  if (!isJsonObject(identity) || typeof identity.path !== "string" || !identity.path) return missing
+  if (identity.url === undefined) return typeof identity.function === "string" && identity.scopes === undefined ? { function: identity.function, path: identity.path } : missing
+  if (identity.function !== undefined || typeof identity.url !== "string") return `${head}: identity takes a function or a url, not both.`
+  const badAddress = addressProblem(`${definition.name}: identity url`, { template: identity.url }, [])
+  if (badAddress) return badAddress
+  if (!isScopeList(identity.scopes, true)) return `${head}: identity url needs the scopes it requires, a non-empty list without spaces.`
+  return { url: identity.url, path: identity.path, scopes: [...identity.scopes] }
+}
+
 /**
  * Le consentement `oauth2_user` déclaré, prêt pour l'appel, ou le problème qui le refuse. Ni réglage, ni `tokenUrls`, ni
- * `fromToken` dans cette version du paquet (aucune description ne s'en sert) : refusés nommément. L'identité se
- * contrôle avec les fonctions (`declaration.ts`).
+ * `fromToken` dans cette version du paquet (aucune description ne s'en sert) : refusés nommément. L'identité par une
+ * fonction se contrôle avec les fonctions (`declaration.ts`) ; celle à une adresse, ici.
  */
 export function prepareUserConsent(definition: ConnectorDefinition, auth: Record<string, unknown>): UserConsentAuth | string {
   const head = `${definition.name}: auth oauth2_user`
@@ -70,11 +126,10 @@ export function prepareUserConsent(definition: ConnectorDefinition, auth: Record
   const token: AddressSpec = { template: auth.tokenUrl }
   const badAddress = addressProblem(`${definition.name}: authorizeUrl`, authorize, []) ?? addressProblem(`${definition.name}: tokenUrl`, token, [])
   if (badAddress) return badAddress
-  const { clientAuth, scopes, authorizeParams, pkce, identity } = auth
+  const { clientAuth, authorizeParams, pkce } = auth
   if (clientAuth !== "body" && clientAuth !== "basic") return `${head} needs clientAuth body or basic.`
-  if (scopes !== undefined && !(Array.isArray(scopes) && scopes.every((scope) => typeof scope === "string" && SCOPE.test(scope)))) {
-    return `${head}: scopes must list texts without spaces.`
-  }
+  const declared = scopesOf(head, auth)
+  if (typeof declared === "string") return declared
   const params = authorizeParams ?? {}
   if (!isJsonObject(params) || Object.entries(params).some(([name, value]) => !PARAM_NAME.test(name) || typeof value !== "string")) {
     return `${head}: authorizeParams must map parameter names to texts.`
@@ -84,9 +139,8 @@ export function prepareUserConsent(definition: ConnectorDefinition, auth: Record
   if (pkce !== undefined && pkce !== "S256") return `${head}: pkce must be S256.`
   const expires = auth.expiresInDefault
   if (expires !== undefined && !isPositiveInteger(expires)) return `${head}: expiresInDefault must be a positive integer.`
-  if (!isJsonObject(identity) || typeof identity.function !== "string" || typeof identity.path !== "string" || !identity.path) {
-    return `${head} needs identity {function, path}: the read that names who consented.`
-  }
+  const identity = identityOf(definition, head, auth.identity)
+  if (typeof identity === "string") return identity
   const refresh = refreshOf(head, auth)
   if (typeof refresh === "string") return refresh
   return {
@@ -94,11 +148,13 @@ export function prepareUserConsent(definition: ConnectorDefinition, auth: Record
     authorize,
     token,
     clientAuth,
-    scopes: [...((scopes as string[] | undefined) ?? [])],
+    scopes: "url" in identity ? [...new Set([...declared.scopes, ...identity.scopes])] : declared.scopes,
+    accessLevels: declared.accessLevels,
+    scopeImplies: declared.scopeImplies,
     authorizeParams: { ...(params as Record<string, string>) },
     ...refresh,
     expiresInDefault: expires ?? null,
-    identity: { function: identity.function, path: identity.path },
+    identity,
   }
 }
 

@@ -113,6 +113,16 @@ describe("described connector engine", () => {
     expect(output.text).toBe(['crm.list_contacts: 2 items from 2 pages:', '- {"id":"c-1"}', '- {"id":"c-2"}'].join("\n"))
   })
 
+  it("should follow the cursor into the argument requestParam names, under another name in the query, as the factory renders it", async () => {
+    // L'argument `cursor` part sous le nom `pageToken`, comme `page_token` chez Gmail ; `requestParam` nomme l'argument.
+    const base = describedConnector()
+    const query = { limit: "limit", pageToken: "cursor", tags: "tags", filter: "filter" }
+    registerConnectors([{ ...base, functions: base.functions.map((fn) => (fn.name === "crm.list_contacts" ? { ...fn, request: { ...fn.request, query } } : fn)) }])
+    const { sent } = stub(json({ items: [], has_more: true, next_cursor: "p2" }), json({ items: [], has_more: false }))
+    await run("crm.list_contacts", { all_pages: true })
+    expect(sent().map((request) => request.url)).toEqual(["https://crm.example.test/v2/contacts?view=full", "https://crm.example.test/v2/contacts?view=full&pageToken=p2"])
+  })
+
   it("should stop at max_pages and give the cursor of the page left (AC6)", async () => {
     const page = (n: number) => json({ items: [{ id: `c-${n}` }], has_more: true, next_cursor: `p${n + 1}` })
     const { send } = stub(page(1), page(2), page(3))

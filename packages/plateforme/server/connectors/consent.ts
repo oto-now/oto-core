@@ -50,11 +50,11 @@ function consentConnector(name: string): DeclaredConnector & { auth: UserConsent
 
 /**
  * Démarre le consentement de la personne connectée à un connecteur `oauth2_user` et rend l'adresse d'autorisation du
- * tiers, où l'envoyer : scopes de la description, `state` à usage unique, preuve PKCE (S256), adresse de retour du
- * paquet à l'adresse de l'organisation (`connectorConsentRedirectUri(origin)`). `return_to` : l'écran de l'hôte où
- * revenir ensuite (l'écran Connecteurs par défaut). Les demandes échues de l'organisation sont purgées au passage.
- * Refus : saisie invalide, connecteur sans consentement (`invalid_arguments`), application OAuth absente
- * (`not_enabled`).
+ * tiers, où l'envoyer : scopes de la description (ceux du niveau `full` pour un connecteur à niveaux d'accès, que le
+ * paquet n'applique pas encore), `state` à usage unique, preuve PKCE (S256), adresse de retour du paquet à l'adresse
+ * de l'organisation (`connectorConsentRedirectUri(origin)`). `return_to` : l'écran de l'hôte où revenir ensuite
+ * (l'écran Connecteurs par défaut). Les demandes échues de l'organisation sont purgées au passage. Refus : saisie
+ * invalide, connecteur sans consentement (`invalid_arguments`), application OAuth absente (`not_enabled`).
  */
 export async function startConnectorConsent(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = connectorConsentSchema.safeParse(input)
@@ -125,7 +125,10 @@ function freshCredential(tokens: ConsentTokens, application: OAuthApplication, l
   }
 }
 
-/** Qui a consenti : la valeur non vide au chemin `identity.path` de la réponse de la fonction d'identité. */
+/**
+ * Qui a consenti : la valeur non vide au chemin `identity.path` de la réponse de la fonction d'identité, ou de l'adresse
+ * d'identité (un `GET` avec le jeton neuf, préparé comme une fonction : `declaration.ts`).
+ */
 async function consentingIdentity(connector: ReturnType<typeof consentConnector>, tokens: ConsentTokens, pacingKey: string): Promise<string> {
   const { definition, auth } = connector
   const credential = freshCredential(tokens, connector.application, definition.label)

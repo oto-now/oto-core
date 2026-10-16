@@ -163,7 +163,7 @@ describe("registerConnectors", () => {
     [
       "a cursor that goes nowhere",
       () => [withFunction("list_contacts", (fn) => ({ ...fn, pagination: { kind: "cursor", requestParam: "page_token", next: "next_cursor", maxPages: 3 } }))],
-      "crm.list_contacts: pagination requestParam page_token is neither a query nor a body parameter.",
+      "crm.list_contacts: pagination requestParam page_token is not an argument placed in the query or the body.",
     ],
     [
       "a check of an unknown kind",

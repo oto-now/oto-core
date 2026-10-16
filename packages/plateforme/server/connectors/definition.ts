@@ -48,24 +48,49 @@ export type ConnectorOAuthRefresh =
   | { readonly refresh: "exchange"; readonly exchange: { readonly grantType: string; readonly tokenParam: string }; readonly rotates?: never }
   | { readonly refresh: "none"; readonly rotates?: never; readonly exchange?: never }
 
+/** Les droits que demande le consentement d'un niveau d'accès. */
+export type ConnectorAccessLevel = { readonly scopes: readonly string[] }
+
+/**
+ * Les droits d'un consentement. Sans niveaux : `scopes`, qui est le niveau `full`. Avec niveaux (`accessLevels`, `full`
+ * exigé, et `scopeImplies`, un droit qui en couvre d'autres) : chaque fonction déclare ses `scopes`. Le paquet n'applique
+ * pas encore les niveaux : le consentement demande les droits de `full`, qui ne filtre rien.
+ */
+export type ConnectorOAuthScopes =
+  | { readonly scopes?: readonly string[]; readonly accessLevels?: never; readonly scopeImplies?: never }
+  | {
+      readonly accessLevels: { readonly full: ConnectorAccessLevel; readonly [level: string]: ConnectorAccessLevel }
+      readonly scopeImplies?: { readonly [scope: string]: readonly string[] }
+      readonly scopes?: never
+    }
+
+/**
+ * Qui a consenti, lu juste après le consentement : la valeur non vide au chemin `path` de la réponse nomme le compte.
+ * Soit `function`, une lecture du connecteur sans argument requis, appelée avec `{}` ; soit `url`, une adresse complète
+ * `https` fixe (le service d'identité commun d'un fournisseur), lue en `GET` avec le jeton d'accès, et `scopes`, les
+ * droits qu'elle exige, que le consentement demande aussi.
+ */
+export type ConnectorConsentIdentity =
+  | { readonly function: string; readonly path: string; readonly url?: never; readonly scopes?: never }
+  | { readonly url: string; readonly path: string; readonly scopes: readonly string[]; readonly function?: never }
+
 /**
  * Le consentement d'une personne (code d'autorisation, OAuth 2.0), de la forme que rend la fabrique. L'application OAuth
  * (identifiant et secret du client) n'est ni ici ni dans `credential` (vide) : l'hôte la fournit à `registerConnectors`.
- * `identity` : la lecture sans argument requis, appelée juste après le consentement, dont la valeur au chemin `path`
- * nomme le compte (qui a consenti). `fromToken` : champs de la réponse de jeton gardés avec le compte.
+ * `fromToken` : champs de la réponse de jeton gardés avec le compte.
  */
 export type ConnectorOAuthUser = {
   readonly kind: "oauth2_user"
   readonly authorizeUrl: string
   readonly clientAuth: "body" | "basic"
-  readonly scopes?: readonly string[]
   readonly authorizeParams?: { readonly [param: string]: string }
   readonly pkce?: "S256"
   readonly expiresInDefault?: number
-  readonly identity: { readonly function: string; readonly path: string }
+  readonly identity: ConnectorConsentIdentity
   readonly fromToken?: readonly string[]
 } & ConnectorTokenEndpoint &
-  ConnectorOAuthRefresh
+  ConnectorOAuthRefresh &
+  ConnectorOAuthScopes
 
 /**
  * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials` et
@@ -123,7 +148,7 @@ export type ConnectorRequest = {
   readonly encode?: { readonly [argument: string]: "json" }
 }
 
-/** Suivie quand l'agent passe `all_pages` : `next` (chemin pointé de la réponse) va dans `requestParam`. */
+/** Suivie quand l'agent passe `all_pages` : `next` (chemin pointé de la réponse) va dans l'argument `requestParam`. */
 export type ConnectorPagination = {
   readonly kind: "cursor" | "page"
   readonly requestParam: string
@@ -156,6 +181,8 @@ export type ConnectorFunctionDefinition = {
   readonly name: string
   readonly connector: string
   readonly class: ConnectorFunctionClass
+  /** Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès. */
+  readonly scopes?: readonly string[]
   readonly description: string
   /** Racine `type: object`, `additionalProperties: false`. */
   readonly schema: ConnectorJsonSchema

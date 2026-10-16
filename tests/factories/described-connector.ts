@@ -173,6 +173,45 @@ export function consentConnector(name = "crm"): ConnectorDefinition {
   }
 }
 
+/** Les droits exigés de chaque fonction du connecteur de test à niveaux, par nom court. */
+const FUNCTION_SCOPES: Record<string, string[]> = {
+  get_company: ["contacts.read"],
+  list_contacts: ["contacts.read"],
+  get_contact: ["contacts.read"],
+  rename_contact: ["contacts.write"],
+  untag_contact: ["contacts.write"],
+  post_entry: ["entries.write"],
+}
+
+/**
+ * Le connecteur à consentement de test sous des niveaux d'accès, de la forme que rend la fabrique : `read` et `full`,
+ * un droit qui en couvre un autre (`scopeImplies`), les droits exigés de chaque fonction, et l'identité lue à une
+ * adresse complète (le service d'identité commun d'un fournisseur), avec ses droits.
+ */
+export function leveledConsentConnector(name = "crm"): ConnectorDefinition {
+  const base = consentConnector(name)
+  return {
+    ...base,
+    auth: {
+      kind: "oauth2_user",
+      authorizeUrl: "https://login.crm.example.test/authorize",
+      tokenUrl: "https://login.crm.example.test/token",
+      clientAuth: "body",
+      authorizeParams: { prompt: "select_account" },
+      refresh: "refresh_token",
+      rotates: true,
+      expiresInDefault: 3600,
+      accessLevels: {
+        read: { scopes: ["offline_access", "contacts.read"] },
+        full: { scopes: ["offline_access", "contacts.write", "entries.write"] },
+      },
+      scopeImplies: { "contacts.write": ["contacts.read"] },
+      identity: { url: "https://id.crm.example.test/v1/userinfo", path: "email", scopes: ["openid", "email"] },
+    },
+    functions: base.functions.map((fn) => ({ ...fn, scopes: FUNCTION_SCOPES[fn.name.slice(name.length + 1)] })),
+  }
+}
+
 /** Le consentement d'un compte gardé par le test : `renewals` relève chaque renouvellement, `revocations` chaque raison. */
 export function memoryConsent(refreshToken: string | null): ConsentCredential & { renewals: { token: string; rotated: string | null; scopes: string[] | null }[]; revocations: string[] } {
   const renewals: { token: string; rotated: string | null; scopes: string[] | null }[] = []
