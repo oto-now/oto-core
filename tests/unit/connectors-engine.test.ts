@@ -80,7 +80,7 @@ describe("described connector engine", () => {
 
   it("should send the body constants with the arguments, a constant header, an encoded path, and a body on PUT and DELETE (AC5)", async () => {
     const { sent } = stub(json({ id: 9 }), json({ id: "a/b c" }), json({}))
-    await run("crm.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "15" }] })
+    await run("crm_act.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "15" }] })
     await run("crm.rename_contact", { contact_id: "a/b c", name: "Ada" })
     await run("crm.untag_contact", { tag_id: "t-1", reason: "duplicate" })
     expect(sent().map(({ url, method, body }) => [method, url, body])).toEqual([
@@ -133,7 +133,7 @@ describe("described connector engine", () => {
 
   it("should refuse an unbalanced entry by its named refusal, sending nothing, and sum decimals exactly (AC7)", async () => {
     const { send } = stub(json({ id: 1 }))
-    const error = await refusal(run("crm.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "14.99" }] }))
+    const error = await refusal(run("crm_act.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "14.99" }] }))
     expect({ code: error.code, message: error.message, details: error.details }).toEqual({
       code: "invalid_arguments",
       message: "The entry is not balanced: total debits must equal total credits. Nothing was sent. (entry_unbalanced)",
@@ -141,7 +141,7 @@ describe("described connector engine", () => {
     })
     expect(send).not.toHaveBeenCalled()
     // 0.1 + 0.2 vaut 0.30000000000000004 en virgule flottante : la somme décimale exacte l'égale à 0.3.
-    await run("crm.post_entry", { label: "Fees", lines: [{ debit: "0.1" }, { debit: "0.2" }, { credit: "0.3" }] })
+    await run("crm_act.post_entry", { label: "Fees", lines: [{ debit: "0.1" }, { debit: "0.2" }, { credit: "0.3" }] })
     expect(send).toHaveBeenCalledTimes(1)
   })
 
@@ -175,7 +175,7 @@ describe("described connector engine", () => {
   })
 
   it("should summarize a sensitive function from its template, its arguments in place (AC10)", async () => {
-    const fn = findFunction(catalogFunctions(), "crm.post_entry")
+    const fn = findFunction(catalogFunctions(), "crm_act.post_entry")
     const summary = await fn?.summarize?.(context(secret()), { label: "Fees", lines: [] } as never)
     expect(summary).toEqual({ text: 'Post entry "Fees": it cannot be deleted.', data: { arguments: { label: "Fees", lines: [] } } })
   })

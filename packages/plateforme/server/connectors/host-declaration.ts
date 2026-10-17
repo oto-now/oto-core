@@ -14,10 +14,10 @@ export const FIELD_NAME = /^[a-z][a-z0-9_]{0,39}$/
 /** Comme le libellé d'un connecteur. */
 const IDENTITY_LABEL_MAX = 80
 
-/** Le premier champ du credential dont le titulaire n'est ni `account` ni `host` ; `null` : aucun. */
-export function holderProblem(name: string, fields: ConnectorDefinition["credential"]): string | null {
-  const bad = fields.find((field) => field.holder !== undefined && !HOLDERS.includes(field.holder))
-  return bad ? `${name}: credential field ${bad.name} has holder ${JSON.stringify(String(bad.holder))}: account or host.` : null
+/** Le premier champ du credential (déjà contrôlé) dont le titulaire n'est ni `account` ni `host` ; `null` : aucun. */
+export function holderProblem(definition: ConnectorDefinition): string | null {
+  const bad = definition.credential.find((field) => field.holder !== undefined && !HOLDERS.includes(field.holder))
+  return bad ? `${definition.name}: credential field ${bad.name} has holder ${JSON.stringify(String(bad.holder))}: account or host.` : null
 }
 
 /**

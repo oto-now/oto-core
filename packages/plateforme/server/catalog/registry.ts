@@ -76,6 +76,18 @@ export function findFunction(functions: readonly CatalogFunction[], name: string
   return functions.find((fn) => fn.name === wanted) ?? null
 }
 
+/**
+ * Le suffixe de l'espace de noms où un connecteur décrit sert ses fonctions qui engagent ou détruisent (`act`) :
+ * `<connecteur>_act.<fonction>` (`outils-mcp.md` § Lire et engager).
+ */
+export const ACT_SUFFIX = "_act"
+
+/** Le nom `<espace>_act.<fonction>` d'un nom simple `<espace>.<fonction>` ; `null` pour un nom d'une autre forme. */
+export function actName(name: string): string | null {
+  const [space, fn, ...rest] = name.split(".")
+  return space && fn && rest.length === 0 ? `${space}${ACT_SUFFIX}.${fn}` : null
+}
+
 /** Nom de fonction (`table.rows`) plutôt que chemin de nœud (`ventes/relance_devis`). */
 export function looksLikeFunction(path: string): boolean {
   return /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(path.trim())

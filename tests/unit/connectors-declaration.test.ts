@@ -43,11 +43,11 @@ describe("registerConnectors", () => {
       "crm.get_contact",
       "crm.rename_contact",
       "crm.untag_contact",
-      "crm.post_entry",
+      "crm_act.post_entry",
     ])
     const contact = findFunction(catalogFunctions(), "crm.get_contact")
     expect([contact?.origin, contact?.class, contact?.examples]).toEqual(["connecteur", "read", [{ contact_id: "c-42" }]])
-    expect(typeof findFunction(catalogFunctions(), "crm.post_entry")?.summarize).toBe("function")
+    expect(typeof findFunction(catalogFunctions(), "crm_act.post_entry")?.summarize).toBe("function")
   })
 
   it("should serve the JSON Schema of the description as is in the contract, and validate arguments against it (AC2)", () => {
@@ -193,5 +193,23 @@ describe("registerConnectors", () => {
         defineErpFunction({ name: "crm.lookup", class: "read", description: "Reads.", schema: z.strictObject({}), examples: [{}], run: async () => ({ text: "ok" }) }),
       ]),
     ).toThrow('Namespace "crm" of crm.lookup is already served by another source.')
+  })
+
+  it("should serve a function that engages under <connector>_act, its connector unchanged, and keep that namespace", () => {
+    registerConnectors([describedConnector()])
+    const engaging = catalogFunctions().filter((fn) => fn.name.startsWith("crm_act."))
+    expect(engaging.map((fn) => [fn.name, fn.connector, fn.class])).toEqual([["crm_act.post_entry", "crm", "sensitive"]])
+    expect(findFunction(catalogFunctions(), "crm.post_entry")).toBeNull()
+    expect(() =>
+      registerFunctions([
+        defineErpFunction({ name: "crm_act.lookup", class: "read", description: "Reads.", schema: z.strictObject({}), examples: [{}], run: async () => ({ text: "ok" }) }),
+      ]),
+    ).toThrow('Namespace "crm_act" of crm_act.lookup is already served by another source.')
+    registerConnectors([])
+    registerFunctions([
+      defineErpFunction({ name: "crm_act.lookup", class: "read", description: "Reads.", schema: z.strictObject({}), examples: [{}], run: async () => ({ text: "ok" }) }),
+    ])
+    expect(refusalOf([describedConnector()])).toBe("Connector crm: the namespace is already served by another source.")
+    expect(refusalOf([describedConnector("crm_act")])).toBe("Connector crm_act: a name ending in _act is kept for the functions of a connector that engage.")
   })
 })

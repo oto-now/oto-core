@@ -10,6 +10,7 @@ import { randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
+import { readNode } from "../../packages/plateforme/server/nodes/read"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -160,7 +161,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     sent = []
     const fetcher: Fetch = async (url, init) => {
       sent.push({ url, key: new Headers(init.headers).get("x-api-key") })
-      return url.includes("/contacts") ? json({ items: [{ id: "c-1" }], has_more: false }) : json({}, 404)
+      if (url.includes("/contacts")) return json({ items: [{ id: "c-1" }], has_more: false })
+      return url.endsWith("/entries") ? json({ id: "e-1" }) : json({}, 404)
     }
     vi.stubGlobal("fetch", fetcher)
     vi.spyOn(console, "error").mockImplementation(() => {})
@@ -484,5 +486,25 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(await codeOf(lea.tx((sql) => sql`update platform.hosted_link_requests set consumed_at = null where user_id = ${o.people.lea.id}`))).toBe("42501")
     expect(await linkedRows(id)).toHaveLength(1)
     expect(await linkedRows("forged")).toHaveLength(0)
+  })
+
+  it("should serve a function that engages under its _act name: read under it, called under it and journaled so, refused under the plain name", async () => {
+    await connect("lea", accountId("lea"))
+    const lea = person("lea", o)
+    const served = `${CONNECTOR}_act.post_entry`
+    const read = await readNode(lea.db, lea.identity, { path: served })
+    expect(read.text.split("\n")[0]).toBe(`Function ${served} (connector ${CONNECTOR}, origin connecteur, class sensitive: two-step confirmation)`)
+    const unread = await refusal(readNode(lea.db, lea.identity, { path: `${CONNECTOR}.post_entry` }))
+    expect(unread.code).toBe("not_found")
+
+    const args = { label: "Fees", lines: [{ debit: "15.00" }, { credit: "15" }] }
+    const done = await callFunction(lea.db, lea.identity, { function: served, arguments: args, confirm: true, account: label("lea") }, { origin: origin(o) })
+    expect([done.status, sent.at(-1)?.url]).toEqual(["done", expect.stringMatching(/\/entries$/)])
+    const plain = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.post_entry`, arguments: args, confirm: true, account: label("lea") }, { origin: origin(o) }))
+    expect([plain.code, plain.message]).toEqual(["not_found", `Unknown function ${CONNECTOR}.post_entry: it engages or destroys, so it is served as ${served}. Call ${served}.`])
+    expect(sent.filter((request) => request.url.endsWith("/entries"))).toHaveLength(1)
+    const lines = await admin<{ target: string | null; is_error: boolean }[]>`
+      select target, is_error from platform.journal where org_id = ${o.org.id} and tool = 'call' and target like ${`%post_entry`} order by id`
+    expect(lines.slice(-2)).toEqual([{ target: served, is_error: false }, { target: `${CONNECTOR}.post_entry`, is_error: true }])
   })
 })

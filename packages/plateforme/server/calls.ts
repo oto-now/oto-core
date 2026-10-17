@@ -16,7 +16,7 @@ import { ERP_VIEW_PREFIX } from "../schemas/views"
 import { administratorNames } from "./access"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
-import { catalogFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
+import { actName, catalogFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
 import { resolveAccount, runningTeam, type ResolvedAccount, type RunningTeam } from "./connectors/resolution"
@@ -159,6 +159,19 @@ async function confirmationRequest(fn: CatalogFunction, context: FunctionContext
 }
 
 /**
+ * Le refus d'une fonction inconnue. Appelée sous son nom simple, une fonction de connecteur qui engage ou détruit est
+ * nommée sous son nom servi, `<connecteur>_act.<fonction>` ; elle ne court jamais sous l'autre.
+ */
+function unknownFunction(functions: readonly CatalogFunction[], name: string, prefix: string): PlatformError {
+  const served = actName(name.trim().toLowerCase())
+  const engaging = served === null ? null : findFunction(functions, served)
+  if (engaging?.origin === "connecteur") {
+    return new PlatformError("not_found", `Unknown function ${name}: it engages or destroys, so it is served as ${engaging.name}. Call ${engaging.name}.`)
+  }
+  return new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
+}
+
+/**
  * `call` : fonction, activation, arguments, équipe, compte, puis récapitulatif (sensible sans
  * `confirm`) ou exécution. Chaque refus est levé tel que le service qui le décide l'a écrit ; `trace`
  * garde l'équipe et le compte établis avant lui. `confirm` ne sert qu'aux fonctions sensibles (N2).
@@ -168,7 +181,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   const prefix = identity.org.prefix
   const functions = deps.functions ?? catalogFunctions()
   const fn = findFunction(functions, input.function.trim().toLowerCase())
-  if (!fn) throw new PlatformError("not_found", `Unknown function ${input.function}. Use ${prefix}_find with type function.`)
+  if (!fn) throw unknownFunction(functions, input.function, prefix)
   const active = await deps.activeConnectors()
   if (!isActive(fn, active)) throw await notEnabled(db, identity, fn)
   const args = checkedArguments(fn, input.arguments ?? {}, prefix)

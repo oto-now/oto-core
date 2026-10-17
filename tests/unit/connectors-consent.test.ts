@@ -144,7 +144,7 @@ describe("oauth2_user with access levels and an identity address", () => {
       { "contacts.write": ["contacts.read"] },
     ])
     // Aucun filtrage : toutes les fonctions sont servies, comme au niveau `full`.
-    expect(declared.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm.post_entry"])
+    expect(declared.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm_act.post_entry"])
     expect(authorizationOf().query.scope).toBe("offline_access contacts.write entries.write openid email")
   })
 

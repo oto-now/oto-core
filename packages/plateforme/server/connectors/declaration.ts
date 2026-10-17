@@ -9,7 +9,7 @@ import { declaredConnector, declaredConnectors, replaceDeclaredConnectors, type 
 import { contractNames } from "../catalog/contracts"
 import type { CatalogFunction, FunctionContext } from "../catalog/define"
 import { CatalogRegistrationError } from "../catalog/erp"
-import { catalogFunctions, looksLikeFunction } from "../catalog/registry"
+import { ACT_SUFFIX, actName, catalogFunctions, looksLikeFunction } from "../catalog/registry"
 import { issuesText, PlatformError } from "../errors"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
@@ -39,7 +39,8 @@ function connectorProblem(definition: ConnectorDefinition, reserved: ReadonlySet
   if (typeof name !== "string" || !CONNECTOR_NAME.test(name)) {
     return `Invalid connector name ${JSON.stringify(String(name))}: lowercase ASCII letters, digits and _, starting with a letter, 40 characters at most.`
   }
-  if (reserved.has(name)) return `Connector ${name}: the namespace is already served by another source.`
+  if (name.endsWith(ACT_SUFFIX)) return `Connector ${name}: a name ending in ${ACT_SUFFIX} is kept for the functions of a connector that engage.`
+  if (reserved.has(name) || reserved.has(`${name}${ACT_SUFFIX}`)) return `Connector ${name}: the namespace is already served by another source.`
   if (seen.has(name)) return `Duplicate connector ${name} in registerConnectors.`
   if (typeof definition.label !== "string" || !definition.label.trim() || definition.label.length > LABEL_MAX) return `${name}: label must be 1 to ${LABEL_MAX} characters.`
   if (!isPositiveInteger(definition.timeoutMs) || definition.timeoutMs > TIMEOUT_MAX_MS) return `${name}: timeoutMs must be 1 to ${TIMEOUT_MAX_MS}.`
@@ -70,8 +71,6 @@ function accountProblem(definition: ConnectorDefinition): string | null {
   const fields = Array.isArray(credential) ? credential : []
   const badField = fields.find((field) => typeof field?.name !== "string" || !FIELD_NAME.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
   if (fields.length === 0 || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
-  const badHolder = holderProblem(name, fields)
-  if (badHolder) return badHolder
   const settings = definition.settings ?? []
   if (!Array.isArray(settings)) return `${name}: settings must be a list.`
   const names = [...fields.map((field) => field.name), ...settings.map((setting) => setting?.name), ...(definition.accountIdentity ? [definition.accountIdentity.name] : [])]
@@ -221,7 +220,8 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
   const { connector, fn } = prepared
   const summary = fn.confirm?.summary
   return {
-    name: fn.name,
+    // Une fonction qui engage ou détruit est servie sous `<connecteur>_act.<fonction>` ; `connector` reste le connecteur.
+    name: fn.act ? (actName(fn.name) ?? fn.name) : fn.name,
     connector: connector.name,
     class: fn.class,
     origin: "connecteur",
@@ -295,7 +295,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
   const problem =
-    connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition) ?? accountIdentityProblem(definition)
+    connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition) ?? holderProblem(definition) ?? accountIdentityProblem(definition)
   if (problem) throw new CatalogRegistrationError(problem)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)

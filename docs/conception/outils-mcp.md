@@ -32,10 +32,11 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - Pas d'outil par famille d'objets (ADR-002 § 6) : tableaux, journal et contrats passent par `call` et `read`.
 - Le connecteur admin (`/api/mcp-admin`) n'est pas soumis au gel ([administration et cellule](administration-et-cellule.md)).
 
-### Lire et engager : la paire `<connecteur>` / `<connecteur>_act` (décidé le 17/10, noms pas encore servis)
+### Lire et engager : la paire `<connecteur>` / `<connecteur>_act`
 
 - Chaque connecteur à effet se partage en deux : `<connecteur>` pour lire et simuler, brouillon compris, et `<connecteur>_act` pour tout ce qui engage ou détruit (envoi, corbeille, archive, déplacement). Le découpage couvre l'écriture et la destruction, pas seulement les fonctions `sensitive`, et reprend celui d'oto 1.
 - Tout reste sous `call` : `find` et `read` servent une fonction qui engage sous le nom `<connecteur>_act.<fonction>`, une fonction qui lit ou simule sous `<connecteur>.<fonction>`. Une seule description, un seul compte, une seule activation ; ce qu'une personne peut engager se règle par les droits du compte, par classe ([droits d'accès](droits-d-acces.md)). Le rangement d'une fonction est un champ `act` de sa description, déduit de sa classe ([format de description](https://github.com/otomata-tech/connectors/blob/main/docs/conception/format-de-description.md)). Les fonctions sensibles gardent leurs deux temps (`confirm`).
+- Servi depuis le 17/10 pour les connecteurs décrits : la déclaration (`registerConnectors`) range sous `<connecteur>_act.<fonction>` chaque fonction dont `act` est vrai, son connecteur inchangé (activation, compte, journal). `find`, `read` et `call` ne la connaissent que sous ce nom, et le journal l'écrit ; sous le nom simple, `call` rend `not_found` qui donne le nom servi, sans rien lancer. Un connecteur dont le nom finit par `_act`, ou dont l'espace `<connecteur>_act` est déjà servi par une autre source, est refusé à la déclaration.
 
 ### Préfixe et descriptions (ADR-002 § 3, § 5)
 
@@ -134,7 +135,7 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - ADR-009 § 3 révisé au statut proposé : le code le suit, l'interrupteur reste éteint par défaut jusqu'à la mesure du banc (lignes W1 à W6 de [les requêtes de référence](../reference/mcp-golden-queries.md)). L'hôte de référence l'allume par `PLATFORM_MCP_WIDGETS=on`.
 - Bundle de 997 Ko, 307 Ko compressé (sortie de `pnpm widgets:build`), au-delà de la cible de `mcp-patterns.md § 5.3` ; accepté pour le banc.
 - Les cas de test du contrat figé et du routage sont dans [les requêtes de référence](../reference/mcp-golden-queries.md).
-- Les noms `<connecteur>_act.<fonction>` décidés le 17/10 ne sont pas servis : `find` et `read` nomment toute fonction `<connecteur>.<fonction>`, quelle que soit sa classe (issue « `call` porte aussi les envois », oto-now/oto-core#61).
+- Les noms `<connecteur>_act.<fonction>` ne valent que pour les connecteurs décrits : les fonctions natives, celle du connecteur simulé `mail` (`mail.send_draft`) et celles de l'ERP gardent leur nom, quelle que soit leur classe (issue « `call` porte aussi les envois », oto-now/oto-core#61). `read` d'un nom simple ne donne pas le nom `_act` (refus ordinaire), et les exemples de la description de `call` peuvent citer une écriture `_act`.
 
 ## Questions ouvertes
 
@@ -150,3 +151,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-02 : ADR-009 § 3 révisé au statut proposé — widget routeur sur `call` et `read` derrière l'interrupteur `widgets`, vues du paquet et de l'ERP, appels du widget sans `confirm` ; mesure du banc à reporter — proposé par la session de la story widgets-dans-la-conversation, à valider par JB.
 - 2026-10-01 : `context` se charge une fois par conversation quand les préférences de la personne le demandent, les autres outils restent réservés au travail ; la borne de la description et le champ `phrase` le disent, mesure sur les assistants après publication — décidé par JB (source : demande du responsable d'Oto).
 - 2026-10-17 : chaque connecteur à effet se partage en `<connecteur>` (lire, simuler, brouillon compris) et `<connecteur>_act` (engager ou détruire), comme dans oto 1 ; tout reste sous `call`, la paire se lit par le nom servi, sans septième outil ; remplace le verbe réservé aux seules fonctions sensibles envisagé le 16/10 — décidé par Alexis (source : issue oto-now/oto-core#61).
+- 2026-10-17 : les noms `<connecteur>_act.<fonction>` sont servis pour les connecteurs décrits, d'après le champ `act` de chaque fonction ; le nom simple d'une telle fonction est refusé par `call` avec le nom servi — choix du projet, mise en œuvre de la décision du même jour (#61).

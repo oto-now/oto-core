@@ -8,7 +8,7 @@
 import { connectorRefSchema, type DeactivationImpact, type OrgConnector } from "../../schemas"
 import { ACCESS_LEVELS, accountLevels, administratorNames, isOrgAdmin, nodeLevels, type AccessLevel } from "../access"
 import type { CatalogFunction } from "../catalog/define"
-import { catalogFunctions, NATIVE_CONNECTOR } from "../catalog/registry"
+import { ACT_SUFFIX, catalogFunctions, NATIVE_CONNECTOR } from "../catalog/registry"
 import type { PlatformDb } from "../db"
 import { memberDirectory, type DirectoryEntry } from "../directory"
 import { boundedList, inTransaction, invalidInput, PlatformError } from "../errors"
@@ -172,9 +172,13 @@ export async function deactivateConnector(db: PlatformDb, identity: Identity, in
   return connectorView(connector, functions, null, [])
 }
 
-/** Un bloc `call` qui appelle une fonction du connecteur : le préfixe `<connecteur>.` comparé tel quel, jamais par `like`, dont `_` est un joker. */
+/**
+ * Un bloc `call` qui appelle une fonction du connecteur : le préfixe `<connecteur>.` ou `<connecteur>_act.` comparé tel
+ * quel, jamais par `like`, dont `_` est un joker.
+ */
 function callsConnector(data: unknown, connector: string): boolean {
-  return isJsonObject(data) && typeof data.function === "string" && data.function.startsWith(`${connector}.`)
+  if (!isJsonObject(data) || typeof data.function !== "string") return false
+  return data.function.startsWith(`${connector}.`) || data.function.startsWith(`${connector}${ACT_SUFFIX}.`)
 }
 
 const readable = (level: AccessLevel | undefined) => (level ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read
