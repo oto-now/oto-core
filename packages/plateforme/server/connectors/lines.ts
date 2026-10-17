@@ -4,14 +4,14 @@
 // d'équipe par défaut ; chaque équipe de la personne qui a un compte du connecteur a sa ligne, dans la
 // partie de cette équipe (ce qu'obtient un appel qu'elle porte) ; un connecteur dont aucune de ses équipes
 // n'a de compte a la sienne dans la partie de Tout le monde (sans équipe). Le compte est décidé comme par
-// `call` (`chooseAccount`) : une seule source.
-import type { AccountMode } from "../../schemas"
+// `call` (`chooseAccount`) : une seule source. Un compte marqué (clé refusée, crédits épuisés) se dit avec sa marque.
+import type { AccountMark, AccountMode } from "../../schemas"
 import type { CatalogFunction } from "../catalog/define"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
-import { connectorAccounts, type ConnectorAccount, type LevelName } from "./accounts"
+import { connectorAccounts, markWords, type ConnectorAccount, type LevelName } from "./accounts"
 import { activableConnectors, loadActiveConnectors } from "./activations"
 import { modeLabel } from "./modes"
 import { personalOwnerOf } from "./consent-accounts"
@@ -23,7 +23,7 @@ const MAX_LABEL_CHARS = 40
 
 /** Ce que la personne obtient par défaut pour un besoin (lecture ou écriture) d'un connecteur. */
 export type NeedOutcome =
-  | { kind: "account"; team: TeamRef | null; account: { label: string; mode: AccountMode; level: LevelName } }
+  | { kind: "account"; team: TeamRef | null; account: { label: string; mode: AccountMode; level: LevelName; mark?: AccountMark } }
   | { kind: "no_account"; team: TeamRef | null }
   | { kind: "read_only"; team: TeamRef | null; labels: string[] }
   | { kind: "several_accounts"; team: TeamRef | null; labels: string[] }
@@ -40,8 +40,10 @@ const NEEDS: Need[] = ["read", "write"]
 function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[], team: TeamRef | null, personalOwner: string | undefined): NeedOutcome {
   const choice = chooseAccount({ fn, accounts, team, personalOwner })
   if (choice.kind === "account") {
-    const { label, mode, level } = choice.account
-    return { kind: "account", team, account: { label, mode, level } }
+    const { id, label, mode, level } = choice.account
+    // La marque du compte (clé refusée, crédits épuisés) : il est pris quand même, le modèle l'apprend avant l'appel.
+    const mark = accounts.find((account) => account.id === id)?.mark
+    return { kind: "account", team, account: { label, mode, level, ...(mark ? { mark } : {}) } }
   }
   if (choice.kind === "ambiguous_step") return { kind: "several_accounts", team, labels: choice.accounts.map((account) => account.label) }
   // Comptes visibles mais sous le niveau exigé : le remède est un accès, pas un compte de plus (N39).
@@ -72,8 +74,8 @@ export function connectorOutlook(input: {
 }
 
 const teamWords = (team: TeamRef | null) => (team ? `team ${cut(team.name, MAX_LABEL_CHARS)}` : "no team")
-const accountWords = (account: { label: string; mode: AccountMode }) =>
-  `account « ${cut(account.label, MAX_LABEL_CHARS)} » (${modeLabel(account.mode)})`
+const accountWords = (account: { label: string; mode: AccountMode; mark?: AccountMark }) =>
+  `account « ${cut(account.label, MAX_LABEL_CHARS)} » (${modeLabel(account.mode)})${account.mark ? `, marked: ${markWords(account.mark)}` : ""}`
 const labelList = (labels: readonly string[]) => labels.map((label) => `« ${cut(label, MAX_LABEL_CHARS)} »`).join(", ")
 
 /**

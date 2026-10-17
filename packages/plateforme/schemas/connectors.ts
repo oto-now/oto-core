@@ -130,6 +130,15 @@ export type OrgConnector = {
  */
 export type DeactivationImpact = { functions: string[]; procedures: string[]; accounts: number }
 
+/** Ce qu'un appel a révélé d'un compte : la clé refusée, ou les crédits épuisés (`marksAccount` d'un connecteur). */
+export type AccountMarkReason = "credential_rejected" | "quota_exhausted"
+
+/**
+ * La marque d'un compte (`accounts.health.mark`) : sa raison et sa date (ISO 8601), posée par l'appel qui l'a révélée,
+ * levée au premier appel réussi. Le compte reste résolu et appelé.
+ */
+export type AccountMark = { reason: AccountMarkReason; at: string }
+
 /**
  * Un compte de l'organisation, désactivé compris (E08-S03, AC6) : jamais de secret. Le propriétaire se
  * dit dans la langue de la porte (H05) : l'écran l'écrit en français, d'après son genre et le nom de
@@ -148,6 +157,8 @@ export type AccountView = {
   settings?: Record<string, string>
   /** La raison d'un état `error` : un consentement à reconnecter. */
   statusReason?: string | null
+  /** La marque du compte, sa raison et sa date : la clé refusée ou les crédits épuisés ; `null` : aucune. */
+  mark?: AccountMark | null
 }
 
 /**

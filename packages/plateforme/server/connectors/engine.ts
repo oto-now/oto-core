@@ -6,13 +6,14 @@
 // (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
 // tiers (`linkedId`, compte rattaché). Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
 // l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
+import type { AccountMarkReason } from "../../schemas"
 import type { FunctionOutput, FunctionSummary } from "../catalog/define"
 import { PlatformError, type PlatformErrorCode } from "../errors"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { guardedFetch } from "./address-guard"
-import { renewsOnUnauthorized, sign, type AccountCredential, type PreparedAuth, type Signature, type Signer } from "./auth"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
+import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
+import type { ConnectorBodyCondition, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { requestJson, type ApiError, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { resolveAddress, type AddressSpec } from "./settings"
 
@@ -42,12 +43,30 @@ export function platformCode(status: number): PlatformErrorCode {
   return "upstream_error"
 }
 
-/** La table d'erreurs d'une fonction : ses refus dont `when` est un statut passent avant la table du connecteur. */
+/** Vrai si la valeur au chemin `path` du corps est égale (stricte) à l'une de `equals`. */
+function bodyMatches(condition: ConnectorBodyCondition): (answer: unknown) => boolean {
+  return (answer) => {
+    const value = valueAt(answer, condition.path)
+    return condition.equals.some((expected) => expected === value)
+  }
+}
+
+/**
+ * La table d'erreurs d'une fonction : ses refus dont `when` est un statut passent avant la table du connecteur. Une
+ * ligne qui marque le compte rend le code de sa marque (`credential_rejected`, `quota_exhausted`), les autres le code
+ * de leur statut ; une condition sur le corps devient le prédicat que lit le client HTTP.
+ */
 export function errorTable(connector: ConnectorDefinition, fn: ConnectorFunctionDefinition): ApiError[] {
-  const own = fn.refusals.flatMap((refusal) => (typeof refusal.when === "number" ? [{ status: refusal.when, code: refusal.code, message: refusal.message }] : []))
+  const own = fn.refusals.flatMap((refusal) => (typeof refusal.when === "number" ? [{ ...refusal, status: refusal.when }] : []))
   return [...own, ...connector.errors].map((error) => {
     const statuses = typeof error.status === "number" ? [error.status] : error.status
-    return { status: error.status, code: platformCode(statuses[0]), message: `${error.message} (${error.code})`, refusal: error.code }
+    return {
+      status: error.status,
+      code: error.marksAccount ?? platformCode(statuses[0]),
+      message: `${error.message} (${error.code})`,
+      refusal: error.code,
+      ...(error.body ? { body: bodyMatches(error.body) } : {}),
+    }
   })
 }
 
@@ -179,7 +198,8 @@ function nextCursor(answer: unknown, pagination: ConnectorPagination | undefined
  * jusqu'à `max_pages` (borné par `maxPages`). Refus : un contrôle des arguments, rien d'envoyé ; une erreur du tiers
  * traduite par la table ; un contrôle de la réponse ; une adresse saisie qui mène à un hôte interne. Sans secret :
  * `internal` (le compte réel en a un, `runCall` l'a vérifié). Une adresse issue d'une saisie part par le transport gardé
- * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf.
+ * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf. État du
+ * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`).
  */
 export async function executeDescribed(
   prepared: PreparedFunction,
@@ -205,18 +225,55 @@ export async function executeDescribed(
   const answers: unknown[] = []
   let current = args
   let next: string | null = null
-  for (let page = 0; page < pages; page++) {
-    const pageArgs = current
-    const signed = async (fresh: boolean) => buildRequest(prepared, pageArgs, await sign(signer, fresh), call.accountId)
-    const resign = renewsOnUnauthorized(prepared.auth) ? () => signed(true) : undefined
-    const answer = await requestJson(api, await signed(false), fetcherFor(address.guarded), resign)
-    runExpectations(fn, answer)
-    answers.push(answer)
-    next = nextCursor(answer, pagination)
-    if (next === null || prepared.cursorArgument === null) break
-    current = { ...current, [prepared.cursorArgument]: next }
+  try {
+    for (let page = 0; page < pages; page++) {
+      const pageArgs = current
+      const signed = async (fresh: boolean) => buildRequest(prepared, pageArgs, await sign(signer, fresh), call.accountId)
+      const resign = renewsOnUnauthorized(prepared.auth) ? () => signed(true) : undefined
+      const answer = await requestJson(api, await signed(false), fetcherFor(address.guarded), resign)
+      runExpectations(fn, answer)
+      answers.push(answer)
+      next = nextCursor(answer, pagination)
+      if (next === null || prepared.cursorArgument === null) break
+      current = { ...current, [prepared.cursorArgument]: next }
+    }
+  } catch (error) {
+    throw await markedRefusal(credential.mark, error, `connector ${connector.name}: account ${call.accountId}`)
   }
+  // Le premier appel réussi lève la marque du compte ; une levée qui échoue ne rend jamais l'appel en échec.
+  const mark = credential.mark
+  if (mark) await mark.set(null).catch((error: unknown) => markWriteFailed(mark, "lift_failed", `connector ${connector.name}: account ${call.accountId}`, error))
   return { answers, next }
+}
+
+const isMarkReason = (code: PlatformErrorCode): code is AccountMarkReason => code === "credential_rejected" || code === "quota_exhausted"
+
+/**
+ * Un refus du tiers qui marque le compte (`marksAccount` : `credential_rejected`, `quota_exhausted`) pose la marque,
+ * puis se dit avec elle, sa date et à qui demander ; tout autre refus passe tel quel. Sans marque ouverte (l'identité
+ * lue au consentement, avant le compte), le refus passe tel quel. Une pose qui échoue rend le refus du tiers tel quel,
+ * sans la phrase de la marque, qui n'est pas posée.
+ */
+async function markedRefusal(mark: AccountMarker | undefined, error: unknown, where: string): Promise<unknown> {
+  if (!mark || !(error instanceof PlatformError) || !isMarkReason(error.code)) return error
+  try {
+    await mark.set(error.code)
+  } catch (failure) {
+    markWriteFailed(mark, "mark_failed", where, failure)
+    return error
+  }
+  return new PlatformError(error.code, `${error.message} ${await mark.remedy()}`, error.details)
+}
+
+/**
+ * L'écriture de la marque a échoué après la réponse du tiers : l'appel garde l'issue que le tiers a rendue (un succès
+ * reste un succès : rejoué, un envoi partirait deux fois). L'échec se voit au log serveur (nom de l'erreur et compte,
+ * sans secret) et à la ligne de journal de l'appel (`effect`, lu par `runCall`).
+ */
+function markWriteFailed(mark: AccountMarker, effect: "mark_failed" | "lift_failed", where: string, failure: unknown): void {
+  const name = failure instanceof PlatformError ? failure.code : failure instanceof Error ? failure.name : typeof failure
+  console.error(`[platform] ${where}: mark ${effect === "lift_failed" ? "not lifted" : "not set"} (${name})`)
+  mark.effect = effect
 }
 
 /** Un enregistrement taillé par `output` : clés de `strip` retirées, puis seules celles de `projection` gardées. */

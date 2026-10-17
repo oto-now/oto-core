@@ -3,18 +3,22 @@
 // `packages/plateforme/migrations/README.md` § Règles). Depuis `20261017090000`, l'insertion est accordée colonne
 // par colonne pour tenir `linked_id` hors de portée : une colonne ajoutée sans son `GRANT INSERT(…)` casserait la
 // création d'un compte en silence, et une colonne ajoutée sans son `GRANT SELECT(…)` sa lecture. Toute colonne
-// s'insère et se lit, sauf les listes fermées ci-dessous, chacune avec sa raison.
+// s'insère et se lit, sauf les listes fermées ci-dessous, chacune avec sa raison. Depuis `20261017150000`, `health` (la
+// marque d'un compte) se lit mais ne s'insère ni ne se met à jour : `platform.mark_account` seule l'écrit.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../helpers/sql"
 
 const VERSION = "20261017090000"
-const pending = (await pendingMigrations()).includes(VERSION)
+const MARK_VERSION = "20261017150000"
+const missing = await pendingMigrations()
+const pending = missing.includes(VERSION) || missing.includes(MARK_VERSION)
 
 /** Colonnes qu'`authenticated` n'insère pas : la base seule les écrit. */
 const NOT_INSERTED: Record<string, string> = {
   linked_id: "written only by platform.link_hosted_account (a person connects their own account)",
   linked_at: "written only by platform.link_hosted_account, with linked_id",
+  health: "written only by platform.mark_account (the mark of an account); a new account takes its default",
 }
 
 /** Colonnes qu'`authenticated` ne lit pas : chiffrés, et l'identifiant d'un compte rattaché. */
@@ -28,9 +32,16 @@ const NOT_READ: Record<string, string> = {
 /** Colonnes qu'`authenticated` ne peut ni insérer, ni lire, ni modifier : la clé de l'hôte atteint tout compte rattaché. */
 const NEVER = ["linked_id", "linked_at"]
 
+/** Colonnes qu'`authenticated` lit sans les écrire : une seule fonction les écrit. */
+const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account" }
+
 type Privileges = { column_name: string; can_insert: boolean; can_select: boolean; can_update: boolean }
 
-const suite = !sqlConfigured ? `accounts column privileges (${SQL_SKIP_REASON})` : pending ? `accounts column privileges (${pendingReason([VERSION])})` : "column privileges of platform.accounts for authenticated"
+const suite = !sqlConfigured
+  ? `accounts column privileges (${SQL_SKIP_REASON})`
+  : pending
+    ? `accounts column privileges (${pendingReason([VERSION, MARK_VERSION].filter((version) => missing.includes(version)))})`
+    : "column privileges of platform.accounts for authenticated"
 
 describe.skipIf(!sqlConfigured || pending)(suite, () => {
   let admin: TestSql
@@ -54,7 +65,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
 
   it("should name only columns that exist in the closed lists", () => {
     const existing = new Set(columns.map((column) => column.column_name))
-    const stale = [...Object.keys(NOT_INSERTED), ...Object.keys(NOT_READ), ...NEVER].filter((name) => !existing.has(name))
+    const stale = [...Object.keys(NOT_INSERTED), ...Object.keys(NOT_READ), ...NEVER, ...Object.keys(WRITTEN_BY_FUNCTION)].filter((name) => !existing.has(name))
     expect(stale.map((name) => `platform.accounts.${name} is in a closed list of this test but no longer exists: remove it from the list.`)).toEqual([])
   })
 
@@ -86,5 +97,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
       )
     expect(reachable).toEqual([])
     expect(columns.filter((column) => NEVER.includes(column.column_name)).map((column) => column.column_name)).toEqual(NEVER)
+  })
+
+  it("should let authenticated read health but neither insert nor update it: only its function writes it", () => {
+    const problems = columns
+      .filter((column) => column.column_name in WRITTEN_BY_FUNCTION)
+      .flatMap((column) => [
+        ...(!column.can_select ? [`platform.accounts.${column.column_name}: authenticated cannot SELECT it, so the mark of an account is not shown.`] : []),
+        ...(["insert", "update"] as const)
+          .filter((privilege) => column[`can_${privilege}`])
+          .map((privilege) => `platform.accounts.${column.column_name}: authenticated can ${privilege.toUpperCase()} it. Revoke it in its migration: only ${WRITTEN_BY_FUNCTION[column.column_name]} writes it.`),
+      ])
+    expect(problems).toEqual([])
   })
 })

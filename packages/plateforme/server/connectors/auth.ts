@@ -5,6 +5,7 @@
 // échéance, et une fois de plus après un 401 ; `oauth2_user` : le jeton d'accès du consentement d'une personne, rangé
 // de même, renouvelé par `oauth-user.ts`. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
 // secret ne sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
+import type { AccountMark, AccountMarkReason } from "../../schemas"
 import { PlatformError } from "../errors"
 import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorSetting, OAuthApplication } from "./definition"
@@ -59,9 +60,23 @@ export type ConsentCredential = {
 }
 
 /**
+ * La marque du compte d'un appel (`accounts.health.mark`), ouverte avec lui : celle qu'il porte (`current`) ; `set`, qui
+ * la pose (une raison) ou la lève (`null`) par `platform.mark_account`, sans rien écrire si rien ne change ; `effect`, ce
+ * que l'appel en a fait, pour sa ligne de journal, une écriture qui a échoué comprise (`mark_failed`, `lift_failed`,
+ * posé par le moteur) ; `remedy`, la phrase qui dit la marque, sa date et à qui demander.
+ */
+export type AccountMarker = {
+  current: AccountMark | null
+  effect: "marked" | "lifted" | "mark_failed" | "lift_failed" | null
+  set: (reason: AccountMarkReason | null) => Promise<void>
+  remedy: () => Promise<string>
+}
+
+/**
  * Le compte d'un appel : ses champs déchiffrés, ceux de l'hôte (`holder: host`) compris, ses réglages, son jeton ; son
  * consentement pour `oauth2_user` ; l'identifiant du compte chez le tiers (`linkedId`, `accounts.linked_id`) pour un
- * connecteur à `accountIdentity`.
+ * connecteur à `accountIdentity` ; sa marque (`mark`), absente seulement pour l'identité lue au consentement, avant
+ * que le compte existe.
  */
 export type AccountCredential = {
   fields: Readonly<Record<string, string>>
@@ -69,6 +84,7 @@ export type AccountCredential = {
   tokens: TokenStore
   consent?: ConsentCredential
   linkedId?: string
+  mark?: AccountMarker
 }
 
 /** Ce que l'authentification pose sur une requête. */

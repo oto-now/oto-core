@@ -18,6 +18,7 @@ import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
+import { signalProblem } from "./signal-declaration"
 import { baseAddress, settingProblem } from "./settings"
 
 /** La contrainte de `platform.connectors.name`. */
@@ -56,7 +57,7 @@ function connectorProblem(definition: ConnectorDefinition, reserved: ReadonlySet
     return `${name}: errors must list {status, code, message}.`
   }
   if (!Array.isArray(definition.functions) || definition.functions.length === 0) return `${name}: needs at least one function.`
-  return null
+  return signalProblem(errors, `${name}: error`)
 }
 
 /**
@@ -143,7 +144,10 @@ function cursorArgument(fn: ConnectorFunctionDefinition): string | null | { prob
   return placed ? argument : { problem: `${fn.name}: pagination requestParam ${argument} is not an argument placed in the query or the body.` }
 }
 
-/** Le problème des contrôles (`checks`, `expect`) et du récapitulatif d'une fonction sensible ; `null` : aucun. */
+/**
+ * Le problème des contrôles (`checks`, `expect`), du récapitulatif d'une fonction sensible, puis du signal de refus de
+ * ses refus (`signal-declaration.ts`) ; `null` : aucun.
+ */
 function controlsProblem(fn: ConnectorFunctionDefinition): string | null {
   const codes = fn.refusals.map((refusal) => refusal.code)
   for (const check of fn.checks ?? []) {
@@ -159,7 +163,7 @@ function controlsProblem(fn: ConnectorFunctionDefinition): string | null {
   if (fn.class === "sensitive" && (typeof fn.confirm?.summary !== "string" || !fn.confirm.summary.trim())) {
     return `${fn.name}: a sensitive function needs confirm.summary (two-step confirmation).`
   }
-  return null
+  return signalProblem(fn.refusals, `${fn.name}: refusal`)
 }
 
 /** Le premier problème d'une fonction, puis son schéma compilé ; les examples sont joués contre lui. */
@@ -353,7 +357,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
 /**
  * Déclare les connecteurs décrits de l'hôte, partagés ou propres (`ConnectorDefinition`), à appeler au montage de
  * chaque route qui monte une porte du paquet, comme `registerFunctions`. Toute la liste est contrôlée d'abord : nom du
- * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs, champs
+ * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
+ * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,

@@ -16,6 +16,8 @@ import {
   createAccountSchema,
   disableAccountSchema,
   type AccessLevelName,
+  type AccountMark,
+  type AccountMarkReason,
   type AccountMode,
   type AccountView,
 } from "../../schemas"
@@ -36,6 +38,7 @@ import type { PlatformDb } from "../db"
 import { leadNames, leadWord, memberDirectory, teamsWithLeads } from "../directory"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { requireActivable } from "./activations"
 import { keepDeclaredConnector } from "./declaration"
@@ -51,10 +54,33 @@ export type AccountOwner = Owner & { description: string }
 export type AccountSummary = { id: string; label: string; connector: string; mode: AccountMode; owner: AccountOwner }
 
 /**
- * Un compte visible de la personne, avec son état, la raison d'un état `error` (un consentement à reconnecter) et son
- * niveau : ce que lisent les résolutions.
+ * Un compte visible de la personne, avec son état, la raison d'un état `error` (un consentement à reconnecter), sa
+ * marque (clé refusée, crédits épuisés) et son niveau : ce que lisent les résolutions.
  */
-export type ConnectorAccount = AccountSummary & { status: string; statusReason?: string | null; level: AccessLevel }
+export type ConnectorAccount = AccountSummary & { status: string; statusReason?: string | null; mark?: AccountMark | null; level: AccessLevel }
+
+/** Les mots d'une raison de marque, dans la langue de la porte. */
+const MARK_WORDS: Record<AccountMarkReason, string> = { credential_rejected: "key refused", quota_exhausted: "credits spent" }
+
+/** La marque d'un compte telle que la dit le texte servi : « key refused since 2026-10-17 09:12 UTC ». */
+export function markWords(mark: AccountMark): string {
+  return `${MARK_WORDS[mark.reason]} since ${mark.at.slice(0, 10)} ${mark.at.slice(11, 16)} UTC`
+}
+
+/**
+ * La marque lue en base (`health -> 'mark'`, écrite par `platform.mark_account` seule, date en UTC) ; `null` : aucune.
+ * Une autre forme ne vient que d'une écriture hors de la fonction : panne nommée, jamais ignorée.
+ */
+export function markOf(value: unknown): AccountMark | null {
+  if (value === null || value === undefined) return null
+  const reason = isJsonObject(value) ? value.reason : undefined
+  const at = isJsonObject(value) ? value.at : undefined
+  if ((reason === "credential_rejected" || reason === "quota_exhausted") && typeof at === "string" && !Number.isNaN(Date.parse(at))) {
+    return { reason, at: new Date(at).toISOString() }
+  }
+  console.error("[platform] accounts: health.mark of an unknown shape")
+  throw new PlatformError("internal", "Internal error.")
+}
 
 /**
  * Un compte lu, et le nom de son équipe propriétaire (`team_name`, sous RLS : `null` quand elle ne se lit pas) ; ses
@@ -74,6 +100,8 @@ export type AccountRow = {
   secret_fields: string[]
   secret_updated_at: string | null
   status_reason: string | null
+  /** `health -> 'mark'`, lu par `markOf`. */
+  mark: unknown
 }
 
 /**
@@ -84,7 +112,7 @@ export type AccountRow = {
 export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string } = {}) {
   return sql<AccountRow[]>`
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
-           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason
+           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.health -> 'mark' as mark
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
        and a.connector = coalesce(${only.connector ?? null}, a.connector)
@@ -119,7 +147,7 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
   return (
     rows
-      .map((row) => ({ ...summary(row), status: row.status, statusReason: row.status_reason, level: levels.get(row.id) ?? ACCESS_LEVELS.none }))
+      .map((row) => ({ ...summary(row), status: row.status, statusReason: row.status_reason, mark: markOf(row.mark), level: levels.get(row.id) ?? ACCESS_LEVELS.none }))
       // Niveau 0 : un compte que la personne ne voit pas n'est ni servi, ni retenu, ni nommé (H83).
       .filter((account) => account.level >= ACCESS_LEVELS.read)
       .sort((a, b) => a.label.localeCompare(b.label, "fr"))
@@ -256,6 +284,7 @@ function accountView(row: AccountRow): AccountView {
     secret: { fields: row.secret_fields, updatedAt: row.secret_updated_at },
     settings: row.settings,
     statusReason: row.status_reason,
+    mark: markOf(row.mark),
   }
 }
 

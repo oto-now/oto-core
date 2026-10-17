@@ -44,6 +44,8 @@ describe("PLATFORM_ERROR_CODES", () => {
         "internal",
         "rate_limited",
         "upstream_error",
+        "credential_rejected",
+        "quota_exhausted",
       ].sort(),
     )
   })
@@ -65,6 +67,8 @@ describe("PLATFORM_ERROR_CODES", () => {
       internal: 500,
       rate_limited: 429,
       upstream_error: 502,
+      credential_rejected: 502,
+      quota_exhausted: 502,
     })
   })
 })

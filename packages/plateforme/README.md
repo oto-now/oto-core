@@ -491,7 +491,14 @@ registerConnectors([messagerie.connector], {
   pnpm exec oto-platform accounts secret --db-url "$ADMIN_DATABASE_URL" --account <id du compte> --setting region=eu < champs.json
   ```
 - **Appel** : un compte réel sans secret, sans un champ qu'exige l'authentification ou dont un réglage manque est
-  refusé (`not_enabled`, qui dit à qui demander), un compte simulé d'un connecteur réel aussi ; un 401 ou un 403 du tiers rend `upstream_error`, un débit dépassé `rate_limited`.
+  refusé (`not_enabled`, qui dit à qui demander), un compte simulé d'un connecteur réel aussi ; un 401 ou un 403 du tiers rend `upstream_error`, sauf une ligne qui marque le compte (état d'un compte, ci-dessous), un débit dépassé `rate_limited`.
+- **État d'un compte** : une ligne de la table d'erreurs qui marque le compte (`marksAccount`, à condition sur le corps
+  ou non, `body`) rend `credential_rejected` (clé refusée) ou `quota_exhausted` (crédits épuisés), au statut 502, et
+  marque le compte (`accounts.health.mark`, par `platform.mark_account`) ; le refus dit la marque, sa date et à qui
+  demander. Le compte reste résolu et appelé ; le premier appel réussi lève la marque. L'écran Connecteurs la montre
+  (`AccountView.mark`), le contexte et `admin_connector accounts` la disent, le journal note `account_marked` et
+  `account_mark_lifted` en `args._outcome`. Une écriture de la marque qui échoue laisse l'issue du tiers (un succès
+  reste un succès), loggée en erreur et notée `account_mark_failed` ou `account_mark_lift_failed`. Base : migration `20261017150000_platform_etat_des_comptes.sql`.
 
 ## Widgets dans la conversation
 

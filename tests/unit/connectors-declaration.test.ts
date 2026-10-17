@@ -8,8 +8,9 @@ import { checkArguments } from "../../packages/plateforme/server/catalog/argumen
 import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { catalogFunctions, describeFunction, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
-import { describedConnector } from "../factories/described-connector"
+import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
+import { errorTable } from "../../packages/plateforme/server/connectors/engine"
+import { describedConnector, markingConnector } from "../factories/described-connector"
 
 afterEach(() => {
   registerConnectors([])
@@ -22,6 +23,12 @@ const declaredNames = () => catalogFunctions().filter((fn) => fn.connector === "
 function withFunction(short: string, change: (fn: ConnectorFunctionDefinition) => ConnectorFunctionDefinition): ConnectorDefinition {
   const base = describedConnector()
   return { ...base, functions: base.functions.map((fn) => (fn.name === `crm.${short}` ? change(fn) : fn)) }
+}
+
+/** Le connecteur de test, une ligne ajoutée au bout de sa table d'erreurs. */
+function withError(error: ConnectorApiError): ConnectorDefinition {
+  const base = describedConnector()
+  return { ...base, errors: [...base.errors, error] }
 }
 
 function refusalOf(definitions: readonly ConnectorDefinition[]): string {
@@ -171,6 +178,46 @@ describe("registerConnectors", () => {
       "crm.post_entry: check formula is not supported, or names no refusal of the function (equal_sums with items and two fields).",
     ],
     [
+      "a mark outside the closed list",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", marksAccount: "banned" as never })],
+      "crm: error payment: marksAccount must be credential_rejected or quota_exhausted.",
+    ],
+    [
+      "a body condition of another shape",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "error.code", equals: [] } })],
+      "crm: error payment: body equals must list distinct text, number or boolean values.",
+    ],
+    [
+      "a 2xx status without a body condition",
+      () => [withError({ status: 200, code: "no_credits", message: "Spent.", marksAccount: "quota_exhausted" })],
+      "crm: error no_credits: a 2xx status needs a body condition, or every success would be refused.",
+    ],
+    [
+      "a refused key marked on a 403 alone",
+      () => [withError({ status: [402, 403], code: "denied", message: "Denied.", marksAccount: "credential_rejected" })],
+      "crm: error denied: a 403 without a body condition cannot mark credential_rejected (a missing right is not a refused key).",
+    ],
+    [
+      "spent credits marked on a 429 alone",
+      () => [{ ...describedConnector(), errors: [{ status: 429, code: "spent", message: "Spent.", marksAccount: "quota_exhausted" }] }],
+      "crm: error spent: a 429 without a body condition cannot mark quota_exhausted (a rate limit is not spent credits).",
+    ],
+    [
+      "a marking entry to retry",
+      () => [withError({ status: 402, code: "spent", message: "Spent.", retryable: true, marksAccount: "quota_exhausted" })],
+      "crm: error spent: an entry that marks the account is not retryable.",
+    ],
+    [
+      "a body condition after a plain entry of the same status",
+      () => [withError({ status: 400, code: "expired", message: "Expired.", body: { path: "error.code", equals: [190] }, marksAccount: "credential_rejected" })],
+      "crm: error expired: its body condition comes after an entry without one for status 400, so it is never read.",
+    ],
+    [
+      "a refusal that marks on a text condition",
+      () => [withFunction("get_contact", (fn) => ({ ...fn, refusals: [...fn.refusals, { code: "spent", when: "credits are spent", message: "Spent.", marksAccount: "quota_exhausted" }] }))],
+      "crm.get_contact: refusal spent: a refusal with body or marksAccount needs an HTTP status in when, not a text condition.",
+    ],
+    [
       "a probe with a required argument",
       () => [{ ...describedConnector(), probe: { function: "crm.get_contact", nonEmpty: ["email"] } }],
       "crm: probe must name a read function of the connector without required arguments, and list nonEmpty paths.",
@@ -179,6 +226,23 @@ describe("registerConnectors", () => {
     registerConnectors([describedConnector("crm_before")])
     expect(refusalOf(definitions())).toBe(message)
     expect(catalogFunctions().filter((fn) => fn.connector === "crm_before")).toHaveLength(6)
+  })
+
+  it("should accept the service's refusal signal (body, marksAccount) and give a marking row the code of its mark", () => {
+    const definition = markingConnector()
+    registerConnectors([definition])
+    expect(declaredNames()).toHaveLength(6)
+    // La première fonction n'a pas de refus propre : sa table est celle du connecteur.
+    const fn = definition.functions[0]
+    expect(fn.refusals).toEqual([])
+    expect(errorTable(definition, fn).map(({ status, code, refusal, body }) => ({ status, code, refusal, body: body !== undefined }))).toEqual([
+      { status: 200, code: "quota_exhausted", refusal: "no_credits", body: true },
+      { status: 400, code: "credential_rejected", refusal: "authorization_expired", body: true },
+      { status: 400, code: "invalid_arguments", refusal: "invalid_request", body: false },
+      { status: 401, code: "credential_rejected", refusal: "key_rejected", body: false },
+      { status: 403, code: "upstream_error", refusal: "scope_missing", body: false },
+      { status: 429, code: "rate_limited", refusal: "rate_limited", body: false },
+    ])
   })
 
   it("should keep the namespaces of the application functions and of the declared connectors apart (AC3)", () => {

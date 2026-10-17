@@ -17,9 +17,10 @@ const DEFAULT_RETRY_WAIT_MS = 1_000
 
 /**
  * Une ligne de la table d'erreurs d'un connecteur : le statut du tiers, le code et le message servis, et le refus nommé
- * par la description (`details.refusal`).
+ * par la description (`details.refusal`) ; `body`, la condition sur le corps JSON de la réponse sans laquelle la ligne
+ * ne s'applique pas (seule une ligne à condition s'applique à un 2xx).
  */
-export type ApiError = { status: number | readonly number[]; code: PlatformErrorCode; message: string; refusal?: string }
+export type ApiError = { status: number | readonly number[]; code: PlatformErrorCode; message: string; refusal?: string; body?: (answer: unknown) => boolean }
 
 /** L'API d'un tiers, telle que sa description la donne. */
 export type ConnectorApi = {
@@ -77,9 +78,18 @@ async function pace(key: string, limit: ConnectorApi["rateLimit"]): Promise<void
   }
 }
 
-function errorOf(api: ConnectorApi, status: number): PlatformError {
-  const known = api.errors.find((error) => (typeof error.status === "number" ? error.status === status : error.status.includes(status)))
-  if (known) return new PlatformError(known.code, known.message, known.refusal ? { refusal: known.refusal } : undefined)
+const covers = (error: ApiError, status: number) => (typeof error.status === "number" ? error.status === status : error.status.includes(status))
+
+/** La première ligne de la table qui s'applique au statut et, si elle a une condition, au corps lu (`null` : non lu). */
+function rowOf(api: ConnectorApi, status: number, answer: unknown): ApiError | undefined {
+  return api.errors.find((error) => covers(error, status) && (error.body === undefined || error.body(answer)))
+}
+
+const refusalOf = (row: ApiError) => new PlatformError(row.code, row.message, row.refusal ? { refusal: row.refusal } : undefined)
+
+function errorOf(api: ConnectorApi, status: number, answer: unknown): PlatformError {
+  const known = rowOf(api, status, answer)
+  if (known) return refusalOf(known)
   if (status === 429) return new PlatformError("rate_limited", `${api.label} request rate exceeded: retry later.`)
   return new PlatformError("upstream_error", `${api.label} answered with an unexpected status (${status}). Retry later.`)
 }
@@ -127,11 +137,28 @@ async function send(api: ConnectorApi, request: ApiRequest, fetcher: Fetch): Pro
 }
 
 /**
+ * Le corps d'une réponse hors 2xx, lu seulement si une ligne à condition couvre son statut ; sinon, ou illisible,
+ * `null` : un corps d'erreur illisible ne dit rien de plus que son statut. Jamais journalisé.
+ */
+async function errorBody(api: ConnectorApi, answer: Response): Promise<unknown> {
+  if (!api.errors.some((error) => error.body !== undefined && covers(error, answer.status))) {
+    await answer.body?.cancel()
+    return null
+  }
+  try {
+    return await readAnswer(api, answer)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Envoie la requête au tiers et rend le JSON de sa réponse, `null` pour une réponse vide. Un 429 se rejoue deux fois au
- * plus, après le `Retry-After` du tiers s'il tient en 10 s. Refus : statut hors 2xx, celui de la table d'erreurs du
- * connecteur, sinon `rate_limited` (429) ou `upstream_error` ; panne, délai dépassé, réponse trop grosse ou
- * illisible : `upstream_error`. `resign` : après un 401, la requête signée de neuf (un jeton renouvelé), envoyée une
- * fois de plus.
+ * plus, après le `Retry-After` du tiers s'il tient en 10 s. Refus : statut hors 2xx, la première ligne de la table
+ * d'erreurs du connecteur qui s'applique (une ligne à condition, si son corps la satisfait), sinon `rate_limited` (429)
+ * ou `upstream_error` ; un 2xx dont le corps satisfait une ligne à condition de son statut (un refus sous un 200) ;
+ * panne, délai dépassé, réponse trop grosse ou illisible : `upstream_error`. `resign` : après un 401, la requête signée
+ * de neuf (un jeton renouvelé), envoyée une fois de plus.
  */
 export async function requestJson(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, resign?: () => Promise<ApiRequest>): Promise<unknown> {
   let answer = await send(api, request, fetcher)
@@ -147,11 +174,17 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
     answer = await send(api, request, fetcher)
   }
   if (!answer.ok) {
-    await answer.body?.cancel()
+    const body = await errorBody(api, answer)
     console.error(`[platform] connector ${api.label}: status ${answer.status}`)
-    throw errorOf(api, answer.status)
+    throw errorOf(api, answer.status, body)
   }
-  return readAnswer(api, answer)
+  const value = await readAnswer(api, answer)
+  const refused = rowOf(api, answer.status, value)
+  if (refused) {
+    console.error(`[platform] connector ${api.label}: status ${answer.status} refused by its body`)
+    throw refusalOf(refused)
+  }
+  return value
 }
 
 /** Le JSON d'une réponse, borné à 4 Mo, `null` pour une réponse vide ; trop grosse ou illisible : `upstream_error`. */

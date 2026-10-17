@@ -160,6 +160,16 @@ describe("connectorOutlook (AC21 with AC13 and AC16)", () => {
     expect(outlook.write).toEqual({ kind: "no_account", team: null })
   })
 
+  it("should take a marked account all the same, and say its mark and its date (oto-core#69)", () => {
+    const marked: ConnectorAccount = { ...teamAccount("X Ventes", VENTES, 3, "reel"), mark: { reason: "quota_exhausted", at: "2026-10-17T09:12:34.000Z" } }
+    const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [marked], team: VENTES })
+    expect(connectorLines([outlook])).toEqual(["x: team Ventes (write), account « X Ventes » (live), marked: credits spent since 2026-10-17 09:12 UTC"])
+    const refused = { ...marked, mark: { reason: "credential_rejected" as const, at: "2026-10-16T22:05:00.000Z" } }
+    expect(connectorLines([connectorOutlook({ connector: "x", functions: X, accounts: [refused], team: VENTES })])).toEqual([
+      "x: team Ventes (write), account « X Ventes » (live), marked: key refused since 2026-10-16 22:05 UTC",
+    ])
+  })
+
   it("should read with the team's account and write with the organisation's when the team's only reads", () => {
     const acme: ConnectorAccount = { ...teamAccount("X Acme", CONSEIL, 2), owner: { kind: "org", teamId: null, userId: null, description: "organisation" } }
     const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [teamAccount("X Conseil", CONSEIL, 1), acme], team: CONSEIL })

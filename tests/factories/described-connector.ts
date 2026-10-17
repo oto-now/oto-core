@@ -3,8 +3,10 @@
 // authentification `bearer`, en-tête constant, listes en query (`brackets`), argument encodé en JSON, pagination par
 // curseur, sortie taillée, refus propre à une fonction, contrôle avant l'appel (`equal_sums`) et sur la réponse
 // (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde. Et ses variantes : sous le
-// consentement d'une personne, et à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé.
-import type { ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
+// consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
+// table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire.
+import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
+import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 
@@ -152,6 +154,46 @@ export function describedConnector(name = "crm"): ConnectorDefinition {
     probe: { function: `${name}.get_company`, nonEmpty: ["scopes"] },
     functions: functions(name),
   }
+}
+
+/**
+ * Le connecteur de test dont la table d'erreurs marque le compte : les crédits épuisés sous un 200 (une erreur dans le
+ * corps), l'autorisation expirée sous un 400 (un code dans le corps, avant le 400 ordinaire), la clé refusée sur un 401 ;
+ * un 403 (un droit manque) ne marque rien.
+ */
+export function markingConnector(name = "crm"): ConnectorDefinition {
+  const base = describedConnector(name)
+  return {
+    ...base,
+    errors: [
+      { status: 200, body: { path: "error.code", equals: ["NO_CREDITS"] }, code: "no_credits", message: "Crm credits are spent.", retryable: false, marksAccount: "quota_exhausted" },
+      { status: 400, body: { path: "error.code", equals: [190, 102] }, code: "authorization_expired", message: "Crm no longer accepts this authorization.", retryable: false, marksAccount: "credential_rejected" },
+      { status: 400, code: "invalid_request", message: "Crm rejected the request as invalid.", retryable: false },
+      { status: 401, code: "key_rejected", message: "Crm refused the key.", retryable: false, marksAccount: "credential_rejected" },
+      { status: 403, code: "scope_missing", message: "Crm refused: the key lacks the scope.", retryable: false },
+      { status: 429, code: "rate_limited", message: "Crm request rate exceeded: retry later.", retryable: true },
+    ],
+  }
+}
+
+/** La marque d'un compte gardée par le test à la place de la ligne du compte ; `sets` relève chaque écriture demandée. */
+export function memoryMark(initial: AccountMark | null = null, who = "team Ventes (lead: Claire Morel)"): AccountMarker & { sets: (AccountMarkReason | null)[] } {
+  const sets: (AccountMarkReason | null)[] = []
+  const marker = {
+    sets,
+    current: initial,
+    effect: null as AccountMarker["effect"],
+    async set(reason: AccountMarkReason | null) {
+      sets.push(reason)
+      if ((marker.current?.reason ?? null) === reason) return
+      marker.current = reason === null ? null : { reason, at: new Date().toISOString() }
+      marker.effect = reason === null ? "lifted" : "marked"
+    },
+    async remedy() {
+      return `Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`
+    },
+  }
+  return marker
 }
 
 /** L'application OAuth de test d'un connecteur à consentement : identifiant et secret tirés par le test. */

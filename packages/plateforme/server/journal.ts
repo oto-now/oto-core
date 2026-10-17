@@ -161,12 +161,13 @@ export function servedEntry(entry: JournalEntry, output: ToolOutput, served: Ser
 
 /**
  * La ligne d'un outil refusé ou en panne (H07) : l'équipe et le compte qu'un `call` avait établis avant d'échouer
- * (`trace`, E03-S04 AC16), le code et le message de l'erreur (`journalError`).
+ * (`trace`, E03-S04 AC16), le code et le message de l'erreur (`journalError`), et ce que l'échec a fait (la marque
+ * posée sur le compte), en clé réservée des arguments comme une ligne servie.
  */
 export function failedEntry(
   entry: JournalEntry,
   failure: { code: string; message: string },
-  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId"> },
+  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome"> },
 ): void {
   Object.assign(entry, {
     ctx: served.ctx,
@@ -177,6 +178,7 @@ export function failedEntry(
     error: journalError(failure.code, failure.message),
     result_chars: served.resultChars,
   })
+  if (served.trace.outcome && isJsonObject(entry.args)) entry.args = { ...entry.args, _outcome: served.trace.outcome }
 }
 
 function signaturePart(value: unknown): string {

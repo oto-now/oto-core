@@ -8,7 +8,7 @@ import { findAccount, readRef, resolveRef } from "../../../server/admin/context"
 import { ownerDescription } from "../../../server/admin/nodes"
 import type { CatalogFunction } from "../../../server/catalog/define"
 import { catalogFunctions } from "../../../server/catalog/registry"
-import { createAccount, disableAccount, listOrgAccounts } from "../../../server/connectors/accounts"
+import { createAccount, disableAccount, listOrgAccounts, markWords } from "../../../server/connectors/accounts"
 import { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "../../../server/connectors/activations"
 import { isSimulatedConnector, modeLabel } from "../../../server/connectors/modes"
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../../server/rules"
@@ -112,7 +112,14 @@ function ownerShort(owner: AccountView["owner"]): string {
   return owner.kind === "user" ? "personal" : "organisation"
 }
 
-const accountData = (account: AccountView) => ({ label: account.label, connector: account.connector, owner: ownerShort(account.owner), mode: account.mode, status: account.status })
+const accountData = (account: AccountView) => ({
+  label: account.label,
+  connector: account.connector,
+  owner: ownerShort(account.owner),
+  mode: account.mode,
+  status: account.status,
+  ...(account.mark ? { mark: account.mark } : {}),
+})
 
 async function accounts(call: OpCall): Promise<AdminOutput> {
   const identity = targetOf(call)
@@ -124,7 +131,8 @@ async function accounts(call: OpCall): Promise<AdminOutput> {
     const text = `${identity.org.slug} has no ${connector ? `${connector} ` : ""}account yet. Create one with admin_connector {"op": "create_account"}.`
     return { ...output, text, data: { accounts: [] } }
   }
-  const line = (account: AccountView) => `- ${account.label} · ${account.connector} · ${ownerShort(account.owner)} · ${modeLabel(account.mode)} · ${account.status}`
+  const line = (account: AccountView) =>
+    `- ${account.label} · ${account.connector} · ${ownerShort(account.owner)} · ${modeLabel(account.mode)} · ${account.status}${account.mark ? ` · marked: ${markWords(account.mark)}` : ""}`
   return { ...output, text: listLines(shown, line).join("\n"), data: { accounts: shown.map(accountData) } }
 }
 

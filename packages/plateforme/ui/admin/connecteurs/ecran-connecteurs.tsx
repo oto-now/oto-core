@@ -2,7 +2,8 @@
 // personne) : les connecteurs activables et leur état, qu'on active ou désactive ; les comptes de l'organisation,
 // simulés ou réels, qu'on crée ou désactive, et le secret et les réglages d'un compte réel, saisis sous sa ligne ; pour
 // un connecteur à consentement (`oauth2_user`) ou à compte rattaché (`accountIdentity`), « Connecter mon compte » (ou
-// « Reconnecter » sous un compte à reconnecter), et l'issue du retour du tiers. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
+// « Reconnecter » sous un compte à reconnecter), l'issue du retour du tiers, et la marque d'un compte (clé refusée,
+// crédits épuisés) avec sa date. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
 // la question d'une désactivation composée ici depuis son impact ; le formulaire de création, la saisie d'un compte et
 // la connexion par consentement sont des îlots clients.
 //
@@ -14,7 +15,7 @@
 // `overQuota`, `stepLeft` : V2), marques d'outils, liens vers une page de connecteur, pile de clés, toolbox
 // (architecture § 10).
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
-import { limitReached, type AccountMode, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
+import { limitReached, type AccountMarkReason, type AccountMode, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Alert } from "../../ds/react/primitives"
@@ -101,6 +102,12 @@ const ANCRE_DES_COMPTES = "admin-comptes"
 
 const MODES: Record<AccountMode, string> = { simule: "simulé", sandbox: "bac à sable", reel: "réel" }
 const ETATS: Record<AccountView["status"], string> = { active: "actif", disabled: "désactivé", error: "en erreur" }
+const MARQUES: Record<AccountMarkReason, string> = { credential_rejected: "clé refusée", quota_exhausted: "crédits épuisés" }
+
+/** La marque d'un compte, sa raison et sa date : le compte reste appelé, le premier appel réussi la lève. */
+function marque(compte: AccountView): string | null {
+  return compte.mark ? `${MARQUES[compte.mark.reason]} le ${dateLisible(compte.mark.at)}` : null
+}
 
 function pluriel(nombre: number, singulier: string, pluriel: string): string {
   return `${nombre} ${nombre > 1 ? pluriel : singulier}`
@@ -199,7 +206,7 @@ function etatDuSecret(compte: AccountView, connexion: Connexion): string | null 
 
 function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formulaire: ConnectorAccountForm | undefined; ici: string }) {
   const connexion = connexionDe(formulaire)
-  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], etatDuSecret(compte, connexion)]
+  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], marque(compte), etatDuSecret(compte, connexion)]
   const reconnectable = formulaire && compte.status === "error" && (connexion === "consentement" || (connexion === "branchement" && formulaire.hosted?.ready === true))
   return (
     <Row className="flex-wrap gap-3">

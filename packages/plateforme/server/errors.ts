@@ -26,8 +26,14 @@ export const PLATFORM_ERROR_CODES = [
   "internal",
   // Le tiers d'un connecteur limite le débit (429) : réessayer plus tard.
   "rate_limited",
-  // Le tiers d'un connecteur refuse le secret (401, 403), tombe ou répond hors de sa table d'erreurs.
+  // Le tiers d'un connecteur refuse l'appel, tombe ou répond hors de sa table d'erreurs.
   "upstream_error",
+  // Le tiers d'un connecteur refuse la clé du compte, selon sa description (`marksAccount`) : le compte est marqué
+  // jusqu'au premier appel réussi ; à qui gère le compte d'en poser une neuve.
+  "credential_rejected",
+  // Le tiers d'un connecteur dit les crédits du compte épuisés, selon sa description (`marksAccount`) : le compte est
+  // marqué jusqu'au premier appel réussi ; à qui gère le compte d'en racheter.
+  "quota_exhausted",
 ] as const
 
 export type PlatformErrorCode = (typeof PLATFORM_ERROR_CODES)[number]
@@ -52,6 +58,8 @@ export const HTTP_STATUS: Record<PlatformErrorCode, number> = {
   internal: 500,
   rate_limited: 429,
   upstream_error: 502,
+  credential_rejected: 502,
+  quota_exhausted: 502,
 }
 
 /** Précisions lisibles par une porte : `reason`, `revision`, `refusals`… jamais un message de la base. */

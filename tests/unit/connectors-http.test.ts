@@ -133,6 +133,44 @@ describe("requestJson", () => {
     expect(loggedText(errors)).not.toContain(secret)
   })
 
+  it("should apply a body row only when its body matches, the first that applies, plain rows otherwise, and never log the body", async () => {
+    const secret = token()
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    const graph = (codes: unknown[]) => (answer: unknown) => codes.includes((answer as { error?: { code?: unknown } } | null)?.error?.code)
+    const api: ConnectorApi = {
+      ...API,
+      errors: [
+        { status: 400, code: "credential_rejected", message: "Tiers no longer accepts this authorization.", refusal: "authorization_expired", body: graph([190, 102]) },
+        { status: 400, code: "invalid_arguments", message: "Tiers rejected the request.", refusal: "invalid_request" },
+        { status: 200, code: "quota_exhausted", message: "Tiers credits are spent.", refusal: "no_credits", body: graph(["NO_CREDITS"]) },
+      ],
+    }
+    const expired = await refusal(requestJson(api, request(secret), async () => json({ error: { code: 190, message: `token ${secret}` } }, 400)))
+    expect({ code: expired.code, message: expired.message, details: expired.details }).toEqual({ code: "credential_rejected", message: "Tiers no longer accepts this authorization.", details: { refusal: "authorization_expired" } })
+    const invalid = await refusal(requestJson(api, request(secret), async () => json({ error: { code: 100 } }, 400)))
+    expect({ code: invalid.code, refusal: invalid.details?.refusal }).toEqual({ code: "invalid_arguments", refusal: "invalid_request" })
+    // Un corps illisible ne satisfait aucune condition : la ligne sans condition s'applique.
+    const unreadable = await refusal(requestJson(api, request(secret), async () => new Response("<html>", { status: 400 })))
+    expect(unreadable.details?.refusal).toBe("invalid_request")
+    const spent = await refusal(requestJson(api, request(secret), async () => json({ error: { code: "NO_CREDITS" } })))
+    expect({ code: spent.code, refusal: spent.details?.refusal }).toEqual({ code: "quota_exhausted", refusal: "no_credits" })
+    expect(await requestJson(api, request(secret), async () => json({ data: { ok: true } }))).toEqual({ data: { ok: true } })
+    expect(loggedText(errors)).not.toContain(secret)
+    expect(loggedText(errors)).not.toContain("NO_CREDITS")
+  })
+
+  it("should not read the body of a status that no body row covers", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const cancel = vi.fn(async () => {})
+    const body = new ReadableStream({ start: (controller) => controller.enqueue(new TextEncoder().encode("{}")) })
+    const answer = new Response(body, { status: 503 })
+    Object.defineProperty(answer, "body", { value: Object.assign(body, { cancel }) })
+    const api: ConnectorApi = { ...API, errors: [...API.errors, { status: 400, code: "credential_rejected", message: "Refused.", body: () => true }] }
+    const down = await refusal(requestJson(api, request(token()), async () => answer))
+    expect(down.details?.refusal).toBe("upstream_unavailable")
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
   it("should refuse an answer that is not JSON as upstream_error", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const unreadable = await refusal(requestJson(API, request(token()), async () => new Response("<html>", { status: 200 })))

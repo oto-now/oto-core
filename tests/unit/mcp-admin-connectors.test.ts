@@ -285,6 +285,16 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         `${demo.slug} has no account yet. Create one with admin_connector {"op": "create_account"}.`,
       )
     })
+
+    it("should say the mark of an account, its reason and its date, in the line and in the data (oto-core#69)", async () => {
+      const ventes = admin.id(accountId(1))
+      undo.push(() => seed.admin`update platform.accounts set health = '{}'::jsonb where id = ${ventes}`)
+      await seed.admin`update platform.accounts set health = ${seed.admin.json({ mark: { reason: "credential_rejected", at: "2026-10-17T09:12:34.000+00:00" } })} where id = ${ventes}`
+      const { connector } = await session()
+      const output = await connector({ op: "accounts" })
+      expect(output.text.split("\n")[2]).toBe("- Mail Ventes · mail · team Ventes · simulated · active · marked: key refused since 2026-10-17 09:12 UTC")
+      expect(output.structured).toMatchObject({ accounts: [{}, {}, { label: "Mail Ventes", mark: { reason: "credential_rejected", at: "2026-10-17T09:12:34.000Z" } }] })
+    })
   })
 
   describe("admin_connector create_account (AC11)", () => {

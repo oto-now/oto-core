@@ -11,7 +11,7 @@ import { catalogFunctions, findFunction } from "../../packages/plateforme/server
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
-import { describedConnector, memoryTokens } from "../factories/described-connector"
+import { describedConnector, markingConnector, memoryMark, memoryTokens } from "../factories/described-connector"
 import { loggedText } from "../helpers/logs"
 
 const secret = () => `key_${randomBytes(12).toString("hex")}`
@@ -178,5 +178,104 @@ describe("described connector engine", () => {
     const fn = findFunction(catalogFunctions(), "crm_act.post_entry")
     const summary = await fn?.summarize?.(context(secret()), { label: "Fees", lines: [] } as never)
     expect(summary).toEqual({ text: 'Post entry "Fees": it cannot be deleted.', data: { arguments: { label: "Fees", lines: [] } } })
+  })
+})
+
+describe("described connector engine, account state (oto-core#69)", () => {
+  beforeEach(() => {
+    registerConnectors([markingConnector()])
+  })
+
+  /** La lecture sans argument, sur un compte à la marque gardée en mémoire. */
+  async function probe(mark: ReturnType<typeof memoryMark>) {
+    const fn = findFunction(catalogFunctions(), "crm.get_company")
+    if (!fn) throw new Error("crm.get_company is not declared")
+    const credential = { fields: { api_key: secret() }, settings: {}, tokens: memoryTokens(), mark }
+    return fn.run({ credential, account: { id: `account-${randomBytes(4).toString("hex")}` } } as unknown as FunctionContext, {} as never)
+  }
+
+  it.each<[string, Response, string, string]>([
+    ["a declared status (401)", json({}, 401), "credential_rejected", "Crm refused the key. (key_rejected)"],
+    ["a body condition under a 200", json({ error: { code: "NO_CREDITS" } }), "quota_exhausted", "Crm credits are spent. (no_credits)"],
+    ["a body condition under a 400", json({ error: { code: 190 } }, 400), "credential_rejected", "Crm no longer accepts this authorization. (authorization_expired)"],
+  ])("should mark the account on %s, and say the mark and whom to ask", async (_case, answer, code, message) => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    stub(answer)
+    const mark = memoryMark()
+    const error = await refusal(probe(mark))
+    expect(mark.sets).toEqual([code])
+    expect(mark.effect).toBe("marked")
+    expect(error.code).toBe(code)
+    expect(error.message).toBe(`${message} Account « Crm Ventes » is marked since ${mark.current?.at}. Ask team Ventes (lead: Claire Morel).`)
+  })
+
+  it.each<[string, Response, string]>([
+    ["a 403 alone", json({}, 403), "upstream_error"],
+    ["an undeclared status", json({}, 418), "upstream_error"],
+    ["a 400 whose body matches no condition", json({ error: { code: 100 } }, 400), "invalid_arguments"],
+    ["a 429", json({}, 429), "rate_limited"],
+  ])("should not mark on %s", async (_case, answer, code) => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.useFakeTimers({ toFake: ["setTimeout"] })
+    try {
+      stub(answer, json({}, 429), json({}, 429))
+      const mark = memoryMark()
+      const run = refusal(probe(mark))
+      await vi.runAllTimersAsync()
+      expect((await run).code).toBe(code)
+      expect(mark.sets).toEqual([])
+      expect(mark.effect).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("should lift the mark at the first success, and leave an unmarked account as it is", async () => {
+    stub(json({ name: "Contoso", scopes: ["read"] }), json({ name: "Contoso", scopes: ["read"] }))
+    const marked = memoryMark({ reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" })
+    await probe(marked)
+    expect({ current: marked.current, effect: marked.effect }).toEqual({ current: null, effect: "lifted" })
+    const clean = memoryMark()
+    await probe(clean)
+    expect({ current: clean.current, effect: clean.effect }).toEqual({ current: null, effect: null })
+  })
+
+  /** Une marque dont l'écriture échoue (base injoignable) : `platform.mark_account` lève. */
+  function failingMark(initial: Parameters<typeof memoryMark>[0] = null) {
+    const mark = memoryMark(initial)
+    mark.set = async () => {
+      throw new PlatformError("internal", "Database unreachable.")
+    }
+    return mark
+  }
+
+  it("should return the success when lifting the mark fails, log the failure and record it for the journal", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    stub(json({ name: "Contoso", scopes: ["read"] }))
+    const mark = failingMark({ reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" })
+    const output = await probe(mark)
+    expect(output.text).toContain("Contoso")
+    expect(mark.effect).toBe("lift_failed")
+    expect(loggedText(errors)).toMatch(/^\[platform\] connector crm: account account-[0-9a-f]+: mark not lifted \(internal\)$/)
+  })
+
+  it("should return the named refusal of the third party, without the mark sentence, when setting the mark fails", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    stub(json({}, 401))
+    const mark = failingMark()
+    const error = await refusal(probe(mark))
+    expect({ code: error.code, message: error.message }).toEqual({ code: "credential_rejected", message: "Crm refused the key. (key_rejected)" })
+    expect(mark.effect).toBe("mark_failed")
+    expect(loggedText(errors)).toContain("mark not set (internal)")
+  })
+
+  it("should keep the date of a mark when the marked account fails again for the same reason, and refuse by name", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    stub(json({}, 401))
+    const mark = memoryMark({ reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" })
+    const error = await refusal(probe(mark))
+    expect(error.code).toBe("credential_rejected")
+    expect(error.message).toBe("Crm refused the key. (key_rejected) Account « Crm Ventes » is marked since 2026-10-16T08:00:00.000Z. Ask team Ventes (lead: Claire Morel).")
+    expect({ current: mark.current, effect: mark.effect }).toEqual({ current: { reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" }, effect: null })
   })
 })

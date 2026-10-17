@@ -6,7 +6,7 @@
 // saisie. Sans ce module, un compte ne porterait qu'un jeton posé par l'outillage. Rien du secret n'est jamais rendu,
 // ni par un résultat, ni par un refus, ni par un log.
 import { mergeCredential } from "../../cli/vault.mjs"
-import { disableAccountSchema, type AccountMode, type ConnectorAccountForm } from "../../schemas"
+import { disableAccountSchema, type AccountMarkReason, type AccountMode, type ConnectorAccountForm } from "../../schemas"
 import { accountSecretSchema } from "../../schemas/connectors"
 import { describeOwner } from "../access"
 import { declaredConnector, declaredConnectors, type DeclaredConnector } from "../catalog/connector-source"
@@ -15,8 +15,8 @@ import { inTransaction, invalidInput, isPlatformError, PlatformError } from "../
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
-import { accountOwner, managedAccount, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
-import { requiredFields, type AccountCredential, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
+import { accountOwner, managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
+import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
 import { executeDescribed, nonEmpty, valueAt } from "./engine"
 import { accountMode } from "./modes"
 import { reconnectRefusal } from "./consent-accounts"
@@ -27,13 +27,62 @@ import { decryptCredential, decryptToken, encryptCredential, encryptToken, type 
 /** Ce que l'appel lit d'un compte résolu pour l'ouvrir. */
 type CallAccount = { id: string; label: string; mode: AccountMode; owner: AccountOwner }
 
-/** Le chiffré du secret, les réglages, les champs posés et la version de la dernière saisie d'un compte. */
-type SecretRow = { secret: string | null; settings: Record<string, string>; secret_fields: string[]; secret_updated_at: string | null }
+/** Le chiffré du secret, les réglages, les champs posés, la version de la dernière saisie et la marque d'un compte. */
+type SecretRow = { secret: string | null; settings: Record<string, string>; secret_fields: string[]; secret_updated_at: string | null; mark: unknown }
 
 function secretRow(db: PlatformDb, service: string, id: string): Promise<SecretRow | undefined> {
   return inTransaction(db, `${service}: account_secret`, (sql) => sql<SecretRow[]>`
-    select platform.account_secret(${id}) as secret, a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at
+    select platform.account_secret(${id}) as secret, a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at,
+           a.health -> 'mark' as mark
       from platform.accounts a where a.id = ${id}`).then(([row]) => row)
+}
+
+/**
+ * Ce qu'il faut pour dire à qui demander de lever une marque : le compte, si c'est celui de l'appelant, s'il se
+ * reconnecte (un consentement, un compte rattaché) ou signe avec la seule clé de l'hôte, et qui le gère.
+ */
+type MarkRemedy = { account: CallAccount; own: boolean; reconnect: boolean; hostKey: boolean; who: () => Promise<string> }
+
+/**
+ * Le remède d'une marque : reconnecter un consentement ou un compte rattaché, faire vérifier la clé de l'hôte, poser
+ * une clé neuve, racheter des crédits.
+ */
+async function remedyOf(reason: AccountMarkReason, remedy: MarkRemedy): Promise<string> {
+  const { own, reconnect } = remedy
+  if (reason === "credential_rejected" && reconnect) return own ? "Ask the user to connect it again (Connect my account)." : "Only its owner can connect it again: ask them."
+  if (reason === "credential_rejected" && remedy.hostKey) return "The key is this application's: ask whoever runs this application to check it."
+  const who = own ? "the user" : await remedy.who()
+  return reason === "credential_rejected" ? `Ask ${who} to set a new key.` : `Ask ${who} to add credits.`
+}
+
+/**
+ * La marque du compte d'un appel (`AccountMarker`) : la seule écriture de `accounts.health` est `platform.mark_account`,
+ * qui pose ou lève la marque d'un compte d'une organisation de l'appelant, et rien d'autre ; elle garde la date d'une
+ * marque reposée pour la même raison. Rien n'est écrit quand la marque lue ne change pas : un appel réussi sur un compte
+ * sans marque ne touche pas la base.
+ */
+function accountMarker(db: PlatformDb, row: SecretRow, remedy: MarkRemedy): AccountMarker {
+  const { account } = remedy
+  const marker: AccountMarker = {
+    current: markOf(row.mark),
+    effect: null,
+    async set(reason) {
+      if ((marker.current?.reason ?? null) === reason) return
+      const [written] = await inTransaction(db, "accountMarker: mark_account", (sql) => sql<{ changed: boolean; mark: unknown }[]>`
+        select changed, mark from platform.mark_account(${account.id}, ${reason})`)
+      marker.current = markOf(written?.mark)
+      if (written?.changed) marker.effect = reason === null ? "lifted" : "marked"
+    },
+    async remedy() {
+      const current = marker.current
+      if (!current) {
+        console.error(`[platform] accountMarker: account ${account.id} has no mark to tell`)
+        throw new PlatformError("internal", "Internal error.")
+      }
+      return `Account « ${account.label} » is marked: ${markWords(current)}. ${await remedyOf(current.reason, remedy)}`
+    },
+  }
+  return marker
 }
 
 /** Le connecteur déclaré d'un compte réel ; un connecteur que l'hôte ne déclare plus n'a ni champs ni réglages. */
@@ -165,19 +214,21 @@ export function applicationMissing(label: string): PlatformError {
  * écritures. Un jeton de rafraîchissement rendu ne remplace celui qu'on a lu que s'il est encore en place
  * (`secret_updated_at` inchangé) ; sinon un autre renouvellement l'a déjà remplacé, et le sien est gardé. Un
  * consentement qui ne vaut plus passe le compte en `error`, la raison dans `status_reason`, sauf si une reconnexion
- * l'a déjà remplacé.
+ * l'a déjà remplacé ; ses jetons restent, rien ne les purge. Le compte s'ouvre avec sa marque (`remedy` : le compte,
+ * s'il est celui de l'appelant, et à qui demander).
  */
-function consentOpener(db: PlatformDb, account: CallAccount & { own: boolean }, declared: DeclaredConnector, row: SecretRow | undefined): () => Promise<AccountCredential> {
+function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredConnector, row: SecretRow | undefined): () => Promise<AccountCredential> {
   const { definition, application } = declared
   if (!application) throw applicationMissing(definition.label)
-  const { own } = account
+  const { account, own } = remedy
   if (!row?.secret) {
-    const remedy = own ? `Ask the user to connect their ${definition.label} account` : "Only its owner can connect it: ask them"
-    throw new PlatformError("not_enabled", `Account « ${account.label} » is not connected yet. ${remedy} (Connect my account).`)
+    const how = own ? `Ask the user to connect their ${definition.label} account` : "Only its owner can connect it: ask them"
+    throw new PlatformError("not_enabled", `Account « ${account.label} » is not connected yet. ${how} (Connect my account).`)
   }
   const ciphertext = row.secret
   const id = account.id
   let version = row.secret_updated_at
+  const mark = accountMarker(db, row, remedy)
   return async () => {
     const opened = decryptCredential(id, ciphertext)
     const fields = "fields" in opened ? opened.fields : {}
@@ -214,7 +265,7 @@ function consentOpener(db: PlatformDb, account: CallAccount & { own: boolean }, 
         return reconnectRefusal(definition.name, account.label, reason, own)
       },
     }
-    return { fields: {}, settings: {}, tokens: tokenStore(db, id), consent }
+    return { fields: {}, settings: {}, tokens: tokenStore(db, id), consent, mark }
   }
 }
 
@@ -225,7 +276,8 @@ function consentOpener(db: PlatformDb, account: CallAccount & { own: boolean }, 
  * manquant ou devenu invalide ; un compte `oauth2_user` sans consentement, ou sans l'application OAuth de l'hôte ; un
  * champ de l'hôte qu'il n'a pas fourni ; un compte d'un connecteur à `accountIdentity` sans identifiant chez le tiers
  * (`linked_id`), ou dont l'identifiant ne suit plus le motif. Les champs de l'hôte (`holder: host`) se lisent à
- * l'ouverture et s'ajoutent à ceux du compte ; l'identifiant va à l'adresse de base, jamais à un argument.
+ * l'ouverture et s'ajoutent à ceux du compte ; l'identifiant va à l'adresse de base, jamais à un argument. Un compte
+ * marqué (clé refusée, crédits épuisés) n'est pas refusé ici : il s'ouvre avec sa marque, que l'appel pose ou lève.
  */
 export async function liveCredential(db: PlatformDb, identity: Identity, account: CallAccount, connector: string): Promise<() => Promise<AccountCredential>> {
   const who = () => describeOwner(db, identity, account.owner)
@@ -241,18 +293,23 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
     throw new PlatformError("internal", "Internal error.")
   }
   const row = await secretRow(db, "liveCredential", account.id)
-  if (declared.auth.kind === "user_consent") {
+  const own = account.owner.kind === "user" && account.owner.userId === identity.user.id
+  const consent = declared.auth.kind === "user_consent"
+  // Un consentement et un compte rattaché se reconnectent ; un autre compte sans champ à lui signe avec la clé de
+  // l'hôte (`holder: host`).
+  const reconnect = consent || declared.definition.accountIdentity !== undefined
+  const hostKey = accountFieldNames(declared.definition).length === 0
+  const remedy: MarkRemedy = { account, own, reconnect, hostKey, who }
+  if (consent) {
     // Un compte partagé (règle d'accès) sert aussi à d'autres que sa personne : seule elle peut le (re)connecter.
-    const own = account.owner.kind === "user" && account.owner.userId === identity.user.id
-    return consentOpener(db, { ...account, own }, declared, row)
+    return consentOpener(db, remedy, declared, row)
   }
   if (!row) {
     console.error(`[platform] liveCredential: account ${account.id} resolved but not read back`)
     throw new PlatformError("internal", "Internal error.")
   }
   // Un compte sans champ à lui (tous fournis par l'hôte) n'a pas de secret : il n'en exige pas.
-  const ownFields = accountFieldNames(declared.definition)
-  if (!row.secret && ownFields.length > 0) throw new PlatformError("not_enabled", `Account « ${account.label} » has no secret yet. Ask ${await who()} to set it.`)
+  if (!row.secret && !hostKey) throw new PlatformError("not_enabled", `Account « ${account.label} » has no secret yet. Ask ${await who()} to set it.`)
   readHostFields(declared)
   const linkedId = declared.definition.accountIdentity ? await linkedIdOf(db, identity, account, declared) : undefined
   const checked = accountSettings(declared.definition, row.settings)
@@ -266,10 +323,11 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
   // Un secret v1 ne dit pas ses champs : il se contrôle une fois ouvert.
   if (row.secret_fields.length > 0) await refuseMissing(row.secret_fields)
   const ciphertext = row.secret
+  const mark = accountMarker(db, row, remedy)
   return async () => {
     const fields = ciphertext ? fieldsOf(declared, decryptCredential(account.id, ciphertext)) : {}
     await refuseMissing(Object.keys(fields))
-    return { fields: { ...fields, ...readHostFields(declared) }, settings: checked.settings, tokens: tokenStore(db, account.id), ...(linkedId !== undefined ? { linkedId } : {}) }
+    return { fields: { ...fields, ...readHostFields(declared) }, settings: checked.settings, tokens: tokenStore(db, account.id), mark, ...(linkedId !== undefined ? { linkedId } : {}) }
   }
 }
 
@@ -306,6 +364,7 @@ export type AccountHealth = { healthy: true } | { healthy: false; reason: string
  * compte (niveau 3, comme `setAccountSecret`) ; hors `call`, elle n'écrit aucune ligne de journal et ne compte dans
  * aucun quota. Refus : compte inconnu ou non géré ; connecteur sans sonde déclarée (`invalid_arguments`). Un compte
  * simulé, sans secret ou mal réglé, un refus ou une panne du tiers : non sain, avec la raison ; une panne du coffre lève.
+ * Comme un appel, un refus qui marque le compte pose sa marque, une réponse du tiers la lève.
  */
 export async function probeAccount(db: PlatformDb, identity: Identity, input: unknown): Promise<AccountHealth> {
   // La même saisie que la désactivation : le compte visé, par son identifiant.

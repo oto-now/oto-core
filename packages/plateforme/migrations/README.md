@@ -210,6 +210,10 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   sous la même RLS que `connector_consents` ; les fonctions `security definer` `account_linked_id` (lecture à l'appel),
   `my_hosted_accounts`, `hosted_linked_elsewhere` et `link_hosted_account`, seul écrivain de `linked_id`, qui refait
   sous verrou les gardes du branchement.
+- `20261017150000_platform_etat_des_comptes.sql` (état d'un compte, `marksAccount`) : la marque d'un compte (clé
+  refusée, crédits épuisés) dans `accounts.health`, sous `mark` (`{reason, at}`) ; `authenticated` perd l'insertion et
+  la mise à jour de `health`, qui ne s'écrit plus que par la fonction `security definer` `mark_account` : poser ou
+  lever la marque d'un compte d'une organisation de l'appelant, rien d'autre, sans écriture quand rien ne change.
 
 ## Installer sur un hôte neuf
 
@@ -441,7 +445,8 @@ garde ; la ligne de base V1 les porte toutes.
   ajoutée à `accounts` doit être ajoutée au `grant select (…)` dans sa migration, et, depuis
   `20261017090000` (insertion colonne par colonne, `linked_id` et `linked_at` exclus), au
   `grant insert (…)` ; vérifié sur base par `tests/integration/droits-colonnes-comptes.test.ts`, qui nomme
-  la colonne fautive.
+  la colonne fautive. Depuis `20261017150000`, `health` ne s'insère ni ne se met à jour par `authenticated` : la
+  marque d'un compte s'écrit par `mark_account` seule.
 - **Rollback en commentaire** en fin de fichier (`-- ROLLBACK:`), dans l'ordre inverse de
   création ; il ne s'exécute jamais depuis le paquet.
 - **`anon` a l'usage du schéma** (depuis E02-S01, pour atteindre `org_by_host`) : toute fonction

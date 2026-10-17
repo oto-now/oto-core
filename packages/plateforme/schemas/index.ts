@@ -140,7 +140,7 @@ export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.
 export { orgSettingsFormSchema } from "./admin"
 export type { OrgSettingsForm, OrgView } from "./admin"
-export type { AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector } from "./connectors"
+export type { AccountMark, AccountMarkReason, AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector } from "./connectors"
 // L'écran d'un tableau (E07-S03) : décision de la revue, paramètres de la grille, vue d'un bloc
 // `reference`, formes des lectures de l'écran.
 export {

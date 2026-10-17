@@ -327,6 +327,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const reason = "Crm no longer accepts its authorization (expired or revoked)"
     expect([revoked.code, revoked.message]).toEqual(["not_enabled", `Your ${CONNECTOR} account « ${label("lea")} » must be connected again: ${reason}. Ask the user to connect it again in the application (Connect my account).`])
     expect(await accountOf("lea")).toMatchObject({ status: "error", status_reason: reason })
+    // Un consentement révoqué passe à reconnecter, jamais purgé : ses jetons restent sur le compte (oto-core#69).
+    const kept = await accountOf("lea")
+    expect([kept.secret_ciphertext, kept.token_ciphertext]).toEqual([renewed.secret_ciphertext, renewed.token_ciphertext])
     const sent = provider.sent.length
     expect((await refusal(call("lea"))).message).toBe(revoked.message)
     expect(provider.sent.length).toBe(sent)

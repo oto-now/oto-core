@@ -240,6 +240,16 @@ describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-
     expect(envoi().corps).toEqual({ secret: { client_id: null } })
   })
 
+  it("should say the mark of an account, its reason and its date, the account still active (oto-core#69)", () => {
+    const pose = { ...CRM_VENTES, secret: { fields: ["client_id", "client_secret"], updatedAt: "2026-10-08T09:00:00.000Z" } }
+    const refuse: AccountView = { ...pose, mark: { reason: "credential_rejected", at: "2026-10-17T09:12:00.000Z" } }
+    const epuise: AccountView = { ...pose, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Crm Support", mark: { reason: "quota_exhausted", at: "2026-10-16T10:00:00.000Z" } }
+    rendre({ ...VIVANTS, accounts: [refuse, epuise] })
+    const comptes = within(screen.getByRole("region", { name: "Comptes" }))
+    expect(comptes.getByText("Crm Ventes · crm · organisation · réel · actif · clé refusée le 17 octobre 2026 · secret posé le 8 octobre 2026")).toBeInTheDocument()
+    expect(comptes.getByText("Crm Support · crm · organisation · réel · actif · crédits épuisés le 16 octobre 2026 · secret posé le 8 octobre 2026")).toBeInTheDocument()
+  })
+
   it("should create a live account with its secret: the account first, mode reel, then its secret", async () => {
     fetchMock.mockResolvedValueOnce(reponse(200, { data: { account: { id: COMPTE, label: "Crm Support" } } }))
     fetchMock.mockResolvedValueOnce(reponse(200, { data: { account: { id: COMPTE } } }))

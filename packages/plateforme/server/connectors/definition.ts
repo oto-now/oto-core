@@ -158,16 +158,44 @@ export type ConnectorAuth =
   | ConnectorOAuthUser
   | { readonly kind: string }
 
-/** Une ligne de la table d'erreurs : statut du tiers, refus nommé, message en anglais. */
+/**
+ * Ce qu'une réponse du tiers révèle du compte, qui le marque jusqu'au premier appel réussi : la clé refusée
+ * (`credential_rejected`) ou les crédits épuisés (`quota_exhausted`).
+ */
+export type ConnectorAccountMark = "credential_rejected" | "quota_exhausted"
+
+/**
+ * Une condition sur le corps JSON de la réponse : la valeur au chemin pointé `path` est égale (stricte) à l'une de
+ * `equals`. Le refus se lit ainsi sous un statut qui ne le dit pas seul (une erreur GraphQL sous un 200, un code d'erreur
+ * sous un 400).
+ */
+export type ConnectorBodyCondition = { readonly path: string; readonly equals: readonly (string | number | boolean)[] }
+
+/**
+ * Une ligne de la table d'erreurs : statut du tiers, refus nommé, message en anglais ; `body`, la condition sur le corps
+ * sans laquelle la ligne ne s'applique pas ; `marksAccount`, la marque que pose la ligne sur le compte de l'appel. La
+ * première ligne qui s'applique l'emporte.
+ */
 export type ConnectorApiError = {
   readonly status: number | readonly number[]
   readonly code: string
   readonly message: string
   readonly retryable?: boolean
+  readonly body?: ConnectorBodyCondition
+  readonly marksAccount?: ConnectorAccountMark
 }
 
-/** Un refus propre à une fonction : `when` est un statut HTTP (il surcharge la table) ou une condition (contrôle). */
-export type ConnectorRefusal = { readonly code: string; readonly when: number | string; readonly message: string }
+/**
+ * Un refus propre à une fonction : `when` est un statut HTTP (il surcharge la table) ou une condition (contrôle) ;
+ * `body` et `marksAccount`, comme une ligne de la table, avec un statut seulement.
+ */
+export type ConnectorRefusal = {
+  readonly code: string
+  readonly when: number | string
+  readonly message: string
+  readonly body?: ConnectorBodyCondition
+  readonly marksAccount?: ConnectorAccountMark
+}
 
 export type ConnectorExample = { readonly title: string; readonly input: { readonly [argument: string]: unknown } }
 

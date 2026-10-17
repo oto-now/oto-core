@@ -18,6 +18,7 @@ import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
 import { actName, catalogFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
+import type { AccountCredential } from "./connectors/auth"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
 import { resolveAccount, runningTeam, type ResolvedAccount, type RunningTeam } from "./connectors/resolution"
 import type { PlatformDb } from "./db"
@@ -41,9 +42,10 @@ export type CallInput = {
 
 /**
  * Ce que l'appel a établi pour sa ligne de journal, rempli à mesure (AC16, N7) : la porte le garde
- * quand l'appel échoue ensuite. Vide tant que le refus précède le choix de l'équipe.
+ * quand l'appel échoue ensuite. Vide tant que le refus précède le choix de l'équipe ; `outcome` : la
+ * marque posée sur le compte par l'échec (`account_marked`), ou sa pose qui a échoué (`account_mark_failed`).
  */
-export type CallTrace = Pick<ToolOutput, "teamId" | "accountId">
+export type CallTrace = Pick<ToolOutput, "teamId" | "accountId" | "outcome">
 
 /** L'équipe sous laquelle l'appel court (F8), telle que ses données la rendent. */
 export type CallTeam = { slug: string; name: string }
@@ -171,6 +173,14 @@ function unknownFunction(functions: readonly CatalogFunction[], name: string, pr
   return new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
 }
 
+const MARK_OUTCOMES = { marked: "account_marked", lifted: "account_mark_lifted", mark_failed: "account_mark_failed", lift_failed: "account_mark_lift_failed" } as const
+
+/** Ce que l'appel a fait de la marque de son compte, pour sa ligne de journal (`args._outcome`) ; vide : rien. */
+function markOutcome(credential: AccountCredential | undefined): Record<string, number> {
+  const effect = credential?.mark?.effect
+  return effect ? { [MARK_OUTCOMES[effect]]: 1 } : {}
+}
+
 /**
  * `call` : fonction, activation, arguments, équipe, compte, puis récapitulatif (sensible sans
  * `confirm`) ou exécution. Chaque refus est levé tel que le service qui le décide l'a écrit ; `trace`
@@ -215,7 +225,13 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   // Le secret ne va qu'à `run`, déchiffré au dernier moment : jamais au récapitulatif, ni au journal, ni au texte.
   const credential = openCredential ? await openCredential() : undefined
   // Arguments validés par `fn.schema` : le type commun du catalogue les efface en `never`.
-  const output = await fn.run({ ...context, credential }, args as never)
+  const output = await fn.run({ ...context, credential }, args as never).catch((error: unknown) => {
+    // Un refus qui a marqué le compte le dit à la ligne de l'échec.
+    const marked = markOutcome(credential)
+    if (Object.keys(marked).length > 0) trace.outcome = marked
+    throw error
+  })
+  const outcome = { ...output.outcome, ...markOutcome(credential) }
   return {
     text: account ? `${output.text}\n${accountLine(team, account)}` : output.text,
     data: { ...data, result: output.data ?? {} },
@@ -223,8 +239,8 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     ...journal,
     // L'équipe rendue par la fonction prime (N8) : un tableau suivi par un ancien chemin (E07-S02).
     teamId: output.teamId === undefined ? journal.teamId : journalTeam(identity, output.teamId),
-    // Ce que la fonction a fait, pour sa ligne de journal (E11-S02, AC-h2).
-    ...(output.outcome ? { outcome: output.outcome } : {}),
+    // Ce que la fonction a fait, pour sa ligne de journal (E11-S02, AC-h2), et la marque du compte levée.
+    ...(Object.keys(outcome).length > 0 ? { outcome } : {}),
     // La vue du widget, dont les données sont déjà en `result` : celle que rend la fonction, sinon la vue de l'ERP
     // qu'elle déclare (story widgets-dans-la-conversation).
     ...(output.view ? { view: output.view } : fn.view ? { view: `${ERP_VIEW_PREFIX}${fn.view}` as const } : {}),
