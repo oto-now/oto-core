@@ -315,6 +315,46 @@ describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
   })
 })
 
+const FORMULAIRE_LI: ConnectorAccountForm = { connector: "messagerie", label: "Messagerie", hosted: { ready: true }, fields: [], settings: [] }
+const LI: OrgConnector = { connector: "messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }] }
+const MON_COMPTE_LI: AccountView = { ...MON_COMPTE_MS, label: "lea@contoso.test (messagerie)", connector: "messagerie", secret: { fields: [], updatedAt: null } }
+
+describe("EcranConnecteurs, a hosted account (accountIdentity)", () => {
+  it("should offer « Connecter mon compte » on the hosted link, never a secret nor a creation by hand", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://link.example.test/auth/abc" } }))
+    rendre({ connectors: [MAIL_ACTIF, LI], formulaires: [FORMULAIRE_LI], accounts: [MON_COMPTE_LI] })
+
+    expect(screen.getByText("lea@contoso.test (messagerie) · messagerie · personnel · réel · actif")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Secret et réglages/ })).toBeNull()
+    expect(within(screen.getByLabelText("Connecteur")).queryByRole("option", { name: "messagerie" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Messagerie" }))
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://link.example.test/auth/abc"))
+    expect(envoi()).toEqual({ url: "/api/platform/hosted-link", methode: "POST", corps: { connector: "messagerie", return_to: "/admin/connectors" } })
+  })
+
+  it("should offer to reconnect an account in error, and nothing while the host has not given its port", () => {
+    rendre({ connectors: [LI], formulaires: [FORMULAIRE_LI], accounts: [{ ...MON_COMPTE_LI, status: "error", statusReason: "session lost" }] })
+    expect(screen.getByText(/en erreur · à reconnecter : session lost/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Reconnecter le compte lea@contoso.test (messagerie)" })).toBeInTheDocument()
+    cleanup()
+    rendre({ connectors: [LI], formulaires: [{ ...FORMULAIRE_LI, hosted: { ready: false } }], accounts: [{ ...MON_COMPTE_LI, status: "error" }] })
+    expect(screen.queryByRole("button", { name: /Reconnecter|Connecter mon compte/ })).toBeNull()
+  })
+
+  it("should say the outcome of a hosted link, by its reason", () => {
+    expect(issueDuConsentement({ hosted: "connected", account: "lea@contoso.test (messagerie)" })).toEqual({ issue: "connected", compte: "lea@contoso.test (messagerie)" })
+    render(
+      <ContexteDeRafraichissement.Provider value={rafraichir}>
+        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ hosted: "failed", reason: "ambiguous_candidates" })} />
+      </ContexteDeRafraichissement.Provider>,
+    )
+    expect(screen.getByRole("alert")).toHaveTextContent("Plusieurs comptes pourraient correspondre à cette demande ; rien n'a été rangé. Recommencez dans quelques minutes.")
+  })
+})
+
 describe("EcranConnecteurs, states (AC12)", () => {
   it("should render a busy status while loading", () => {
     render(<EcranConnecteursChargement />)

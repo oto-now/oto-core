@@ -3,7 +3,7 @@
 // part, sans import à l'exécution, comme `erp-source.ts` : logée dans `declaration.ts`, qui lit le registre pour
 // valider, elle ferait s'importer registre et déclaration.
 import type { PreparedAuth } from "../connectors/auth"
-import type { ConnectorDefinition, OAuthApplication } from "../connectors/definition"
+import type { ConnectorDefinition, HostCredentialReader, HostedLinkProvider, OAuthApplication } from "../connectors/definition"
 import type { PreparedFunction } from "../connectors/engine"
 import type { CatalogFunction } from "./define"
 
@@ -11,7 +11,9 @@ import type { CatalogFunction } from "./define"
  * Un connecteur déclaré : sa définition telle que l'hôte l'a passée, son authentification préparée (les champs du compte
  * qu'elle exige), ses fonctions au contrat du catalogue, et la fonction préparée de sa sonde (`probeAccount`), `null`
  * sans sonde. Pour `oauth2_user` : la fonction préparée qui nomme qui a consenti (`identity`) et l'application OAuth
- * que l'hôte a fournie (`application`, `null` sans elle) ; `null` toutes deux pour une autre authentification.
+ * que l'hôte a fournie (`application`, `null` sans elle) ; `null` toutes deux pour une autre authentification. Le
+ * lecteur des champs `holder: host` (`hostCredentials`) et le port du branchement hébergé d'un connecteur à
+ * `accountIdentity` (`hostedLinks`), fournis par l'hôte ; `null` sans eux.
  */
 export type DeclaredConnector = {
   definition: ConnectorDefinition
@@ -20,6 +22,8 @@ export type DeclaredConnector = {
   probe: PreparedFunction | null
   identity: PreparedFunction | null
   application: OAuthApplication | null
+  hostCredentials: HostCredentialReader | null
+  hostedLinks: HostedLinkProvider | null
 }
 
 let declared: readonly DeclaredConnector[] = []

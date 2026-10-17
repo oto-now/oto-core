@@ -18,8 +18,52 @@ export type ConnectorJsonSchema = { readonly [key: string]: unknown }
 
 export type ConnectorJsonValue = string | number | boolean | null | readonly ConnectorJsonValue[] | { readonly [key: string]: ConnectorJsonValue }
 
-/** Un champ du secret d'un compte ; un compte garde tous les champs que déclare son connecteur, chiffrés ensemble. */
-export type ConnectorCredentialField = { readonly name: string; readonly label: string; readonly secret: boolean }
+/**
+ * Qui fournit un champ du credential. `account` (par défaut) : saisi avec le compte, chiffré avec lui. `host` : fourni par
+ * l'hôte, une fois pour toutes ses organisations (`registerConnectors`, `hostCredentials`), lu à chaque appel ; jamais
+ * gardé sur un compte, montré ni saisissable.
+ */
+export type ConnectorCredentialHolder = "account" | "host"
+
+/**
+ * Un champ du credential ; un compte garde, chiffrés ensemble, tous les champs que déclare son connecteur dont `holder`
+ * est `account` ; l'hôte fournit les siens.
+ */
+export type ConnectorCredentialField = { readonly name: string; readonly label: string; readonly secret: boolean; readonly holder?: ConnectorCredentialHolder }
+
+/**
+ * L'identité d'un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs : l'identifiant du compte
+ * chez le tiers (`accounts.linked_id`), qui satisfait `pattern` (expression ancrée), cité par la seule adresse de base,
+ * après l'hôte, sous `{name}`. Aucun argument ne le porte : il vient du compte que la résolution a désigné.
+ */
+export type ConnectorAccountIdentity = { readonly name: string; readonly label: string; readonly pattern: string }
+
+/**
+ * Le lecteur des champs `holder: host` d'un connecteur, fourni par l'hôte (son environnement, son coffre) : appelé à
+ * chaque appel, jamais gardé par le paquet.
+ */
+export type HostCredentialReader = () => Record<string, string>
+
+/**
+ * Le port du branchement hébergé d'un connecteur à `accountIdentity`, que l'hôte fournit à `registerConnectors`
+ * (`hostedLinks`) : le paquet n'appelle le tiers que par lui. L'hôte le construit avec sa clé ; aucun champ de l'hôte ni
+ * aucun secret n'y passe par le paquet. `createLink` : l'adresse du lien d'authentification hébergée du tiers, pour
+ * une demande (`requestId`), à créer ou à reconnecter (`linkedId`, contrôlé par le paquet), revenant à `returnUrl`
+ * (construite par le paquet) avant `expiresAt`. `listAccounts` : les comptes de la clé chez le tiers, toutes pages, du
+ * bon fournisseur seulement, `createdAt` en ISO 8601 ou `null`. `probe` : la session d'un compte, vivante (avec le nom
+ * de son titulaire), morte ou indisponible. Une méthode qui lève vaut `upstream_error`.
+ */
+export interface HostedLinkProvider {
+  createLink(input: {
+    requestId: string
+    kind: "create" | "reconnect"
+    linkedId?: string
+    returnUrl: string
+    expiresAt: Date
+  }): Promise<{ url: string }>
+  listAccounts(): Promise<Array<{ id: string; createdAt: string | null }>>
+  probe(id: string): Promise<{ state: "alive"; label: string } | { state: "dead" } | { state: "unavailable" }>
+}
 
 /**
  * Un réglage non secret d'un compte, saisi par qui le connecte et gardé en clair : `choice`, une valeur d'une liste
@@ -181,6 +225,11 @@ export type ConnectorFunctionDefinition = {
   readonly name: string
   readonly connector: string
   readonly class: ConnectorFunctionClass
+  /**
+   * La fonction engage ou détruit (envoi, corbeille, archive, déplacement) : servie sous `<connecteur>_act.<fonction>`,
+   * les autres sous `<connecteur>.<fonction>`. Jamais `true` pour `read`, jamais `false` pour `sensitive`.
+   */
+  readonly act: boolean
   /** Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès. */
   readonly scopes?: readonly string[]
   readonly description: string
@@ -200,13 +249,18 @@ export type ConnectorFunctionDefinition = {
 export type ConnectorDefinition = {
   readonly name: string
   readonly label: string
-  /** Racine `https://` des chemins, sans `/` final ; gabarit possible sur les réglages (`https://{domain}.example.net`). */
+  /**
+   * Racine `https://` des chemins, sans `/` final ; gabarit possible sur les réglages (`https://{domain}.example.net`) et
+   * sur l'identité du compte, après l'hôte (`https://api.example.com/v2/{account_id}`).
+   */
   readonly baseUrl?: string
   /** Racine des chemins par valeur d'un réglage `choice` (une région), à la place de `baseUrl`. */
   readonly baseUrls?: ConnectorUrlsBySetting
   readonly auth: ConnectorAuth
   /** Vide pour `oauth2_user` : les jetons d'un consentement ne sont pas des champs. */
   readonly credential: readonly ConnectorCredentialField[]
+  /** Présente pour un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs. */
+  readonly accountIdentity?: ConnectorAccountIdentity
   readonly settings?: readonly ConnectorSetting[]
   readonly timeoutMs: number
   readonly queryArrays?: "repeat" | "brackets" | "comma"

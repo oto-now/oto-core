@@ -16,6 +16,7 @@ import { cellRoutes } from "./cell"
 import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
 import { filesRoutes } from "./files"
+import { hostedLinkRoutes } from "./hosted-link"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
 import { invitationsRoutes } from "./invitations"
 import { membersRoutes } from "./members"
@@ -116,6 +117,8 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   files: filesRoutes,
   // Le consentement d'une personne à un connecteur `oauth2_user` : son départ, et l'adresse de retour du tiers.
   "connector-consent": connectorConsentRoutes,
+  // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ, et l'adresse de retour du tiers.
+  "hosted-link": hostedLinkRoutes,
 }
 
 type PlatformRequestOptions = {

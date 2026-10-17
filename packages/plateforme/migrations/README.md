@@ -203,6 +203,13 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   demandes de consentement en cours (empreinte SHA-256 du `state`, jamais le `state` ; personne, organisation,
   connecteur, écran de retour ; dix minutes, consommées une fois), sous RLS : chacun pose, lit et consomme les siennes,
   tout membre purge les échues. Les jetons se rangent dans les colonnes de `20261008090000`.
+- `20261017090000_platform_comptes_rattaches.sql` (compte rattaché, `accountIdentity`) : `accounts.linked_id`,
+  l'identifiant du compte chez le tiers, et `linked_at`, sans aucun droit de colonne à `authenticated` (l'insertion d'un
+  compte passe donc aux droits de colonnes) ; la table `hosted_link_requests`, les demandes de branchement en cours
+  (personne, organisation, connecteur, `create` ou `reconnect`, écran de retour ; une heure, consommées par la liaison),
+  sous la même RLS que `connector_consents` ; les fonctions `security definer` `account_linked_id` (lecture à l'appel),
+  `my_hosted_accounts`, `hosted_linked_elsewhere` et `link_hosted_account`, seul écrivain de `linked_id`, qui refait
+  sous verrou les gardes du branchement.
 
 ## Installer sur un hôte neuf
 
@@ -431,7 +438,10 @@ garde ; la ligne de base V1 les porte toutes.
 
 - **`accounts` : grants de colonnes.** `secret_ciphertext` n'est jamais accordée en lecture à
   `authenticated` ; `select *` est refusé, les services listent leurs colonnes. Toute colonne
-  ajoutée à `accounts` doit être ajoutée au `grant select (…)` dans sa migration.
+  ajoutée à `accounts` doit être ajoutée au `grant select (…)` dans sa migration, et, depuis
+  `20261017090000` (insertion colonne par colonne, `linked_id` et `linked_at` exclus), au
+  `grant insert (…)` ; vérifié sur base par `tests/integration/droits-colonnes-comptes.test.ts`, qui nomme
+  la colonne fautive.
 - **Rollback en commentaire** en fin de fichier (`-- ROLLBACK:`), dans l'ordre inverse de
   création ; il ne s'exécute jamais depuis le paquet.
 - **`anon` a l'usage du schéma** (depuis E02-S01, pour atteindre `org_by_host`) : toute fonction

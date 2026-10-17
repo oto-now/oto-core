@@ -185,12 +185,23 @@ export function requireNotConsent(connector: string): void {
 }
 
 /**
+ * L'identifiant d'un compte chez un tiers (`linked_id`) ne s'écrit que par le branchement hébergé, qui le vérifie
+ * auprès du tiers (`link_hosted_account`) : une saisie qui le porte est refusée, jamais ignorée en silence.
+ */
+export function refuseLinkedId(input: unknown, at: Record<string, unknown> | null = null): void {
+  const carries = (value: unknown) => typeof value === "object" && value !== null && "linked_id" in value
+  if (!carries(input) && !carries(at)) return
+  throw new PlatformError("invalid_arguments", "linked_id is never set by hand: it is written only when a person connects their own account (Connect my account).")
+}
+
+/**
  * Crée un compte pour un connecteur activable, actif ou non (N12), au mode que son connecteur admet
  * (`requireCreatableMode`). Le mode est posé explicitement : le défaut de la colonne est `reel`. Un libellé déjà
  * pris dans l'organisation, sans casse, tous connecteurs et comptes invisibles compris, est refusé par l'index
- * unique d'E01-S06 (`23505` → `conflict`).
+ * unique d'E01-S06 (`23505` → `conflict`). L'identifiant chez un tiers (`linked_id`) n'est jamais une saisie.
  */
 export async function createAccount(db: PlatformDb, identity: Identity, input: unknown): Promise<AccountSummary> {
+  refuseLinkedId(input)
   const parsed = createAccountSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const account = parsed.data

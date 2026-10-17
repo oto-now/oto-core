@@ -16,8 +16,9 @@ import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
+import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
-import { addressProblem, baseAddress, settingProblem } from "./settings"
+import { baseAddress, settingProblem } from "./settings"
 
 /** La contrainte de `platform.connectors.name`. */
 const CONNECTOR_NAME = /^[a-z][a-z0-9_]{0,39}$/
@@ -67,12 +68,14 @@ function accountProblem(definition: ConnectorDefinition): string | null {
     return Array.isArray(credential) && credential.length === 0 ? null : `${name}: credential must be empty with oauth2_user: the tokens of a consent are not fields, and the OAuth application is the host's.`
   }
   const fields = Array.isArray(credential) ? credential : []
-  const badField = fields.find((field) => typeof field?.name !== "string" || !/^[a-z][a-z0-9_]{0,39}$/.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
+  const badField = fields.find((field) => typeof field?.name !== "string" || !FIELD_NAME.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
   if (fields.length === 0 || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
+  const badHolder = holderProblem(name, fields)
+  if (badHolder) return badHolder
   const settings = definition.settings ?? []
   if (!Array.isArray(settings)) return `${name}: settings must be a list.`
-  const names = [...fields.map((field) => field.name), ...settings.map((setting) => setting?.name)]
-  if (new Set(names).size !== names.length) return `${name}: credential fields and settings need distinct names.`
+  const names = [...fields.map((field) => field.name), ...settings.map((setting) => setting?.name), ...(definition.accountIdentity ? [definition.accountIdentity.name] : [])]
+  if (new Set(names).size !== names.length) return `${name}: credential fields, settings and the account identity need distinct names.`
   for (const setting of settings) {
     const problem = settingProblem(name, setting)
     if (problem) return problem
@@ -172,6 +175,8 @@ function compiledFunction(definition: ConnectorDefinition, fn: ConnectorFunction
   if (!isJsonObject(fn.schema) || fn.schema.type !== "object" || fn.schema.additionalProperties !== false) {
     return `${name}: schema must be a strict object (type object, additionalProperties false): unknown keys are refused, not ignored.`
   }
+  const hostFault = functionHostProblem(definition, fn)
+  if (hostFault) return hostFault
   if (!Array.isArray(fn.refusals) || fn.refusals.some((refusal) => typeof refusal?.code !== "string" || typeof refusal.message !== "string")) {
     return `${name}: refusals must list {code, when, message}.`
   }
@@ -274,6 +279,7 @@ function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth,
     name: `${definition.name}.identity`,
     connector: definition.name,
     class: "read",
+    act: false,
     description: "Who consented, read at the identity address.",
     schema: { type: "object", additionalProperties: false, properties: {} },
     examples: [{ title: "Who consented", input: {} }],
@@ -285,14 +291,15 @@ function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth,
 }
 
 /** Un connecteur contrôlé et préparé ; au premier problème, `CatalogRegistrationError`. */
-function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, application: OAuthApplication | null): DeclaredConnector {
+function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, given: HostGiven): DeclaredConnector {
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
-  const problem = connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition)
+  const problem =
+    connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition) ?? accountIdentityProblem(definition)
   if (problem) throw new CatalogRegistrationError(problem)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
-  const addressFault = addressProblem(`${definition.name}: baseUrl`, address, definition.settings ?? [])
+  const addressFault = baseAddressProblem(definition, address)
   if (addressFault) throw new CatalogRegistrationError(addressFault)
   const auth = prepareAuth(definition)
   if (typeof auth === "string") throw new CatalogRegistrationError(auth)
@@ -315,11 +322,11 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   const problemOfProbe = probeProblem(definition) ?? identityProblem(definition, auth)
   if (problemOfProbe) throw new CatalogRegistrationError(problemOfProbe)
   if (auth.kind === "user_consent" && "url" in auth.identity) identity = identityAddress(definition, auth, auth.identity.url)
-  return { definition, auth, functions, probe, identity, application: auth.kind === "user_consent" ? application : null }
+  return { definition, auth, functions, probe, identity, ...given, application: auth.kind === "user_consent" ? given.application : null }
 }
 
 /** Ce que l'hôte passe à `registerConnectors` en plus de ses définitions. */
-export type ConnectorOptions = {
+export type ConnectorOptions = HostOptions & {
   /**
    * L'application OAuth de chaque connecteur `oauth2_user`, par nom de connecteur : l'identifiant et le secret du client
    * que l'hôte a enregistrés chez le tiers, lus par l'hôte (son environnement, son coffre), jamais par le paquet. Sans
@@ -352,7 +359,9 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
  * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux ; enfin la sonde et l'identité d'un
  * consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
- * connecteur `oauth2_user`, fournie par l'hôte. Au premier refus, `CatalogRegistrationError` et rien n'est déclaré ;
+ * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
+ * le port du branchement hébergé d'un connecteur à `accountIdentity` ; tous fournis par l'hôte. Au premier refus,
+ * `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
 export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {
@@ -361,7 +370,9 @@ export function registerConnectors(definitions: readonly ConnectorDefinition[], 
   const reserved = new Set([...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf))
   const seen = new Set<string>()
   const applications = checkedApplications(definitions, options.oauthApplications)
-  const connectors = definitions.map((definition) => declared(definition, reserved, seen, applications.get(definition.name) ?? null))
+  const { readers, ports } = checkedHostGifts(definitions, options)
+  const gift = (name: string): HostGiven => ({ application: applications.get(name) ?? null, hostCredentials: readers.get(name) ?? null, hostedLinks: ports.get(name) ?? null })
+  const connectors = definitions.map((definition) => declared(definition, reserved, seen, gift(definition.name)))
   replaceDeclaredConnectors(connectors)
 }
 

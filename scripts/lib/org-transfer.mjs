@@ -78,7 +78,7 @@ export const TABLES = [
     columns: cols('id org_id connector owner_kind owner_team_id owner_user_id label status health mode created_at updated_at settings status_reason'),
     // Le secret, ce qui en dit l'état, le jeton d'un échange ou d'un consentement et ses droits accordés ne quittent
     // jamais la base : un compte importé se reconnecte par qui le gère.
-    excluded: ['secret_ciphertext', 'secret_fields', 'secret_updated_at', 'token_ciphertext', 'token_expires_at', 'granted_scopes'],
+    excluded: ['secret_ciphertext', 'secret_fields', 'secret_updated_at', 'token_ciphertext', 'token_expires_at', 'granted_scopes', 'linked_id', 'linked_at'],
     refs: { org_id: 'orgs', owner_team_id: 'teams' },
     people: { owner_user_id: 'sauter' },
   }),
@@ -233,6 +233,9 @@ NEVER_EXPORTED.push('connectors')
 // Les demandes de consentement à un connecteur `oauth2_user` : dix minutes, liées à une personne et à un navigateur ;
 // une demande ne se transfère pas.
 NEVER_EXPORTED.push('connector_consents')
+// Les demandes de branchement hébergé (`accountIdentity`) : une heure, liées à une personne ; et l'identifiant chez le
+// tiers d'un compte (`linked_id`, exclu ci-dessus) ne s'écrit que par la personne qui branche son propre compte.
+NEVER_EXPORTED.push('hosted_link_requests')
 
 /** @param {string} name */
 function tableSpec(name) {

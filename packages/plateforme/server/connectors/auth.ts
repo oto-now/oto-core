@@ -58,8 +58,18 @@ export type ConsentCredential = {
   revoked: (reason: string) => Promise<PlatformError>
 }
 
-/** Le compte d'un appel : ses champs déchiffrés, ses réglages, son jeton ; son consentement pour `oauth2_user`. */
-export type AccountCredential = { fields: Readonly<Record<string, string>>; settings: AccountSettings; tokens: TokenStore; consent?: ConsentCredential }
+/**
+ * Le compte d'un appel : ses champs déchiffrés, ceux de l'hôte (`holder: host`) compris, ses réglages, son jeton ; son
+ * consentement pour `oauth2_user` ; l'identifiant du compte chez le tiers (`linkedId`, `accounts.linked_id`) pour un
+ * connecteur à `accountIdentity`.
+ */
+export type AccountCredential = {
+  fields: Readonly<Record<string, string>>
+  settings: AccountSettings
+  tokens: TokenStore
+  consent?: ConsentCredential
+  linkedId?: string
+}
 
 /** Ce que l'authentification pose sur une requête. */
 export type Signature = { headers: Record<string, string>; query: [string, string][] }

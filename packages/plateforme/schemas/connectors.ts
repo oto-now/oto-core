@@ -72,6 +72,19 @@ export const connectorConsentReturnSchema = z.object({
   error: z.string().max(200).optional(),
 })
 
+/**
+ * Le branchement hébergé du compte d'une personne à un connecteur à `accountIdentity` (`startHostedLink`,
+ * `POST hosted-link`) : la même saisie que le consentement, le connecteur et l'écran de l'hôte où revenir.
+ */
+export const hostedLinkSchema = connectorConsentSchema
+export type HostedLinkInput = z.input<typeof hostedLinkSchema>
+
+/**
+ * Le retour du branchement hébergé (`GET hosted-link/callback`) : la demande, que le paquet a mise dans l'adresse de
+ * retour ; le reste de la query (l'indice du tiers) est lu à part, sous liste blanche.
+ */
+export const hostedLinkReturnSchema = z.object({ request: z.uuid() })
+
 /** Le nom d'un champ du secret ou d'un réglage, comme la déclaration d'un connecteur l'écrit. */
 const accountKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, "a field or setting name: lowercase letters, digits and _")
 
@@ -147,6 +160,11 @@ export type ConnectorAccountForm = {
   label: string
   /** Vrai pour un connecteur `oauth2_user` : ni champ ni réglage, chacun y connecte son compte par son consentement. */
   consent?: boolean
+  /**
+   * Présent pour un connecteur à `accountIdentity` : chacun y branche son compte chez le tiers, jamais créé à la main ;
+   * `ready` quand l'hôte a fourni le port du branchement.
+   */
+  hosted?: { ready: boolean }
   fields: { name: string; label: string; secret: boolean }[]
   settings: (
     | { name: string; label: string; type: "choice"; choices: string[]; default?: string }

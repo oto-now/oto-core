@@ -2,9 +2,10 @@
 // dépôt `connectors` : le paquet n'importe aucun connecteur réel. Il porte de quoi exercer chaque part du moteur :
 // authentification `bearer`, en-tête constant, listes en query (`brackets`), argument encodé en JSON, pagination par
 // curseur, sortie taillée, refus propre à une fonction, contrôle avant l'appel (`equal_sums`) et sur la réponse
-// (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde.
+// (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde. Et ses variantes : sous le
+// consentement d'une personne, et à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé.
 import type { ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
-import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 
 const ID = { type: "string", pattern: "^[a-z0-9_-]{1,40}$" }
@@ -22,6 +23,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.get_company`,
       connector: name,
       class: "read",
+      act: false,
       description: "Get the company the key belongs to, and the key's scopes.",
       schema: { type: "object", additionalProperties: false, properties: {} },
       examples: [{ title: "Company and scopes", input: {} }],
@@ -32,6 +34,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.list_contacts`,
       connector: name,
       class: "read",
+      act: false,
       description: "List the contacts, one page at a time. Pass next_cursor as cursor for the next page.",
       schema: {
         type: "object",
@@ -54,6 +57,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.get_contact`,
       connector: name,
       class: "read",
+      act: false,
       description: "Get one contact by its id, with its email.",
       schema: { type: "object", additionalProperties: false, required: ["contact_id"], properties: { contact_id: ID } },
       examples: [{ title: "One contact", input: { contact_id: "c-42" } }],
@@ -69,6 +73,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.rename_contact`,
       connector: name,
       class: "write",
+      act: false,
       description: "Rename a contact.",
       schema: { type: "object", additionalProperties: false, required: ["contact_id", "name"], properties: { contact_id: { type: "string" }, name: { type: "string", minLength: 1 } } },
       examples: [{ title: "Rename", input: { contact_id: "c-42", name: "Ada" } }],
@@ -79,6 +84,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.untag_contact`,
       connector: name,
       class: "write",
+      act: false,
       description: "Remove a tag from a contact, saying why.",
       schema: { type: "object", additionalProperties: false, required: ["tag_id", "reason"], properties: { tag_id: ID, reason: { type: "string" } } },
       examples: [{ title: "Remove a duplicate tag", input: { tag_id: "t-1", reason: "duplicate" } }],
@@ -89,6 +95,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
       name: `${name}.post_entry`,
       connector: name,
       class: "sensitive",
+      act: true,
       description: "Post a balanced accounting entry: it cannot be deleted.",
       schema: {
         type: "object",
@@ -245,4 +252,60 @@ export function memoryTokens(initial: StoredToken | null = null): TokenStore & {
       written.push(token)
     },
   }
+}
+
+/** Le motif de l'identifiant d'un compte chez le tiers de test. */
+export const HOSTED_ID_PATTERN = "^[A-Za-z0-9_-]{1,64}$"
+
+/**
+ * Le connecteur décrit de test à compte rattaché (`accountIdentity`), de la forme que rend la fabrique : la clé
+ * `api_key` fournie par l'hôte (`holder: host`), l'identifiant du compte chez le tiers cité par l'adresse de base.
+ */
+export function hostedConnector(name = "crm"): ConnectorDefinition {
+  const described = describedConnector(name)
+  return {
+    ...described,
+    label: "Hosted Crm",
+    baseUrl: "https://crm.example.test/v2/{account_id}",
+    auth: { kind: "api_key", in: "header", name: "X-Api-Key", key: "api_key" },
+    credential: [{ name: "api_key", label: "API key", secret: true, holder: "host" }],
+    accountIdentity: { name: "account_id", label: "Account", pattern: HOSTED_ID_PATTERN },
+  }
+}
+
+/** Un compte de la clé de test : son identifiant, sa date de création chez le tiers, sa sonde. */
+export type FakeHostedAccount = { id: string; createdAt: string | null; probe: "alive" | "dead" | "unavailable" | "throws"; who?: string }
+
+/**
+ * Le faux port du branchement hébergé : les comptes de la clé (`accounts`, modifiables par le test), et le relevé de
+ * chaque appel (`calls`). `fail` fait lever une méthode ; `url` remplace l'adresse rendue par `createLink`.
+ */
+export function fakeHostedLinks(accounts: FakeHostedAccount[] = []) {
+  const calls: { method: keyof HostedLinkProvider; input: unknown }[] = []
+  const state = { accounts, fail: null as keyof HostedLinkProvider | null, url: "https://link.example.test/auth/abc" }
+  const failing = (method: keyof HostedLinkProvider) => {
+    if (state.fail === method) throw new TypeError("fetch failed: secret-key-123 at https://api.example.test")
+  }
+  const port: HostedLinkProvider = {
+    async createLink(input) {
+      calls.push({ method: "createLink", input })
+      failing("createLink")
+      return { url: state.url }
+    },
+    async listAccounts() {
+      calls.push({ method: "listAccounts", input: null })
+      failing("listAccounts")
+      return state.accounts.map(({ id, createdAt }) => ({ id, createdAt }))
+    },
+    async probe(id) {
+      calls.push({ method: "probe", input: id })
+      failing("probe")
+      const account = state.accounts.find((entry) => entry.id === id)
+      if (!account || account.probe === "dead") return { state: "dead" }
+      if (account.probe === "throws") throw new Error("probe exploded")
+      if (account.probe === "unavailable") return { state: "unavailable" }
+      return { state: "alive", label: account.who ?? `${id}@example.test` }
+    },
+  }
+  return { port, calls, state }
 }

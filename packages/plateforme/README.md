@@ -441,6 +441,33 @@ registerConnectors([microsoft.connector], {
   ou `?consent=failed&reason=<code>`.
 - **Écran** : le vôtre ; l'écran Connecteurs du paquet n'en porte que le bouton par défaut « Connecter mon compte ».
 - **Base** : migration `20261016090000_platform_consentement.sql` (demandes en cours, droits accordés).
+### Compte de l'hôte et compte rattaché (`holder: host`, `accountIdentity`)
+
+Un champ de `credential` marqué `holder: "host"` est le vôtre, une fois pour toutes vos organisations (la clé d'une
+messagerie hébergée, par exemple) : passez un lecteur, appelé à chaque appel, jamais gardé par le paquet. Un connecteur
+qui déclare `accountIdentity` court sur un compte rattaché chez le tiers, dont l'identifiant (`accounts.linked_id`)
+va dans l'adresse de base ; il se branche par un parcours hébergé, que le paquet mène par le port que vous construisez
+avec votre clé (`HostedLinkProvider`, face `server`) :
+
+```ts
+registerConnectors([messagerie.connector], {
+  hostCredentials: { messagerie: () => ({ api_key: process.env.MESSAGERIE_API_KEY! }) },
+  hostedLinks: { messagerie: monAdaptateur(process.env.MESSAGERIE_API_KEY!) }, // createLink, listAccounts, probe
+})
+```
+
+- **Port** : `createLink({ requestId, kind, linkedId?, returnUrl, expiresAt })` rend `{ url }` (https) ;
+  `listAccounts()` rend tous les comptes de la clé, toutes pages, du bon fournisseur, `{ id, createdAt }` (ISO 8601
+  ou `null`) ; `probe(id)` rend `{ state: "alive", label }`, `{ state: "dead" }` ou `{ state: "unavailable" }`. Une
+  méthode qui lève devient `upstream_error`, sans détail.
+- **Départ** : `startHostedLink(db, identity, { connector, return_to? }, { origin })`, ou `POST /api/platform/hosted-link`,
+  rend `{ url }` ; envoyez-y le navigateur. Le paquet sert le retour (`/api/platform/hosted-link/callback`, en `GET`
+  avec la session), lie le compte sur le compte personnel de la personne et revient à `return_to` avec
+  `?hosted=connected&account=…` ou `?hosted=failed&reason=<raison>`.
+- **Appel** : la personne n'a pas à nommer son compte rattaché, son appel le prend ; elle peut le partager comme
+  tout compte personnel (qui le reçoit le nomme dans `account`).
+- **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
+
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
   qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }`.
 

@@ -3,9 +3,9 @@
 // requête composée (en-têtes du connecteur, puis constantes et arguments de la fonction, authentification en dernier ;
 // chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode ; `encode:
 // json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
-// (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte. Sans lui, chaque connecteur
-// s'écrirait à la main. Le secret ne va que dans l'authentification de la requête (`auth.ts`) : jamais dans un
-// argument, un texte, une erreur ni un log.
+// (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
+// tiers (`linkedId`, compte rattaché). Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
+// l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
 import type { FunctionOutput, FunctionSummary } from "../catalog/define"
 import { PlatformError, type PlatformErrorCode } from "../errors"
 import { cut } from "../journal"
@@ -195,7 +195,8 @@ export async function executeDescribed(
   runChecks(fn, args)
   // `fetch` lu à l'appel, jamais au chargement : l'hôte (et un test) peut le remplacer.
   const fetcherFor = (guarded: boolean): Fetch => call.fetcher ?? (guarded ? guardedFetch() : (input, init) => fetch(input, init))
-  const address = resolveAddress(prepared.address, credential.settings, connector.settings ?? [])
+  const identity = connector.accountIdentity && credential.linkedId !== undefined ? { name: connector.accountIdentity.name, value: credential.linkedId } : undefined
+  const address = resolveAddress(prepared.address, credential.settings, connector.settings ?? [], identity)
   const api: ConnectorApi = { ...prepared.api, baseUrl: address.url }
   const signer: Signer = { auth: prepared.auth, definition: connector, credential, accountId: call.accountId, fetcherFor }
   const pagination = fn.pagination

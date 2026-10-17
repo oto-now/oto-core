@@ -1,8 +1,8 @@
 // « Connecteurs » du tableau de bord (E08-S03, AC4 à AC7, AC12 ; comptes à plusieurs champs ; consentement d'une
 // personne) : les connecteurs activables et leur état, qu'on active ou désactive ; les comptes de l'organisation,
 // simulés ou réels, qu'on crée ou désactive, et le secret et les réglages d'un compte réel, saisis sous sa ligne ; pour
-// un connecteur à consentement (`oauth2_user`), « Connecter mon compte » (ou « Reconnecter » sous un compte à
-// reconnecter), et l'issue du retour du tiers. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
+// un connecteur à consentement (`oauth2_user`) ou à compte rattaché (`accountIdentity`), « Connecter mon compte » (ou
+// « Reconnecter » sous un compte à reconnecter), et l'issue du retour du tiers. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
 // la question d'une désactivation composée ici depuis son impact ; le formulaire de création, la saisie d'un compte et
 // la connexion par consentement sont des îlots clients.
 //
@@ -61,25 +61,33 @@ export type EcranConnecteursProps = {
 }
 
 /**
- * L'issue d'un consentement lue dans la query de l'écran (`?consent=connected&account=…` ou
- * `?consent=failed&reason=<code>`, posée par l'adresse de retour du paquet) ; `undefined` hors d'un retour.
+ * L'issue d'un consentement ou d'un branchement hébergé lue dans la query de l'écran (`?consent=connected&account=…`
+ * ou `?consent=failed&reason=<code>` ; `hosted=` de même, posée par l'adresse de retour du paquet) ; `undefined` hors
+ * d'un retour.
  */
 export function issueDuConsentement(query: Readonly<Record<string, string | string[] | undefined>>): IssueDuConsentement | undefined {
   const lu = (nom: string) => {
     const valeur = query[nom]
     return typeof valeur === "string" ? valeur : undefined
   }
-  if (lu("consent") === "connected") return { issue: "connected", compte: lu("account") ?? "" }
-  if (lu("consent") === "failed") return { issue: "failed", raison: lu("reason") ?? "" }
+  const issue = lu("consent") ?? lu("hosted")
+  if (issue === "connected") return { issue: "connected", compte: lu("account") ?? "" }
+  if (issue === "failed") return { issue: "failed", raison: lu("reason") ?? "" }
   return undefined
 }
 
-/** Ce que dit l'échec d'un consentement, par le code du refus. */
+/** Ce que dit l'échec d'un consentement ou d'un branchement, par le code du refus ou sa raison. */
 const ECHECS_DU_CONSENTEMENT: Readonly<Record<string, string>> = {
   invalid_arguments: "La connexion n'a pas abouti : refusée, annulée, expirée ou déjà servie. Recommencez.",
   upstream_error: "Le service tiers n'a pas pu terminer la connexion. Réessayez plus tard.",
   not_enabled: "La connexion à ce service n'est pas configurée sur cette application.",
   conflict: "Un autre compte de l'organisation porte déjà ce nom.",
+  not_found: "Cette demande de connexion est inconnue ou déjà servie. Recommencez.",
+  expired: "Cette demande de connexion a expiré. Recommencez.",
+  no_candidate: "Aucun compte connecté pendant cette demande n'a été trouvé. Recommencez.",
+  candidates_dead: "La session de ce compte chez le service tiers est déconnectée. Recommencez.",
+  ambiguous_candidates: "Plusieurs comptes pourraient correspondre à cette demande ; rien n'a été rangé. Recommencez dans quelques minutes.",
+  forbidden: "Ce compte ne peut pas être connecté par vous.",
 }
 
 function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsentement }) {
@@ -165,11 +173,24 @@ function proprietaire(owner: AccountView["owner"]): string {
   return owner.kind === "org" ? "organisation" : "personnel"
 }
 
-/** Ce que la ligne dit du secret d'un compte réel, jamais sa valeur ; d'un consentement, ses jetons ou sa raison. */
-function etatDuSecret(compte: AccountView, consentement: boolean): string | null {
+/** Comment se connecte un compte d'un connecteur : saisi à la main, par consentement, ou branché chez le tiers. */
+type Connexion = "saisie" | "consentement" | "branchement"
+
+const connexionDe = (formulaire: ConnectorAccountForm | undefined): Connexion =>
+  formulaire?.consent === true ? "consentement" : formulaire?.hosted ? "branchement" : "saisie"
+
+/** La porte du bouton « Connecter mon compte » d'un connecteur à consentement ou à compte rattaché. */
+const PORTES = { consentement: "connector-consent", branchement: "hosted-link" } as const
+
+/**
+ * Ce que la ligne dit du secret d'un compte réel, jamais sa valeur ; d'un consentement, ses jetons ou sa raison ; d'un
+ * compte branché, sa raison quand il est à reconnecter.
+ */
+function etatDuSecret(compte: AccountView, connexion: Connexion): string | null {
   if (compte.mode !== "reel") return null
   const date = compte.secret?.updatedAt ? dateLisible(compte.secret.updatedAt) : null
-  if (consentement) {
+  if (connexion === "branchement") return compte.status === "error" ? `à reconnecter${compte.statusReason ? ` : ${compte.statusReason}` : ""}` : null
+  if (connexion === "consentement") {
     if (compte.status === "error") return `à reconnecter${compte.statusReason ? ` : ${compte.statusReason}` : ""}`
     return date ? `jetons du ${date}` : "pas encore connecté"
   }
@@ -177,8 +198,9 @@ function etatDuSecret(compte: AccountView, consentement: boolean): string | null
 }
 
 function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formulaire: ConnectorAccountForm | undefined; ici: string }) {
-  const consentement = formulaire?.consent === true
-  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], etatDuSecret(compte, consentement)]
+  const connexion = connexionDe(formulaire)
+  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], etatDuSecret(compte, connexion)]
+  const reconnectable = formulaire && compte.status === "error" && (connexion === "consentement" || (connexion === "branchement" && formulaire.hosted?.ready === true))
   return (
     <Row className="flex-wrap gap-3">
       <span className="min-w-0 flex-1">{parties.filter((partie) => partie !== null).join(" · ")}</span>
@@ -191,9 +213,15 @@ function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formu
           ancre={ANCRE_DES_COMPTES}
         />
       )}
-      {compte.mode === "reel" && compte.status !== "disabled" && formulaire && !consentement && <SaisieDuCompte compte={compte} formulaire={formulaire} />}
-      {consentement && compte.status === "error" && formulaire && (
-        <ConnexionParConsentement connecteur={formulaire.connector} libelle="Reconnecter" nomAccessible={`Reconnecter le compte ${compte.label}`} retour={ici} />
+      {compte.mode === "reel" && compte.status !== "disabled" && formulaire && connexion === "saisie" && <SaisieDuCompte compte={compte} formulaire={formulaire} />}
+      {reconnectable && (
+        <ConnexionParConsentement
+          ressource={PORTES[connexion]}
+          connecteur={formulaire.connector}
+          libelle="Reconnecter"
+          nomAccessible={`Reconnecter le compte ${compte.label}`}
+          retour={ici}
+        />
       )}
     </Row>
   )
@@ -202,12 +230,14 @@ function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formu
 type ComptesProps = { comptes: AccountView[]; connecteurs: string[]; equipes: DonneesDesConnecteurs["options"]["teams"]; formulaires: ConnectorAccountForm[]; ici: string }
 
 /**
- * Les annexes : les comptes, la connexion de son propre compte à un connecteur à consentement, puis l'îlot où l'on
- * crée un compte (jamais d'un connecteur à consentement : chacun y connecte le sien).
+ * Les annexes : les comptes, la connexion de son propre compte à un connecteur à consentement ou à compte rattaché
+ * (quand l'hôte a fourni son port), puis l'îlot où l'on crée un compte (jamais de ces connecteurs : chacun y connecte
+ * le sien).
  */
 function Comptes({ comptes, connecteurs, equipes, formulaires, ici }: ComptesProps) {
-  const parConsentement = formulaires.filter((formulaire) => formulaire.consent === true)
-  const aCreer = connecteurs.filter((connecteur) => !parConsentement.some((formulaire) => formulaire.connector === connecteur))
+  const personnels = formulaires.filter((formulaire) => connexionDe(formulaire) !== "saisie")
+  const parConsentement = personnels.filter((formulaire) => formulaire.consent === true || formulaire.hosted?.ready === true)
+  const aCreer = connecteurs.filter((connecteur) => !personnels.some((formulaire) => formulaire.connector === connecteur))
   return (
     <>
       <Ilot id={ANCRE_DES_COMPTES} titre="Comptes" compte={pluriel(comptes.length, "compte", "comptes")}>
@@ -222,7 +252,13 @@ function Comptes({ comptes, connecteurs, equipes, formulaires, ici }: ComptesPro
           <div className="flex flex-col gap-3">
             <p className="oto-caption">Ces services se connectent personne par personne : chacun y connecte son propre compte, qui devient l&apos;un de ses comptes personnels.</p>
             {parConsentement.map((formulaire) => (
-              <ConnexionParConsentement key={formulaire.connector} connecteur={formulaire.connector} libelle={`Connecter mon compte ${formulaire.label}`} retour={ici} />
+              <ConnexionParConsentement
+                key={formulaire.connector}
+                ressource={formulaire.consent === true ? PORTES.consentement : PORTES.branchement}
+                connecteur={formulaire.connector}
+                libelle={`Connecter mon compte ${formulaire.label}`}
+                retour={ici}
+              />
             ))}
           </div>
         </Ilot>
