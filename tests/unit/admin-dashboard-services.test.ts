@@ -107,9 +107,9 @@ describe("deactivationImpact (AC11, H123)", () => {
         expect(accounts).toHaveLength(PAGE_AND_MORE + 3)
         expect(accounts.filter((account) => !account.label.startsWith("Compte "))).toEqual([
           // Un compte simulé n'a ni secret ni réglage : l'écran le lit tel quel.
-          { id: "account:mail-old", label: "Mail Ancien", connector: "mail", owner: { kind: "org" }, mode: "simule", status: "disabled", ...NO_SECRET },
-          { id: "account:mail-org", label: "Mail Org", connector: "mail", owner: { kind: "org" }, mode: "simule", status: "active", ...NO_SECRET },
-          { id: "account:mail-ventes", label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", ...NO_SECRET },
+          { id: "account:mail-old", label: "Mail Ancien", connector: "mail", owner: { kind: "org" }, mode: "simule", status: "disabled", mark: null, ...NO_SECRET },
+          { id: "account:mail-org", label: "Mail Org", connector: "mail", owner: { kind: "org" }, mode: "simule", status: "active", mark: null, ...NO_SECRET },
+          { id: "account:mail-ventes", label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", mark: null, ...NO_SECRET },
         ])
         // Ni le compte personnel de Claire, ni celui de P.
         expect(accounts.map((account) => account.label)).not.toContain("Mail Claire")
