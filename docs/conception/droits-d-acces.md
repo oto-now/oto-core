@@ -1,11 +1,11 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-18
 
 ## Résumé
 
-Quatre niveaux (aucun, lecture, écriture, gestion) se calculent dans le service, pour une personne, sur un nœud de l'arbre ou un compte de connecteur.
+Quatre niveaux (aucun, lecture, écriture, gestion) se calculent dans le service, pour une personne, sur un nœud de l'arbre ; un compte de connecteur en a un cinquième, sensible, entre l'écriture et la gestion.
 Une règle vise une personne, une équipe ou l'organisation entière ; la plus proche dans l'arbre l'emporte, l'administrateur gère tout sauf les espaces personnels.
 L'équipe plateforme n'entre dans une organisation que par un accès daté, que l'administrateur du client voit et révoque.
 
@@ -39,7 +39,7 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 - Le responsable de l'équipe propriétaire effective garde la gestion d'un nœud ou d'un compte de son équipe : une règle qui vise son équipe ne la lui retire pas, seule une règle qui le vise nommément la baisse ; l'admin garde la gestion (E01-S04 N7). Une règle posée sur l'équipe propriétaire ne ferme pas son responsable (niveau 3) ; un membre de cette équipe sans règle nominative prend le niveau de la règle d'équipe (E01-S04 N26). Une règle nominative `none` sur un ancêtre ôte au responsable sa gestion ; son niveau vient de la règle la plus proche qui le vise, lui ou ses équipes (1 sur `ventes/devis`, 0 sur `ventes`) (HN-E01S07-16).
 - Une règle d'équipe posée au-dessus du dossier d'une équipe devient sa règle la plus proche et peut baisser son niveau ; le responsable garde la gestion ; pour garder l'écriture, poser aussi une règle d'écriture sur le dossier (D20).
 - L'administrateur d'une organisation a la gestion sur tout, sauf les espaces personnels ; un nœud qu'un gestionnaire rend personnel sort donc aussi de sa vue (D5). Dans un espace personnel, seules comptent les règles posées sur le nœud qui porte la personne comme propriétaire, ou en dessous : une règle posée plus haut (`perso`, la racine) n'ouvre l'espace à personne, pas même à l'admin (E01-S04 N35).
-- Niveau sur un compte : même calcul, sans héritage ; par défaut, compte d'organisation en lecture (gestion à l'administrateur), d'équipe en écriture (gestion au responsable), personnel à son propriétaire ; une fonction sensible exige l'écriture (H67).
+- Niveau sur un compte : même calcul, sans héritage, sur l'échelle des comptes : aucun (0), lecture (1), écriture (2), sensible (3), gestion (4) (`ACCOUNT_LEVELS`, à part de celle des nœuds, qui ne change pas). Par défaut, compte d'organisation en lecture (gestion à l'administrateur), d'équipe jusqu'au sensible pour ses membres (gestion au responsable), personnel à son seul propriétaire, qui le gère quelles que soient les règles. Une fonction de lecture exige la lecture, d'écriture l'écriture, sensible le niveau sensible (H67, partage des comptes).
 - Le niveau d'un nœud se calcule en SQL sur les colonnes de la ligne (`node_level_of`, definer) ; la recherche filtre par `node_level_for`, qui l'applique à l'appelant ; le niveau d'un compte n'a plus de pendant en base (E01-S04 N24). Un seul test de parité : les décisions du service sur les nœuds comparées à `node_level_for` sous la même session, à l'égalité stricte ; l'exactitude du calcul pur se prouve sans base (HN-E01S07-13).
 
 ### Faits lus par le service
@@ -58,7 +58,7 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 ### Règles d'accès
 
 - Une règle d'`access_rules` vise un nœud ou un compte, pour une équipe ou une personne (l'organisation entière selon ADR-014) ; aucune table d'accès propre aux comptes (H82).
-- Trois sujets de règle : une personne (`subject_user_id`), une équipe (`subject_team_id`) ou l'organisation entière (`subject_org` vrai : tous les membres de l'organisation de la règle). Une règle porte exactement un sujet (contrainte de base) ; une règle d'organisation ne vise qu'un nœud ; une règle est unique par cible et sujet (ADR-014 § 1).
+- Trois sujets de règle : une personne (`subject_user_id`), une équipe (`subject_team_id`) ou l'organisation entière (`subject_org` vrai : tous les membres de l'organisation de la règle). Une règle porte exactement un sujet (contrainte de base) ; une règle d'organisation vise un nœud ou un compte (partage des comptes) ; une règle est unique par cible et sujet (ADR-014 § 1). Le niveau `sensitive` n'existe que sur une règle de compte (`access_rules_level_check`).
 - Une règle d'organisation compte pour chaque membre, avec les mêmes règles d'héritage par l'arbre ; à un même nœud, la plus précise l'emporte (personne, puis équipe, puis organisation ; à précision égale, le niveau le plus haut). Elle ne retire rien à ce que donne le propriétaire, elle ouvre au-delà ; l'espace personnel n'en admet pas (le service refuse, le calcul l'ignore) (ADR-014 § 2).
 - Qui gère un nœud pose des règles pour une autre équipe, une personne ou toute l'organisation, en lecture ou en écriture ; une règle de gestion reste réservée à l'administrateur ; une règle ne vise jamais quelqu'un du dehors (le lien public est à part, ADR-013) (D4, ADR-014 § 3). Une règle `manage` ne se pose que par qui administre l'organisation (`isOrgAdmin`) ; un responsable d'équipe ou tout autre gestionnaire du nœud pose `none`, `read` ou `write`, et l'écran ne lui propose pas la gestion (E01-S04 N6).
 - `access_rules` ne se met à jour que sur `level` (privilège de colonne) : un service relit la règle du couple cible-sujet, puis met à jour `level` ou insère ; jamais d'upsert, qui réécrirait toutes les colonnes (E01-S04 N15).
@@ -66,16 +66,17 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 - Portabilité : colonne et contrainte dans `platform` ; calcul dans le service et dans `node_level_of`, le seul corps SQL du niveau, que gardent la recherche (`node_level_for`) et la lecture publique (ADR-012 § 3, ADR-013) ; aucune dépendance à Supabase (ADR-014 § 5).
 - Les droits se règlent dans « Partager » : « Règles d'accès » et « Accès plateforme » ont quitté l'écran Équipes & accès, l'accès du support d'Oto passant par la console admin ; l'espace Démo est vidé de ses contenus et de ses équipes à la fin, les tests de bout en bout semant leurs propres données (D127, JB, 2026-09-28).
 
-### Partage d'un compte de connecteur (décidé le 16/10, pas encore écrit)
+### Partage d'un compte de connecteur
 
 Origine : un incident d'oto 1, où une personne sans compte propre a écrit dans la boîte d'une collègue sans le savoir ; la règle d'oto 1 du 15/10 (`partage-de-compte.md` d'oto-backend) est reprise, partie d'un seul geste.
 
-- **Sujets** : un compte personnel se partage à une personne, à une équipe ou à l'organisation entière. Cela lève, pour les comptes, « une règle d'organisation ne vise qu'un nœud » (ADR-014 § 1).
-- **Servir** : son propre compte personnel sert sans être nommé, en tête, avant le compte de l'équipe porteuse et celui de l'organisation. Le compte personnel d'un autre, même partagé, ne sert que nommé.
-- **Refus** : faute de compte, le refus nomme les comptes personnels partagés avec l'appelant et leur propriétaire. Chaque réponse dit à qui est le compte qui a servi (l'équivalent du `lent_by` d'oto 1).
-- **Départ** : quand une personne quitte l'organisation, son compte cesse aussitôt de servir à ceux à qui elle l'avait partagé. C'est relu à chaque appel, rien n'est supprimé, et le refus le nomme. Même règle pour une future pause.
-- **Niveaux** : les droits d'un compte se règlent par classe, par compte et par personne ou équipe : lecture, écriture, et un niveau sensible distinct de l'écriture (aujourd'hui `write` et `sensitive` exigent le même niveau 2). Pas de droit fonction par fonction.
-- **Journal** : chaque règle posée ou retirée sur un compte est journalisée (qui, quel compte, vers qui, quand), et le propriétaire la lit à l'écran dès le premier lot.
+- **Sujets** : un compte, personnel compris, se partage à une personne, à une équipe ou à l'organisation entière (`subject_org` sur une règle de compte). Une règle de personne ou d'équipe l'emporte sur celle de l'organisation ; sans elles, le compte prend le plus haut du défaut de son propriétaire et de la règle d'organisation, comme un nœud.
+- **Servir** : pour tout connecteur, l'ordre est le compte nommé, puis son propre compte personnel, sans être nommé, puis celui de l'équipe porteuse, puis celui de l'organisation (`chooseAccount`, `resolution.ts`). Son propre compte qui sert lève l'ambiguïté entre deux équipes capables. Le compte personnel d'un autre, même partagé au bon niveau, ne sert que nommé.
+- **Refus** : faute de compte, ou sous le niveau partout, le refus nomme les comptes personnels partagés avec l'appelant au niveau voulu, chacun avec son propriétaire, et demande de les montrer à l'utilisateur sans choisir (`details.shared_accounts`, comme `ambiguous_account`). Un connecteur à consentement demande toujours de connecter le sien, avec la même mention.
+- **À qui** : chaque réponse de `call` dit à qui est le compte servi (`account.owner` : l'organisation, l'équipe, ou la personne, son nom et `yours`) ; quand il est à une autre personne, une ligne le dit au texte et au récapitulatif d'une fonction sensible, et le journal l'écrit en clé réservée `_lent_by` (l'identifiant de la personne qui l'a partagé), l'équivalent du `lent_by` d'oto 1.
+- **Départ** : quand une personne quitte l'organisation, son compte cesse aussitôt de servir aux autres : `accountRows` (`connectors/accounts.ts`) lit à chaque appel si le propriétaire est encore membre (`owner_left`), seul point d'entrée d'une future pause. Rien n'est supprimé (compte, secret, règles sur le compte) ; nommé, il est refusé (« no longer serves: its owner has left … », sans son nom, que l'annuaire ne garde plus) ; il ne se propose ni ne se mentionne plus. La personne revenue, il sert de nouveau.
+- **Niveaux** : les droits d'un compte se règlent par classe, par compte et par personne, équipe ou organisation : lecture, écriture, sensible. Pas de droit fonction par fonction. Les règles de compte à `write` d'avant le niveau sensible sont passées à `sensitive` par la migration, pour garder ce qu'elles ouvraient.
+- **Journal** : chaque règle de compte posée, remplacée (niveau changé) ou retirée s'écrit dans `account_share_events` (qui, quel compte, vers qui, quel niveau, l'ancien, quand), par un déclencheur sur `access_rules`, dans la transaction du geste : services, départ d'une personne (`members_cleanup`) et outillage compris ; l'auteur est l'appelant de la session (`auth.uid()`), nul hors session. Seule la personne qui gère le compte le lit (`listAccountShareJournal`, `GET admin/accounts/<id>/share-journal`, « Journal des partages » sous le compte à l'écran Connecteurs) : pour un compte personnel, son propriétaire. `forget_user` y efface la personne, pas l'événement ; l'export d'une organisation ne le porte pas, l'import l'écrit en reposant les règles.
 - **Plus tard** : une organisation pourra interdire les comptes personnels d'un connecteur, partage compris.
 
 ### Propriétaires, déplacements, personnel
@@ -136,7 +137,7 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 ## Écart avec le code
 
 - `default_team_id` et `lead_user_id` vidés restent en base, à retirer en 1.1 ; services et API des règles d'accès et des accès plateforme sans écran client (M73).
-- Le partage d'un compte décidé le 16/10 n'est pas écrit : `access_rules_one_subject` refuse une règle d'organisation sur un compte ; `chooseAccount` (`resolution.ts`) ne prend un compte personnel, même le sien, que nommé, sauf le sien d'un connecteur à consentement `oauth2_user` ([connecteurs et comptes](connecteurs-et-comptes.md) § Consentement d'une personne) ; le refus ne nomme pas les comptes partagés ; `members_cleanup` laisse servir le compte d'une personne partie ; `write` et `sensitive` exigent le même niveau ; aucun journal propre aux règles d'un compte (issue « Partage des comptes », oto-now/oto-core#68).
+- Partage des comptes : l'écran Connecteurs est réservé à l'administrateur, si bien qu'un propriétaire qui n'administre pas lit le journal de son compte par la route seule ; aucune porte ne lui permet encore de poser une règle sur son compte (services seuls ; `admin_connector add_account_rule` ne prend ni l'organisation pour sujet ni un compte personnel qu'un administrateur ne gère pas) ; aucune pause d'un membre n'existe, `owner_left` d'`accountRows` est son point d'entrée (oto-now/oto-core#68).
 - Upsert et vue du sujet des règles (`server/rules.ts`), curseur au-delà de 200 éléments (M18b) ; `DirectoryEntry.email` et `StaffEntry` en `string | null`, `server/admin/grants.ts` sur `sameEmail` (M20b) ; commentaires de `server/` rendus faux par l'isolation par organisation (M15b).
 
 ## Questions ouvertes
@@ -152,3 +153,4 @@ Aucune à ce jour.
 - 2026-10-05 : autorisation répartie et recalculée au front écartée, leçon d'oto 1 (ADR 0053, 0066) — décidé par Alexis (source : tri des issues d'oto-enterprise du 05/10).
 - 2026-10-14 : l'équipe plateforme nomme le premier administrateur de l'organisation qu'elle crée (elle-même, membre sans email, ou le client invité) au lieu de l'inviter ensuite — décidé par Alexis (source : [administration et cellule](administration-et-cellule.md)).
 - 2026-10-16 : partage d'un compte de connecteur — à l'organisation ou à une équipe ; son propre compte sans le nommer ; refus qui nomme les comptes partagés et leur propriétaire ; extinction au départ ; niveau sensible distinct ; journal des règles d'un compte — décidé par Alexis (source : revue des connecteurs d'oto 2 du 16/10, issue oto-now/oto-core#68).
+- 2026-10-18 : partage des comptes écrit — échelle des comptes à cinq niveaux, règle d'organisation sur un compte, ordre son compte, équipe, organisation pour tout connecteur, `owner_left` lu à chaque appel, journal des partages par déclencheur et son écran — décidé par Alexis (source : issue oto-now/oto-core#68).

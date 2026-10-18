@@ -34,6 +34,7 @@ erDiagram
     orgs ||--o{ member_exclusions : ""
     nodes ||--o{ access_rules : ""
     accounts ||--o{ access_rules : ""
+    accounts ||--o{ account_share_events : "journal des partages"
     orgs ||--o{ accounts : ""
     orgs ||--o{ connector_activations : ""
     accounts ||--o{ sim_outbox : ""
@@ -68,7 +69,8 @@ erDiagram
 | `connector_consents` | Demande de consentement d'une personne à un connecteur `oauth2_user`, jamais exportée | `state_hash` (empreinte SHA-256 du `state`, clé, jamais le `state`), `user_id`, `connector` (clé vers `connectors`), `return_to` (chemin de l'écran de retour), `expires_at` (10 minutes) ; posée, lue et consommée (supprimée) par sa personne ; expirée, purgée par tout membre |
 | `hosted_link_requests` | Demande de branchement hébergé d'un compte à un connecteur à `account_identity`, jamais exportée | `user_id`, `connector` (clé vers `connectors`), `kind` (`create` · `reconnect`), `return_to` (chemin de l'écran de retour), `created_at` (posée par la base : fonde la garde de provenance), `expires_at` (une heure au plus), `consumed_at` (posée par `link_hosted_account` seule, avec toutes les demandes ouvertes de la personne pour ce connecteur) ; posée, lue et retirée par sa personne ; expirée, purgée par tout membre ; aucune mise à jour |
 | `member_exclusions` | Personne retirée d'une organisation par un administrateur : l'entrée sans invitation la refuse ; jamais exportée | `org_id`, `user_id` (clé), `excluded_at`, `excluded_by` ; inscrite par `removeMember`, levée par une invitation acceptée, supprimée par `forget_user` |
-| `access_rules` | Un droit | `node_id` **ou** `account_id` ; exactement un sujet : `subject_team_id`, `subject_user_id` ou `subject_org` (nœud seulement, ADR-014) ; `level` (`none` · `read` · `write` · `manage`) ; unique par cible et sujet |
+| `access_rules` | Un droit | `node_id` **ou** `account_id` ; exactement un sujet : `subject_team_id`, `subject_user_id` ou `subject_org` (nœud ou compte, ADR-014 et partage des comptes) ; `level` (`none` · `read` · `write` · `manage`, et `sensitive` sur un compte seulement) ; unique par cible et sujet |
+| `account_share_events` | Journal des partages d'un compte : une ligne par règle de compte posée, remplacée ou retirée ; jamais exporté | `org_id`, `account_id` (cascade), `action` (`set` · `removed`), `subject_kind` (`team` · `user` · `org`), `subject_id` (sans clé : l'équipe ou la personne peut partir), `level`, `previous_level` (niveau remplacé), `actor_user_id` (`auth.uid()` du geste, nul hors session), `at` ; écrit par le déclencheur `access_rules_account_share_journal` seul, lu sous RLS par un membre, le service le réservant à qui gère le compte ; `forget_user` met la personne à nul |
 | `platform_staff` | Équipe plateforme (sans `org_id`) | `user_id` (clé), `email`, `name`, `added_by`, `added_at` ; écrite par l'outillage seul |
 | `platform_grants` | Accès d'un consultant à une organisation | `user_id`, `granted_by`, `granted_at`, `revoked_at`, `revoked_by`, `reason` ; `user_email`, `user_name` copiés de `platform_staff` ; un seul accès en cours par couple ; révocation datée par la base |
 | `identities` | Correspondance d'une personne chez l'émetteur (sans `org_id`) | `issuer`, `subject` (clé), `user_id` (unique par émetteur) ; ni email ni nom ; écrite par `identity_for_caller()` seule |
@@ -122,7 +124,7 @@ fonction réservée à l'outillage n'est accordée à aucun rôle de l'applicati
 | `search_content(org, query, kinds, limit)` | Recherche de `find` : titre, puis résumé, puis blocs publiés, lignes comprises, hors corbeille ; d'abord le nœud qui couvre la plus grande part des termes ; rend nœud, bloc, clé, colonne et extrait (jusqu'à la fin du bloc quand il en reste au plus 8 mots), trois blocs par nœud au plus et, sur chacun, le nombre de blocs trouvés du nœud (`block_total`) ; une faute se corrige par le lexique (`lexicon_fix`) en dernier recours ; la corbeille est exclue avant la coupe |
 | `lexicon_words(text)`, `lexicon_sync()`, `lexicon_rebuild(org)`, `lexicon_fix(org, word)` | Mots d'un texte ; déclencheur qui les ajoute ; reconstruction du lexique d'une organisation (outillage) ; la correction d'un mot par le lexique, écrite une fois pour `search_content` et `route_candidates`, exécutable par aucun rôle client |
 | `update_my_profile(org, patch)` | La personne écrit son prénom, son nom (80 caractères chacun, `name` recomposé), sa langue et sa couleur |
-| `forget_user(user)` | Oublie une personne (outillage) : ses lignes, ses espaces personnels, ses `identities`, les auteurs mis à nul, le lexique reconstruit ; refus tant qu'un nœud d'un autre propriétaire est rangé sous les siens |
+| `forget_user(user)` | Oublie une personne (outillage) : ses lignes, ses espaces personnels, ses `identities`, les auteurs mis à nul (journal des partages compris, auteur et sujet), le lexique reconstruit ; refus tant qu'un nœud d'un autre propriétaire est rangé sous les siens |
 | `applied_migrations()` | Migrations appliquées, pour `admin_cell` (équipe plateforme) |
 | `account_token(account)` | Le chiffré du jeton d'un échange (`oauth2_client_credentials`) d'un compte, rendu au seul membre de l'organisation du compte, null sinon ; lu et renouvelé par l'appel (`authenticated`) |
 | `account_secret(account)` | Le chiffré du secret d'un compte, rendu au seul membre de l'organisation du compte (`member_orgs`), null sinon ; lu par `runCall` pour un compte réel d'un connecteur réel, déchiffré par le serveur de l'hôte pour le seul appel au tiers (`authenticated`) |
@@ -144,6 +146,7 @@ fonction réservée à l'outillage n'est accordée à aucun rôle de l'applicati
 | `teams_lead_sync`, `team_members_guard` | `teams.lead_user_id` est la source, `team_members.role` en est dérivé ; le responsable ne quitte pas son équipe |
 | `teams_tree_sync`, `members_tree_sync`, `teams_tree_cleanup` | Équipe créée : son dossier et son Contexte ; membre créé : `private/<handle>` (« Privé ») et son Contexte ; équipe supprimée dont le dossier ne contient que son Contexte : les deux nœuds partent avec elle |
 | `members_cleanup` | Membre retiré : ses `team_members`, ses règles nominatives, sa place de responsable |
+| `access_rules_account_share_journal` | Règle d'un compte insérée, au niveau changé ou retirée : une ligne d'`account_share_events` (`account_share_journal()`, definer), dans la transaction du geste ; rien pour une règle de nœud, un niveau inchangé ou le retrait en cascade d'un compte supprimé |
 | `blocks_guard`, `blocks_lock_draft` | `org_id` pris du nœud ; un `row` seulement dans un tableau, publié, clé immuable ; une écriture de brouillon passe la porte du brouillon (verrou partagé, `PT409` pendant une publication) et avance son tampon |
 | `bump_rules_version` | `rules_version + 1` à la publication d'un nœud Contexte ; compteur seul, la garde du `ctx` lit `ctx.contexts` (E11-S03) |
 | `feedback_number` | Numéro de ticket par organisation, sous verrou |
