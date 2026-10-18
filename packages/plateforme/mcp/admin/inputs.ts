@@ -5,7 +5,7 @@
 // (ADR-002, Neutres), mais il évolue par ajout : un champ facultatif, une opération, jamais un retrait.
 // Un champ borné par un schéma partagé en est tiré (`.shape`), jamais recopié : sa borne n'a qu'une source.
 import * as z from "zod/v4"
-import { createTeamSchema, orgSettingsSchema, platformAccessSchema, themeSchema } from "../../schemas"
+import { createTeamSchema, orgSettingsSchema, platformAccessSchema, setAccountRuleSchema, themeSchema } from "../../schemas"
 import type { AdminToolKey } from "./tools"
 
 const ctx = z.string().describe("Admin ctx code returned by admin_context, e.g. 7K3Q-M2XA. Required: call admin_context first.")
@@ -132,7 +132,7 @@ export const ADMIN_INPUTS = {
       .optional()
       .describe("Account mode; V1 has simulated accounts only (create_account, default simule)"),
     subject: z.string().optional().describe("Who a rule applies to: team:<slug> or user:<email> (add_account_rule, remove_account_rule)"),
-    level: level.optional().describe("Rule level (add_account_rule)"),
+    level: setAccountRuleSchema.shape.level.optional().describe("Rule level (add_account_rule); sensitive opens the sensitive functions, write does not"),
     confirm: confirm("deactivate, disable_account"),
   }),
   admin_journal: z.object({

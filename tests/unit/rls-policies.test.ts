@@ -114,6 +114,9 @@ ADDED.push("connectors_select_authenticated")
 ADDED.push("connector_consents_select_own", "connector_consents_insert_own", "connector_consents_delete_own_or_expired")
 // Les demandes de branchement hébergé (`accountIdentity`) : même règle que les demandes de consentement.
 ADDED.push("hosted_link_requests_select_own", "hosted_link_requests_insert_own", "hosted_link_requests_delete_own_or_expired")
+// Le journal des partages d'un compte (partage des comptes) : lu dans son organisation, écrit par le seul déclencheur
+// d'`access_rules` ; qui le lit, le service le décide (la personne qui gère le compte).
+ADDED.push("account_share_events_select_member")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

@@ -43,15 +43,22 @@ export type CallInput = {
 /**
  * Ce que l'appel a établi pour sa ligne de journal, rempli à mesure (AC16, N7) : la porte le garde
  * quand l'appel échoue ensuite. Vide tant que le refus précède le choix de l'équipe ; `outcome` : la
- * marque posée sur le compte par l'échec (`account_marked`), ou sa pose qui a échoué (`account_mark_failed`).
+ * marque posée sur le compte par l'échec (`account_marked`), ou sa pose qui a échoué (`account_mark_failed`) ;
+ * `lentBy` : la personne qui a partagé le compte personnel servi.
  */
-export type CallTrace = Pick<ToolOutput, "teamId" | "accountId" | "outcome">
+export type CallTrace = Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy">
 
 /** L'équipe sous laquelle l'appel court (F8), telle que ses données la rendent. */
 export type CallTeam = { slug: string; name: string }
 
-/** Le compte d'une fonction de connecteur et son mode (F5), tels que les données de l'appel le rendent. */
-export type CallAccount = { id: string; label: string; mode: ResolvedAccount["mode"] }
+/**
+ * À qui est le compte servi (`droits-d-acces.md` § Partage d'un compte de connecteur, l'équivalent du `lent_by` d'oto 1) :
+ * l'organisation, une équipe (« team Ventes »), ou une personne, l'appelant (`yours`) ou celle qui le lui a partagé.
+ */
+export type CallAccountOwner = { kind: "org" | "team"; description: string } | { kind: "user"; userId: string; name: string; yours: boolean }
+
+/** Le compte d'une fonction de connecteur, son mode (F5) et à qui il est, tels que les données de l'appel le rendent. */
+export type CallAccount = { id: string; label: string; mode: ResolvedAccount["mode"]; owner: CallAccountOwner }
 
 /**
  * Données en champs d'un `call` (F7) : la fonction, l'équipe, le compte d'une fonction de connecteur, puis le résultat
@@ -131,32 +138,68 @@ function nextActions(names: readonly string[], functions: readonly CatalogFuncti
   })
 }
 
-/** Données en champs (F7) : la fonction, l'équipe de l'appel, et le compte d'une fonction de connecteur (AC4, AC13). */
-function callData(fn: CatalogFunction, team: RunningTeam | null, account: ResolvedAccount | undefined): Pick<CallData, "function" | "team" | "account"> {
+/** À qui est le compte servi, pour les données de l'appel ; un compte personnel porte toujours son nom (`resolveAccount`). */
+function accountOwner(identity: Identity, account: ResolvedAccount): CallAccountOwner {
+  const { owner } = account
+  if (owner.kind !== "user") return { kind: owner.kind, description: owner.description }
+  // `resolveAccount` nomme toujours la personne d'un compte personnel servi : sans nom, le câblage est fautif.
+  if (!owner.userId || account.ownerName === undefined) {
+    console.error(`[platform] call: personal account ${account.id} served without its owner`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return { kind: "user", userId: owner.userId, name: account.ownerName, yours: owner.userId === identity.user.id }
+}
+
+/** La personne qui a partagé le compte personnel servi, s'il n'est pas à l'appelant. */
+function lender(owner: CallAccountOwner): Extract<CallAccountOwner, { kind: "user" }> | null {
+  return owner.kind === "user" && !owner.yours ? owner : null
+}
+
+/** Données en champs (F7) : la fonction, l'équipe de l'appel, et le compte d'une fonction de connecteur et son propriétaire (AC4, AC13). */
+function callData(identity: Identity, fn: CatalogFunction, team: RunningTeam | null, account: ResolvedAccount | undefined): Pick<CallData, "function" | "team" | "account"> {
   return {
     function: fn.name,
     team: team ? { slug: team.slug, name: team.name } : null,
-    ...(account ? { account: { id: account.id, label: account.label, mode: account.mode } } : {}),
+    ...(account ? { account: { id: account.id, label: account.label, mode: account.mode, owner: accountOwner(identity, account) } } : {}),
   }
 }
 
-/** Dernière ligne du compte-rendu d'une fonction de connecteur (N4) : l'équipe de l'appel (F8), le compte et son mode (F5). */
-function accountLine(team: RunningTeam | null, account: ResolvedAccount): string {
-  return `${team ? `Team ${team.name}` : "No team"} · account « ${account.label} » (${modeLabel(account.mode)}).`
+/**
+ * Dernières lignes du compte-rendu d'une fonction de connecteur (N4) : l'équipe de l'appel (F8), le compte et son mode
+ * (F5) ; puis, quand le compte est celui d'une autre personne, à qui il est.
+ */
+function accountLines(team: RunningTeam | null, account: CallAccount): string[] {
+  const lent = lender(account.owner)
+  return [
+    `${team ? `Team ${team.name}` : "No team"} · account « ${account.label} » (${modeLabel(account.mode)}).`,
+    ...(lent ? [lentLine(account.label, lent.name)] : []),
+  ]
+}
+
+/** « Account « Mail Claire » belongs to Claire Morel, who shared it with you. » */
+function lentLine(label: string, name: string): string {
+  return `Account « ${label} » belongs to ${name}, who shared it with you.`
 }
 
 /**
  * Récapitulatif d'une fonction sensible appelée sans `confirm` (H86, N1) : un résultat, pas une erreur,
  * et rien d'exécuté. Une fonction sensible sans `summarize` ne court jamais sans accord : câblage fautif.
  */
-async function confirmationRequest(fn: CatalogFunction, context: FunctionContext, args: Record<string, unknown>, team: RunningTeam | null) {
+async function confirmationRequest(
+  fn: CatalogFunction,
+  context: FunctionContext,
+  args: Record<string, unknown>,
+  served: { team: RunningTeam | null; account: CallAccount | undefined },
+) {
   if (!fn.summarize) {
     console.error(`[platform] call: sensitive function ${fn.name} has no summarize`)
     throw new PlatformError("internal", "Internal error.")
   }
   // Arguments validés par `fn.schema` : le type commun du catalogue les efface en `never`.
   const summary = await fn.summarize(context, args as never)
-  const text = [summary.text, ...(team ? [`Team: ${team.name}`] : []), "", NOTHING_SENT].join("\n")
+  // Le compte d'une autre personne se dit avant l'accord : l'utilisateur sait au nom de qui il agirait.
+  const lent = served.account ? lender(served.account.owner) : null
+  const text = [summary.text, ...(served.team ? [`Team: ${served.team.name}`] : []), ...(served.account && lent ? [lentLine(served.account.label, lent.name)] : []), "", NOTHING_SENT].join("\n")
   return { text, summary: summary.data ?? {} }
 }
 
@@ -204,6 +247,8 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
       ? await resolveAccount(db, identity, { fn, team, account: input.account, origin: deps.origin })
       : undefined
   trace.accountId = account?.id ?? null
+  const data = callData(identity, fn, team, account)
+  trace.lentBy = data.account ? (lender(data.account.owner)?.userId ?? null) : null
   // Un connecteur réel ne court que sur un compte réel qui a son secret, ses champs et ses réglages (H85), refusé avant
   // la fonction ; un connecteur simulé (`mail`) garde lui-même ses comptes simulés.
   const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential(db, identity, account, fn.connector) : undefined
@@ -216,10 +261,9 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     origin: deps.origin,
     accessToken: fn.origin === "erp" ? deps.accessToken : undefined,
   }
-  const data = callData(fn, team, account)
-  const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId }
+  const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId, lentBy: trace.lentBy }
   if (fn.class === "sensitive" && input.confirm !== true) {
-    const { text, summary } = await confirmationRequest(fn, context, args, team)
+    const { text, summary } = await confirmationRequest(fn, context, args, { team, account: data.account })
     return { text, data: { ...data, status: "needs_confirmation", summary }, nextActions: [], ...journal }
   }
   // Le secret ne va qu'à `run`, déchiffré au dernier moment : jamais au récapitulatif, ni au journal, ni au texte.
@@ -233,7 +277,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   })
   const outcome = { ...output.outcome, ...markOutcome(credential) }
   return {
-    text: account ? `${output.text}\n${accountLine(team, account)}` : output.text,
+    text: data.account ? [output.text, ...accountLines(team, data.account)].join("\n") : output.text,
     data: { ...data, result: output.data ?? {} },
     nextActions: nextActions(output.next ?? fn.next ?? [], functions, active),
     ...journal,

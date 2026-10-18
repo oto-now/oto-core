@@ -14,7 +14,7 @@ import { cut } from "../journal"
 import { connectorAccounts, markWords, type ConnectorAccount, type LevelName } from "./accounts"
 import { activableConnectors, loadActiveConnectors } from "./activations"
 import { modeLabel } from "./modes"
-import { personalOwnerOf } from "./consent-accounts"
+import { isPersonalConnector } from "./consent-accounts"
 import { chooseAccount, type TeamRef } from "./resolution"
 
 /** Une ligne par connecteur, jamais plus (le moteur de blocs coupe le bloc, H30). */
@@ -36,9 +36,9 @@ type Need = "read" | "write"
 
 const NEEDS: Need[] = ["read", "write"]
 
-/** Ce qu'obtient un appel que porte `team` (`null` : aucune équipe), pour la fonction donnée. */
-function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[], team: TeamRef | null, personalOwner: string | undefined): NeedOutcome {
-  const choice = chooseAccount({ fn, accounts, team, personalOwner })
+/** Ce qu'obtient un appel de `caller` que porte `team` (`null` : aucune équipe), pour la fonction donnée. */
+function needOutcome(fn: CatalogFunction, accounts: readonly ConnectorAccount[], team: TeamRef | null, caller: { id: string; personal: boolean }): NeedOutcome {
+  const choice = chooseAccount({ fn, accounts, team, caller: caller.id, personal: caller.personal })
   if (choice.kind === "account") {
     const { id, label, mode, level } = choice.account
     // La marque du compte (clé refusée, crédits épuisés) : il est pris quand même, le modèle l'apprend avant l'appel.
@@ -62,13 +62,15 @@ export function connectorOutlook(input: {
   functions: readonly CatalogFunction[]
   accounts: readonly ConnectorAccount[]
   team: TeamRef | null
-  /** La personne dont le compte porte un connecteur dont chaque personne connecte le sien (`personalOwnerOf`). */
-  personalOwner?: string
+  /** L'appelant, dont le compte personnel porte l'appel en tête (H83). */
+  caller: string
+  /** Un connecteur dont chaque personne connecte le sien (`isPersonalConnector`) : faute de compte, elle connecte le sien. */
+  personal?: boolean
 }): ConnectorOutlook {
   const outlook: ConnectorOutlook = { connector: input.connector }
   for (const need of NEEDS) {
     const fn = input.functions.find((candidate) => (candidate.class === "read") === (need === "read"))
-    if (fn) outlook[need] = needOutcome(fn, input.accounts, input.team, input.personalOwner)
+    if (fn) outlook[need] = needOutcome(fn, input.accounts, input.team, { id: input.caller, personal: input.personal === true })
   }
   return outlook
 }
@@ -157,11 +159,12 @@ export async function teamConnectorLines(db: PlatformDb, identity: Identity): Pr
     const owning = identity.teams.filter((team) =>
       accounts.some((account) => account.status === "active" && account.owner.kind === "team" && account.owner.teamId === team.id),
     )
+    const caller = { caller: identity.user.id, personal: isPersonalConnector(connector) }
     for (const { id, slug, name } of owning) {
-      const outlook = connectorOutlook({ connector, functions, accounts, team: { id, slug, name } })
+      const outlook = connectorOutlook({ connector, functions, accounts, team: { id, slug, name }, ...caller })
       lines.teams.set(id, [...(lines.teams.get(id) ?? []), ...connectorLines([outlook])])
     }
-    if (owning.length === 0) lines.everyone.push(...connectorLines([connectorOutlook({ connector, functions, accounts, team: null, personalOwner: personalOwnerOf(connector, identity) })]))
+    if (owning.length === 0) lines.everyone.push(...connectorLines([connectorOutlook({ connector, functions, accounts, team: null, ...caller })]))
   }
   return lines
 }

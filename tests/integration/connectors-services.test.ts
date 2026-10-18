@@ -225,7 +225,8 @@ describe.skipIf(!sqlConfigured || privatePending)(
             connector: "mail",
             mode: "simule",
             owner: { kind: "team", teamId: o.teams.support, userId: null, description: "team Support" },
-            level: "write",
+            // Un membre va jusqu'aux fonctions sensibles du compte de son équipe (partage des comptes, #68).
+            level: "sensitive",
           },
         ])
         expect(JSON.stringify(usable)).not.toContain("secret")

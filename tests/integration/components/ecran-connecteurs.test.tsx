@@ -24,7 +24,7 @@ const MAIL_ACTIF: OrgConnector = {
 }
 const MAIL_INACTIF: OrgConnector = { ...MAIL_ACTIF, state: "inactive", activatedAt: null, activatedBy: null }
 
-const MAIL_VENTES: AccountView = { id: COMPTE, label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active" }
+const MAIL_VENTES: AccountView = { id: COMPTE, label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "manage" }
 
 const DONNEES: DonneesDesConnecteurs = {
   connectors: [MAIL_ACTIF],
@@ -197,7 +197,7 @@ const FORMULAIRE_CRM: ConnectorAccountForm = {
   ],
   settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
 }
-const CRM_VENTES: AccountView = { id: COMPTE, label: "Crm Ventes", connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: [], updatedAt: null }, settings: {} }
+const CRM_VENTES: AccountView = { id: COMPTE, label: "Crm Ventes", connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: [], updatedAt: null }, settings: {}, viewerLevel: "manage" }
 const VIVANTS: Partial<DonneesDesConnecteurs> = { connectors: [CRM], impacts: {}, accounts: [CRM_VENTES], formulaires: [FORMULAIRE_CRM] }
 
 describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-champs)", () => {
@@ -280,6 +280,7 @@ const MON_COMPTE_MS: AccountView = {
   status: "active",
   secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" },
   settings: {},
+  viewerLevel: "manage",
 }
 
 describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
@@ -385,5 +386,55 @@ describe("capacités atteintes (E12-S02, AC-10)", () => {
     expect(screen.getByRole("button", { name: "Activer" })).toBeDisabled()
     expect(screen.getByText(/Limite atteinte : 0 connecteur actif sur 0\./)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?from=pkg&capacity=connectors_max")
+  })
+})
+
+describe("EcranConnecteurs, the share journal of an account (#68)", () => {
+  const MON_COMPTE: AccountView = { ...MAIL_VENTES, label: "Mail Léa", owner: { kind: "user" } }
+
+  it("should read the journal of an account the person manages on opening, and say each share in French", async () => {
+    fetchMock.mockResolvedValue(
+      reponse(200, {
+        data: {
+          label: "Mail Léa",
+          events: [
+            { at: "2026-10-18T09:12:00.000Z", action: "removed", subject: { kind: "user", name: "Paul Durand" }, level: "read", previous: null, by: { name: "Léa Bernard" } },
+            { at: "2026-10-17T08:00:00.000Z", action: "set", subject: { kind: "team", name: "Support" }, level: "write", previous: "read", by: { name: null } },
+            { at: "2026-10-16T08:00:00.000Z", action: "set", subject: { kind: "org", name: null }, level: "sensitive", previous: null, by: null },
+          ],
+        },
+      }),
+    )
+    rendre({ accounts: [MON_COMPTE] })
+    const bouton = screen.getByRole("button", { name: "Journal des partages de Mail Léa" })
+    expect(bouton).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(bouton)
+
+    const journal = await screen.findByRole("list", { name: "Journal des partages de Mail Léa" })
+    expect(within(journal).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
+      expect.stringMatching(/^18 octobre 2026 à \d\d:12 · Léa Bernard a retiré le partage à Paul Durand \(en lecture\)$/),
+      expect.stringMatching(/^17 octobre 2026 à \d\d:00 · Une personne qui n'est plus membre a partagé à l'équipe Support en écriture \(avant : en lecture\)$/),
+      expect.stringMatching(/^16 octobre 2026 à \d\d:00 · Hors session a partagé à toute l'organisation jusqu'aux fonctions sensibles$/),
+    ])
+    expect(envoi()).toEqual({ url: `/api/platform/admin/accounts/${COMPTE}/share-journal`, methode: "GET", corps: undefined })
+    expect(bouton).toHaveAttribute("aria-expanded", "true")
+  })
+
+  it("should say an empty journal and a refused read", async () => {
+    fetchMock.mockResolvedValueOnce(reponse(200, { data: { label: "Mail Léa", events: [] } }))
+    rendre({ accounts: [MON_COMPTE] })
+    fireEvent.click(screen.getByRole("button", { name: "Journal des partages de Mail Léa" }))
+    expect(await screen.findByText("Aucun partage posé ni retiré sur ce compte.")).toBeInTheDocument()
+    cleanup()
+
+    fetchMock.mockResolvedValueOnce(reponse(403, { error: { code: "forbidden" } }))
+    rendre({ accounts: [MON_COMPTE] })
+    fireEvent.click(screen.getByRole("button", { name: "Journal des partages de Mail Léa" }))
+    expect(await screen.findByRole("alert")).toBeInTheDocument()
+  })
+
+  it("should offer no journal on an account the person does not manage", () => {
+    rendre({ accounts: [{ ...MON_COMPTE, label: "Mail Claire", viewerLevel: "write" }] })
+    expect(screen.queryByRole("button", { name: /Journal des partages/ })).toBeNull()
   })
 })

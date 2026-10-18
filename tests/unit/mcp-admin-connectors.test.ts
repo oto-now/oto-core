@@ -25,7 +25,8 @@ const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
 
 const ACTIVATED_AT = "2026-09-24T10:00:00.000Z"
-const DEFAULTS = "Without a rule, members read an organisation account, its team writes a team account, its owner manages a personal one."
+const DEFAULTS =
+  "Without a rule, members read an organisation account, its team uses a team account up to its sensitive functions, its owner manages a personal one. A sensitive function needs the level sensitive, above write."
 const NOTHING = (verb: string) => `Nothing was ${verb}. Show this to the user and ask for explicit approval, then call again with confirm: true.`
 
 const accountId = (n: number) => `c1000000-0000-4000-8000-00000000000${n}`

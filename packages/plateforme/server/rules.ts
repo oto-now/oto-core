@@ -17,16 +17,20 @@
 // `access-levels.ts`, E01-S07).
 import {
   ACCESS_LEVEL_NAMES,
+  ACCOUNT_LEVEL_NAMES,
   nodePathSchema,
   setAccountRuleSchema,
   setNodeRuleSchema,
   type AccessLevelName,
+  type AccountLevelName,
+  type AccountRuleSubject,
   type NodeRulesView,
   type RuledNodeView,
   type RuleSubject,
 } from "../schemas"
 import {
   ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   nodeLevel,
   nodeLevels,
   nodeOwner,
@@ -34,6 +38,7 @@ import {
   requireNodeLevel,
   unknownPath,
   type AccessLevel,
+  type AccountLevel,
   type NodeAction,
   type Owner,
 } from "./access"
@@ -172,10 +177,11 @@ async function requireSubject(sql: Tx, identity: Identity, subject: RuleSubject)
 }
 
 /**
- * Une règle à poser : sa cible (un nœud ou un compte, par sa colonne), son sujet (toute l'organisation
- * sur un nœud seulement, ADR-014), son niveau.
+ * Une règle à poser : sa cible (un nœud ou un compte, par sa colonne), son sujet (une équipe, une personne ou toute
+ * l'organisation, ADR-014 ; sur un compte aussi depuis le partage des comptes), son niveau (`sensitive` sur un compte
+ * seulement, contrainte `access_rules_level_check`).
  */
-type RuleWrite = { target: { column: "node_id" | "account_id"; id: string }; subject: RuleSubject | { kind: "org" }; level: AccessLevelName }
+type RuleWrite = { target: { column: "node_id" | "account_id"; id: string }; subject: RuleSubject | { kind: "org" }; level: AccessLevelName | AccountLevelName }
 
 /**
  * Pose la règle du sujet sur la cible, ou remplace son niveau (AC17, fiche D4), dans la transaction de
@@ -272,11 +278,32 @@ export async function removeRule(db: PlatformDb, identity: Identity, ruleId: unk
 // ------------------------------------------------------------------ Règles d'un compte (E08-S06, N10)
 // Sur le modèle des règles d'un nœud : un compte se lit au niveau 1, une règle s'y pose ou s'en retire à
 // la gestion du compte (`requireAccountLevel`, H67), `manage` réservé à `isOrgAdmin` (fiche D4), le
-// sujet est de l'organisation ; tout est décidé avant la requête (H123). Un compte n'hérite de rien : la
-// règle du sujet sur le compte même décide, sinon les défauts de H67.
+// sujet est de l'organisation, ou l'organisation entière (`droits-d-acces.md` § Partage d'un compte de connecteur) ;
+// tout est décidé avant la requête (H123). Un compte n'hérite de rien : la règle du sujet sur le compte même décide,
+// sinon les défauts de H67. Les niveaux sont ceux de l'échelle des comptes (`ACCOUNT_LEVELS`, `sensitive` compris).
+// Chaque règle posée ou retirée sur un compte entre au journal des partages (`account_share_events`), par déclencheur,
+// dans la transaction qui l'écrit ; qui gère le compte le lit (`listAccountShareJournal`).
 
-/** Les règles d'un compte telles que les lit le MCP admin : le compte, son propriétaire, le niveau de l'appelant. */
-export type AccountRulesView = { id: string; label: string; owner: Owner; viewerLevel: AccessLevel; rules: NodeRulesView["rules"] }
+/** Une règle d'un compte : son sujet nommé et son niveau, sur l'échelle des comptes. */
+type AccountRuleView = { id: string; subject: { kind: "team" | "user"; id: string; name: string }; level: AccountLevelName }
+
+/**
+ * Les règles d'un compte telles que les lit le MCP admin : le compte, son propriétaire, le niveau de l'appelant, les
+ * règles des équipes et des personnes, et à part celle de toute l'organisation (`general`).
+ */
+export type AccountRulesView = {
+  id: string
+  label: string
+  owner: Owner
+  viewerLevel: AccountLevel
+  rules: AccountRuleView[]
+  general: { id: string; level: AccountLevelName } | null
+}
+
+/** Le niveau d'une règle de compte lu en base, nommé comme `ACCOUNT_LEVEL_NAMES` ; toute autre valeur : `none`. */
+export function accountLevelName(value: string): AccountLevelName {
+  return ACCOUNT_LEVEL_NAMES.find((name) => name === value) ?? "none"
+}
 
 type AccountRow = { id: string; label: string; owner_kind: string; owner_team_id: string | null; owner_user_id: string | null }
 
@@ -288,7 +315,7 @@ function accountRulesChanged(label: string): string {
  * Le compte de l'organisation et son propriétaire (H67) ; le niveau `needed` exigé de l'appelant, sinon le
  * refus d'`access.ts`. Un compte invisible (niveau 0) répond comme un identifiant inconnu, sans son libellé (H68).
  */
-async function readAccount({ db, sql }: InOperation, identity: Identity, accountId: string, needed: AccessLevel) {
+export async function readAccount({ db, sql }: InOperation, identity: Identity, accountId: string, needed: AccountLevel) {
   const unknownAccount = () => new PlatformError("not_found", `Unknown account ${accountId}.`)
   const [row] = await sql<AccountRow[]>`
     select id, label, owner_kind, owner_team_id, owner_user_id from platform.accounts where id = ${accountId} and org_id = ${identity.org.id}`
@@ -308,7 +335,7 @@ async function readAccount({ db, sql }: InOperation, identity: Identity, account
 export async function listAccountRules(db: PlatformDb, identity: Identity, accountId: unknown): Promise<AccountRulesView> {
   const id = parseId(accountId, "account")
   return inTransaction(db, "listAccountRules", async (sql) => {
-    const account = await readAccount({ db, sql }, identity, id, ACCESS_LEVELS.read)
+    const account = await readAccount({ db, sql }, identity, id, ACCOUNT_LEVELS.read)
     // Rangées par id, comme les pages qu'en lisait PostgREST : un même nom garde son ordre.
     const rows = await sql<RuleRow[]>`
       select id, subject_team_id, subject_user_id, subject_org, level from platform.access_rules
@@ -319,34 +346,45 @@ export async function listAccountRules(db: PlatformDb, identity: Identity, accou
     const [teams, directory] = await Promise.all([readTeams(), memberDirectory(db, identity.org.id)])
     const teamName = new Map(teams.map((team) => [team.id, team.name]))
     const personName = new Map(directory.map((person) => [person.userId, person.name]))
-    const rules = rows.map((rule) => {
-      const subject = rule.subject_team_id
-        ? { kind: "team" as const, id: rule.subject_team_id, name: teamName.get(rule.subject_team_id) ?? rule.subject_team_id }
-        : { kind: "user" as const, id: rule.subject_user_id ?? "", name: personName.get(rule.subject_user_id ?? "") ?? rule.subject_user_id ?? "" }
-      return { id: rule.id, subject, level: levelName(rule.level) }
-    })
+    const rules = rows
+      .filter((rule) => !rule.subject_org)
+      .map((rule): AccountRuleView => {
+        const subject = rule.subject_team_id
+          ? { kind: "team" as const, id: rule.subject_team_id, name: teamName.get(rule.subject_team_id) ?? rule.subject_team_id }
+          : { kind: "user" as const, id: rule.subject_user_id ?? "", name: personName.get(rule.subject_user_id ?? "") ?? rule.subject_user_id ?? "" }
+        return { id: rule.id, subject, level: accountLevelName(rule.level) }
+      })
     rules.sort((a, b) => Number(a.subject.kind === "user") - Number(b.subject.kind === "user") || a.subject.name.localeCompare(b.subject.name, "fr"))
-    return { id: account.id, label: account.label, owner: account.owner, viewerLevel: account.level, rules }
+    const general = rows.find((rule) => rule.subject_org)
+    return {
+      id: account.id,
+      label: account.label,
+      owner: account.owner,
+      viewerLevel: account.level,
+      rules,
+      general: general ? { id: general.id, level: accountLevelName(general.level) } : null,
+    }
   })
 }
 
 /**
  * Pose une règle sur un compte, ou remplace le niveau de la règle du même sujet (`saveRule`, comme
- * `setNodeRule`). La gestion du compte est exigée avant toute écriture ; sans elle, aucune requête
- * d'écriture ne part.
+ * `setNodeRule`) : pour une équipe, une personne ou toute l'organisation (`subject.kind` `org`, partage des comptes),
+ * au niveau `read`, `write`, `sensitive` ou, par l'administrateur, `manage`. La gestion du compte est exigée avant
+ * toute écriture ; sans elle, aucune requête d'écriture ne part. Le journal des partages en garde la trace (déclencheur).
  */
 export async function setAccountRule(
   db: PlatformDb,
   identity: Identity,
   input: unknown,
-): Promise<Mutation<{ id: string; accountId: string; label: string; subject: RuleSubject; level: AccessLevelName; created: boolean }>> {
+): Promise<Mutation<{ id: string; accountId: string; label: string; subject: AccountRuleSubject; level: AccountLevelName; created: boolean }>> {
   const parsed = setAccountRuleSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const { subject, level } = parsed.data
   return inTransaction(db, "setAccountRule", async (sql) => {
-    const account = await readAccount({ db, sql }, identity, parsed.data.accountId, ACCESS_LEVELS.manage)
+    const account = await readAccount({ db, sql }, identity, parsed.data.accountId, ACCOUNT_LEVELS.manage)
     if (level === "manage") requireAdmin(identity, "grant the manage level")
-    await requireSubject(sql, identity, subject)
+    if (subject.kind !== "org") await requireSubject(sql, identity, subject)
 
     const target = { column: "account_id" as const, id: account.id }
     const saved = await saveRule(sql, identity, { target, subject, level }, { context: "setAccountRule", message: accountRulesChanged(account.label) })
@@ -370,7 +408,7 @@ export async function removeAccountRule(db: PlatformDb, identity: Identity, rule
     const [rule] = await sql<{ id: string; account_id: string | null }[]>`select id, account_id from platform.access_rules where id = ${id} and org_id = ${identity.org.id}`
     const ruleAccount = rule?.account_id
     if (!ruleAccount) throw unknownRule()
-    const account = await readAccount({ db, sql }, identity, ruleAccount, ACCESS_LEVELS.manage).catch((refusal: unknown) => {
+    const account = await readAccount({ db, sql }, identity, ruleAccount, ACCOUNT_LEVELS.manage).catch((refusal: unknown) => {
       throw isPlatformError(refusal) && refusal.code === "not_found" ? unknownRule() : refusal
     })
     const deleted = await sql`delete from platform.access_rules where id = ${id} returning id`

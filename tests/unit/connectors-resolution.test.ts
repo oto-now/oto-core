@@ -6,9 +6,10 @@
 // rend ce que la personne ne lit pas : un tableau, une procédure ou un compte invisible ne décide rien
 // (E01-S07 AC23).
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import type { AccountLevel } from "../../packages/plateforme/server/access-levels"
 import type { ConnectorAccount } from "../../packages/plateforme/server/connectors/accounts"
+import { accountRefusal, type RefusalWords } from "../../packages/plateforme/server/connectors/account-refusals"
 import {
-  accountRefusal,
   chooseAccount,
   chooseTeam,
   lastProcedure,
@@ -17,7 +18,6 @@ import {
   teamRefusal,
   type AccountChoice,
   type FunctionTraits,
-  type RefusalWords,
   type TeamChoice,
   type TeamChoiceInput,
   type TeamRef,
@@ -45,22 +45,25 @@ const WORDS: RefusalWords = {
   ask: "team Ventes (lead: Claire Morel)",
 }
 
-type Owned = { team?: TeamRef; personal?: boolean; status?: string }
+type Owned = { team?: TeamRef; personal?: boolean; owner?: string; status?: string; ownerLeft?: boolean }
 
-function account(id: string, label: string, owned: Owned, level: 1 | 2 | 3): ConnectorAccount {
+/** L'appelant des cas en mémoire : Ada, à qui n'est pas le compte personnel de Claire. */
+const ADA = "u-ada"
+
+function account(id: string, label: string, owned: Owned, level: AccountLevel): ConnectorAccount {
   const status = owned.status ?? "active"
   const owner = owned.team
     ? { kind: "team" as const, teamId: owned.team.id, userId: null, description: `team ${owned.team.name}` }
     : owned.personal
-      ? { kind: "user" as const, teamId: null, userId: "u-claire", description: "personal" }
+      ? { kind: "user" as const, teamId: null, userId: owned.owner ?? "u-claire", description: "personal" }
       : { kind: "org" as const, teamId: null, userId: null, description: "organisation" }
-  return { id, label, connector: "mail", mode: "simule", owner, status, level }
+  return { id, label, connector: "mail", mode: "simule", owner, status, level, ...(owned.ownerLeft ? { ownerLeft: true } : {}) }
 }
 
 const MAIL_VENTES = account("a-ventes", "Mail Ventes", { team: VENTES }, 2)
 const MAIL_SUPPORT = account("a-support", "Mail Support", { team: SUPPORT }, 2)
 const MAIL_ACME = account("a-acme", "Mail Acme", {}, 2)
-const MAIL_CLAIRE = account("a-claire", "Mail Claire", { personal: true }, 3)
+const MAIL_CLAIRE = account("a-claire", "Mail Claire", { personal: true }, 2)
 
 function teamOf(choice: TeamChoice) {
   if (choice.kind !== "team") throw new Error(`expected a team, got ${choice.kind}`)
@@ -72,9 +75,9 @@ function accountOf(choice: AccountChoice) {
   return choice.account
 }
 
-function refusalOf(choice: AccountChoice, words: RefusalWords = WORDS) {
+function refusalOf(choice: AccountChoice, words: RefusalWords = WORDS, fn: FunctionTraits = CREATE) {
   if (choice.kind === "account") throw new Error(`expected a refusal, got ${choice.account.label}`)
-  return accountRefusal(choice, CREATE, words)
+  return accountRefusal(choice, fn, words)
 }
 
 describe("chooseTeam: team argument (AC10, N2)", () => {
@@ -192,11 +195,11 @@ describe("chooseAccount: order and level (AC14, H83, P37)", () => {
   const all = [MAIL_ACME, MAIL_CLAIRE, MAIL_SUPPORT, MAIL_VENTES]
 
   it("should take the named account, then the running team's, then the organisation's", () => {
-    expect(accountOf(chooseAccount({ fn: CREATE, accounts: all, team: VENTES, account: "Mail Support" }))).toMatchObject({
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: all, team: VENTES, account: "Mail Support" }))).toMatchObject({
       id: "a-support",
       source: "named",
     })
-    expect(accountOf(chooseAccount({ fn: CREATE, accounts: all, team: VENTES }))).toEqual({
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: all, team: VENTES }))).toEqual({
       id: "a-ventes",
       label: "Mail Ventes",
       connector: "mail",
@@ -205,7 +208,7 @@ describe("chooseAccount: order and level (AC14, H83, P37)", () => {
       level: "write",
       source: "team",
     })
-    expect(accountOf(chooseAccount({ fn: CREATE, accounts: [MAIL_ACME, MAIL_SUPPORT], team: VENTES }))).toMatchObject({
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_ACME, MAIL_SUPPORT], team: VENTES }))).toMatchObject({
       id: "a-acme",
       source: "organisation",
     })
@@ -213,38 +216,42 @@ describe("chooseAccount: order and level (AC14, H83, P37)", () => {
 
   it("should skip a team account where a rule leaves the person read only, for a write or sensitive function", () => {
     const readOnly = account("a-ventes", "Mail Ventes", { team: VENTES }, 1)
+    const acme = account("a-acme", "Mail Acme", {}, 3)
     for (const fn of [CREATE, SEND]) {
-      expect(accountOf(chooseAccount({ fn, accounts: [readOnly, MAIL_ACME], team: VENTES })).id).toBe("a-acme")
+      expect(accountOf(chooseAccount({ caller: ADA, fn, accounts: [readOnly, acme], team: VENTES })).id).toBe("a-acme")
     }
-    expect(accountOf(chooseAccount({ fn: LIST, accounts: [readOnly, MAIL_ACME], team: VENTES }))).toMatchObject({ id: "a-ventes", level: "read" })
+    expect(accountOf(chooseAccount({ caller: ADA, fn: LIST, accounts: [readOnly, acme], team: VENTES }))).toMatchObject({ id: "a-ventes", level: "read" })
+    // Une écriture n'ouvre plus les fonctions sensibles (#68) : le compte de l'organisation partagé en écriture
+    // sert la création, pas l'envoi.
+    expect(chooseAccount({ caller: ADA, fn: SEND, accounts: [readOnly, MAIL_ACME], team: VENTES })).toMatchObject({ kind: "below_level" })
   })
 
   it("should never resolve a disabled or failing account, nor a personal one that is not named", () => {
     const off = account("a-ventes", "Mail Ventes", { team: VENTES, status: "disabled" }, 3)
     const broken = account("a-acme", "Mail Acme", { status: "error" }, 3)
-    expect(chooseAccount({ fn: CREATE, accounts: [off, broken, MAIL_CLAIRE], team: VENTES })).toEqual({ kind: "none", team: VENTES })
-    expect(accountOf(chooseAccount({ fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES, account: "a-claire" }))).toMatchObject({
+    expect(chooseAccount({ caller: ADA, fn: CREATE, accounts: [off, broken, MAIL_CLAIRE], team: VENTES })).toEqual({ kind: "none", team: VENTES, shared: [MAIL_CLAIRE] })
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES, account: "a-claire" }))).toMatchObject({
       source: "named",
-      level: "manage",
+      level: "write",
     })
   })
 })
 
 describe("chooseAccount: named account (AC15, N3)", () => {
   it("should refuse an unknown name without trying another account", () => {
-    const choice = chooseAccount({ fn: CREATE, accounts: [MAIL_VENTES, account("a-ro", "Mail Lecture", {}, 1)], team: VENTES, account: " mail compta " })
+    const choice = chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_VENTES, account("a-ro", "Mail Lecture", {}, 1)], team: VENTES, account: " mail compta " })
     const error = refusalOf(choice)
     expect(error.code).toBe("not_found")
     expect(error.message).toBe(
       "Unknown account « mail compta » for mail. Accounts you can use: « Mail Ventes » (team Ventes, simulated). No other account was tried.",
     )
-    expect(refusalOf(chooseAccount({ fn: CREATE, accounts: [], team: VENTES, account: "x" })).message).toBe(
+    expect(refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: VENTES, account: "x" })).message).toBe(
       "Unknown account « x » for mail. Accounts you can use: none. No other account was tried.",
     )
   })
 
   it("should refuse a named account below the level of the class, saying whom to ask", () => {
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [account("a-ventes", "Mail Ventes", { team: VENTES }, 1)], team: null, account: "MAIL VENTES" }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [account("a-ventes", "Mail Ventes", { team: VENTES }, 1)], team: null, account: "MAIL VENTES" }))
     expect(error.code).toBe("forbidden")
     expect(error.message).toBe(
       "Account « Mail Ventes » cannot run mail.create_draft for you (write access needed). Ask team Ventes (lead: Claire Morel) for access.",
@@ -253,27 +260,27 @@ describe("chooseAccount: named account (AC15, N3)", () => {
 
   it("should refuse a disabled named account", () => {
     const off = account("a-ventes", "Mail Ventes", { team: VENTES, status: "disabled" }, 3)
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [off, MAIL_ACME], team: VENTES, account: "Mail Ventes" }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [off, MAIL_ACME], team: VENTES, account: "Mail Ventes" }))
     expect(error.code).toBe("not_enabled")
     expect(error.message).toBe("Account « Mail Ventes » is disabled. Ask team Ventes (lead: Claire Morel) to enable it, or name another account.")
   })
 
   it("should refuse a named account in error, asking to fix it (N20)", () => {
     const broken = account("a-ventes", "Mail Ventes", { team: VENTES, status: "error" }, 3)
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [broken, MAIL_ACME], team: VENTES, account: "Mail Ventes" }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [broken, MAIL_ACME], team: VENTES, account: "Mail Ventes" }))
     expect(error.code).toBe("not_enabled")
     expect(error.message).toBe("Account « Mail Ventes » is in error. Ask team Ventes (lead: Claire Morel) to fix it, or name another account.")
   })
 
   it("should refuse the level before the state of a named account both disabled and below the level (N30)", () => {
     const off = account("a-ventes", "Mail Ventes", { team: VENTES, status: "disabled" }, 1)
-    expect(chooseAccount({ fn: CREATE, accounts: [off], team: VENTES, account: "Mail Ventes" })).toEqual({ kind: "named_below_level", account: off })
+    expect(chooseAccount({ caller: ADA, fn: CREATE, accounts: [off], team: VENTES, account: "Mail Ventes" })).toEqual({ kind: "named_below_level", account: off })
   })
 
   it("should find an account by its id, and refuse two labels that only an accent tells apart", () => {
-    expect(accountOf(chooseAccount({ fn: CREATE, accounts: [MAIL_VENTES], team: null, account: "A-VENTES" })).id).toBe("a-ventes")
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_VENTES], team: null, account: "A-VENTES" })).id).toBe("a-ventes")
     const accented = account("a-accent", "Mail Véntes", {}, 2)
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [MAIL_VENTES, accented], team: VENTES, account: "Mail Ventes" }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_VENTES, accented], team: VENTES, account: "Mail Ventes" }))
     expect(error.code).toBe("ambiguous_account")
     expect(error.message).toBe(
       'Several mail accounts are named « Mail Ventes »: « Mail Ventes » (team Ventes, id a-ventes), « Mail Véntes » (organisation, id a-accent). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<id>".',
@@ -283,18 +290,18 @@ describe("chooseAccount: named account (AC15, N3)", () => {
 
 describe("chooseAccount: nothing usable (AC16, N5, N6)", () => {
   it("should refuse when no account is visible, with the dashboard link", () => {
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [], team: VENTES }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: VENTES }))
     expect(error.code).toBe("not_enabled")
     expect(error.message).toBe(
-      "No mail account is connected for you (team Ventes, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.example.test/admin/connectors.",
+      "No mail account is connected for you (your own, team Ventes, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.example.test/admin/connectors.",
     )
-    const alone = refusalOf(chooseAccount({ fn: CREATE, accounts: [], team: null }))
-    expect(alone.message).toContain("(the organisation). Ask an administrator of Acme Test (Ada Martin)")
+    const alone = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: null }))
+    expect(alone.message).toContain("(your own, then the organisation). Ask an administrator of Acme Test (Ada Martin)")
   })
 
   it("should refuse when the visible accounts are all below the level, saying whom to ask", () => {
     const readOnly = account("a-acme", "Mail Acme", {}, 1)
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts: [readOnly], team: VENTES }), {
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [readOnly], team: VENTES }), {
       ...WORDS,
       ask: "the administrators of Acme Test (Ada Martin)",
     })
@@ -306,41 +313,125 @@ describe("chooseAccount: nothing usable (AC16, N5, N6)", () => {
 
   it("should never choose silently between two usable accounts of the same step", () => {
     const second = account("a-ventes-2", "Mail Ventes 2", { team: VENTES }, 2)
-    const atTeam = refusalOf(chooseAccount({ fn: CREATE, accounts: [MAIL_VENTES, second, MAIL_ACME], team: VENTES }))
+    const atTeam = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_VENTES, second, MAIL_ACME], team: VENTES }))
     expect(atTeam.code).toBe("ambiguous_account")
     expect(atTeam.message).toBe(
       'Several mail accounts of team Ventes can run mail.create_draft: « Mail Ventes », « Mail Ventes 2 ». Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".',
     )
     const acme2 = account("a-acme-2", "Mail Acme 2", {}, 2)
-    expect(refusalOf(chooseAccount({ fn: CREATE, accounts: [MAIL_ACME, acme2], team: VENTES })).message).toBe(
+    expect(refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_ACME, acme2], team: VENTES })).message).toBe(
       'Several mail accounts of the organisation can run mail.create_draft: « Mail Acme », « Mail Acme 2 ». Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".',
     )
   })
 })
 
+describe("chooseAccount: personal accounts and shares (#68)", () => {
+  const MAIL_ADA = account("a-ada", "Mail Ada", { personal: true, owner: ADA }, 4)
+  const OWNERS: RefusalWords = { ...WORDS, owners: new Map([["u-claire", "Claire Morel"]]) }
+
+  it("should take the caller's own personal account first, before the team's and the organisation's, unnamed", () => {
+    expect(accountOf(chooseAccount({ caller: ADA, fn: SEND, accounts: [MAIL_ACME, MAIL_VENTES, MAIL_ADA], team: VENTES }))).toMatchObject({
+      id: "a-ada",
+      level: "manage",
+      source: "personal",
+    })
+    // Le sien hors d'usage, l'ordre reprend : l'équipe, puis l'organisation.
+    const off = account("a-ada", "Mail Ada", { personal: true, owner: ADA, status: "disabled" }, 4)
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_ACME, MAIL_VENTES, off], team: VENTES }))).toMatchObject({ source: "team" })
+  })
+
+  it("should apply the same order to a consent connector, the personal flag only changing the refusal", () => {
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_ACME, MAIL_ADA], team: null, personal: true })).id).toBe("a-ada")
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_ACME], team: null, personal: true })).id).toBe("a-acme")
+  })
+
+  it("should never serve another person's personal account unnamed, even shared at the needed level", () => {
+    const choice = chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES })
+    expect(choice).toEqual({ kind: "none", team: VENTES, shared: [MAIL_CLAIRE] })
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES, account: "Mail Claire" }))).toMatchObject({
+      id: "a-claire",
+      source: "named",
+    })
+  })
+
+  it("should name the personal accounts shared with the caller and their owner when no account serves", () => {
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES }), OWNERS)
+    expect(error.code).toBe("not_enabled")
+    expect(error.message).toBe(
+      "No mail account is connected for you (your own, team Ventes, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.example.test/admin/connectors." +
+        ' Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".',
+    )
+    expect(error.details).toEqual({ shared_accounts: [{ id: "a-claire", label: "Mail Claire", owner: "Claire Morel" }] })
+    // Sous le niveau partout ailleurs, la même mention suit le refus.
+    const readOnly = account("a-acme", "Mail Acme", {}, 1)
+    const below = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [readOnly, MAIL_CLAIRE], team: null }), OWNERS)
+    expect(below.code).toBe("forbidden")
+    expect(below.message).toContain("Ask team Ventes (lead: Claire Morel) for access. Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel")
+  })
+
+  it("should leave out of the mention a shared account below the level, inactive or whose owner left", () => {
+    const readOnly = account("a-claire", "Mail Claire", { personal: true }, 1)
+    const left = account("a-paul", "Mail Paul", { personal: true, owner: "u-paul", ownerLeft: true }, 2)
+    const off = account("a-zoe", "Mail Zoé", { personal: true, owner: "u-zoe", status: "disabled" }, 2)
+    expect(chooseAccount({ caller: ADA, fn: CREATE, accounts: [readOnly, left, off], team: null })).toEqual({ kind: "none", team: null, shared: [] })
+    expect(refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [readOnly, left, off], team: null })).message).not.toContain("Personal accounts")
+  })
+
+  it("should refuse a named account whose owner left, saying so, and serve it again once they are back", () => {
+    const left = account("a-claire", "Mail Claire", { personal: true, ownerLeft: true }, 2)
+    const choice = chooseAccount({ caller: ADA, fn: CREATE, accounts: [left, MAIL_ACME], team: null, account: "Mail Claire" })
+    expect(choice).toEqual({ kind: "named_owner_left", account: left })
+    const error = refusalOf(choice, OWNERS)
+    expect(error.code).toBe("not_enabled")
+    expect(error.message).toBe("Account « Mail Claire » no longer serves: its owner has left Acme Test. Name another account.")
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: null, account: "Mail Claire" })).id).toBe("a-claire")
+  })
+
+  it("should ask the caller to connect theirs on a consent connector, naming the shared ones", () => {
+    const choice = chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: null, personal: true })
+    expect(choice).toEqual({ kind: "connect_needed", account: null, shared: [MAIL_CLAIRE] })
+    expect(refusalOf(choice, OWNERS).message).toContain("Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated).")
+    const broken = account("a-ada", "Mail Ada", { personal: true, owner: ADA, status: "error" }, 4)
+    expect(chooseAccount({ caller: ADA, fn: CREATE, accounts: [broken, MAIL_CLAIRE], team: null, personal: true })).toEqual({
+      kind: "connect_needed",
+      account: broken,
+      shared: [MAIL_CLAIRE],
+    })
+  })
+
+  it("should refuse a sensitive function on an account shared in write, and serve it once shared up to sensitive", () => {
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: SEND, accounts: [MAIL_CLAIRE], team: null, account: "Mail Claire" }), WORDS, SEND)
+    expect(error.code).toBe("forbidden")
+    expect(error.message).toBe("Account « Mail Claire » cannot run mail.send_draft for you (sensitive access needed). Ask team Ventes (lead: Claire Morel) for access.")
+    const sensitive = account("a-claire", "Mail Claire", { personal: true }, 3)
+    expect(accountOf(chooseAccount({ caller: ADA, fn: SEND, accounts: [sensitive], team: null, account: "Mail Claire" }))).toMatchObject({ level: "sensitive" })
+    expect(accountOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: null, account: "Mail Claire" }))).toMatchObject({ level: "write" })
+  })
+})
+
 describe("accountRefusal: lists of 1,000 accounts (N32)", () => {
-  const many = (level: 1 | 2, label = (index: number) => `Mail ${String(index).padStart(4, "0")}`) =>
+  const many = (level: AccountLevel, label = (index: number) => `Mail ${String(index).padStart(4, "0")}`) =>
     Array.from({ length: 1000 }, (_, index) => account(`a-${index}`, label(index), {}, level))
   const first20 = (accounts: ConnectorAccount[], render: (item: ConnectorAccount) => string) => accounts.slice(0, 20).map(render).join(", ")
 
   it("should name 20 usable accounts when the named one is unknown", () => {
     const accounts = many(2)
-    const error = refusalOf(chooseAccount({ fn: CREATE, accounts, team: null, account: "mail compta" }))
+    const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts, team: null, account: "mail compta" }))
     const listed = first20(accounts, (item) => `« ${item.label} » (organisation, simulated)`)
     expect(error.message).toBe(`Unknown account « mail compta » for mail. Accounts you can use: ${listed}, … and 980 more. No other account was tried.`)
   })
 
   it("should name 20 accounts of the same name, of the same step, or below the level", () => {
     const twins = many(2, () => "Mail Ventes")
-    const named = refusalOf(chooseAccount({ fn: CREATE, accounts: twins, team: null, account: "Mail Ventes" }))
+    const named = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: twins, team: null, account: "Mail Ventes" }))
     expect(named.message).toContain(`: ${first20(twins, (item) => `« Mail Ventes » (organisation, id ${item.id})`)}, … and 980 more. Show them`)
 
     const accounts = many(2)
-    const step = refusalOf(chooseAccount({ fn: CREATE, accounts, team: null }))
+    const step = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts, team: null }))
     expect(step.message).toContain(`can run mail.create_draft: ${first20(accounts, (item) => `« ${item.label} »`)}, … and 980 more. Show them`)
 
     const readOnly = many(1)
-    const below = refusalOf(chooseAccount({ fn: CREATE, accounts: readOnly, team: null }))
+    const below = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: readOnly, team: null }))
     expect(below.message).toContain(
       `Accounts you can see but not use this way: ${first20(readOnly, (item) => `« ${item.label} » (organisation, read for you)`)}, … and 980 more. Ask `,
     )

@@ -4,6 +4,7 @@
 // que les écrans d'E08-S03 reprendront (forms-patterns.md § Principe, H02). `zod/v4`, comme tout
 // schemas/ (P1). Les arguments des fonctions `mail.*` restent dans `server/connectors/simulated/`.
 import * as z from "zod/v4"
+import type { AccountLevelName } from "./rules"
 
 /** La contrainte de `connector_activations.connector` (E01-S06). */
 const CONNECTOR_NAME_PATTERN = /^[a-z][a-z0-9_]{0,39}$/
@@ -159,6 +160,8 @@ export type AccountView = {
   statusReason?: string | null
   /** La marque du compte, sa raison et sa date : la clé refusée ou les crédits épuisés ; `null` : aucune. */
   mark?: AccountMark | null
+  /** Le niveau de l'appelant sur le compte, décidé par le service : `manage` ouvre, entre autres, son journal des partages. */
+  viewerLevel: Exclude<AccountLevelName, "none">
 }
 
 /**

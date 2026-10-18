@@ -57,13 +57,20 @@ function seededDraft(): Row {
 }
 
 /**
- * O avec `mail` activé, ses comptes simulés et actifs plus « Mail Support », la procédure
- * `ventes/relance`, le tableau `support/suivi` et un brouillon de « Mail Ventes ».
+ * L'état de départ d'un compte : « Mail Claire » désactivé, sinon le compte personnel de Claire servirait ses appels
+ * avant ceux de ses équipes (partage des comptes, #68) ; les cas de l'ordre des équipes le laissent ainsi, ceux des
+ * comptes personnels l'activent.
+ */
+const statusAtStart = (id: string) => (id === ACCOUNTS.claire.id ? "disabled" : "active")
+
+/**
+ * O avec `mail` activé, ses comptes simulés, actifs sauf « Mail Claire » (`statusAtStart`), plus « Mail Support », la
+ * procédure `ventes/relance`, le tableau `support/suivi` et un brouillon de « Mail Ventes ».
  */
 function callTables(): Tables {
   const tables = referenceTables()
   tables.accounts.push(account(MAIL_SUPPORT.id, MAIL_SUPPORT.label, "support"))
-  for (const row of tables.accounts) Object.assign(row, { mode: "simule", status: "active" })
+  for (const row of tables.accounts) Object.assign(row, { mode: "simule", status: statusAtStart(String(row.id)) })
   tables.connector_activations = [{ org_id: ORG.id, connector: "mail", state: "active" }]
   tables.nodes.push(node("ventes/relance", "procedure"), node("support/suivi", "table"))
   tables.sim_outbox = [seededDraft()]
@@ -81,7 +88,8 @@ async function reset(): Promise<void> {
   await seed.admin`delete from platform.journal where org_id = ${org}`
   await seed.admin`delete from platform.access_rules where org_id = ${org}`
   await seed.admin`delete from platform.accounts where org_id = ${org} and id not in ${seed.admin(kept)}`
-  await seed.admin`update platform.accounts set mode = 'simule', status = 'active' where org_id = ${org}`
+  await seed.admin`update platform.accounts set mode = 'simule', status = case when id = ${ref.id(ACCOUNTS.claire.id)} then 'disabled' else 'active' end
+                   where org_id = ${org}`
   await seed.admin`insert into platform.connector_activations (org_id, connector, state) values (${org}, 'mail', 'active')
                    on conflict (org_id, connector) do update set state = 'active'`
   await ref.write({ sim_outbox: [seededDraft()] })
@@ -186,7 +194,7 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       expect(ref.readable(output.data)).toEqual({
         function: "mail.create_draft",
         team: { slug: "ventes", name: "Ventes" },
-        account: { id: ACCOUNTS.ventes.id, label: "Mail Ventes", mode: "simule" },
+        account: { id: ACCOUNTS.ventes.id, label: "Mail Ventes", mode: "simule", owner: { kind: "team", description: "team Ventes" } },
         result: { draft_id: draft?.id, to: DRAFT.to, subject: DRAFT.subject },
       })
       expect(ref.readable(output)).toMatchObject({ nextActions: [], target: "mail.create_draft", teamId: TEAMS.ventes.id, accountId: ACCOUNTS.ventes.id })
@@ -224,7 +232,7 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       await expect(call(claire, { function: "mail.create_draft", arguments: DRAFT, account: "Mail Compta" })).rejects.toMatchObject({
         code: "not_found",
         message:
-          "Unknown account « Mail Compta » for mail. Accounts you can use: « Mail Claire » (personal, simulated), « Mail Ventes » (team Ventes, simulated), « Mail Ventes 2 » (team Ventes, simulated). No other account was tried.",
+          "Unknown account « Mail Compta » for mail. Accounts you can use: « Mail Ventes » (team Ventes, simulated), « Mail Ventes 2 » (team Ventes, simulated). No other account was tried.",
       })
       await expect(call(claire, { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({
         code: "ambiguous_account",
@@ -254,7 +262,7 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       await expect(notEnabled).rejects.toMatchObject({
         code: "not_enabled",
         message:
-          "No mail account is connected for you (the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.test/admin/connectors.",
+          "No mail account is connected for you (your own, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.test/admin/connectors.",
       })
       const refusals = await Promise.all([forbidden, notEnabled].map((refused) => refused.then(() => "", (error: unknown) => String(error))))
       for (const refused of refusals) expect(hidden.filter((label) => refused.includes(label))).toEqual([])
@@ -348,6 +356,64 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
         })
         expect(writes(), mode).toEqual([])
       }
+    })
+  })
+
+  // Partage des comptes (#68) : le compte personnel de l'appelant sert d'abord, sans être nommé ; celui d'une autre
+  // personne seulement nommé, et l'appel dit à qui il est (texte, données, `lentBy` que le journal écrit en `_lent_by`).
+  describe("runCall: personal accounts and shares (#68)", () => {
+    const activateMailClaire = () => seed.admin`update platform.accounts set status = 'active' where id = ${ref.id(ACCOUNTS.claire.id)}`
+    const CLAIRE_OWNS = { kind: "user", userId: PEOPLE.claire.id, name: "Claire Morel" }
+
+    it("should serve the caller's own personal account before the team of the procedure, unnamed, and say it is hers", async () => {
+      await activateMailClaire()
+      await ref.write({ journal: [contextLine("claire", "ventes/relance")] })
+      const { call } = setup()
+      const output = await call(claireInBoth(), { function: "mail.create_draft", arguments: DRAFT }, { ctxCode: ref.id(CTX) })
+      expect((await outbox()).at(-1)?.account_id).toBe(ACCOUNTS.claire.id)
+      expect(ref.readable(output.data.account)).toEqual({ id: ACCOUNTS.claire.id, label: "Mail Claire", mode: "simule", owner: { ...CLAIRE_OWNS, yours: true } })
+      expect(output.text.split("\n").at(-1)).toBe("Team Ventes · account « Mail Claire » (simulated).")
+      expect(output.lentBy).toBeNull()
+    })
+
+    it("should serve another person's account shared with the caller only when named, and say whose it is", async () => {
+      await activateMailClaire()
+      await ref.addRules([{ account: "claire", user: "marc", level: "write" }])
+      const { call } = setup()
+      const marc = ref.identityOf("marc")
+      await expect(call(marc, { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({
+        code: "forbidden",
+        message:
+          "mail.create_draft needs write access to a mail account. Accounts you can see but not use this way: « Mail Org » (organisation, read for you). Ask the administrators of Acme Test (Ada Martin) for access." +
+          ' Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".',
+      })
+      const output = await call(marc, { function: "mail.create_draft", arguments: DRAFT, account: "Mail Claire" })
+      expect(output.text.split("\n").slice(-2)).toEqual(["No team · account « Mail Claire » (simulated).", "Account « Mail Claire » belongs to Claire Morel, who shared it with you."])
+      expect(ref.readable(output.data.account?.owner)).toEqual({ ...CLAIRE_OWNS, yours: false })
+      expect(ref.readable(output.lentBy)).toBe(PEOPLE.claire.id)
+      expect((await outbox()).at(-1)).toMatchObject({ account_id: ACCOUNTS.claire.id, created_by: PEOPLE.marc.id })
+    })
+
+    it("should refuse a sensitive function on an account shared in write, and say whose it is before the approval once shared up to sensitive", async () => {
+      await activateMailClaire()
+      await ref.addRules([{ account: "claire", user: "marc", level: "write" }])
+      const { call, writes } = setup()
+      const marc = ref.identityOf("marc")
+      const created = await call(marc, { function: "mail.create_draft", arguments: DRAFT, account: "Mail Claire" })
+      if (created.data.status === "needs_confirmation") throw new Error("a draft needs no confirmation")
+      const draftId = String(created.data.result.draft_id)
+      const written = writes().length
+      const refused = call(marc, { function: "mail.send_draft", arguments: { id: draftId }, account: "Mail Claire", confirm: true })
+      await expect(refused).rejects.toMatchObject({ code: "forbidden", message: expect.stringMatching(/^Account « Mail Claire » cannot run mail\.send_draft for you \(sensitive access needed\)\. /) })
+      expect(writes()).toHaveLength(written)
+
+      await seed.admin`update platform.access_rules set level = 'sensitive' where account_id = ${ref.id(ACCOUNTS.claire.id)}`
+      const asked = await call(marc, { function: "mail.send_draft", arguments: { id: draftId }, account: "Mail Claire" })
+      expect(asked.text.split("\n").slice(-3)).toEqual([
+        "Account « Mail Claire » belongs to Claire Morel, who shared it with you.",
+        "",
+        "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true.",
+      ])
     })
   })
 

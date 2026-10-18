@@ -32,6 +32,7 @@ import { questionDeDesactivation, questionDeDesactivationDuCompte } from "../tex
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
 import { CreationDeCompte } from "./creation-de-compte"
+import { JournalDesPartages } from "./journal-des-partages"
 import { SaisieDuCompte } from "./saisie-du-compte"
 
 /** Ce que la page lit pour l'écran : le catalogue et son état, l'impact de chaque désactivation possible, les comptes, les équipes. */
@@ -230,6 +231,7 @@ function LigneDeCompte({ compte, formulaire, ici }: { compte: AccountView; formu
           retour={ici}
         />
       )}
+      {compte.viewerLevel === "manage" && <JournalDesPartages compte={compte} />}
     </Row>
   )
 }

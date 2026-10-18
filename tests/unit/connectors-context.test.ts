@@ -142,37 +142,37 @@ describe("connectorLines (AC21, N8)", () => {
 describe("connectorOutlook (AC21 with AC13 and AC16)", () => {
   it("should resolve the account of the team that runs the calls, for the write functions of mail", () => {
     const accounts = [teamAccount("Mail Ventes", VENTES, 3), teamAccount("Mail Support", SUPPORT, 3)]
-    expect(connectorLines([connectorOutlook({ connector: "mail", functions: MAIL, accounts, team: VENTES })])).toEqual([
+    expect(connectorLines([connectorOutlook({ connector: "mail", functions: MAIL, accounts, team: VENTES, caller: "u-claire" })])).toEqual([
       "mail: team Ventes (write), account « Mail Ventes » (simulated)",
     ])
-    expect(connectorLines([connectorOutlook({ connector: "mail", functions: MAIL, accounts, team: SUPPORT })])).toEqual([
+    expect(connectorLines([connectorOutlook({ connector: "mail", functions: MAIL, accounts, team: SUPPORT, caller: "u-claire" })])).toEqual([
       "mail: team Support (write), account « Mail Support » (simulated)",
     ])
   })
 
   it("should say read only, not no account, when the only account is read only for the person (N39)", () => {
-    const outlook = connectorOutlook({ connector: "mail", functions: MAIL, accounts: [teamAccount("Mail Ventes", VENTES, 1)], team: VENTES })
+    const outlook = connectorOutlook({ connector: "mail", functions: MAIL, accounts: [teamAccount("Mail Ventes", VENTES, 1)], team: VENTES, caller: "u-claire" })
     expect(outlook.write).toEqual({ kind: "read_only", team: VENTES, labels: ["Mail Ventes"] })
   })
 
   it("should give the organisation's step to calls that no team runs", () => {
-    const outlook = connectorOutlook({ connector: "mail", functions: MAIL, accounts: [teamAccount("Mail Ventes", VENTES, 3)], team: null })
+    const outlook = connectorOutlook({ connector: "mail", functions: MAIL, accounts: [teamAccount("Mail Ventes", VENTES, 3)], team: null, caller: "u-claire" })
     expect(outlook.write).toEqual({ kind: "no_account", team: null })
   })
 
   it("should take a marked account all the same, and say its mark and its date (oto-core#69)", () => {
     const marked: ConnectorAccount = { ...teamAccount("X Ventes", VENTES, 3, "reel"), mark: { reason: "quota_exhausted", at: "2026-10-17T09:12:34.000Z" } }
-    const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [marked], team: VENTES })
+    const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [marked], team: VENTES, caller: "u-claire" })
     expect(connectorLines([outlook])).toEqual(["x: team Ventes (write), account « X Ventes » (live), marked: credits spent since 2026-10-17 09:12 UTC"])
     const refused = { ...marked, mark: { reason: "credential_rejected" as const, at: "2026-10-16T22:05:00.000Z" } }
-    expect(connectorLines([connectorOutlook({ connector: "x", functions: X, accounts: [refused], team: VENTES })])).toEqual([
+    expect(connectorLines([connectorOutlook({ connector: "x", functions: X, accounts: [refused], team: VENTES, caller: "u-claire" })])).toEqual([
       "x: team Ventes (write), account « X Ventes » (live), marked: key refused since 2026-10-16 22:05 UTC",
     ])
   })
 
   it("should read with the team's account and write with the organisation's when the team's only reads", () => {
     const acme: ConnectorAccount = { ...teamAccount("X Acme", CONSEIL, 2), owner: { kind: "org", teamId: null, userId: null, description: "organisation" } }
-    const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [teamAccount("X Conseil", CONSEIL, 1), acme], team: CONSEIL })
+    const outlook = connectorOutlook({ connector: "x", functions: X, accounts: [teamAccount("X Conseil", CONSEIL, 1), acme], team: CONSEIL, caller: "u-claire" })
     expect(connectorLines([outlook])).toEqual([
       "x: read with team Conseil, account « X Conseil » (simulated); write with team Conseil, account « X Acme » (simulated)",
     ])

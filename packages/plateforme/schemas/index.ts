@@ -175,7 +175,8 @@ export type { Language } from "./brand"
 // MCP admin (E08-S06) : propriétaires et sujets en références plates (N1) ; règles d'un compte.
 export { accountOwnerRefSchema, ownerRefSchema, subjectRefSchema } from "./admin"
 export type { OwnerRef } from "./admin"
-export { setAccountRuleSchema } from "./rules"
+export { ACCOUNT_LEVEL_NAMES, setAccountRuleSchema } from "./rules"
+export type { AccountLevelName, AccountRuleSubject, AccountShareEventView } from "./rules"
 // L'écran « Équipes et droits » (E05-S09, partie d1) : la recherche, le filtre et le tri de ses tableaux,
 // lus dans l'adresse par la page de l'hôte.
 export { equipesListesSchema } from "./team-screen"

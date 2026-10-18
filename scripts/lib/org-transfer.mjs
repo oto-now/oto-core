@@ -236,6 +236,10 @@ NEVER_EXPORTED.push('connector_consents')
 // Les demandes de branchement hébergé (`accountIdentity`) : une heure, liées à une personne ; et l'identifiant chez le
 // tiers d'un compte (`linked_id`, exclu ci-dessus) ne s'écrit que par la personne qui branche son propre compte.
 NEVER_EXPORTED.push('hosted_link_requests')
+// Le journal des partages d'un compte (partage des comptes) : un déclencheur sur `access_rules` l'écrit ; l'import, qui
+// repose les règles, y écrit leurs lignes « posée » hors session. Les lignes de la source citeraient des équipes et des
+// personnes par leurs anciens identifiants.
+NEVER_EXPORTED.push('account_share_events')
 
 /** @param {string} name */
 function tableSpec(name) {

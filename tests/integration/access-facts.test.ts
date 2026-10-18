@@ -48,7 +48,8 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     expect(reads(sent)).toEqual(["nodes"])
 
     const accounts = await accountLevels(db, lea, [ref.id(ACCOUNTS.org.id), ref.id(ACCOUNTS.ventes.id), ref.id(ACCOUNTS.claire.id)])
-    expect([...accounts.values()]).toEqual([1, 2, 0])
+    // Échelle des comptes (#68) : Léa va jusqu'aux fonctions sensibles du compte de son équipe (3).
+    expect([...accounts.values()]).toEqual([1, 3, 0])
     expect(reads(sent).slice(1).sort()).toEqual(["access_rules", "accounts"])
     // Aucune fonction : ni niveau lu en base, ni `node_owner` pour une liste.
     expect(sent.filter((query) => query.op === "call")).toEqual([])

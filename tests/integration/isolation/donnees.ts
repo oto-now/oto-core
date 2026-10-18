@@ -332,6 +332,10 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   // L'accès général de B (ADR-014) : toute l'organisation B peut modifier son tableau.
   await admin`insert into platform.access_rules (org_id, node_id, subject_org, level, created_by) values (${b.id}, ${table}, true, 'write', ${people.b.id})`
   const rule = await one(admin<{ id: string }[]>`select id from platform.access_rules where org_id = ${b.id} limit 1`, "rule of B read")
+  // Le journal des partages de B (partage des comptes) : le déclencheur d'`access_rules` l'écrit au partage de son
+  // compte « Mail Ventes » à toute l'organisation, posé après la lecture de la règle ci-dessus.
+  await admin`insert into platform.access_rules (org_id, account_id, subject_org, level, created_by) values (${b.id}, ${account.id}, true, 'read', ${people.b.id})`
+  await one(admin`select id from platform.account_share_events where org_id = ${b.id} and account_id = ${account.id}`, "share journal of B read")
   const team = await one(admin<{ id: string }[]>`select id from platform.teams where org_id = ${b.id} and slug = 'support'`, "team of B read")
   // Le lexique (E01-S13) : les déclencheurs de la publication le remplissent (script Démo, marqueurs), aucun
   // client ne l'écrit ; le mot témoin de B y est.

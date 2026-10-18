@@ -11,25 +11,25 @@
 // Repris d'Oto (`docs\roles-and-resolution.md`) : un libellé déjà pris est refusé. Retiré : compte par
 // défaut `is_default`, paliers tenant et plateforme (architecture § 10).
 import {
-  ACCESS_LEVEL_NAMES,
+  ACCOUNT_LEVEL_NAMES,
   connectorRefSchema,
   createAccountSchema,
   disableAccountSchema,
-  type AccessLevelName,
+  type AccountLevelName,
   type AccountMark,
   type AccountMarkReason,
   type AccountMode,
   type AccountView,
 } from "../../schemas"
 import {
-  ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   accountLevel,
   accountLevels,
   administrators,
   describeOwner,
   isOrgAdmin,
   leadsTeam,
-  type AccessLevel,
+  type AccountLevel,
   type Owner,
 } from "../access"
 import { declaredConnector } from "../catalog/connector-source"
@@ -44,8 +44,11 @@ import { requireActivable } from "./activations"
 import { keepDeclaredConnector } from "./declaration"
 import { accountMode, isSimulatedConnector, modeLabel } from "./modes"
 
-/** Niveau sur un compte tel que le lit le modèle : 1 lecture, 2 écriture, 3 gestion (H65) ; les noms d'`ACCESS_LEVEL_NAMES`. */
-export type LevelName = Exclude<AccessLevelName, "none">
+/**
+ * Niveau sur un compte tel que le lit le modèle : 1 lecture, 2 écriture, 3 sensible, 4 gestion (`ACCOUNT_LEVELS`) ; les
+ * noms d'`ACCOUNT_LEVEL_NAMES`.
+ */
+export type LevelName = Exclude<AccountLevelName, "none">
 
 /** Propriétaire d'un compte, décrit comme le lit le modèle : « team Ventes », « organisation », « personal ». */
 export type AccountOwner = Owner & { description: string }
@@ -55,9 +58,16 @@ export type AccountSummary = { id: string; label: string; connector: string; mod
 
 /**
  * Un compte visible de la personne, avec son état, la raison d'un état `error` (un consentement à reconnecter), sa
- * marque (clé refusée, crédits épuisés) et son niveau : ce que lisent les résolutions.
+ * marque (clé refusée, crédits épuisés), son niveau, et, pour un compte personnel, si sa personne a quitté
+ * l'organisation (`ownerLeft`, relu à chaque lecture : son compte ne sert plus aux autres) : ce que lisent les résolutions.
  */
-export type ConnectorAccount = AccountSummary & { status: string; statusReason?: string | null; mark?: AccountMark | null; level: AccessLevel }
+export type ConnectorAccount = AccountSummary & {
+  status: string
+  statusReason?: string | null
+  mark?: AccountMark | null
+  level: AccountLevel
+  ownerLeft?: boolean
+}
 
 /** Les mots d'une raison de marque, dans la langue de la porte. */
 const MARK_WORDS: Record<AccountMarkReason, string> = { credential_rejected: "key refused", quota_exhausted: "credits spent" }
@@ -102,6 +112,12 @@ export type AccountRow = {
   status_reason: string | null
   /** `health -> 'mark'`, lu par `markOf`. */
   mark: unknown
+  /**
+   * Compte personnel dont la personne n'est plus membre de l'organisation (`droits-d-acces.md` § Partage d'un compte
+   * de connecteur) : il cesse de servir aux autres, rien n'est supprimé. Seul point qui dit qu'un propriétaire n'est
+   * plus là : une pause, quand elle existera, s'y ajoutera.
+   */
+  owner_left: boolean
 }
 
 /**
@@ -112,16 +128,17 @@ export type AccountRow = {
 export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string } = {}) {
   return sql<AccountRow[]>`
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
-           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.health -> 'mark' as mark
+           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.health -> 'mark' as mark,
+           a.owner_kind = 'user' and not exists (select 1 from platform.members m where m.org_id = a.org_id and m.user_id = a.owner_user_id) as owner_left
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
        and a.connector = coalesce(${only.connector ?? null}, a.connector)
        and a.id = coalesce(${only.id ?? null}::uuid, a.id)`
 }
 
-/** Niveau d'un compte visible (1 au moins) : `read`, `write` ou `manage`, le nom de son rang (N34). */
-export function levelName(level: AccessLevel): LevelName {
-  const name = ACCESS_LEVEL_NAMES[level]
+/** Niveau d'un compte visible (1 au moins) : `read`, `write`, `sensitive` ou `manage`, le nom de son rang (N34). */
+export function levelName(level: AccountLevel): LevelName {
+  const name = ACCOUNT_LEVEL_NAMES[level]
   return name === "none" ? "read" : name
 }
 
@@ -147,9 +164,16 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
   return (
     rows
-      .map((row) => ({ ...summary(row), status: row.status, statusReason: row.status_reason, mark: markOf(row.mark), level: levels.get(row.id) ?? ACCESS_LEVELS.none }))
+      .map((row) => ({
+        ...summary(row),
+        status: row.status,
+        statusReason: row.status_reason,
+        mark: markOf(row.mark),
+        level: levels.get(row.id) ?? ACCOUNT_LEVELS.none,
+        ownerLeft: row.owner_left,
+      }))
       // Niveau 0 : un compte que la personne ne voit pas n'est ni servi, ni retenu, ni nommé (H83).
-      .filter((account) => account.level >= ACCESS_LEVELS.read)
+      .filter((account) => account.level >= ACCOUNT_LEVELS.read)
       .sort((a, b) => a.label.localeCompare(b.label, "fr"))
   )
 }
@@ -272,7 +296,7 @@ function accountStatus(value: string): AccountView["status"] {
   return value === "active" || value === "disabled" ? value : "error"
 }
 
-function accountView(row: AccountRow): AccountView {
+function accountView(row: AccountRow, level: AccountLevel): AccountView {
   const { kind } = accountOwner(row)
   return {
     id: row.id,
@@ -285,6 +309,7 @@ function accountView(row: AccountRow): AccountView {
     settings: row.settings,
     statusReason: row.status_reason,
     mark: markOf(row.mark),
+    viewerLevel: levelName(level),
   }
 }
 
@@ -297,15 +322,18 @@ export async function listOrgAccounts(db: PlatformDb, identity: Identity): Promi
   const rows = await inTransaction(db, "listOrgAccounts: accounts", (sql) => accountRows(sql, identity.org.id))
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
   return rows
-    .filter((row) => (levels.get(row.id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read)
-    .map(accountView)
+    .flatMap((row) => {
+      const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
+      return level >= ACCOUNT_LEVELS.read ? [accountView(row, level)] : []
+    })
     .sort((a, b) => a.label.localeCompare(b.label, "fr"))
 }
 
 /**
  * Les comptes actifs du connecteur que la personne peut utiliser (AC8) : ceux qu'elle voit
- * (`connectorAccounts`), avec son niveau (`read`, `write`, `manage`), le mode et le propriétaire décrit. Un
- * connecteur inconnu ou natif est refusé comme à la création d'un compte (N35).
+ * (`connectorAccounts`), avec son niveau (`read`, `write`, `sensitive`, `manage`), le mode et le propriétaire décrit ;
+ * jamais le compte d'une personne partie, qui ne sert plus (`ownerLeft`). Un connecteur inconnu ou natif est refusé
+ * comme à la création d'un compte (N35).
  */
 export async function listUsableAccounts(
   db: PlatformDb,
@@ -317,20 +345,20 @@ export async function listUsableAccounts(
   requireActivable(parsed.data.connector, catalogFunctions())
   const accounts = await connectorAccounts(db, identity, parsed.data.connector)
   return accounts
-    .filter((account) => account.status === "active")
+    .filter((account) => account.status === "active" && account.ownerLeft !== true)
     .map(({ id, label, connector: name, mode, owner, level }) => ({ id, label, connector: name, mode, owner, level: levelName(level) }))
 }
 
 /**
- * Le compte nommé, si l'appelant le gère (niveau 3 : responsable d'un compte d'équipe, administrateur d'un compte
+ * Le compte nommé, si l'appelant le gère (gestion, `ACCOUNT_LEVELS.manage` : responsable d'un compte d'équipe, administrateur d'un compte
  * d'organisation, propriétaire d'un compte personnel), décidé avant toute écriture ou tout appel au tiers. Inconnu ou
  * invisible (niveau 0) : `not_found` ; sous le niveau : `forbidden`, qui dit qui le gère.
  */
 export async function managedAccount(db: PlatformDb, identity: Identity, id: string, use: { service: string; gesture: string }): Promise<AccountRow> {
   const [row] = await inTransaction(db, `${use.service}: accounts`, (sql) => accountRows(sql, identity.org.id, { id }))
-  const level = row ? await accountLevel(db, identity, id) : ACCESS_LEVELS.none
-  if (!row || level === ACCESS_LEVELS.none) throw new PlatformError("not_found", `Unknown account ${id}.`)
-  if (level < ACCESS_LEVELS.manage) {
+  const level = row ? await accountLevel(db, identity, id) : ACCOUNT_LEVELS.none
+  if (!row || level === ACCOUNT_LEVELS.none) throw new PlatformError("not_found", `Unknown account ${id}.`)
+  if (level < ACCOUNT_LEVELS.manage) {
     const who = await describeOwner(db, identity, accountOwner(row))
     throw new PlatformError("forbidden", `${use.gesture} « ${row.label} » is reserved to those who manage it: ${who}.`)
   }
@@ -338,7 +366,7 @@ export async function managedAccount(db: PlatformDb, identity: Identity, id: str
 }
 
 /**
- * Désactive un compte (AC9) : réservé à qui le gère (niveau 3 : responsable d'un compte d'équipe,
+ * Désactive un compte (AC9) : réservé à qui le gère (la gestion : responsable d'un compte d'équipe,
  * administrateur d'un compte d'organisation, propriétaire d'un compte personnel), décidé avant
  * l'écriture. Inconnu ou invisible (niveau 0) : `not_found`. Déjà désactivé : rien n'est écrit. Une
  * écriture qui ne rend aucune ligne après la décision est un conflit (HN-E01S07-6).

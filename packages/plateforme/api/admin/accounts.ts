@@ -1,10 +1,12 @@
 // `POST admin/accounts`, `POST admin/accounts/<id>/disable` et `POST admin/accounts/<id>/secret` du tableau de bord
 // (E08-S03, AC6, AC7, AC10 ; comptes à plusieurs champs) : créer un compte, désactiver un compte, poser le secret et
-// les réglages d'un compte réel. Adaptateur mince : la validation, les droits et l'écriture sont dans `createAccount`,
-// `disableAccount` et `setAccountSecret` ; la route n'ajoute qu'une règle, un compte d'organisation ou d'équipe
-// seulement à la création (N11). Le secret arrive sous la clé `secret` du corps, que le journal masque entière ; la
-// réponse ne le rend jamais.
+// les réglages d'un compte réel ; `GET admin/accounts/<id>/share-journal` : le journal des partages d'un compte, pour
+// qui le gère (partage des comptes). Adaptateur mince : la validation, les droits et l'écriture sont dans
+// `createAccount`, `disableAccount`, `setAccountSecret` et `listAccountShareJournal` ; la route n'ajoute qu'une règle,
+// un compte d'organisation ou d'équipe seulement à la création (N11). Le secret arrive sous la clé `secret` du corps,
+// que le journal masque entière ; la réponse ne le rend jamais.
 import { createAccountSchema } from "../../schemas"
+import { listAccountShareJournal } from "../../server/account-share-journal"
 import { setAccountSecret } from "../../server/connectors/account-secret"
 import { createAccount, disableAccount } from "../../server/connectors/accounts"
 import { PlatformError } from "../../server/errors"
@@ -52,5 +54,14 @@ export const accountSecretRoute: Route = {
   async handle({ db, identity, params, body }) {
     const account = await setAccountSecret(db, identity, { account_id: params[1], input: body })
     return { status: 200, data: { account }, journal: { target: account.id, teamId: account.owner.teamId } }
+  },
+}
+
+export const accountShareJournalRoute: Route = {
+  params: 3,
+  fixed: { 0: "accounts", 2: "share-journal" },
+  async handle({ db, identity, params }) {
+    const journal = await listAccountShareJournal(db, identity, params[1])
+    return { status: 200, data: journal }
   },
 }

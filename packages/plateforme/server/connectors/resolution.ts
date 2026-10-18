@@ -13,24 +13,18 @@
 // le calcul des niveaux, `accountLevelOf` d'`access-levels.ts`) ; retiré : l'arête « tout le monde »
 // et les clés tenant et plateforme.
 import { NODE_PATH_PATTERN, nodePathSchema, normalizeTitle, type AccountMode } from "../../schemas"
-import { ACCESS_LEVELS, administratorNames, describeOwner, nodeLevels, nodeOwner, type AccessLevel } from "../access"
-import type { CatalogFunction, FunctionClass } from "../catalog/define"
+import { ACCESS_LEVELS, nodeLevels, nodeOwner, requiredAccountLevel, type AccountLevel } from "../access"
+import type { CatalogFunction } from "../catalog/define"
 import type { PlatformDb } from "../db"
 import { memberDirectory } from "../directory"
 import { boundedList, inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { accountRefusal, ASK_WHICH, refusalWords } from "./account-refusals"
 import { connectorAccounts, levelName, type AccountOwner, type ConnectorAccount, type LevelName } from "./accounts"
-import { consentRefusal, ownAccount, personalOwnerOf } from "./consent-accounts"
-import { modeLabel } from "./modes"
+import { isPersonalConnector } from "./consent-accounts"
 
 /** Lignes du journal du `ctx` relues pour trouver la dernière procédure, les plus récentes d'abord (N11). */
 const JOURNAL_LOOKBACK = 50
-
-/**
- * Consigne d'une liste de candidats pour une action (N31) : l'utilisateur choisit, le modèle ne
- * devine pas (mcp-patterns.md § 3 « Résolution par nom », § 4 ; H37).
- */
-const ASK_WHICH = "Show them to the user and ask which one to use; do not pick one yourself."
 
 export type TeamRef = { id: string; slug: string; name: string }
 
@@ -43,7 +37,12 @@ export type ResolvedAccount = {
   mode: AccountMode
   owner: AccountOwner
   level: LevelName
-  source: "named" | "team" | "organisation" | "personal"
+  source: "named" | "personal" | "team" | "organisation"
+  /**
+   * Le nom de la personne dont c'est le compte personnel, posé par `resolveAccount` (l'appelant ou celle qui le lui a
+   * partagé) : la réponse le dit, l'équivalent du `lent_by` d'oto 1 (`droits-d-acces.md` § Partage d'un compte de connecteur).
+   */
+  ownerName?: string
 }
 
 /** Ce que les décisions lisent d'une fonction du catalogue. */
@@ -61,6 +60,11 @@ export type TeamChoiceInput = {
   procedureTeam?: TeamRef | null
   /** Équipes qui ont un compte actif du connecteur au niveau exigé ; absent pour une fonction sans compte. */
   capable?: ReadonlySet<string>
+  /**
+   * La personne a un compte personnel actif du connecteur : il porte l'appel avant celui d'une équipe (H83), donc
+   * plusieurs équipes capables ne rendent pas l'appel ambigu.
+   */
+  ownAccount?: boolean
 }
 
 export type TeamChoice =
@@ -75,44 +79,41 @@ export type AccountChoiceInput = {
   team: TeamRef | null
   /** `call.account` : libellé (sans casse ni accent) ou identifiant (N3). */
   account?: string
+  /** L'appelant : son compte personnel porte l'appel sans être nommé, en tête ; celui d'un autre ne sert que nommé. */
+  caller: string
   /**
-   * La personne dont le compte personnel porte l'appel d'un connecteur dont chaque personne connecte le sien
-   * (consentement, compte rattaché) : sans compte nommé, le sien seul, jamais un autre (`personalOwnerOf`).
+   * Un connecteur dont chaque personne connecte le sien (consentement, compte rattaché, `isPersonalConnector`) : faute
+   * de compte, la personne connecte le sien (ou reconnecte le sien en erreur) au lieu d'en demander un.
    */
-  personalOwner?: string
+  personal?: boolean
 }
 
+/**
+ * Un refus faute de compte nomme les comptes personnels que d'autres ont partagés avec l'appelant (`shared`) : actifs, à
+ * son niveau, d'une personne encore membre ; il ne les prend pas, il les montre.
+ */
 export type AccountRefusal =
   | { kind: "unknown_named"; wanted: string; usable: ConnectorAccount[] }
   | { kind: "ambiguous_named"; wanted: string; accounts: ConnectorAccount[] }
   | { kind: "named_below_level"; account: ConnectorAccount }
   | { kind: "named_unavailable"; account: ConnectorAccount }
+  /** Le compte personnel nommé d'une personne qui a quitté l'organisation : il ne sert plus aux autres. */
+  | { kind: "named_owner_left"; account: ConnectorAccount }
   | { kind: "ambiguous_step"; team: TeamRef | null; accounts: ConnectorAccount[] }
-  | { kind: "below_level"; accounts: ConnectorAccount[] }
-  | { kind: "none"; team: TeamRef | null }
+  | { kind: "below_level"; accounts: ConnectorAccount[]; shared: ConnectorAccount[] }
+  | { kind: "none"; team: TeamRef | null; shared: ConnectorAccount[] }
   /** Connecteur à comptes personnels : aucun compte de la personne (`account` nul), ou le sien est à reconnecter. */
-  | { kind: "connect_needed"; account: ConnectorAccount | null }
+  | { kind: "connect_needed"; account: ConnectorAccount | null; shared: ConnectorAccount[] }
 
 export type AccountChoice = { kind: "account"; account: ResolvedAccount } | AccountRefusal
-
-/**
- * Ce que disent les refus qui nomment des personnes : à qui demander (`describeOwner`), les noms
- * des administrateurs, l'origine de l'adresse appelée (lien du tableau de bord).
- */
-export type RefusalWords = { orgName: string; administrators: string; origin: string; ask: string }
 
 /** Sans casse, sans accent ni espace de bord (`normalizeTitle`), espaces intérieurs réduits. */
 function comparable(text: string): string {
   return normalizeTitle(text).replace(/\s+/g, " ")
 }
 
-/** Niveau exigé par la classe (H67) : lecture → 1 ; écriture et sensible → 2. */
-export function requiredLevel(fnClass: FunctionClass): AccessLevel {
-  return fnClass === "read" ? ACCESS_LEVELS.read : ACCESS_LEVELS.write
-}
-
 /** Équipes qui peuvent porter l'appel : un compte actif de l'équipe, au niveau exigé (N1). */
-export function capableTeams(accounts: readonly ConnectorAccount[], needed: AccessLevel): Set<string> {
+export function capableTeams(accounts: readonly ConnectorAccount[], needed: AccountLevel): Set<string> {
   return new Set(
     accounts.flatMap((account) =>
       account.owner.kind === "team" && account.owner.teamId && account.status === "active" && account.level >= needed
@@ -142,9 +143,9 @@ function teamOfArgument(teams: readonly TeamRef[], argument: string): TeamChoice
 /**
  * Équipe porteuse, dans l'ordre de H84 : argument, tableau, dernière procédure ; puis, pour une fonction
  * de connecteur, la seule équipe de la personne qui peut porter l'appel, plusieurs → ambiguïté (la
- * personne dit laquelle), aucune → pas d'équipe (la résolution du compte décide). Une fonction sans compte
- * n'a pas d'équipe et n'est jamais ambiguë. Plus d'équipe par défaut (E05-S13, fiche D128). Jamais « la
- * première équipe qui a le droit ».
+ * personne dit laquelle), sauf quand son propre compte porte l'appel (`ownAccount`) : pas d'équipe ; aucune → pas
+ * d'équipe (la résolution du compte décide). Une fonction sans compte n'a pas d'équipe et n'est jamais ambiguë. Plus
+ * d'équipe par défaut (E05-S13, fiche D128). Jamais « la première équipe qui a le droit ».
  */
 export function chooseTeam(input: TeamChoiceInput): TeamChoice {
   if (input.argument !== undefined) return teamOfArgument(input.teams, input.argument)
@@ -155,7 +156,7 @@ export function chooseTeam(input: TeamChoiceInput): TeamChoice {
   const capable = input.capable ?? new Set<string>()
   const able = bySlug(input.teams.filter((team) => capable.has(team.id)))
   if (able.length === 1) return running(able[0], "only_team")
-  if (able.length > 1) return { kind: "ambiguous", teams: able }
+  if (able.length > 1 && input.ownAccount !== true) return { kind: "ambiguous", teams: able }
   return none
 }
 
@@ -181,137 +182,66 @@ function resolved(account: ConnectorAccount, source: ResolvedAccount["source"]):
   return { kind: "account", account: { id, label, connector, mode, owner, level: levelName(level), source } }
 }
 
+/** Le compte personnel d'une autre personne que l'appelant. */
+const othersPersonal = (account: ConnectorAccount, caller: string) => account.owner.kind === "user" && account.owner.userId !== caller
+
+/** Le compte personnel d'une personne partie, pour un autre que lui : il ne sert plus (`ownerLeft`). */
+const goneFor = (account: ConnectorAccount, caller: string) => othersPersonal(account, caller) && account.ownerLeft === true
+
 /** Compte nommé (N3) : par identifiant, sinon par libellé sans casse ni accent ; jamais de repli (H83). */
-function namedAccount(input: AccountChoiceInput, wanted: string, needed: AccessLevel): AccountChoice {
+function namedAccount(input: AccountChoiceInput, wanted: string, needed: AccountLevel): AccountChoice {
   const byId = input.accounts.find((account) => account.id === wanted.toLowerCase())
   const found = byId ? [byId] : input.accounts.filter((account) => comparable(account.label) === comparable(wanted))
   if (found.length === 0) {
-    const usable = input.accounts.filter((account) => account.status === "active" && account.level >= needed)
+    const usable = input.accounts.filter((account) => account.status === "active" && account.level >= needed && !goneFor(account, input.caller))
     return { kind: "unknown_named", wanted, usable }
   }
   if (found.length > 1) return { kind: "ambiguous_named", wanted, accounts: found }
+  if (goneFor(found[0], input.caller)) return { kind: "named_owner_left", account: found[0] }
   if (found[0].level < needed) return { kind: "named_below_level", account: found[0] }
   if (found[0].status !== "active") return { kind: "named_unavailable", account: found[0] }
   return resolved(found[0], "named")
 }
 
 /**
- * Compte d'un appel (H83) : le compte nommé, sinon celui de l'équipe porteuse, sinon celui de
- * l'organisation (plus d'étape de slot, P37). À chaque étape, seul compte un compte actif dont le
- * niveau atteint celui de la classe (H67) ; deux à la même étape → ambiguïté, jamais de choix
- * silencieux (N5). Un compte personnel ne sert que nommé, sauf à sa personne celui d'un connecteur dont chaque
- * personne connecte le sien (consentement, compte rattaché) : sans compte nommé, son appel prend le sien
- * (`personalOwner`), jamais un autre ; partagé, il sert aux autres nommé, comme tout compte personnel.
+ * Compte d'un appel (H83 ; `droits-d-acces.md` § Partage d'un compte de connecteur) : le compte nommé, sinon le compte
+ * personnel de l'appelant, sinon celui de l'équipe porteuse, sinon celui de l'organisation, pour tout connecteur (plus
+ * d'étape de slot, P37). À chaque étape, seul compte un compte actif dont le niveau atteint celui de la classe (H67) ;
+ * deux à la même étape → ambiguïté, jamais de choix silencieux (N5). Le compte personnel d'un autre, même partagé, ne
+ * sert que nommé : faute de compte, le refus le nomme avec son propriétaire, sans le prendre ; celui d'une personne
+ * partie ne sert plus à personne d'autre.
  */
 export function chooseAccount(input: AccountChoiceInput): AccountChoice {
-  const needed = requiredLevel(input.fn.class)
+  const needed = requiredAccountLevel(input.fn.class)
   if (input.account !== undefined) return namedAccount(input, input.account.trim(), needed)
-  if (input.personalOwner !== undefined) return ownAccount(input.accounts, input.personalOwner)
-  const { team } = input
-  const steps = [
-    ...(team ? [input.accounts.filter((account) => account.owner.kind === "team" && account.owner.teamId === team.id)] : []),
-    input.accounts.filter((account) => account.owner.kind === "org"),
+  const { team, caller } = input
+  const own = input.accounts.filter((account) => account.owner.kind === "user" && account.owner.userId === caller)
+  const steps: { source: ResolvedAccount["source"]; accounts: ConnectorAccount[] }[] = [
+    { source: "personal", accounts: own },
+    ...(team ? [{ source: "team" as const, accounts: input.accounts.filter((account) => account.owner.kind === "team" && account.owner.teamId === team.id) }] : []),
+    { source: "organisation", accounts: input.accounts.filter((account) => account.owner.kind === "org") },
   ]
-  for (const [index, accounts] of steps.entries()) {
+  for (const { source, accounts } of steps) {
     const usable = accounts.filter((account) => account.status === "active" && account.level >= needed)
-    const source = team && index === 0 ? "team" : "organisation"
     if (usable.length === 1) return resolved(usable[0], source)
     if (usable.length > 1) return { kind: "ambiguous_step", team: source === "team" ? team : null, accounts: usable }
   }
-  const seen = steps.flat().filter((account) => account.status === "active")
-  return seen.length > 0 ? { kind: "below_level", accounts: seen } : { kind: "none", team }
-}
-
-const mention = (account: ConnectorAccount) => `« ${account.label} » (${account.owner.description}, ${modeLabel(account.mode)})`
-
-/**
- * Texte et code d'un refus de compte (AC15, AC16), une fois connus ceux à qui demander ; 20
- * comptes nommés au plus (N32), consigne de demander à l'utilisateur sur une ambiguïté (N31).
- */
-export function accountRefusal(refusal: AccountRefusal, fn: FunctionTraits, words: RefusalWords): PlatformError {
-  const needs = levelName(requiredLevel(fn.class))
-  switch (refusal.kind) {
-    case "unknown_named": {
-      const usable = boundedList(refusal.usable.map(mention)) || "none"
-      return new PlatformError(
-        "not_found",
-        `Unknown account « ${refusal.wanted} » for ${fn.connector}. Accounts you can use: ${usable}. No other account was tried.`,
-      )
-    }
-    case "ambiguous_named": {
-      const named = boundedList(refusal.accounts.map((account) => `« ${account.label} » (${account.owner.description}, id ${account.id})`))
-      return new PlatformError(
-        "ambiguous_account",
-        `Several ${fn.connector} accounts are named « ${refusal.wanted} »: ${named}. ${ASK_WHICH} Then call again with account: "<id>".`,
-      )
-    }
-    case "named_below_level":
-      return new PlatformError(
-        "forbidden",
-        `Account « ${refusal.account.label} » cannot run ${fn.name} for you (${needs} access needed). Ask ${words.ask} for access.`,
-      )
-    case "named_unavailable":
-      return new PlatformError(
-        "not_enabled",
-        refusal.account.status === "error"
-          ? `Account « ${refusal.account.label} » is in error. Ask ${words.ask} to fix it, or name another account.`
-          : `Account « ${refusal.account.label} » is disabled. Ask ${words.ask} to enable it, or name another account.`,
-      )
-    case "ambiguous_step": {
-      const personal = refusal.accounts.every((account) => account.owner.kind === "user")
-      const whose = refusal.team ? `of team ${refusal.team.name}` : personal ? "of yours" : "of the organisation"
-      const labels = boundedList(refusal.accounts.map((account) => `« ${account.label} »`))
-      return new PlatformError(
-        "ambiguous_account",
-        `Several ${fn.connector} accounts ${whose} can run ${fn.name}: ${labels}. ${ASK_WHICH} Then call again with account: "<label>".`,
-      )
-    }
-    case "below_level": {
-      const seen = boundedList(
-        refusal.accounts.map((account) => `« ${account.label} » (${account.owner.description}, ${levelName(account.level)} for you)`),
-      )
-      return new PlatformError(
-        "forbidden",
-        `${fn.name} needs ${needs} access to a ${fn.connector} account. Accounts you can see but not use this way: ${seen}. Ask ${words.ask} for access.`,
-      )
-    }
-    case "none": {
-      const steps = refusal.team ? `team ${refusal.team.name}, then the organisation` : "the organisation"
-      const names = words.administrators ? ` (${words.administrators})` : ""
-      return new PlatformError(
-        "not_enabled",
-        `No ${fn.connector} account is connected for you (${steps}). Ask an administrator of ${words.orgName}${names} to connect one on the dashboard: ${words.origin}/admin/connectors.`,
-      )
-    }
-    case "connect_needed":
-      return consentRefusal(fn.connector, refusal.account)
-  }
-}
-
-
-/**
- * Qui gère les comptes d'un refus (`describeOwner`, une fois par propriétaire : deux au plus, l'équipe
- * porteuse et l'organisation, les étapes de `chooseAccount`) ; administrateurs nommés si aucun compte.
- */
-async function refusalWords(db: PlatformDb, identity: Identity, refusal: AccountRefusal, origin: string): Promise<RefusalWords> {
-  const accounts =
-    refusal.kind === "named_below_level" || refusal.kind === "named_unavailable"
-      ? [refusal.account]
-      : refusal.kind === "below_level"
-        ? refusal.accounts
-        : []
-  const owners = [...new Map(accounts.map((account) => [JSON.stringify([account.owner.kind, account.owner.teamId, account.owner.userId]), account.owner])).values()]
-  const [asks, administrators] = await Promise.all([
-    Promise.all(owners.map((owner) => describeOwner(db, identity, owner))),
-    refusal.kind === "none" ? memberDirectory(db, identity.org.id).then(administratorNames) : Promise.resolve(""),
-  ])
-  return { orgName: identity.org.name, administrators, origin, ask: boundedList([...new Set(asks)], " or ") }
+  const shared = input.accounts.filter(
+    (account) => othersPersonal(account, caller) && account.status === "active" && account.level >= needed && account.ownerLeft !== true,
+  )
+  // Le sien est à reconnecter (un consentement que le tiers ne reconnaît plus) : la personne le reconnecte.
+  const broken = own.find((account) => account.status === "error")
+  if (input.personal === true && broken) return { kind: "connect_needed", account: broken, shared }
+  const seen = steps.flatMap((step) => (step.source === "personal" ? [] : step.accounts)).filter((account) => account.status === "active")
+  if (seen.length > 0) return { kind: "below_level", accounts: seen, shared }
+  return input.personal === true ? { kind: "connect_needed", account: null, shared } : { kind: "none", team, shared }
 }
 
 /**
  * Compte d'un appel à une fonction de connecteur (H83) : les comptes visibles du connecteur, la
- * décision de `chooseAccount`, et un refus qui dit à qui demander. Une fonction sans compte
- * (`table.*`, ERP) n'est pas résolue : son appelant ne l'appelle pas (E03-S04).
+ * décision de `chooseAccount`, et un refus qui dit à qui demander. Le compte résolu dit à qui il est quand il est
+ * personnel (`ownerName`) : l'appelant, ou la personne qui le lui a partagé, lue dans l'annuaire. Une fonction sans
+ * compte (`table.*`, ERP) n'est pas résolue : son appelant ne l'appelle pas (E03-S04).
  */
 export async function resolveAccount(
   db: PlatformDb,
@@ -319,9 +249,25 @@ export async function resolveAccount(
   input: { fn: FunctionTraits; team: TeamRef | null; account?: string; origin: string },
 ): Promise<ResolvedAccount> {
   const accounts = await connectorAccounts(db, identity, input.fn.connector)
-  const choice = chooseAccount({ fn: input.fn, accounts, team: input.team, account: input.account, personalOwner: personalOwnerOf(input.fn.connector, identity) })
-  if (choice.kind === "account") return choice.account
-  throw accountRefusal(choice, input.fn, await refusalWords(db, identity, choice, input.origin))
+  const choice = chooseAccount({
+    fn: input.fn,
+    accounts,
+    team: input.team,
+    account: input.account,
+    caller: identity.user.id,
+    personal: isPersonalConnector(input.fn.connector),
+  })
+  if (choice.kind !== "account") throw accountRefusal(choice, input.fn, await refusalWords(db, identity, choice, input.origin))
+  const { owner } = choice.account
+  if (owner.kind !== "user") return choice.account
+  if (owner.userId === identity.user.id) return { ...choice.account, ownerName: identity.user.name }
+  // Le compte d'une personne partie ne se résout jamais (`named_owner_left`) : sa propriétaire est dans l'annuaire.
+  const name = (await memberDirectory(db, identity.org.id)).find((person) => person.userId === owner.userId)?.name
+  if (name === undefined) {
+    console.error(`[platform] resolveAccount: no directory name for the owner of account ${choice.account.id}`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return { ...choice.account, ownerName: name }
 }
 
 /** Équipe propriétaire effective d'un nœud (`node_owner`), si c'est une équipe. */
@@ -408,7 +354,12 @@ export async function runningTeam(
     const procedure = !choice.tableTeam && input.ctxCode ? await lastProcedure(db, identity, input.ctxCode) : null
     choice.procedureTeam = procedure ? await ownerTeam(db, identity, procedure.id) : null
     if (!choice.tableTeam && !choice.procedureTeam && input.fn.origin === "connecteur") {
-      choice.capable = capableTeams(await connectorAccounts(db, identity, input.fn.connector), requiredLevel(input.fn.class))
+      const accounts = await connectorAccounts(db, identity, input.fn.connector)
+      const needed = requiredAccountLevel(input.fn.class)
+      choice.capable = capableTeams(accounts, needed)
+      choice.ownAccount = accounts.some(
+        (account) => account.owner.kind === "user" && account.owner.userId === identity.user.id && account.status === "active" && account.level >= needed,
+      )
     }
   }
   const decided = chooseTeam(choice)

@@ -151,7 +151,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       const [lea, paul] = [ref.identityOf("lea"), ref.identityOf("paul")]
       const mail = { id: ref.id(ACCOUNTS.ventes.id), label: "Mail Ventes" }
       const levels = [accountLevel(dbOf("paul"), paul, mail.id), accountLevel(dbOf("lea"), lea, mail.id)]
-      expect(await Promise.all([...levels, accountLevel(dbOf("claire"), ref.identityOf("claire"), ref.id(ACCOUNTS.claire.id))])).toEqual([0, 2, 3])
+      expect(await Promise.all([...levels, accountLevel(dbOf("claire"), ref.identityOf("claire"), ref.id(ACCOUNTS.claire.id))])).toEqual([0, 3, 4])
       await expect(requireAccountLevel(dbOf("paul"), paul, mail, 2)).rejects.toMatchObject({ code: "not_found", message: "Unknown account « Mail Ventes »." })
       await withRules([{ account: "ventes", team: "support", level: "read" }], async () => {
         expect(await requireAccountLevel(dbOf("paul"), paul, mail, 1)).toBe(1)
@@ -159,6 +159,13 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
           code: "forbidden",
           message: "Using account « Mail Ventes » is reserved to team Ventes (lead: Claire Morel). Ask them for access.",
         })
+      })
+      // Partage des comptes (#68) : une règle d'organisation sur un compte personnel, en base, ouvre l'écriture à tout
+      // membre et pas les fonctions sensibles, au-dessus.
+      const mailClaire = { id: ref.id(ACCOUNTS.claire.id), label: "Mail Claire" }
+      await withRules([{ account: "claire", org: true, level: "write" }], async () => {
+        expect(await requireAccountLevel(dbOf("paul"), paul, mailClaire, 2)).toBe(2)
+        await expect(requireAccountLevel(dbOf("paul"), paul, mailClaire, 3)).rejects.toMatchObject({ code: "forbidden" })
       })
       expect(levelFunctions()).toEqual([])
     })

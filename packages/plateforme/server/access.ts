@@ -15,11 +15,13 @@
 import { nodeOwner, readAccountFacts, readMemberCallers, readNodeChains, type ReadNodeChain } from "./access-facts"
 import {
   ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   accountLevelOf,
   callerOf,
   effectiveOwner,
   nodeLevelOf,
   type AccessLevel,
+  type AccountLevel,
   type Caller,
   type NodeChain,
   type Owner,
@@ -29,8 +31,8 @@ import { leadNames, leadWord, memberDirectory, teamsWithLeads, type DirectoryEnt
 import { fromDatabaseError, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 
-export { ACCESS_LEVELS, isOrgAdmin, isStaffWithGrant, leadsTeam } from "./access-levels"
-export type { AccessLevel, NodeOwner, Owner } from "./access-levels"
+export { ACCESS_LEVELS, ACCOUNT_LEVELS, isOrgAdmin, isStaffWithGrant, leadsTeam, requiredAccountLevel } from "./access-levels"
+export type { AccessLevel, AccountLevel, NodeOwner, Owner } from "./access-levels"
 export { nodeOwner } from "./access-facts"
 // Chemins de l'arbre (H50, H51), sans décision : `server/nodes/` les lit ici, `access-levels.ts` lui
 // étant fermé (ESLint) ; sans eux, `lookup.ts` recopiait racine, ancêtres et profondeur (E03-S03).
@@ -159,30 +161,33 @@ export async function nodeDecisions(
   return decisions
 }
 
-/** Niveau de l'appelant sur chacun des comptes, en deux lectures ; 0 pour un compte inconnu ou invisible. */
+/**
+ * Niveau de l'appelant sur chacun des comptes, sur l'échelle des comptes (`ACCOUNT_LEVELS`), en deux lectures ; 0 pour
+ * un compte inconnu ou invisible.
+ */
 export async function accountLevels(
   db: PlatformDb,
   identity: Identity,
   accountIds: readonly string[],
-): Promise<Map<string, AccessLevel>> {
+): Promise<Map<string, AccountLevel>> {
   const caller = callerOf(identity)
   const facts = await readAccountFacts(db, identity.org.id, accountIds)
   return new Map(
     accountIds.map((id) => {
       const account = facts.get(id)
-      return [id, account ? accountLevelOf(caller, account) : ACCESS_LEVELS.none]
+      return [id, account ? accountLevelOf(caller, account) : ACCOUNT_LEVELS.none]
     }),
   )
 }
 
-async function accountDecision(db: PlatformDb, identity: Identity, accountId: string): Promise<Decision> {
+async function accountDecision(db: PlatformDb, identity: Identity, accountId: string): Promise<{ level: AccountLevel; owner: Owner | null }> {
   const facts = (await readAccountFacts(db, identity.org.id, [accountId])).get(accountId)
-  if (!facts) return INVISIBLE
+  if (!facts) return { level: ACCOUNT_LEVELS.none, owner: null }
   return { level: accountLevelOf(callerOf(identity), facts), owner: facts.account.owner }
 }
 
-/** Niveau de l'appelant sur un compte de connecteur ; 0 pour un compte inconnu ou invisible. */
-export async function accountLevel(db: PlatformDb, identity: Identity, accountId: string): Promise<AccessLevel> {
+/** Niveau de l'appelant sur un compte de connecteur (`ACCOUNT_LEVELS`) ; 0 pour un compte inconnu ou invisible. */
+export async function accountLevel(db: PlatformDb, identity: Identity, accountId: string): Promise<AccountLevel> {
   return (await accountDecision(db, identity, accountId)).level
 }
 
@@ -272,18 +277,18 @@ export async function requireNodeLevel(
 }
 
 /**
- * Exige un niveau sur un compte de connecteur (H67) et rend le niveau de l'appelant. Invisible :
+ * Exige un niveau sur un compte de connecteur (H67, échelle des comptes) et rend le niveau de l'appelant. Invisible :
  * `not_found` ; visible sans le niveau : `forbidden`, qui dit à qui demander.
  */
 export async function requireAccountLevel(
   db: PlatformDb,
   identity: Identity,
   account: { id: string; label: string },
-  needed: AccessLevel,
-): Promise<AccessLevel> {
+  needed: AccountLevel,
+): Promise<AccountLevel> {
   const { level, owner } = await accountDecision(db, identity, account.id)
   if (level >= needed) return level
-  if (level === ACCESS_LEVELS.none || !owner) throw new PlatformError("not_found", `Unknown account « ${account.label} ».`)
+  if (level === ACCOUNT_LEVELS.none || !owner) throw new PlatformError("not_found", `Unknown account « ${account.label} ».`)
   throw new PlatformError("forbidden", reservedTo("use", `account « ${account.label} »`, await describeOwner(db, identity, owner)))
 }
 

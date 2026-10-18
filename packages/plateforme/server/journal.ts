@@ -142,10 +142,18 @@ export function openedEntry(identity: Identity, request: { method: string; param
  */
 export type ServedEntry = { ctx: string | null; host: string | null; resultChars: number }
 
+/** Les clés réservées des arguments d'une ligne de `call` : ce que la fonction a fait, et à qui était le compte servi. */
+function reservedArgs(entry: JournalEntry, output: Pick<ToolOutput, "outcome" | "lentBy">): void {
+  if (!isJsonObject(entry.args)) return
+  if (output.outcome) entry.args = { ...entry.args, _outcome: output.outcome }
+  if (output.lentBy) entry.args = { ...entry.args, _lent_by: output.lentBy }
+}
+
 /**
  * La ligne d'un outil qui a répondu (H07) : `ctx` et client rendus par le service, sinon ceux de l'appel ; fonction,
- * chemin ou phrase touchés ; équipe et compte (E03-S04, AC16) ; et ce qu'une fonction de `call` a fait, en clé réservée
- * des arguments après leur masquage et leur coupe (E11-S02, AC-h2, HN-E11S02-16), que le fil de l'accueil relit.
+ * chemin ou phrase touchés ; équipe et compte (E03-S04, AC16) ; et, en clés réservées des arguments après leur masquage
+ * et leur coupe, ce qu'une fonction de `call` a fait (E11-S02, AC-h2, HN-E11S02-16), que le fil de l'accueil relit, et
+ * la personne qui a partagé le compte servi (`_lent_by`).
  */
 export function servedEntry(entry: JournalEntry, output: ToolOutput, served: ServedEntry): void {
   Object.assign(entry, {
@@ -156,18 +164,18 @@ export function servedEntry(entry: JournalEntry, output: ToolOutput, served: Ser
     account_id: output.accountId ?? null,
     result_chars: served.resultChars,
   })
-  if (output.outcome && isJsonObject(entry.args)) entry.args = { ...entry.args, _outcome: output.outcome }
+  reservedArgs(entry, output)
 }
 
 /**
  * La ligne d'un outil refusé ou en panne (H07) : l'équipe et le compte qu'un `call` avait établis avant d'échouer
  * (`trace`, E03-S04 AC16), le code et le message de l'erreur (`journalError`), et ce que l'échec a fait (la marque
- * posée sur le compte), en clé réservée des arguments comme une ligne servie.
+ * posée sur le compte) et à qui était le compte, en clés réservées des arguments comme une ligne servie.
  */
 export function failedEntry(
   entry: JournalEntry,
   failure: { code: string; message: string },
-  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome"> },
+  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy"> },
 ): void {
   Object.assign(entry, {
     ctx: served.ctx,
@@ -178,7 +186,7 @@ export function failedEntry(
     error: journalError(failure.code, failure.message),
     result_chars: served.resultChars,
   })
-  if (served.trace.outcome && isJsonObject(entry.args)) entry.args = { ...entry.args, _outcome: served.trace.outcome }
+  reservedArgs(entry, served.trace)
 }
 
 function signaturePart(value: unknown): string {

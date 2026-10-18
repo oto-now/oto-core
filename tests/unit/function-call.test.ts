@@ -31,10 +31,13 @@ function seededDraft(): Row {
   return { ...row, status: "draft", sent_at: null, created_at: CONTENT_AT }
 }
 
-/** O avec `mail` activé, ses comptes simulés et actifs, et un brouillon de « Mail Ventes ». */
+/**
+ * O avec `mail` activé, ses comptes simulés, actifs sauf « Mail Claire » (le compte personnel de Claire servirait ses
+ * appels avant celui de son équipe : partage des comptes, #68), et un brouillon de « Mail Ventes ».
+ */
 function functionCallTables(): Tables {
   const tables = referenceTables()
-  for (const row of tables.accounts) Object.assign(row, { mode: "simule", status: "active" })
+  for (const row of tables.accounts) Object.assign(row, { mode: "simule", status: row.id === ACCOUNTS.claire.id ? "disabled" : "active" })
   tables.connector_activations = [{ org_id: ORG.id, connector: "mail", state: "active" }]
   tables.sim_outbox = [seededDraft()]
   return tables
@@ -91,7 +94,7 @@ describe.skipIf(!sqlConfigured)(portable("callFunction on a real database"), { t
       function: "mail.create_draft",
       text: `Draft ${draft?.id} saved for sophie@valbrune.test: « Votre rendez-vous ». Not sent.\nTeam Ventes · account « Mail Ventes » (simulated).`,
       team: { slug: "ventes", name: "Ventes" },
-      account: { id: ACCOUNTS.ventes.id, label: "Mail Ventes", mode: "simule" },
+      account: { id: ACCOUNTS.ventes.id, label: "Mail Ventes", mode: "simule", owner: { kind: "team", description: "team Ventes" } },
       result: { draft_id: draft?.id, to: DRAFT.to, subject: DRAFT.subject },
       nextActions: [],
     })

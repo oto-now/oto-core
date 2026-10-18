@@ -6,7 +6,7 @@
 //
 // Repris d'Oto : rien. Retiré : l'activation « prochaine session » et les kits (architecture § 10).
 import { connectorRefSchema, type DeactivationImpact, type OrgConnector } from "../../schemas"
-import { ACCESS_LEVELS, accountLevels, administratorNames, isOrgAdmin, nodeLevels, type AccessLevel } from "../access"
+import { ACCESS_LEVELS, accountLevels, administratorNames, isOrgAdmin, nodeLevels, type AccessLevel, type AccountLevel } from "../access"
 import type { CatalogFunction } from "../catalog/define"
 import { ACT_SUFFIX, catalogFunctions, NATIVE_CONNECTOR } from "../catalog/registry"
 import type { PlatformDb } from "../db"
@@ -181,7 +181,8 @@ function callsConnector(data: unknown, connector: string): boolean {
   return data.function.startsWith(`${connector}.`) || data.function.startsWith(`${connector}${ACT_SUFFIX}.`)
 }
 
-const readable = (level: AccessLevel | undefined) => (level ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read
+/** Lu au niveau 1 au moins : la lecture a le même rang sur l'échelle des nœuds et sur celle des comptes. */
+const readable = (level: AccessLevel | AccountLevel | undefined) => (level ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read
 
 /**
  * Ce que coûte la désactivation d'un connecteur activable (E08-S03, AC5, AC11 ; `admin_connector`

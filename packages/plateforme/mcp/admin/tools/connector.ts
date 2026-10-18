@@ -17,7 +17,8 @@ import { noRuleFor, readSubject, ruleOf, rulesOutput, ruleSetText } from "../rul
 
 /** Chemins de procédures nommés au plus par le récapitulatif d'une désactivation (AC9). */
 const PROCEDURES_NAMED = 10
-const ACCOUNT_DEFAULTS = "Without a rule, members read an organisation account, its team writes a team account, its owner manages a personal one."
+const ACCOUNT_DEFAULTS =
+  "Without a rule, members read an organisation account, its team uses a team account up to its sensitive functions, its owner manages a personal one. A sensitive function needs the level sensitive, above write."
 const AFTER_ACCOUNT_RULES = ["admin_connector account_rules"]
 
 type Fn = { name: string; class: string }
@@ -172,7 +173,7 @@ async function accountRules(call: OpCall): Promise<AdminOutput> {
   const account = await findAccount(db, identity, { label: String(call.input.account) })
   const view = await listAccountRules(db, identity, account.id)
   const owner = await ownerDescription(db, identity, view.owner)
-  const served = await rulesOutput(db, identity, { target: `account ${view.label}`, rules: view.rules, closing: `Owner: ${owner}. ${ACCOUNT_DEFAULTS}` })
+  const served = await rulesOutput(db, identity, { target: `account ${view.label}`, rules: view.rules, general: view.general, closing: `Owner: ${owner}. ${ACCOUNT_DEFAULTS}` })
   return { text: served.text, data: { account: view.label, owner, rules: served.rules }, target: `account:${view.label}`, nextActions: ["admin_connector add_account_rule"] }
 }
 

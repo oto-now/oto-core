@@ -215,8 +215,9 @@ describe.skipIf(!sqlConfigured)(portable("connector services on a real database 
       // Paul (Support) lit le compte de l'organisation ; ni celui de Ventes, ni celui de Claire.
       const usable = await listUsableAccounts(db, ref.identityOf("paul"), { connector: "mail" })
       expect(usable.map(({ label, level }) => [label, level])).toEqual([["Mail Org", "read"]])
-      // Une lecture des comptes, le nom de leur équipe joint (`teams`, face SQL du lot d1), puis leurs niveaux en un lot.
-      expect(requests.flatMap(namesOf).sort()).toEqual(["access_rules", "accounts", "accounts", "teams"])
+      // Une lecture des comptes, le nom de leur équipe joint (`teams`, face SQL du lot d1) et le départ du propriétaire
+      // d'un compte personnel (`members`, partage des comptes), puis leurs niveaux en un lot.
+      expect(requests.flatMap(namesOf).sort()).toEqual(["access_rules", "accounts", "accounts", "members", "teams"])
     })
 
     it("should decide who creates which account before inserting it", async () => {

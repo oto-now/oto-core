@@ -214,6 +214,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   refusée, crédits épuisés) dans `accounts.health`, sous `mark` (`{reason, at}`) ; `authenticated` perd l'insertion et
   la mise à jour de `health`, qui ne s'écrit plus que par la fonction `security definer` `mark_account` : poser ou
   lever la marque d'un compte d'une organisation de l'appelant, rien d'autre, sans écriture quand rien ne change.
+- `20261018090000_platform_partage_des_comptes.sql` (partage des comptes) : `access_rules` admet une règle
+  d'organisation sur un compte (`access_rules_one_subject`) et le niveau `sensitive` sur un compte seulement
+  (`access_rules_level_check`) ; les règles de compte à `write` passent à `sensitive`, pour garder ce qu'elles
+  ouvraient ; la table `account_share_events`, journal des partages (lue sous RLS par un membre, écrite par le seul
+  déclencheur `access_rules_account_share_journal`, fonction `security definer` `account_share_journal`) ;
+  `forget_user` met la personne à nul dans ce journal.
 
 ## Installer sur un hôte neuf
 

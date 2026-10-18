@@ -10,12 +10,30 @@
 // Repris de la maquette (`mcp-test/src/proto/identity.ts` l. 93-103, `canRead`, `canWrite`) : un
 // droit calculé en TypeScript, fonction pure de l'identité. Retiré : l'équipe portée par une colonne
 // du nœud (→ propriétaire hérité, H52), l'admin qui lit tout (→ D5), l'absence de règles (→ H66).
+import type { FunctionClass } from "./catalog/define"
 import type { Identity } from "./identity"
 
 /** Niveaux (H65) : 0 aucun, 1 lecture, 2 écriture, 3 gestion. */
 export const ACCESS_LEVELS = { none: 0, read: 1, write: 2, manage: 3 } as const
 
 export type AccessLevel = (typeof ACCESS_LEVELS)[keyof typeof ACCESS_LEVELS]
+
+/**
+ * Niveaux d'un compte de connecteur (`droits-d-acces.md` § Partage d'un compte de connecteur) : ceux d'un nœud, plus
+ * un niveau sensible entre l'écriture et la gestion, qu'exige une fonction `sensitive` ; une fonction `write` n'exige
+ * que l'écriture. Une échelle à part : les nœuds gardent la leur, que tient égale le test de parité avec la base.
+ */
+export const ACCOUNT_LEVELS = { none: 0, read: 1, write: 2, sensitive: 3, manage: 4 } as const
+
+export type AccountLevel = (typeof ACCOUNT_LEVELS)[keyof typeof ACCOUNT_LEVELS]
+
+/**
+ * Niveau exigé sur un compte par la classe d'une fonction (H67) : lecture, écriture, et le niveau sensible, distinct de
+ * l'écriture, pour une fonction `sensitive` (`droits-d-acces.md` § Partage d'un compte de connecteur).
+ */
+export function requiredAccountLevel(fnClass: FunctionClass): AccountLevel {
+  return ACCOUNT_LEVELS[fnClass]
+}
 
 /** Propriétaire effectif d'un nœud (H52) ou propriétaire d'un compte (H67). */
 export type Owner = { kind: "org" | "team" | "user"; teamId: string | null; userId: string | null }
@@ -41,10 +59,14 @@ export type Caller = {
 export type NodeFact = { id: string; orgId: string; path: string; owner: Owner | null }
 
 /**
- * Une règle (H82) sur un nœud ou un compte (`targetId`), pour une équipe, une personne, ou toute
- * l'organisation (`org`, ADR-014 : sur un nœud seulement, contrainte `access_rules_one_subject`).
+ * Une règle (H82) sur un nœud ou un compte (`targetId`), pour une équipe, une personne, ou toute l'organisation (`org`,
+ * ADR-014 ; sur un compte depuis le partage des comptes). `level` est au rang de l'échelle de sa cible : celle des
+ * nœuds, ou celle des comptes (`AccountRuleFact`).
  */
-export type RuleFact = { targetId: string; teamId: string | null; userId: string | null; org?: boolean; level: AccessLevel }
+export type RuleFact<Level extends number = AccessLevel> = { targetId: string; teamId: string | null; userId: string | null; org?: boolean; level: Level }
+
+/** Une règle sur un compte, au rang de l'échelle des comptes (`ACCOUNT_LEVELS`). */
+export type AccountRuleFact = RuleFact<AccountLevel>
 
 /**
  * Un nœud, les ancêtres lus (racine comprise ; un nœud qui ne couvre pas son chemin est ignoré) et
@@ -61,7 +83,7 @@ export type NodeChain = {
 export type AccountFact = { id: string; orgId: string; owner: Owner }
 
 /** Un compte et les règles posées sur lui : les comptes sont à plat, sans héritage (H67). */
-export type AccountFacts = { account: AccountFact; rules: readonly RuleFact[] }
+export type AccountFacts = { account: AccountFact; rules: readonly AccountRuleFact[] }
 
 const { none: NONE, read: READ, write: WRITE, manage: MANAGE } = ACCESS_LEVELS
 
@@ -143,22 +165,22 @@ export function effectiveOwner(chain: NodeChain): Owner | null {
 }
 
 /** La règle vise l'appelant : lui, une de ses équipes, ou toute l'organisation quand elle compte (`orgCounts`). */
-function aimsAt(caller: Caller, rule: RuleFact, orgCounts: boolean): boolean {
+function aimsAt(caller: Caller, rule: RuleFact<number>, orgCounts: boolean): boolean {
   return rule.userId === caller.userId || (rule.teamId !== null && caller.teamIds.has(rule.teamId)) || (orgCounts && rule.org === true)
 }
 
-function highest(rules: readonly RuleFact[]): AccessLevel {
-  return rules.reduce<AccessLevel>((level, rule) => (rule.level > level ? rule.level : level), NONE)
+function highest<Level extends number>(rules: readonly RuleFact<Level>[], none: Level): Level {
+  return rules.reduce<Level>((level, rule) => (rule.level > level ? rule.level : level), none)
 }
 
 /** La règle de la personne l'emporte ; à défaut, le plus haut niveau de ses équipes (H66 (2)). */
-function strongest(caller: Caller, rules: readonly RuleFact[]): AccessLevel {
+function strongest<Level extends number>(caller: Caller, rules: readonly RuleFact<Level>[], none: Level): Level {
   const own = rules.filter((rule) => rule.userId === caller.userId)
-  return highest(own.length > 0 ? own : rules)
+  return highest(own.length > 0 ? own : rules, none)
 }
 
 /** Responsable de l'équipe propriétaire, sans règle qui le vise nommément (H66 (1 bis), N7). */
-function leadKeepsManage(caller: Caller, owner: Owner | null, rules: readonly RuleFact[]): boolean {
+function leadKeepsManage(caller: Caller, owner: Owner | null, rules: readonly RuleFact<number>[]): boolean {
   return (
     owner?.kind === "team" &&
     owner.teamId !== null &&
@@ -204,29 +226,50 @@ export function nodeLevelOf(caller: Caller, chain: NodeChain): AccessLevel {
   const nearest = counted.length > 0 ? Math.max(...counted.map((rule) => depths.get(rule.targetId) ?? 0)) : null
   const closest = counted.filter((rule) => depths.get(rule.targetId) === nearest)
   const precise = closest.filter((rule) => rule.org !== true)
-  if (precise.length > 0) return strongest(caller, precise)
+  if (precise.length > 0) return strongest(caller, precise, NONE)
   // (3) sans règle de la personne ni de ses équipes : le propriétaire effectif décide, et une règle
   // d'organisation au plus proche ouvre au-delà, sans rien retirer (HN-E05S10e-12).
   const byOwner = ownerDefault(caller, owner)
-  const byOrg = highest(closest)
+  const byOrg = highest(closest, NONE)
   return byOrg > byOwner ? byOrg : byOwner
 }
 
 /**
- * Niveau de l'appelant sur un compte (H67) : même calcul, sans héritage. Les règles comptées sont
- * celles de l'organisation du compte (M02) : un compte d'une
- * autre organisation vaut 0, et `readAccountFacts` ne lit que les règles de l'organisation de
- * l'identité (précondition des `facts`).
+ * Sans règle, le propriétaire d'un compte décide (H67) : un compte d'organisation se lit, un compte d'équipe sert ses
+ * membres jusqu'aux fonctions sensibles, comme avant le niveau sensible (son responsable le gère) ; le compte personnel
+ * d'un autre ne s'ouvre que par une règle (sa personne, elle, le gère : `accountLevelOf`).
  */
-export function accountLevelOf(caller: Caller, facts: AccountFacts): AccessLevel {
+function accountOwnerDefault(caller: Caller, owner: Owner): AccountLevel {
+  if (owner.kind === "org") return ACCOUNT_LEVELS.read
+  if (owner.kind === "team" && owner.teamId !== null) {
+    if (caller.ledTeamIds.has(owner.teamId)) return ACCOUNT_LEVELS.manage
+    return caller.teamIds.has(owner.teamId) ? ACCOUNT_LEVELS.sensitive : ACCOUNT_LEVELS.none
+  }
+  return ACCOUNT_LEVELS.none
+}
+
+/**
+ * Niveau de l'appelant sur un compte (H67), sur l'échelle des comptes (`ACCOUNT_LEVELS`) : même calcul qu'un nœud,
+ * sans héritage. Les règles comptées sont celles de l'organisation du compte (M02) : un compte d'une autre organisation
+ * vaut 0, et `readAccountFacts` ne lit que les règles de l'organisation de l'identité (précondition des `facts`). La
+ * règle qui nomme la personne, puis celles de ses équipes, décident ; sans elles, le défaut du propriétaire, qu'une
+ * règle d'organisation ouvre au-delà sans rien retirer, comme sur un nœud (ADR-014 ; `droits-d-acces.md` § Partage
+ * d'un compte de connecteur).
+ */
+export function accountLevelOf(caller: Caller, facts: AccountFacts): AccountLevel {
   const { account } = facts
-  if (account.orgId !== caller.orgId) return NONE
-  if (account.owner.kind !== "user" && caller.isOrgAdmin) return MANAGE
+  if (account.orgId !== caller.orgId) return ACCOUNT_LEVELS.none
+  if (account.owner.kind !== "user" && caller.isOrgAdmin) return ACCOUNT_LEVELS.manage
+  // Sa personne gère son compte personnel : une règle qu'elle pose pour son équipe ou l'organisation ne la vise pas.
+  if (account.owner.kind === "user" && account.owner.userId === caller.userId) return ACCOUNT_LEVELS.manage
   const rules = facts.rules.filter((rule) => rule.targetId === account.id)
-  if (leadKeepsManage(caller, account.owner, rules)) return MANAGE
-  // Aucune règle d'organisation sur un compte (contrainte `access_rules_one_subject`, ADR-014).
-  const counted = rules.filter((rule) => aimsAt(caller, rule, false))
-  return counted.length > 0 ? strongest(caller, counted) : ownerDefault(caller, account.owner)
+  if (leadKeepsManage(caller, account.owner, rules)) return ACCOUNT_LEVELS.manage
+  const counted = rules.filter((rule) => aimsAt(caller, rule, true))
+  const precise = counted.filter((rule) => rule.org !== true)
+  if (precise.length > 0) return strongest(caller, precise, ACCOUNT_LEVELS.none)
+  const byOwner = accountOwnerDefault(caller, account.owner)
+  const byOrg = highest(counted, ACCOUNT_LEVELS.none)
+  return byOrg > byOwner ? byOrg : byOwner
 }
 
 /** Rendre personnel ce qui ne l'était pas : propriétaire effectif `user` après, pas avant. */
@@ -243,5 +286,5 @@ function becomesPersonal(before: Owner | null, after: Owner | null): boolean {
 export function accountOwnerChangeAllowed(caller: Caller, facts: AccountFacts, owner: Owner): boolean {
   if (becomesPersonal(facts.account.owner, owner) && !caller.isOrgAdmin) return false
   const written: AccountFacts = { ...facts, account: { ...facts.account, owner } }
-  return accountLevelOf(caller, facts) === MANAGE && accountLevelOf(caller, written) === MANAGE
+  return accountLevelOf(caller, facts) === ACCOUNT_LEVELS.manage && accountLevelOf(caller, written) === ACCOUNT_LEVELS.manage
 }

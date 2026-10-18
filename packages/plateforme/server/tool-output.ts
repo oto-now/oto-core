@@ -41,6 +41,11 @@ export type ToolOutput = {
   /** Pour le journal : ce qu'une fonction de `call` a fait, en nombres, écrit en `args._outcome` (E11-S02, AC-h2). */
   outcome?: Record<string, number>
   /**
+   * Pour le journal : la personne dont `call` a servi le compte personnel, quand ce n'est pas l'appelant (partage des
+   * comptes, l'équivalent du `lent_by` d'oto 1), écrite en `args._lent_by`.
+   */
+  lentBy?: string | null
+  /**
    * La vue du widget qui rend ce résultat ; ses données sont déjà dans `data`. La porte la sert avec le thème quand
    * les widgets sont allumés (`structuredContent.view`), l'ignore sinon (story widgets-dans-la-conversation).
    */

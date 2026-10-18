@@ -1,6 +1,7 @@
 // Face server : services, seule porte d'écriture vers la base.
 export {
   ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   accountLevel,
   describeOwner,
   isOrgAdmin,
@@ -11,7 +12,7 @@ export {
   reservedTo,
   unknownPath,
 } from "./access"
-export type { AccessAction, AccessLevel, NodeAction, NodeOwner, Owner } from "./access"
+export type { AccessAction, AccessLevel, AccountLevel, NodeAction, NodeOwner, Owner } from "./access"
 export { cellStatus } from "./cell"
 export type { CellStatus } from "./cell"
 export { createAnonPlatformDb, createPlatformDb, PlatformConfigError, PLATFORM_SCHEMA } from "./db"
@@ -158,6 +159,7 @@ export type { AdminLogEntry, AdminLogFilters, AdminLogPage } from "./admin/journ
 export { findAccount, resolveRef } from "./admin/context"
 export type { ResolvedRef } from "./admin/context"
 export { listAccountRules, removeAccountRule, setAccountRule } from "./rules"
+export { listAccountShareJournal } from "./account-share-journal"
 export type { AccountRulesView } from "./rules"
 // E05-S10 (partie e) : ordre des frères, corbeille, duplication, aperçu d'un déplacement, accès général,
 // liens d'un nœud ; (partie d, ADR-013) liens publics et leur lecture hors session.

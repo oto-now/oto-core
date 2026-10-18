@@ -46,9 +46,39 @@ export type NodeRulesView = {
 
 export type RuledNodeView = { path: string; title: string; rulesCount: number }
 
-/** Une règle sur un compte de connecteur (E08-S06, N10) : le compte, le sujet, le niveau, comme sur un nœud. */
+/**
+ * Les niveaux d'un compte de connecteur, du plus bas au plus haut : ceux d'un nœud, plus `sensitive`, entre l'écriture
+ * et la gestion, qu'exige une fonction sensible (`droits-d-acces.md` § Partage d'un compte de connecteur).
+ */
+export const ACCOUNT_LEVEL_NAMES = ["none", "read", "write", "sensitive", "manage"] as const
+
+const accountLevelSchema = z.enum(ACCOUNT_LEVEL_NAMES)
+
+export type AccountLevelName = z.infer<typeof accountLevelSchema>
+
+/** Le sujet d'une règle sur un compte : une équipe, une personne, ou l'organisation entière (partage des comptes). */
+const accountRuleSubjectSchema = z.discriminatedUnion("kind", [...ruleSubjectSchema.options, z.object({ kind: z.literal("org") })])
+
+export type AccountRuleSubject = z.infer<typeof accountRuleSubjectSchema>
+
+/** Une règle sur un compte de connecteur (E08-S06, N10) : le compte, le sujet, le niveau de l'échelle des comptes. */
 export const setAccountRuleSchema = z.object({
   accountId: z.uuid(),
-  subject: ruleSubjectSchema,
-  level: accessLevelSchema,
+  subject: accountRuleSubjectSchema,
+  level: accountLevelSchema,
 })
+
+/**
+ * Une ligne du journal des partages d'un compte (`listAccountShareJournal`) : qui a posé (`set`, `previous` : le niveau
+ * remplacé) ou retiré (`removed`, `level` : celui qui partait) quelle règle, vers qui, quand. `subject.name` nul : une
+ * équipe supprimée ou une personne qui n'est plus membre ; `by` nul : un geste hors d'une session (outillage, import),
+ * `by.name` nul : son auteur n'est plus membre.
+ */
+export type AccountShareEventView = {
+  at: string
+  action: "set" | "removed"
+  subject: { kind: "team" | "user" | "org"; name: string | null }
+  level: AccountLevelName
+  previous: AccountLevelName | null
+  by: { name: string | null } | null
+}

@@ -22,6 +22,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A connector that runs on the account each person connects (`oauth2_user`) uses yours without naming it; when it is missing or must be connected again, the refusal says so.
 - Platform team: `admin_org create` takes `admin_email`, its first administrator (you join at once; another email is invited), and `admin_org add_admin` names one later.
 - A connector account whose key the third party refused, or whose credits are spent, is marked: the refusal says since when and whom to ask, `context` says it, and the next success lifts it.
+- Your own personal account serves first, unnamed, before your team's and the organisation's; another person's account shared with you serves only named, and the answer says whose it is.
+- When no account serves, the refusal names the personal accounts shared with you and their owner: show them to the user and call again naming the one chosen.
+- A sensitive connector function needs the sensitive level on its account, above write; the account of a person who left the organisation no longer serves.
 
 ### Hosts
 - MCP: `admin_org create` requires `admin_email`, the first administrator: the caller's own email (no case) makes them a member with the admin role in the creation transaction, without email, in OIDC and Supabase modes; another email gets an admin invitation once created, by the invitation service and email of the Équipes screen, linking to an address of the organisation. Its summary says which; its next line no longer says to invite from Équipes. The creator's `creation` platform access stays.
@@ -48,6 +51,15 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - UI: the Connecteurs screen shows « Connecter mon compte » for each `accountIdentity` connector whose port you gave (`ConnectorAccountForm.hosted.ready`), « Reconnecter » under an account in error, and reads `?hosted=` in `issueDuConsentement`; it no longer offers a secret nor a creation by hand for such a connector. `ConnexionParConsentement` takes `ressource`.
 - Migrations: apply `20261017090000_platform_comptes_rattaches.sql` (`accounts.linked_id`, `linked_at`, `hosted_link_requests`, four `security definer` functions; account inserts move to column grants; additive).
 - Server: `callFunction(db, identity, { function, arguments?, confirm?, team?, account? }, { origin, accessToken?, userAgent?, defer? })` runs a catalogue function from your server under the signed-in person, with the checks of `<p>_call` (activation, arguments, team, account level, secret); a refusal is thrown as is (`PlatformError`), and a sensitive function without `confirm: true` returns `status: "needs_confirmation"` and its summary, running nothing. It returns `FunctionCallResult` and writes the journal line of a `call`, with `method` `api` and tool `call` (no `ctx`, not counted in assistant usage).
+- Server: account levels have their own scale, `ACCOUNT_LEVELS` (none 0, read 1, write 2, sensitive 3, manage 4; type `AccountLevel`), returned by `accountLevel`, `accountLevels` and `requireAccountLevel`: manage on an account is 4, no longer 3; node levels are unchanged. A team member's default on a team account is sensitive.
+- Server: for every connector, the caller's own personal account is resolved before the running team's and the organisation's; another person's only when named, and never once its owner has left the organisation (`not_enabled`). A refusal for lack of account carries `details.shared_accounts` (`id`, `label`, `owner`).
+- Server: `runCall` and `callFunction` return `account.owner` (`{ kind: "org" | "team", description }` or `{ kind: "user", userId, name, yours }`); the journal line of a call served by someone else's account carries `args._lent_by` (their user id).
+- Server: `setAccountRule` takes `subject: { kind: "org" }` and the level `sensitive`; `listAccountRules` returns the organisation rule apart (`general`); `listAccountShareJournal(db, identity, accountId)` is new, reserved to whoever manages the account.
+- Schemas: `AccountView.viewerLevel` (required), `ACCOUNT_LEVEL_NAMES`, `AccountLevelName`, `AccountRuleSubject`, `AccountShareEventView`; `setAccountRuleSchema` accepts the org subject and `sensitive`.
+- API: `GET admin/accounts/<id>/share-journal` serves the share journal of an account to whoever manages it.
+- UI: the Connecteurs screen shows « Journal des partages de … » under each account the viewer manages.
+- MCP: `admin_connector add_account_rule` accepts the level `sensitive`; its defaults text says a sensitive function needs it.
+- Migrations: apply `20261018090000_platform_partage_des_comptes.sql` (`access_rules` admits an org subject and `sensitive` on an account; account rules at `write` become `sensitive`, keeping what they opened; table `account_share_events` written by a trigger on `access_rules`; `forget_user` scrubs it).
 
 ## 1.5.0 — 2026-10-06
 

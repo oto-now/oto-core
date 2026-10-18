@@ -33,7 +33,7 @@ import { trashRoutes } from "./trash"
 import { isUploadFormRoute, isUploadRoute, uploadFormResponse, uploadResponse } from "./uploads"
 import { tablesRoutes } from "./tables"
 import { teamsRoutes } from "./teams"
-import { accountCreationRoute, accountDisablingRoute, accountSecretRoute } from "./admin/accounts"
+import { accountCreationRoute, accountDisablingRoute, accountSecretRoute, accountShareJournalRoute } from "./admin/accounts"
 import { activationRoute, deactivationRoute } from "./admin/connectors"
 import { flagRoute } from "./admin/flags"
 import { openEntryRoute, orgRoute } from "./admin/org"
@@ -100,8 +100,10 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   nodes: nodesRoutes,
   feedback: feedbackRoutes,
   // Tableau de bord (E08-S03) : `admin/org`, `admin/open-entry`, `admin/connectors/<nom>/activation`, `admin/accounts`,
-  // `admin/accounts/<id>/disable`, `admin/accounts/<id>/secret` et `admin/flags`, départagées par leurs segments fixes.
+  // `admin/accounts/<id>/disable`, `admin/accounts/<id>/secret`, `admin/accounts/<id>/share-journal` (lecture) et
+  // `admin/flags`, départagées par leurs segments fixes.
   admin: {
+    GET: accountShareJournalRoute,
     PATCH: [orgRoute, flagRoute, openEntryRoute],
     POST: [activationRoute, accountCreationRoute, accountDisablingRoute, accountSecretRoute],
     DELETE: deactivationRoute,

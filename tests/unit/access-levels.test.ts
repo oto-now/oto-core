@@ -14,12 +14,14 @@ import {
   nodeLevelOf,
   type AccessLevel,
   type AccountFacts,
+  type AccountLevel,
   type NodeChain,
   type NodeFact,
   type NodeOwner,
 } from "../../packages/plateforme/server/access-levels"
 import type { Identity } from "../../packages/plateforme/server/identity"
 import {
+  accountRuleFact,
   ACCOUNTS,
   identityOf,
   nodeFacts,
@@ -62,10 +64,10 @@ function level(who: Person | Identity, path: string, rules: RuleSpec[] = []): Ac
 
 function account(key: AccountKey, rules: RuleSpec[] = []): AccountFacts {
   const { id, owner } = ACCOUNTS[key]
-  return { account: { id, orgId: ORG.id, owner }, rules: rules.map(ruleFact) }
+  return { account: { id, orgId: ORG.id, owner }, rules: rules.map(accountRuleFact) }
 }
 
-function accountLevel(who: Person, key: AccountKey, rules: RuleSpec[] = []): AccessLevel {
+function accountLevel(who: Person, key: AccountKey, rules: RuleSpec[] = []): AccountLevel {
   return accountLevelOf(callerOf(identityOf(who)), account(key, rules))
 }
 
@@ -175,11 +177,44 @@ describe("nodeLevelOf", () => {
 
 describe("accountLevelOf", () => {
   it("should give each owner's default, the lead's manage until named, and no inheritance from nodes (AC8)", () => {
-    expect([accountLevel("lea", "org"), accountLevel("ada", "org")]).toEqual([1, 3])
-    expect((["lea", "claire", "paul"] as const).map((who) => accountLevel(who, "ventes"))).toEqual([2, 3, 0])
-    expect(accountLevel("ada", "claire")).toBe(0)
+    // Échelle des comptes : 1 lecture, 2 écriture, 3 sensible, 4 gestion ; un membre va jusqu'aux fonctions sensibles
+    // du compte de son équipe (#68 : ce que l'écriture ouvrait avant le niveau sensible).
+    expect([accountLevel("lea", "org"), accountLevel("ada", "org")]).toEqual([1, 4])
+    expect((["lea", "claire", "paul"] as const).map((who) => accountLevel(who, "ventes"))).toEqual([3, 4, 0])
+    expect([accountLevel("ada", "claire"), accountLevel("claire", "claire")]).toEqual([0, 4])
     expect(accountLevel("claire", "ventes", [{ account: "ventes", user: "claire", level: "read" }])).toBe(1)
     expect(accountLevel("paul", "ventes", [{ node: "ventes", team: "support", level: "write" }])).toBe(0)
+  })
+})
+
+describe("accountLevelOf: sharing a personal account (#68)", () => {
+  it("should keep the owner manager of their own account whatever the rules", () => {
+    const rules: RuleSpec[] = [
+      { account: "claire", org: true, level: "read" },
+      { account: "claire", team: "ventes", level: "none" },
+      { account: "claire", user: "claire", level: "none" },
+    ]
+    expect(accountLevel("claire", "claire", rules)).toBe(4)
+  })
+
+  it("should share with the whole organisation, administrators included, without giving them manage", () => {
+    const rules: RuleSpec[] = [{ account: "claire", org: true, level: "write" }]
+    expect((["lea", "paul", "marc", "ada"] as const).map((who) => accountLevel(who, "claire", rules))).toEqual([2, 2, 2, 2])
+  })
+
+  it("should share with a team, and let a person's or a team's rule win over the organisation's", () => {
+    expect((["paul", "lea"] as const).map((who) => accountLevel(who, "claire", [{ account: "claire", team: "support", level: "sensitive" }]))).toEqual([3, 0])
+    const precise: RuleSpec[] = [
+      { account: "claire", org: true, level: "write" },
+      { account: "claire", user: "lea", level: "none" },
+      { account: "claire", team: "support", level: "read" },
+    ]
+    expect((["lea", "paul", "marc"] as const).map((who) => accountLevel(who, "claire", precise))).toEqual([0, 1, 2])
+  })
+
+  it("should let an organisation rule raise a team account for the other members, never lower its own team", () => {
+    const rules: RuleSpec[] = [{ account: "ventes", org: true, level: "read" }]
+    expect((["paul", "lea", "claire"] as const).map((who) => accountLevel(who, "ventes", rules))).toEqual([1, 3, 4])
   })
 })
 

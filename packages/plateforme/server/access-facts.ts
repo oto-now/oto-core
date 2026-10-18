@@ -1,6 +1,6 @@
 // Faits du calcul des niveaux (E01-S07, HN-E01S07-3), lus sous l'appelant de la session et par lots :
 // les cibles, leurs ancêtres par chemin et les règles de ces nœuds, en une lecture (E05-S10, partie c) ; les
-// comptes et leurs règles, en deux. Jamais nœud par nœud, aucun cache d'une requête à l'autre (un
+// comptes et leurs règles, en deux, au rang de l'échelle des comptes (`ACCOUNT_LEVELS`). Jamais nœud par nœud, aucun cache d'une requête à l'autre (un
 // retrait ou une règle nouvelle comptent dès la requête suivante, H70), et une lecture en échec lève :
 // un fait manquant ne vaut jamais « niveau 0 ». Sans ce module, chaque service lirait ancêtres et
 // règles à sa façon, nœud par nœud.
@@ -17,10 +17,13 @@
 // `grants`, les observateurs de comparaison (`docs/conception/vue-d-ensemble.md`, « Oto : ce qui ne revient jamais »).
 import {
   ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   ancestorPaths,
   ROOT_PATH,
   type AccessLevel,
   type AccountFacts,
+  type AccountLevel,
+  type AccountRuleFact,
   type Caller,
   type NodeChain,
   type NodeFact,
@@ -29,7 +32,7 @@ import {
   type RuleFact,
 } from "./access-levels"
 import type { PlatformDb } from "./db"
-import { fromDatabaseError, inTransaction } from "./errors"
+import { fromDatabaseError, inTransaction, PlatformError } from "./errors"
 import type { Tx } from "./sql"
 
 /** Une chaîne lue ; `complete` : chaque chemin d'ancêtre est revenu de la lecture. */
@@ -51,6 +54,18 @@ const LEVEL_RANKS: Record<string, AccessLevel | undefined> = {
   read: ACCESS_LEVELS.read,
   write: ACCESS_LEVELS.write,
   manage: ACCESS_LEVELS.manage,
+}
+
+/**
+ * Rang d'un niveau de règle sur un compte, sur l'échelle des comptes (`ACCOUNT_LEVELS`) : `sensitive` n'existe que là
+ * (contrainte `access_rules_level_check`) ; `none` donne 0. Toute autre valeur ne vient que d'une écriture hors du
+ * paquet : panne nommée, jamais lue comme « aucun ».
+ */
+function accountLevelRank(level: string): AccountLevel {
+  if (level === "none") return ACCOUNT_LEVELS.none
+  if (level === "read" || level === "write" || level === "sensitive" || level === "manage") return ACCOUNT_LEVELS[level]
+  console.error("[platform] access: account rule of an unknown level")
+  throw new PlatformError("internal", "Internal error.")
 }
 
 function ownerKind(value: string | null): Owner["kind"] {
@@ -176,7 +191,7 @@ export async function readAccountFacts(
   for (const row of accounts) {
     facts.set(row.id, {
       account: { id: row.id, orgId: row.org_id, owner: ownerOf(row) },
-      rules: rules.filter((rule) => rule.account_id === row.id).map((rule) => ruleFact(row.id, rule)),
+      rules: rules.filter((rule) => rule.account_id === row.id).map((rule): AccountRuleFact => ({ ...ruleFact(row.id, rule), level: accountLevelRank(rule.level) })),
     })
   }
   return facts

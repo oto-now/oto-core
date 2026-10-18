@@ -226,8 +226,14 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     // Partagé (décision du 16/10, n° 10) : le compte d'un autre se nomme ; sans nom, l'appel de claire cherche le sien.
     const [account] = await accountsOf("lea")
     await setAccountRule(lea.db, lea.identity, { accountId: account.id, subject: { kind: "user", id: o.people.claire.id }, level: "write" })
+    // Le refus nomme le compte partagé et sa propriétaire (partage des comptes, #68), sans le prendre.
     const unnamed = await refusal(callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
-    expect([unnamed.code, unnamed.message]).toEqual(["not_enabled", yours])
+    const shared = ` Personal accounts shared with you, used only when named: « ${label("lea")} » (owner Léa Roux, live). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".`
+    expect([unnamed.code, unnamed.message, unnamed.details]).toEqual([
+      "not_enabled",
+      yours + shared,
+      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux" }] },
+    ])
     const named = await callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts`, account: label("lea") }, { origin: origin(o) })
     expect([named.status, named.account?.label, sent.at(-1)?.url]).toEqual(["done", label("lea"), `${API}/${id}/contacts?view=full`])
   })

@@ -8,7 +8,9 @@
 // un fichier d'ajout (HN-E01S07-20).
 import {
   ACCESS_LEVELS,
+  ACCOUNT_LEVELS,
   ancestorPaths,
+  type AccountRuleFact,
   type NodeFact,
   type Owner,
   type RuleFact,
@@ -140,20 +142,28 @@ export type RuleSpec = {
   team?: TeamKey
   user?: Person
   org?: true
-  level: keyof typeof ACCESS_LEVELS
+  /** `sensitive` ne vaut que sur un compte (`access_rules_level_check`). */
+  level: keyof typeof ACCOUNT_LEVELS
 }
 
 const targetOf = (spec: RuleSpec): string => (spec.node !== undefined ? nodeId(spec.node) : ACCOUNTS[spec.account ?? "org"].id)
 
-/** La règle en fait du calcul pur. */
+const subjectOf = (spec: RuleSpec) => ({
+  targetId: targetOf(spec),
+  teamId: spec.team ? TEAMS[spec.team].id : null,
+  userId: spec.user ? PEOPLE[spec.user].id : null,
+  org: spec.org === true,
+})
+
+/** La règle d'un nœud en fait du calcul pur ; `sensitive` n'existe pas sur un nœud. */
 export function ruleFact(spec: RuleSpec): RuleFact {
-  return {
-    targetId: targetOf(spec),
-    teamId: spec.team ? TEAMS[spec.team].id : null,
-    userId: spec.user ? PEOPLE[spec.user].id : null,
-    org: spec.org === true,
-    level: ACCESS_LEVELS[spec.level],
-  }
+  if (spec.level === "sensitive") throw new Error("a node rule has no sensitive level")
+  return { ...subjectOf(spec), level: ACCESS_LEVELS[spec.level] }
+}
+
+/** La règle d'un compte en fait du calcul pur, sur l'échelle des comptes (`ACCOUNT_LEVELS`). */
+export function accountRuleFact(spec: RuleSpec): AccountRuleFact {
+  return { ...subjectOf(spec), level: ACCOUNT_LEVELS[spec.level] }
 }
 
 /** La règle en ligne d'`access_rules`. */
