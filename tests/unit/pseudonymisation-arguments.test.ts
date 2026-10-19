@@ -54,6 +54,19 @@ describe("the tokens in the arguments, on a dictionary in memory", () => {
     ;[camille, jean, acme, shared] = served.split(", ")
   })
 
+  it("should take for text what only has a token's shape, at the gate and at the entry", async () => {
+    // Sans enveloppe fermante, l'ancre d'une adresse a la forme d'un jeton : elle ne protège pas un nom, n'est pas refusée.
+    expect(pseudonymizedText(dictionary, "https://crm.test/fiche#camille_dupre")).toBe(`https://crm.test/fiche#${camille}`)
+    expect(pseudonymizedText(dictionary, "voir fiche#camille dupré")).toBe(`voir fiche#${camille}`)
+    expect(pseudonymizedText(dictionary, `voir fiche#${camille}`)).toBe(`voir fiche#${camille}`)
+    expect(() => checkTokens(dictionary, "https://docs.test/guide#installation, issue#12, doc.md#intro", "designation")).not.toThrow()
+    expect(designatedText(dictionary, `fiche#${camille} et guide#intro`)).toBe("fiche#Camille Dupré et guide#intro")
+    expect(pathCandidates(dictionary, "docs/guide#intro")).toEqual(["docs/guide#intro"])
+    expect(withEntityIds(dictionary, { client: "issue#12" }, { client: "client" })).toEqual({ client: "issue#12" })
+    expect(() => refuseTokens(dictionary, "mail.send", { body: "voir guide#installation" })).not.toThrow()
+    expect(await refusal(() => checkTokens(dictionary, token("client", "0".repeat(13)), "content"))).toBe("invalid_arguments unknown_pseudonym")
+  })
+
   it("should give a query the designation of the entity, and a phrase too, keeping a shared value's token there", () => {
     expect([camille, jean, acme]).toEqual([expect.stringMatching(new RegExp(`^${PERSON}$`, "u")), expect.any(String), expect.any(String)])
     expect(designatedText(dictionary, `devis ${camille} et ${acme}`)).toBe("devis Camille Dupré et Acme SA")

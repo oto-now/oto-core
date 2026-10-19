@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-19] — Pseudonymisation : le jeton s'écrit `client#…`
+**Quoi :** `TOKEN_ENVELOPE` passe de `⟦client:…⟧` à `client#…` (sans ouverture ni fermeture, `#` pour séparateur). Sans fermeture, la forme seule ne prouve plus le jeton : la porte ne garde, sans y chercher de mention, que les jetons que le dictionnaire connaît ; l'entrée ne lit comme jeton qu'une suite d'une sorte déclarée ou réservée (`Dictionary.kinds`), le reste est du texte ; une suite écartée ne mange pas le jeton qui la suit (`tokenMatches`). Conception, README et changelog du paquet à jour ; la friction de `table.rows` relevée au banc va à « Reste à faire ».
+**Pourquoi :** Décision d'Alexis du 19/10 sur le banc de fidélité : 30 conversations par format sur Sonnet, aucun jeton altéré ni inventé dans `⟦…⟧`, `‹…›` ou `client#…` ; `client#…` est le moins coûteux (13 tokens par jeton contre 19 et 16 ; 547 k tokens au banc contre 618 k et 617 k).
+**Problèmes :** Avec `#`, l'ancre d'une adresse a la forme d'un jeton. Sans garde, `https://crm.test/fiche#camille_dupre` était servi en clair (la porte n'y cherchait rien) et `guide#installation`, `issue#12` ou `doc.md#intro` dans un argument étaient refusés (`unknown_pseudonym`) ; trouvé par une sonde avant le changement, couvert par un test.
+**Fichiers :** `packages/plateforme/server/pseudonym/{token,dictionary,gate,arguments}.ts`, `server/tables/filters.ts`, `server/nodes/replace-text.ts` (commentaires), `packages/plateforme/{README,CHANGELOG}.md`, `docs/conception/{pseudonymisation,contexte-servi}.md`, `tests/unit/pseudonymisation-arguments.test.ts`.
+
 ## [2026-10-19] — Pseudonymisation : les jetons dans les arguments (J2, fin)
 **Quoi :** `find` de `replace_text` qui porte un jeton se cherche dans le markdown pseudonymisé, puis la coupe revient au texte en clair par une table de places (`pseudonymizedPlaces`) ; un filtre de `table.*` qui porte un jeton compare les cellules pseudonymisées ; une clé de ligne en jeton devient la clé en clair de la ligne qui la redonne ; `q` d'un tableau reçoit « prénoms nom ». Le README garde un avertissement : le nom seul reste en clair.
 **Pourquoi :** Dernière partie des jetons dans les arguments (§ Les jetons dans les arguments) : sans elle, l'assistant ne pouvait ni corriger un texte qui nomme une personne, ni filtrer un tableau par une personne.

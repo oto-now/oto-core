@@ -6,7 +6,7 @@ import type { Dictionary } from "./dictionary"
 import { findMentions } from "./mentions"
 import { normalized } from "./normalize"
 import { phoneDigits } from "./forms"
-import { TOKEN_PATTERN } from "./token"
+import { tokenMatches } from "./token"
 
 /** Une suite qui ressemble à un numéro de téléphone : 8 à 15 chiffres, séparés au plus d'un blanc, point, tiret ou parenthèse. */
 const PHONE_LIKE = /(?<![\d+])(?:\+|00)?\d(?:[\s.()-]{0,2}\d){7,14}(?!\d)/gu
@@ -44,11 +44,15 @@ function segmentCuts(dictionary: Dictionary, text: string, offset: number): Cut[
   return kept
 }
 
-/** Les coupes de `text` : chaque mention d'une personne déclarée et son jeton ; rien dans un jeton déjà posé. */
+/**
+ * Les coupes de `text` : chaque mention d'une personne déclarée et son jeton ; rien dans un jeton déjà posé, que le
+ * dictionnaire connaît. Une suite qui en a seulement la forme (l'ancre d'une adresse, `fiche#camille_dupre`) se masque
+ * comme tout texte : sans enveloppe fermante, la forme seule ne prouve pas le jeton.
+ */
 function textCuts(dictionary: Dictionary, text: string): Cut[] {
   const cuts: Cut[] = []
   let at = 0
-  for (const match of text.matchAll(TOKEN_PATTERN)) {
+  for (const match of tokenMatches(text, (found) => dictionary.byToken.has(found))) {
     cuts.push(...segmentCuts(dictionary, text.slice(at, match.index), at))
     at = match.index + match[0].length
   }

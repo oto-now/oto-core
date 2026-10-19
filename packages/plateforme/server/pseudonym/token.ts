@@ -1,4 +1,4 @@
-// Le jeton d'une personne (`pseudonymisation.md` § Le jeton) : `⟦<sorte>:<corps>⟧`, dans l'enveloppe `TOKEN_ENVELOPE`. Le corps est, par défaut, les 64
+// Le jeton d'une personne (`pseudonymisation.md` § Le jeton) : `<sorte>#<corps>`, dans l'enveloppe `TOKEN_ENVELOPE`. Le corps est, par défaut, les 64
 // premiers bits d'un HMAC-SHA-256 de l'identifiant sous la clé de l'organisation, en 13 caractères de base32 de
 // Crockford minuscule ; ou la référence que l'hôte fournit pour une sorte (`tokens: "reference"`). La clé de
 // l'organisation dérive de la clé maître (`PLATFORM_PSEUDONYM_KEY`) et d'un sel propre à l'organisation. Sans clé, nul
@@ -16,9 +16,12 @@ export const HMAC_BODY_CHARS = 13
 
 /**
  * L'enveloppe d'un jeton, seule définition de sa forme écrite : l'expression qui le reconnaît et son rendu en dérivent.
- * Changer de format (`‹client:…›`, `client#…`), c'est changer ces trois chaînes, et rien d'autre.
+ * `client#…`, retenu le 19/10 sur le banc de fidélité, le moins coûteux à fidélité égale. Changer de format (`⟦client:…⟧`,
+ * `‹client:…›`), c'est changer ces trois chaînes, et rien d'autre. Sans fermeture, la forme seule ne prouve pas le jeton
+ * (l'ancre d'une adresse, `guide#installation`, l'a aussi) : la porte ne garde que les jetons que le dictionnaire connaît,
+ * l'entrée que ceux d'une sorte déclarée ou réservée.
  */
-export const TOKEN_ENVELOPE: { readonly open: string; readonly separator: string; readonly close: string } = { open: "⟦", separator: ":", close: "⟧" }
+export const TOKEN_ENVELOPE: { readonly open: string; readonly separator: string; readonly close: string } = { open: "", separator: "#", close: "" }
 
 /** L'expression d'une sorte, d'un corps HMAC et d'un corps quelconque (HMAC ou référence fournie par l'hôte). */
 export const KIND_SOURCE = "[a-z][a-z0-9]{1,9}"
@@ -40,6 +43,18 @@ export function tokenSource(kind: string = KIND_SOURCE, body: string = BODY_SOUR
 
 /** Un jeton, de corps HMAC ou de référence : la sorte et le corps. */
 export const TOKEN_PATTERN = new RegExp(tokenSource(`(${KIND_SOURCE})`, `(${BODY_SOURCE})`), "gu")
+/**
+ * Les jetons de `text` que `accept` retient (par la suite trouvée et sa sorte), de gauche à droite. Une suite écartée ne
+ * mange pas ce qui la suit : dans `fiche#client#…`, `fiche#client` écarté, `client#…` est encore trouvé.
+ */
+export function* tokenMatches(text: string, accept: (found: string, kind: string) => boolean): Generator<RegExpExecArray> {
+  const pattern = new RegExp(TOKEN_PATTERN.source, "gu")
+  for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+    if (accept(match[0], match[1])) yield match
+    else pattern.lastIndex = match.index + 1
+  }
+}
+
 /** Le corps d'une référence fournie par l'hôte. */
 export const REFERENCE_PATTERN = new RegExp(`^${BODY_SOURCE}$`, "u")
 /** Une sorte déclarable : ASCII minuscule, 2 à 10 caractères. */

@@ -8,7 +8,7 @@ import { isRecord } from "../../schemas/tables"
 import { PlatformError } from "../errors"
 import type { Dictionary } from "./dictionary"
 import { pseudonymizedText } from "./gate"
-import { TOKEN_PATTERN, tokenSource } from "./token"
+import { TOKEN_PATTERN, tokenMatches, tokenSource } from "./token"
 
 /** Ce que l'argument fait d'un jeton : un contenu le garde, jeton de valeur compris ; une désignation vise une entité. */
 export type TokenUse = "content" | "designation"
@@ -21,9 +21,17 @@ const LONE_TOKEN = new RegExp(`^${tokenSource()}$`, "u")
 
 type EntityTarget = { kind: string; id: string }
 
-/** Vrai si `text` porte au moins un jeton. */
+/**
+ * Vrai si `text` porte au moins une suite qui a la forme d'un jeton : un aiguillage (filtre, `replace_text`, chemin),
+ * pas une preuve. Sans enveloppe fermante, l'ancre d'une adresse (`guide#installation`) a aussi cette forme.
+ */
 export function hasToken(text: string): boolean {
   return text.search(TOKEN_PATTERN) !== -1
+}
+
+/** Les jetons de `text` : les suites qui en ont la forme et dont la sorte est déclarée ou réservée ; le reste est du texte. */
+function tokensIn(dictionary: Dictionary, text: string): RegExpExecArray[] {
+  return [...tokenMatches(text, (_found, kind) => dictionary.kinds.has(kind))]
 }
 
 function unknownPseudonym(found: string): PlatformError {
@@ -62,7 +70,7 @@ function* stringsOf(value: unknown): Generator<string> {
 
 /** Chaque jeton d'une valeur JSON (texte compris), contrôlé pour l'usage `use`. */
 export function checkTokens(dictionary: Dictionary, value: unknown, use: TokenUse): void {
-  for (const text of stringsOf(value)) for (const match of text.matchAll(TOKEN_PATTERN)) targetOf(dictionary, match[0], use)
+  for (const text of stringsOf(value)) for (const match of tokensIn(dictionary, text)) targetOf(dictionary, match[0], use)
 }
 
 /**
@@ -70,7 +78,14 @@ export function checkTokens(dictionary: Dictionary, value: unknown, use: TokenUs
  * jeton, comme un jeton de valeur sous l'usage `content` (la phrase de `context`).
  */
 export function designatedText(dictionary: Dictionary, text: string, use: TokenUse = "designation"): string {
-  return text.replace(TOKEN_PATTERN, (found) => (targetOf(dictionary, found, use) ? (dictionary.details.get(found)?.designation ?? found) : found))
+  let out = ""
+  let at = 0
+  for (const match of tokensIn(dictionary, text)) {
+    const found = match[0]
+    out += text.slice(at, match.index) + (targetOf(dictionary, found, use) ? (dictionary.details.get(found)?.designation ?? found) : found)
+    at = match.index + found.length
+  }
+  return out + text.slice(at)
 }
 
 /**
@@ -80,7 +95,7 @@ export function designatedText(dictionary: Dictionary, text: string, use: TokenU
 export function pathCandidates(dictionary: Dictionary, path: string): string[] {
   let heads = [""]
   let at = 0
-  for (const match of path.matchAll(TOKEN_PATTERN)) {
+  for (const match of tokensIn(dictionary, path)) {
     targetOf(dictionary, match[0], "designation")
     const slugs = dictionary.details.get(match[0])?.slugs ?? []
     const between = path.slice(at, match.index)
@@ -93,7 +108,7 @@ export function pathCandidates(dictionary: Dictionary, path: string): string[] {
 
 /** La valeur d'un argument d'entité : un jeton seul de la sorte attendue devient l'identifiant ; un texte sans jeton passe. */
 function entityId(dictionary: Dictionary, value: unknown, argument: { path: string; kind: string }): unknown {
-  if (typeof value !== "string" || !hasToken(value)) return value
+  if (typeof value !== "string" || tokensIn(dictionary, value).length === 0) return value
   if (!LONE_TOKEN.test(value)) throw new PlatformError("invalid_arguments", `${argument.path} takes one ${argument.kind} token alone, as a result gave it.`)
   // Une désignation : un jeton de valeur est refusé avant, l'entité n'est donc jamais nulle ici.
   const target = targetOf(dictionary, value, "designation") as EntityTarget
@@ -130,8 +145,9 @@ export function withEntityIds(
  */
 export function refuseTokens(dictionary: Dictionary, functionName: string, args: unknown): void {
   for (const text of stringsOf(args)) {
-    const [found] = text.match(TOKEN_PATTERN) ?? []
-    if (found === undefined) continue
+    const [match] = tokensIn(dictionary, text)
+    if (match === undefined) continue
+    const found = match[0]
     targetOf(dictionary, found, "content")
     throw new PlatformError(
       "forbidden",

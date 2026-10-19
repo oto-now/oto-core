@@ -37,7 +37,7 @@ type Compared =
 
 /**
  * `masked` : quand une valeur de la clause porte un jeton (pseudonymisation), la cellule se compare pseudonymisée, dans
- * l'espace où l'assistant l'a lue (« ⟦client:…⟧ » égale « Camille Dupré »).
+ * l'espace où l'assistant l'a lue (« client#… » égale « Camille Dupré »).
  */
 export type FilterClause = { column: TableColumn; op: FilterOperator; values: Compared[]; masked?: (text: string) => string }
 

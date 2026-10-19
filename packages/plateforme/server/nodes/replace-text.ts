@@ -60,7 +60,7 @@ function indicesOf(text: string, find: string): number[] {
 
 /**
  * Les occurrences de `find` dans le markdown en clair. Un `find` qui porte un jeton (pseudonymisation) se cherche dans le
- * markdown pseudonymisé (`state.places`), puis chaque occurrence revient au clair par la table de places : « ⟦client:…⟧
+ * markdown pseudonymisé (`state.places`), puis chaque occurrence revient au clair par la table de places : « client#…
  * a rappelé » remplace « Camille Dupré a rappelé ». Une occurrence dont un bord tombe dans un jeton ne compte pas.
  */
 function occurrences(state: OpState, markdown: string, find: string): Range[] {

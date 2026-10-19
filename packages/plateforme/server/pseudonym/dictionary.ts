@@ -7,7 +7,7 @@ import type { SensitiveEntity, SensitiveKind, SensitiveOrg, SensitiveValues } fr
 import { checkedValues, designationOf, entityForms, entityPhones, slugForms, titledName, type EntityForm } from "./forms"
 import { formRuns, type FormTable, type FormTarget } from "./mentions"
 import { normalizedText } from "./normalize"
-import { entityBody, REFERENCE_PATTERN, token, valueBody } from "./token"
+import { entityBody, REFERENCE_PATTERN, RESERVED_KINDS, token, valueBody } from "./token"
 
 /** Une panne de construction : sa cause va au log, jamais une valeur d'une personne. */
 export class DictionaryError extends Error {
@@ -42,6 +42,8 @@ export type Dictionary = {
   byToken: ReadonlyMap<string, TokenTarget>
   /** Jeton d'entité → sa désignation et ses formes en chemin. */
   details: ReadonlyMap<string, EntityDetail>
+  /** Les sortes qu'un jeton reçu peut porter : celles que l'hôte déclare, et les réservées (jetons de valeur). */
+  kinds: ReadonlySet<string>
   entities: number
 }
 
@@ -166,5 +168,6 @@ export async function buildDictionary(kinds: readonly SensitiveKind[], org: Sens
   const targets = (map: Map<string, Owned>) => new Map([...map].map(([value, { target, boundary }]): [string, FormTarget] => [value, { target, boundary }]))
   const phones = new Map([...draft.phones].map(([phone, { target }]): [string, number] => [phone, target]))
   const table: FormTable = { forms: targets(draft.forms), maxRuns: draft.maxRuns, titled: targets(draft.titled), titledRuns: draft.titledRuns }
-  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, details: draft.details, entities: total.count }
+  const tokenKinds = new Set([...kinds.map((declared) => declared.kind), ...RESERVED_KINDS])
+  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, details: draft.details, kinds: tokenKinds, entities: total.count }
 }
