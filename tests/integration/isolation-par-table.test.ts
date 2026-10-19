@@ -292,7 +292,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const writes: [string, string, () => Promise<string>][] = [
         ["orgs insert", "42501", () => insert("bea", "orgs", { name: "Intrus", slug: `t${hex(4)}`, prefix: `t${hex(4)}` })],
         ["orgs update", "0 rows", () => bea((sql) => sql`update platform.orgs set name = 'Intrus' where id = ${org} returning id`)],
-        ["orgs delete", "0 rows", () => bea((sql) => sql`delete from platform.orgs where id = ${org} returning id`)],
+        // Une organisation, un compte, une activation ne se suppriment sous aucune session (20261019140000).
+        ["orgs delete", "42501", () => bea((sql) => sql`delete from platform.orgs where id = ${org} returning id`)],
         ["members insert", "42501", () => insert("bea", "members", { org_id: org, user_id: people.bea.id, role: "admin" })],
         ["members update", "0 rows", () => bea((sql) => sql`update platform.members set role = 'admin' where org_id = ${org} and user_id = ${marc.id} returning user_id`)],
         ["members delete", "0 rows", () => bea((sql) => sql`delete from platform.members where org_id = ${org} and user_id = ${marc.id} returning user_id`)],
@@ -310,7 +311,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         // `authenticated` ne modifie aucune colonne d'un compte (20261019130000) ; le rôle du serveur, sous la RLS.
         ["accounts update", "42501", () => bea((sql) => sql`update platform.accounts set label = 'Intrus' where id = ${ids.accountA} returning id`)],
         ["accounts update by the server", "0 rows", () => countedByServer("bea", (sql) => sql`update platform.accounts set status = 'disabled' where id = ${ids.accountA} returning id`)],
-        ["accounts delete", "0 rows", () => bea((sql) => sql`delete from platform.accounts where id = ${ids.accountA} returning id`)],
+        ["accounts delete", "42501", () => bea((sql) => sql`delete from platform.accounts where id = ${ids.accountA} returning id`)],
         ["ctx insert", "42501", () => insert("bea", "ctx", { code: ctxCode(), org_id: org, user_id: people.bea.id, rules_version: 1 })],
         ["journal insert", "42501", () => insert("bea", "journal", { org_id: org, user_id: people.bea.id, method: "tools/call" })],
         ["org_domains insert", "42501", () => insert("bea", "org_domains", { host: `t${hex(4)}.example.invalid`, org_id: org })],
@@ -363,7 +364,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         ],
         [
           "connector_activations delete",
-          "0 rows",
+          "42501",
           () => bea((sql) => sql`delete from platform.connector_activations where org_id = ${org} and connector = 'mail' returning connector`),
         ],
         [

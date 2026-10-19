@@ -190,7 +190,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
           returning id, account_id`,
       )
       expect(line.account_id).toBe(account)
-      expect(await as("ada").tx((sql) => sql`delete from platform.accounts where id = ${account} returning id`)).toEqual([{ id: account }])
+      // Un compte ne se supprime sous aucune session, administratrice comprise (20261019140000) : l'outillage le fait.
+      expect(await codeOf(as("ada").tx((sql) => sql`delete from platform.accounts where id = ${account} returning id`))).toBe("42501")
+      expect(await fx.admin`delete from platform.accounts where id = ${account} returning id`).toEqual([{ id: account }])
       expect(await fx.admin`select account_id from platform.journal where id = ${line.id}`).toEqual([{ account_id: null }])
     })
 

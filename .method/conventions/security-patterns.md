@@ -145,8 +145,8 @@ réécrire ou supprimer les données d'un client. **Il n'écrit ni ne supprime u
 n'a pas créée** : il la reconnaît à une marque posée à sa création (`orgs.settings.demo` pour le script Démo, `guardOrg`
 de `scripts/demo-seed.mjs`) et refuse toute autre organisation existante, en la nommant, avant sa
 première écriture (code 1). La marque se lit « créée par le script, ou déclarée de démonstration par
-son admin » : la policy `orgs_update_admin` laisse l'admin écrire `settings`, sans rien lui donner de
-plus, puisqu'il peut déjà supprimer son organisation (`orgs_delete_admin`). **Vérifiable :** toute
+son admin » : la policy `orgs_update_admin` laisse l'admin écrire `settings` (aucune session ne supprime
+plus une organisation depuis `20261019140000`). **Vérifiable :** toute
 écriture ou suppression d'`orgs` par un script passe d'abord par ce contrôle, et un test
 d'intégration joue le refus sur une organisation jetable sans marque, lignes identiques après.
 

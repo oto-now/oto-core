@@ -173,6 +173,15 @@ par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,
 `consume_upload_ticket` et `org_usage`.
 
+**Suppressions.** `authenticated` ne supprime que dans les tables où un service supprime sous la session
+d'une personne ou du serveur : `access_rules`, `blocks`, `connector_consents`, `files`,
+`hosted_link_requests`, `members`, `nodes`, `org_domains`, `team_members`, `teams` et `upload_tickets`.
+`orgs`, `accounts` et `connector_activations` ne se suppriment sous aucune session (droit retiré, policy
+de suppression neutralisée, `false`) : une organisation et ses comptes par `oto-platform org delete`, les
+comptes d'une personne oubliée par `forget_user`, un connecteur se désactive par son état. `anon` ne
+supprime nulle part, `platform_server` rien de plus qu'`authenticated`. Ces tables sont la liste fermée
+de `tests/integration/role-du-serveur.test.ts`, chacune avec le service qui s'en sert.
+
 **Rôle du serveur.** `platform_server` (créé par `oto-platform db prepare`, `nologin`, membre
 d'`authenticated` dont il hérite, pris par `platform_app` seul) reçoit en plus ce qui écrit un fait venu
 d'un tiers ou du serveur : les fonctions marquées ci-dessus et, sur `accounts`, la mise à jour de

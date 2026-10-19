@@ -253,6 +253,13 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   la personne choisit. Les échéances que pose le serveur (`files.expires_at` d'un fichier en transit,
   `upload_tickets`, `connector_consents`) sont gardées à l'horloge de la base par `platform.expires_at_clock`
   (42501 sur une autre valeur). Avant de l'appliquer : relancer `oto-platform db prepare`.
+- `20261019140000_platform_suppressions.sql` (faits affirmés, suite du lot 1) : `delete` révoqué à `authenticated`
+  (donc à `platform_server`) sur `orgs`, `accounts` et `connector_activations`, qu'aucun service ne supprime sous une
+  session ; leurs policies `orgs_delete_admin`, `accounts_delete_admin` et `connector_activations_delete_admin`
+  neutralisées (`false`, recréées sous leur nom : `check:migrations` refuse un `drop`). Une organisation et ses
+  comptes se suppriment par `oto-platform org delete`, les comptes d'une personne oubliée par `forget_user`. Les
+  tables où `authenticated` supprime encore sont la liste fermée de `tests/integration/role-du-serveur.test.ts`.
+  Aucune table, colonne ni fonction ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

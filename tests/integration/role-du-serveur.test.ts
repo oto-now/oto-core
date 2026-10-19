@@ -4,14 +4,18 @@
 // accordée en écriture, croit ce que l'appelant lui passe : sur un hôte qui exposerait `platform` (le Data API de
 // Supabase), une personne l'affirmerait avec son seul jeton. Ce qui écrit un fait venu d'un tiers ou du serveur est
 // réservé à `platform_server`. Les listes fermées ci-dessous font échouer toute fonction ou colonne nouvelle : la
-// réserver au rôle du serveur, ou l'ajouter à sa liste en disant pourquoi elle n'écrit aucun fait affirmé.
+// réserver au rôle du serveur, ou l'ajouter à sa liste en disant pourquoi elle n'écrit aucun fait affirmé. Le droit
+// DELETE suit la même garde (migration `20261019140000`) : une table où `authenticated` supprime est un service qui y
+// supprime sous la session d'une personne ou du serveur, nommé dans sa liste.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData, type SeededOrg, type SeededPerson } from "../helpers/sql"
 import { withServerSession } from "../../packages/plateforme/server/sql"
 
 const VERSION = "20261019130000"
-const pending = (await pendingMigrations()).includes(VERSION)
+const DELETES = "20261019140000"
+const missing = (await pendingMigrations()).filter((version) => version === VERSION || version === DELETES)
+const pending = missing.length > 0
 
 /**
  * Les fonctions SECURITY DEFINER de `platform` qu'`authenticated` ou `anon` exécutent, chacune avec la raison pour
@@ -97,10 +101,33 @@ const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
   accounts: ["secret_ciphertext", "status", "settings", "secret_fields", "secret_updated_at", "token_ciphertext", "token_expires_at", "status_reason", "granted_scopes"],
 }
 
+/**
+ * Les tables de `platform` où `authenticated` supprime (aucune pour `anon`), chacune avec le service qui y supprime sous
+ * la session d'une personne, ou sous `platform_server` qui hérite de ce droit. Une suppression que seul l'outillage fait
+ * (organisation, compte : `oto-platform org delete`, `forget_user`) passe par la connexion d'administration ou une
+ * fonction `security definer`, jamais par ce droit.
+ */
+const DELETED_BY_AUTHENTICATED: Record<string, string> = {
+  access_rules: "removeRule, removeAccountRule, setGeneralAccess (server/rules.ts, server/general-access.ts): the person who manages the node or the account",
+  blocks: "draft blocks dropped on a save (server/nodes/store.ts), table rows by delete_rows (server/tables/delete-rows.ts)",
+  connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
+  files: "trash purge, undone upload, abandoned pending files, size mismatch, the caller's transit file (server/nodes/trash.ts, server/uploads-write.ts, server/files/)",
+  hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",
+  members: "an administrator removes a member (removeMember, server/members.ts)",
+  nodes: "trash purge and an undone upload creation (server/nodes/trash.ts, server/uploads-write.ts)",
+  org_domains: "an administrator removes an address (removeHost, server/admin/hosts.ts)",
+  team_members: "removeTeamMember (server/teams.ts)",
+  teams: "deleteTeam (server/teams.ts)",
+  upload_tickets: "expired tickets swept when a ticket is issued (server/uploads.ts)",
+}
+
+/** Les tables où `platform_server` supprime en plus d'`authenticated` : aucune. */
+const DELETED_BY_SERVER_ONLY: Record<string, string> = {}
+
 const suite = !sqlConfigured
   ? `the server role (${SQL_SKIP_REASON})`
   : pending
-    ? `the server role (${pendingReason([VERSION])})`
+    ? `the server role (${pendingReason(missing)})`
     : "the server role platform_server: who takes it, and what only it writes"
 
 type Callable = { fn: string; authenticated: boolean; anon: boolean; server: boolean }
@@ -113,6 +140,14 @@ function columnDrift(granted: ColumnRight[], role: string, closed: Record<string
   return [
     ...[...held].filter((column) => !listed.has(column)).map((column) => `platform.${column}: ${role} can UPDATE it, outside the closed list. If its value comes from a third party or the server, grant it to platform_server only; otherwise add it to the list of this test with the reason.`),
     ...[...listed].filter((column) => !held.has(column)).map((column) => `platform.${column}: in the closed list of ${role}, but no longer granted: remove it from the list.`),
+  ].sort()
+}
+
+/** Les écarts entre les tables où un rôle supprime et une liste fermée, avec le geste à faire. */
+function deleteDrift(held: string[], role: string, closed: Record<string, string>): string[] {
+  return [
+    ...held.filter((table) => !(table in closed)).map((table) => `platform.${table}: ${role} can DELETE from it, outside the closed list. If no service deletes from it under a person's or the server's session, revoke DELETE (and neutralise its DELETE policy); otherwise add it to the list of this test, naming the service.`),
+    ...Object.keys(closed).filter((table) => !held.includes(table)).map((table) => `platform.${table}: in the closed list of ${role}, but DELETE is no longer granted: remove it from the list.`),
   ].sort()
 }
 
@@ -208,6 +243,35 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
       ...columnDrift(granted, "anon", {}),
       ...columnDrift(beyond.map((right) => ({ ...right, role: "server only" })), "server only", UPDATED_BY_SERVER_ONLY),
     ]).toEqual([])
+  })
+
+  it("should grant DELETE to authenticated on the closed list of tables only, to anon on none, and to platform_server nothing beyond", async () => {
+    const granted = await seed.admin<{ role: string; table_name: string }[]>`
+      select r.role, c.relname as table_name
+        from pg_catalog.pg_class c
+        join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+       cross join (values ('authenticated'), ('anon'), ('platform_server')) as r(role)
+       where n.nspname = 'platform' and c.relkind in ('r', 'p', 'v')
+         and pg_catalog.has_table_privilege(r.role, c.oid, 'DELETE')`
+    const held = (role: string) => granted.filter((right) => right.role === role).map((right) => right.table_name)
+    const authenticated = held("authenticated")
+    expect([
+      ...deleteDrift(authenticated, "authenticated", DELETED_BY_AUTHENTICATED),
+      ...deleteDrift(held("anon"), "anon", {}),
+      ...deleteDrift(held("platform_server").filter((table) => !authenticated.includes(table)), "platform_server only", DELETED_BY_SERVER_ONLY),
+    ]).toEqual([])
+  })
+
+  it("should refuse a member deleting her organisation, an account or an activation, under her session as under the server's (42501)", async () => {
+    const db = asCaller(lea.id, lea.email)
+    const tries = (session?: "server") => [
+      failureOf(db.tx((sql) => sql`delete from platform.orgs where id = ${org.id}`, session)),
+      failureOf(db.tx((sql) => sql`delete from platform.accounts where org_id = ${org.id}`, session)),
+      failureOf(db.tx((sql) => sql`delete from platform.connector_activations where org_id = ${org.id}`, session)),
+    ]
+    const codes = (await Promise.all([...tries(), ...tries("server")])).map((failure) => failure?.code)
+    expect(codes).toEqual(Array(6).fill("42501"))
+    expect(await seed.admin`select id from platform.orgs where id = ${org.id}`).toHaveLength(1)
   })
 
   it("should refuse a reserved function under the caller's session and run it under the server's, same caller", async () => {
