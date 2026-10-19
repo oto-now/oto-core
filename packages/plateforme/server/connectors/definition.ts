@@ -208,9 +208,15 @@ export type ConnectorRequest = {
   readonly path: string
   readonly pathParams: readonly string[]
   readonly query: ConnectorArgumentMap
-  /** Corps JSON, quelle que soit la méthode. */
+  /** Corps JSON, quelle que soit la méthode ; avec `files`, les parties texte du corps multipart. */
   readonly body: ConnectorArgumentMap
   readonly headers: ConnectorArgumentMap
+  /**
+   * Nom de partie → argument qui porte l'identifiant d'un fichier en transit de l'appelant. Présent, le corps part en
+   * `multipart/form-data` (entrées et constantes de `body` en parties texte, chaque fichier à son nom et à son type),
+   * en `POST`, `PUT` ou `PATCH`, sans pagination ; le fichier se consomme après un appel réussi.
+   */
+  readonly files?: ConnectorArgumentMap
   readonly constants?: {
     readonly query?: { readonly [apiName: string]: string | number | boolean }
     readonly body?: { readonly [apiName: string]: ConnectorJsonValue }

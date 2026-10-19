@@ -40,6 +40,9 @@ export type ConnectorApi = {
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
+/** Un corps déjà encodé (un corps `multipart/form-data` qui porte un fichier), envoyé tel quel avec son type. */
+export type RawBody = { readonly bytes: Uint8Array; readonly contentType: string }
+
 export type ApiRequest = {
   method: HttpMethod
   /** Chemin sous `baseUrl`, barre initiale comprise, paramètres déjà encodés : `/pages/1f2e`. */
@@ -52,6 +55,8 @@ export type ApiRequest = {
   body?: unknown
   /** Corps en formulaire (point de jeton d'un échange), à la place d'un corps JSON. */
   form?: readonly (readonly [string, string])[]
+  /** Corps déjà encodé, à la place d'un corps JSON ou en formulaire ; jamais journalisé. */
+  raw?: RawBody
   /** La clé du rythme : le compte dont le secret signe la requête. */
   pacingKey: string
 }
@@ -123,13 +128,15 @@ async function send(api: ConnectorApi, request: ApiRequest, fetcher: Fetch): Pro
   const headers: Record<string, string> = { accept: "application/json", ...request.headers }
   if (request.body !== undefined) headers["content-type"] = "application/json"
   if (request.form !== undefined) headers["content-type"] = "application/x-www-form-urlencoded"
+  if (request.raw !== undefined) headers["content-type"] = request.raw.contentType
   const body = request.form !== undefined ? new URLSearchParams(request.form.map(([key, value]) => [key, value])).toString() : request.body
+  const sent = request.raw !== undefined ? request.raw.bytes : body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body)
   await pace(request.pacingKey, api.rateLimit)
   try {
     return await fetcher(`${api.baseUrl}${request.path}${query}`, {
       method: request.method,
       headers,
-      body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
+      body: sent,
       redirect: "error",
       signal: AbortSignal.timeout(api.timeoutMs),
     })

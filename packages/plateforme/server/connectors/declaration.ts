@@ -18,6 +18,7 @@ import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { asyncProblem, costProblem } from "./cost-declaration"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
+import { callerTransitFiles, filesProblem } from "./multipart"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { signalProblem } from "./signal-declaration"
@@ -237,7 +238,7 @@ function describedCall(prepared: PreparedFunction, context: FunctionContext): De
     console.error(`[platform] call: ${prepared.fn.name} without a resolved account`)
     throw new PlatformError("internal", "Internal error.")
   }
-  return { credential: context.credential, accountId: context.account.id }
+  return { credential: context.credential, accountId: context.account.id, ...(prepared.fn.request.files ? { files: callerTransitFiles(context) } : {}) }
 }
 
 /** Une fonction décrite au contrat du catalogue : origine `connecteur`, exemples sans titre, exécution par le moteur. */
@@ -309,7 +310,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -340,9 +341,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
     const definition = definitions.find((candidate) => candidate.name === name)
     if (definition?.auth.kind !== "oauth2_user") throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
     const filled = (value: unknown): value is string => typeof value === "string" && value.trim() !== ""
-    if (!isJsonObject(application) || !filled(application.clientId) || !filled(application.clientSecret)) {
-      throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)
-    }
+    const complete = isJsonObject(application) && filled(application.clientId) && filled(application.clientSecret)
+    if (!complete) throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)
     applications.set(name, { clientId: application.clientId, clientSecret: application.clientSecret })
   }
   return applications

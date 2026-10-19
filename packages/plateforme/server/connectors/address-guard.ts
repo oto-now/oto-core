@@ -94,6 +94,16 @@ function headersOf(raw: NodeJS.Dict<string | string[]>): Headers {
 }
 
 /**
+ * Le corps qu'envoie le transport gardé : un texte (JSON, formulaire) ou des octets (corps multipart déjà encodé). Une
+ * autre forme (flux, `FormData`) ne part jamais en silence sans son contenu : elle lève.
+ */
+function sentBody(body: RequestInit["body"]): string | Uint8Array | undefined {
+  if (body === undefined || body === null) return undefined
+  if (typeof body === "string" || body instanceof Uint8Array) return body
+  throw new Error("[platform] connectors: the guarded transport sends a text or bytes body only")
+}
+
+/**
  * Un `fetch` gardé pour une adresse saisie : `https` seul, hôte en adresse IP ou résolu contrôlé à la connexion, aucune
  * redirection suivie (une réponse 3xx est rendue telle quelle, le client la refuse comme tout statut hors 2xx).
  * `resolve` : la résolution, remplacée par les tests.
@@ -106,6 +116,8 @@ export function guardedFetch(resolve: Lookup = dnsLookup): Fetch {
       if (url.protocol !== "https:") return fail(new PlatformError("not_enabled", "The address of this account must use https: refused."))
       if (isIP(host) && !isPublicAddress(host)) return fail(internalHost(host))
       const headers = Object.fromEntries(new Headers(init.headers))
+      // Avant toute connexion : un corps d'une autre forme rejette l'appel sans rien ouvrir.
+      const payload = sentBody(init.body)
       const sent = request(url, { method: init.method, headers, signal: init.signal ?? undefined, lookup: guardedLookup(resolve) }, (answer) => {
         const status = answer.statusCode ?? 502
         const body = status === 204 || status === 304 ? null : (Readable.toWeb(answer) as ReadableStream<Uint8Array>)
@@ -113,6 +125,6 @@ export function guardedFetch(resolve: Lookup = dnsLookup): Fetch {
       })
       // Un délai dépassé se dit comme `fetch` le dit (`TimeoutError`), pour le message du client.
       sent.on("error", (error) => fail(init.signal?.aborted ? init.signal.reason : error))
-      sent.end(typeof init.body === "string" ? init.body : undefined)
+      sent.end(payload)
     })
 }

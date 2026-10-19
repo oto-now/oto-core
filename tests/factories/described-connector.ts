@@ -6,7 +6,7 @@
 // consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
 // table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; à fonctions qui ont
 // leur délai propre (`timedConnector`) ; enfin à lot payant soumis puis relevé (`billedConnector`), coût à l'élément,
-// quantité relue et travail asynchrone.
+// quantité relue et travail asynchrone ; et à dépôt d'un fichier en transit en corps multipart (`uploadConnector`).
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
@@ -402,4 +402,40 @@ export function billedConnector(name = "crm"): ConnectorDefinition {
     request: { method: "GET", path: "/enrichments/{enrichment_id}", pathParams: ["enrichment_id"], query: {}, body: {}, headers: {} },
   }
   return { ...base, functions: [...base.functions, submit, collect] }
+}
+
+/**
+ * Le connecteur de test qui dépose un fichier : `upload_document` envoie en `multipart/form-data` le fichier en transit
+ * que nomme `file` (partie `document`), `folder_id` et `title` en parties texte, `source: "oto"` en constante ; un 422
+ * est son refus nommé `document_rejected` ; le lien de la réponse est retiré.
+ */
+export function uploadConnector(name = "crm"): ConnectorDefinition {
+  const base = describedConnector(name)
+  const upload: ConnectorFunctionDefinition = {
+    name: `${name}.upload_document`,
+    connector: name,
+    class: "write",
+    act: true,
+    description: "Upload a transit file of yours into a folder; the file is consumed once Crm accepts it.",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["folder_id", "file"],
+      properties: { folder_id: { type: "integer", minimum: 1 }, file: { type: "string", format: "uuid" }, title: { type: "string", maxLength: 255 } },
+    },
+    examples: [{ title: "A file into a folder", input: { folder_id: 7, file: "0f8fad5b-d9cb-469f-a165-70867728950e" } }],
+    refusals: [{ code: "document_rejected", when: 422, message: "Crm refused this document." }],
+    request: {
+      method: "POST",
+      path: "/folders/{folder_id}/documents",
+      pathParams: ["folder_id"],
+      query: {},
+      body: { title: "title" },
+      headers: {},
+      files: { document: "file" },
+      constants: { body: { source: "oto" } },
+    },
+    output: { strip: ["url"] },
+  }
+  return { ...base, functions: [...base.functions, upload] }
 }

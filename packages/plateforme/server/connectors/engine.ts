@@ -4,7 +4,8 @@
 // chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode ; `encode:
 // json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
 // (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
-// tiers (`linkedId`, compte rattaché). Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
+// tiers (`linkedId`, compte rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
+// (`multipart.ts`), consommé après un appel réussi. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
 // l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
 import type { AccountMarkReason } from "../../schemas"
 import type { FunctionOutput, FunctionSummary } from "../catalog/define"
@@ -15,6 +16,7 @@ import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
 import type { ConnectorBodyCondition, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { requestJson, type ApiError, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
+import { consumeSent, uploadOf, type TransitFiles, type Upload } from "./multipart"
 import { resolveAddress, type AddressSpec } from "./settings"
 
 /** Une fonction décrite prête à courir, préparée une fois à la déclaration (`declaration.ts`). */
@@ -34,9 +36,10 @@ export type PreparedFunction = {
 /**
  * Ce qu'il faut pour un appel : le compte résolu (champs, réglages, jeton), son identifiant (clé du rythme), et `fetch`.
  * `settlesMark` : l'appelant lève ou pose la marque du compte lui-même après un succès (la sonde à solde, qui juge le
- * solde lu) ; un refus qui marque la pose toujours ici.
+ * solde lu) ; un refus qui marque la pose toujours ici. `files` : les fichiers en transit de l'appelant, pour une
+ * fonction qui en envoie (`request.files`).
  */
-export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true }
+export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true; files?: TransitFiles }
 
 /** Le code du paquet d'un statut du tiers (H04, liste fermée) ; le refus nommé par la description reste dans le message. */
 export function platformCode(status: number): PlatformErrorCode {
@@ -150,11 +153,41 @@ function asText(value: unknown): string {
   return JSON.stringify(value)
 }
 
-/** La requête d'une page, composée des seuls arguments donnés ; l'authentification en dernier, rien ne la remplace. */
-function buildRequest(prepared: PreparedFunction, args: Record<string, unknown>, signature: Signature, accountId: string): ApiRequest {
+/** Un argument tel qu'il part : sérialisé en JSON si `encode` le dit. */
+function placedValue(fn: ConnectorFunctionDefinition, args: Record<string, unknown>, argument: string): unknown {
+  return fn.request.encode?.[argument] === "json" ? JSON.stringify(args[argument]) : args[argument]
+}
+
+/** Les parties texte d'un corps multipart : constantes du corps, puis arguments donnés, en texte. */
+function textParts(fn: ConnectorFunctionDefinition, args: Record<string, unknown>): [string, string][] {
+  const constants = Object.entries(fn.request.constants?.body ?? {}).map(([name, value]): [string, string] => [name, asText(value)])
+  const given = Object.entries(fn.request.body).filter(([, argument]) => args[argument] !== undefined)
+  return [...constants, ...given.map(([name, argument]): [string, string] => [name, asText(placedValue(fn, args, argument))])]
+}
+
+/**
+ * Le corps multipart d'une fonction qui envoie des fichiers (`request.files`), lus avant tout envoi ; `null` pour une
+ * autre. Sans les fichiers de l'appelant, câblage fautif.
+ */
+async function uploadFor(fn: ConnectorFunctionDefinition, call: DescribedCall, args: Record<string, unknown>): Promise<Upload | null> {
+  if (fn.request.files === undefined) return null
+  if (!call.files) {
+    console.error(`[platform] connector ${fn.connector}: ${fn.name} called without the transit files of the caller`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return uploadOf(fn, args, call.files, textParts(fn, args))
+}
+
+/**
+ * La requête d'une page, composée des seuls arguments donnés ; l'authentification en dernier, rien ne la remplace ;
+ * `sending` : le compte (clé du rythme) et, pour une fonction qui envoie des fichiers, le corps multipart déjà encodé,
+ * à la place du corps JSON.
+ */
+function buildRequest(prepared: PreparedFunction, args: Record<string, unknown>, signature: Signature, sending: { accountId: string; upload: Upload | null }): ApiRequest {
+  const { accountId, upload } = sending
   const { connector, fn } = prepared
   const spec = fn.request
-  const placed = (argument: string): unknown => (spec.encode?.[argument] === "json" ? JSON.stringify(args[argument]) : args[argument])
+  const placed = (argument: string): unknown => placedValue(fn, args, argument)
   const path = spec.path.replace(/\{([^{}]+)\}/g, (_whole, name: string) => {
     if (args[name] === undefined || args[name] === null) throw new PlatformError("invalid_arguments", `${fn.name}: argument ${name} is required.`)
     return encodeURIComponent(asText(args[name]))
@@ -182,6 +215,7 @@ function buildRequest(prepared: PreparedFunction, args: Record<string, unknown>,
     }
   }
   query.push(...signature.query)
+  if (upload) return { method: spec.method, path, query, headers, raw: upload.body, pacingKey: accountId }
   const withBody = Object.keys(spec.body).length > 0 || spec.constants?.body !== undefined
   const body: Record<string, unknown> = { ...spec.constants?.body }
   for (const [name, argument] of Object.entries(spec.body)) if (args[argument] !== undefined) body[name] = placed(argument)
@@ -214,7 +248,8 @@ export function pageCount(fn: ConnectorFunctionDefinition, args: Record<string, 
  * `internal` (le compte réel en a un, `runCall` l'a vérifié). Une adresse issue d'une saisie part par le transport gardé
  * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf. État du
  * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`), sauf
- * quand l'appelant la décide (`settlesMark`).
+ * quand l'appelant la décide (`settlesMark`). Fichiers (`request.files`) : lus avant tout envoi, consommés après un
+ * appel réussi seulement, jamais après un refus ni un envoi ambigu (délai, panne, 5xx).
  */
 export async function executeDescribed(
   prepared: PreparedFunction,
@@ -228,6 +263,7 @@ export async function executeDescribed(
     throw new PlatformError("internal", "Internal error.")
   }
   runChecks(fn, args)
+  const upload = await uploadFor(fn, call, args)
   // `fetch` lu à l'appel, jamais au chargement : l'hôte (et un test) peut le remplacer.
   const fetcherFor = (guarded: boolean): Fetch => call.fetcher ?? (guarded ? guardedFetch() : (input, init) => fetch(input, init))
   const identity = connector.accountIdentity && credential.linkedId !== undefined ? { name: connector.accountIdentity.name, value: credential.linkedId } : undefined
@@ -242,7 +278,7 @@ export async function executeDescribed(
   try {
     for (let page = 0; page < pages; page++) {
       const pageArgs = current
-      const signed = async (fresh: boolean) => buildRequest(prepared, pageArgs, await sign(signer, fresh), call.accountId)
+      const signed = async (fresh: boolean) => buildRequest(prepared, pageArgs, await sign(signer, fresh), { accountId: call.accountId, upload })
       const resign = renewsOnUnauthorized(prepared.auth) ? () => signed(true) : undefined
       const answer = await requestJson(api, await signed(false), fetcherFor(address.guarded), resign)
       runExpectations(fn, answer)
@@ -254,6 +290,7 @@ export async function executeDescribed(
   } catch (error) {
     throw await markedRefusal(credential.mark, error, `connector ${connector.name}: account ${call.accountId}`)
   }
+  if (upload && call.files) await consumeSent(call.files, upload.sent, `connector ${connector.name}: ${fn.name}`)
   // Le premier appel réussi lève la marque du compte ; une levée qui échoue ne rend jamais l'appel en échec.
   const mark = credential.mark
   if (mark && !call.settlesMark) await settleMark(mark, null, `connector ${connector.name}: account ${call.accountId}`)

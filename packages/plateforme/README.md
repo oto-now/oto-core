@@ -421,6 +421,8 @@ registerFunctions([/* fonctions de l'ERP */])
 - **Coût d'un appel** : `cost` (pire cas avant l'appel, quantité relue après) et `async` (travail soumis, relevé plus
   tard) sont contrôlés à la déclaration, sans rien réserver ni régler ; `costOf`, `settledQuantity` et `collectionOf`
   (face `server`), fonctions pures, en donnent le pire cas, la quantité à régler et la relève à votre service.
+- **Fichiers envoyés à un tiers** : `request.files` envoie en `multipart/form-data` un fichier en transit de la
+  personne qui appelle, lu sous son identité et consommé après un appel réussi ; l'agent ne passe que son identifiant.
 - **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
   lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa
