@@ -43,6 +43,12 @@ export type ContextBlock = {
    * Sans lui, l'écran ne saurait où finit ce que l'assistant lit toujours et où commence le Contexte écrit.
    */
   head?: number
+  /**
+   * L'ordre dans lequel le budget se répartit, plus petit d'abord ; sans lui, l'ordre d'affichage. Le texte garde
+   * l'ordre d'affichage : seule la coupe suit la priorité. Sans elle, les procédures et les contenus récents,
+   * affichés en dernier, partaient les premiers quand onze Contextes d'équipe remplissaient le budget.
+   */
+  priority?: number
 }
 
 /** Ce que le moteur a fait d'un bloc : gardé entier, coupé, remplacé par son `fallback`, omis. */
@@ -126,48 +132,65 @@ function recededReport(report: BlockReport[], kept: number): BlockReport[] {
   })
 }
 
-/**
- * Assemble les blocs dans l'ordre tant qu'ils tiennent, séparés par une ligne vide. Le premier
- * qui dépasse est coupé à la dernière ligne qui tient, les suivants sont omis, et une dernière
- * ligne les nomme (« <nom> (cut) » pour le bloc coupé) ; une partie de Contexte au corps servi finit
- * par son pointeur (`cutContextPart`, E11-S03 AC-b4). Un bloc à `fallback` n'est jamais coupé :
- * s'il dépasse, son `fallback` le remplace s'il tient, et l'assemblage continue ; sinon il est omis
- * avec les suivants. Le texte fait au plus `budget`. Le rapport dit, pour chaque bloc non vide, sa
- * taille incluse et ce qu'il est devenu (E03-S08, AC8) : l'aperçu d'E05-S04 le montre.
- */
-export function renderContext(blocks: ContextBlock[], budget: number, prefix: string): { text: string; report: BlockReport[] } {
-  const room = budget - NOTICE_RESERVE
-  let text = ""
-  const omitted: string[] = []
-  const report: BlockReport[] = []
-  const record = (block: ContextBlock, chars: number, status: BlockStatus) =>
-    report.push({ name: block.name, chars, status, path: block.path ?? null, head: Math.min(block.head ?? 0, chars) })
+/** Ce qu'un bloc devient dans le budget : son texte inclus (`""` s'il est omis) et son statut. */
+type Placement = { text: string; status: BlockStatus }
 
-  for (const block of blocks.filter((candidate) => candidate.text.trim() !== "")) {
-    if (omitted.length > 0) {
-      omitted.push(block.name)
-      record(block, 0, "omitted")
-      continue
-    }
-    const separator = text ? "\n\n" : ""
-    if (text.length + separator.length + block.text.length <= room) {
-      text += separator + block.text
-      record(block, block.text.length, block.cut ? "cut" : "full")
+/**
+ * Le budget réparti dans l'ordre de `priority` (l'ordre d'affichage à défaut), chaque bloc compté avec sa ligne vide :
+ * un bloc qui tient entre entier ; sinon son `fallback` s'il en a un et qu'il tient, sinon il est omis avec ceux qui le
+ * suivent en priorité ; un bloc sans `fallback` est coupé à la dernière ligne qui tient, ceux qui le suivent omis.
+ */
+function placements(blocks: readonly ContextBlock[], budget: number, prefix: string): Placement[] {
+  const room = budget - NOTICE_RESERVE
+  const order = blocks.map((block, rank) => ({ block, rank })).sort((a, b) => (a.block.priority ?? a.rank) - (b.block.priority ?? b.rank) || a.rank - b.rank)
+  const placed: Placement[] = blocks.map(() => ({ text: "", status: "omitted" }))
+  let used = 0
+  let stopped = false
+  for (const { block, rank } of order) {
+    if (stopped) continue
+    const separator = used > 0 ? 2 : 0
+    if (used + separator + block.text.length <= room) {
+      placed[rank] = { text: block.text, status: block.cut ? "cut" : "full" }
+      used += separator + block.text.length
       continue
     }
     if (block.fallback !== undefined) {
-      const fits = text.length + separator.length + block.fallback.length <= room
-      if (fits) text += separator + block.fallback
-      else omitted.push(block.name)
-      record(block, fits ? block.fallback.length : 0, fits ? "replaced" : "omitted")
+      if (used + separator + block.fallback.length <= room) {
+        placed[rank] = { text: block.fallback, status: "replaced" }
+        used += separator + block.fallback.length
+      } else stopped = true
       continue
     }
-    const max = room - text.length - separator.length
+    const max = room - used - separator
     const partial = block.path === undefined ? linesThatFit(block.text, max) : cutContextPart({ ...block, path: block.path }, max, budget, prefix)
-    if (partial.trim()) text += separator + partial
-    omitted.push(partial.trim() ? `${block.name}${SERVED_BUDGET.cut}` : block.name)
-    record(block, partial.trim() ? partial.length : 0, partial.trim() ? "cut" : "omitted")
+    if (partial.trim()) placed[rank] = { text: partial, status: "cut" }
+    stopped = true
   }
+  return placed
+}
+
+/**
+ * Assemble les blocs dans l'ordre d'affichage, séparés par une ligne vide, ceux que le budget garde (`placements`) :
+ * entiers, remplacés par leur `fallback`, ou coupés à la dernière ligne qui tient ; une dernière ligne nomme ceux qui
+ * sont coupés ou omis (« <nom> (cut) » pour le bloc coupé) ; une partie de Contexte au corps servi finit par son
+ * pointeur (`cutContextPart`, E11-S03 AC-b4). Le texte fait au plus `budget`. Le rapport dit, pour chaque bloc non
+ * vide, sa taille incluse et ce qu'il est devenu (E03-S08, AC8) : l'aperçu d'E05-S04 le montre.
+ */
+export function renderContext(blocks: ContextBlock[], budget: number, prefix: string): { text: string; report: BlockReport[] } {
+  const shown = blocks.filter((candidate) => candidate.text.trim() !== "")
+  const placed = placements(shown, budget, prefix)
+  const omitted: string[] = []
+  const report: BlockReport[] = []
+  const parts: string[] = []
+  shown.forEach((block, rank) => {
+    const { text: part, status } = placed[rank]
+    if (part.trim()) parts.push(part)
+    if (status === "omitted") omitted.push(block.name)
+    // Un bloc déjà arrêté à sa borne en lignes (`cut`) et servi entier n'est pas coupé par le budget.
+    else if (status === "cut" && part !== block.text) omitted.push(`${block.name}${SERVED_BUDGET.cut}`)
+    report.push({ name: block.name, chars: part.trim() ? part.length : 0, status, path: block.path ?? null, head: Math.min(block.head ?? 0, part.trim() ? part.length : 0) })
+  })
+  const text = parts.join("\n\n")
 
   if (omitted.length === 0) return { text, report }
   const notice = budgetNotice(omitted, prefix)

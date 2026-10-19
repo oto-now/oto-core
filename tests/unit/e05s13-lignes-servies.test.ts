@@ -167,7 +167,7 @@ describe("the end of the text read back (AC-14)", () => {
     ])
     expect(morceauxDeLaFin("Une fin libre.")).toEqual([{ genre: "brut", texte: "Une fin libre." }])
     // Une ligne presque servie : un chemin hors du format des nœuds, une date qui n'en est pas une.
-    expect(morceauxDuBloc("procedures", "## Procedures you can run (1)\n- Hors Format: x")).toEqual([
+    expect(morceauxDuBloc("procedures", "## Procedures you can run, most used first (1)\n- Hors Format: x")).toEqual([
       { genre: "liste", legende: { genre: "procedures", nombre: 1 }, lignes: [] },
       { genre: "brut", texte: "- Hors Format: x" },
     ])
@@ -179,7 +179,7 @@ describe("the end of the text read back (AC-14)", () => {
     const hostiles = [
       `## Recent content\n${`- a (b, ${"(".repeat(200)}): `.repeat(100)}`,
       `## What's new since 2026-09-20\n${`- a/a v1 (${" (".repeat(9_990)}`}`,
-      `## Procedures you can run (1)\n- ${"a/".repeat(9_990)}!: x`,
+      `## Procedures you can run, most used first (1)\n- ${"a/".repeat(9_990)}!: x`,
       `[Context budget reached. Omitted: ${"a, ".repeat(6_600)}. Use demo_find or demo_read for more.]`,
     ]
     for (const texte of hostiles) {

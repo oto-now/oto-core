@@ -627,18 +627,18 @@ describe.skipIf(!sqlConfigured)(portable("procedures you can run (E03-S08, AC4)"
 
     // Claire mène Ventes : ses lignes et celles de Ventes comptent (H74, N3).
     expect((await proceduresBlock(await ref.db("claire"), ref.identityOf("claire"))).text).toBe(
-      ["## Procedures you can run (4)", summaries.point, summaries.relance, summaries.qualifier, summaries.lire].join("\n"),
+      ["## Procedures you can run, most used first (4)", summaries.point, summaries.relance, summaries.qualifier, summaries.lire].join("\n"),
     )
     // Léa, simple membre : ses seules lignes.
     expect((await proceduresBlock(await ref.db("lea"), ref.identityOf("lea"))).text).toBe(
-      ["## Procedures you can run (4)", summaries.relance, summaries.qualifier, summaries.lire, summaries.point].join("\n"),
+      ["## Procedures you can run, most used first (4)", summaries.relance, summaries.qualifier, summaries.lire, summaries.point].join("\n"),
     )
     // Ada, administratrice et simple membre de Ventes : ses lignes et toutes celles de ses équipes (isOrgAdmin).
     expect((await proceduresBlock(await ref.db("ada"), ref.identityOf("ada", { teams: [ref.teamOf("ventes", "ada")] }))).text).toBe(
-      ["## Procedures you can run (5)", summaries.relance, summaries.point, summaries.qualifier, summaries.lire, summaries.ticket].join("\n"),
+      ["## Procedures you can run, most used first (5)", summaries.relance, summaries.point, summaries.qualifier, summaries.lire, summaries.ticket].join("\n"),
     )
     const empty = await seedO(oTables())
-    expect((await proceduresBlock(await empty.db("marc"), empty.identityOf("marc"))).text).toBe("## Procedures you can run (0)\nNone published yet.")
+    expect((await proceduresBlock(await empty.db("marc"), empty.identityOf("marc"))).text).toBe("## Procedures you can run, most used first (0)\nNone published yet.")
   })
 })
 
@@ -731,7 +731,7 @@ describe.skipIf(!sqlConfigured)(portable("the dynamic blocks served whole (E03-S
     const lines = procedures.text.split("\n")
     expect(procedures.cut).toBe(true)
     // 60 lignes, puis celle qui compte les autres ; les 15 premières par leur résumé, les suivantes par leur titre (E11-S16).
-    expect(lines[0]).toBe("## Procedures you can run (70)")
+    expect(lines[0]).toBe("## Procedures you can run, most used first (70)")
     expect(lines.slice(1, -1)).toEqual(long.slice(0, 60).map((node, rank) => `- ${node.path}: ${rank < 15 ? node.summary : node.title}`))
     expect(lines.at(-1)).toBe(`… and 10 more: find them with ${longRef.org.prefix}_find, type procedure.`)
     // Plus de procédures qu'une lecture n'en rend (`supabase-patterns.md § Error Handling`) : toutes comptées.
@@ -739,7 +739,7 @@ describe.skipIf(!sqlConfigured)(portable("the dynamic blocks served whole (E03-S
     const shortRef = await seedO(oTables(short))
     const capped = (await proceduresBlock(await shortRef.db("marc"), shortRef.identityOf("marc"))).text.split("\n")
     expect(capped.length).toBe(62)
-    expect([capped[0], capped.at(-1)]).toEqual(["## Procedures you can run (1005)", `… and 945 more: find them with ${shortRef.org.prefix}_find, type procedure.`])
+    expect([capped[0], capped.at(-1)]).toEqual(["## Procedures you can run, most used first (1005)", `… and 945 more: find them with ${shortRef.org.prefix}_find, type procedure.`])
 
     const documents = Array.from({ length: 20 }, (_, index): ContentNode => ({ path: `annonces/doc${String(index).padStart(2, "0")}`, title: `${"Un document au titre long ".repeat(4)}${index}` }))
     const updated = documents.map((_, index) => ago(index + 1))
@@ -792,6 +792,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
     expect(preview.blocks.map(({ name, status, path }) => [name, status, path])).toEqual([
       ["code", "full", null],
       ["procedure", "replaced", null],
+      ["related", "full", null],
       ["contexte", "full", "contexte"],
       ["private/lea/contexte", "full", null],
       // Plus de taille par partie (E11-S03, AC-b1) : le Contexte de Ventes, plus long que l'ancienne, entier.
@@ -847,7 +848,7 @@ describe.skipIf(!sqlConfigured)(portable("filtering by the service (E03-S08, AC9
         `## Context: everyone (contexte)\n${orgFacts(paul.org)}\nLes pages utiles sont liées ci-dessous.\n\nLinked pages:\n- support/faq — support/faq — Summary of support/faq.`,
       )
       expect(section(text, "## What's new")?.split("\n").slice(1)).toEqual([`- support/faq v2 (${day(faqAt)}): FAQ révisée`])
-      expect(section(text, "## Procedures you can run")).toBe("## Procedures you can run (1)\n- support/ticket: Répond à un ticket.")
+      expect(section(text, "## Procedures you can run, most used first")).toBe("## Procedures you can run, most used first (1)\n- support/ticket: Répond à un ticket.")
     }
   })
 })
@@ -984,7 +985,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("f
     // Les versions (`news.ts`), l'usage du journal (`procedures.ts`), les blocs écrits par la personne (`recent.ts`).
     const omitted: [string, () => void][] = [
       ["## What's new", () => vi.mocked(newsItems).mockImplementationOnce(failure("context: node_versions"))],
-      ["## Procedures you can run", () => vi.mocked(proceduresBlock).mockImplementationOnce(failure("context: journal usage"))],
+      ["## Procedures you can run, most used first", () => vi.mocked(proceduresBlock).mockImplementationOnce(failure("context: journal usage"))],
       ["## Recent content", () => vi.mocked(recentBlock).mockImplementationOnce(failure("context: recent blocks"))],
     ]
     for (const [heading, fail] of omitted) {

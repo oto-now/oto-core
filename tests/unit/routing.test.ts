@@ -53,7 +53,8 @@ function journalRow(person: Person, target: string | null, days: number, orgId: 
 }
 
 type AcmeDbOptions = {
-  route?: Row[]
+  /** Les lignes de `route_candidates`, pour toute demande, ou selon la demande. */
+  route?: Row[] | ((query: unknown) => Row[])
   search?: (query: unknown) => Row[]
   journal?: Row[]
   fail?: WatchOptions["fail"]
@@ -243,7 +244,7 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
     const found = (row: Row): Row => ({ ...row, node_id: ref.nodeId(String(row.path)) })
     return watchDb(await ref.db(person), {
       rpc: {
-        route_candidates: () => options.route ?? [],
+        route_candidates: (args) => (typeof options.route === "function" ? options.route(args.p_query) : (options.route ?? [])),
         search_content: (args) => (options.search?.(args.p_query) ?? []).map(found),
       },
       fail: options.fail,
@@ -398,11 +399,14 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
           rank: 0.1,
         })
       const { db } = await acmeDb("paul", {
-        route: [
-          // Ventes, que Paul ne lit pas : `route_candidates` ne la lui rend plus depuis E01-S13 (AC-a2) ; la doublure la rend.
-          routeRow("ventes/relance_devis", { s_summary: 1, s_title: 0.8, lexical: 1, query_lexemes: 3 }),
-          routeRow("support/reponse_ticket", { s_summary: 0.5, s_title: 0.2, lexical: 0.5, query_lexemes: 2 }, TEAMS.support.id),
-        ],
+        route: (query) =>
+          query === "Valbrune"
+            ? []
+            : [
+                // Ventes, que Paul ne lit pas : `route_candidates` ne la lui rend plus depuis E01-S13 (AC-a2) ; la doublure la rend.
+                routeRow("ventes/relance_devis", { s_summary: 1, s_title: 0.8, lexical: 1, query_lexemes: 3 }),
+                routeRow("support/reponse_ticket", { s_summary: 0.5, s_title: 0.2, lexical: 0.5, query_lexemes: 2 }, TEAMS.support.id),
+              ],
         search: (query) =>
           query === "Valbrune"
             ? [valbrune("P-003", 701), valbrune("P-001", 702)]
@@ -429,7 +433,8 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
 
       const byWords = await find(db, paul, { query: "relance devis" }, NO_CATALOG)
       expect(byWords.text).not.toContain("ventes/")
-      expect(byWords.data).toMatchObject({ matches: [{ path: "support/faq" }], more_nodes: 0 })
+      // `find` classe comme `context` : la procédure du Support, que le routage rend à Paul, s'ajoute à la page trouvée.
+      expect(byWords.data).toMatchObject({ matches: [{ path: "support/reponse_ticket" }, { path: "support/faq" }], more_nodes: 0 })
       const byRow = await find(db, paul, { query: "Valbrune" }, NO_CATALOG)
       expect(byRow.text).toBe("No match for « Valbrune ». Ask the user to rephrase or to say what they are looking for; do not guess.")
     })

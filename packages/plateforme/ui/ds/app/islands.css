@@ -1,6 +1,6 @@
 /* Porté d'oto-frontend (src/design-system/app/islands.css), tel quel ; chaque pourquoi en une ligne, l'historique retiré (portage-ecrans.md § 5). Changé : `.oto-content` est un bloc conteneur, la racine `.oto` n'étant pas `<html>` ; l'anneau d'une bande étirée est un trait d'encre ; sous 768 px, le déclencheur du tiroir a sa rangée. */
 
-/* Grammaire d'îlots : aucun cadre applicatif autour des régions, la page EST le bureau (`--desk`) et chaque région un îlot détaché (rayon 8, filet, ombre, `--gap` entre elles, `--inset` au bord) ; les îlots ne partagent jamais un bord, chacun fait défiler son propre contenu, et le bureau ne défile jamais ; paliers : l'inspecteur quitte le flux sous 1 280 px, le rail se réduit à ses icônes sous 1 024, devient un tiroir sous 768, une colonne et des cibles de 44 px sous 640. */
+/* Grammaire d'îlots : aucun cadre applicatif autour des régions, la page EST le bureau (`--desk`) et chaque région un îlot détaché (rayon 8, filet, ombre, `--gap` entre elles, `--inset` au bord) ; les îlots ne partagent jamais un bord, chacun fait défiler son propre contenu, et le bureau ne défile jamais ; paliers : l'inspecteur quitte le flux sous 1 280 px, le rail devient un tiroir sous 1 024, les lignes prennent la hauteur d'un doigt sous 768, une colonne et des cibles de 44 px sous 640. */
 
 /* LE BUREAU */
 
@@ -585,7 +585,7 @@
   .oto-grid[data-cols] { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* RESPONSIVE : quatre paliers, quatre décisions */
+/* RESPONSIVE : quatre paliers, quatre décisions (inspecteur sous 1 280 px, rail en tiroir sous 1 024 px, téléphone sous 768 px, une colonne sous 640 px) */
 
 /* ── < 1280, l'inspecteur quitte le flux : il ne rétrécit pas sous 320 px, il devient un panneau déclenché posé sur le bureau, qui garde son rayon et son ombre. */
 @media (max-width: 1279px) {
@@ -605,56 +605,8 @@
   .oto .oto-inspector-toggle { display: inline-flex; }
 }
 
-/* ── < 1024, le rail se réduit à ses icônes : les libellés passent en infobulle, les mots partent, pas la structure. */
+/* ── < 1024, le rail devient un tiroir, ouvert par « Menu » : réduit à ses icônes (56 px), un arbre de pages ne se lisait plus, chaque ligne un même glyphe sans son nom. Le tiroir garde les mots du rail complet. */
 @media (max-width: 1023px) {
-  .oto-desk,
-  .oto-desk[data-inspector] { grid-template-columns: var(--rail-w-collapsed) minmax(0, 1fr); }
-
-  .oto-rail { padding-inline: var(--space-2); align-items: center; }
-  .oto-rail .oto-rail-count,
-  .oto-rail .oto-rail-group { display: none; }
-
-  /* Le libellé s'efface, il ne disparaît pas : en `display: none` il sortait du nom accessible, et le badge de fin de ligne devenait tout le nom ; les déclarations de `.oto-sr-only` : présent, lu, invisible. */
-  .oto-rail .oto-rail-label {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
-  }
-  .oto-rail-item { justify-content: center; padding-inline: 0; inline-size: var(--ctrl-h-md); block-size: var(--ctrl-h-md); }
-  /* un filet remplace le titre de groupe disparu : la structure reste lisible sans les mots */
-  .oto-rail-group {
-    display: block; padding: var(--space-2) 0 var(--space-1);
-    block-size: 1px; inline-size: 60%; margin-inline: auto;
-    background: var(--rail-bd); overflow: hidden; text-indent: -999em;
-  }
-  .oto-rail .oto-org-switcher .oto-org-name { display: none; }
-}
-
-/* 768 à 1 023 px : le titre d'une section part avec les mots (`.oto-rail .oto-rail-group`), son pli reste : le bouton ne garde que son chevron (E05-S13, AC-12). */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .oto-rail .oto-rail-section > button.oto-rail-group {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    inline-size: 20px;
-    block-size: 20px;
-    margin: 0;
-    padding: 0;
-    background: none;
-    text-indent: 0;
-  }
-  .oto-rail .oto-rail-section > button.oto-rail-group > .oto-icon { margin: 0; }
-  .oto-rail .oto-rail-section > button.oto-rail-group > :not(.oto-icon) { display: none; }
-}
-
-/* ── < 768, le rail devient un tiroir : 56 px de rail sur 375 px d'écran, c'est 15 % de la fenêtre pour une navigation qui sert trois fois par heure. */
-@media (max-width: 767px) {
   .oto-desk,
   .oto-desk[data-inspector],
   .oto-desk[data-rail="none"] { grid-template-columns: minmax(0, 1fr); }
@@ -672,23 +624,6 @@
     box-shadow: var(--sh-dialog);
   }
   .oto-rail[data-open] { transform: none; }
-  /* dans le tiroir, le rail redevient complet : les mots reviennent */
-  .oto-rail .oto-rail-count { display: block; }
-  /* le libellé sort de l'escamotage du palier précédent ; `overflow` et `white-space` restent ceux qui portent l'ellipse d'un nom trop long */
-  .oto-rail .oto-rail-label {
-    position: static;
-    inline-size: auto;
-    block-size: auto;
-    margin: 0;
-    clip-path: none;
-  }
-  .oto-rail .oto-rail-group {
-    display: block; block-size: auto; inline-size: auto; margin-inline: 0;
-    background: none; text-indent: 0;
-    padding: var(--space-4) var(--space-2) var(--space-1);
-  }
-  .oto-rail-item { justify-content: flex-start; padding-inline: var(--space-2); inline-size: 100%; block-size: auto; min-block-size: var(--touch); }
-  .oto-rail .oto-org-switcher .oto-org-name { display: block; }
 
   .oto-rail-scrim {
     position: fixed; inset: 0; z-index: 49;
@@ -699,13 +634,37 @@
   /* Changé (fiche D90 B) : le déclencheur du tiroir est la première rangée du bureau, le contenu prend le reste ; sans rangées déclarées, les deux se partageaient la hauteur. */
   .oto-desk:has(> .oto-rail-toggle) { grid-template-rows: auto minmax(0, 1fr); }
 
+  /* Le bouton « Menu » se pose sur la première ligne d'un en-tête d'écran (le fil, sinon le titre), qui lui fait place : seul sur sa rangée, il coûtait ~60 px en haut d'un téléphone. Sans en-tête d'écran dans le contenu, il garde sa rangée. */
+  .oto-desk { --menu-h: var(--ctrl-h-md); --menu-pad: var(--island-pad); --menu-left: 0px; }
+  .oto-desk:has(> .oto-rail-toggle):has(> .oto-content > .oto-screen-header) { grid-template-rows: minmax(0, 1fr); }
+  .oto-desk:has(> .oto-content > .oto-screen-header) > :is(.oto-rail-toggle, .oto-content) { grid-area: 1 / 1; }
+  .oto-desk:has(> .oto-content > .oto-screen-header) > .oto-rail-toggle {
+    position: relative;
+    z-index: 1;
+    align-self: start;
+    margin-block-start: var(--menu-pad);
+    margin-inline-start: var(--menu-left);
+  }
+  /* La première ligne a au moins la hauteur du bouton, son contenu centré : les deux partagent leur milieu, fil ou titre. */
+  .oto-desk:has(> .oto-rail-toggle) > .oto-content > .oto-screen-header > :first-child {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--menu-h);
+    padding-inline-start: calc(var(--menu-h) + var(--space-2));
+  }
+}
+
+/* ── < 768, l'écran d'un téléphone : les lignes du tiroir prennent la hauteur d'un doigt, l'inspecteur et le contenu se resserrent. */
+@media (max-width: 767px) {
+  .oto-rail-item { min-block-size: var(--touch); }
   .oto-inspector { inline-size: min(var(--inspector-w), calc(100vw - var(--inset) * 2)); }
   .oto-content { padding: var(--space-3); }
+  .oto-desk { --menu-pad: var(--space-3); --menu-left: var(--space-3); }
 }
 
 /* ── < 640, une seule colonne, cibles tactiles : la topbar ne garde que le fil d'Ariane tronqué et l'action principale. */
 @media (max-width: 639px) {
-  .oto-desk { padding: var(--space-2); --gap: var(--space-2); }
+  .oto-desk { padding: var(--space-2); --gap: var(--space-2); --menu-h: var(--touch); }
 
   .oto-topbar { block-size: var(--touch); gap: var(--space-2); }
   .oto-topbar [data-hide-sm] { display: none; }

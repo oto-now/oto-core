@@ -304,13 +304,13 @@ export function roundScore(score: number): number {
 }
 
 /**
- * Les composantes des procédures publiées de l'organisation, 50 lignes, sous la session de la personne.
- * Arguments nommés : la fonction les reçoit par leur nom, comme par PostgREST.
+ * Les composantes des nœuds publiés de l'organisation du genre `kind` (`null` : tous), 50 lignes, sous la session
+ * de la personne. Arguments nommés : la fonction les reçoit par leur nom, comme par PostgREST.
  */
-async function routeRows(db: PlatformDb, identity: Identity, query: string): Promise<RouteRow[]> {
+async function routeRows(db: PlatformDb, identity: Identity, query: string, kind: string | null): Promise<RouteRow[]> {
   return inTransaction(db, "rankCandidates: route_candidates", (sql) => sql<RouteRow[]>`
     select r.node_id, r.path, r.title, r.summary, r.kind, r.owner_team_id, r.s_summary, r.s_title, r.s_phrase, r.lexical, r.lexical_title, r.query_lexemes
-      from platform.route_candidates(p_org => ${identity.org.id}, p_query => ${query}, p_kind => ${ROUTED_KIND}, p_limit => ${PREFILTER}) r`)
+      from platform.route_candidates(p_org => ${identity.org.id}, p_query => ${query}, p_kind => ${kind}, p_limit => ${PREFILTER}) r`)
 }
 
 /**
@@ -337,8 +337,8 @@ async function usedPaths(db: PlatformDb, identity: Identity): Promise<Set<string
 }
 
 /**
- * Les procédures candidates pour `query`, que la personne lit, triées par score décroissant puis par
- * chemin, de score ≥ 0,30, `limit` au plus. Le niveau des nœuds rendus est calculé en un lot et un
+ * Les procédures candidates pour `query` (ou les nœuds des genres `kinds`, par le même classement : les contenus proches
+ * de `context`), que la personne lit, triées par score décroissant puis par chemin, de score ≥ 0,30, `limit` au plus. Le niveau des nœuds rendus est calculé en un lot et un
  * nœud de niveau 0 est retiré avant tout mélange, bonus ou coupe (H123, N22) : `route_candidates` ne
  * rend déjà que les procédures publiées que la demande présélectionne et que la personne lit (E01-S13,
  * AC-a2), et le service garde sa propre décision (`security-patterns.md § Droits dans le service`).
@@ -346,9 +346,11 @@ async function usedPaths(db: PlatformDb, identity: Identity): Promise<Set<string
 export async function rankCandidates(
   db: PlatformDb,
   identity: Identity,
-  request: { query: string; limit: number },
+  request: { query: string; limit: number; kinds?: readonly string[] },
 ): Promise<Candidate[]> {
-  const [rows, used] = await Promise.all([routeRows(db, identity, request.query), usedPaths(db, identity)])
+  const kinds = request.kinds ?? [ROUTED_KIND]
+  const [all, used] = await Promise.all([routeRows(db, identity, request.query, kinds.length === 1 ? kinds[0] : null), usedPaths(db, identity)])
+  const rows = all.filter((row) => kinds.includes(row.kind))
   const levels = await nodeLevels(db, identity, rows.map((row) => row.node_id))
   const teams = new Set(identity.teams.map((team) => team.id))
   return rows

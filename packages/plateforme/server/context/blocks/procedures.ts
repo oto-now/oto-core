@@ -112,7 +112,10 @@ export function proceduresText(procedures: readonly Pick<Procedure, "path" | "ti
     return [header, ...lines.slice(0, shown), ...more].join("\n")
   }
   const shown = Math.min(lines.length, PROCEDURES_MAX)
-  return { name: "procedures", text: text(shown), ...(shown < lines.length ? { cut: true } : {}) }
+  // Au budget, la liste par leurs titres seuls : chaque procédure reste nommée plutôt que coupée sans un mot.
+  const titles = procedures.slice(0, shown).map((procedure) => `${item}${procedure.path}${separator}${procedure.title}`)
+  const more = shown < lines.length ? [`${moreStart}${lines.length - shown}${moreEnd}${prefix}_find, type procedure.`] : []
+  return { name: "procedures", text: text(shown), fallback: [header, ...titles, ...more].join("\n"), ...(shown < lines.length ? { cut: true } : {}) }
 }
 
 /** L'ordre des procédures utiles : l'usage sur 90 jours, décroissant, puis le chemin ; le même pour le bloc et l'accueil (E05-S12, AC-18). */

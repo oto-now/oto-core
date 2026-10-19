@@ -104,7 +104,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(first).toContain(`\n\n## Context: team Conseil (conseil/contexte)\nTeam Conseil. Lead: ${ACME_PEOPLE.jb.name}.\n`)
       expect(first).toContain(`\n\n→ page: ${grille.title} — ${grille.summary} (${GRILLE})\n\nLinked pages:\n- ${GRILLE} — ${grille.title} — ${grille.summary}\n\n`)
       expect(first).toMatch(/\n## What's new since \d{4}-\d{2}-\d{2}\n- contexte v2 \(\d{4}-\d{2}-\d{2}\): Contexte\n/)
-      expect(first).toContain(`\n## Procedures you can run (1)\n- ${ACME_PROCEDURES[0].path}: ${ACME_PROCEDURES[0].summary}\n`)
+      expect(first).toContain(`\n## Procedures you can run, most used first (1)\n- ${ACME_PROCEDURES[0].path}: ${ACME_PROCEDURES[0].summary}\n`)
       expect(first).toMatch(new RegExp(`\\n## Recent content\\n- ${ACME_TABLE.path} \\(table, \\d{4}-\\d{2}-\\d{2}\\): ${ACME_TABLE.title}\\n- ${GRILLE} \\(page, \\d{4}-\\d{2}-\\d{2}\\): ${grille.title}$`))
       // La conversation suivante ne revoit pas la nouveauté (AC3, sur le vrai schéma) ; rien depuis le jour même : aucun bloc (M53).
       expect(next).not.toContain("## What's new")

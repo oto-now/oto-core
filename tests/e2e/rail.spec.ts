@@ -34,7 +34,7 @@ test.describe("le rail", () => {
         await seConnecterSurLEspace(page, { email, password })
         const rail = page.getByRole("navigation", { name: "Navigation principale" })
         await expect(page.getByRole("navigation")).toHaveCount(1)
-        // Le déclencheur du tiroir n'existe que sous 768 px (fiche D90 B).
+        // Le déclencheur du tiroir n'existe que sous 1 024 px (fiche D90 B).
         await expect(page.getByRole("button", { name: "Menu", exact: true })).toBeHidden()
 
         // Un rechargement du document emporterait cette marque ; une navigation de l'hôte la garde.

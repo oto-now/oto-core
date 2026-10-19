@@ -20,6 +20,7 @@ import { seedAcme } from "../integration/fixtures/acme-sql"
 import { MAX_RESULT_CHARS } from "../../packages/plateforme/mcp/result"
 import { defineFunction, type CatalogFunction } from "../../packages/plateforme/server/catalog/define"
 import { find, type FindType } from "../../packages/plateforme/server/find"
+import { rankCandidates } from "../../packages/plateforme/server/routing"
 
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
@@ -105,7 +106,8 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
   /** Le client d'Ada, dont `search_content` rend `rows[p_query]` quel que soit le genre, chaque nœud sous son identifiant réel. */
   async function searchDb(rows: Record<string, Row[]> = {}) {
     const real = (row: Row): Row => ({ ...row, node_id: ref.nodeId(String(row.path)) })
-    return watchDb(await ref.db("ada"), { rpc: { search_content: (args) => (rows[String(args.p_query)] ?? []).map(real) } })
+    // Le classement du routage (`route_candidates`) ne rend rien ici : ces cas portent sur les lignes de `search_content`.
+    return watchDb(await ref.db("ada"), { rpc: { search_content: (args) => (rows[String(args.p_query)] ?? []).map(real), route_candidates: () => [] } })
   }
 
   describe("find: nodes, places and snippets (AC10)", () => {
@@ -202,8 +204,8 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
         "   - row P-009: ville: **Valbrune**",
       ])
       expect(lines.slice(5, 7).map((line) => line.split(": ")[0])).toEqual([
-        "2. ventes/qualifier_prospects (procedure, score 0.87)",
-        "3. ventes/relance_prospects (procedure, score 0.85)",
+        "2. ventes/qualifier_prospects (procedure, score 0.92)",
+        "3. ventes/relance_prospects (procedure, score 0.90)",
       ])
     })
   })
@@ -236,14 +238,20 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
           "   3 of 5 matching blocks shown: read the page for the others, or search more exact words.",
           // E11-S19 (AC-e5) : Ada, administratrice, écrit la page ; ses blocs simulés n'ont pas de section en base.
           `   To edit: ${ref.org.prefix}_write {"path": "ventes/c_bloc", "base_revision": ${cRevision}, "ops": [...]}.`,
-          "More nodes match (at least 1): add words or set type to narrow the search.",
+          // Le quatrième nœud, en une ligne : l'agent le voit et peut le lire.
+          "Other matches:",
+          "- ventes/d_bloc (page, score 0.03): Page D. Une autre page dont un bloc porte le mot.",
           readLine(ref.org.prefix),
         ].join("\n"),
       )
-      expect(result.data).toMatchObject({ more_nodes: 1, matches: [{}, {}, { path: "ventes/c_bloc", blocks_total: 5 }] })
+      expect(result.data).toMatchObject({
+        more_nodes: 1,
+        others: [{ path: "ventes/d_bloc", kind: "page", title: "Page D", score: 0.03 }],
+        matches: [{}, {}, { path: "ventes/c_bloc", blocks_total: 5 }],
+      })
       const whole = await find(db, ada, { query: "zorglub seul" }, NO_CATALOG)
-      expect(whole.text).not.toContain("More nodes match")
-      expect(whole.data).toMatchObject({ more_nodes: 0 })
+      expect(whole.text).not.toContain("Other matches")
+      expect(whole.data).toMatchObject({ more_nodes: 0, others: [] })
     })
   })
 
@@ -275,8 +283,21 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
       // Marc lit la page sans l'écrire : les sections, sans l'appel qui édite.
       await ref.addRules([{ node: path, user: "marc", level: "read" }])
       const marc = await ref.db("marc")
-      const read = await find(watchDb(marc, { rpc: { search_content: () => found.map((row) => ({ ...row, node_id: ref.nodeId(path) })) } }).db, ref.identityOf("marc"), { query: "zorglub tarifs" }, NO_CATALOG)
+      const read = await find(watchDb(marc, { rpc: { search_content: () => found.map((row) => ({ ...row, node_id: ref.nodeId(path) })), route_candidates: () => [] } }).db, ref.identityOf("marc"), { query: "zorglub tarifs" }, NO_CATALOG)
       expect(read.text.split("\n").slice(2, 5)).toEqual([...blockLines, readLine(ref.org.prefix)])
+    })
+  })
+
+  // Un seul classement : la procédure que `context` sert pour une phrase est le premier résultat de `find` pour la même.
+  describe("find: the ranking of context", () => {
+    it("should put first the procedure that context serves for the same phrase, by its title and summary", async () => {
+      const ada = ref.identityOf("ada")
+      const db = await ref.db("ada")
+      const phrase = "relance les devis en attente"
+      const [served] = await rankCandidates(db, ada, { query: phrase, limit: 1 })
+      expect(served?.path).toBe("ventes/relance_devis")
+      const found = await find(db, ada, { query: phrase }, NO_CATALOG)
+      expect(found.text.split("\n")[1]).toMatch(/^1\. ventes\/relance_devis \(procedure, score /)
     })
   })
 
@@ -342,7 +363,7 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
       const nodesFirst = (await find(db, ada, { query: "table.schema" }, CATALOG)).text.split("\n")
       const [{ revision }] = await seed.admin<{ revision: number }[]>`select revision from platform.nodes where id = ${ref.nodeId("ventes/qualifier_prospects")}`
       expect(nodesFirst.slice(1, 6)).toEqual([
-        "1. ventes/qualifier_prospects (procedure, score 0.13): Qualifier les prospects à traiter. " + acmeNode("ventes/qualifier_prospects").summary,
+        "1. ventes/qualifier_prospects (procedure, score 0.18): Qualifier les prospects à traiter. " + acmeNode("ventes/qualifier_prospects").summary,
         '   - block 00000009 (call): **table.schema** {"table":"ventes/suivi_prospects"}',
         // E11-S19 (AC-e5) : Ada écrit la procédure.
         `   To edit: ${prefix}_write {"path": "ventes/qualifier_prospects", "base_revision": ${revision}, "ops": [...]}.`,
@@ -390,7 +411,7 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
 
       const found = await session.call("find", { ctx: code, query })
       expect(found.isError).toBe(false)
-      expect(Object.keys(found.result.structuredContent ?? {}).sort()).toEqual(["functions", "matches", "more_nodes", "next_actions", "text"])
+      expect(Object.keys(found.result.structuredContent ?? {}).sort()).toEqual(["functions", "matches", "more_nodes", "next_actions", "others", "text"])
       expect(found.result.structuredContent).toMatchObject({
         text: found.text,
         matches: [{ path: GRILLE, kind: "page", title: "Grille tarifaire 2026", score: 1, places: [{ match: "title", block: null, block_type: null, column: null }] }],
