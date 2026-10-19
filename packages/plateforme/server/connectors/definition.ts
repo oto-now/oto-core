@@ -270,6 +270,11 @@ export type ConnectorFunctionDefinition = {
   readonly request: ConnectorRequest
   readonly pagination?: ConnectorPagination
   readonly output?: ConnectorOutput
+  /**
+   * Le délai de chaque requête de la fonction (chaque page d'une pagination), en millisecondes, à la place de celui du
+   * connecteur, plus court ou plus long, jamais égal ; absent, celui du connecteur.
+   */
+  readonly timeoutMs?: number
   /** Unité décomptée (`per: request` ou `page`), ignorée par le moteur (aucun quota d'appel) ; lue pour refuser une sonde à solde qui coûterait. */
   readonly cost?: { readonly per: "request" | "page" }
   /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */

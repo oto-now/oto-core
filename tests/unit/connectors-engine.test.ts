@@ -13,7 +13,7 @@ import { registerConnectors } from "../../packages/plateforme/server/connectors/
 import { executeDescribed } from "../../packages/plateforme/server/connectors/engine"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
-import { describedConnector, markingConnector, memoryMark, memoryTokens } from "../factories/described-connector"
+import { describedConnector, markingConnector, memoryMark, memoryTokens, timedConnector } from "../factories/described-connector"
 import { loggedText } from "../helpers/logs"
 
 const secret = () => `key_${randomBytes(12).toString("hex")}`
@@ -292,5 +292,55 @@ describe("described connector engine, account state (oto-core#69)", () => {
     expect(error.code).toBe("credential_rejected")
     expect(error.message).toBe("Crm refused the key. (key_rejected) Account « Crm Ventes » is marked since 2026-10-16T08:00:00.000Z. Ask team Ventes (lead: Claire Morel).")
     expect({ current: mark.current, effect: mark.effect }).toEqual({ current: { reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" }, effect: null })
+  })
+})
+
+describe("described connector engine, a function's own timeout (oto-core#70)", () => {
+  /** Le délai de chaque requête envoyée, lu sur `AbortSignal.timeout` que pose le client HTTP. */
+  const timeouts = () => vi.spyOn(AbortSignal, "timeout")
+  const page = (cursor: string | null) => json({ items: [{ id: "c-1" }], has_more: cursor !== null, next_cursor: cursor })
+
+  it("should give each page of a function its own timeout when longer than the connector's", async () => {
+    registerConnectors([timedConnector(60_000)])
+    const sent = timeouts()
+    stub(page("p2"), page(null))
+    await run("crm.list_contacts", { all_pages: true })
+    expect(sent.mock.calls.map(([ms]) => ms)).toEqual([60_000, 60_000])
+  })
+
+  it("should time out at a function's own timeout when shorter than the connector's, and say it in the refusal", async () => {
+    registerConnectors([timedConnector(2_000)])
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const sent = timeouts()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<Fetch>(async () => {
+        throw Object.assign(new Error("aborted"), { name: "TimeoutError" })
+      }),
+    )
+    const error = await refusal(run("crm.list_contacts", {}))
+    expect({ code: error.code, message: error.message }).toEqual({ code: "upstream_error", message: "Crm did not answer within 2 s. Retry later." })
+    expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000])
+  })
+
+  it("should keep the connector's timeout for a function without its own, beside one that has it", async () => {
+    registerConnectors([timedConnector(60_000)])
+    const sent = timeouts()
+    stub(json({ id: "c-42", name: "Ada", email: "ada@example.test" }), page("p2"), page(null))
+    await run("crm.get_contact", { contact_id: "c-42" })
+    expect(sent.mock.calls.map(([ms]) => ms)).toEqual([5_000])
+    registerConnectors([describedConnector()])
+    await run("crm.list_contacts", { all_pages: true })
+    expect(sent.mock.calls.map(([ms]) => ms)).toEqual([5_000, 5_000, 5_000])
+  })
+
+  it("should give the probe its function's own timeout", async () => {
+    registerConnectors([timedConnector(2_000)])
+    const prepared = declaredConnector("crm")?.probe
+    if (!prepared) throw new Error("crm declares no probe")
+    const sent = timeouts()
+    stub(json({ name: "Contoso", scopes: ["read"] }))
+    await executeDescribed(prepared, { credential: { fields: { api_key: secret() }, settings: {}, tokens: memoryTokens() }, accountId: "account-probe" }, {})
+    expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000])
   })
 })

@@ -28,6 +28,10 @@ export type ConnectorApi = {
   label: string
   /** Adresse de base, sans barre finale : `https://api.notion.com/v1`. */
   baseUrl: string
+  /**
+   * Le délai de chaque requête : celui de la fonction appelée si elle en déclare un, sinon celui du connecteur, seul lu
+   * par un point de jeton.
+   */
   timeoutMs: number
   errors: readonly ApiError[]
   /** Débit maximal du tiers, par compte : `requests` requêtes par fenêtre de `intervalMs`. */

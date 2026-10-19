@@ -21,7 +21,7 @@ import { decryptCredential } from "../../packages/plateforme/server/connectors/v
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { resolveIdentity, type Identity } from "../../packages/plateforme/server/identity"
-import { describedConnector } from "../factories/described-connector"
+import { describedConnector, timedConnector } from "../factories/described-connector"
 import { loggedText } from "../helpers/logs"
 import { connectDeps } from "../helpers/mcp"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
@@ -320,6 +320,29 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         healthy: false,
         reason: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
       })
+    })
+
+    it("should run the probe at its function's own timeout, and say it when the third party does not answer in time (oto-core#70)", async () => {
+      const ada = as("ada")
+      const live = await orgAccount("reel")
+      await setAccountSecret(ada.db, ada.identity, { account_id: live.id, input: { secret: { api_key: newSecret() } } })
+      registerConnectors([timedConnector(2_000, LIVE), describedConnector(FRESH)])
+      try {
+        vi.spyOn(console, "error").mockImplementation(() => {})
+        const sent = vi.spyOn(AbortSignal, "timeout")
+        stubTiers({ company: "Acme", scopes: ["contacts:read"] })
+        expect(await probeAccount(ada.db, ada.identity, { account_id: live.id })).toEqual({ healthy: true })
+        vi.stubGlobal(
+          "fetch",
+          vi.fn<Fetch>(async () => {
+            throw Object.assign(new Error("aborted"), { name: "TimeoutError" })
+          }),
+        )
+        expect(await probeAccount(ada.db, ada.identity, { account_id: live.id })).toEqual({ healthy: false, reason: "Crm did not answer within 2 s. Retry later." })
+        expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000, 2_000])
+      } finally {
+        registerConnectors([describedConnector(LIVE), describedConnector(FRESH)])
+      }
     })
 
     it("should reserve the probe to whoever manages the account, and refuse a connector without a probe", async () => {

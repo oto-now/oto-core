@@ -10,7 +10,7 @@ import { catalogFunctions, describeFunction, findFunction } from "../../packages
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
 import { errorTable } from "../../packages/plateforme/server/connectors/engine"
-import { describedConnector, markingConnector } from "../factories/described-connector"
+import { describedConnector, markingConnector, timedConnector } from "../factories/described-connector"
 
 afterEach(() => {
   registerConnectors([])
@@ -233,6 +233,20 @@ describe("registerConnectors", () => {
       () => [withBalance({ path: "credits.remaining", min: 1, unit: "credits" }, { per: "request" })],
       "crm: probe crm.get_company reads a balance, so it must declare no cost: one never pays to learn whether one can pay.",
     ],
+    ["a function timeout equal to the connector's", () => [timedConnector(5_000)], "crm.get_company: timeoutMs equals the connector's (5000): it says nothing, drop it."],
+    ...(
+      [
+        ["a function timeout that is not an integer", 1_500.5],
+        ["a function timeout under one second", 999],
+        ["a function timeout of zero", 0],
+        ["a function timeout above the connector's bound", 300_001],
+        ["a function timeout given as text", "60000"],
+      ] as const
+    ).map(([what, timeoutMs]): [string, () => ConnectorDefinition[], string] => [
+      what,
+      () => [timedConnector(timeoutMs as number)],
+      "crm.get_company: timeoutMs must be an integer from 1000 to 300000.",
+    ]),
     ...(
       [
         ["an empty balance path", { path: "", min: 1, unit: "credits" }],
@@ -255,6 +269,13 @@ describe("registerConnectors", () => {
     registerConnectors([describedConnector("crm_before")])
     expect(refusalOf(definitions())).toBe(message)
     expect(catalogFunctions().filter((fn) => fn.connector === "crm_before")).toHaveLength(6)
+  })
+
+  it("should accept a function timeout shorter or longer than the connector's, from one second to the connector's bound", () => {
+    for (const timeoutMs of [1_000, 2_000, 60_000, 300_000]) {
+      registerConnectors([timedConnector(timeoutMs)])
+      expect(declaredNames()).toHaveLength(6)
+    }
   })
 
   it("should accept a probe that reads a balance with a function that declares no cost, and a probe without balance whose function costs", () => {

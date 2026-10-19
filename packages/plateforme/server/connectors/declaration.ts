@@ -28,6 +28,8 @@ const LABEL_MAX = 80
 const NAME_MAX = 64
 const DESCRIPTION_MAX = 1000
 const TIMEOUT_MAX_MS = 300_000
+/** Le délai d'une fonction : des secondes entières dans la description (`timeout_s` ≥ 1), donc une seconde au moins. */
+const FUNCTION_TIMEOUT_MIN_MS = 1_000
 const CLASSES = ["read", "write", "sensitive"]
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 const QUERY_ARRAYS = ["repeat", "brackets", "comma"]
@@ -198,6 +200,23 @@ function compiledFunction(definition: ConnectorDefinition, fn: ConnectorFunction
   return schema
 }
 
+/**
+ * Le délai propre à une fonction (`timeoutMs`), comme la fabrique le contrôle : un entier de millisecondes, d'une seconde
+ * au moins, borné comme celui du connecteur ; plus court ou plus long que lui, jamais égal (il ne dirait rien).
+ */
+function functionTimeoutProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string | null {
+  const timeout = fn.timeoutMs
+  if (timeout === undefined) return null
+  const bounded = Number.isInteger(timeout) && timeout >= FUNCTION_TIMEOUT_MIN_MS && timeout <= TIMEOUT_MAX_MS
+  if (!bounded) return `${fn.name}: timeoutMs must be an integer from ${FUNCTION_TIMEOUT_MIN_MS} to ${TIMEOUT_MAX_MS}.`
+  return timeout === definition.timeoutMs ? `${fn.name}: timeoutMs equals the connector's (${timeout}): it says nothing, drop it.` : null
+}
+
+/** Le tiers d'une fonction : le délai de la fonction s'il en déclare un, sinon celui du connecteur ; sa table d'erreurs. */
+function functionApi(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): PreparedFunction["api"] {
+  return { label: definition.label, timeoutMs: fn.timeoutMs ?? definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
+}
+
 /** Les refus que `read` sert : ceux de la fonction, le compte, puis la table du connecteur. */
 function refusalLines(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string[] {
   const account =
@@ -264,8 +283,8 @@ function functionScopesProblem(fn: ConnectorFunctionDefinition, auth: PreparedAu
 
 /**
  * L'identité lue à une adresse complète, préparée comme une lecture sans argument : un `GET` sur l'adresse, avec le
- * jeton d'accès, par le même moteur qu'une fonction (client HTTP, redirection refusée, délai, table d'erreurs du
- * connecteur, renouvellement sur un 401). Elle n'entre pas au catalogue : l'agent ne l'appelle jamais.
+ * jeton d'accès, par le même moteur qu'une fonction (client HTTP, redirection refusée, délai et table
+ * d'erreurs du connecteur, renouvellement sur un 401). Elle n'entre pas au catalogue : l'agent ne l'appelle jamais.
  */
 function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth, url: string): PreparedFunction {
   const fn: ConnectorFunctionDefinition = {
@@ -279,8 +298,7 @@ function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth,
     refusals: [],
     request: { method: "GET", path: "", pathParams: [], query: {}, body: {}, headers: {} },
   }
-  const api = { label: definition.label, timeoutMs: definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
-  return { connector: definition, fn, api, address: { template: url }, auth, cursorArgument: null }
+  return { connector: definition, fn, api: functionApi(definition, fn), address: { template: url }, auth, cursorArgument: null }
 }
 
 /** Un connecteur contrôlé et préparé ; au premier problème, `CatalogRegistrationError`. */
@@ -303,11 +321,10 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
-    const api = { label: definition.label, timeoutMs: definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
-    const prepared: PreparedFunction = { connector: definition, fn, api, address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
+    const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
     if (fn.name === definition.probe?.function) probe = prepared
     if (auth.kind === "user_consent" && "function" in auth.identity && fn.name === auth.identity.function) identity = prepared
     return catalogFunction(prepared, schema)
@@ -351,8 +368,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux ; enfin la sonde et l'identité d'un
- * consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre ; enfin la sonde et
+ * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; tous fournis par l'hôte. Au premier refus,
  * `CatalogRegistrationError` et rien n'est déclaré ;

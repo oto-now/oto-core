@@ -4,7 +4,8 @@
 // curseur, sortie taillée, refus propre à une fonction, contrôle avant l'appel (`equal_sums`) et sur la réponse
 // (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde. Et ses variantes : sous le
 // consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
-// table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire.
+// table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; enfin à fonctions qui ont
+// leur délai propre (`timedConnector`).
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
@@ -154,6 +155,16 @@ export function describedConnector(name = "crm"): ConnectorDefinition {
     probe: { function: `${name}.get_company`, nonEmpty: ["scopes"] },
     functions: functions(name),
   }
+}
+
+/**
+ * Le connecteur de test dont la sonde (`get_company`) et la liste paginée (`list_contacts`) ont leur délai propre,
+ * `timeoutMs`, à la place de celui du connecteur (5 s) ; les autres fonctions gardent celui du connecteur.
+ */
+export function timedConnector(timeoutMs: number, name = "crm"): ConnectorDefinition {
+  const base = describedConnector(name)
+  const timed = [`${name}.get_company`, `${name}.list_contacts`]
+  return { ...base, functions: base.functions.map((fn) => (timed.includes(fn.name) ? { ...fn, timeoutMs } : fn)) }
 }
 
 /**

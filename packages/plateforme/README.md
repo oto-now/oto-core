@@ -411,7 +411,8 @@ registerFunctions([/* fonctions de l'ERP */])
   à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
   (`https://{domain}.example.net`, `{server}/v1`), une adresse saisie ne joignant jamais un hôte interne ; `GET`, `POST`, `PUT`, `PATCH`, `DELETE` ; en-têtes et constantes ; listes en query ; arguments encodés
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
-  essai après un 429. Le JSON Schema d'entrée est validé et servi tel quel.
+  essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon
+  celui du connecteur. Le JSON Schema d'entrée est validé et servi tel quel.
 - **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
   lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa
