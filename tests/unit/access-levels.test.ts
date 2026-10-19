@@ -188,13 +188,19 @@ describe("accountLevelOf", () => {
 })
 
 describe("accountLevelOf: sharing a personal account (#68)", () => {
-  it("should keep the owner manager of their own account whatever the rules", () => {
-    const rules: RuleSpec[] = [
-      { account: "claire", org: true, level: "read" },
+  it("should let a rule naming the owner, or else one of their teams, lower their level on their own account, manage included", () => {
+    expect(accountLevel("claire", "claire", [{ account: "claire", user: "claire", level: "read" }])).toBe(1)
+    expect(accountLevel("claire", "claire", [{ account: "claire", user: "claire", level: "none" }])).toBe(0)
+    expect(accountLevel("claire", "claire", [{ account: "claire", team: "ventes", level: "write" }])).toBe(2)
+    const named: RuleSpec[] = [
       { account: "claire", team: "ventes", level: "none" },
-      { account: "claire", user: "claire", level: "none" },
+      { account: "claire", user: "claire", level: "sensitive" },
     ]
-    expect(accountLevel("claire", "claire", rules)).toBe(4)
+    expect(accountLevel("claire", "claire", named)).toBe(3)
+  })
+
+  it("should let an organisation rule alone open the owner's account to the others, never lower the owner", () => {
+    expect(accountLevel("claire", "claire", [{ account: "claire", org: true, level: "read" }])).toBe(4)
   })
 
   it("should share with the whole organisation, administrators included, without giving them manage", () => {

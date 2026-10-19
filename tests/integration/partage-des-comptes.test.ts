@@ -6,7 +6,9 @@
 // les autres, lu à chaque appel, rien n'étant effacé, et son retour le rend ; le journal des partages écrit chaque règle
 // posée, remplacée ou retirée (même par le départ d'une personne), que seule la personne qui gère le compte lit, et que
 // la RLS borne à l'organisation. `mail` simulé : aucun réseau.
+import { readFileSync } from "node:fs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { accountLevel } from "../../packages/plateforme/server/access"
 import { listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
@@ -24,6 +26,13 @@ const pending = (await pendingMigrations()).includes(VERSION)
 const ORIGIN = "https://acme.test"
 const DRAFT = { to: "sophie@valbrune.test", subject: "Votre rendez-vous", body: "Bonjour Sophie, …" }
 const ASK_WHICH = "Show them to the user and ask which one to use; do not pick one yourself."
+/** L'instruction de la migration qui passe les règles de compte `write` d'hier à `sensitive`, lue dans le fichier. */
+const WRITE_TO_SENSITIVE = (() => {
+  const migration = readFileSync(new URL(`../../packages/plateforme/migrations/${VERSION}_platform_partage_des_comptes.sql`, import.meta.url), "utf8")
+  const statement = migration.split("\n").find((line) => line.startsWith("UPDATE platform.access_rules SET level = 'sensitive'"))
+  if (!statement) throw new Error("the migration no longer moves account rules from write to sensitive")
+  return statement.replace(/;\s*$/, "")
+})()
 
 type Person = { db: PlatformDb; identity: Identity }
 
@@ -115,6 +124,45 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect((await refusal(draft(marc, mail.label))).code).toBe("not_found")
   })
 
+  // Rien de ce qu'un compte permettait hier ne se perd, rien ne s'ouvre de plus : l'ancien niveau 2 (`write`) couvrait
+  // l'écriture et le sensible, jamais la gestion.
+  it("should let a write rule of yesterday, once migrated, open write and sensitive functions as before, and nothing more", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa hier")
+    // La règle telle qu'elle était en base avant ce lot, puis l'instruction même de la migration, bornée à elle.
+    const [rule] = await fx.admin<{ id: string }[]>`
+      insert into platform.access_rules (org_id, account_id, subject_user_id, level, created_by)
+      values (${o.org.id}, ${mail.id}, ${o.people.paul.id}, 'write', ${o.people.lea.id}) returning id`
+    await fx.admin.unsafe(`${WRITE_TO_SENSITIVE} AND id = $1`, [rule.id])
+    expect(await fx.admin`select level from platform.access_rules where id = ${rule.id}`).toEqual([{ level: "sensitive" }])
+
+    const created = await draft(paul, mail.label)
+    if (created.status !== "done") throw new Error(created.status)
+    const asked = await callFunction(paul.db, paul.identity, { function: "mail.send_draft", arguments: { id: created.result.draft_id }, account: mail.label }, { origin: ORIGIN })
+    expect(asked.status).toBe("needs_confirmation")
+    // Ni la gestion du compte, ni la pose d'une règle, ni la lecture du journal des partages.
+    expect(await accountLevel(paul.db, paul.identity, mail.id)).toBe(3)
+    expect((await refusal(setAccountRule(paul.db, paul.identity, { accountId: mail.id, subject: { kind: "user", id: o.people.marc.id }, level: "read" }))).code).toBe("forbidden")
+    expect((await refusal(listAccountShareJournal(paul.db, paul.identity, mail.id))).code).toBe("forbidden")
+
+    // Une règle `write` posée après ce lot ouvre l'écriture, pas le sensible.
+    await setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "user", id: o.people.marc.id }, level: "write" })
+    const marcs = await draft(marc, mail.label)
+    if (marcs.status !== "done") throw new Error(marcs.status)
+    const refused = await refusal(
+      callFunction(marc.db, marc.identity, { function: "mail.send_draft", arguments: { id: marcs.result.draft_id }, account: mail.label }, { origin: ORIGIN }),
+    )
+    expect(refused.code).toBe("forbidden")
+  })
+
+  it("should keep the default of a team account up to its sensitive functions for a member, as write covered them", async () => {
+    const label = `Mail Ventes ${hex(3)}`
+    await fx.createAccount(o.org.id, { ownerKind: "team", ownerTeamId: o.teams.ventes, label })
+    const created = await draft(lea, label)
+    if (created.status !== "done") throw new Error(created.status)
+    const asked = await callFunction(lea.db, lea.identity, { function: "mail.send_draft", arguments: { id: created.result.draft_id }, account: label }, { origin: ORIGIN })
+    expect(asked.status).toBe("needs_confirmation")
+  })
+
   it("should refuse a sensitive function on an account shared in write, then ask for approval once shared up to sensitive", async () => {
     const mail = await personalAccount(o.people.lea, "Léa sensible")
     await setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "user", id: o.people.paul.id }, level: "write" })
@@ -130,6 +178,44 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const asked = await send()
     expect(asked.status).toBe("needs_confirmation")
     expect(asked.text).toContain(`Account « ${mail.label} » belongs to Léa Roux, who shared it with you.`)
+  })
+
+  // Comme avant ce lot : sa personne gère son compte personnel par défaut, et une règle qui la nomme, ou à défaut une
+  // règle d'une de ses équipes, baisse son niveau, gestion comprise (un administrateur peut restreindre cet usage).
+  it("should let a read rule naming the owner of a personal account refuse her write, sensitive and manage", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa restreinte")
+    const created = await draft(lea, mail.label)
+    if (created.status !== "done") throw new Error(created.status)
+    await fx.admin`
+      insert into platform.access_rules (org_id, account_id, subject_user_id, level, created_by)
+      values (${o.org.id}, ${mail.id}, ${o.people.lea.id}, 'read', ${o.people.ada.id})`
+
+    expect(await accountLevel(lea.db, lea.identity, mail.id)).toBe(1)
+    const written = await refusal(draft(lea, mail.label))
+    expect(written.code).toBe("forbidden")
+    expect(written.message.startsWith(`Account « ${mail.label} » cannot run mail.create_draft for you (write access needed). `)).toBe(true)
+    const sent = await refusal(
+      callFunction(lea.db, lea.identity, { function: "mail.send_draft", arguments: { id: created.result.draft_id }, account: mail.label, confirm: true }, { origin: ORIGIN }),
+    )
+    expect(sent.code).toBe("forbidden")
+    expect((await refusal(setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "user", id: o.people.paul.id }, level: "read" }))).code).toBe("forbidden")
+    expect((await refusal(listAccountShareJournal(lea.db, lea.identity, mail.id))).code).toBe("forbidden")
+  })
+
+  it("should let a rule of the owner's team, with none naming her, lower her level on her personal account", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa par Ventes")
+    await fx.admin`
+      insert into platform.access_rules (org_id, account_id, subject_team_id, level, created_by)
+      values (${o.org.id}, ${mail.id}, ${o.teams.ventes}, 'write', ${o.people.ada.id})`
+
+    expect(await accountLevel(lea.db, lea.identity, mail.id)).toBe(2)
+    const created = await draft(lea, mail.label)
+    if (created.status !== "done") throw new Error(created.status)
+    const sent = await refusal(
+      callFunction(lea.db, lea.identity, { function: "mail.send_draft", arguments: { id: created.result.draft_id }, account: mail.label, confirm: true }, { origin: ORIGIN }),
+    )
+    expect(sent.code).toBe("forbidden")
+    expect((await refusal(listAccountShareJournal(lea.db, lea.identity, mail.id))).code).toBe("forbidden")
   })
 
   it("should stop serving the account of a person who left, at once and by name, deleting nothing, and serve it again when she is back", async () => {

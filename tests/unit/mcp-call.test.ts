@@ -105,13 +105,15 @@ describe.skipIf(!sqlConfigured)(portable("acme_call through the MCP gate"), { ti
   it("should journal each call, refusals included, with the function, the team and the account, in the order of the D1 flow (AC16)", async () => {
     const { run, journal } = await session()
     const draftId = ref.id(DRAFT_ID)
-    const summary = await run({ function: "mail.send_draft", arguments: { id: draftId } })
+    // Le compte est nommé, comme le demande le refus quand le compte personnel de Claire servirait d'abord (#68).
+    const account = ACCOUNTS.ventes.label
+    const summary = await run({ function: "mail.send_draft", account, arguments: { id: draftId } })
     expect(summary.isError).toBe(false)
     expect(summary.result.structuredContent).toMatchObject({ status: "needs_confirmation", next_actions: [] })
-    const sent = await run({ function: "mail.send_draft", arguments: { id: draftId }, confirm: true })
+    const sent = await run({ function: "mail.send_draft", account, arguments: { id: draftId }, confirm: true })
     expect(ref.readable(sent.result.structuredContent)).toMatchObject({ result: { sent_ids: [DRAFT_ID] } })
     // Refusé après le choix de l'équipe et du compte : ils restent à la ligne (N7).
-    expect((await run({ function: "mail.send_draft", arguments: { id: draftId }, confirm: true })).isError).toBe(true)
+    expect((await run({ function: "mail.send_draft", account, arguments: { id: draftId }, confirm: true })).isError).toBe(true)
     // Refusé avant : la fonction demandée seule.
     expect((await run({ function: "sellsy.list_estimates" })).isError).toBe(true)
     // Un nom de 250 caractères, refusé par le schéma (100 au plus) après la pose de la cible, qui en
@@ -121,7 +123,7 @@ describe.skipIf(!sqlConfigured)(portable("acme_call through the MCP gate"), { ti
     // L'équipe rendue par la fonction prime sur celle de l'appel, Ventes (N8).
     expect((await run({ function: "test.write", arguments: { team_id: ref.id(TEAMS.support.id) } })).isError).toBe(false)
 
-    const send = { ctx: CTX, function: "mail.send_draft", arguments: { id: DRAFT_ID } }
+    const send = { ctx: CTX, function: "mail.send_draft", account, arguments: { id: DRAFT_ID } }
     const [ventes, mailVentes] = [TEAMS.ventes.id, ACCOUNTS.ventes.id]
     const lines = ref.readable(journal)
     expect(lines.map((line) => [line.target, line.team_id, line.account_id, line.is_error ?? false, line.args])).toEqual([

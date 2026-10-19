@@ -236,8 +236,8 @@ export function nodeLevelOf(caller: Caller, chain: NodeChain): AccessLevel {
 
 /**
  * Sans règle, le propriétaire d'un compte décide (H67) : un compte d'organisation se lit, un compte d'équipe sert ses
- * membres jusqu'aux fonctions sensibles, comme avant le niveau sensible (son responsable le gère) ; le compte personnel
- * d'un autre ne s'ouvre que par une règle (sa personne, elle, le gère : `accountLevelOf`).
+ * membres jusqu'aux fonctions sensibles, comme avant le niveau sensible (son responsable le gère) ; un compte personnel
+ * est géré par sa personne et ne s'ouvre à un autre que par une règle.
  */
 function accountOwnerDefault(caller: Caller, owner: Owner): AccountLevel {
   if (owner.kind === "org") return ACCOUNT_LEVELS.read
@@ -245,7 +245,7 @@ function accountOwnerDefault(caller: Caller, owner: Owner): AccountLevel {
     if (caller.ledTeamIds.has(owner.teamId)) return ACCOUNT_LEVELS.manage
     return caller.teamIds.has(owner.teamId) ? ACCOUNT_LEVELS.sensitive : ACCOUNT_LEVELS.none
   }
-  return ACCOUNT_LEVELS.none
+  return owner.kind === "user" && owner.userId === caller.userId ? ACCOUNT_LEVELS.manage : ACCOUNT_LEVELS.none
 }
 
 /**
@@ -254,14 +254,13 @@ function accountOwnerDefault(caller: Caller, owner: Owner): AccountLevel {
  * vaut 0, et `readAccountFacts` ne lit que les règles de l'organisation de l'identité (précondition des `facts`). La
  * règle qui nomme la personne, puis celles de ses équipes, décident ; sans elles, le défaut du propriétaire, qu'une
  * règle d'organisation ouvre au-delà sans rien retirer, comme sur un nœud (ADR-014 ; `droits-d-acces.md` § Partage
- * d'un compte de connecteur).
+ * d'un compte de connecteur). Le propriétaire d'un compte personnel n'y échappe pas : une règle qui le nomme, ou à
+ * défaut une règle d'une de ses équipes, baisse son niveau, gestion comprise.
  */
 export function accountLevelOf(caller: Caller, facts: AccountFacts): AccountLevel {
   const { account } = facts
   if (account.orgId !== caller.orgId) return ACCOUNT_LEVELS.none
   if (account.owner.kind !== "user" && caller.isOrgAdmin) return ACCOUNT_LEVELS.manage
-  // Sa personne gère son compte personnel : une règle qu'elle pose pour son équipe ou l'organisation ne la vise pas.
-  if (account.owner.kind === "user" && account.owner.userId === caller.userId) return ACCOUNT_LEVELS.manage
   const rules = facts.rules.filter((rule) => rule.targetId === account.id)
   if (leadKeepsManage(caller, account.owner, rules)) return ACCOUNT_LEVELS.manage
   const counted = rules.filter((rule) => aimsAt(caller, rule, true))
