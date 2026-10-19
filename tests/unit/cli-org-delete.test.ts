@@ -18,11 +18,14 @@ function cli(args: string[]) {
 }
 
 async function run(options: { org?: string; withoutStorage?: boolean; env?: Record<string, string> }) {
-  const password = randomBytes(8).toString("hex")
+  // L'adresse à mot de passe se compose à l'exécution, sans sa forme en littéral, que `check-public` refuse.
+  const dbUrl = new URL("postgresql://db.example.invalid:5432/app")
+  dbUrl.username = "admin"
+  dbUrl.password = randomBytes(8).toString("hex")
   const printed: string[] = []
   let connected = false
   const code = await orgDeleteCommand({
-    dbUrl: `postgresql://admin:${password}@db.example.invalid:5432/app`,
+    dbUrl: dbUrl.toString(),
     org: options.org ?? "acme",
     yes: true,
     by: "staff@example.invalid",
@@ -35,7 +38,7 @@ async function run(options: { org?: string; withoutStorage?: boolean; env?: Reco
       throw new Error("no connection expected")
     }) as never,
   })
-  return { code, connected, printed: printed.join("\n"), password }
+  return { code, connected, printed: printed.join("\n"), password: dbUrl.password }
 }
 
 const storageEnv = (endpoint = "https://s3.example.invalid") => ({

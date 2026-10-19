@@ -36,7 +36,8 @@ const SECRET_RULES = [
   ['private-key', /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY(?: BLOCK)?-----/],
   ['stripe-live-key', /\bsk_live_[0-9A-Za-z]{10,}/],
   // `smtps?` : le relais d'invitation (`PLATFORM_SMTP_URL`, E01-S11 a2-core ; M23).
-  ['url-with-password', /\b(?:postgres(?:ql)?|mysql|redis|https?|smtps?):\/\/[^\s:@/]+:[^\s@/]+@/i],
+  // Un mot de passe écrit `${…}` est une interpolation, composée à l'exécution, jamais un secret en clair.
+  ['url-with-password', /\b(?:postgres(?:ql)?|mysql|redis|https?|smtps?):\/\/[^\s:@/]+:(?!\$\{)[^\s@/]+@/i],
 ]
 // Nom de fichier : `.env` ou `.env.<suffixe>`, hors `.env.example`.
 const ENV_FILE = /^\.env(?:\.(?!example$).+)?$/
