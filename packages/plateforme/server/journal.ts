@@ -13,6 +13,7 @@ import type { Database, Json } from "./database"
 import type { PlatformDb } from "./db"
 import type { Identity } from "./identity"
 import { isJsonObject, jsonLeaves } from "./json"
+import { pseudonymizedLines } from "./pseudonym/journal"
 import type { ToolOutput } from "./tool-output"
 
 export type JournalEntry = Database["platform"]["Tables"]["journal"]["Insert"]
@@ -314,7 +315,8 @@ type JournalColumn = keyof JournalEntry
  */
 export async function writeJournal(db: PlatformDb, entries: readonly JournalEntry[]): Promise<void> {
   if (entries.length === 0) return
-  const lines = entries.map((entry) => ({ is_error: false, ...entry }))
+  // Arguments, cible et erreur pseudonymisés à l'écriture, aux trois portes (pseudonymisation, J2).
+  const lines = await pseudonymizedLines(db, entries.map((entry) => ({ is_error: false, ...entry })))
   // `Object.keys` rend des `string` : ce sont ici les clés d'une ligne du journal.
   const columns = [...new Set(lines.flatMap((line) => Object.keys(line) as JournalColumn[]))]
   try {

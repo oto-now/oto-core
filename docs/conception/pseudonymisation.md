@@ -61,11 +61,11 @@ Le chantier se livre en six jalons, dans l'ordre de besoin : primitives (J1), di
 ### Le dictionnaire et la détection
 
 - Normalisation : NFKD, diacritiques retirés, casse repliée, ligatures (`œ`, `æ`, `ß`), apostrophes et tirets unifiés, blancs resserrés ; une table de positions rend la coupe dans le texte d'origine.
-- Formes d'une entité : « prénoms nom », « nom prénoms », premier prénom et nom dans les deux ordres, initiale et nom (« j. dupont »), civilité et nom (`m`, `mme`, `monsieur`, `madame`, `me`, `maître`, `dr`), chaque courriel, chaque désignation libre, la ligne de voie de chaque adresse. Un téléphone se compare en chiffres, au format E.164 (`+33` par défaut), à ce que trouve le détecteur de téléphones.
+- Formes d'une entité : « prénoms nom », « nom prénoms », premier prénom et nom dans les deux ordres, initiale et nom (« j. dupont »), civilité et nom (`m`, `mme`, `mlle`, `monsieur`, `madame`, `mademoiselle`, `me`, `maître`, `dr`, `docteur`, `pr`, avec ou sans point ; reconnue à la recherche, le nom après la civilité, pas une forme par couple), la forme en chemin (`jean_dupont`), chaque courriel, chaque désignation libre, la ligne de voie de chaque adresse. Un téléphone se compare en chiffres, au format E.164 (`+33` par défaut), à ce que trouve le détecteur de téléphones.
 - Mots entiers seulement : ni lettre ni chiffre de part et d'autre. La plus longue mention l'emporte, de gauche à droite. Rien n'est cherché dans un jeton déjà posé.
 - Le **nom seul** n'est masqué que s'il a au moins 3 lettres et ne figure pas dans la liste des mots courants (mots de la langue et prénoms, livrée avec le paquet) ; « Martin » ou « Rose » seul reste en clair, masqué avec le prénom, une civilité ou dans un champ déclaré (J5). Le prénom seul n'est jamais masqué.
 - Une forme partagée par deux entités (homonymes, nom seul commun à deux personnes) ne désigne personne : elle reçoit un jeton de valeur `⟦name:…⟧`, à sens unique.
-- Automate d'Aho-Corasick par organisation, sur les formes normalisées : un passage linéaire par résultat. La porte parcourt `text` et chaque chaîne de `data`, à toute profondeur ; les clés d'objet ne sont pas touchées.
+- Une table des formes par organisation (`Map`), et non un automate : une mention commence au début d'une suite de lettres ou de chiffres et finit à la fin de l'une des 12 suites suivantes au plus ; chaque candidat se cherche dans la table, le plus long d'abord. Les formes sont bornées par des mots, le nombre de candidats par mot est celui des mots de la plus longue forme, et la mémoire est celle des formes seules. Un nom composé (« Marie-Jean Morin ») ne se coupe pas au tiret ; un courriel ne se coupe pas dans un courriel plus long. La porte parcourt `text` et chaque chaîne de `data`, à toute profondeur ; les clés d'objet ne sont pas touchées.
 
 ### La porte : inventaire des sorties vers l'assistant
 
@@ -77,8 +77,8 @@ La porte est une fonction pure du dictionnaire, appliquée au `ToolOutput` (text
 | Avis d'un Contexte changé (`withCtxNotice`, chemins servis) | `runTool`, compris dans `output` et dans le refus | J2 |
 | Refus et pannes d'un outil (message d'un service, d'un tiers par `upstream_error`) | `runTool`, `catch`, sur `failure.message` avant `withCtxNotice` et `formatError` (l. 205) | J2 |
 | Données d'un widget (`structuredContent`) et appels du widget | même chemin que le résultat : le widget appelle `call` par l'host | J2 |
-| `prompts/list` (titre, description) et `prompts/get` (description, message) | `visiblePrompts` (l. 238), `servedPrompt` (l. 244) ; un nom de prompt masqué se retrouve à `get` en comparant dans l'espace pseudonymisé (20 prompts au plus) | J2 |
-| MCP admin, opérations sur une organisation (journal, nœuds, retours) | `mcp/admin/server.ts`, `runAdminCall`, avant `formatResult` (l. 146) et `formatError` (l. 133), sous l'organisation de l'opération | J2 |
+| `prompts/list` (titre, description) et `prompts/get` (description, message) | `visiblePrompts`, `servedPrompt` (`mcp/pseudonym.ts`) ; le nom d'un prompt est de l'ASCII que Claude Code met dans une commande : un prompt dont le nom nomme une personne n'est pas servi (inconnu à `get`), la procédure reste lisible par `read` | J2 |
+| MCP admin, opérations sur une organisation (journal, nœuds, retours) | `mcp/admin/server.ts`, `runAdminCall`, avant `formatResult` et `formatError`, sous l'organisation de l'opération (`output.orgId`, sinon celle de la trace) ; sa porte en panne, le refus devient `Internal error.` | J2 |
 | Champ dont le contenu est le secret (patrimoine, situation familiale, notes, régime, numéro d'identité) | moteur des connecteurs décrits (`shaped`, `server/connectors/engine.ts` l. 293) ; `runCall` pour une fonction de l'hôte | J2b (`withhold`) |
 | Coordonnées (latitude, longitude) d'un résultat : des nombres qui désignent une adresse, que le dictionnaire ne voit pas | aucun | non par la porte : patron « une source qui exige la valeur en clair », ou `withhold` (J2b), ou `generalize` (J5) sur le champ |
 | Valeurs de personnes non déclarées dans un texte libre | détecteurs par forme, puis modèle en option | J3, J5 |
@@ -119,7 +119,8 @@ Un jeton reçu se cherche dans le dictionnaire avant le service. Inconnu : `inva
 - Le journal reçoit des arguments, une cible et un message d'erreur pseudonymisés, aux trois portes qui journalisent une requête : le MCP et `callFunction`, dans `openedEntry`, `servedEntry` et `failedEntry` (`server/journal.ts`) ; l'API HTTP des écrans, dont chaque mutation journalise son corps (`journaled` et `journalLine`, `api/handler.ts`).
 - À la porte HTTP, aucune route ne court une fonction du catalogue : le marqueur `personal` n'y a rien à marquer. Une route dont le corps porte une donnée personnelle pose `journalArgs`, la liste blanche qui remplace le corps journalisé (J1) : son refus se journalise par son seul code, et toute valeur du corps que la liste ne garde pas est retirée de la cible par substitution, comme celle d'un argument marqué. En J2, la porte HTTP passe aussi le corps gardé, la cible et l'erreur par le dictionnaire. L'écriture suit la réponse : le coût est hors du chemin critique. Un dictionnaire illisible à ce moment ne garde pas les arguments (`{ _withheld: true }`), jamais en clair.
 - Une ligne écrite avant J2 reste en clair ; `read journal` la sert par la porte, et la rétention (J1) la purge.
-- Le texte d'un retour (`feedback`, `recordFeedback`) est pseudonymisé à l'écriture : l'équipe plateforme, qui les traite, est un tiers pour l'organisation.
+- Le journal de l'équipe plateforme (`admin_journal`, `flushAdminJournal`) passe par le même écrivain : arguments, cible et erreur pseudonymisés sous l'organisation de chaque ligne.
+- Le texte d'un retour (`feedback`, `recordFeedback`) et sa cible sont pseudonymisés à l'écriture : l'équipe plateforme, qui les traite, est un tiers pour l'organisation. Un jeton est plus long que le nom qu'il remplace : le texte gardé est coupé aux bornes de la table (4 000 et 500 caractères).
 - `callFunction` rend en clair : l'hôte appelle depuis son serveur, ses contrôles rendent un verdict sans identité. S'il repasse un résultat à un assistant, il le pseudonymise d'abord (`pseudonymize`, exporté dès J2).
 - Les sorties des connecteurs partagés passent par `runCall`, donc par la porte, comme celles des connecteurs propres.
 
@@ -165,8 +166,6 @@ export type ConnectorOptions = HostOptions & {
   serverOnly?: Readonly<Record<string, "all" | readonly string[]>>
 }
 export type DataPolicy = {
-  /** En jours, pour toutes les organisations de l'hôte ; absente : rien n'est purgé. */
-  retentionDays?: { journal?: number; feedback?: number }
   fileContents?: "served" | "metadata" | ((org: SensitiveOrg) => "served" | "metadata")
 }
 export function registerDataPolicy(policy: DataPolicy | null): void
@@ -197,7 +196,7 @@ export function reidentify<T extends Json>(db: PlatformDb, identity: Identity, p
 export function resolveForDisplay(db: PlatformDb, identity: Identity, text: string): Promise<string>
 ```
 
-- Une déclaration mal formée (sorte invalide ou réservée, doublon, sortie de confiance inconnue au catalogue, fonction `serverOnly` inconnue de son connecteur) lève `CatalogRegistrationError` au chargement de la route, comme `registerFunctions`.
+- Une déclaration mal formée lève au chargement de la route : `registerSensitiveEntities` (sorte invalide ou réservée, doublon, `tokens` inconnu, `list` ou `read` absente) lève `TypeError`, comme `registerDataPolicy` ; une sortie de confiance inconnue au catalogue ou une fonction `serverOnly` inconnue de son connecteur lève `CatalogRegistrationError`, comme `registerFunctions`.
 - Les refus réutilisent les codes fermés de `PLATFORM_ERROR_CODES`, avec une raison (`details.reason`), comme `not_utf8` : `unknown_pseudonym`, `one_way_pseudonym` (`invalid_arguments`) ; `pseudonym_not_accepted`, `reidentification_refused`, `file_contents_withheld` (`forbidden`). Une panne de la pseudonymisation (source de l'hôte, clé absente, témoin, collision, référence en double ou qui contient une forme de l'entité) est un `internal` servi par la consigne habituelle, sa cause au log sous la raison `pseudonymization_unavailable`, sans valeur.
 
 ### Cache, invalidation et plusieurs instances
@@ -206,6 +205,7 @@ export function resolveForDisplay(db: PlatformDb, identity: Identity, text: stri
 - `invalidateSensitiveEntities` incrémente la génération en base : chaque instance la voit à sa requête suivante. Aucune notification entre processus : le transport est sans état et passe à zéro instance ([outils MCP](outils-mcp.md)) ; la borne de 5 minutes rattrape une invalidation oubliée.
 - Fenêtre acceptée : une entité créée chez l'hôte, lue par un assistant sur une instance avant l'invalidation, part en clair. L'hôte invalide juste après sa validation.
 - Une source qui lève, rend une forme invalide, ou une construction en collision : l'appel est refusé, rien n'est servi.
+- Borne : 50 000 entités par organisation, toutes sortes comprises ; au-delà, la construction est refusée. La construction rend la main à la boucle d'événements toutes les 1 000 entités : elle ne gèle pas le serveur pendant ses deux secondes.
 
 ### Les quatre primitives (J1)
 
@@ -228,6 +228,13 @@ Dans l'ordre de besoin de l'hôte demandeur.
 | **J5** généralisation, modèle | Annoter les champs de sortie (`generalize: "year"`, `"department"`, `"bracket"`, `"area"` pour des coordonnées arrondies au dixième de degré) dans `output.schema` des connecteurs décrits et `output` des fonctions de l'hôte ; brancher un détecteur par modèle s'il le veut. | Aucune | Date de naissance annotée servie en année, adresse en département, montant en tranche, coordonnées arrondies ; une date non annotée intacte. Détecteur par modèle éteint par défaut ; allumé, il désigne des coupes et le code les remplace ; en panne, l'appel est refusé. |
 
 Mesures à faire en J2, avant de servir : coût en jetons de modèle par mention (compteurs des fournisseurs, sur une page, un tableau de 50 lignes et un résultat de connecteur, pseudonymisés), pour trois formats (`⟦client:…⟧`, `‹client:…›`, `client#…`) et pour un corps de référence ; fidélité de recopie (30 conversations par host où l'assistant réutilise un jeton dans un appel, critère : aucune altération) ; temps de construction et mémoire du dictionnaire pour 10 000 et 100 000 entités ; latence ajoutée à un appel. Le format retenu est le moins coûteux à fidélité entière ; la borne d'entités par organisation se fixe d'après la mesure.
+
+Mesures de J2 (19/10, entités synthétiques à cinq valeurs : prénom, nom, courriel, téléphone, adresse) :
+
+- Construction du dictionnaire : 0,35 à 0,47 s pour 10 000 entités, 1,9 à 2,2 s pour 50 000, 4,2 à 4,8 s pour 100 000 ; mémoire gardée 14,5 Mo, 68 Mo et 134 Mo (environ 7 formes et 1,35 Ko par entité). La première écriture, avec une forme par couple civilité et nom, coûtait 30 s et 381 Mo pour 100 000 : la civilité est devenue une reconnaissance à la recherche. Borne retenue : 50 000 entités.
+- Porte, dictionnaire de 50 000 entités : 13 ms pour une page de 48 600 caractères, 1,2 ms pour un tableau de 50 lignes ; une requête de plus par appel MCP (l'état de l'organisation).
+- Coût en tokens, mesuré avec deux encodeurs publics (`o200k_base`, `cl100k_base`), faute de compteur d'un fournisseur sans clé : un jeton HMAC `⟦client:…⟧` coûte 15 à 17 tokens, `‹client:…›` 13 à 14, `client#…` 11, une référence `⟦client:c-0⟧` 8 à 10 ; un nom en clair, 3. Sur une page de 20 lignes (60 jetons posés), un tableau de 50 lignes (150) et un résultat de connecteur de 20 contacts (60), le surcoût par rapport au clair est de 44 à 53 % pour `⟦…⟧` HMAC, 24 à 30 % pour `‹…›`, 15 à 20 % pour `client#…`, 14 à 17 % pour `⟦…⟧` de référence (`o200k_base`). Le compteur du fournisseur reste à lire avant de choisir.
+- Fidélité de recopie : protocole proposé, non lancé (il demande des appels à un modèle).
 
 ## Décisions et alternatives écartées
 
@@ -260,7 +267,10 @@ Mesures à faire en J2, avant de servir : coût en jetons de modèle par mention
 ## Écart avec le code
 
 - J1 est écrit : arguments marqués (`server/catalog/personal.ts`, `server/journal.ts`), liste blanche HTTP qui retire de la cible ce qu'elle ne garde pas (`api/handler.ts`), réservation au serveur (`server/connectors/server-only.ts`, `serverOnly` de `defineErpFunction`, `assistantFunctions()` du registre), contenu des fichiers (`server/data-policy.ts`, `readNodeFile`), purge (`platform.purge_expired`, `cli/purge.mjs`).
-- Rien d'autre n'est écrit : ni déclaration, ni dictionnaire, ni porte, ni table `platform.pseudonym_orgs`, ni `PLATFORM_PSEUDONYM_KEY`, ni `withhold`, ni `resolveForDisplay`.
+- J2, dictionnaire et porte, est écrit : déclaration (`server/pseudonym/declaration.ts`), normalisation, formes, jeton et dictionnaire (`normalize.ts`, `forms.ts`, `token.ts`, `mentions.ts`, `dictionary.ts`), cache et état de l'organisation (`service.ts`, `platform.pseudonym_orgs`), porte MCP (`mcp/pseudonym.ts`, `runTool`, prompts, MCP admin), journal et journal de l'équipe plateforme à l'écriture (`server/pseudonym/journal.ts`), retours, avis de `context`, `pseudonymize`.
+- Écarts de J2 avec ce document : une table des formes plutôt qu'un automate (§ Le dictionnaire et la détection) ; la civilité reconnue à la recherche ; le nom seul attend la liste des mots courants (J3) et reste en clair ; un prompt dont le nom nomme une personne n'est pas servi, au lieu d'être retrouvé par son nom masqué ; une déclaration mal formée lève `TypeError`. Le transfert d'une organisation ne porte pas sa ligne `pseudonym_orgs` : l'organisation reçoit un nouveau sel, donc d'autres jetons, à destination.
+- Reste de J2 : les jetons dans les arguments (§ Les jetons dans les arguments : `entityArguments`, comparaison dans l'espace pseudonymisé, refus vers un connecteur, `unknown_pseudonym`, `one_way_pseudonym`). Tant qu'ils manquent, l'assistant reçoit des jetons qu'il ne peut pas encore employer.
+- Rien d'autre n'est écrit : ni `withhold`, ni détecteurs par forme, ni `reidentify`, ni `resolveForDisplay`.
 - Aujourd'hui : le journal ne masque que les clés de secret et les arguments marqués ; une fonction de l'hôte n'a pas de schéma de sortie ; `output.schema` d'un connecteur décrit est ignoré par le moteur ; l'aperçu, le plan et `raw` de [lecture des fichiers](lecture-des-fichiers.md), pas encore écrits, devront suivre `fileContents`.
 - Les mots `withhold` et `generalize` du format de description sont à ajouter dans `oto-connectors` (`format-de-description.md`, `fabrique.md`) ; `personal` y arrive avec J1, par un commit séparé.
 
@@ -274,3 +284,4 @@ Mesures à faire en J2, avant de servir : coût en jetons de modèle par mention
 - 2026-10-19 : révision après relecture de l'hôte demandeur — retenue d'un champ (`withhold`, J2b) ; réservation au serveur par fonction ; patron d'une source qui exige la valeur en clair, coordonnées à l'inventaire ; référence fournie par l'hôte et `resolveForDisplay` proposées ; lien vers l'écran de l'hôte dans le récapitulatif d'une fonction sensible ; rétention par hôte en V1 ; jalons dans l'ordre de besoin — à valider par Alexis.
 - 2026-10-19 : référence fournie par l'hôte retenue, en option par sorte, non séquentielle conseillée et hors clé ; `resolveForDisplay` retenu en J4, sortie réservée `display`, sans journal ; pas d'indice lisible dans le jeton opaque ; source des mots courants réglée en J3 ; document validé — décidé par Alexis.
 - 2026-10-19 : J1 écrit — arguments marqués retirés du journal aux portes MCP et `callFunction`, la porte HTTP ajoutée à l'inventaire du journal (`journalArgs`, cible comprise) ; réservation au serveur par fonction ; contenu des fichiers retenu (`registerDataPolicy({ fileContents })`, sa seule option) ; rétention fixée par `oto-platform journal purge --journal-days/--feedback-days`, et non par `registerDataPolicy` — écrit en J1 ; la durée est un paramètre de la commande de purge, fixée par l'hôte (décision : par hôte en v1).
+- 2026-10-19 : J2 dictionnaire et porte écrits — table des formes au lieu d'un automate, civilité reconnue à la recherche, nom seul reporté à J3, prompt nommant une personne non servi, journal de l'équipe plateforme pseudonymisé, borne de 50 000 entités d'après la mesure ; jetons dans les arguments à suivre — écrit en J2.

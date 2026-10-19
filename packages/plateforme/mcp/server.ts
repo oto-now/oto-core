@@ -33,8 +33,10 @@ import { clip, failedEntry, journalError, openedEntry, servedEntry, type Journal
 import { preferredTheme } from "../server/language"
 import { readNode } from "../server/nodes/read"
 import { writeNode } from "../server/nodes/write"
-import { getPrompt, listPrompts, type ProcedurePrompt, unknownPromptMessage } from "../server/prompts"
+import { listPrompts, type ProcedurePrompt, unknownPromptMessage } from "../server/prompts"
+import { pseudonymizerFor, type Pseudonymizer } from "../server/pseudonym/service"
 import type { ToolOutput } from "../server/tool-output"
+import { gatedOutput, gatedPrompt, gatedPrompts } from "./pseudonym"
 import { formatError, formatResult, type ToolResult } from "./result"
 import { inputSchemas, parseInput, type ToolInput } from "./schemas"
 import { buildTools, displayOrg, serverInstructions, toolKey, type ToolKey, type ToolOrg } from "./tools"
@@ -187,7 +189,10 @@ async function runTool(
   // La fonction demandée, posée avant les gardes : un `call` refusé la garde (E03-S04, N7).
   if (toolKey(deps.org.prefix, name) === "call") entry.target = functionOfArgs(args)
   const validated: { ctx: ValidCtx | null } = { ctx: null }
+  // La porte (pseudonymisation) : lue avant le service, fermée en cas de panne ; rien ne part en clair.
+  let gate: Pseudonymizer | null = null
   try {
+    gate = await pseudonymizerFor(member.db, member.identity.org.id)
     const served = await serve(member, { name, args, size: opened.args_chars }, validated)
     // Un code périmé : l'avis en tête du texte, le nouveau code aussi en champ (`new_ctx`).
     const output = validated.ctx?.changed
@@ -196,13 +201,14 @@ async function runTool(
     // La vue du widget, au thème de la personne sinon de l'organisation, comme ses écrans (ADR-008 § 3).
     // `call` : l'outil que le widget appelle (page suivante, vue de l'ERP), sous le préfixe de l'organisation.
     const view = deps.widgets && output.view ? { kind: output.view, theme: preferredTheme(member.identity), call: `${deps.org.prefix}_call` } : undefined
-    const result = formatResult(output, (next) => findFunction(functions, next)?.class === "sensitive", view)
+    const result = formatResult(gatedOutput(gate, output), (next) => findFunction(functions, next)?.class === "sensitive", view)
     servedEntry(entry, output, { ctx: validated.ctx?.code ?? entry.ctx ?? null, host: validated.ctx?.host ?? null, resultChars: result.content[0].text.length })
     return result
   } catch (error) {
     const failure = failureOf(error, deps.org.prefix)
+    const message = gate ? gate.text(failure.message) : failure.message
     // Un refus d'un service n'a rien écrit ; une panne a pu courir en partie : l'avis le dit autrement.
-    const result = formatError(withCtxNotice(failure.message, deps.org.prefix, validated.ctx, failure.code === "internal" ? "failed" : "refused"))
+    const result = formatError(withCtxNotice(message, deps.org.prefix, validated.ctx, failure.code === "internal" ? "failed" : "refused"))
     failedEntry(entry, failure, { ctx: validated.ctx?.code ?? entry.ctx ?? null, host: validated.ctx?.host ?? null, trace, resultChars: result.content[0].text.length })
     return result
   } finally {
@@ -237,17 +243,15 @@ async function exampleConnectors(deps: McpDeps): Promise<ReadonlySet<string>> {
 /** `prompts/list` : nom, titre et description de chaque prompt ; aucun pour un non-membre (N5). */
 async function visiblePrompts(deps: McpDeps): Promise<ProcedurePrompt[]> {
   if (deps.caller.kind !== "member") return []
-  return listPrompts(deps.db, deps.caller.identity)
+  const gate = await pseudonymizerFor(deps.db, deps.caller.identity.org.id)
+  return gatedPrompts(gate, await listPrompts(deps.db, deps.caller.identity))
 }
 
 /** `prompts/get` : un message de la personne, le titre de la procédure (P37) ; inconnu pour un non-membre. */
 async function servedPrompt(deps: McpDeps, name: string) {
   if (deps.caller.kind !== "member") throw new PlatformError("not_found", unknownPromptMessage(name))
-  const prompt = await getPrompt(deps.db, deps.caller.identity, name)
-  return {
-    description: prompt.description,
-    messages: [{ role: "user" as const, content: { type: "text" as const, text: prompt.text } }],
-  }
+  const gate = await pseudonymizerFor(deps.db, deps.caller.identity.org.id)
+  return gatedPrompt(deps.db, deps.caller.identity, gate, name)
 }
 
 /**

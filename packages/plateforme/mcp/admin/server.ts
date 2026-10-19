@@ -14,6 +14,8 @@ import { newCtxCode } from "../../server/ctx"
 import type { PlatformDb } from "../../server/db"
 import { isPlatformError, PlatformError, type PlatformErrorCode } from "../../server/errors"
 import { clip, journalError, lastHostSignature } from "../../server/journal"
+import { pseudonymizerFor } from "../../server/pseudonym/service"
+import { gatedOutput } from "../pseudonym"
 import { formatError, formatResult, type ToolResult } from "../result"
 import { MAX_ARGS_CHARS } from "../server"
 import { MAX_NAME_CHARS, runAdminOp, type AdminOutput, type OpTable, type OpTrace } from "./ops"
@@ -129,21 +131,35 @@ async function runAdminCall(deps: AdminMcpDeps, name: string, args: Record<strin
   const entry: AdminJournalEntry = { ...opened, tool: clip(name, MAX_NAME_CHARS), op, ctx: name === "admin_context" ? null : ctxOfArgs(args) }
   const trace: OpTrace = { orgId: null, target: null }
   const session: { host: string | null } = { host: null }
-  const refuse = (failure: { code: PlatformErrorCode; message: string }) => {
-    const result = formatError(failure.message)
+  const refuse = async (failure: { code: PlatformErrorCode; message: string }) => {
+    // Le refus d'une opération sur une organisation passe par sa porte ; sa porte en panne, le refus devient la panne.
+    let message = failure.message
+    if (trace.orgId) {
+      try {
+        const gate = await pseudonymizerFor(deps.db, trace.orgId)
+        if (gate) message = gate.text(message)
+      } catch {
+        message = "Internal error."
+      }
+    }
+    const result = formatError(message)
     const fields = { org_id: trace.orgId, target: trace.target, host: session.host, is_error: true, error: journalError(failure.code, failure.message) }
     deps.journal.push({ ...entry, ...fields, result_chars: result.content[0].text.length, duration_ms: Date.now() - started })
     return result
   }
 
   let served: { output: AdminOutput; issued: string | null }
+  let shown: AdminOutput
   try {
     served = await serve(deps, { name, args, size: opened.args_chars ?? 0 }, trace, session)
+    // Une opération sur une organisation : ce qu'elle sert passe par la porte de cette organisation (pseudonymisation).
+    const orgId = served.output.orgId ?? trace.orgId
+    shown = gatedOutput(orgId ? await pseudonymizerFor(deps.db, orgId) : null, served.output)
   } catch (error) {
     return refuse(failureOf(error))
   }
   const { output, issued } = served
-  const result = formatResult(output, isTwoStep)
+  const result = formatResult(shown, isTwoStep)
   const done: AdminJournalEntry = {
     ...entry,
     host: session.host,

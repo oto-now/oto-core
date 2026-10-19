@@ -32,12 +32,16 @@ import { inTransaction, invalidInput, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import type { Tx } from "./sql"
 import type { ToolOutput } from "./tool-output"
+import { pseudonymizerFor } from "./pseudonym/service"
 
 /**
  * Fenêtre du rejeu (Oto) : un rejeu arrive dans la seconde ou la minute (réseau coupé, réponse non
  * vue) ; un défaut qui se reproduit vraiment ne se raconte pas deux fois mot pour mot si vite.
  */
 const DUPLICATE_WINDOW_MINUTES = 10
+/** Les bornes de `platform.feedback` (`feedback_text_check`, `feedback_target_check`). */
+const FEEDBACK_TEXT_MAX = 4000
+const FEEDBACK_TARGET_MAX = 500
 
 /**
  * Tickets relus pour y chercher le même texte, les plus récents d'abord (N6). Le texte se compare
@@ -94,7 +98,12 @@ export async function recordFeedback(
 ): Promise<ToolOutput> {
   // Une moitié de paire de substitution envoyée par le host devient U+FFFD, comme au journal : le texte
   // comparé au doublon est celui qu'on écrit (`supabase-patterns.md § Error Handling`).
-  const report: Report = { type: input.type, text: input.text.toWellFormed(), target: input.target?.toWellFormed() ?? null }
+  const written: Report = { type: input.type, text: input.text.toWellFormed(), target: input.target?.toWellFormed() ?? null }
+  // Pseudonymisé à l'écriture : l'équipe plateforme, qui traite les retours, est un tiers pour l'organisation (J2).
+  const gate = await pseudonymizerFor(db, identity.org.id)
+  // Un jeton est plus long que le nom qu'il remplace : le texte gardé reste sous les bornes de la table (4 000 et 500).
+  const gated = (text: string, max: number) => (gate ? [...gate.text(text)].slice(0, max).join("") : text)
+  const report: Report = { ...written, text: gated(written.text, FEEDBACK_TEXT_MAX), target: written.target === null ? null : gated(written.target, FEEDBACK_TARGET_MAX) }
   return inTransaction(db, "recordFeedback: feedback", async (sql): Promise<ToolOutput> => {
     const existing = await sameReport(sql, identity, report)
     if (existing) {

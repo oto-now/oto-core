@@ -233,6 +233,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   est refusée (22023) ; elle rend le nombre de lignes retirées par table. Aucun rôle de session ne l'exécute (`REVOKE`
   de `PUBLIC`, `anon`, `authenticated`) : la connexion d'administration la lance, par `oto-platform journal purge`.
   Aucune table, colonne ni index : elle lit par les index `ts` de la ligne de base.
+- `20261019110000_platform_pseudonymes.sql` (pseudonymisation, J2) : la table `platform.pseudonym_orgs`, une ligne par
+  organisation (version de clé, sel, témoin de la clé maître, génération), sans aucune personne ; RLS sans politique ni
+  privilège. Elle ne se lit que par `platform.pseudonym_org(org, salt, witness)`, qui pose la ligne au premier appel
+  (le premier sel gagne) et la rend avec le slug, et ne change que par `platform.invalidate_pseudonyms(org)`, qui
+  avance la génération ; toutes deux pour un membre de l'organisation ou l'équipe plateforme (42501 sinon). La ligne
+  part avec l'organisation (`ON DELETE CASCADE`).
 
 ## Installer sur un hôte neuf
 

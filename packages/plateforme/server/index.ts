@@ -30,6 +30,9 @@ export { readOpenEntry, setOpenEntry } from "./open-entry"
 // Les données servies aux assistants (`pseudonymisation.md` § Les quatre primitives) : le contenu des fichiers joints
 // servi ou retenu, par l'hôte.
 export { registerDataPolicy } from "./data-policy"
+export { registerSensitiveEntities } from "./pseudonym/declaration"
+export type { SensitiveEntity, SensitiveKind, SensitiveOrg, SensitiveValues } from "./pseudonym/declaration"
+export { invalidateSensitiveEntities, pseudonymize } from "./pseudonym/service"
 export type { DataPolicy, FileContentsPolicy } from "./data-policy"
 export type { OrgLimitsSource, OrgUsage } from "./limits"
 export {

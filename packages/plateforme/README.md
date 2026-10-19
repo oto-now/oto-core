@@ -95,7 +95,8 @@ Pour une application Next 15 (App Router) sur Supabase.
    devenir `authenticated` ou `anon` : chaque requête porte l'appelant vérifié, sous RLS. TLS est
    exigé hors de la machine locale.
 
-   Et `PLATFORM_VAULT_KEY` dès qu'un compte réel de connecteur se pose (« Connecteurs réels et coffre »).
+   Et `PLATFORM_VAULT_KEY` dès qu'un compte réel de connecteur se pose (« Connecteurs réels et coffre »),
+   `PLATFORM_PSEUDONYM_KEY` dès que vous déclarez vos personnes (« Pseudonymiser les personnes »).
 
 6. Routes à monter : celles de `src/app/` de l'application de base du dépôt
    [`oto-now/oto-core`](https://github.com/oto-now/oto-core), qui en est la
@@ -525,6 +526,43 @@ registerConnectors([messagerie.connector], {
   (`AccountView.mark`), le contexte et `admin_connector accounts` la disent, le journal note `account_marked` et
   `account_mark_lifted` en `args._outcome`. Une écriture de la marque qui échoue laisse l'issue du tiers (un succès
   reste un succès), loggée en erreur et notée `account_mark_failed` ou `account_mark_lift_failed`. Base : migration `20261017150000_platform_etat_des_comptes.sql`.
+
+## Pseudonymiser les personnes
+
+Les noms, courriels, téléphones et adresses des personnes que vous déclarez partent vers l'assistant en jetons
+(`⟦client:7k2m9q4x1b3nd⟧`) : résultats et refus des outils MCP, prompts, MCP admin. Le journal et les retours les
+gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` restent en clair.
+
+- **Clé** : `PLATFORM_PSEUDONYM_KEY`, 32 octets en base64 (`openssl rand -base64 32`), dans l'environnement serveur
+  seulement. Absente, mal écrite ou changée (chaque organisation garde un témoin de la clé), tout appel MCP d'une
+  organisation est refusé (`internal`) : rien ne part en clair.
+- **Base** : migration `20261019110000_platform_pseudonymes.sql` (sel et génération par organisation).
+- **Déclarer** : au chargement de la route, avec vos autres déclarations.
+
+  ```ts
+  registerSensitiveEntities([{
+    kind: "client", // a-z0-9, 2 à 10 caractères ; email, phone, iban, nir, card et name sont réservés
+    list: async (org) => (await clientsOf(org.id)).map((c) => ({
+      id: c.id,
+      values: { lastName: c.nom, firstNames: c.prenoms, emails: [c.email], phones: [c.tel], addresses: [c.adresse], aliases: [c.raison_sociale] },
+    })),
+    read: async (org, id) => valuesOf(await clientById(org.id, id)), // null : la personne n'existe plus
+  }])
+  ```
+
+  Une déclaration mal formée lève `TypeError`. Option `tokens: "reference"` : chaque entité porte `reference`
+  (`c-7k2`, `[0-9a-z][0-9a-z-]{0,23}`, unique, opaque, non séquentielle), corps de son jeton à la place du HMAC ; une
+  référence absente, en double ou qui contient le nom, le prénom, le courriel ou six chiffres du téléphone refuse le
+  dictionnaire.
+- **Invalider** : `await invalidateSensitiveEntities(db, org)` après toute écriture d'une personne déclarée
+  (création, changement, effacement) ; sinon le dictionnaire gardé sert l'ancienne liste jusqu'à 5 minutes.
+- **Repasser un résultat** de `callFunction` à un assistant : `await pseudonymize(db, org, result)` d'abord.
+- **Bornes** : 50 000 entités par organisation (mesuré : 2,3 s de construction, 67 Mo gardés) ; au-delà, refus.
+- Ce qui est reconnu : prénoms et nom dans les deux ordres, premier prénom, initiale, civilité devant le nom, forme en
+  chemin (`camille_dupre`), courriels, désignations libres, ligne de voie, téléphones en chiffres. Le nom seul ou le
+  prénom seul restent en clair. Une forme commune à deux personnes devient un jeton à sens unique (`⟦name:…⟧`).
+- **Pas encore** : un jeton que l'assistant recopie dans un argument (chemin, recherche, fonction) n'est pas encore
+  résolu. Ne déclarez pas vos personnes en production avant la version qui le fait.
 
 ## Widgets dans la conversation
 

@@ -73,6 +73,7 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - E03-S01 N22 : ce que le host envoie est borné à 200 caractères avant le journal ou un message : nom d'outil, nom de prompt, signature `client_name@version`, fonction demandée par `call`.
 - H29 : la signature `client_name@version` de l'`initialize` est lue dans le corps de la requête et posée sur `ctx.host` et `journal.host`. E03-S01 N3 : `ctx.host` est la signature du dernier `initialize` journalisé de la même personne au même agent utilisateur (membre : journal de son organisation ; équipe plateforme : `admin_journal`) ; les appels sous ce `ctx` en héritent.
 - E03-S01 N21 : `prompts/get` d'un nom inconnu : erreur JSON-RPC -32602 qui porte le message seul, journalisée `not_found: Unknown prompt <nom>.`.
+- Quand l'hôte déclare des personnes, la porte charge le dictionnaire de l'organisation avant le service (sa panne refuse l'appel, `internal`, rien n'est servi) et pseudonymise le résultat (texte, données, suite) avant `formatResult`, pour que le plafond de 45 000 caractères se mesure sur ce qui part, puis le message d'un refus ; les prompts aussi, et le MCP admin sous l'organisation de l'opération ([pseudonymisation](pseudonymisation.md) § La porte).
 
 ### Journal de la porte
 
@@ -152,3 +153,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-01 : `context` se charge une fois par conversation quand les préférences de la personne le demandent, les autres outils restent réservés au travail ; la borne de la description et le champ `phrase` le disent, mesure sur les assistants après publication — décidé par JB (source : demande du responsable d'Oto).
 - 2026-10-17 : chaque connecteur à effet se partage en `<connecteur>` (lire, simuler, brouillon compris) et `<connecteur>_act` (engager ou détruire), comme dans oto 1 ; tout reste sous `call`, la paire se lit par le nom servi, sans septième outil ; remplace le verbe réservé aux seules fonctions sensibles envisagé le 16/10 — décidé par Alexis (source : issue oto-now/oto-core#61).
 - 2026-10-17 : les noms `<connecteur>_act.<fonction>` sont servis pour les connecteurs décrits, d'après le champ `act` de chaque fonction ; le nom simple d'une telle fonction est refusé par `call` avec le nom servi — choix du projet, mise en œuvre de la décision du même jour (#61).
+- 2026-10-19 : la porte pseudonymise résultats, refus et prompts quand l'hôte déclare des personnes — écrit (pseudonymisation, J2).

@@ -21,6 +21,7 @@ import { memberDirectory, sameEmail, type DirectoryEntry } from "../directory"
 import { boundedList, inTransaction, isPlatformError, PlatformError } from "../errors"
 import { identityInOrg, type Identity, type IdentityOrg } from "../identity"
 import { loggedArgs } from "../journal"
+import { pseudonymizedLines } from "../pseudonym/journal"
 import { listTeams } from "../teams"
 
 /** Un membre de l'équipe plateforme, reconnu par `requireStaff` : l'appelant du MCP admin. */
@@ -280,10 +281,8 @@ export function adminJournalEntry(staff: StaffCaller, request: { method: string;
 export async function flushAdminJournal(db: PlatformDb, staff: StaffCaller, entries: readonly AdminJournalEntry[]): Promise<void> {
   if (entries.length === 0) return
   try {
-    await insertAdminJournal(
-      db,
-      entries.map((entry) => ({ ...EMPTY_ENTRY, ...entry, user_id: staff.userId })),
-    )
+    // Pseudonymisé à l'écriture, comme le journal des membres : sous l'organisation de chaque ligne (J2).
+    await insertAdminJournal(db, await pseudonymizedLines(db, entries.map((entry) => ({ ...EMPTY_ENTRY, ...entry, user_id: staff.userId }))))
   } catch (error) {
     console.error("[platform] admin journal: insert failed", codeOf(error))
   }

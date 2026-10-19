@@ -27,6 +27,7 @@ import {
   type RoutingSettings,
 } from "../routing"
 import type { ToolOutput } from "../tool-output"
+import { sensitiveKinds } from "../pseudonym/declaration"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
 import { newsBlock, newsItems } from "./blocks/news"
@@ -230,6 +231,13 @@ async function sinceOf(db: PlatformDb, identity: Identity, raw: string | undefin
   })
 }
 
+/**
+ * Quand l'hôte déclare des personnes (pseudonymisation, J2) : ce qu'est un jeton, qu'il se recopie tel quel, qu'il ne
+ * se devine pas. Sans jeton réel : la porte le laisserait tel quel, mais l'exemple ne doit désigner personne.
+ */
+export const PSEUDONYM_NOTICE =
+  "People's names, emails and phone numbers appear as tokens such as ⟦client:…⟧. To refer to a person (in a path, a search or a function argument), copy the token exactly as written; never guess a token or try to recover the value behind it."
+
 export async function buildContext(
   db: PlatformDb,
   identity: Identity,
@@ -258,7 +266,7 @@ async function fullContext(
   })
   const { host } = await issued
   return {
-    text,
+    text: sensitiveKinds().length > 0 ? `${text}\n\n${PSEUDONYM_NOTICE}` : text,
     data: { ctx: code, ...routingData(routing) },
     // La procédure servie, sinon la phrase : ce que relisent l'usage (E08-S09) et le bonus d'usage.
     target: routing.served?.path ?? (phrase === undefined ? null : clip(phrase, MAX_TARGET_CHARS)),
