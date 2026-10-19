@@ -421,6 +421,19 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect(codes(claire.journal)).toEqual([null, null, null])
     })
 
+    it("should refuse the owner a rule naming herself on her personal account, before any write (decided on 19/10)", async () => {
+      const staff = [admin.persons.claire.id]
+      undo.push(() => seed.admin`delete from platform.platform_staff where user_id in ${seed.admin(staff)}`)
+      await admin.write({ platform_staff: [{ user_id: PERSONS.claire.id }] })
+      const claire = await session("claire")
+      const refused = await claire.connector({ op: "add_account_rule", account: "Mail Direction", subject: `user:${admin.persons.claire.email}`, level: "read" })
+      expect(refused.text).toBe(
+        "A rule naming the owner of the personal account « Mail Direction » would change nothing: its owner manages it whatever the rules. Share it with a team, another person or the whole organisation.",
+      )
+      expect(requestedWrites(claire.spy.requests)).toEqual([])
+      expect(codes(claire.journal)).toEqual(["invalid_arguments"])
+    })
+
     it("should serve the rules of an account the caller reads only, an invisible account answering as an unknown one (H68)", async () => {
       const deps = await admin.deps("sam")
       const spy = recordRequests(deps.db)

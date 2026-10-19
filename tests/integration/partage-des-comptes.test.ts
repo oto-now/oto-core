@@ -304,6 +304,23 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     ])
   })
 
+  // Décidé le 19/10 : pas d'écriture sans effet. Une règle qui nommerait la personne de son propre compte personnel ne
+  // changerait rien (elle le gère avant toute règle) : refusée, sans règle ni ligne au journal des partages.
+  it("should refuse the owner a rule naming herself on her personal account, writing neither the rule nor a journal line", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa à elle")
+    for (const level of ["read", "sensitive"] as const) {
+      const refused = await refusal(setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "user", id: o.people.lea.id }, level }))
+      expect([refused.code, refused.details]).toEqual(["invalid_arguments", { reason: "owner_subject" }])
+      expect(refused.message).toBe(
+        `A rule naming the owner of the personal account « ${mail.label} » would change nothing: its owner manages it whatever the rules. Share it with a team, another person or the whole organisation.`,
+      )
+    }
+    const written = await fx.admin<{ rules: number; events: number }[]>`
+      select (select count(*)::int from platform.access_rules where account_id = ${mail.id}) as rules,
+             (select count(*)::int from platform.account_share_events where account_id = ${mail.id}) as events`
+    expect(written).toEqual([{ rules: 0, events: 0 }])
+  })
+
   // Question ouverte : un administrateur peut-il restreindre le compte personnel d'un membre ? Comportement d'avant,
   // gardé : il ne le gère pas, ne le voit pas sans partage (`not_found`), et partagé en lecture n'y pose rien (`forbidden`).
   it("should keep the behaviour of before: an administrator sets no rule on the personal account of a member", async () => {

@@ -297,7 +297,12 @@ export const CONNECTOR_OPS: OpTable = {
     twoStep: false,
     summary: "Sets the access level of a team or a person on an account, replacing the rule of that subject if there is one.",
     example: { org: "acme", account: "Mail Ventes", subject: "team:support", level: "read" },
-    refusals: [unknownAccount, "invalid_arguments: subject must be team:<slug> or user:<email>.", "forbidden: Using account « <label> » is reserved to <who>."],
+    refusals: [
+      unknownAccount,
+      "invalid_arguments: subject must be team:<slug> or user:<email>.",
+      "invalid_arguments: A rule naming the owner of the personal account « <label> » would change nothing: its owner manages it whatever the rules.",
+      "forbidden: Using account « <label> » is reserved to <who>.",
+    ],
     run: addAccountRule,
   },
   remove_account_rule: {

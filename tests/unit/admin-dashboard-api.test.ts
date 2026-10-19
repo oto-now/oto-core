@@ -375,6 +375,15 @@ describe.skipIf(!sqlConfigured)(portable("admin/account-rules for the owner of a
     expect([refused.status, refused.body.error.code, refused.writes]).toEqual([403, "forbidden", []])
   })
 
+  // Décidé le 19/10 : pas d'écriture sans effet. Une règle qui nommerait le propriétaire sur son propre compte ne
+  // changerait rien (il le gère avant toute règle) : refusée, 400, rien d'écrit.
+  it("should refuse the owner a rule naming herself on her own personal account (400), writing nothing", async () => {
+    const refused = await call("marc", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "user", id: PERSONS.marc.id }, level: "read" }, change: (all) => accounts(all) })
+    expect([refused.status, refused.body.error.code, refused.body.error.details, refused.writes]).toEqual([400, "invalid_arguments", { reason: "owner_subject" }, []])
+    expect(refused.body.error.message.startsWith("A rule naming the owner of the personal account « Mail Marc » would change nothing")).toBe(true)
+    expect(refused.journal).toMatchObject([{ tool: "POST admin/account-rules", is_error: true, error: expect.stringMatching(/^invalid_arguments: /) }])
+  })
+
   it("should keep an administrator out of the personal account of a member, as before: 404 unseen, 403 once shared with all in read", async () => {
     const unseen = await call("ada", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "user", id: PERSONS.ada.id }, level: "read" }, change: (all) => accounts(all) })
     expect([unseen.status, unseen.body.error.code, unseen.writes]).toEqual([404, "not_found", []])

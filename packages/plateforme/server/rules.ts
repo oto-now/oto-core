@@ -307,6 +307,18 @@ export function accountLevelName(value: string): AccountLevelName {
 
 type AccountRow = { id: string; label: string; owner_kind: string; owner_team_id: string | null; owner_user_id: string | null }
 
+/**
+ * Une règle qui nommerait la personne d'un compte personnel ne changerait rien : elle le gère avant toute règle
+ * (`accountLevelOf`, décidé le 19/10). Refusée avant toute écriture plutôt qu'écrite sans effet (décidé le 19/10).
+ */
+function ownerRuleRefusal(label: string): PlatformError {
+  return new PlatformError(
+    "invalid_arguments",
+    `A rule naming the owner of the personal account « ${label} » would change nothing: its owner manages it whatever the rules. Share it with a team, another person or the whole organisation.`,
+    { reason: "owner_subject" },
+  )
+}
+
 function accountRulesChanged(label: string): string {
   return `The rules of account « ${label} » changed meanwhile: reload them and try again.`
 }
@@ -371,7 +383,8 @@ export async function listAccountRules(db: PlatformDb, identity: Identity, accou
  * Pose une règle sur un compte, ou remplace le niveau de la règle du même sujet (`saveRule`, comme
  * `setNodeRule`) : pour une équipe, une personne ou toute l'organisation (`subject.kind` `org`, partage des comptes),
  * au niveau `read`, `write`, `sensitive` ou, par l'administrateur, `manage`. La gestion du compte est exigée avant
- * toute écriture ; sans elle, aucune requête d'écriture ne part. Le journal des partages en garde la trace (déclencheur).
+ * toute écriture ; sans elle, aucune requête d'écriture ne part. Une règle qui nommerait la personne d'un compte
+ * personnel est refusée (`invalid_arguments`, `details.reason` `owner_subject`) : elle ne changerait rien. Le journal des partages en garde la trace (déclencheur).
  */
 export async function setAccountRule(
   db: PlatformDb,
@@ -383,6 +396,7 @@ export async function setAccountRule(
   const { subject, level } = parsed.data
   return inTransaction(db, "setAccountRule", async (sql) => {
     const account = await readAccount({ db, sql }, identity, parsed.data.accountId, ACCOUNT_LEVELS.manage)
+    if (account.owner.kind === "user" && subject.kind === "user" && subject.id === account.owner.userId) throw ownerRuleRefusal(account.label)
     if (level === "manage") requireAdmin(identity, "grant the manage level")
     if (subject.kind !== "org") await requireSubject(sql, identity, subject)
 

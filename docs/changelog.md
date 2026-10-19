@@ -10,6 +10,13 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-19] — Connecteurs : une règle sur soi-même refusée
+**À appliquer :** rien côté hôte : ni migration, ni route, ni type ; un appel qui posait une règle nommant le propriétaire sur son propre compte reçoit désormais un refus.
+**Quoi :** `setAccountRule` refuse une règle dont le sujet est la personne du compte personnel visé (`invalid_arguments`, `details.reason` `owner_subject`, 400 par `POST admin/account-rules`, même refus par `add_account_rule` du MCP admin), avant toute écriture : ni règle, ni ligne au journal des partages. L'écran ne propose pas ce geste (il ne partage qu'à une équipe ou à l'organisation). Une telle règle déjà en base reste sans effet, listée et retirable ; ni signalée ni nettoyée.
+**Pourquoi :** Décision d'Alexis du 19/10 : pas d'écriture sans effet silencieuse, une erreur à la place. Depuis la règle du même jour, le propriétaire gère son compte avant toute règle : une règle qui le nomme ne changerait rien (#68).
+**Problèmes :** Aucun.
+**Fichiers :** `packages/plateforme/server/rules.ts`, `mcp/admin/tools/connector.ts`, `tests/integration/partage-des-comptes.test.ts`, `tests/unit/admin-dashboard-api.test.ts`, `tests/unit/mcp-admin-connectors.test.ts`, `docs/conception/{connecteurs-et-comptes,droits-d-acces}.md`, `packages/plateforme/CHANGELOG.md`
+
 ## [2026-10-19] — Connecteurs : le propriétaire d'un compte personnel en garde la gestion
 **À appliquer :** rien côté hôte : ni migration, ni route, ni type changé ; le niveau rendu change (`viewerLevel`, refus des services).
 **Quoi :** `accountLevelOf` met la personne d'un compte personnel à la gestion avant toute règle, de personne, d'équipe ou d'organisation, sur toutes les surfaces (services, écran, MCP admin) : partager son compte à une équipe dont on est membre sert les autres membres au niveau partagé et ne retire plus la gestion à qui partage ; une règle qui nomme le propriétaire, même posée par l'outillage, ne baisse plus son niveau. Le formulaire de partage ne replie plus le focus après un succès : il reste.
