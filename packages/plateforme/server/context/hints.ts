@@ -1,6 +1,7 @@
 // Ce que `context` propose quand aucune procédure ne convient à la demande (1.4.3) : les fonctions dont la description y
 // répond (`searchFunctions`, trois au plus) et la section du guide de la plateforme la plus proche (`help`). Sans lui,
 // « exporte toutes les pages de l'équipe SAV » répondait « no procedure matches », alors que `node.export_tree` le fait.
+import type { CatalogFunction } from "../catalog/define"
 import { assistantFunctions, isActive, searchFunctions } from "../catalog/registry"
 import { loadActiveConnectors } from "../connectors/activations"
 import type { PlatformDb } from "../db"
@@ -10,6 +11,11 @@ import type { Identity } from "../identity"
 
 /** La part des mots de la demande qu'une fonction doit couvrir pour être proposée : un mot sur quatre. */
 const FUNCTION_SCORE_MIN = 0.25
+/**
+ * Et au moins deux mots : un seul mot commun ne dit pas de quoi parle la demande, « créer une tâche » proposait
+ * `node.export_tree` et `node.import_tree`.
+ */
+const FUNCTION_WORDS_MIN = 2
 
 export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string } | null }
 
@@ -22,13 +28,15 @@ export async function routingHints(db: PlatformDb, identity: Identity, phrase: s
     console.error("[platform] context: active connectors read failed", error)
     return null
   })
-  const functions =
-    active === null
-      ? []
-      : searchFunctions(assistantFunctions().filter((fn) => isActive(fn, active)), phrase, 3)
-          .filter(({ score }) => score >= FUNCTION_SCORE_MIN)
-          .map(({ fn }) => ({ name: fn.name, sentence: firstSentence(fn.description) }))
+  const functions = active === null ? [] : proposedFunctions(assistantFunctions().filter((fn) => isActive(fn, active)), phrase)
   return { functions, help: closestHelpSection(phrase) }
+}
+
+/** Les fonctions proposées pour une demande, trois au plus, parmi celles reçues : la règle seule, sans lecture. */
+export function proposedFunctions(functions: readonly CatalogFunction[], phrase: string): RoutingHints["functions"] {
+  return searchFunctions(functions, phrase, 3)
+    .filter(({ score, hits }) => score >= FUNCTION_SCORE_MIN && hits >= FUNCTION_WORDS_MIN)
+    .map(({ fn }) => ({ name: fn.name, sentence: firstSentence(fn.description) }))
 }
 
 /** Les lignes des propositions, après la ligne du routage ; rien quand il n'y a rien à proposer. */

@@ -119,6 +119,19 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
 
+## 1.4.10 — 2026-10-19
+
+### Assistants
+- Call `<p>_context` first with the user's request, then again with `since_ctx` for each new request: it routes the new phrase without reloading the whole context.
+- A procedure may now hold 12,000 characters (8,000 before).
+- Without a matching procedure, `<p>_context` proposes a function only when it shares at least two words with the request.
+
+### Hosts
+- Install: upgrade to 1.4.10; no migration, no new variable, no import to change. Published from 1.4.9, without what main carries for 1.5.0.
+- Schemas: `PROCEDURE_MAX_CHARS` (12,000) moves to `schemas`, read by the publication check and by the procedure screen's refusal.
+- MCP: the description of `<p>_context` and the served rule say to call it again with `since_ctx` for each new request, instead of « once per conversation »; refresh the tool list in your hosts.
+- UI: the « + » and the handle of a toggle face its summary line, like a Texte; they sat 5 px lower than its chevron.
+
 ## 1.4.9 — 2026-10-15
 
 ### Hosts

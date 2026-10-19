@@ -143,7 +143,7 @@ describe.skipIf(!sqlConfigured)(
           callBlock("mail.send", { id: "<id>" }),
           steps(["Prépare :", "Écris :"], 3),
           callBlock("mail.create_draft", { to: "claire", subject: "Relance", body: "<texte>" }),
-          paragraph("x".repeat(8_000)),
+          paragraph("x".repeat(12_000)),
         ])
         const { refusals } = await check(blocks)
         const size = renderBlocks(blocks).length
@@ -152,7 +152,7 @@ describe.skipIf(!sqlConfigured)(
           code: "invalid_arguments",
           message: [
             "Publication of ventes/relance_test refused: 3 problem(s). The draft is kept; nothing was published.",
-            `- steps: ${size.toLocaleString("en-US")} characters; a procedure is served whole by acme_context and holds at most 8,000: move reference material to a page and link to it`,
+            `- steps: ${size.toLocaleString("en-US")} characters; a procedure is served whole by acme_context and holds at most 12,000: move reference material to a page and link to it`,
             `- section « Étapes », call block 1 (step 2): ${unknown("mail.send")}`,
             '- section « Étapes », call block 2 (step 4): mail.create_draft argument « to »: Invalid email address (got "claire")',
             FOOTER,

@@ -184,7 +184,7 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     expect(rules.length).toBeLessThanOrEqual(3_100)
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
     expect(rules.split("\n")[0]).toBe("## How this workspace works")
-    expect(rules).toContain("abcdefghij_context (first, once per conversation), abcdefghij_find, abcdefghij_read, abcdefghij_call, abcdefghij_write, abcdefghij_feedback.")
+    expect(rules).toContain("abcdefghij_context (first, then again with since_ctx for each new request), abcdefghij_find, abcdefghij_read, abcdefghij_call, abcdefghij_write, abcdefghij_feedback.")
     // Aucune donnée d'une identité, aucun nom de produit ni de client : seul le préfixe varie.
     expect(workspaceRules("acme").replaceAll("acme_", "abcdefghij_")).toBe(rules)
     for (const word of ["<p>", "Oto", "Claude", "ChatGPT", "Acme", "ventes"]) expect(rules).not.toContain(word)

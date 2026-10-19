@@ -7,6 +7,12 @@
 // borne d'une phrase à tester.
 import * as z from "zod/v4"
 
+/**
+ * La taille d'une procédure, servie entière par `context` (H30, P24) : son rendu, sans titre ni résumé (N6). Lue par le
+ * contrôle à la publication et par le refus que dit l'écran : sans elle ici, l'écran écrivait la borne en chiffres.
+ */
+export const PROCEDURE_MAX_CHARS = 12_000
+
 /** Les huit genres d'un refus (colonne « Genre » d'E03-S06), dans l'ordre des cas R1 à R13. */
 export const PROCEDURE_REFUSAL_KINDS = [
   "too_long",

@@ -134,7 +134,7 @@ export type {
   TableRowsArgs,
   TableSort,
 } from "./tables"
-export { isPlaceholderValue, PROCEDURE_REFUSAL_KINDS } from "./procedures"
+export { isPlaceholderValue, PROCEDURE_MAX_CHARS, PROCEDURE_REFUSAL_KINDS } from "./procedures"
 export type { ProcedureRefusal, ProcedureRefusalKind, ProcedureSummary } from "./procedures"
 export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.

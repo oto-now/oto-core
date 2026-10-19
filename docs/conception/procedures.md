@@ -1,7 +1,7 @@
 # Procédures
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -34,7 +34,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Le contrôle lit les blocs (types `call` et `code`, et les lignes ```` ```call ```` que rend un bloc), jamais le markdown ; la clôture ```` ```call ```` n'est que la forme markdown d'un bloc `call` (E03-S06 N1).
 - Un bloc `code` de langage `call` (rogné, sans casse) est refusé (R2) : `renderBlocks` l'écrirait comme un appel jamais contrôlé (E03-S06 N3). R2 vaut pour toute clôture `call` : un bloc `code` dont la ligne d'ouverture rendue ouvre une clôture `call`, et tout texte rendu tel quel dont une ligne rognée en ouvre une (accents graves ou tildes, puis `call` ; `callout` exclu) (E03-S06 N17).
 - `confirm`, `team`, `account`, `ctx`, `function` ou `arguments` écrits dans les arguments d'un bloc `call` : refus R9 avec l'indice (E03-S06 N11).
-- La borne de 8 000 caractères d'une procédure (P24, [tableaux](tableaux.md)) se mesure sur `renderBlocks` (options par défaut) de ses blocs, sans titre ni résumé (E03-S06 N6).
+- La borne de 12 000 caractères d'une procédure (8 000 jusqu'au 2026-10-19, trop court pour une procédure réelle ; `PROCEDURE_MAX_CHARS`, `schemas/procedures.ts`, lue par le contrôle et par l'écran) (P24, [tableaux](tableaux.md)) se mesure sur `renderBlocks` (options par défaut) de ses blocs, sans titre ni résumé (E03-S06 N6).
 - Le refus donne tous les problèmes d'un coup (20 listés, le reste compté) et `details.refusals` complet, avec l'`id` du bloc fautif (E03-S06 N5). Les refus vont dans `details.refusals` ; `effectiveHeader` est exporté ; `previewContext` rend aussi `served` et `candidates` (P19).
 - `checkProcedure` contrôle le brouillon quand le niveau calculé vaut au moins 2, sinon les blocs publiés ; `listProcedures` liste les nœuds de genre `procedure` de niveau ≥ 1, une page au genre en attente n'y entrant qu'à sa publication (E03-S06 N8).
 - `publishNode` lit le tampon du brouillon (`node_drafts.updated_at`) avant ses blocs, pour tout genre, et le passe en `p_draft_stamp` : un brouillon changé pendant le contrôle rend `stale_revision`, et rien n'est publié (E03-S06 N9).

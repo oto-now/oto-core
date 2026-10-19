@@ -331,6 +331,8 @@
 
 /* ── le menu dépliant écrit : le dessin de la lecture (`.oto-depliant`, `content.css`) ; le résumé, champ en place, prend le corps du texte lu ; le corps, décalé de la largeur du bouton du chevron (`.oto-pli-bouton`) ; seul le chevron replie. */
 .oto-depliant-tete ~ .oto-depliant-corps { padding-inline-start: calc(var(--ctrl-h-sm) + var(--space-1)); }
+/* Le résumé descend du rembourrage d'un champ de bloc (`.oto-block-field`) : sa ligne tombe où tombe la première ligne d'un Texte, face au « + » et à la poignée de la gouttière ; sans lui, ils étaient 5 px plus bas que le chevron. */
+.oto-depliant-tete { padding-block-start: var(--space-1); }
 
 /* La bordure d'un champ du menu dépliant paraît au survol (`.oto-inline-field:hover`) et au focus, comme celle d'une cellule du tableau simple. */
 .oto-depliant .oto-inline-field:not([readonly]):focus-visible {

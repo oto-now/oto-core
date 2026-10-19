@@ -323,7 +323,7 @@ describe("publication refusée, par emplacement (AC7)", () => {
     expect(within(ligne ?? document.body).getByText(REFUS_DE_SORTIE.message).closest("details")).toHaveTextContent(/^Détail technique/)
 
     const refus: [Record<string, unknown>, string][] = [
-      [{ kind: "too_long" }, "Procédure · procédure de plus de 8 000 caractères : déplacez les informations de référence dans une page et liez-la"],
+      [{ kind: "too_long" }, `Procédure · procédure de plus de ${new Intl.NumberFormat("fr-FR").format(12_000)} caractères : déplacez les informations de référence dans une page et liez-la`],
       [{ kind: "invalid_block", block: 1 }, "Avant le premier titre, bloc 1 · bloc d'appel mal formé"],
       [{ kind: "unknown_function", section: "Étapes", block: 2, step: 2, function: "mail.send" }, "Section « Étapes », bloc 2, étape 2 · mail.send · fonction inconnue"],
       [{ kind: "function_not_active", section: "Étapes", block: 4, step: 5, function: "mail.create_draft" }, "Section « Étapes », bloc 4, étape 5 · mail.create_draft · fonction non activée pour l'organisation"],

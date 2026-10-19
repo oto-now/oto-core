@@ -1,7 +1,7 @@
 # Contexte servi
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -50,7 +50,7 @@ Le banc a mesuré que le seul levier qui force la lecture des règles sur tous l
 Ordre servi : le bloc `code` (première ligne « ctx: XXXX-XXXX », règles « How this workspace works », langue de réponse, puis « ## This request » et la ligne du routage, la procédure reconnue suivant immédiatement sa ligne), une partie par Contexte, « What's new », « Procedures you can run », « Recent content ». Le routage lui-même : [routage et recherche](routage-et-recherche.md).
 
 - Les règles (1.4.3) tiennent en 16 lignes et 3 100 caractères au plus avec un préfixe de 10 caractères (1 200 de plus qu'avant, borne du cahier des charges) : en plus de la carte des outils, une ligne « Reference » (`read path functions` et le contrat d'une fonction, `read path help` le guide de la plateforme une section à la fois, `write.procedure` et `write.table` avant d'en écrire un, `call table.schema` avant d'écrire des lignes) et les pièges qui coûtent le plus : un titre publié déplace le chemin, réorganiser par `node.move` et jamais recréer puis jeter, `contexte` est le nom du Contexte de l'organisation, d'une équipe ou d'un espace, nommer les outils sans préfixe dans un texte.
-- Sans procédure servie (aucune candidate, ou aucune assez nette), la ligne du routage est suivie des fonctions actives dont la description couvre un mot sur quatre de la demande au moins (`searchFunctions`, trois au plus, `context/hints.ts`) et de la section du guide la plus proche (débuts de mots anglais et français de chaque section) : « exporte toutes les pages de l'équipe SAV » mène à `node.export_tree` et à la section `transfer`.
+- Sans procédure servie (aucune candidate, ou aucune assez nette), la ligne du routage est suivie des fonctions actives dont la description couvre un mot sur quatre de la demande et deux mots au moins (`proposedFunctions`, trois au plus, `context/hints.ts` : un seul mot commun proposait `node.export_tree` à « créer une tâche ») et de la section du guide la plus proche (débuts de mots anglais et français de chaque section) : « exporte toutes les pages de l'équipe SAV » mène à `node.export_tree` et à la section `transfer`.
 
 - HN-E05S12-1 : D109 se lit comme la première ligne sous l'en-tête `## Context: …`, qui garde son rôle (nom de la partie, gardé par la coupe) ; les faits de l'ancien bloc personne (deux lignes) tiennent en une ; « You work for » devient « You: ».
 - D109 : dans le texte servi par `context` et dans l'onglet « Contexte » de l'accueil, les faits de la personne, de l'organisation et d'une équipe sont la première ligne de la partie du Contexte correspondant (Privé, Tout le monde, chaque équipe), servie même quand ce Contexte est vide ; « Code de la conversation » devient « Règles Oto », replié, non modifiable.
@@ -119,4 +119,5 @@ Relevées par la story E05-S12, à trancher par JB ; le code suit l'option A :
 - 2026-10-01 : un Contexte changé ne refuse plus l'appel, son résultat porte l'avis, le nouveau code et les parties changées — décidé par JB (source : session de travail du 2026-10-01, rejeu des retours d'assistants sur Démo).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-002 § 2 et § 7, D109, D134, H27, H28, H30 à H36, Q1, Q2, les choix d'E03-S08, E11-S03, E11-S19 et ceux d'E05-S12 cités par le code — décidé par Alexis, accord de JB.
 - 2026-10-14 : règles v2 (références et pièges, 16 lignes et 3 100 caractères au plus), fonctions et section du guide proposées sans procédure servie, avis d'un code périmé qui dit un refus — décidé par JB (source : cahier des charges « un agent autonome sur Oto dès le premier appel », session du 14/10/2026).
+- 2026-10-19 : une fonction proposée sans procédure servie couvre deux mots de la demande au moins — décidé par JB (source : retours d'usage du MCP Démo, session du 19/10/2026).
 - 2026-10-19 : paragraphe sur les jetons quand l'hôte déclare des personnes — écrit (pseudonymisation, J2).

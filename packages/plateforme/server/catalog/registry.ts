@@ -121,20 +121,20 @@ function matches(wanted: string, found: string): boolean {
 
 /**
  * Recherche lexicale (nom, connecteur, description) : score = part des mots de la requête
- * trouvés ; à score égal, par nom.
+ * trouvés ; à score égal, par nom. `hits` : le nombre de mots trouvés.
  */
 export function searchFunctions(
   functions: readonly CatalogFunction[],
   query: string,
   limit: number,
-): { fn: CatalogFunction; score: number }[] {
+): { fn: CatalogFunction; score: number; hits: number }[] {
   const wanted = [...new Set(words(query))]
   if (wanted.length === 0) return []
   return functions
     .map((fn) => {
       const haystack = words(`${fn.name} ${fn.connector} ${fn.description}`)
       const hits = wanted.filter((word) => haystack.some((found) => matches(word, found)))
-      return { fn, score: hits.length / wanted.length }
+      return { fn, score: hits.length / wanted.length, hits: hits.length }
     })
     .filter((result) => result.score > 0)
     .sort((a, b) => b.score - a.score || a.fn.name.localeCompare(b.fn.name))
