@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
+import { linkOrigin } from "@otomata_tech/oto_platform/schemas"
 import { OIDC_LOGIN_PATH, oidcEnabled } from "@/lib/plateforme/oidc-client"
 import { oidcMiddlewareSession } from "@/lib/plateforme/oidc-session"
 import { loginPath, safeRedirect } from "@/lib/schemas/auth"
@@ -43,17 +44,15 @@ function publicShare(): NextResponse {
  * L'adresse publique d'une destination de la requête. Sous `next start` derrière un proxy, Next bâtit
  * `request.url` du middleware sur l'adresse d'écoute (`localhost:<port>`) : une redirection qui s'en servirait
  * enverrait le navigateur sur `https://localhost:<port>`. L'hôte vient donc de `X-Forwarded-Host`, sinon de
- * `Host`, et le protocole de `X-Forwarded-Proto`, comme l'organisation (`rawRequestHost` et `requestOrigin` du
- * paquet, que le middleware n'importe pas : il tourne sur Edge, sans la face server). Sans ces en-têtes,
- * l'adresse de la requête.
+ * `Host`, comme l'organisation (`rawRequestHost` du paquet, que le middleware n'importe pas : il tourne sur Edge,
+ * sans la face server), et l'origine de `linkOrigin` : `https` hors du poste local, jamais `X-Forwarded-Proto`.
+ * L'hôte n'est pas vérifié en base (Edge, sans `org_by_host`) : la redirection ne va qu'à qui a envoyé la requête,
+ * et un 307 n'est gardé par aucun cache partagé sans en-tête qui le permette. Sans hôte lisible, l'adresse de la requête.
  */
 function publicUrl(request: NextRequest, destination: string): URL {
   const target = new URL(destination, request.url)
-  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host")?.trim()
-  if (!host) return target
-  const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase()
-  const protocol = forwarded === "http" || forwarded === "https" ? forwarded : target.protocol.slice(0, -1)
-  return new URL(`${target.pathname}${target.search}`, `${protocol}://${host}`)
+  const origin = linkOrigin(request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host"))
+  return origin ? new URL(`${target.pathname}${target.search}`, origin) : target
 }
 
 /** La session Supabase de la requête, rafraîchie par `getUser()` : ses cookies sont sur `response`. */

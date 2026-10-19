@@ -26,7 +26,7 @@ import { profileRoutes } from "./profile"
 import { isPublicRoute, publicResponse } from "./public"
 import { rulesRoutes } from "./rules"
 import { searchRoutes } from "./search"
-import { addressOrigin, asPlatformError, authenticationRequired, errorResponse, requireSameOrigin, sessionIdentity, verifiedSession } from "./session"
+import { addressOrigin, asPlatformError, authenticationRequired, errorResponse, identityLinkOrigin, requireSameOrigin, sessionIdentity, verifiedSession } from "./session"
 import { sharesRoutes } from "./shares"
 import { isSignupRoute, signupResponse } from "./signup"
 import { trashRoutes } from "./trash"
@@ -56,8 +56,10 @@ type RouteContext = {
   params: string[]
   /** Corps JSON d'un `POST` ou d'un `PATCH` ; `undefined` sinon. */
   body: unknown
-  /** Origine appelée (`https://acme.oto.cx`) : adresse de retour des emails (hypothèse N2). */
+  /** Origine appelée (`https://acme.oto.cx`), protocole de `x-forwarded-proto` compris : contrôle d'`Origin`, retours du navigateur. */
   origin: string
+  /** Origine des liens envoyés hors de la requête, l'email d'invitation (hypothèse N2) : `identityLinkOrigin`. */
+  linkOrigin: string
 }
 
 type RouteResult = {
@@ -347,7 +349,7 @@ export async function handlePlateforme(request: Request, options: PlatformReques
       return errorResponse(asPlatformError(error))
     }
 
-    const served = await serve(match, { db, identity, request, origin })
+    const served = await serve(match, { db, identity, request, origin, linkOrigin: identityLinkOrigin(options.host) })
     if (MUTATIONS.has(method) || match.route.journaled) {
       const userAgent = request.headers.get("user-agent")
       const line = journalLine(served, { method, tool: match.tool, identity, started, userAgent })

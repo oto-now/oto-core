@@ -233,7 +233,7 @@ export function oidcCallback(request: NextRequest, origin: string | null, accept
     const sealed = request.cookies.get(LOGIN_COOKIE)?.value
     const pending = sealed ? pendingSchema.safeParse(await unseal(sealed, "login", config.secret)).data : undefined
     if (!pending || !origin) {
-      console.error("[oidc] callback: no sign-in in progress in this browser, or no host")
+      console.error("[oidc] callback: no sign-in in progress in this browser, or no trusted address")
       return text(400, REFUSED)
     }
     const session = await exchangeCode(config, pending, new URL(request.url).searchParams)

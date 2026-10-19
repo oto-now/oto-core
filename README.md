@@ -85,7 +85,7 @@ affichée, jamais commitée.
 
 | Variable | Mode | Lue par | Rôle | Secret |
 |---|---|---|---|---|
-| `NEXT_PUBLIC_SITE_URL` | les deux | outillage, `admin_cell` | Adresse commune du site | non |
+| `NEXT_PUBLIC_SITE_URL` | les deux | outillage, `admin_cell`, `getRequestOrigin` | Adresse commune du site ; adresse d'entrée d'où partent aussi les liens de connexion | non |
 | `PLATFORM_DATABASE_URL` | les deux | `server/sql.ts` | Connexion du serveur, rôle `platform_app` ; TLS exigé hors de la machine locale | oui |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase | middleware, `issuer.ts`, `invitations.ts` | Projet Supabase, émetteur par défaut | non |
 | `PLATFORM_OIDC_ISSUER` | OIDC | paquet et hôte | Émetteur, **exactement** comme dans `iss` ; sa présence choisit le mode | non |

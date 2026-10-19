@@ -20,7 +20,7 @@ export type InvitationMailInput = {
   brand: Pick<Brand, "displayName" | "logoUrl">
   /** Nom de qui invite ; `null` quand il n'est pas connu. */
   inviterName: string | null
-  /** Origine `http:` ou `https:` de l'adresse d'où l'on invite (`requestOrigin`) : le lien mène à `<origine>/login`. */
+  /** Origine `http:` ou `https:` de l'adresse d'où l'on invite (`identityLinkOrigin` de la porte, l'adresse du MCP admin) : le lien mène à `<origine>/login`. */
   origin: string
 }
 
@@ -93,7 +93,7 @@ function invitationHtml(input: InvitationMailInput, loginUrl: string): string {
  * l'organisation, avec le nom de qui invite s'il est connu et le lien `<origine>/login`, qui mène à la
  * connexion chez l'émetteur de l'hôte (AC-a8). Fonction pure : le HTML échappe tout ce qu'il reçoit,
  * et une origine que `webUrl` refuse (ni `http:` ni `https:`, illisible, ou à identifiants) lève
- * `internal` avant qu'un lien n'existe : `requestOrigin` prend le protocole dans `x-forwarded-proto`,
+ * `internal` avant qu'un lien n'existe : l'origine du MCP admin prend le protocole dans `x-forwarded-proto`,
  * qu'un proxy peut transmettre du client, et un lien n'interpole jamais un autre protocole
  * (`security-patterns.md § XSS Prevention`).
  */

@@ -10,6 +10,7 @@
 // Face SQL (E01-S10, partie e1a) : chaque lecture passe par `db.tx`, sous l'appelant de la session
 // (ou `anon` pour le client sans session, `resolveOrg` des pages publiques) ; `resolveIdentity` tient
 // ses lectures en une transaction (HN-E01S10-2).
+import { linkOrigin, normalizeHost } from "../schemas/link-origin"
 import type { Json } from "./database"
 import type { PlatformDb } from "./db"
 import { fromDatabaseError, inTransaction, isPlatformError, PlatformError } from "./errors"
@@ -68,16 +69,8 @@ export type Identity = {
   hasOpenGrant: boolean
 }
 
-/**
- * Nom d'hôte comparable à `org_domains.host` : minuscules, sans port, sans point final. `null`
- * pour une valeur vide ou une adresse IPv6 littérale (aucune organisation n'y est servie).
- */
-export function normalizeHost(raw: string | null | undefined): string | null {
-  const value = (raw ?? "").trim().toLowerCase()
-  if (!value || value.startsWith("[")) return null
-  const host = value.split(":")[0].replace(/\.$/, "")
-  return host || null
-}
+// `normalizeHost` vit avec `linkOrigin` (`schemas/link-origin.ts`), que le middleware de l'hôte lit sans la face server.
+export { normalizeHost }
 
 /**
  * Hôte tel que le navigateur l'a appelé, port compris : premier élément de `x-forwarded-host`
@@ -109,15 +102,57 @@ export async function servedHost(choose: ServedHost | undefined, called: { host:
 
 /**
  * Origine appelée par le navigateur : `x-forwarded-proto` (derrière un proxy), sinon le protocole
- * donné, et l'hôte brut. Sert au contrôle d'`Origin` des mutations et à l'adresse de retour des
- * emails, qui ramène à l'adresse d'où l'on a invité (hypothèse N2). Un proxy peut transmettre le
- * `x-forwarded-proto` du client : seuls `http` et `https` en sont lus, sinon le protocole donné
- * (E01-S11 a2-wire : le lien d'un email d'invitation ne porte jamais un autre protocole).
+ * donné, et l'hôte brut. Sert au contrôle d'`Origin` des mutations, comparé à ce que le navigateur
+ * envoie, et aux adresses du MCP admin ; jamais au lien d'un email, qui part de `trustedRequestOrigin`
+ * ou de l'hôte qui a résolu l'identité (`linkOrigin`). Un proxy peut transmettre le
+ * `x-forwarded-proto` du client : seuls `http` et `https` en sont lus, sinon le protocole donné.
  */
 export function requestOrigin(headers: HeadersLike, host: string, fallbackProtocol: string): string {
   const forwarded = headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase()
   const protocol = forwarded === "http" || forwarded === "https" ? forwarded : fallbackProtocol
   return `${protocol}://${host}`.toLowerCase()
+}
+
+/**
+ * Ce que l'hôte de l'application passe à `trustedRequestOrigin` : ses adresses d'entrée, celles qui ne servent aucune
+ * organisation mais d'où partent des liens (son adresse commune, la page qui liste les organisations d'une personne). Des
+ * noms d'hôte, normalisés comme une adresse appelée (port ignoré).
+ */
+export type TrustedOriginOptions = { entryHosts?: readonly string[] }
+
+/** Au-delà, l'hôte refusé est coupé au log : un en-tête de la requête n'y entre jamais en entier. */
+const LOGGED_HOST_MAX = 100
+
+/**
+ * L'origine des liens que le serveur envoie hors de la requête (lien de connexion, réinitialisation, retour d'un
+ * fournisseur d'identité, émetteur OIDC) : `linkOrigin` de l'hôte appelé, en `https` hors du poste local, si cet hôte
+ * sert une organisation (`org_by_host` sous `db`, le client sans session de `resolveOrg`) ou figure parmi les adresses
+ * d'entrée de l'hôte. Sinon `null`, journalisé : derrière un proxy qui transmet `x-forwarded-host` tel quel, le lien
+ * d'un email demandé pour autrui mènerait chez qui a forgé l'en-tête. Une panne de la base remonte.
+ */
+export async function trustedRequestOrigin(db: PlatformDb, headers: HeadersLike, options: TrustedOriginOptions = {}): Promise<string | null> {
+  const raw = rawRequestHost(headers)
+  const host = normalizeHost(raw)
+  const origin = linkOrigin(raw)
+  if (host && origin && (isEntryHost(host, options.entryHosts ?? []) || (await servesOrg(db, host)))) return origin
+  // Normalisé, coupé et échappé (`JSON.stringify`) : ni retour à la ligne ni en-tête entier au log.
+  console.error(`[platform] trustedRequestOrigin: no link built, ${JSON.stringify(host?.slice(0, LOGGED_HOST_MAX) ?? null)} serves no organisation and is not an entry address`)
+  return null
+}
+
+function isEntryHost(host: string, entryHosts: readonly string[]): boolean {
+  return entryHosts.some((entry) => normalizeHost(entry) === host)
+}
+
+/** L'hôte sert-il une organisation ? `resolveOrg`, dont seul `unknown_org` vaut « non » ; toute autre erreur remonte. */
+async function servesOrg(db: PlatformDb, host: string): Promise<boolean> {
+  try {
+    await resolveOrg(db, host)
+    return true
+  } catch (error) {
+    if (isPlatformError(error) && error.code === "unknown_org") return false
+    throw error
+  }
 }
 
 /** Organisation servie à cette adresse, ou `unknown_org`. */

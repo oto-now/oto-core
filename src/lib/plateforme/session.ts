@@ -2,14 +2,16 @@ import { cache } from "react"
 import { cookies, headers } from "next/headers"
 import { unstable_rethrow } from "next/navigation"
 import type { Session, User } from "@supabase/supabase-js"
+import { linkOrigin } from "@otomata_tech/oto_platform/schemas"
 import {
   acceptInvitations,
   callerName,
+  createAnonPlatformDb,
   createPlatformDb,
   isPlatformError,
   rawRequestHost,
-  requestOrigin,
   resolveIdentity,
+  trustedRequestOrigin,
   type Caller,
   type Identity,
   type PlatformDb,
@@ -138,11 +140,33 @@ export async function getPlatformIdentitySafely(context: string): Promise<Platfo
   }
 }
 
-/** Origine appelée par le navigateur (`https://acme.oto.cx`), pour les liens des emails (N2). */
+/**
+ * Les adresses d'entrée de l'hôte de référence : l'hôte de `NEXT_PUBLIC_SITE_URL`, son adresse commune, qui peut ne servir
+ * aucune organisation. Absente, aucune ; illisible, une erreur de configuration, jamais ignorée.
+ */
+function entryHosts(): string[] {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (!site) return []
+  if (!URL.canParse(site)) throw new Error("NEXT_PUBLIC_SITE_URL n'est pas une adresse lisible")
+  return [new URL(site).host]
+}
+
+/**
+ * Origine des liens qui partent hors de la requête (`https://acme.oto.cx`) : emails de connexion et de réinitialisation
+ * (N2), retour d'un fournisseur, émetteur OIDC. Celle de l'adresse appelée si elle sert une organisation ou est l'adresse
+ * commune du site, en `https` hors du poste local (`trustedRequestOrigin`) ; `null` sinon.
+ */
 export async function getRequestOrigin(): Promise<string | null> {
-  const requestHeaders = await headers()
-  const host = rawRequestHost(requestHeaders)
-  return host ? requestOrigin(requestHeaders, host, "https") : null
+  return trustedRequestOrigin(createAnonPlatformDb(), await headers(), { entryHosts: entryHosts() })
+}
+
+/**
+ * Origine de l'adresse appelée, pour ce qui ne sert qu'à qui l'appelle (`metadataBase` des métadonnées de partage) :
+ * `linkOrigin`, sans lire la base, pour que nulle page n'attende une base lente (HN-E05S07-4). Jamais un lien qui part
+ * hors de la requête : celui-là passe par `getRequestOrigin`.
+ */
+export async function getCalledOrigin(): Promise<string | null> {
+  return linkOrigin(rawRequestHost(await headers()))
 }
 
 /**

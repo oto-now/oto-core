@@ -204,7 +204,7 @@ describe.skipIf(!sqlConfigured)(portable("table.import and POST tables/import on
   it("should write a lot of the screen into an existing table, merged on the key, the state column ignored, all or nothing (AC-b5)", async () => {
     if (!importRoute) throw new Error("no POST tables/import route")
     const lea: Identity = acmeIdentity(ref, "lea")
-    const send = async (body: Record<string, unknown>) => importRoute.handle({ db: await ref.db("lea"), identity: lea, body, origin: "https://acme.test", request: new Request("https://acme.test/api/platform/tables/import"), params: ["import"] })
+    const send = async (body: Record<string, unknown>) => importRoute.handle({ db: await ref.db("lea"), identity: lea, body, origin: "https://acme.test", linkOrigin: "https://acme.test", request: new Request("https://acme.test/api/platform/tables/import"), params: ["import"] })
     const columns = ["entreprise", "ville", "statut"]
     const done = await send({ table: PROSPECTS.path, file_name: "prospects.csv", columns, rows: [["Atelier 2", "Valbrune", "écarté"], ["Boulangerie Fournier", "Brémontier", "x"], ["Nouvelle Forge", "Valbrune", ""]] })
     expect(done).toMatchObject({ status: 200, data: { path: PROSPECTS.path, created: 1, updated: 1, unchanged: 1, ignored: ["statut"] }, journal: { target: PROSPECTS.path } })

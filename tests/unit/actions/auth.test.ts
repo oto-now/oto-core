@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { readFileSync } from "fs"
 import path from "path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { acceptInvitations, createPlatformDb } from "@otomata_tech/oto_platform/server"
+import { acceptInvitations, createAnonPlatformDb, createPlatformDb } from "@otomata_tech/oto_platform/server"
 import {
   confirmerLienAction,
   connexionFournisseurAction,
@@ -12,6 +12,7 @@ import {
   magicLinkAction,
   resetPasswordAction,
 } from "@/lib/actions/auth"
+import { orgDomainsDb } from "../../helpers/org-domains"
 
 const auth = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
@@ -34,12 +35,16 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(async () => new Headers({ "x-forwarded-host": "acme.test", "x-forwarded-proto": "https" })),
 }))
 
-// Les services du paquet sont simulés : seule l'acceptation des invitations est observée.
+// Les services du paquet sont simulés : l'acceptation des invitations est observée, et le client sans session ne
+// connaît que les adresses d'organisation de `ORG_HOSTS` (`org_by_host`) ; `trustedRequestOrigin` reste le vrai.
 vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   createPlatformDb: vi.fn(() => ({})),
+  createAnonPlatformDb: vi.fn(),
   acceptInvitations: vi.fn(async () => []),
 }))
+
+const ORG_HOSTS = ["acme.test", "acme.cellule.test", "acme.example.test"]
 
 // redirect() lève NEXT_REDIRECT dans Next : le mock lève aussi, pour que le code après
 // l'appel ne s'exécute pas comme en production.
@@ -65,8 +70,17 @@ const MAGIC_LINK_MESSAGE =
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
+  // L'adresse commune du site : une adresse d'entrée, qui ne sert aucune organisation ici.
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000")
+  vi.mocked(createAnonPlatformDb).mockReturnValue(orgDomainsDb(ORG_HOSTS))
 })
+
+/** En-têtes de la requête, lus par `getRequestOrigin()`, pour le prochain appel. */
+function requestHeaders(values: Record<string, string>) {
+  // `headers()` rend des en-têtes en lecture seule : des `Headers` ordinaires suffisent à la lecture.
+  vi.mocked(headers).mockResolvedValueOnce(new Headers(values) as unknown as Awaited<ReturnType<typeof headers>>)
+}
 
 describe("loginAction", () => {
   it("should return an error when the input is invalid", async () => {
@@ -238,8 +252,7 @@ describe("forgotPasswordAction", () => {
     [{ "x-forwarded-host": "acme.cellule.test", "x-forwarded-proto": "https" }, "https://acme.cellule.test"],
     [{ host: "localhost:3000", "x-forwarded-proto": "http" }, "http://localhost:3000"],
   ])("should send a reset link back to the origin of the request (%j) (E09-S02, AC15)", async (values, origin) => {
-    // `headers()` rend des en-têtes en lecture seule : des `Headers` ordinaires suffisent à la lecture.
-    vi.mocked(headers).mockResolvedValueOnce(new Headers(values) as unknown as Awaited<ReturnType<typeof headers>>)
+    requestHeaders(values)
     auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
 
     await forgotPasswordAction(form({ email: "claire@acme.test" }))
@@ -263,12 +276,6 @@ describe("connexionFournisseurAction (E09-S03)", () => {
   const PROVIDER_URL = "https://ref.supabase.test/auth/v1/authorize?provider=google&code_challenge=abc"
   const UNAVAILABLE = "Ce mode de connexion n'est pas disponible."
   const START_FAILED = "La connexion avec ce fournisseur n'a pas pu démarrer. Réessayez."
-
-  /** En-têtes de la requête, lus par `getRequestOrigin()` (E02-S01). */
-  function requestHeaders(values: Record<string, string>) {
-    // `headers()` rend des en-têtes en lecture seule : des `Headers` ordinaires suffisent à la lecture.
-    vi.mocked(headers).mockResolvedValueOnce(new Headers(values) as unknown as Awaited<ReturnType<typeof headers>>)
-  }
 
   it.each([
     [{ host: "localhost:3000", "x-forwarded-proto": "http" }, "http://localhost:3000"],
@@ -417,5 +424,88 @@ describe("way back after sign-in (E02-S02)", () => {
     await magicLinkAction(form({ email: "claire@acme.test", redirect: hostile }))
 
     expect(auth.signInWithOtp.mock.calls[0][0].options.emailRedirectTo).toBe("https://acme.test/auth/confirm?next=/")
+  })
+})
+
+// Derrière un proxy qui transmet `x-forwarded-host` tel quel, un lien demandé pour l'email d'autrui ne part que vers une
+// adresse qui sert une organisation ou l'adresse commune du site, en https hors du poste local.
+describe("links only to a trusted address", () => {
+  const FORGED = { "x-forwarded-host": "evil.example.test", "x-forwarded-proto": "https", host: "acme.test" }
+
+  it("should give the same answer to a magic link asked from an unknown host, without calling Supabase", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    requestHeaders(FORGED)
+
+    await expect(magicLinkAction(form({ email: "victim@acme.test" }))).resolves.toEqual({ data: { message: MAGIC_LINK_MESSAGE } })
+    expect(auth.signInWithOtp).not.toHaveBeenCalled()
+    expect(String(log.mock.calls[0]?.[0])).toContain("evil.example.test")
+  })
+
+  it("should give the same answer to a reset asked from an unknown host, without calling Supabase", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
+    const known = await forgotPasswordAction(form({ email: "victim@acme.test" }))
+    vi.clearAllMocks()
+    requestHeaders(FORGED)
+
+    await expect(forgotPasswordAction(form({ email: "victim@acme.test" }))).resolves.toEqual(known)
+    expect(auth.resetPasswordForEmail).not.toHaveBeenCalled()
+  })
+
+  it("should not start a provider from an unknown host", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    requestHeaders(FORGED)
+
+    await expect(connexionFournisseurAction(null, form({ fournisseur: "google" }))).resolves.toEqual({ error: "La connexion avec ce fournisseur n'a pas pu démarrer. Réessayez." })
+    expect(auth.signInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it("should keep https for an organisation address when the proxy forwards http", async () => {
+    requestHeaders({ "x-forwarded-host": "acme.test", "x-forwarded-proto": "http" })
+    auth.signInWithOtp.mockResolvedValue({ data: {}, error: null })
+
+    await magicLinkAction(form({ email: "claire@acme.test" }))
+
+    expect(auth.signInWithOtp.mock.calls[0][0].options.emailRedirectTo).toBe("https://acme.test/auth/confirm?next=/")
+  })
+
+  it("should admit the common address of the site, which serves no organisation", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://oto.example.test")
+    requestHeaders({ "x-forwarded-host": "oto.example.test", "x-forwarded-proto": "https" })
+    auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
+
+    await forgotPasswordAction(form({ email: "claire@acme.test" }))
+
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("claire@acme.test", { redirectTo: "https://oto.example.test/auth/callback?next=/reset-password" })
+  })
+
+  it("should refuse an unreadable NEXT_PUBLIC_SITE_URL instead of ignoring it", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "not an address")
+
+    await expect(magicLinkAction(form({ email: "claire@acme.test" }))).rejects.toThrow("NEXT_PUBLIC_SITE_URL")
+    expect(auth.signInWithOtp).not.toHaveBeenCalled()
+  })
+})
+
+// Mode OIDC : on se connecte chez l'émetteur ; les actions propres à Supabase Auth ne tentent rien (HN-E01S11b-12).
+describe("Supabase actions in OIDC mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("PLATFORM_OIDC_ISSUER", "https://issuer.example.test/oidc")
+  })
+
+  it("should answer the magic link and the reset as usual, without calling Supabase nor reading the address", async () => {
+    await expect(magicLinkAction(form({ email: "claire@acme.test" }))).resolves.toEqual({ data: { message: MAGIC_LINK_MESSAGE } })
+    await expect(forgotPasswordAction(form({ email: "claire@acme.test" }))).resolves.toEqual({ data: { message: "Si un compte existe, un email vous a été envoyé." } })
+
+    expect(auth.signInWithOtp).not.toHaveBeenCalled()
+    expect(auth.resetPasswordForEmail).not.toHaveBeenCalled()
+    expect(createAnonPlatformDb).not.toHaveBeenCalled()
+  })
+
+  it("should say a provider is not available, without calling Supabase", async () => {
+    await expect(connexionFournisseurAction(null, form({ fournisseur: "google" }))).resolves.toEqual({ error: "Ce mode de connexion n'est pas disponible." })
+
+    expect(auth.signInWithOAuth).not.toHaveBeenCalled()
+    expect(redirect).not.toHaveBeenCalled()
   })
 })

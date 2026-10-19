@@ -50,7 +50,7 @@ import DOMPurify from "dompurify"
 - Pas de `dangerouslySetInnerHTML` sans DOMPurify
 - Pas d'interpolation dans les `href` : `href={userInput}` peut exécuter `javascript:`
 - Valider les URLs : `z.string().url().startsWith("https://")`
-- Un lien que le serveur bâtit sur l'origine d'une requête (`requestOrigin`, emails) passe par `webUrl` (`http:` ou `https:`, sans identifiants) et vise l'hôte qui a résolu l'organisation ; `requestOrigin` ne lit de `x-forwarded-proto` que `http` ou `https`
+- Un lien envoyé hors de la requête (email, adresse de retour confiée à un fournisseur d'identité ou à l'émetteur) ne se bâtit jamais sur un en-tête de la requête non vérifié, parce qu'un proxy peut transmettre `x-forwarded-host` et `x-forwarded-proto` tels que le client les envoie : son origine vient de `trustedRequestOrigin` (l'hôte appelé s'il sert une organisation ou est une adresse d'entrée de l'hôte) ou de l'hôte qui a résolu l'identité (`linkOrigin`), en `https` hors du poste local ; sur `null`, rien ne part et la réponse reste neutre. L'email d'invitation repasse son origine par `webUrl` (`http:` ou `https:`, sans identifiants). `requestOrigin` ne sert qu'à comparer l'`Origin` d'une mutation
 
 ## CSRF Protection
 

@@ -9,6 +9,7 @@ import { createPlatformDb, type PlatformDb } from "../server/db"
 import type { Caller } from "../server/sql"
 import { HTTP_STATUS, isPlatformError, PlatformError } from "../server/errors"
 import { requestOrigin, resolveIdentity, type Identity } from "../server/identity"
+import { linkOrigin } from "../schemas/link-origin"
 
 /** Ce qu'une porte reçoit de l'hôte pour vérifier la session. */
 export type SessionOptions = {
@@ -49,6 +50,18 @@ export function sessionIdentity(session: VerifiedSession, host: string | null): 
 /** L'origine de l'adresse appelée (`https://acme.oto.cx`), par l'hôte qui a résolu l'organisation. */
 export function addressOrigin(request: Request, host: string | null): string {
   return requestOrigin(request.headers, host ?? "", new URL(request.url).protocol.replace(/:$/, ""))
+}
+
+/**
+ * L'origine des liens qu'une route envoie hors de la requête (l'email d'invitation) : `linkOrigin` de l'hôte qui a
+ * résolu l'organisation de l'identité, donc une adresse d'`org_domains`, en `https` hors du poste local ; jamais
+ * `x-forwarded-proto`, qu'un proxy peut transmettre du client.
+ */
+export function identityLinkOrigin(host: string | null): string {
+  const origin = linkOrigin(host)
+  // `resolveIdentity` a trouvé l'organisation par cet hôte : une adresse d'`org_domains` est toujours un nom d'hôte.
+  if (!origin) throw new PlatformError("internal", "The called address is not a host name.")
+  return origin
 }
 
 /**

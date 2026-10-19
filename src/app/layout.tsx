@@ -5,7 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { metadonneesDePartage } from "@otomata_tech/oto_platform/share"
 import { marqueDeLAdresse } from "@/lib/plateforme/marque-de-l-adresse"
-import { getRequestOrigin } from "@/lib/plateforme/session"
+import { getCalledOrigin } from "@/lib/plateforme/session"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ["latin"] })
 // (HN-E11S21-2) ; l'image vient de la convention `opengraph-image.tsx`. L'origine de la requête devient `metadataBase` :
 // chaque organisation sert ses images sous sa propre adresse.
 export async function generateMetadata(): Promise<Metadata> {
-  const [origine, marque] = await Promise.all([getRequestOrigin(), marqueDeLAdresse()])
+  const [origine, marque] = await Promise.all([getCalledOrigin(), marqueDeLAdresse()])
   return {
     title: {
       default: "Oto",

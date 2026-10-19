@@ -7,11 +7,12 @@
 // invitations et la porte de l'API ; la vérification du jeton d'accès, elle, est celle du paquet (AC-a3).
 // Le cookie chiffré lui-même : `tests/unit/oidc-session.test.ts`.
 import type { NextResponse } from "next/server"
+import { headers } from "next/headers"
 import { randomBytes, randomUUID } from "crypto"
 import { decodeJwt } from "jose"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
-import { acceptInvitations, createPlatformDb, resolveIdentity } from "@otomata_tech/oto_platform/server"
+import { acceptInvitations, createAnonPlatformDb, createPlatformDb, resolveIdentity } from "@otomata_tech/oto_platform/server"
 import DashboardPage from "@/app/(dashboard)/page"
 import PlateformePage from "@/app/(dashboard)/platform/page"
 import ForgotPasswordPage from "@/app/(auth)/forgot-password/page"
@@ -29,6 +30,7 @@ import { getPlatformSession, getSessionAccessToken } from "@/lib/plateforme/sess
 import { middleware } from "@/middleware"
 import { makeVerifyToken } from "../../packages/plateforme/mcp/auth"
 import { loggedText } from "../helpers/logs"
+import { orgDomainsDb } from "../helpers/org-domains"
 import { absorb, AUDIENCE, CLIENT_ID, EMAIL, NAME, oidcHost, ORIGIN, PERSON, request, SESSION_COOKIE, SUBJECT, type Jar } from "../helpers/oidc-host"
 import type { TestIssuer, TestPerson } from "../helpers/oidc-issuer"
 import { identityOf } from "../helpers/reference-org"
@@ -63,6 +65,8 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({ aut
 vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   createPlatformDb: vi.fn(() => ({})),
+  // Le client sans session de `getRequestOrigin` : `org_by_host` sert l'organisation d'`ORIGIN` seulement.
+  createAnonPlatformDb: vi.fn(),
   acceptInvitations: vi.fn(async () => []),
   // L'accueil (E05-S09 b) résout l'identité de la session et lit ses services : simulés comme la porte de l'API.
   resolveIdentity: vi.fn(async () => identityOf("lea")),
@@ -104,7 +108,13 @@ async function signIn(issuer: TestIssuer, person: TestPerson = PERSON, back = "/
 beforeEach(() => {
   vi.clearAllMocks()
   host.cookies = cookieJar(new Map())
+  vi.mocked(createAnonPlatformDb).mockReturnValue(orgDomainsDb([new URL(ORIGIN).hostname]))
 })
+
+/** La requête suivante arrive par un proxy qui transmet `x-forwarded-host` tel quel, forgé par le client. */
+function forgedHost(): void {
+  vi.mocked(headers).mockResolvedValueOnce(new Headers({ "x-forwarded-host": "evil.example.test", host: new URL(ORIGIN).host, "x-forwarded-proto": "https" }) as unknown as Awaited<ReturnType<typeof headers>>)
+}
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -138,6 +148,20 @@ describe("sign-in at the issuer (AC-b1)", () => {
       code_challenge_method: "S256",
     })
     expect(login.cookies.get(LOGIN_COOKIE)).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 600 })
+  })
+
+  // Aucune adresse de retour n'est confiée à l'émetteur hors d'une adresse qui sert une organisation (ou d'entrée).
+  it("should refuse to start from a forwarded host that serves no organisation", async () => {
+    await oidcHost()
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    forgedHost()
+
+    const login = await loginRoute(request("/auth/oidc/login?redirect=%2Fn%2Fcontexte"))
+
+    expect(login.status).toBe(400)
+    expect(login.headers.get("location")).toBeNull()
+    expect(login.cookies.get(LOGIN_COOKIE)).toBeUndefined()
+    expect(loggedText(log)).toContain("evil.example.test")
   })
 })
 
@@ -302,6 +326,33 @@ describe("the silent refresh (AC-b3)", () => {
 
     expect(response.headers.get("location")).toBeNull()
     expect(response.cookies.getAll()).toEqual([])
+  })
+})
+
+describe("a forwarded host that serves no organisation", () => {
+  it("should refuse the way back from the issuer, and set no session", async () => {
+    const issuer = await oidcHost()
+    const login = await loginRoute(request("/auth/oidc/login?redirect=%2Fn%2Fcontexte"))
+    const callbackUrl = issuer.authorize(login.headers.get("location") ?? "", PERSON)
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    forgedHost()
+
+    const callback = await callbackRoute(request(callbackUrl, absorb(new Map(), login)))
+
+    expect(callback.status).toBe(400)
+    expect(callback.headers.get("location")).toBeNull()
+    expect(sessionCookies(callback)).toEqual([])
+  })
+
+  it("should refuse the sign-out", async () => {
+    const issuer = await oidcHost()
+    const { jar } = await signIn(issuer)
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    forgedHost()
+
+    const response = await logoutRoute(request("/auth/oidc/logout", jar, { method: "POST", headers: { origin: "https://evil.example.test" } }))
+
+    expect(response.status).toBe(403)
   })
 })
 

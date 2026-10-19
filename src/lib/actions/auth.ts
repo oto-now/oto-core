@@ -52,15 +52,15 @@ export async function loginAction(formData: FormData): Promise<ActionResult<void
 export async function magicLinkAction(formData: FormData): Promise<ActionResult<{ message: string }>> {
   // Même réponse pour toute adresse, invalide, inconnue ou refusée par le hook : aucune énumération.
   const confirmation = { data: { message: MAGIC_LINK_CONFIRMATION } }
+  // Mode OIDC : on se connecte chez l'émetteur, Supabase Auth n'est pas l'annuaire (HN-E01S11b-12) ; rien n'est tenté.
+  if (oidcEnabled()) return confirmation
   const parsed = magicLinkSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return confirmation
 
-  // Le lien ramène à l'adresse d'où on le demande : la session s'y ouvre (N2).
+  // Le lien ramène à l'adresse d'où on le demande, si elle sert une organisation ou est l'adresse commune (N2) ;
+  // sinon aucun lien ne part, et `getRequestOrigin` l'a journalisé.
   const origin = await getRequestOrigin()
-  if (!origin) {
-    console.error("magicLinkAction: la requête n'a pas d'hôte")
-    return confirmation
-  }
+  if (!origin) return confirmation
   // La page demandée avant la connexion (E02-S02), encodée : elle porte sa propre requête, et le
   // modèle d'email ajoute `&token_hash=…` à cette adresse, qui doit donc déjà avoir un `?`.
   const retour = safeRedirect(parsed.data.redirect)
@@ -86,14 +86,14 @@ export async function connexionFournisseurAction(
   _state: ActionResult<void> | null,
   formData: FormData
 ): Promise<ActionResult<void>> {
+  // Mode OIDC : on se connecte chez l'émetteur, les fournisseurs de Supabase Auth ne servent pas (HN-E01S11b-12).
+  if (oidcEnabled()) return { error: PROVIDER_UNAVAILABLE }
   const parsed = oauthSignInSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return { error: PROVIDER_UNAVAILABLE }
 
+  // Sans adresse de confiance, aucun retour n'est confié au fournisseur ; `getRequestOrigin` l'a journalisé.
   const origin = await getRequestOrigin()
-  if (!origin) {
-    console.error("connexionFournisseurAction: la requête n'a pas d'hôte")
-    return { error: PROVIDER_START_FAILED }
-  }
+  if (!origin) return { error: PROVIDER_START_FAILED }
   const provider = parsed.data.fournisseur
   // Le rappel ramène à la page demandée avant la connexion (E02-S02), sinon à `/` comme avant.
   const retour = safeRedirect(parsed.data.redirect)
@@ -132,18 +132,18 @@ export async function confirmerLienAction(formData: FormData): Promise<never> {
 export async function forgotPasswordAction(
   formData: FormData
 ): Promise<ActionResult<{ message: string }>> {
-  const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData))
   // Message de succès même sur email invalide ou inconnu : l'existence d'un compte ne fuite pas.
   const confirmation = { data: { message: RESET_CONFIRMATION } }
+  // Mode OIDC : le mot de passe est celui de l'émetteur, Supabase Auth n'a rien à réinitialiser (HN-E01S11b-12).
+  if (oidcEnabled()) return confirmation
+  const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return confirmation
 
   // Le lien ramène à l'adresse d'où on le demande (E09-S02) : l'organisation y est servie, et le
-  // vérificateur PKCE, posé en cookie sur cet hôte, y attend le retour.
+  // vérificateur PKCE, posé en cookie sur cet hôte, y attend le retour. Sans adresse de confiance,
+  // aucun lien ne part, et `getRequestOrigin` l'a journalisé.
   const origin = await getRequestOrigin()
-  if (!origin) {
-    console.error("forgotPasswordAction: la requête n'a pas d'hôte")
-    return confirmation
-  }
+  if (!origin) return confirmation
   const supabase = await createClient()
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,

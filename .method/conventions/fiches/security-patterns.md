@@ -7,7 +7,7 @@ Texte complet : `.method/conventions/security-patterns.md`. La fiche suffit pour
 - Un motif Zod qui compte sur sa borne la pose en `{ abort: true }` ; un email se lit `[^@\s]+@[^@\s]+`, jamais `.+@.+`. § Validation des inputs
 - Un `.md` venu d'un autre outil passe par `splitFrontmatter` avant d'en tirer titre, résumé ou blocs : un frontmatter YAML n'est jamais du contenu. § Validation des inputs
 - Aucun `dangerouslySetInnerHTML` sans DOMPurify ; aucun `href` tiré d'une saisie non validée (URL exigée en `https://`). § XSS Prevention
-- Un lien bâti sur l'origine d'une requête passe par `webUrl` et vise l'hôte qui a résolu l'organisation ; `x-forwarded-proto` ne se lit que `http` ou `https`. § XSS Prevention
+- Un lien envoyé hors de la requête (email, retour d'un fournisseur ou de l'émetteur) ne se bâtit jamais sur un en-tête non vérifié : `trustedRequestOrigin`, ou `linkOrigin` de l'hôte qui a résolu l'identité, en `https` hors du poste local. § XSS Prevention
 - Aucun jeton CSRF dans une Server Action : derrière un proxy, `serverActions.allowedOrigins` explicite et sans joker ; un Route Handler vérifie l'origine ou une signature. § CSRF Protection
 - Le débit se limite sur un store partagé, par le dernier segment de `x-forwarded-for` ; une `Map` de module seulement en dev, commentée ; connexion 5/min/IP, inscription 3/h/IP, réinitialisation 3/h/email. § Rate Limiting
 - Une création facturable ou irréversible accepte une `idempotency_key` portée par un `UNIQUE` en base. § Idempotence et mutations concurrentes

@@ -19,9 +19,9 @@ export const invitationsRoutes: ResourceRoutes = {
       const parsed = inviteSchema.safeParse(body)
       return parsed.success ? parsed.data.email : null
     },
-    async handle({ db, identity, body, origin }) {
-      // Le lien ramène à l'adresse d'où l'on invite : le cookie de session y sera posé (N2).
-      const created = await inviteMember(db, identity, body, { redirectTo: `${origin}/auth/confirm?next=/` })
+    async handle({ db, identity, body, linkOrigin }) {
+      // Le lien ramène à l'adresse d'où l'on invite, celle qui a résolu l'organisation : le cookie de session y sera posé (N2).
+      const created = await inviteMember(db, identity, body, { redirectTo: `${linkOrigin}/auth/confirm?next=/` })
       return {
         status: 201,
         data: created,

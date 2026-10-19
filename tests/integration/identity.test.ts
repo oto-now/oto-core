@@ -5,9 +5,10 @@
 // `asCaller`, sans Supabase Auth. Sous la seule isolation (E01-S08), la base rend à chacun les lignes de
 // toutes ses organisations : la ligne `members`, les équipes et les accès de l'organisation de l'adresse
 // se choisissent dans le service. Les cas purs (hôte, origine) sont dans `tests/unit/identity.test.ts`.
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PlatformError } from "../../packages/plateforme/server/errors"
-import { orgContact, resolveIdentity } from "../../packages/plateforme/server/identity"
+import { createAnonPlatformDb } from "../../packages/plateforme/server/db"
+import { orgContact, resolveIdentity, trustedRequestOrigin } from "../../packages/plateforme/server/identity"
 import { hex } from "../helpers/plateforme"
 import { ORG, OTHER_ORG, PEOPLE, TEAMS, type Person } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
@@ -160,5 +161,21 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     const lea = dbOf(named("lea"))
     expect(await orgContact(lea, ref.org.id)).toEqual({ name: "Ada Martin", email: named("ada").email })
     expect(await orgContact(lea, ref.other.id)).toBeNull()
+  })
+
+  // L'origine des liens envoyés hors de la requête : `org_by_host` sous `anon`, comme la page de connexion.
+  it("should give a link origin, in https, only to an address of org_domains or an entry address (trustedRequestOrigin)", async () => {
+    const anon = createAnonPlatformDb()
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      const forwarded = (host: string) => new Headers({ "x-forwarded-host": host, "x-forwarded-proto": "http", host: ref.org.host })
+
+      await expect(trustedRequestOrigin(anon, forwarded(`${ref.org.host.toUpperCase()}:8443`))).resolves.toBe(`https://${ref.org.host}`)
+      await expect(trustedRequestOrigin(anon, forwarded("evil.example.invalid"))).resolves.toBeNull()
+      await expect(trustedRequestOrigin(anon, forwarded("site.example.invalid"), { entryHosts: ["site.example.invalid"] })).resolves.toBe("https://site.example.invalid")
+      expect(log).toHaveBeenCalledTimes(1)
+    } finally {
+      log.mockRestore()
+    }
   })
 })

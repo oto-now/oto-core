@@ -47,8 +47,9 @@ export {
   requestOrigin,
   resolveIdentity,
   resolveOrg,
+  trustedRequestOrigin,
 } from "./identity"
-export type { Identity, IdentityOrg, IdentityTeam, MemberProfile } from "./identity"
+export type { Identity, IdentityOrg, IdentityTeam, MemberProfile, TrustedOriginOptions } from "./identity"
 export { acceptInvitations, invitationOptions, inviteMember, listInvitations, revokeInvitation } from "./invitations"
 export type { InvitationOptions } from "./invitations"
 export { brandSettings, readBrand, updateBrand } from "./brand"

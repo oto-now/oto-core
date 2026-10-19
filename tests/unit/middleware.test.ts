@@ -175,4 +175,23 @@ describe("middleware behind a proxy", () => {
 
     expect(response.headers.get("location")).toBe("https://acme.example.test/")
   })
+
+  // L'origine de `linkOrigin` du paquet : `X-Forwarded-Proto`, qu'un proxy peut transmettre du client, n'est plus lu.
+  it("should keep https off the local machine when the proxy forwards http", async () => {
+    const response = await middleware(derriere("/n/contexte", { host: "localhost:3000", "x-forwarded-host": "acme.example.test:8443", "x-forwarded-proto": "http" }))
+
+    expect(response.headers.get("location")).toBe("https://acme.example.test/login?redirect=%2Fn%2Fcontexte")
+  })
+
+  it("should keep http and the port on the local machine", async () => {
+    const response = await middleware(new NextRequest("http://localhost:3000/n/contexte", { headers: { host: "demo.localhost:3000", "x-forwarded-proto": "https" } }))
+
+    expect(response.headers.get("location")).toBe("http://demo.localhost:3000/login?redirect=%2Fn%2Fcontexte")
+  })
+
+  it.each(["evil.example.test/@acme.example.test", "evil.example.test\\x", "acme example"])("should not build the address on a forwarded host that is not a host name (%j)", async (forged) => {
+    const response = await middleware(derriere("/n/contexte", { host: "localhost:3000", "x-forwarded-host": forged }))
+
+    expect(response.headers.get("location")).toBe("https://localhost:3000/login?redirect=%2Fn%2Fcontexte")
+  })
 })

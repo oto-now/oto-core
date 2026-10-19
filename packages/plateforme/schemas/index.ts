@@ -248,3 +248,6 @@ export type { LimitState, OrgLimits, OrgLimitsView } from "./limits"
 // E10-S02 (lot f, ADR-018) : le dépôt par lien à usage unique. Entrée d'`upload.link`, jeton, bornes, adresses.
 export { MODES_OF, UPLOAD_BYTES_MAX, UPLOAD_FORM_ROUTE, UPLOAD_KINDS, UPLOAD_MODES, UPLOAD_RULE, UPLOAD_TOKEN_PATTERN, UPLOAD_TTL_MINUTES, UPLOADS_ROUTE, uploadLinkSchema } from "./uploads"
 export type { UploadDone, UploadFormView, UploadKind, UploadLinkArgs, UploadMode } from "./uploads"
+// L'origine d'un lien vers l'hôte appelé, sans base : `https` hors du poste local, jamais `x-forwarded-proto`. Le middleware
+// de l'hôte la lit (Edge, sans la face server) ; `trustedRequestOrigin` (face server) y ajoute la confiance dans l'hôte.
+export { linkOrigin } from "./link-origin"

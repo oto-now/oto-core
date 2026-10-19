@@ -175,6 +175,21 @@ describe("handlePlateforme routes", () => {
     })
   })
 
+  // Le lien de l'email part de l'hôte qui a résolu l'identité, en https hors du poste local : un `x-forwarded-proto`
+  // transmis du client ne l'abaisse pas ; le contrôle d'`Origin`, lui, compare toujours l'origine appelée.
+  it("should keep the invitation link in https when the proxy forwards http", async () => {
+    vi.mocked(inviteMember).mockResolvedValue({
+      invitation: { id: INVITATION_ID, email: "a@x.test", role: "member" as const, teamId: null, expiresAt: "2026-10-01T00:00:00Z" },
+      emailed: true as const,
+    })
+    const req = request("POST", "invitations", { body: JSON.stringify({ email: "a@x.test" }), headers: { "x-forwarded-proto": "http", origin: `http://${HOST}` } })
+
+    const { response } = await call(req)
+
+    expect(response.status).toBe(201)
+    expect(vi.mocked(inviteMember).mock.calls[0][3]).toEqual({ redirectTo: `${ORIGIN}/auth/confirm?next=/` })
+  })
+
   it("should revoke with 200", async () => {
     vi.mocked(revokeInvitation).mockResolvedValue({ id: INVITATION_ID, state: "revoked", teamId: null })
     const { response, body } = await call(request("DELETE", `invitations/${INVITATION_ID}`))

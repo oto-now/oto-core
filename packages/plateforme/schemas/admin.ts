@@ -25,7 +25,7 @@ export const toolPrefixSchema = z
   .regex(/^[a-z][a-z0-9]{1,11}$/, "2 to 12 lowercase letters or digits, starting with a letter")
 
 /** Étiquettes DNS séparées par des points, 253 caractères au plus : le check de `org_domains.host` (H10). */
-const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
+export const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
 
 /**
  * Adresse d'une organisation : en minuscules, sans schéma, port ni chemin (H10) ; `localhost` admis.

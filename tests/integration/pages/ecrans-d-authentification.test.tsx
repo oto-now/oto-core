@@ -39,7 +39,7 @@ vi.mock("@/lib/actions/auth", () => ({
   logoutAction: vi.fn(),
 }))
 
-vi.mock("@/lib/plateforme/session", () => ({ getPlatformSession: vi.fn(), getPlatformIdentitySafely: vi.fn(), getRequestOrigin: vi.fn(async () => "https://demo.oto.test") }))
+vi.mock("@/lib/plateforme/session", () => ({ getPlatformSession: vi.fn(), getPlatformIdentitySafely: vi.fn(), getRequestOrigin: vi.fn(async () => "https://demo.oto.test"), getCalledOrigin: vi.fn(async () => "https://demo.oto.test") }))
 
 // redirect() lève NEXT_REDIRECT dans Next : le mock lève aussi, le rendu s'arrête comme en production.
 vi.mock("next/navigation", async (importOriginal) => ({
