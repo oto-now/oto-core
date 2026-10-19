@@ -115,6 +115,19 @@ describe("contextParts (E05-S12, AC-1 to AC-4)", () => {
 
 // E11-S03 (lot b, fiche D134) : plus de taille par bloc ; seul le plafond de `renderContext` coupe, et toute coupe
 // est dite (le plafond : `context-engine.test.ts`).
+describe("procedures named by their titles at the budget", () => {
+  it("should give the useful procedures a fallback that names each one by its title, under the same header", () => {
+    const procedures = proceduresText(
+      [
+        { path: "ventes/relance", title: "Relancer les devis", summary: "Relance les devis restés sans réponse depuis dix jours, un par client." },
+        { path: "support/ticket", title: "Répondre à un ticket", summary: "Répond à un ticket du support avec la FAQ et le contrat du client." },
+      ],
+      "acme",
+    )
+    expect(procedures.fallback).toBe("## Procedures you can run, most used first (2)\n- ventes/relance: Relancer les devis\n- support/ticket: Répondre à un ticket")
+  })
+})
+
 describe("whole blocks under the cap (E11-S03, AC-b1, AC-b2)", () => {
   it("should serve a 10,000-character Contexte, 60 useful procedures and 10 news whole, without pointer nor notice, every report line full", () => {
     const long = Array.from({ length: 200 }, (_, index) => `Règle ${index} de l'organisation, relue chaque trimestre.`).join("\n").slice(0, 10_000)

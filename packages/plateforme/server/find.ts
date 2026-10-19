@@ -18,7 +18,7 @@ import { inTransaction } from "./errors"
 import type { Identity } from "./identity"
 import { clip, cut, MAX_TARGET_CHARS } from "./journal"
 import { FUNCTIONS_PATH } from "./reserved-paths"
-import { formatScore, roundScore } from "./routing"
+import { formatScore, rankCandidates, requestKind, roundScore, type Candidate } from "./routing"
 import type { ToolOutput } from "./tool-output"
 
 /** Nœuds servis en détail et fonctions servies au plus : la description de `find` le promet (N13). */
@@ -35,6 +35,10 @@ const OTHER_LINE_MAX = 160
 const SEARCH_ROWS = 50
 /** Un rang de `search_content` est dans [0, 3] (titre, résumé, bloc) ; le score d'un nœud, dans [0, 1]. */
 const RANK_SPAN = 3
+/** Une procédure, pour une demande d'action, de méthode ou une formule de demande : elle dit comment faire. */
+const PROCEDURE_BONUS = 0.05
+/** Les genres classés par le routage quand `type` n'en choisit pas : tous ceux que `find` sert. */
+const ALL_KINDS = ["procedure", "page", "table", "context"]
 
 export type FindType = "procedure" | "page" | "table" | "function"
 
@@ -93,11 +97,10 @@ function placeOf(row: SearchRow): Place {
 }
 
 /**
- * Les lignes regroupées par nœud (N11) : trois nœuds servis en détail, dans l'ordre de leur première ligne,
- * chacun avec ses emplacements dans l'ordre des lignes et son score (meilleur rang / 3, N13), les dix suivants
- * (`others`), et le nombre des nœuds vus au-delà des trois premiers. Sur les lignes que le filtre de niveau a gardées (HN-E01S07-8).
+ * Les lignes regroupées par nœud (N11), dans l'ordre de leur première ligne, chacun avec ses emplacements dans l'ordre
+ * des lignes et son score (meilleur rang / 3, N13). Sur les lignes que le filtre de niveau a gardées (HN-E01S07-8).
  */
-function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; others: NodeMatch[]; moreNodes: number } {
+function groupMatches(rows: readonly SearchRow[]): NodeMatch[] {
   const byNode = new Map<string, NodeMatch>()
   for (const row of rows) {
     const found = byNode.get(row.node_id)
@@ -107,9 +110,33 @@ function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; others:
     if (row.block_total != null) node.blocksTotal = row.block_total
     if (!found) byNode.set(row.node_id, node)
   }
+  return [...byNode.values()]
+}
+
+/**
+ * Le classement de `find`, celui de `context` (E11-S04) : le score de routage d'un nœud (titre et résumé, lexèmes et
+ * trigrammes, bonus d'équipe et d'usage, `rankCandidates`), ou celui de `search_content` s'il est meilleur (un nœud trouvé
+ * par ses seuls blocs y vaut peu : la case à cocher d'une page cliente ne passe plus devant la procédure dont le titre et
+ * le résumé répondent) ; une procédure, pour une demande d'action, gagne `PROCEDURE_BONUS`.
+ * Un nœud que seul le routage trouve entre sans emplacement. Trois en détail, les dix suivants (`others`), et le
+ * nombre des nœuds vus au-delà des trois premiers. Sans lui, la procédure que `context` mettait en tête manquait au
+ * `find` de la même phrase.
+ */
+function rankNodes(found: readonly NodeMatch[], candidates: readonly Candidate[], query: string): { nodes: NodeMatch[]; others: NodeMatch[]; moreNodes: number } {
+  const action = requestKind(query) !== "data"
+  const byNode = new Map(found.map((node) => [node.nodeId, { ...node }]))
+  for (const candidate of candidates) {
+    const node = byNode.get(candidate.nodeId)
+    if (node) node.score = Math.max(node.score, candidate.score)
+    else byNode.set(candidate.nodeId, { nodeId: candidate.nodeId, path: candidate.path, kind: candidate.kind, title: candidate.title, summary: candidate.summary, score: candidate.score, places: [] })
+  }
   const nodes = [...byNode.values()]
+    .map((node) => (action && node.kind === "procedure" ? { ...node, score: Math.min(1, node.score + PROCEDURE_BONUS) } : node))
+    .sort((a, b) => b.score - a.score || byPathOf(a, b))
   return { nodes: nodes.slice(0, FIND_LIMIT), others: nodes.slice(FIND_LIMIT, FIND_LIMIT + OTHERS_MAX), moreNodes: Math.max(0, nodes.length - FIND_LIMIT) }
 }
+
+const byPathOf = (a: { path: string }, b: { path: string }) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
 
 /** Première phrase d'une description : jusqu'au premier point suivi d'une espace ou de la fin, point final redit. */
 export function firstSentence(description: string): string {
@@ -183,8 +210,8 @@ function nodeLines(node: NodeMatch, index: number, prefix: string): string[] {
   return [`${index + 1}. ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${title}. ${summary}`, ...blocks, ...hidden, ...edit]
 }
 
-/** Un nœud suivant en une ligne : chemin, genre, score, titre et début du résumé. */
-function otherLine(node: NodeMatch): string {
+/** Un nœud en une ligne : chemin, genre, score, titre et début du résumé ; les suivants de `find`, les contenus proches de `context`. */
+export function otherLine(node: Pick<NodeMatch, "path" | "kind" | "title" | "summary" | "score">): string {
   return `- ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${cut(`${oneLine(node.title)}. ${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
 }
 
@@ -308,8 +335,17 @@ export async function find(
 ): Promise<ToolOutput> {
   const { query, type } = input
   const prefix = identity.org.prefix
-  const readable = type === "function" ? null : await readableRows(db, identity, query, type)
-  const { nodes, others, moreNodes } = readable === null ? { nodes: [], others: [], moreNodes: 0 } : groupMatches(readable.rows)
+  const [readable, candidates] = await Promise.all([
+    type === "function" ? null : readableRows(db, identity, query, type),
+    // Le classement du routage ne fait qu'ordonner : sa panne laisse `find` à ses seules lignes.
+    type === "function"
+      ? []
+      : rankCandidates(db, identity, { query, limit: SEARCH_ROWS, kinds: type === undefined ? ALL_KINDS : KINDS[type] }).catch((error: unknown) => {
+          console.error("[platform] find: routing rank failed", error)
+          return []
+        }),
+  ])
+  const { nodes, others, moreNodes } = readable === null ? { nodes: [], others: [], moreNodes: 0 } : rankNodes(groupMatches(readable.rows), candidates, query)
   if (readable) await withSections(db, identity, nodes, readable.levels)
   const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
   const functions = type === undefined || type === "function" ? matchFunctions(active, query) : []

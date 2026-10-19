@@ -61,6 +61,25 @@ describe("renderContext (AC21)", () => {
     expect(BLOCKS[2].text.startsWith(kept)).toBe(true)
   })
 
+  it("should share the budget by priority, keep the display order, and name a list by its fallback rather than cut it", () => {
+    const parts = [
+      { name: "code", text: "## Code\nrules", priority: 0 },
+      { name: "ventes/contexte", text: `## Context: team Ventes\n${"v".repeat(600)}`, priority: 10 },
+      { name: "support/contexte", text: `## Context: team Support\n${"s".repeat(600)}`, priority: 11 },
+      { name: "procedures", text: `## Procedures\n${"- p: un long résumé\n".repeat(60)}`, fallback: "## Procedures\n- p: P", priority: 3 },
+    ]
+    const { text, report } = renderContext(parts, 1200, "acme")
+    // Les procédures, affichées en dernier, passent avant les Contextes : nommées par leurs titres, le dernier Contexte coupé.
+    expect(report.map(({ name, status }) => [name, status])).toEqual([
+      ["code", "full"],
+      ["ventes/contexte", "full"],
+      ["support/contexte", "cut"],
+      ["procedures", "replaced"],
+    ])
+    expect(text.indexOf("## Context: team Ventes")).toBeLessThan(text.indexOf("## Procedures\n- p: P"))
+    expect(text).toContain("Omitted: support/contexte (cut).")
+  })
+
   it("should name a block that does not fit at all without (cut)", () => {
     const blocks = [BLOCKS[0], { name: "procedures", text: "x".repeat(2000) }, BLOCKS[4]]
     const { text } = renderContext(blocks, 1000, "acme")
@@ -251,7 +270,7 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
     const assembly = { phrase: "relance les devis en attente", code: "AAAA-BBBB", since: new Date(Date.now() - 14 * 86_400_000).toISOString() }
     const full = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget: CONTEXT_BUDGET })
     expect(full.report.map(({ name, status }) => [name, status])).toEqual(
-      ["code", "procedure", "contexte", "private/claire/contexte", "ventes/contexte", "news", "procedures", "recent content"].map((name) => [name, "full"]),
+      ["code", "procedure", "related", "contexte", "private/claire/contexte", "ventes/contexte", "news", "procedures", "recent content"].map((name) => [name, "full"]),
     )
     expect(full.text.length).toBeLessThanOrEqual(CONTEXT_BUDGET)
 
@@ -272,5 +291,18 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
     expect(cut.report.at(-1)?.status).toBe("omitted")
     const named = cut.report.filter((block) => block.status !== "full").map((block) => (block.status === "cut" ? `${block.name} (cut)` : block.name))
     expect(cut.text.endsWith(`\n\n[Context budget reached. Omitted: ${named.join(", ")}. Use ${ref.org.prefix}_find or ${ref.org.prefix}_read for more.]`)).toBe(true)
+  })
+
+  // Les contenus proches : une page dont le titre porte la demande paraît sous la procédure servie, avec son score ; sans
+  // phrase, aucun bloc.
+  it("should list the pages and tables close to the request, by title and summary, and none without a phrase", async () => {
+    const ref = await everyBlockRef()
+    const db = await ref.db("claire")
+    const assembly = { code: "AAAA-BBBB", since: null, budget: CONTEXT_BUDGET }
+    const asked = await assembleContext(db, ref.identityOf("claire"), { ...assembly, phrase: "grille tarifaire" })
+    expect(asked.text).toMatch(/\n\n## Pages and tables close to the request\n- conseil\/grille_tarifaire_2026 \(page, score \d\.\d\d\): Grille tarifaire 2026\./)
+    expect(asked.report.map(({ name }) => name)).toContain("related")
+    const none = await assembleContext(db, ref.identityOf("claire"), assembly)
+    expect(none.text).not.toContain("## Pages and tables close to the request")
   })
 })

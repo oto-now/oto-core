@@ -94,7 +94,7 @@ describe("the parts of the « Contexte » view as read-only cards in French (AC-
     ...Array.from({ length: 12 }, (_, rang) => `- Rule ${rang + 1}.`),
   ]
   const PROCEDURES = [
-    "## Procedures you can run (62)",
+    "## Procedures you can run, most used first (62)",
     ...Array.from({ length: 60 }, (_, rang) => `- ventes/p${String(rang).padStart(2, "0")}: Demandez la procédure ${rang}.`),
     "… and 2 more: find them with demo_find, type procedure.",
   ]

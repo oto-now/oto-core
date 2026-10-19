@@ -126,6 +126,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A procedure may now hold 12,000 characters (8,000 before).
 - Without a matching procedure, `<p>_context` proposes a function only when it shares at least two words with the request.
 - `<p>_find` shows the next matches after the first three, one line each, so you can read a better one.
+- `<p>_find` now ranks like `<p>_context`: the procedure that `<p>_context` serves for a request comes first in `<p>_find` for the same words.
+- With a request, `<p>_context` lists the pages and tables close to it; at its size limit, useful procedures are named by their titles rather than dropped.
 
 ### Hosts
 - Install: upgrade to 1.4.10; no migration, no new variable, no import to change. Published from 1.4.9, without what main carries for 1.5.0.
@@ -133,6 +135,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - MCP: the description of `<p>_context` and the served rule say to call it again with `since_ctx` for each new request, instead of « once per conversation »; refresh the tool list in your hosts.
 - UI: the « + » and the handle of a toggle face its summary line, like a Texte; they sat 5 px lower than its chevron.
 - UI: under 1,024 px the rail is a drawer opened by « Menu », with its words; the icon-only rail (56 px, between 768 and 1,024 px) is gone. The « Menu » button sits on the first line of the screen header (breadcrumb or title) instead of a row of its own.
+- MCP: `<p>_context` shares its 35,000-character budget by priority (rules and routing, served procedure, close contents, useful procedures, then Contextes, then news and recent content), the text keeping its order; the useful procedures block is titled « Procedures you can run, most used first » and falls back to titles only; a new block « Pages and tables close to the request » follows the served procedure when a phrase is given. `<p>_find` ranks nodes by the routing score of `<p>_context` (title and summary), or its search score when better.
 - MCP: `<p>_find` lists the next matches after the first three, one line each (path, kind, score, title, start of summary), and serves them as `others`; refresh the tool list in your hosts.
 
 ## 1.4.9 — 2026-10-15

@@ -40,6 +40,7 @@ import { recentBlock } from "./blocks/recent"
 import { teamFacts } from "./blocks/team"
 import { CONTEXT_BUDGET, daysAgo, renderContext, type BlockReport, type ContextBlock } from "./engine"
 import { routingHints } from "./hints"
+import { RELATED_KINDS, RELATED_MAX, relatedBlock } from "./blocks/related"
 
 /** Ce que le routage a trouvé ; `candidates` nul : le routage n'a pas abouti (AC18, N30). */
 type Routing = {
@@ -50,9 +51,18 @@ type Routing = {
   procedure: { block: ContextBlock; revision: number } | null
   /** Seuil et écart de l'organisation, dits sans procédure servie (E11-S19, AC-d1) ; `null` sans phrase. */
   settings: RoutingSettings | null
+  /** Les pages et tableaux proches de la phrase (`relatedBlock`) ; aucun sans phrase ou en panne. */
+  related: Candidate[]
 }
 
-const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, procedure: null, settings: null }
+const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, procedure: null, settings: null, related: [] }
+
+/**
+ * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
+ * routage, la procédure servie, les contenus proches et les procédures utiles passent avant les Contextes, puis les
+ * nouveautés et les contenus récents. Sans elle, onze Contextes d'équipe faisaient couper les procédures, affichées après.
+ */
+const PRIORITY = { code: 0, procedure: 1, related: 2, procedures: 3, contexts: 10, news: 100, recent: 101 } as const
 
 /** Sans conversation antérieure, les nouveautés remontent à 14 jours (H34). */
 const NEWS_WINDOW_DAYS = 14
@@ -67,12 +77,17 @@ const PREVIEW_CODE = "XXXX-XXXX"
  * ni étape ni candidat, la ligne de panne (N30), plutôt que des candidats entre lesquels faire choisir.
  */
 async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): Promise<Routing> {
-  const [candidates, settings] = await Promise.all([
+  const [candidates, settings, related] = await Promise.all([
     rankCandidates(db, identity, { query: phrase, limit: CANDIDATES_SHOWN }).catch((error: unknown) => {
       console.error("[platform] context: routing failed", error)
       return null
     }),
     loadRoutingSettings(db, identity.org.id),
+    // Les contenus proches ne font qu'aider : leur panne ne prive que d'eux.
+    rankCandidates(db, identity, { query: phrase, limit: RELATED_MAX, kinds: RELATED_KINDS }).catch((error: unknown) => {
+      console.error("[platform] context: related contents failed", error)
+      return []
+    }),
   ])
   const decided = candidates ? decide(candidates, settings) : null
   const procedure = decided
@@ -81,8 +96,8 @@ async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): 
         return null
       })
     : null
-  if (decided && !procedure) return { candidates: null, served: null, kind: requestKind(phrase), procedure: null, settings }
-  return { candidates, served: decided, kind: requestKind(phrase), procedure, settings }
+  if (decided && !procedure) return { candidates: null, served: null, kind: requestKind(phrase), procedure: null, settings, related }
+  return { candidates, served: decided, kind: requestKind(phrase), procedure, settings, related }
 }
 
 /** Données en champs (H26) : la procédure servie, les candidats montrés, scores à deux décimales. */
@@ -119,6 +134,11 @@ async function newsSince(db: PlatformDb, identity: Identity): Promise<string | n
     console.error("[platform] context: previous ctx read failed", error)
     return null
   }
+}
+
+/** Le bloc avec sa priorité dans le budget, ou rien quand il n'y en a pas. */
+function withPriority(block: ContextBlock | null, priority: number): ContextBlock[] {
+  return block === null ? [] : [{ ...block, priority }]
 }
 
 /** Un bloc dynamique dont la lecture échoue est omis (AC13, N13) : le `ctx` sert encore `read` et `feedback`. */
@@ -167,13 +187,17 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
   const { candidates, served, kind, procedure, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
   const hints = phrase !== undefined && served === null ? await routingHints(db, identity, phrase) : undefined
+  const prefix = identity.org.prefix
   const blocks = [
-    codeBlock({ prefix: identity.org.prefix, code, phrase, candidates, served, kind, settings, hints }),
-    ...(procedure ? [procedure.block] : []),
-    ...contextParts(identity, facts, bodies),
-    ...[news, procedures, recent].filter((block) => block !== null),
+    { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints }), priority: PRIORITY.code },
+    ...(procedure ? [{ ...procedure.block, priority: PRIORITY.procedure }] : []),
+    ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
+    ...contextParts(identity, facts, bodies).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
+    ...withPriority(news, PRIORITY.news),
+    ...withPriority(procedures, PRIORITY.procedures),
+    ...withPriority(recent, PRIORITY.recent),
   ]
-  return { code, routing, phrase, ...renderContext(blocks, assembly.budget, identity.org.prefix) }
+  return { code, routing, phrase, ...renderContext(blocks, assembly.budget, prefix) }
 }
 
 /**
@@ -210,7 +234,7 @@ async function lightContext(
   const { candidates, kind, settings } = routing
   const hints = phrase !== undefined && routing.served === null ? await routingHints(db, identity, phrase) : undefined
   const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed }, hints })
-  const blocks = [code, ...(routing.procedure ? [routing.procedure.block] : []), ...parts]
+  const blocks = [code, ...(routing.procedure ? [routing.procedure.block] : []), ...withPriority(relatedBlock(routing.related, identity.org.prefix), PRIORITY.related), ...parts]
   return {
     text: renderContext(blocks, CONTEXT_BUDGET, identity.org.prefix).text,
     data: { ctx: issued.code, ...routingData(routing) },

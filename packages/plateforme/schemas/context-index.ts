@@ -32,11 +32,12 @@ export const CONTEXT_INDEX = {
 } as const
 
 /**
- * Le bloc des procédures utiles : `## Procedures you can run (<n>)`, puis `- <chemin>: <résumé>` par procédure, ou
- * `None published yet.` ; `… and <k> more: find them with <p>_find, type procedure.` quand toutes ne sont pas listées.
+ * Le bloc des procédures utiles : `## Procedures you can run, most used first (<n>)`, puis `- <chemin>: <résumé>` par
+ * procédure, ou `None published yet.` ; `… and <k> more: find them with <p>_find, type procedure.` quand toutes ne sont
+ * pas listées. Le titre dit l'ordre (usage de la personne et de ses équipes sur 90 jours) : l'agent ne le savait pas.
  */
 export const SERVED_PROCEDURES = {
-  title: "## Procedures you can run",
+  title: "## Procedures you can run, most used first",
   item: "- ",
   separator: ": ",
   none: "None published yet.",
@@ -84,4 +85,14 @@ export const SERVED_BUDGET = {
   /** Les derniers noms comptés : `<noms> and <k> more`. */
   moreStart: " and ",
   moreEnd: " more",
+} as const
+
+/**
+ * Le bloc des contenus proches de la demande : `## Pages and tables close to the request`, puis
+ * `- <chemin> (<genre>, score <s>): <titre>. <résumé>` par contenu, classés comme les procédures par leur titre et leur
+ * résumé, puis la consigne de lecture. Sans lui, `context` ne montrait que des procédures, jamais la page qui répond.
+ */
+export const SERVED_RELATED = {
+  title: "## Pages and tables close to the request",
+  item: "- ",
 } as const

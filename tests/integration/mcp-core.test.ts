@@ -164,7 +164,7 @@ describe.skipIf(!sqlConfigured)(
         ].join("\n")
         // E03-S08 : puis le contexte dynamique ; l'organisation du test n'a ni Contexte publié, ni procédure, ni document.
         expect(opened.text.startsWith(`${opening}\n\n## What's new since `)).toBe(true)
-        expect(opened.text.slice(opening.length)).toMatch(/^\n\n## What's new since \d{4}-\d{2}-\d{2}\nNothing new\.\n\n## Procedures you can run \(0\)\nNone published yet\.$/)
+        expect(opened.text.slice(opening.length)).toMatch(/^\n\n## What's new since \d{4}-\d{2}-\d{2}\nNothing new\.\n\n## Procedures you can run, most used first \(0\)\nNone published yet\.$/)
         expect(opened.text.length).toBeLessThanOrEqual(20_000)
         expect(opened.result.structuredContent).toEqual({
           ctx: opened.code,
