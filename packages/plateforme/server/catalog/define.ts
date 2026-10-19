@@ -22,6 +22,11 @@ export type FunctionClass = "read" | "write" | "sensitive"
 export type FunctionOrigin = "paquet" | "erp" | "connecteur"
 
 export type FunctionContext = {
+  /**
+   * La porte d'un assistant quand l'hôte déclare des personnes : un texte pseudonymisé comme l'assistant le lit. Un
+   * filtre de `table.*` qui porte un jeton compare les cellules ainsi (`filters.ts`).
+   */
+  pseudonymized?: (text: string) => string
   db: PlatformDb
   identity: Identity
   /** Jeton vérifié de l'appelant (E08-S05, NH4), posé pour une fonction de l'ERP seule (NH19) : elle construit sur lui son client de l'ERP. */

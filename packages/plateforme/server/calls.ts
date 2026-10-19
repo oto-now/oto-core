@@ -27,6 +27,7 @@ import { memberDirectory } from "./directory"
 import { issuesText, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import type { Dictionary } from "./pseudonym/dictionary"
+import { pseudonymizedText } from "./pseudonym/gate"
 import { resolvedCallArguments } from "./pseudonym/inputs"
 import type { ToolOutput } from "./tool-output"
 
@@ -231,6 +232,9 @@ function markOutcome(credential: AccountCredential | undefined): Record<string, 
   return effect ? { [MARK_OUTCOMES[effect]]: 1 } : {}
 }
 
+/** Le texte tel que l'assistant le lit, sous le dictionnaire de la requête. */
+const pseudonymizerOf = (dictionary: Dictionary) => (text: string): string => pseudonymizedText(dictionary, text)
+
 /**
  * `call` : fonction, activation, arguments, équipe, compte, puis récapitulatif (sensible sans
  * `confirm`) ou exécution. Chaque refus est levé tel que le service qui le décide l'a écrit ; `trace`
@@ -272,6 +276,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     host: deps.ctxHost ?? null,
     origin: deps.origin,
     accessToken: fn.origin === "erp" ? deps.accessToken : undefined,
+    ...(deps.dictionary ? { pseudonymized: pseudonymizerOf(deps.dictionary) } : {}),
   }
   const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId, lentBy: trace.lentBy, personal: trace.personal }
   if (fn.class === "sensitive" && input.confirm !== true) {

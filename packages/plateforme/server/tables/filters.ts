@@ -23,6 +23,7 @@ import {
 } from "../../schemas"
 import { isRecord } from "../../schemas/tables"
 import { boundedList } from "../errors"
+import { hasToken } from "../pseudonym/arguments"
 import { columnOf } from "./header"
 import { instantOf, isValidDate, valueProblem } from "./meta"
 
@@ -34,7 +35,11 @@ type Compared =
   | { kind: "instant"; value: number }
   | { kind: "bool"; value: boolean }
 
-export type FilterClause = { column: TableColumn; op: FilterOperator; values: Compared[] }
+/**
+ * `masked` : quand une valeur de la clause porte un jeton (pseudonymisation), la cellule se compare pseudonymisée, dans
+ * l'espace où l'assistant l'a lue (« ⟦client:…⟧ » égale « Camille Dupré »).
+ */
+export type FilterClause = { column: TableColumn; op: FilterOperator; values: Compared[]; masked?: (text: string) => string }
 
 const TEXT_TYPES: readonly ColumnType[] = ["text", "email", "url", "enum"]
 const ORDERED_TYPES: readonly ColumnType[] = ["number", "date", "datetime"]
@@ -71,9 +76,9 @@ export function unknownColumns(header: TableHeader, names: readonly string[]): s
   return [...new Set(names.filter((name) => !columnOf(header, name)))]
 }
 
-/** La valeur comparable d'une cellule ; `null` pour une valeur hors type (semée par la clé service). */
-export function comparedCell(column: TableColumn, cell: CellValue): Compared | null {
-  if (TEXT_TYPES.includes(column.type)) return typeof cell === "string" ? { kind: "text", value: normalizeTitle(cell) } : null
+/** La valeur comparable d'une cellule, pseudonymisée par `masked` s'il est donné ; `null` pour une valeur hors type (semée par la clé service). */
+export function comparedCell(column: TableColumn, cell: CellValue, masked?: (text: string) => string): Compared | null {
+  if (TEXT_TYPES.includes(column.type)) return typeof cell === "string" ? { kind: "text", value: normalizeTitle(masked ? masked(cell) : cell) } : null
   if (column.type === "number") return typeof cell === "number" ? { kind: "number", value: cell } : null
   if (column.type === "bool") return typeof cell === "boolean" ? { kind: "bool", value: cell } : null
   if (column.type === "date") return typeof cell === "string" && isValidDate(cell) ? { kind: "date", value: cell } : null
@@ -151,7 +156,7 @@ function checkClause(raw: RawClause): FilterClause | string[] {
  * inconnue, `null`, opérateur inconnu ou d'un autre type, valeur mal typée, `in` vide, plus de 30
  * clauses). Reçoit l'entrée brute : une vue rangée en base (E07-S03) n'est passée par aucun schéma.
  */
-export function parseFilter(filter: unknown, header: TableHeader): { clauses: FilterClause[] } | { problems: string[] } {
+export function parseFilter(filter: unknown, header: TableHeader, masked?: (text: string) => string): { clauses: FilterClause[] } | { problems: string[] } {
   if (filter === undefined) return { clauses: [] }
   if (!isRecord(filter)) return { problems: ['filter: expected an object, e.g. {"ville": "Valbrune"}.'] }
   const unknown = unknownColumns(header, Object.keys(filter))
@@ -164,7 +169,7 @@ export function parseFilter(filter: unknown, header: TableHeader): { clauses: Fi
   const clauses: FilterClause[] = []
   for (const checked of raw.map(checkClause)) {
     if (Array.isArray(checked)) problems.push(...checked)
-    else clauses.push(checked)
+    else clauses.push(masked && checked.values.some((value) => value.kind === "text" && hasToken(value.value)) ? { ...checked, masked } : checked)
   }
   return problems.length > 0 ? { problems: [...new Set(problems)] } : { clauses }
 }
@@ -183,7 +188,7 @@ function matchesClause(cells: ReadonlyMap<string, CellValue>, clause: FilterClau
   const cell = cells.get(clause.column.name)
   if (clause.op === "empty") return cell === undefined
   if (clause.op === "not_empty") return cell !== undefined
-  const typed = cell === undefined ? null : comparedCell(clause.column, cell)
+  const typed = cell === undefined ? null : comparedCell(clause.column, cell, clause.masked)
   const [first] = clause.values
   switch (clause.op) {
     case "ne":

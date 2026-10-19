@@ -118,7 +118,8 @@ const SERVICES: { [K in ToolKey]: Service<K> } = {
   call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate }, input, ctx) =>
     runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: gate?.dictionary }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
-  write: ({ db, identity }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null }),
+  // `places` : `find` de `replace_text` qui porte un jeton se cherche dans le texte pseudonymisé (pseudonymisation).
+  write: ({ db, identity, gate }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null, ...(gate ? { places: gate.places } : {}) }),
   // `ctx` est toujours validé ici : la garde précède tout outil autre que `context`.
   feedback: ({ db, identity }, input, ctx) => recordFeedback(db, identity, input, ctx?.code ?? null),
 }

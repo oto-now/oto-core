@@ -11,7 +11,7 @@ import type { Identity } from "../../packages/plateforme/server/identity"
 import { checkTokens, designatedText, pathCandidates, refuseTokens, withEntityIds } from "../../packages/plateforme/server/pseudonym/arguments"
 import { registerSensitiveEntities, type SensitiveEntity, type SensitiveKind } from "../../packages/plateforme/server/pseudonym/declaration"
 import { buildDictionary, type Dictionary } from "../../packages/plateforme/server/pseudonym/dictionary"
-import { pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
+import { pseudonymizedPlaces, pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
 import { resolvedCallArguments } from "../../packages/plateforme/server/pseudonym/inputs"
 import { forgetDictionaries } from "../../packages/plateforme/server/pseudonym/service"
 import { HMAC_BODY_SOURCE, orgKey, token, tokenSource } from "../../packages/plateforme/server/pseudonym/token"
@@ -91,6 +91,16 @@ describe("the tokens in the arguments, on a dictionary in memory", () => {
     expect(await refusal(() => refuseTokens(dictionary, "mail.create_draft", { to: "x@y.test", body: `Pour ${camille}` }))).toBe("forbidden pseudonym_not_accepted")
     expect(await refusal(() => refuseTokens(dictionary, "mail.create_draft", { body: `Pour ${shared}` }))).toBe("forbidden pseudonym_not_accepted")
     expect(() => refuseTokens(dictionary, "mail.create_draft", { to: "camille@acme.test", body: "Pour Camille Dupré" })).not.toThrow()
+  })
+
+  it("should map a place of the pseudonymized text back to the clear text, and none strictly inside a token", () => {
+    const clear = "Écrire à Camille Dupré, puis à C. Dupré."
+    const places = pseudonymizedPlaces(dictionary, clear)
+    expect(places.text).toBe(`Écrire à ${camille}, puis à ${camille}.`)
+    const second = places.text.lastIndexOf(camille)
+    expect([places.clearAt(0), places.clearAt(9), places.clearAt(9 + camille.length), places.clearAt(second), places.clearAt(second + camille.length)]).toEqual([0, 9, 22, 31, 39])
+    expect(places.clearAt(10)).toBeNull()
+    expect(clear.slice(places.clearAt(second) ?? 0, places.clearAt(places.text.length) ?? 0)).toBe("C. Dupré.")
   })
 
   it("should resolve the path arguments of a native function to the path that exists, else to prenoms_nom", async () => {
@@ -179,6 +189,44 @@ describe.skipIf(!sqlConfigured)(portable("the tokens in the arguments, through M
     const [row] = await seed.admin<{ text: string }[]>`
       select b.text from platform.blocks b join platform.nodes n on n.id = b.node_id where n.org_id = ${ref.org.id} and n.path = 'ventes/jean_morin'`
     expect(row?.text).toBe(`Rappeler ${jean}.`)
+  })
+
+  it("should replace in clear the text that replace_text finds with a token, whatever form the page gives the name", async () => {
+    const { run, camille } = await session()
+    const created = await run("write", { path: "ventes/note", kind: "page", title: "Note", summary: "Une note.", ops: [{ op: "set_markdown", text: "Appeler Camille Dupré au sujet du devis. Puis écrire à C. Dupré." }], publish: true })
+    expect(created.isError).toBe(false)
+    const replaced = await run("write", { path: "ventes/note", base_revision: 1, ops: [{ op: "replace_text", find: `${camille} au sujet`, text: "la cliente au sujet" }], publish: true })
+    expect([replaced.isError, replaced.text]).toEqual([false, expect.stringContaining("replaced 1 occurrence")])
+    const again = await run("write", { path: "ventes/note", base_revision: 2, ops: [{ op: "replace_text", find: `à ${camille}.`, text: "à elle." }], publish: true })
+    expect(again.isError).toBe(false)
+    const [row] = await seed.admin<{ text: string }[]>`
+      select b.text from platform.blocks b join platform.nodes n on n.id = b.node_id
+       where n.org_id = ${ref.org.id} and n.path = 'ventes/note' and b.state = 'published' and b.type = 'paragraph'`
+    expect(row?.text).toBe("Appeler la cliente au sujet du devis. Puis écrire à elle.")
+  })
+
+  it("should compare a table's filters and keys with tokens in the pseudonymized space, and keep a token in a new cell", async () => {
+    const { run, camille, jean } = await session()
+    const header = { columns: [{ name: "nom", type: "text", required: true }, { name: "ville", type: "text" }, { name: "contact", type: "text" }], key: "nom" }
+    expect((await run("write", { path: "ventes/suivi", kind: "table", title: "Suivi", summary: "Le suivi des clients.", header, publish: true })).isError).toBe(false)
+    const rows = [{ key: "Camille Dupré", set: { ville: "Lyon", contact: "Camille Dupré" } }, { key: "Jean Morin", set: { ville: "Nantes", contact: "M. Jean Morin" } }]
+    expect((await run("call", { function: "table.write", arguments: { table: "ventes/suivi", rows } })).isError).toBe(false)
+    const equal = await run("call", { function: "table.rows", arguments: { table: "ventes/suivi", filter: { contact: camille } } })
+    expect([equal.text.includes("Lyon"), equal.text.includes("Nantes")]).toEqual([true, false])
+    const contains = await run("call", { function: "table.rows", arguments: { table: "ventes/suivi", filter: { contact: { contains: jean } } } })
+    expect([contains.text.includes("Lyon"), contains.text.includes("Nantes")]).toEqual([false, true])
+    const searched = await run("call", { function: "table.rows", arguments: { table: "ventes/suivi", q: jean } })
+    expect([searched.text.includes("Lyon"), searched.text.includes("Nantes")]).toEqual([false, true])
+    // La clé reçue en jeton désigne la ligne existante ; une cellule neuve garde le jeton.
+    const updated = await run("call", { function: "table.write", arguments: { table: "ventes/suivi", rows: [{ key: camille, set: { ville: "Paris", contact: `${camille} (rappel)` } }] } })
+    expect(updated.isError).toBe(false)
+    const stored = await seed.admin<{ key: string; data: { ville?: string; contact?: string } }[]>`
+      select b.key, b.data from platform.blocks b join platform.nodes n on n.id = b.node_id
+       where n.org_id = ${ref.org.id} and n.path = 'ventes/suivi' and b.type = 'row' order by b.key`
+    expect(stored.map((row) => [row.key, row.data.ville, row.data.contact])).toEqual([
+      ["Camille Dupré", "Paris", `${camille} (rappel)`],
+      ["Jean Morin", "Nantes", "M. Jean Morin"],
+    ])
   })
 
   it("should refuse an unknown token, give a host function the id, and refuse a token toward a connector", async () => {

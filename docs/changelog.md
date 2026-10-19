@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-19] — Pseudonymisation : les jetons dans les arguments (J2, fin)
+**Quoi :** `find` de `replace_text` qui porte un jeton se cherche dans le markdown pseudonymisé, puis la coupe revient au texte en clair par une table de places (`pseudonymizedPlaces`) ; un filtre de `table.*` qui porte un jeton compare les cellules pseudonymisées ; une clé de ligne en jeton devient la clé en clair de la ligne qui la redonne ; `q` d'un tableau reçoit « prénoms nom ». Le README garde un avertissement : le nom seul reste en clair.
+**Pourquoi :** Dernière partie des jetons dans les arguments (§ Les jetons dans les arguments) : sans elle, l'assistant ne pouvait ni corriger un texte qui nomme une personne, ni filtrer un tableau par une personne.
+**Problèmes :** `replace_text` supposait chaque occurrence de la longueur de `find` ; il travaille désormais sur des étendues en clair, dont la longueur varie avec la forme du nom (« Camille Dupré », « C. Dupré »). Un `replace_text` par `write_many` ne reçoit pas la porte : un jeton n'y trouve rien.
+**Fichiers :** `packages/plateforme/server/pseudonym/{gate,service,inputs}.ts`, `server/nodes/{replace-text,op-kit,ops,write,write-result}.ts`, `server/tables/{filters,rows,aggregate,claim}.ts`, `server/catalog/define.ts`, `server/calls.ts`, `mcp/server.ts`, `tests/unit/pseudonymisation-arguments.test.ts`, docs.
+
 ## [2026-10-19] — Pseudonymisation : les jetons dans les arguments (J2, première partie)
 **Quoi :** Un jeton que l'assistant recopie se résout avant le schéma de l'outil ou de la fonction : un chemin (`read`, `write`, arguments de chemin d'une fonction native) essaie les formes en chemin de l'entité contre les nœuds et les anciens chemins, la première qui existe l'emportant, sinon `prenoms_nom` ; la requête de `find` et la phrase de `context` reçoivent « prénoms nom » ; `entityArguments` de `defineErpFunction` fait d'un jeton l'identifiant ; une fonction de connecteur refuse tout jeton (`forbidden`, `pseudonym_not_accepted`). Un jeton inconnu est refusé (`unknown_pseudonym`), un jeton à sens unique aussi là où il faut une personne (`one_way_pseudonym`). L'enveloppe du jeton est une seule constante (`TOKEN_ENVELOPE`) ; les tests passent sous `‹client:…›` et `client#…`.
 **Pourquoi :** Sans eux, l'assistant recevait des jetons qu'il ne pouvait employer nulle part. Le format du jeton se tranchera sur le banc de fidélité : le changer ne touche qu'une constante.

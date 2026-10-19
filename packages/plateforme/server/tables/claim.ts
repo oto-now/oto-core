@@ -111,8 +111,8 @@ async function take(db: PlatformDb, row: StoredRow, claim: Claim): Promise<Store
   }, { skipLocked: true })
 }
 
-function filterClauses(table: LoadedTable, args: TableClaimArgs): FilterClause[] {
-  const filter = parseFilter(args.filter, table.header)
+function filterClauses(table: LoadedTable, args: TableClaimArgs, masked?: (text: string) => string): FilterClause[] {
+  const filter = parseFilter(args.filter, table.header, masked)
   if ("problems" in filter) throw new PlatformError("invalid_arguments", boundedList(filter.problems, " "))
   return filter.clauses
 }
@@ -124,7 +124,7 @@ async function claimRows(context: FunctionContext, validated: TableClaimArgs): P
   const table = await loadTable(context, args.table)
   await requireWrite(context, table)
   const lifecycle = queueOf(table, "table.claim")
-  const clauses = filterClauses(table, args)
+  const clauses = filterClauses(table, args, context.pseudonymized)
   const { db, identity } = context
   const path = table.node.path
   const filtered = clauses.length > 0

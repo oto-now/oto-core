@@ -151,7 +151,7 @@ function setMarkdown(state: OpState, op: WriteOpBody): OpOutcome {
 export function applyOps(
   blocks: readonly DocBlock[],
   ops: readonly WriteOpBody[],
-  options: { path: string; revision?: number; tolerant?: boolean; wholeFile?: boolean; opsMax?: number },
+  options: { path: string; revision?: number; tolerant?: boolean; wholeFile?: boolean; opsMax?: number; places?: OpState["places"] },
 ): { blocks: WorkBlock[]; touched: Touched[]; keptAsText: number } {
   const opsMax = options.opsMax ?? OPS_MAX
   if (ops.length > opsMax) {
@@ -164,6 +164,7 @@ export function applyOps(
     revision: options.revision,
     tolerant: options.tolerant,
     keptAsText: 0,
+    places: options.places,
   }
   const touched: Touched[] = []
   ops.forEach((op, index) => {

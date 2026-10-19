@@ -570,11 +570,13 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
   chemin de chacune (`camille_dupre`, `acme_sa`), courriels, désignations libres, ligne de voie, téléphones en chiffres. Le nom seul ou le
   prénom seul restent en clair. Une forme commune à deux personnes devient un jeton à sens unique (`⟦name:…⟧`).
 - Un jeton que l'assistant recopie se résout : chemin de `read`, de `write` et d'une fonction native (la page qui
-  existe), requête de `find` et phrase de `context` (« prénoms nom »), argument d'entité de vos fonctions. Un jeton
+  existe), requête de `find`, phrase de `context` et `q` d'un tableau (« prénoms nom »), argument d'entité de vos
+  fonctions, clé de ligne d'un tableau (la ligne qui existe) ; `find` de `replace_text` et un filtre de `table.*` se
+  comparent au texte tel que l'assistant l'a lu, et le texte en clair change. Un jeton
   inconnu est refusé (`invalid_arguments`, raison `unknown_pseudonym`), comme un jeton à sens unique là où il faut une
   personne (`one_way_pseudonym`) ; une fonction de connecteur refuse tout jeton (`forbidden`, `pseudonym_not_accepted`).
-- **Pas encore** : un jeton dans `find` de `replace_text`, ou dans une clé ou un filtre de `table.*`, ne se compare pas
-  au texte en clair. Ne déclarez pas vos personnes en production avant la version qui le fait.
+- **Pas encore** : le nom seul et le prénom seul restent en clair (« Martin » sans prénom ni civilité). Ne déclarez pas
+  vos personnes en production avant la version qui masque le nom seul.
 
 ## Widgets dans la conversation
 

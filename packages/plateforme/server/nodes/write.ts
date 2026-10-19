@@ -201,7 +201,7 @@ async function saveEdits(db: PlatformDb, identity: Identity, edit: Edit): Promis
   const file = uploadedFile(edit.origin)
   const base = file?.replace ? [] : current
   // Les fichiers cités, relus avant l'écriture (E10-S02, AC-d3).
-  const applied = await attachFiles(db, identity, { node, current, created: edit.created, tolerant }, applyOps(base, body.ops ?? [], { path: node.path, revision: node.revision, tolerant, wholeFile: file !== undefined, opsMax: opsMaxFor(edit.origin) }))
+  const applied = await attachFiles(db, identity, { node, current, created: edit.created, tolerant }, applyOps(base, body.ops ?? [], { path: node.path, revision: node.revision, tolerant, wholeFile: file !== undefined, opsMax: opsMaxFor(edit.origin), places: edit.origin.kind === "agent" ? edit.origin.places : undefined }))
   const next: WorkBlock[] = placeBlocks(applied.blocks)
   const header = edit.created ? null : pendingHeader(body, node)
   const table = node.kind === "table" ? tableHeaderEdit(edit, draft, identity.org.prefix) : null

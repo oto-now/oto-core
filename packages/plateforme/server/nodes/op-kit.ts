@@ -2,6 +2,7 @@
 // les opérations, le refus d'une opération, l'analyse d'un texte, les listes citées. Fichier à part :
 // `ops.ts` importe `section-ops.ts` et `block-ops.ts`, qui en ont besoin ; sans lui, les trois
 // modules s'importeraient en cycle.
+import type { Places } from "../pseudonym/gate"
 import type { BlockInput, WriteOpBody } from "../../schemas"
 import type { PlatformErrorCode } from "../errors"
 import type { DocBlock } from "./document"
@@ -19,7 +20,11 @@ export type WorkBlock = DocBlock & { uid: number }
  * du nœud, que porte un refus de révision (`details.revision`, AC37). `tolerant` : le texte des opérations se
  * lit en mode tolérant, et `keptAsText` compte ce qu'il a gardé en texte (E10-S01, AC-a2 ; corps de l'API seul).
  */
-export type OpState = { blocks: WorkBlock[]; path: string; nextUid: number; revision?: number; tolerant?: boolean; keptAsText?: number }
+/**
+ * `places` : le markdown d'une portée pseudonymisé, avec sa table de places, quand la porte MCP pseudonymise ; `find` de
+ * `replace_text` qui porte un jeton s'y cherche (`replace-text.ts`).
+ */
+export type OpState = { blocks: WorkBlock[]; path: string; nextUid: number; revision?: number; tolerant?: boolean; keptAsText?: number; places?: (text: string) => Places }
 
 /**
  * Ce qu'une opération a touché : les blocs qu'elle a écrits (`uid`), et son fragment de réponse,

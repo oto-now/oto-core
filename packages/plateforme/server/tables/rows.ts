@@ -215,11 +215,11 @@ type Query = {
 }
 
 /** Les arguments contrôlés contre l'en-tête : colonnes inconnues d'abord (filtre, tri, projection), puis le filtre. */
-function parseQuery(header: TableHeader, args: TableRowsArgs): Query {
+function parseQuery(header: TableHeader, args: TableRowsArgs, masked?: (text: string) => string): Query {
   const named = [...Object.keys(args.filter ?? {}), ...(args.sort ? [args.sort.column] : []), ...(args.columns ?? [])]
   const unknown = unknownColumns(header, named)
   if (unknown.length > 0) throw new PlatformError("invalid_arguments", unknownColumnsMessage(header, unknown))
-  const filter = parseFilter(args.filter, header)
+  const filter = parseFilter(args.filter, header, masked)
   if ("problems" in filter) throw new PlatformError("invalid_arguments", boundedList(filter.problems, " "))
   const q = args.q === undefined ? null : queryWords(args.q)
   const narrowed = filter.clauses.length > 0 || q !== null || args.sort !== undefined
@@ -303,7 +303,7 @@ async function servedPage(request: PageRequest, selection: Selection & { fast: b
 
 async function readRows(context: FunctionContext, args: TableRowsArgs): Promise<FunctionOutput> {
   const table = await loadTable(context, args.table)
-  const query = parseQuery(table.header, args)
+  const query = parseQuery(table.header, args, context.pseudonymized)
   const print = queryPrint(table.node.id, args)
   const cursor = openCursor(args.cursor, print)
   const count = await countRows(context.db, table.node.id)

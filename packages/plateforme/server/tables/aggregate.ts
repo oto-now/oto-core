@@ -135,12 +135,12 @@ function firstLine(path: string, total: number, groupBy: TableColumn | null, gro
 }
 
 /** Les colonnes nommées (`where`, `group_by`, `metrics`) sont déclarées (AC8), le filtre typé, les métriques permises. */
-function checkArgs(table: LoadedTable, args: TableAggregateArgs) {
+function checkArgs(table: LoadedTable, args: TableAggregateArgs, masked?: (text: string) => string) {
   const { header } = table
   const named = [...Object.keys(args.where ?? {}), ...(args.group_by ? [args.group_by] : []), ...(args.metrics ?? []).flatMap((metric) => (metric.column ? [metric.column] : []))]
   const unknown = unknownColumns(header, named)
   if (unknown.length > 0) throw new PlatformError("invalid_arguments", unknownColumnsMessage(header, unknown))
-  const where = parseFilter(args.where, header)
+  const where = parseFilter(args.where, header, masked)
   if ("problems" in where) throw new PlatformError("invalid_arguments", boundedList(where.problems, " "))
   const groupBy = args.group_by ? (columnOf(header, args.group_by) ?? null) : null
   return { clauses: where.clauses, groupBy, metrics: parseMetrics(header, args) }
@@ -148,7 +148,7 @@ function checkArgs(table: LoadedTable, args: TableAggregateArgs) {
 
 async function aggregateRows(context: FunctionContext, args: TableAggregateArgs): Promise<FunctionOutput> {
   const table = await loadTable(context, args.table)
-  const { clauses, groupBy, metrics } = checkArgs(table, args)
+  const { clauses, groupBy, metrics } = checkArgs(table, args, context.pseudonymized)
   const path = table.node.path
   const count = await countRows(context.db, table.node.id)
   if (count > FILTERED_ROWS_MAX) throw tooManyRows(path, count)

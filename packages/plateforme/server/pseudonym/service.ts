@@ -9,7 +9,7 @@ import type { PlatformDb } from "../db"
 import { PlatformError } from "../errors"
 import { declarationVersion, sensitiveKinds, type SensitiveOrg } from "./declaration"
 import { buildDictionary, type Dictionary } from "./dictionary"
-import { pseudonymizedJson, pseudonymizedText } from "./gate"
+import { pseudonymizedJson, pseudonymizedPlaces, pseudonymizedText, type Places } from "./gate"
 import { keyWitness, orgKey, pseudonymKey } from "./token"
 
 /** Au-delà, un dictionnaire se rebâtit : une invalidation oubliée se rattrape en 5 minutes. */
@@ -28,6 +28,8 @@ export type Pseudonymizer = {
   dictionary: Dictionary
   text(value: string): string
   json<T>(value: T): T
+  /** Un texte pseudonymisé et sa table de places vers le clair (`find` de `replace_text`). */
+  places(value: string): Places
 }
 
 /** La panne nommée au log, l'appel refusé en `internal` sans rien de la cause. */
@@ -97,6 +99,7 @@ export async function pseudonymizerFor(db: PlatformDb, orgId: string): Promise<P
     dictionary,
     text: (value) => pseudonymizedText(dictionary, value),
     json: (value) => pseudonymizedJson(dictionary, value),
+    places: (value) => pseudonymizedPlaces(dictionary, value),
   }
 }
 

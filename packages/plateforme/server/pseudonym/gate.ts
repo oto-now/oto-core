@@ -24,9 +24,9 @@ function phoneCuts(dictionary: Dictionary, text: string): Cut[] {
   return cuts
 }
 
-/** Un morceau de texte sans jeton, ses mentions remplacées. */
-function segment(dictionary: Dictionary, text: string): string {
-  if (text === "") return text
+/** Les coupes d'un morceau de texte sans jeton, décalées de `offset`, de gauche à droite, sans chevauchement. */
+function segmentCuts(dictionary: Dictionary, text: string, offset: number): Cut[] {
+  if (text === "") return []
   const norm = normalized(text)
   const cuts: Cut[] = findMentions(dictionary.table, norm.text).map((mention) => ({
     start: norm.starts[mention.start],
@@ -34,26 +34,76 @@ function segment(dictionary: Dictionary, text: string): string {
     token: dictionary.tokens[mention.target],
   }))
   const all = [...cuts, ...phoneCuts(dictionary, text)].sort((a, b) => a.start - b.start || b.end - a.end)
-  if (all.length === 0) return text
-  let out = ""
+  const kept: Cut[] = []
   let at = 0
   for (const cut of all) {
     if (cut.start < at) continue
-    out += text.slice(at, cut.start) + cut.token
+    kept.push({ start: cut.start + offset, end: cut.end + offset, token: cut.token })
     at = cut.end
   }
-  return out + text.slice(at)
+  return kept
+}
+
+/** Les coupes de `text` : chaque mention d'une personne déclarée et son jeton ; rien dans un jeton déjà posé. */
+function textCuts(dictionary: Dictionary, text: string): Cut[] {
+  const cuts: Cut[] = []
+  let at = 0
+  for (const match of text.matchAll(TOKEN_PATTERN)) {
+    cuts.push(...segmentCuts(dictionary, text.slice(at, match.index), at))
+    at = match.index + match[0].length
+  }
+  cuts.push(...segmentCuts(dictionary, text.slice(at), at))
+  return cuts
 }
 
 /** `text`, chaque mention d'une personne déclarée remplacée par son jeton ; les jetons déjà posés gardés tels quels. */
 export function pseudonymizedText(dictionary: Dictionary, text: string): string {
   let out = ""
   let at = 0
-  for (const match of text.matchAll(TOKEN_PATTERN)) {
-    out += segment(dictionary, text.slice(at, match.index)) + match[0]
-    at = match.index + match[0].length
+  for (const cut of textCuts(dictionary, text)) {
+    out += text.slice(at, cut.start) + cut.token
+    at = cut.end
   }
-  return out + segment(dictionary, text.slice(at))
+  return out + text.slice(at)
+}
+
+/**
+ * Un texte pseudonymisé et le chemin retour vers le texte en clair : `clearAt(i)`, la place en clair de la place `i` du
+ * texte pseudonymisé ; `null` strictement dans un jeton posé, où le bord d'une coupe ne peut pas tomber.
+ */
+export type Places = { text: string; clearAt(index: number): number | null }
+
+/** `text` pseudonymisé, avec sa table de places : un texte trouvé dans l'espace pseudonymisé se coupe dans le clair. */
+export function pseudonymizedPlaces(dictionary: Dictionary, text: string): Places {
+  const marks: { at: number; end: number; clearStart: number; clearEnd: number }[] = []
+  let out = ""
+  let from = 0
+  for (const cut of textCuts(dictionary, text)) {
+    out += text.slice(from, cut.start)
+    marks.push({ at: out.length, end: out.length + cut.token.length, clearStart: cut.start, clearEnd: cut.end })
+    out += cut.token
+    from = cut.end
+  }
+  out += text.slice(from)
+  const clearAt = (index: number): number | null => {
+    // La dernière coupe qui commence à `index` ou avant, par dichotomie.
+    let low = 0
+    let high = marks.length - 1
+    let found = -1
+    while (low <= high) {
+      const middle = (low + high) >> 1
+      if (marks[middle].at <= index) {
+        found = middle
+        low = middle + 1
+      } else high = middle - 1
+    }
+    if (found === -1) return index
+    const mark = marks[found]
+    if (index === mark.at) return mark.clearStart
+    if (index < mark.end) return null
+    return mark.clearEnd + (index - mark.end)
+  }
+  return { text: out, clearAt }
 }
 
 /** Une valeur JSON, chaque chaîne pseudonymisée à toute profondeur, clés d'objet comprises telles quelles. */

@@ -6,6 +6,7 @@
 // (`coding-standards.md § Complexité`) et parce que l'opération ne vise plus seulement une section.
 import type { WriteOpBody } from "../../schemas"
 import { cut } from "../journal"
+import { hasToken } from "../pseudonym/arguments"
 import { target } from "./block-ops"
 import { blockMarkdown, blocksSize, formatCount, headingLevel } from "./document"
 import { PAGE_MAX, SECTION_MAX } from "./limits"
@@ -14,6 +15,9 @@ import { checkHeadings, keepNewerBlocks, locate, matchByForm, type Located } fro
 
 /** Le rendu d'un bloc dans celui de la portée : ses indices de chaîne. */
 type Span = { block: WorkBlock; start: number; end: number }
+
+/** Une occurrence de `find` dans le markdown en clair de la portée : `[start, end)`. */
+type Range = { start: number; end: number }
 
 /** Où cherche l'opération : ses blocs à partir de l'indice `from`, comme un refus la nomme (`label`), et sa section. */
 type Scope = { from: number; blocks: WorkBlock[]; label: string; section: Located | null; max: number }
@@ -47,11 +51,26 @@ function spansOf(blocks: readonly WorkBlock[]): { markdown: string; spans: Span[
   return { markdown, spans }
 }
 
-/** Les indices des occurrences de `find`, sans chevauchement, de gauche à droite (comme `split`). */
-function occurrences(markdown: string, find: string): number[] {
+/** Les places des occurrences de `find` dans `text`, sans chevauchement, de gauche à droite (comme `split`). */
+function indicesOf(text: string, find: string): number[] {
   const found: number[] = []
-  for (let at = markdown.indexOf(find); at !== -1; at = markdown.indexOf(find, at + find.length)) found.push(at)
+  for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, at + find.length)) found.push(at)
   return found
+}
+
+/**
+ * Les occurrences de `find` dans le markdown en clair. Un `find` qui porte un jeton (pseudonymisation) se cherche dans le
+ * markdown pseudonymisé (`state.places`), puis chaque occurrence revient au clair par la table de places : « ⟦client:…⟧
+ * a rappelé » remplace « Camille Dupré a rappelé ». Une occurrence dont un bord tombe dans un jeton ne compte pas.
+ */
+function occurrences(state: OpState, markdown: string, find: string): Range[] {
+  if (!state.places || !hasToken(find)) return indicesOf(markdown, find).map((start) => ({ start, end: start + find.length }))
+  const places = state.places(markdown)
+  return indicesOf(places.text, find).flatMap((at) => {
+    const start = places.clearAt(at)
+    const end = places.clearAt(at + find.length)
+    return start === null || end === null ? [] : [{ start, end }]
+  })
 }
 
 /** Le nombre d'occurrences attendu (`count`, 1 par défaut) ; un autre est refusé en disant celui trouvé. */
@@ -70,8 +89,9 @@ function checkCount(find: string, found: number, op: WriteOpBody, label: string)
  * occurrences d'un texte de 40 000 caractères ne s'assemblent jamais (HN-E11S18-10). Un remplacement qui ne fait pas
  * grandir passe, comme les autres opérations.
  */
-function checkProjected(scope: Scope, size: number, count: number, edit: { find: string; text: string }): void {
-  const projected = size + count * (edit.text.length - edit.find.length)
+function checkProjected(scope: Scope, size: number, at: readonly Range[], text: string): void {
+  const count = at.length
+  const projected = size + at.reduce((sum, range) => sum + text.length - (range.end - range.start), 0)
   if (projected <= scope.max || projected <= size) return
   throw new OpProblem(
     "too_large",
@@ -91,14 +111,14 @@ function enclosing(state: OpState, scope: Scope, block: WorkBlock): { level: num
  * la section visée, ou tout titre hors d'une section visée, reste un titre de son niveau ; un autre bloc ne fait naître
  * aucun titre au niveau de sa section ou au-dessus (N9).
  */
-function editBlock(state: OpState, scope: Scope, span: Span, edit: { at: readonly number[]; find: string; text: string }): WorkBlock[] {
+function editBlock(state: OpState, scope: Scope, span: Span, edit: { at: readonly Range[]; text: string }): WorkBlock[] {
   // En une passe : les morceaux entre les occurrences, joints par le texte neuf (jamais une copie par occurrence).
   const rendered = blockMarkdown(span.block)
   const pieces: string[] = []
   let from = 0
-  for (const index of edit.at) {
-    pieces.push(rendered.slice(from, index - span.start))
-    from = index - span.start + edit.find.length
+  for (const range of edit.at) {
+    pieces.push(rendered.slice(from, range.start - span.start))
+    from = range.end - span.start
   }
   pieces.push(rendered.slice(from))
   const markdown = pieces.join(edit.text)
@@ -119,8 +139,8 @@ function editBlock(state: OpState, scope: Scope, span: Span, edit: { at: readonl
 }
 
 /** Chaque occurrence dans un seul bloc : seuls ces blocs se réécrivent. */
-function inBlocks(state: OpState, scope: Scope, hits: readonly Span[], edit: { at: readonly number[]; find: string; text: string }): Replaced {
-  const bySpan = new Map<Span, number[]>()
+function inBlocks(state: OpState, scope: Scope, hits: readonly Span[], edit: { at: readonly Range[]; text: string }): Replaced {
+  const bySpan = new Map<Span, Range[]>()
   hits.forEach((span, rank) => {
     const indices = bySpan.get(span) ?? []
     indices.push(edit.at[rank])
@@ -143,7 +163,7 @@ function inBlocks(state: OpState, scope: Scope, hits: readonly Span[], edit: { a
 }
 
 /** Une occurrence à cheval sur plusieurs blocs : le corps d'une section se réécrit ; ailleurs, refus. */
-function acrossBlocks(state: OpState, scope: Scope, found: { markdown: string; spans: Span[]; at: readonly number[] }, edit: { find: string; text: string }): Replaced {
+function acrossBlocks(state: OpState, scope: Scope, found: { markdown: string; spans: Span[]; at: readonly Range[] }, edit: { find: string; text: string }): Replaced {
   const at = scope.section
   if (!at) {
     throw new OpProblem(
@@ -151,13 +171,18 @@ function acrossBlocks(state: OpState, scope: Scope, found: { markdown: string; s
       `« ${cut(edit.find, 100)} » spans several blocks of ${scope.label}; replace it within one block or one section (give section), or rewrite the page with set_markdown.`,
     )
   }
-  const bodyStart = (found.spans[1]?.start ?? found.markdown.length) - 2
-  const body = found.markdown.slice(bodyStart + 2)
+  const from = found.spans[1]?.start ?? found.markdown.length
   keepNewerBlocks(scope.blocks.slice(1), at.title)
-  if (found.at[0] < bodyStart + 2 || body.split(edit.find).length - 1 !== found.at.length) {
-    throw new OpProblem("invalid_arguments", `« find » spans the title of « ${at.title} »; use replace_section.`)
+  if (found.at[0].start < from) throw new OpProblem("invalid_arguments", `« find » spans the title of « ${at.title} »; use replace_section.`)
+  // Les morceaux du corps entre les occurrences, joints par le texte neuf.
+  const pieces: string[] = []
+  let cursor = from
+  for (const range of found.at) {
+    pieces.push(found.markdown.slice(cursor, range.start))
+    cursor = range.end
   }
-  const newBody = body.split(edit.find).join(edit.text)
+  pieces.push(found.markdown.slice(cursor))
+  const newBody = pieces.join(edit.text)
   const parsed = parseOpText(newBody, state)
   checkHeadings(parsed, newBody, at.level, at.title)
   const oldBody = scope.blocks.slice(1)
@@ -181,12 +206,12 @@ export function replaceText(state: OpState, op: WriteOpBody): OpOutcome {
   const scope = scopeOf(state, op)
   const edit = { find: op.find ?? "", text: op.text ?? "" }
   const { markdown, spans } = spansOf(scope.blocks)
-  const at = occurrences(markdown, edit.find)
+  const at = occurrences(state, markdown, edit.find)
   checkCount(edit.find, at.length, op, scope.label)
-  checkProjected(scope, markdown.length, at.length, edit)
-  const hits = at.map((index) => spans.find((span) => span.start <= index && index + edit.find.length <= span.end))
+  checkProjected(scope, markdown.length, at, edit.text)
+  const hits = at.map((range) => spans.find((span) => span.start <= range.start && range.end <= span.end))
   const within = hits.flatMap((span) => (span ? [span] : []))
-  const replaced = within.length === hits.length ? inBlocks(state, scope, within, { ...edit, at }) : acrossBlocks(state, scope, { markdown, spans, at }, edit)
+  const replaced = within.length === hits.length ? inBlocks(state, scope, within, { at, text: edit.text }) : acrossBlocks(state, scope, { markdown, spans, at }, edit)
   const blocks = [...state.blocks.slice(0, scope.from), ...replaced.blocks, ...state.blocks.slice(scope.from + scope.blocks.length)]
   const text = described(op, scope, replaced, at.length)
   return { blocks, touched: { op: op.op, uids: replaced.edited.map((block) => block.uid), describe: () => text } }
