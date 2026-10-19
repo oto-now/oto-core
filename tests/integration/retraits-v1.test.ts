@@ -45,14 +45,21 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
            and p.proname in ('node_level', 'account_level', 'account_level_for', 'accounts_guard', 'node_level_for', 'node_level_of', 'level_rank', 'is_org_admin')
          order by 1`,
       fx.admin<{ name: string }[]>`select t.tgname as name from pg_catalog.pg_trigger t where t.tgrelid = 'platform.accounts'::regclass and t.tgname = 'accounts_guard'`,
-      fx.admin<{ name: string }[]>`select policyname as name from pg_catalog.pg_policies where schemaname = 'platform' and (qual = 'false' or with_check = 'false')`,
+      fx.admin<{ name: string }[]>`select policyname as name from pg_catalog.pg_policies where schemaname = 'platform' and (qual = 'false' or with_check = 'false') order by 1`,
     ])
     expect({ columns, functions: functions.map((row) => row.name), triggers, policies }).toEqual({
       columns: [],
       functions: ["is_org_admin", "level_rank", "node_level_for", "node_level_of"],
       triggers: [],
-      // La lecture fermée du lexique (E01-S13) est la seule policy à `false` : sa table n'en a pas d'autre.
-      policies: [{ name: "lexicon_select_none" }],
+      // La lecture fermée du lexique (E01-S13) : sa table n'en a pas d'autre. Les trois suppressions retirées
+      // (`20261019140000_platform_suppressions.sql`) restent sous leur nom à `false`, `check:migrations` refusant
+      // un `drop` sans recréation ; la prochaine ligne de base les omettra.
+      policies: [
+        { name: "accounts_delete_admin" },
+        { name: "connector_activations_delete_admin" },
+        { name: "lexicon_select_none" },
+        { name: "orgs_delete_admin" },
+      ],
     })
     // `service_role` n'existe que sur Supabase : ailleurs, rien à retirer.
     const [role] = await fx.admin<{ present: boolean }[]>`select exists (select 1 from pg_catalog.pg_roles where rolname = 'service_role') as present`
