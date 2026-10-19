@@ -61,7 +61,7 @@ export function ListeDesPartages({ compte, partages, equipes, ancre }: ListeDesP
           ))}
         </ul>
       )}
-      <PartageDuCompte compte={compte} equipes={equipes} ancre={ancre} />
+      <PartageDuCompte compte={compte} equipes={equipes} />
     </div>
   )
 }

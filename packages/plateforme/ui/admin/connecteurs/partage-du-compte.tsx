@@ -5,16 +5,14 @@
 // (`setAccountRuleSchema`) ; un partage au même sujet remplace son niveau. « Partage enregistré. » se dit dans une
 // région `status` montée vide, puis la page se relit. `setAccountRule` décide le droit : la gestion du compte.
 //
-// Repris d'`AjoutDeRegle` (règle d'un nœud) : un seul champ pour le sujet, le focus replié à l'ancre de la liste quand
-// la relecture qui suit un succès retire le formulaire. Elle le retire quand le partage ôte la gestion à qui partage :
-// une règle d'une de ses équipes compte pour lui comme pour ses membres (`droits-d-acces.md` § Partage d'un compte de
-// connecteur ; question ouverte de `connecteurs-et-comptes.md`). Changé : le sujet est l'organisation ou une équipe,
-// jamais une personne ; les niveaux sont ceux d'un compte, sans la gestion, que seul un administrateur accorde.
-import { useId, useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react"
+// Repris d'`AjoutDeRegle` (règle d'un nœud) : un seul champ pour le sujet. Changé : le sujet est l'organisation ou une
+// équipe, jamais une personne ; les niveaux sont ceux d'un compte, sans la gestion, que seul un administrateur accorde ;
+// pas de focus replié après un succès : le propriétaire d'un compte personnel le gère avant toute règle (décidé le
+// 19/10, `droits-d-acces.md` § Partage d'un compte de connecteur), la relecture garde donc le formulaire.
+import { useId, useState, useTransition, type FormEvent } from "react"
 import { setAccountRuleSchema, type AccountLevelName } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../../api/messages"
-import { replierLeFocusSur } from "../../components/focus"
 import { Field } from "../../ds/react/forms"
 import { Button } from "../../ds/react/primitives"
 import { Select } from "../../ds/react/select"
@@ -35,8 +33,6 @@ const REFUS: MessagesDuGeste = {
 type PartageDuCompteProps = {
   compte: { id: string; label: string }
   equipes: { id: string; name: string }[]
-  /** L'ancre de la liste des comptes, qui reçoit le focus quand la relecture qui suit un succès retire le formulaire. */
-  ancre: string
 }
 
 /** Le sujet du partage tel que le champ le porte : l'organisation, ou une équipe. */
@@ -46,27 +42,15 @@ function sujetDe(valeur: string) {
   return { kind, id }
 }
 
-export function PartageDuCompte({ compte, equipes, ancre }: PartageDuCompteProps) {
+export function PartageDuCompte({ compte, equipes }: PartageDuCompteProps) {
   const id = useId()
   const rafraichir = useRafraichir()
   const [erreur, setErreur] = useState("")
   const [annonce, setAnnonce] = useState("")
   const [enCours, demarrer] = useTransition()
-  const formulaire = useRef<HTMLFormElement>(null)
-  // Comme `AjoutDeRegle` : le niveau se calcule en base, l'îlot ne sait pas si son succès retire la gestion à qui
-  // partage. Il replie donc le focus à son départ, et seulement après un succès.
-  const apresUnSucces = useRef(false)
-
-  useLayoutEffect(() => {
-    const geste = formulaire.current
-    return () => {
-      if (apresUnSucces.current) replierLeFocusSur(ancre, geste)
-    }
-  }, [ancre])
 
   function partager(evenement: FormEvent<HTMLFormElement>) {
     evenement.preventDefault()
-    apresUnSucces.current = false
     setErreur("")
     setAnnonce("")
     const champs = new FormData(evenement.currentTarget)
@@ -81,14 +65,13 @@ export function PartageDuCompte({ compte, equipes, ancre }: PartageDuCompteProps
         setErreur(messageDErreur(reponse.erreur, REFUS))
         return
       }
-      apresUnSucces.current = true
       setAnnonce("Partage enregistré.")
       rafraichir()
     })
   }
 
   return (
-    <form ref={formulaire} noValidate onSubmit={partager} aria-label={`Partager ${compte.label}`} className="flex flex-col gap-2">
+    <form noValidate onSubmit={partager} aria-label={`Partager ${compte.label}`} className="flex flex-col gap-2">
       <div role="status" className="oto-caption">
         {annonce}
       </div>

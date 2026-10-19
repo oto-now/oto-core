@@ -405,6 +405,22 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect(codes([...marc.journal, ...claire.journal])).toEqual(["forbidden", "forbidden", "forbidden"])
     })
 
+    it("should let the owner of a personal account share it to her own team and keep managing it (decided on 19/10)", async () => {
+      const staff = [admin.persons.claire.id]
+      undo.push(() => seed.admin`delete from platform.platform_staff where user_id in ${seed.admin(staff)}`)
+      undo.push(() => seed.admin`delete from platform.access_rules where account_id = ${admin.id(accountId(3))}`)
+      await admin.write({ platform_staff: [{ user_id: PERSONS.claire.id }] })
+      // « Mail Direction » est le compte personnel de Claire, membre (et responsable) de Ventes.
+      const claire = await session("claire")
+      const rules = (args: Record<string, unknown>) => claire.connector({ account: "Mail Direction", ...args })
+      expect((await rules({ op: "add_account_rule", subject: "team:ventes", level: "read" })).text).toBe("team Ventes now has read on account Mail Direction.")
+      expect((await rules({ op: "add_account_rule", subject: "team:conseil", level: "read" })).text).toBe("team Conseil now has read on account Mail Direction.")
+      expect((await rules({ op: "remove_account_rule", subject: "team:ventes" })).text).toBe(
+        `team Ventes no longer has a rule on account Mail Direction (it was read). ${DEFAULTS}`,
+      )
+      expect(codes(claire.journal)).toEqual([null, null, null])
+    })
+
     it("should serve the rules of an account the caller reads only, an invisible account answering as an unknown one (H68)", async () => {
       const deps = await admin.deps("sam")
       const spy = recordRequests(deps.db)

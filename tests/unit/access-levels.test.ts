@@ -188,15 +188,19 @@ describe("accountLevelOf", () => {
 })
 
 describe("accountLevelOf: sharing a personal account (#68)", () => {
-  it("should let a rule naming the owner, or else one of their teams, lower their level on their own account, manage included", () => {
-    expect(accountLevel("claire", "claire", [{ account: "claire", user: "claire", level: "read" }])).toBe(1)
-    expect(accountLevel("claire", "claire", [{ account: "claire", user: "claire", level: "none" }])).toBe(0)
-    expect(accountLevel("claire", "claire", [{ account: "claire", team: "ventes", level: "write" }])).toBe(2)
-    const named: RuleSpec[] = [
-      { account: "claire", team: "ventes", level: "none" },
-      { account: "claire", user: "claire", level: "sensitive" },
+  it("should keep the owner of a personal account at manage before any rule, hers or her team's (decided on 19/10)", () => {
+    const rules: RuleSpec[][] = [
+      [{ account: "claire", user: "claire", level: "read" }],
+      [{ account: "claire", user: "claire", level: "none" }],
+      [{ account: "claire", team: "ventes", level: "read" }],
+      [
+        { account: "claire", team: "ventes", level: "none" },
+        { account: "claire", user: "claire", level: "sensitive" },
+      ],
     ]
-    expect(accountLevel("claire", "claire", named)).toBe(3)
+    expect(rules.map((spec) => accountLevel("claire", "claire", spec))).toEqual([4, 4, 4, 4])
+    // La règle de son équipe sert les autres membres de Ventes, au niveau qu'elle dit.
+    expect(accountLevel("lea", "claire", [{ account: "claire", team: "ventes", level: "read" }])).toBe(1)
   })
 
   it("should let an organisation rule alone open the owner's account to the others, never lower the owner", () => {

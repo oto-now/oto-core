@@ -10,6 +10,13 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-19] — Connecteurs : le propriétaire d'un compte personnel en garde la gestion
+**À appliquer :** rien côté hôte : ni migration, ni route, ni type changé ; le niveau rendu change (`viewerLevel`, refus des services).
+**Quoi :** `accountLevelOf` met la personne d'un compte personnel à la gestion avant toute règle, de personne, d'équipe ou d'organisation, sur toutes les surfaces (services, écran, MCP admin) : partager son compte à une équipe dont on est membre sert les autres membres au niveau partagé et ne retire plus la gestion à qui partage ; une règle qui nomme le propriétaire, même posée par l'outillage, ne baisse plus son niveau. Le formulaire de partage ne replie plus le focus après un succès : il reste.
+**Pourquoi :** Alexis a tranché le 19/10 la question ouverte « un propriétaire peut-il se retirer à lui-même la gestion de son compte ? » : non, il la garde toujours (#68). La question de l'administrateur qui restreindrait un compte personnel reste ouverte.
+**Problèmes :** Aucun ; quatre tests (calcul pur, services sur Postgres, MCP admin) échouent sur l'ancienne règle et passent sur la nouvelle.
+**Fichiers :** `packages/plateforme/server/access-levels.ts`, `ui/admin/connecteurs/{partage-du-compte,partages-du-compte}.tsx`, `tests/unit/access-levels.test.ts`, `tests/unit/mcp-admin-connectors.test.ts`, `tests/integration/partage-des-comptes.test.ts`, `docs/conception/{connecteurs-et-comptes,droits-d-acces}.md`, `packages/plateforme/CHANGELOG.md`
+
 ## [2026-10-19] — Connecteurs : l'écran ouvert aux membres
 **À appliquer :** l'hôte qui monte l'écran Connecteurs met sa page à jour (celle de l'hôte de référence, `src/app/(dashboard)/admin/connectors/page.tsx`) : sans cela, le rail mène chaque membre au refus « réservée aux administrateurs ». Aucune migration, aucune variable.
 **Quoi :** À qui n'administre pas, l'écran montre ses seuls comptes personnels (`listOwnAccounts`), « Connecter mon compte », et sous chaque compte personnel qu'il gère, ses partages : retrait confirmé, partage à toute l'organisation ou à une équipe (lecture, écriture, sensible), journal des partages. Porte de même origine `POST admin/account-rules` et `DELETE admin/account-rules/<id>`, adaptateurs de `setAccountRule` et `removeAccountRule`, droits inchangés. L'administrateur garde sa vue, les partages en plus sous ses propres comptes personnels. « Connecteurs » au rail pour chacun.
