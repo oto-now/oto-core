@@ -1,8 +1,9 @@
 // Le service des fichiers joints (E10-S02 lot a, ADR-016 § 3 à § 5) : la demande d'envoi, la confirmation, la
-// lecture par redirection, sa disponibilité, le texte d'un fichier texte, la purge des envois abandonnés, le quota et la copie des
-// objets d'une page dupliquée (lot e), l'envoi par le serveur d'un fichier déposé par lien (lot f). Chaque refus est décidé
-// ici, avant la requête qu'il garde (`security-patterns.md § Droits dans le service`) : l'écriture sur le nœud
-// pour envoyer et confirmer, la lecture pour lire ; la RLS n'isole que l'organisation. Les octets ne passent
+// lecture par redirection, sa disponibilité, le texte d'un fichier texte, la purge des envois abandonnés et la copie des
+// objets d'une page dupliquée (lot e), l'envoi par le serveur d'un fichier déposé par lien (lot f) ; le quota et la ligne
+// `pending` sont dans `rows.ts`. Chaque refus est décidé ici, avant la requête qu'il garde (`security-patterns.md § Droits
+// dans le service`) : l'écriture sur le nœud pour envoyer et confirmer, la lecture pour lire ; la RLS n'isole que
+// l'organisation, et cache un fichier en transit à tout autre que son auteur (`transit.ts`). Les octets ne passent
 // jamais par le paquet pour l'écran : le navigateur envoie au bucket par l'URL présignée, et lit par la
 // redirection. Sans lui, aucun fichier ne se dépose ni ne se lit.
 import {
@@ -24,27 +25,21 @@ import {
 import { ACCESS_LEVELS, nodeLevel, requireNodeLevel } from "../access"
 import { readBounded } from "../bounded-read"
 import type { PlatformDb } from "../db"
-import { boundedList, changedMeanwhile, inTransaction, invalidInput, PlatformError } from "../errors"
+import { boundedList, inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
-import { orgStorageQuota } from "../limits"
 import type { Mutation } from "../members"
 import { findNode, unknownNode } from "../nodes/lookup"
 import { ownerOf, teamOf } from "../nodes/view"
-import type { Tx } from "../sql"
+import { insertPending, markReady } from "./rows"
 import { fileStore, objectKey, storageNotEnabled, type FileStore, type ObjectResponse } from "./store"
 
 /** Une ligne `pending` plus vieille est un envoi abandonné, purgé avec son objet (AC-a6). */
 const PENDING_HOURS = 1
 
-/** Le verrou consultatif du quota d'une organisation (`database-patterns.md § Transactions`, après 7401). */
-const QUOTA_LOCK = 7501
-
 /** Délai de la lecture d'un fichier texte par le serveur (AC-a8). */
 const TEXT_READ_TIMEOUT_MS = 10_000
 
 const MB = 1_048_576
-
-const GB = 1_073_741_824
 
 /** Les fichiers texte, dits dans un refus : « html, md, txt, csv ». */
 const TEXT_LIST = TEXT_TYPES.join(", ")
@@ -92,11 +87,6 @@ function megabytes(bytes: number): string {
   return `${Math.round((bytes / MB) * 10) / 10} MB`
 }
 
-/** `10 GB` : le quota dit dans un refus. */
-function gigabytes(bytes: number): string {
-  return `${Math.round((bytes / GB) * 10) / 10} GB`
-}
-
 /** L'état du stockage, pour l'écran (AC-a7, HN-E10S02-6). */
 export function fileStorageState(): FileStorageState {
   return { enabled: fileStore() !== null }
@@ -135,23 +125,6 @@ export async function purgePendingFiles(db: PlatformDb, identity: Identity): Pro
     returning id`)
   await removeObjects(identity.org.id, purged.map((row) => row.id))
 }
-
-/**
- * Le quota de l'organisation (AC-a3, 5 ; ADR-016 § 4), dans la transaction qui écrit des lignes `files` : le verrou de
- * l'organisation, puis la somme des lignes `pending` et `ready` plus `adding` octets ; au-delà de `quota` (`orgStorageQuota`,
- * lu chez l'hôte avant la transaction, 10 Go par défaut, E12-S02), `too_large` (raison `quota`, `max` en octets), qui
- * annule la transaction. Pris avant l'insertion (la demande d'envoi) ou après elle (la duplication d'une page, AC-e3,
- * `adding` nul) : la dernière transaction à prendre le verrou compte les lignes des autres, validées.
- */
-export async function requireQuota(sql: Tx, identity: Identity, request: { adding: number; what: string; quota: number }): Promise<void> {
-  await sql`select pg_catalog.pg_advisory_xact_lock(${QUOTA_LOCK}, pg_catalog.hashtext(${identity.org.id}::text))`
-  const [{ used }] = await sql<{ used: string }[]>`
-    select coalesce(sum(size), 0)::text as used from platform.files where org_id = ${identity.org.id} and status in ('pending', 'ready')`
-  if (Number(used) + request.adding > request.quota) {
-    throw new PlatformError("too_large", `${request.what} would take the files of ${identity.org.name} beyond ${gigabytes(request.quota)}: delete the pages that hold files no longer needed.`, { reason: "quota", max: request.quota })
-  }
-}
-
 
 /** Copies d'objets lancées ensemble au plus : une page qui cite des centaines de fichiers n'ouvre pas autant de requêtes. */
 const COPIES_AT_ONCE = 8
@@ -194,12 +167,16 @@ export function admittedType(name: string): FileType {
   throw new PlatformError("invalid_arguments", `${name}: this type of file is not admitted. Admitted extensions: ${boundedList(Object.keys(FILE_TYPES))}.`)
 }
 
-/** La taille : de 1 octet à 50 Mo, 4 Mo pour un fichier texte, sinon `too_large` (AC-a3, 4) ; relue par le dépôt par lien (AC-f7). */
-export function checkSize(name: string, type: FileType, size: number): void {
-  const limit = TEXT_TYPES.includes(type) ? TEXT_FILE_MAX_BYTES : FILE_MAX_BYTES
+/**
+ * La taille : de 1 octet à 50 Mo, 4 Mo pour un fichier texte joint, sinon `too_large` (AC-a3, 4) ; relue par le dépôt par
+ * lien (AC-f7). Un fichier en transit (`type` nul) passe 50 Mo quel que soit son type : un gros export CSV y passe.
+ */
+export function checkSize(name: string, type: FileType | null, size: number): void {
+  const limit = type !== null && TEXT_TYPES.includes(type) ? TEXT_FILE_MAX_BYTES : FILE_MAX_BYTES
   if (size < 1) throw new PlatformError("too_large", `${name} is empty: a file holds 1 byte at least.`)
   if (size <= limit) return
-  throw new PlatformError("too_large", `${name} is ${megabytes(size)}: a file holds ${megabytes(FILE_MAX_BYTES)} at most, a text file (${TEXT_LIST}) ${megabytes(TEXT_FILE_MAX_BYTES)}.`)
+  const rule = type === null ? `a file in transit holds ${megabytes(FILE_MAX_BYTES)} at most` : `a file holds ${megabytes(FILE_MAX_BYTES)} at most, a text file (${TEXT_LIST}) ${megabytes(TEXT_FILE_MAX_BYTES)}`
+  throw new PlatformError("too_large", `${name} is ${megabytes(size)}: ${rule}.`)
 }
 
 /**
@@ -222,25 +199,9 @@ export async function requestFileUpload(db: PlatformDb, identity: Identity, inpu
   const type = admittedType(request.name)
   checkSize(request.name, type, request.size)
   const mime = FILE_TYPES[type]
-  const id = await insertPending(db, identity, { nodeId: node.id, name: request.name, mime, size: request.size })
+  const { id } = await insertPending(db, identity, { nodeId: node.id, name: request.name, mime, size: request.size })
   const upload = await onStorage("upload url", () => store.uploadUrl(objectKey(identity.org.id, id), { size: request.size, mime }))
   return { data: { id, upload }, target: node.path, teamId: teamOf(await ownerOf(db, node.id)) }
-}
-
-/**
- * La ligne `pending` d'un envoi (AC-a3, 5), sous le quota lu dans la même transaction, sous le verrou de l'organisation :
- * la demande de l'écran, et l'envoi par le serveur du dépôt par lien (lot f, `storeFile`). Rend son identifiant.
- */
-async function insertPending(db: PlatformDb, identity: Identity, file: { nodeId: string; name: string; mime: string; size: number }): Promise<string> {
-  const quota = await orgStorageQuota(identity.org)
-  return inTransaction(db, "files: request", async (sql) => {
-    await requireQuota(sql, identity, { adding: file.size, what: file.name, quota })
-    const [row] = await sql<{ id: string }[]>`
-      insert into platform.files (org_id, node_id, name, mime, size, status, created_by)
-      values (${identity.org.id}, ${file.nodeId}, ${file.name}, ${file.mime}, ${file.size}, 'pending', ${identity.user.id})
-      returning id`
-    return row.id
-  })
 }
 
 /** Le délai d'un envoi par le serveur au stockage (dépôt par lien, 1 Mo au plus). */
@@ -279,7 +240,7 @@ export async function storeFile(db: PlatformDb, identity: Identity, file: { node
   const type = admittedType(file.name)
   checkSize(file.name, type, size)
   const mime = FILE_TYPES[type]
-  const id = await insertPending(db, identity, { nodeId: file.nodeId, name: file.name, mime, size })
+  const { id } = await insertPending(db, identity, { nodeId: file.nodeId, name: file.name, mime, size })
   const key = objectKey(identity.org.id, id)
   const failure = await sendObject(store, key, { bytes: file.bytes, mime }).catch((error: unknown) => {
     console.error(`[platform] files: upload left pending ${key}`, error instanceof Error ? error.message : error)
@@ -303,16 +264,8 @@ async function pendingFile(db: PlatformDb, identity: Identity, id: string): Prom
 }
 
 /**
- * La confirmation d'un envoi (AC-a4) : la ligne `pending` de l'appelant, l'écriture sur son nœud, l'objet lu
- * (`HEAD`). Taille égale à celle de la ligne : `ready`. Objet absent : `conflict`. Taille différente : journalisée
- * avec les deux tailles, puis la ligne et l'objet supprimés, `conflict` qui les dit. Taille non dite par le stockage :
- * `internal`, la ligne `pending` et l'objet gardés pour une nouvelle confirmation (HN-E10S02-124). Ligne inconnue, déjà
- * `ready` ou d'une autre personne : `not_found`.
- *
- * Le type relu n'est pas comparé (ADR-016 § 4, HN-E10S02-114) : Supabase Storage relit un objet `text/html` en
- * `text/plain`, et la comparaison refusait tout fichier HTML. Il ne garde rien : l'URL d'envoi signe déjà le
- * type de l'extension, et aucune lecture ne sert le type de l'objet (`readResponse` le tire du nom, la route
- * isolée d'ADR-017 pose le sien, `objectText` lit en `application/octet-stream`).
+ * La confirmation d'un envoi (AC-a4) : la ligne `pending` de l'appelant, l'écriture sur son nœud, l'objet confirmé
+ * (`confirmObject`). Ligne inconnue, déjà `ready` ou d'une autre personne : `not_found`.
  */
 export async function completeFileUpload(db: PlatformDb, identity: Identity, fileId: unknown): Promise<Mutation<FileReady>> {
   const id = fileIdOf(fileId)
@@ -320,6 +273,23 @@ export async function completeFileUpload(db: PlatformDb, identity: Identity, fil
   const file = await pendingFile(db, identity, id)
   if (!file) throw unknownFile()
   await requireNodeLevel(db, identity, { id: file.node_id, path: file.path }, "write")
+  await confirmObject(db, identity, store, file)
+  const data: FileReady = { id: file.id, name: file.name, size: file.size, mime: file.mime }
+  return { data, target: file.path, teamId: teamOf(await ownerOf(db, file.node_id)) }
+}
+
+/**
+ * L'objet d'une ligne `pending` dont l'appelant a déjà décidé le droit, lu (`HEAD`) : taille égale à celle de la ligne,
+ * `ready`. Objet absent : `conflict`. Taille différente : journalisée avec les deux tailles, puis la ligne et l'objet
+ * supprimés, `conflict` qui les dit. Taille non dite par le stockage : `internal`, la ligne `pending` et l'objet gardés
+ * pour une nouvelle confirmation (HN-E10S02-124). La confirmation d'un fichier joint et celle d'un fichier en transit.
+ *
+ * Le type relu n'est pas comparé (ADR-016 § 4, HN-E10S02-114) : Supabase Storage relit un objet `text/html` en
+ * `text/plain`, et la comparaison refusait tout fichier HTML. Il ne garde rien : l'URL d'envoi signe déjà le
+ * type de l'extension, et aucune lecture ne sert le type de l'objet (`readResponse` le tire du nom, la route
+ * isolée d'ADR-017 pose le sien, `objectText` lit en `application/octet-stream`).
+ */
+export async function confirmObject(db: PlatformDb, identity: Identity, store: FileStore, file: { id: string; name: string; size: number }): Promise<void> {
   const head = await onStorage("head", () => store.head(objectKey(identity.org.id, file.id)))
   if (!head) throw new PlatformError("conflict", `${file.name} has not been uploaded: send it to its upload address, then confirm.`)
   if (head.size === null) {
@@ -334,20 +304,6 @@ export async function completeFileUpload(db: PlatformDb, identity: Identity, fil
     throw new PlatformError("conflict", `${file.name} does not match its request: ${file.size} bytes announced, ${head.size} bytes stored. Upload it again.`)
   }
   await markReady(db, identity, file, { label: "files: complete", advice: "upload it again" })
-  const data: FileReady = { id: file.id, name: file.name, size: file.size, mime: file.mime }
-  return { data, target: file.path, teamId: teamOf(await ownerOf(db, file.node_id)) }
-}
-
-/**
- * La ligne `pending` d'un objet lu passée à `ready` : la confirmation de l'écran (AC-a4) et l'envoi par le serveur (lot f).
- * Aucune ligne : la ligne a changé entre-temps, `conflict` journalisé d'abord (`changedMeanwhile`).
- */
-async function markReady(db: PlatformDb, identity: Identity, file: { id: string; name: string }, meanwhile: { label: string; advice: string }): Promise<void> {
-  const updated = await inTransaction(db, meanwhile.label, (sql) => sql<{ id: string }[]>`
-    update platform.files set status = 'ready'
-     where org_id = ${identity.org.id} and id = ${file.id} and status = 'pending'
-    returning id`)
-  if (updated.length === 0) throw changedMeanwhile(meanwhile.label, file.id, `${file.name} changed meanwhile: ${meanwhile.advice}.`)
 }
 
 /**

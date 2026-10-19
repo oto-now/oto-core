@@ -64,6 +64,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - UI: the Connecteurs screen shows « Journal des partages de … » under each account the viewer manages.
 - MCP: `admin_connector add_account_rule` accepts the level `sensitive`; its defaults text says a sensitive function needs it.
 - Migrations: apply `20261018090000_platform_partage_des_comptes.sql` (`access_rules` admits an org subject and `sensitive` on an account; account rules at `write` become `sensitive`, keeping what they opened; table `account_share_events` written by a trigger on `access_rules`; `forget_user` scrubs it).
+- API: transit files, files with no node that pass between a person and a connector: `POST transit-files` `{ name, mime, size }` (the types and quota of an attached file, 50 MB for every type, text included; returns `{ id, upload, expiresAt }`, one hour), `POST transit-files/<id>/complete` `{}` and `GET transit-files/<id>` (302). Only their author reads them: any other person, an administrator and the platform team included, gets `not_found`. Expired ones are purged at the next transit upload of the organisation. Their journal lines carry only the id, the size and the MIME type, never the file name, and a refusal by its code alone (a route's new `journalArgs`).
+- Schemas: `transitFileRequestSchema` and the types `TransitFileUpload`, `TransitFile`.
+- Migrations: apply `20261019090000_platform_fichiers_en_transit.sql` before mounting the new package, otherwise every attached-file upload fails: the file quota is now read by `org_files_bytes`. It makes `files.node_id` nullable, adds `files.expires_at`, has the four `files` policies hide a transit file from anyone but its author, and adds the `security definer` functions `org_files_bytes` and `purge_transit_files` for `authenticated`; additive.
 
 ## 1.5.0 — 2026-10-06
 

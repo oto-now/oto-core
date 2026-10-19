@@ -88,6 +88,13 @@ export const fileRequestSchema = z.strictObject({
   size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 })
 
+/**
+ * La demande d'un fichier en transit (`POST transit-files`) : celle d'un fichier joint, sans nœud. Un fichier en transit
+ * passe entre une personne et un connecteur, n'est lisible que par elle (et par le moteur, qui court sous son identité)
+ * et s'efface à son échéance.
+ */
+export const transitFileRequestSchema = fileRequestSchema.omit({ node: true })
+
 /** L'identifiant d'un fichier dans l'adresse (`files/<id>`). */
 export const fileIdSchema = z.uuid()
 
@@ -148,6 +155,12 @@ export type FileUpload = { id: string; upload: { url: string; headers: Record<st
 
 /** Un fichier confirmé (`ready`), tel qu'un bloc le cite. */
 export type FileReady = { id: string; name: string; size: number; mime: string }
+
+/** La demande d'envoi d'un fichier en transit, et son échéance (ISO 8601), au-delà de laquelle il n'existe plus. */
+export type TransitFileUpload = FileUpload & { expiresAt: string }
+
+/** Un fichier en transit confirmé (`ready`), et son échéance. */
+export type TransitFile = FileReady & { expiresAt: string }
 
 /** L'état du stockage (`GET files`, AC-a7, HN-E10S02-6). */
 export type FileStorageState = { enabled: boolean }

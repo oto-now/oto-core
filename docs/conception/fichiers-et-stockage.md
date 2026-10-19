@@ -1,11 +1,11 @@
 # Fichiers et stockage
 
 - **Statut** : validé avec JB le 28/09/2026
-- **Dernière révision** : 2026-10-15
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
-Un fichier joint vit en deux moitiés : sa ligne `platform.files` en base (métadonnées) et ses octets dans un stockage d'objets compatible S3, troisième port du paquet après l'identité et la base (ADR-016). Le navigateur envoie au bucket par une URL présignée, le service décide tout (droits, type, taille, quota) et confirme ; la lecture passe par une route du paquet qui redirige vers une URL signée de 60 secondes. Un fichier vit autant que son nœud, se copie à la duplication et part à la purge de la corbeille.
+Un fichier joint vit en deux moitiés : sa ligne `platform.files` en base (métadonnées) et ses octets dans un stockage d'objets compatible S3, troisième port du paquet après l'identité et la base (ADR-016). Le navigateur envoie au bucket par une URL présignée, le service décide tout (droits, type, taille, quota) et confirme ; la lecture passe par une route du paquet qui redirige vers une URL signée de 60 secondes. Un fichier vit autant que son nœud, se copie à la duplication et part à la purge de la corbeille. Un fichier en transit, entre une personne et un connecteur, n'a pas de nœud : il n'est lisible que par son auteur et par le moteur sous son identité, compte au quota et s'efface à son échéance.
 
 ## Contexte
 
@@ -79,15 +79,16 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - Les fichiers copiés comptent au quota (D149) : `requireQuota` relit la somme sous le verrou 7501 dans la transaction de la duplication ; au-delà de 10 Go, `too_large` (raison `quota`), rien n'est écrit, copie de page comprise (HN-E10S02-89).
 - Après le commit, les copies d'objets partent ensemble, par lots de 8 (`COPIES_AT_ONCE`), un échec n'arrêtant pas les lots suivants (HN-E10S02-113) ; puis une seule mise à jour sous la session passe les lignes copiées à `ready` ; sans stockage, elles restent `pending`, nommées au log (`[platform] files: copy left pending <clé>`) (HN-E10S02-91). Le lien public d'une copie sert le fichier copié, jamais celui de l'original (HN-E10S02-94).
 
-### Fichier en transit (décidé le 15/10, pas encore écrit)
+### Fichier en transit
 
-- Un fichier qui va d'un connecteur à un autre passe par oto, de serveur à serveur, sans transiter par l'assistant : il y devient un **fichier en transit**, une ligne `files` et un objet comme un fichier joint, donc sous les droits, le plafond et les [lecteurs](lecture-des-fichiers.md) d'oto, mais rattaché à aucune page et effacé après le transfert. Rien de durable par défaut.
-- Toute source produit un fichier d'oto (une adresse publique et un fichier du poste le font déjà par le [dépôt par lien](depot-par-lien.md) ; une sortie de connecteur déclarée fichier, un contenu tenu par l'assistant restent à faire) ; toute destination de connecteur ne reçoit qu'un identifiant de fichier d'oto, joint ou en transit. Le compte de la source se résout une fois, à l'entrée, par la résolution habituelle ([connecteurs et comptes](connecteurs-et-comptes.md)).
-- La source et la destination sont deux appels : entre les deux, l'assistant peut lire le fichier par `read {file}`.
-- Garder la pièce est un geste explicite de l'assistant : la joindre à une page, où elle devient un fichier joint et vit avec son nœud.
-- Un fichier en transit est effacé à sa consommation, et au plus tard une heure après sa création s'il n'est jamais consommé (16/10).
-- Il reste hors de l'arbre : sa ligne `files` n'a pas de nœud (`node_id` nul) et porte une échéance, plutôt qu'un nœud caché (16/10).
-- Un seul plafond : 50 Mo par fichier, comme un fichier joint (D113) (16/10).
+- Un fichier qui passe entre une personne (ou un assistant) et un connecteur, une pièce jointe à envoyer ou un export rendu par une API, passe par oto de serveur à serveur, sans transiter par l'assistant : il y devient un **fichier en transit**, une ligne `files` et un objet comme un fichier joint, donc sous le plafond, le quota et les [lecteurs](lecture-des-fichiers.md) d'oto, mais rattaché à aucune page. Rien de durable par défaut (15/10).
+- Toute source produit un fichier d'oto (une adresse publique et un fichier du poste le font déjà par le [dépôt par lien](depot-par-lien.md) ; une sortie de connecteur déclarée fichier, un contenu tenu par l'assistant restent à faire) ; toute destination de connecteur ne reçoit qu'un identifiant de fichier d'oto, joint ou en transit. Le compte de la source se résout une fois, à l'entrée, par la résolution habituelle ([connecteurs et comptes](connecteurs-et-comptes.md)). La source et la destination sont deux appels.
+- Garder la pièce est un geste explicite : la joindre à une page, où elle devient un fichier joint et vit avec son nœud.
+- **Forme** (16/10) : hors de l'arbre, sa ligne `files` n'a pas de nœud (`node_id` nul) et porte une échéance (`expires_at`), plutôt qu'un nœud caché ; `files_transit_check` pose l'échéance sur une ligne sans nœud, et sur elle seule. Un seul plafond : 50 Mo par fichier, pour tout type admis, texte compris (19/10) : la borne de 4 Mo d'un fichier texte joint ne vaut pas ici, un gros export CSV passe (`checkSize` sans type). Les types admis sont ceux d'un fichier joint (`admittedType`), confirmés le 19/10 : un export en `.json` ou `.xml` est refusé.
+- **Lecture** (19/10) : un fichier en transit n'est lisible que par la personne qui l'a produit ou téléversé, et par le moteur pendant le transfert ; ni l'organisation, ni une équipe, ni un administrateur, ni l'équipe plateforme ne le lisent. Le moteur court sous l'identité de la personne qui appelle (`<p>_call`, `callFunction`), donc ne lit que les siens : aucune fonction `security definer` ne lui ouvre les fichiers d'un autre. Le service le décide en filtrant sur l'auteur avant toute URL (`ownTransitRow`) ; les quatre policies de `files` le doublent, un fichier en transit ne se lisant, ne se modifiant et ne se supprimant que par son auteur. Pour tout autre, la même réponse `not_found` qu'un fichier inconnu.
+- **Durée de vie** (16/10) : effacé à sa consommation, et au plus tard une heure après sa création (`TRANSIT_HOURS`) s'il n'est jamais consommé. L'échéance part de l'horloge de la base, à l'insertion. Échu, il est aussitôt illisible et hors du quota ; sa ligne et son objet partent à l'entrée en transit suivante de l'organisation, de toute personne (`purge_transit_files`, `security definer`, qui ne rend que les identifiants ; le paquet n'a pas de tâche planifiée). La consommation est `expireTransitFile` : la ligne de l'appelant, puis l'objet après le commit ; la lecture par le moteur n'efface rien, la consommation suit l'envoi réussi au tiers (confirmé le 19/10).
+- **Quota** (19/10) : pendant sa vie, il compte au quota de l'organisation, `pending` et `ready`, comme un fichier joint, et la demande refuse au-delà par `too_large` (raison `quota`), avec le message d'un fichier joint (confirmé le 19/10). La RLS le cachant aux autres, le quota se lit par `org_files_bytes` (`security definer`, une somme pour une organisation de l'appelant, `42501` sinon), sous le verrou 7501 (`requireQuota`, `server/files/rows.ts`).
+- **Portes** : `POST transit-files` `{ name, mime, size }` (la demande : purge des échus, stockage, type, taille, quota ; rend `{ id, upload, expiresAt }`), `POST transit-files/<id>/complete` (la confirmation, `confirmObject` partagée avec le fichier joint) et `GET transit-files/<id>` (sa lecture par l'auteur, redirection 302 vers une URL de 60 s, `attachment` hors images matricielles, confirmé le 19/10) ; aucune cible au journal, faute de nœud. Au journal de l'organisation (19/10), la demande et la confirmation ne portent que l'identifiant, la taille et le type MIME, jamais le nom : la route en tire une liste blanche (`journalArgs`), au lieu du corps, et un refus s'y journalise par son seul code, son message pouvant citer le nom. Le moteur lit les octets par `readTransitBytes` (50 Mo au plus), qui n'efface rien : la consommation se décide après l'envoi au tiers. Un fichier en transit ne se lit pas par les routes d'un fichier joint (`files/<id>`), ne s'exporte jamais avec l'organisation (`present: 'node_id'` de la carte du transfert) et ne se cite dans aucun bloc.
 
 ### Partage public et transfert (ADR-016 § 7 et § 8)
 
@@ -107,6 +108,9 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - **Supabase Storage par son client** : immédiat, avec des policies de Storage. Écarté : nouvelle dépendance au schéma `storage` et au client Supabase, contraire à la garde de portabilité (ADR-012).
 - **Une empreinte par fichier** (`sha256`, ADR-016 § 3 d'origine) : retirée, aucun comportement ne la lit (HN-E10S02-7).
 - **Un fichier partagé entre l'original et sa copie** : écarté par D118 ; chaque page garde ses propres fichiers. Copie hors quota : écartée par D149.
+- **Une table à part pour le fichier en transit** : écartée ; la forme est décidée le 16/10 (une ligne `files` sans nœud, avec une échéance), et le quota, la confirmation, la purge des objets et le plafond s'écrivent déjà sur `files`.
+- **Un fichier en transit lisible par l'organisation** (la RLS d'isolation seule, comme un fichier joint) : écarté par Alexis le 19/10 ; une pièce de paie ou un relevé envoyé à un connecteur ne regarde que la personne qui l'envoie.
+- **Une lecture du moteur hors de la session de l'appelant** (fonction `security definer`) : écartée ; le moteur court déjà sous l'identité de qui appelle, et une telle porte lirait le fichier d'un autre pour un appel qui n'est pas le sien.
 - **Comparer le type de l'objet relu à la confirmation** (1.1.2) : abandonné, il refusait tout HTML sur Supabase Storage (HN-E10S02-114).
 - **Adresses S3 en sous-domaine** : non livrées, une option le jour où un fournisseur l'exige (D148).
 
@@ -115,6 +119,7 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - Les clés du bucket sont des clés d'accès S3 de l'hôte, jamais `service_role` ; le bucket est privé ; une URL de lecture vit 60 secondes (une heure pour l'export d'une arborescence, une capacité que l'assistant relaie à l'import) et n'est jamais journalisée en clair.
 - Le nom d'origine n'entre jamais dans la clé d'objet ; type et disposition sont signés dans l'URL, jamais lus de l'objet ni du navigateur.
 - Les droits se décident dans le service avant toute URL (`security-patterns.md § Droits dans le service`) ; voir [droits d'accès](droits-d-acces.md).
+- Un fichier en transit n'est lisible que par son auteur : décidé par le service, doublé par la RLS, prouvé contre une personne de son équipe, un administrateur et l'équipe plateforme (`tests/integration/fichiers-en-transit.test.ts`). Son nom n'entre pas au journal de l'organisation, que lit un administrateur, ni par le corps, ni par la réponse, ni par le message d'un refus (`tests/unit/api-transit-files.test.ts`). `org_files_bytes` et `purge_transit_files` vérifient l'appartenance de l'appelant et ne rendent ni nom ni taille d'un fichier d'un autre.
 
 ## Écart avec le code
 
@@ -123,11 +128,13 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - M88 : la CI n'a pas de MinIO pour l'adaptateur S3 réel (SigV4, `copy`, URL signées).
 - HN-E10S02-115 : sur le bucket de l'hôte de démo en 1.1.2, `.md`, `.txt` et `.svg` échouaient ; seul l'échec de `html` est expliqué (comparaison de type), la cause des trois autres n'est pas établie sans le bucket réel (hypothèse : types MIME admis du bucket, ou refus du `PUT`) ; les messages d'HN-E10S02-116 et le log serveur la diront. Un ticket public de Supabase Storage décrit la perte du `charset`, correctif non fusionné.
 - M98 : test d'expiration sensible à l'écart d'horloge entre la base et le poste.
-- Le fichier en transit n'est pas écrit : un fichier vit toujours avec son nœud, et le moteur de connecteurs n'envoie ni ne reçoit d'octets hors JSON (ni multipart, ni réponse binaire).
+- Fichier en transit : le moteur de connecteurs n'envoie ni ne reçoit encore d'octets hors JSON (ni multipart, ni réponse binaire), donc rien n'appelle `readTransitBytes` ni `expireTransitFile` ; une sortie de connecteur n'en produit pas ; `read {file}` d'un assistant ne le lit pas ; le joindre à une page n'est pas écrit.
+- Fichier en transit : `forget_user` met son auteur à nul comme pour un fichier joint ; plus personne ne le lit, et il part à son échéance (accepté le 19/10).
+- Fichier en transit : un refus de la demande ou de la confirmation se journalise par son seul code (`too_large`, `conflict`…), sans son message, qui peut citer le nom ; le journal ne dit pas lequel des refus d'un même code.
 
 ## Questions ouvertes
 
-- Fichier en transit : qui peut lire un fichier sans nœud, et s'il compte au quota de l'organisation, à trancher avec son écriture (sa durée de vie, sa forme et son plafond sont décidés le 16/10).
+- Aucune pour le fichier en transit : ses valeurs, d'abord provisoires, sont confirmées le 19/10.
 
 ## Historique
 
@@ -142,3 +149,5 @@ Le bloc `image` ne portait qu'une adresse `https` externe (`src` ≤ 2 000 carac
 - 2026-10-14 : « Image » et « Fichier » aussi dans la liste de « / », comme au « + » — décidé par JB (source : retour sur l'éditeur, session du 14/10/2026).
 - 2026-10-15 : un fichier qui va d'un connecteur à un autre passe par oto en fichier en transit, effacé après le transfert ; toute destination ne reçoit qu'un identifiant de fichier d'oto ; garder la pièce est un geste explicite — proposé par JB, décidé avec Alexis (source : issue du transfert de fichier entre connecteurs, 14 et 15/10/2026). Port lecteur du 08/10 abandonné au profit du registre des lecteurs — décidé avec Alexis (source : issue des lecteurs de fichiers, 15/10/2026).
 - 2026-10-16 : fichier en transit effacé à sa consommation et au plus tard au bout d'une heure, sans nœud et avec une échéance, plafond de 50 Mo — décidé par Alexis (source : revue des connecteurs d'oto 2 du 16/10, issue oto-now/oto-core#3).
+- 2026-10-19 : fichier en transit écrit ; lisible par la seule personne qui l'a produit ou téléversé, et par le moteur pendant le transfert, jamais par l'organisation, une équipe ou un administrateur ; compté au quota de l'organisation pendant sa vie — décidé par Alexis (source : décision du 19/10 sur le fichier en transit).
+- 2026-10-19 : fichier en transit, valeurs confirmées : 50 Mo pour tout type admis, texte compris ; les types d'un fichier joint ; aucun nom de fichier au journal de l'organisation (identifiant, taille et type MIME seuls, refus par son code) ; le refus au quota plein d'un fichier joint, l'effacement à la consommation seule, la lecture en `attachment` hors images matricielles et `forget_user` inchangé, acceptés tels quels — arrêté à la relecture du lot (source : relecture du fichier en transit, 19/10).

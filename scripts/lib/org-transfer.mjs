@@ -37,6 +37,8 @@ export const VERSION = 1
  * @property {Record<string, PersonPolicy>} people  colonnes de personne et leur politique
  * @property {{ column: string, value: string }} [only]  seules les lignes où la colonne vaut cette valeur
  *   s'exportent (fichiers joints : `ready`)
+ * @property {string} [present]  seules les lignes où cette colonne n'est pas nulle s'exportent (fichiers : ceux d'un
+ *   nœud ; un fichier en transit, sans nœud, n'est lisible que par son auteur et ne quitte jamais l'organisation)
  */
 
 /** @returns {TableSpec} */
@@ -92,12 +94,15 @@ export const TABLES = [
   }),
   // Fichiers joints (E10-S02, ADR-016 § 8, AC-e4) : les lignes `ready` seules (un envoi en cours ne se transfère
   // pas) ; leurs octets vont dans `<fichier>.files/` (`org-transfer-files.mjs`). L'import leur donne un nouvel
-  // identifiant, que `deepReplace` reporte dans le `file_id` des blocs et des instantanés.
+  // identifiant, que `deepReplace` reporte dans le `file_id` des blocs et des instantanés. Un fichier en transit (sans
+  // nœud, `expires_at` posé) ne s'exporte jamais : `expires_at`, nul sur toute ligne exportée, n'est pas lue.
   table('files', {
     columns: cols('id org_id node_id name mime size status created_by created_at'),
+    excluded: ['expires_at'],
     refs: { org_id: 'orgs', node_id: 'nodes' },
     people: { created_by: 'null' },
     only: { column: 'status', value: 'ready' },
+    present: 'node_id',
   }),
   table('node_drafts', {
     parent: { table: 'nodes', column: 'node_id' },
@@ -261,7 +266,7 @@ function tableSpec(name) {
  */
 export function orgRowsSql(sql, spec, orgId) {
   // E10-S02 (AC-e4) : le filtre propre à une table (`only`), lu par l'export et par le compte d'AC1.
-  const kept = spec.only ? sql` and ${sql(spec.only.column)} = ${spec.only.value}` : sql``
+  const kept = sql`${spec.only ? sql` and ${sql(spec.only.column)} = ${spec.only.value}` : sql``}${spec.present ? sql` and ${sql(spec.present)} is not null` : sql``}`
   if (!spec.parent) return sql`${sql(spec.name === 'orgs' ? 'id' : 'org_id')} = ${orgId}${kept}`
   const parent = tableSpec(spec.parent.table)
   if (!parent) throw new Error(`Table parente absente de la carte : ${spec.parent.table}.`)

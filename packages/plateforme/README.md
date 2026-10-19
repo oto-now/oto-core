@@ -170,7 +170,12 @@ Pour une application Next 15 (App Router) sur Supabase.
      pour tout le reste) ; `GET files/<id>?check` (`{ data: { available } }`, sans redirection : le stockage
      sert-il encore l'objet ?) ; `GET files/<id>/markdown` (les blocs d'un `.md`) ; `GET files/<id>/html` (la route
      isolée d'un fichier HTML, ADR-017). Par un lien public, sans session : `GET public/<jeton>/files/<id>`,
-     `…/markdown` et `…/html`, pour un fichier cité par un bloc publié du contenu partagé.
+     `…/markdown` et `…/html`, pour un fichier cité par un bloc publié du contenu partagé. Fichier en transit (sans
+     nœud, entre une personne et un connecteur) : `POST transit-files` `{ name, mime, size }` (types d'un fichier joint,
+     50 Mo pour tout type, texte compris, compté au quota ; rend `{ id, upload, expiresAt }`, une heure),
+     `POST transit-files/<id>/complete` `{}` et `GET transit-files/<id>` (redirection 302) ; lisible par son seul
+     auteur, `not_found` pour toute autre personne, administrateur et équipe plateforme compris ; au journal de
+     l'organisation, l'identifiant, la taille et le type MIME seuls, jamais le nom, et un refus par son seul code.
    - « Voir » d'un fichier `html` ou `md` ouvre la visionneuse à l'adresse du contenu, `?view=<id>` : la page de
      l'hôte passe `fileView` (`/n/<chemin>`) ou `publicFileView` (`/p/<jeton>/<chemin>`, avec
      `routeDesFichiers={publicFilesRoute(<jeton>)}`) à l'écran. Un fichier HTML s'y exécute dans une iframe

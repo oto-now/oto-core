@@ -166,6 +166,19 @@ function replacedCheckDrops(body) {
   return positions
 }
 
+/**
+ * Positions des `alter column X drop not null` d'une instruction `alter table` : une colonne qui devient facultative
+ * admet toute ligne qu'elle admettait, rien n'est retiré (le fichier en transit, sans nœud : `files.node_id`). Le
+ * contraire, `set not null`, reste refusé.
+ */
+const RELAXED_NOT_NULL = new RegExp(String.raw`\balter\s+(?:column\s+)?${IDENT}\s+(drop)\s+not\s+null\b`, 'gi')
+
+function relaxedNotNullDrops(body) {
+  const positions = new Set()
+  for (const m of body.matchAll(RELAXED_NOT_NULL)) positions.add(m.index + m[0].toLowerCase().lastIndexOf('drop'))
+  return positions
+}
+
 function additiveErrors(stmt, next, report) {
   const isAlterTable = /^\s*alter\s+table\b/i.test(stmt.body)
   const rules = [
@@ -177,7 +190,7 @@ function additiveErrors(stmt, next, report) {
   }
   for (const [re, rule] of rules) for (const m of stmt.body.matchAll(re)) report(stmt.offset + m.index, rule)
   if (isDropBeforeRecreate(stmt, next)) return
-  const replaced = isAlterTable ? replacedCheckDrops(stmt.body) : new Set()
+  const replaced = isAlterTable ? new Set([...replacedCheckDrops(stmt.body), ...relaxedNotNullDrops(stmt.body)]) : new Set()
   for (const m of stmt.body.matchAll(/\bdrop\b/gi)) {
     if (replaced.has(m.index)) continue
     const dropColumn = isAlterTable && /^drop\s+(?:column\b|(?!constraint\b|default\b|not\b|identity\b|expression\b)[a-z_"])/i.test(stmt.body.slice(m.index))

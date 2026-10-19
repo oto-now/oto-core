@@ -220,6 +220,13 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   ouvraient ; la table `account_share_events`, journal des partages (lue sous RLS par un membre, écrite par le seul
   déclencheur `access_rules_account_share_journal`, fonction `security definer` `account_share_journal`) ;
   `forget_user` met la personne à nul dans ce journal.
+- `20261019090000_platform_fichiers_en_transit.sql` (fichier en transit) : `files.node_id` devient facultatif et
+  `files.expires_at` apparaît, posée pour un fichier sans nœud et pour lui seul (`files_transit_check`) ; les quatre
+  policies de `files` cachent un fichier en transit à tout autre que son auteur (insertion `pending` attribuée à
+  l'appelant, avec son échéance) ; les fonctions `security definer` `org_files_bytes` (le quota de l'organisation, les
+  fichiers en transit des autres compris, une somme et rien d'autre) et `purge_transit_files` (les échus de
+  l'organisation, de toute personne, identifiants seuls). Premier `alter column … drop not null` du paquet, admis par
+  `check:migrations` : la colonne admet toute ligne qu'elle admettait.
 
 ## Installer sur un hôte neuf
 

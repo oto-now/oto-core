@@ -61,6 +61,14 @@ describe("check-migrations", () => {
     expect(result.stdout).toMatch(/\.sql:1 set-not-null/)
   })
 
+  // Une colonne qui devient facultative admet toute ligne qu'elle admettait (le fichier en transit, sans nœud).
+  it("should accept drop not null, and still reject a dropped default or column in the same statement", () => {
+    expect(check("alter table platform.files alter column node_id drop not null;\n")).toMatchObject({ status: 0 })
+    const mixed = check("alter table platform.files alter column node_id drop not null, alter column name drop default, drop column mime;\n")
+    expect(mixed.status).toBe(1)
+    expect(mixed.stdout.match(/\.sql:1 (drop|drop-column)$/gm)).toEqual([".sql:1 drop", ".sql:1 drop-column"])
+  })
+
   it("should reject a column type change", () => {
     const result = check("alter table platform.orgs alter column name type varchar(80);\n")
     expect(result.status).toBe(1)

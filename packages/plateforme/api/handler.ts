@@ -10,7 +10,7 @@ import type { Json } from "../server/database"
 import type { PlatformDb } from "../server/db"
 import { PlatformError } from "../server/errors"
 import type { Identity } from "../server/identity"
-import { journalError, loggedArgs, writeJournal } from "../server/journal"
+import { journalError, loggedArgs, wellFormed, writeJournal } from "../server/journal"
 import { brandRoutes } from "./brand"
 import { cellRoutes } from "./cell"
 import { connectorConsentRoutes } from "./connector-consent"
@@ -33,6 +33,7 @@ import { trashRoutes } from "./trash"
 import { isUploadFormRoute, isUploadRoute, uploadFormResponse, uploadResponse } from "./uploads"
 import { tablesRoutes } from "./tables"
 import { teamsRoutes } from "./teams"
+import { transitFilesRoutes } from "./transit-files"
 import { accountCreationRoute, accountDisablingRoute, accountSecretRoute, accountShareJournalRoute } from "./admin/accounts"
 import { activationRoute, deactivationRoute } from "./admin/connectors"
 import { flagRoute } from "./admin/flags"
@@ -81,6 +82,11 @@ type Route = {
   target?: (request: { params: string[]; body: unknown }) => string | null
   /** Une lecture (`GET`) qui écrit pourtant : sa ligne de journal part comme celle d'une mutation. */
   journaled?: boolean
+  /**
+   * Liste blanche des arguments journalisés, tirée de l'adresse, du corps et, servie, de la réponse, au lieu du corps
+   * entier : posée, un refus se journalise par son seul code, son message pouvant citer le corps (un nom de fichier).
+   */
+  journalArgs?: (request: { params: string[]; body: unknown; data?: unknown }) => Json
 }
 
 // Les routes `admin/*` du tableau de bord (E08-S03) vivent dans quatre fichiers et se réunissent ici.
@@ -117,6 +123,8 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   shares: sharesRoutes,
   // E10-S02 : les fichiers joints (ADR-016).
   files: filesRoutes,
+  // Les fichiers en transit, entre une personne et un connecteur : sans nœud, lisibles par leur seul auteur, à échéance.
+  "transit-files": transitFilesRoutes,
   // Le consentement d'une personne à un connecteur `oauth2_user` : son départ, et l'adresse de retour du tiers.
   "connector-consent": connectorConsentRoutes,
   // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ, et l'adresse de retour du tiers.
@@ -220,6 +228,14 @@ type Served = {
   target: string | null
   teamId: string | null
   args: Json | null
+  /** La colonne `error` : code et message, le code seul sous `journalArgs`. */
+  error: string | null
+}
+
+/** Arguments et erreur de la ligne : le corps masqué (`loggedArgs`), sinon la liste blanche de la route. */
+function journaled(route: Route, request: { params: string[]; body: Json | undefined; data?: unknown }, failure: PlatformError | null): Pick<Served, "args" | "error"> {
+  if (route.journalArgs) return { args: wellFormed(route.journalArgs(request)), error: failure ? failure.code : null }
+  return { args: request.body === undefined ? null : loggedArgs(request.body), error: failure ? journalError(failure.code, failure.message) : null }
 }
 
 async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" | "body">): Promise<Served> {
@@ -228,12 +244,13 @@ async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" |
   try {
     if (request.method === "POST" || request.method === "PATCH") body = await readJson(request)
     const result = await match.route.handle({ ...context, params: match.params, body })
+    const failure = result.journal?.error ?? null
     return {
       response: result.redirect ? redirection(result.redirect, result.status) : Response.json({ data: result.data }, { status: result.status }),
-      failure: result.journal?.error ?? null,
+      failure,
       target: result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null,
       teamId: result.journal?.teamId ?? null,
-      args: body === undefined ? null : loggedArgs(body),
+      ...journaled(match.route, { params: match.params, body, data: result.data }, failure),
     }
   } catch (error) {
     const failure = asPlatformError(error)
@@ -242,7 +259,7 @@ async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" |
       failure,
       target: match.route.target?.({ params: match.params, body }) ?? null,
       teamId: null,
-      args: body === undefined ? null : loggedArgs(body),
+      ...journaled(match.route, { params: match.params, body }, failure),
     }
   }
 }
@@ -257,7 +274,7 @@ function journalLine(served: Served, request: { method: string; tool: string; id
     team_id: served.teamId,
     args: request.method === "DELETE" ? null : served.args,
     is_error: served.failure !== null,
-    error: served.failure ? journalError(served.failure.code, served.failure.message) : null,
+    error: served.error,
     duration_ms: Date.now() - request.started,
     user_agent: request.userAgent,
     ctx: null,
