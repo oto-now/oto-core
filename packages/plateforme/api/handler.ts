@@ -34,7 +34,14 @@ import { isUploadFormRoute, isUploadRoute, uploadFormResponse, uploadResponse } 
 import { tablesRoutes } from "./tables"
 import { teamsRoutes } from "./teams"
 import { transitFilesRoutes } from "./transit-files"
-import { accountCreationRoute, accountDisablingRoute, accountSecretRoute, accountShareJournalRoute } from "./admin/accounts"
+import {
+  accountCreationRoute,
+  accountDisablingRoute,
+  accountRuleRemovalRoute,
+  accountRuleSettingRoute,
+  accountSecretRoute,
+  accountShareJournalRoute,
+} from "./admin/accounts"
 import { activationRoute, deactivationRoute } from "./admin/connectors"
 import { flagRoute } from "./admin/flags"
 import { openEntryRoute, orgRoute } from "./admin/org"
@@ -108,13 +115,14 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   nodes: nodesRoutes,
   feedback: feedbackRoutes,
   // Tableau de bord (E08-S03) : `admin/org`, `admin/open-entry`, `admin/connectors/<nom>/activation`, `admin/accounts`,
-  // `admin/accounts/<id>/disable`, `admin/accounts/<id>/secret`, `admin/accounts/<id>/share-journal` (lecture) et
-  // `admin/flags`, départagées par leurs segments fixes.
+  // `admin/accounts/<id>/disable`, `admin/accounts/<id>/secret`, `admin/accounts/<id>/share-journal` (lecture),
+  // `admin/account-rules` et `admin/account-rules/<id>` (le partage d'un compte, pour qui le gère) et `admin/flags`,
+  // départagées par leurs segments fixes.
   admin: {
     GET: accountShareJournalRoute,
     PATCH: [orgRoute, flagRoute, openEntryRoute],
-    POST: [activationRoute, accountCreationRoute, accountDisablingRoute, accountSecretRoute],
-    DELETE: deactivationRoute,
+    POST: [activationRoute, accountCreationRoute, accountDisablingRoute, accountSecretRoute, accountRuleSettingRoute],
+    DELETE: [deactivationRoute, accountRuleRemovalRoute],
   },
   tables: tablesRoutes,
   profile: profileRoutes,

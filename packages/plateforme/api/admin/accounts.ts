@@ -1,16 +1,19 @@
 // `POST admin/accounts`, `POST admin/accounts/<id>/disable` et `POST admin/accounts/<id>/secret` du tableau de bord
 // (E08-S03, AC6, AC7, AC10 ; comptes à plusieurs champs) : créer un compte, désactiver un compte, poser le secret et
 // les réglages d'un compte réel ; `GET admin/accounts/<id>/share-journal` : le journal des partages d'un compte, pour
-// qui le gère (partage des comptes). Adaptateur mince : la validation, les droits et l'écriture sont dans
-// `createAccount`, `disableAccount`, `setAccountSecret` et `listAccountShareJournal` ; la route n'ajoute qu'une règle,
-// un compte d'organisation ou d'équipe seulement à la création (N11). Le secret arrive sous la clé `secret` du corps,
-// que le journal masque entière ; la réponse ne le rend jamais.
-import { createAccountSchema } from "../../schemas"
+// qui le gère (partage des comptes) ; `POST admin/account-rules` et `DELETE admin/account-rules/<id>` : poser ou
+// remplacer, puis retirer, le partage d'un compte, pour qui le gère (l'écran Connecteurs ouvert aux membres : le
+// propriétaire d'un compte personnel y partage le sien). Adaptateur mince : la validation, les droits et l'écriture sont
+// dans `createAccount`, `disableAccount`, `setAccountSecret`, `listAccountShareJournal`, `setAccountRule` et
+// `removeAccountRule` ; la route n'ajoute qu'une règle, un compte d'organisation ou d'équipe seulement à la création
+// (N11). Le secret arrive sous la clé `secret` du corps, que le journal masque entière ; la réponse ne le rend jamais.
+import { createAccountSchema, setAccountRuleSchema } from "../../schemas"
 import { listAccountShareJournal } from "../../server/account-share-journal"
 import { setAccountSecret } from "../../server/connectors/account-secret"
 import { createAccount, disableAccount } from "../../server/connectors/accounts"
 import { PlatformError } from "../../server/errors"
 import { clip, MAX_TARGET_CHARS } from "../../server/journal"
+import { removeAccountRule, setAccountRule } from "../../server/rules"
 import type { Route } from "../handler"
 import { idOrNull } from "../ids"
 
@@ -63,5 +66,33 @@ export const accountShareJournalRoute: Route = {
   async handle({ db, identity, params }) {
     const journal = await listAccountShareJournal(db, identity, params[1])
     return { status: 200, data: journal }
+  },
+}
+
+/**
+ * Pose ou remplace la règle d'un sujet (une équipe, une personne, toute l'organisation) sur un compte : le corps est celui
+ * de `setAccountRuleSchema`, comme `POST rules` pour un nœud. 201 pour une règle nouvelle, 200 pour un niveau remplacé.
+ */
+export const accountRuleSettingRoute: Route = {
+  params: 1,
+  fixed: { 0: "account-rules" },
+  target: ({ body }) => {
+    const parsed = setAccountRuleSchema.safeParse(body)
+    return parsed.success ? parsed.data.accountId : null
+  },
+  async handle({ db, identity, body }) {
+    const { data, target, teamId } = await setAccountRule(db, identity, body)
+    return { status: data.created ? 201 : 200, data: { rule: data }, journal: { target, teamId } }
+  },
+}
+
+/** Retire une règle d'un compte, par son identifiant, comme `DELETE rules/<id>` pour un nœud. */
+export const accountRuleRemovalRoute: Route = {
+  params: 2,
+  fixed: { 0: "account-rules" },
+  target: ({ params }) => idOrNull(params[1]),
+  async handle({ db, identity, params }) {
+    const { data, target, teamId } = await removeAccountRule(db, identity, params[1])
+    return { status: 200, data: { rule: data }, journal: { target, teamId } }
   },
 }

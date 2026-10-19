@@ -5,11 +5,12 @@
 // fonction sensible exige le niveau sensible, au-dessus de l'écriture ; le départ du propriétaire arrête le compte pour
 // les autres, lu à chaque appel, rien n'étant effacé, et son retour le rend ; le journal des partages écrit chaque règle
 // posée, remplacée ou retirée (même par le départ d'une personne), que seule la personne qui gère le compte lit, et que
-// la RLS borne à l'organisation. `mail` simulé : aucun réseau.
+// la RLS borne à l'organisation ; l'écran Connecteurs ouvert aux membres lit les comptes personnels de qui regarde
+// (`listOwnAccounts`), et les deux questions ouvertes y gardent le comportement d'avant. `mail` simulé : aucun réseau.
 import { readFileSync } from "node:fs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { accountLevel } from "../../packages/plateforme/server/access"
-import { listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
+import { listOwnAccounts, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { callFunction } from "../../packages/plateforme/server/function-call"
@@ -284,4 +285,44 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       select subject_id from platform.account_share_events where account_id = ${mail.id} and subject_kind = 'user'`
     expect(scrubbed).toEqual([{ subject_id: null }, { subject_id: null }])
   })
+
+  // L'écran Connecteurs ouvert aux membres : ses seuls comptes personnels, ni ceux de l'organisation ou de ses équipes, ni
+  // celui d'un autre partagé avec lui, ni celui qu'une règle lui fermerait.
+  it("should list the own personal accounts of the caller only, for the screen opened to members", async () => {
+    const mine = await personalAccount(o.people.paul, "Paul à moi")
+    const hers = await personalAccount(o.people.lea, "Léa à Paul")
+    await setAccountRule(lea.db, lea.identity, { accountId: hers.id, subject: { kind: "user", id: o.people.paul.id }, level: "write" })
+    await fx.createAccount(o.org.id, { ownerKind: "org", label: `Mail org ${hex(3)}` })
+    await fx.createAccount(o.org.id, { ownerKind: "team", ownerTeamId: o.teams.support, label: `Mail Support ${hex(3)}` })
+
+    const own = await listOwnAccounts(paul.db, paul.identity)
+    expect(own.map((account) => [account.label, account.owner.kind, account.viewerLevel])).toEqual([[mine.label, "user", "manage"]])
+    expect((await listOwnAccounts(stranger.db, stranger.identity)).map((account) => account.id)).not.toContain(mine.id)
+  })
+
+  // Question ouverte (`connecteurs-et-comptes.md` § Questions ouvertes) : un propriétaire peut-il se retirer à lui-même
+  // la gestion de son compte ? Comportement d'avant l'écran, gardé : son partage à une équipe dont il est membre compte
+  // pour lui comme pour elle, et lui retire la gestion — le partage ne se retire plus, le journal ne se lit plus.
+  it("should keep the behaviour of before: sharing to a team of the owner lowers her own level, management included", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa à Ventes")
+    const shared = await setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "team", id: o.teams.ventes }, level: "write" })
+
+    expect(await accountLevel(lea.db, lea.identity, mail.id)).toBe(2)
+    expect((await refusal(removeAccountRule(lea.db, lea.identity, shared.data.id))).code).toBe("forbidden")
+    expect((await refusal(listAccountShareJournal(lea.db, lea.identity, mail.id))).code).toBe("forbidden")
+    expect((await listOwnAccounts(lea.db, lea.identity)).find((account) => account.id === mail.id)?.viewerLevel).toBe("write")
+  })
+
+  // Question ouverte : un administrateur peut-il restreindre le compte personnel d'un membre ? Comportement d'avant,
+  // gardé : il ne le gère pas, ne le voit pas sans partage (`not_found`), et partagé en lecture n'y pose rien (`forbidden`).
+  it("should keep the behaviour of before: an administrator sets no rule on the personal account of a member", async () => {
+    const mail = await personalAccount(o.people.lea, "Léa admin")
+    const restrict = { accountId: mail.id, subject: { kind: "user" as const, id: o.people.lea.id }, level: "read" as const }
+    expect((await refusal(setAccountRule(ada.db, ada.identity, restrict))).code).toBe("not_found")
+
+    await setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "org" }, level: "read" })
+    expect((await refusal(setAccountRule(ada.db, ada.identity, restrict))).code).toBe("forbidden")
+    expect(await accountLevel(lea.db, lea.identity, mail.id)).toBe(4)
+  })
 })
+

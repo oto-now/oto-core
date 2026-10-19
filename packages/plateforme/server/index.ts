@@ -115,9 +115,9 @@ export { listFeedback } from "./feedback"
 // E05-S13 (AC-9) : les retours à l'équipe plateforme seule, règle lue par la page et le layout de l'hôte.
 export { handlesFeedback } from "./feedback"
 // Tableau de bord (E08-S03) : services de connecteurs d'E04-S01, qui lui laissait ces exports, impact
-// d'une désactivation et comptes de l'organisation.
+// d'une désactivation et comptes de l'organisation ; les comptes personnels de qui regarde, pour l'écran ouvert aux membres.
 export { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "./connectors/activations"
-export { createAccount, disableAccount, listOrgAccounts } from "./connectors/accounts"
+export { createAccount, disableAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
 // Le secret et les réglages d'un compte réel, posés par qui le gère (écran Connecteurs, outillage), jamais rendus ; le
 // formulaire de chaque connecteur déclaré, que l'écran Connecteurs reçoit de sa page.
 export { connectorAccountForms, setAccountSecret } from "./connectors/account-secret"

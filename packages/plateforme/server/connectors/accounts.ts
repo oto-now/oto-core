@@ -121,11 +121,11 @@ export type AccountRow = {
 }
 
 /**
- * Les comptes de l'organisation : ceux d'un connecteur, un seul par son identifiant, ou tous (un filtre
- * absent, `null`, ne retient rien). Colonnes listées, jamais `secret_ciphertext`, que la base n'accorde
- * pas à `authenticated`.
+ * Les comptes de l'organisation : ceux d'un connecteur, un seul par son identifiant, les comptes personnels d'une
+ * personne, ou tous (un filtre absent, `null`, ne retient rien). Colonnes listées, jamais `secret_ciphertext`, que la
+ * base n'accorde pas à `authenticated`.
  */
-export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string } = {}) {
+export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string; ownerUserId?: string } = {}) {
   return sql<AccountRow[]>`
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
            a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.health -> 'mark' as mark,
@@ -133,7 +133,8 @@ export function accountRows(sql: Tx, orgId: string, only: { connector?: string; 
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
        and a.connector = coalesce(${only.connector ?? null}, a.connector)
-       and a.id = coalesce(${only.id ?? null}::uuid, a.id)`
+       and a.id = coalesce(${only.id ?? null}::uuid, a.id)
+       and (${only.ownerUserId ?? null}::uuid is null or (a.owner_kind = 'user' and a.owner_user_id = ${only.ownerUserId ?? null}::uuid))`
 }
 
 /** Niveau d'un compte visible (1 au moins) : `read`, `write`, `sensitive` ou `manage`, le nom de son rang (N34). */
@@ -322,6 +323,22 @@ function accountView(row: AccountRow, level: AccountLevel): AccountView {
  */
 export async function listOrgAccounts(db: PlatformDb, identity: Identity): Promise<AccountView[]> {
   const rows = await inTransaction(db, "listOrgAccounts: accounts", (sql) => accountRows(sql, identity.org.id))
+  return visibleViews(db, identity, rows)
+}
+
+/**
+ * Les comptes personnels de l'appelant, ceux dont il est le propriétaire, désactivés compris, triés par libellé : ce que
+ * l'écran Connecteurs montre à un membre (`connecteurs-et-comptes.md` § Écran Connecteurs). Filtrés au niveau 1 au
+ * moins comme `listOrgAccounts` : un compte qu'une règle lui fermerait ne se montre pas. Ni le compte d'un autre, même
+ * partagé avec lui, ni ceux de ses équipes ou de l'organisation.
+ */
+export async function listOwnAccounts(db: PlatformDb, identity: Identity): Promise<AccountView[]> {
+  const rows = await inTransaction(db, "listOwnAccounts: accounts", (sql) => accountRows(sql, identity.org.id, { ownerUserId: identity.user.id }))
+  return visibleViews(db, identity, rows)
+}
+
+/** La vue des comptes lus que l'appelant voit (niveau 1 au moins, `accountLevels` en un lot), triée par libellé. */
+async function visibleViews(db: PlatformDb, identity: Identity, rows: AccountRow[]): Promise<AccountView[]> {
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
   return rows
     .flatMap((row) => {

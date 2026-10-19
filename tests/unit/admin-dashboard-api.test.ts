@@ -5,7 +5,8 @@
 // posés par le test. Pour chaque route : sans session (401) ; un membre qui n'administre pas (403, décidé
 // par le service, aucune écriture envoyée : l'espion des deux faces, `recordDb`) ; un corps invalide
 // (400) ; l'administrateur (200, la vue à jour, une ligne de journal `api`, relue dans la base). Le
-// registre des drapeaux, vide en V1, en déclare un ici.
+// registre des drapeaux, vide en V1, en déclare un ici. Le partage d'un compte (`admin/account-rules`) se sert aussi au
+// propriétaire d'un compte personnel qui n'administre pas (écran Connecteurs ouvert aux membres), et à lui seul.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import type { Identity, PlatformDb } from "@otomata_tech/oto_platform/server"
@@ -41,6 +42,11 @@ vi.mock("../../packages/plateforme/server/flags", async (importOriginal) => {
 
 /** Le compte d'organisation d'acme à désactiver, en identifiant simulé ; la fixture lui tire sa valeur réelle. */
 const ACCOUNT = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e"
+/** Le partage de ce compte à toute l'organisation, en lecture, quand le cas le pose. */
+const RULE = "6b2f3c1d-4e5a-4b6c-8d7e-0000000000a1"
+/** Les comptes personnels de Marc et d'Ada, quand le cas les pose. */
+const MARCS = "6b2f3c1d-4e5a-4b6c-8d7e-0000000000b1"
+const ADAS = "6b2f3c1d-4e5a-4b6c-8d7e-0000000000b2"
 /** Un connecteur réel déclaré par le test, sous un nom propre au passage : le compte de `admin/accounts/<id>/secret`. */
 const LIVE = `t${Math.random().toString(16).slice(2, 10)}`
 /** Une valeur de secret tirée à l'exécution, qui ne doit jamais atteindre le journal. */
@@ -89,6 +95,16 @@ function request(method: string, path: string, body?: unknown) {
 
 type Sent = { method: string; path: string; body?: unknown; change?: (all: Tables) => void }
 
+/** Le partage du compte d'organisation à toute l'organisation, en lecture. */
+function orgRule(): Row {
+  return { id: RULE, org_id: ORGS.acme.id, account_id: ACCOUNT, subject_org: true, level: "read" }
+}
+
+/** Le compte personnel simulé d'une personne d'acme. */
+function personal(id: string, owner: "ada" | "marc", label: string): Row {
+  return { id, org_id: ORGS.acme.id, connector: "mail", label, owner_kind: "user", owner_team_id: null, owner_user_id: PERSONS[owner].id, mode: "simule", status: "active" }
+}
+
 /** Les lignes de journal d'acme, relues en identifiants simulés. */
 async function journal(): Promise<Row[]> {
   return admin.readable([...(await seed.admin<Row[]>`select * from platform.journal where org_id = ${admin.orgs.acme.id} order by id`)])
@@ -114,9 +130,9 @@ async function call(person: "ada" | "marc" | null, { method, path, body, change 
   if (person) vi.mocked(resolveIdentity).mockResolvedValue(identity(person))
   const tasks: (() => Promise<void>)[] = []
   try {
-    // L'adresse d'un compte porte son identifiant réel, tiré à l'écriture ci-dessus.
-    const realPath = path.replace(ACCOUNT, admin.id(ACCOUNT))
-    const response = await handlePlateforme(request(method, realPath, body), { accessToken: person ? "token" : null, host: admin.orgs.acme.host, defer: (task) => tasks.push(task), verifyToken })
+    // L'adresse et le corps portent les identifiants réels des lignes, tirés à l'écriture ci-dessus.
+    const realPath = path.split("/").map((segment) => admin.real(segment)).join("/")
+    const response = await handlePlateforme(request(method, realPath, admin.real(body)), { accessToken: person ? "token" : null, host: admin.orgs.acme.host, defer: (task) => tasks.push(task), verifyToken })
     const writes: SentRequest[] = spied?.writes() ?? []
     for (const task of tasks) await task()
     return { status: response.status, body: await response.json(), writes, journal: await journal() }
@@ -209,6 +225,30 @@ const ROUTES: RouteCase[] = [
     },
   },
   {
+    name: "POST admin/account-rules",
+    method: "POST",
+    path: "admin/account-rules",
+    body: { accountId: ACCOUNT, subject: { kind: "org" }, level: "write" },
+    invalid: { path: "admin/account-rules", body: { accountId: ACCOUNT, subject: { kind: "org" }, level: "everything" } },
+    // Le partage déjà posé change de niveau : 200, comme une règle remplacée ; une règle nouvelle rend 201 (plus bas).
+    data: () => ({ rule: { id: RULE, accountId: ACCOUNT, label: "Mail Acme", subject: { kind: "org" }, level: "write", created: false } }),
+    target: "account:Mail Acme",
+    change: (all) => {
+      all.access_rules = [orgRule()]
+    },
+  },
+  {
+    name: "DELETE admin/account-rules",
+    method: "DELETE",
+    path: `admin/account-rules/${RULE}`,
+    invalid: { path: "admin/account-rules/Mail Acme" },
+    data: () => ({ rule: { id: RULE, accountId: ACCOUNT, label: "Mail Acme" } }),
+    target: "account:Mail Acme",
+    change: (all) => {
+      all.access_rules = [orgRule()]
+    },
+  },
+  {
     name: "PATCH admin/flags",
     method: "PATCH",
     path: "admin/flags",
@@ -288,5 +328,61 @@ describe.skipIf(!sqlConfigured)(portable("admin/* routes of the dashboard (AC10)
     expect(refused.status).toBe(403)
     expect(refused.journal).toMatchObject([{ tool: "POST admin/accounts", target: "Mail \ufffd", is_error: true }])
     expect(String(refused.journal[0]?.target).isWellFormed()).toBe(true)
+  })
+})
+
+// Le partage d'un compte personnel par son propriétaire, qui n'administre pas (écran Connecteurs ouvert aux membres) :
+// le sien seulement, décidé par `setAccountRule` et `removeAccountRule` avant toute écriture. Un compte qu'il ne voit pas
+// répond comme un identifiant inconnu (404) ; l'administrateur ne gère pas le compte personnel d'un membre, comme avant
+// (question ouverte : un administrateur peut-il le restreindre ?).
+describe.skipIf(!sqlConfigured)(portable("admin/account-rules for the owner of a personal account"), { timeout: 60_000 }, () => {
+  beforeAll(async () => {
+    seed = seedWithAdmin()
+    admin = await seedAdminFixture(seed)
+  }, 180_000)
+
+  afterAll(async () => {
+    await seed?.cleanup()
+  }, 180_000)
+
+  const accounts = (all: Tables, rules: Row[] = []) => {
+    all.accounts = [...all.accounts, personal(MARCS, "marc", "Mail Marc"), personal(ADAS, "ada", "Mail Ada")]
+    all.access_rules = rules
+  }
+
+  it("should let a member share their own personal account with the organisation (201), then remove the share (200)", async () => {
+    const shared = await call("marc", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "org" }, level: "write" }, change: (all) => accounts(all) })
+    expect(shared.status).toBe(201)
+    expect(admin.readable(shared.body.data.rule)).toMatchObject({ accountId: MARCS, label: "Mail Marc", subject: { kind: "org" }, level: "write", created: true })
+    expect(shared.journal).toMatchObject([{ user_id: PERSONS.marc.id, method: "api", tool: "POST admin/account-rules", target: "account:Mail Marc", is_error: false }])
+
+    const removed = await call("marc", { method: "DELETE", path: `admin/account-rules/${RULE}`, change: (all) => accounts(all, [{ ...orgRule(), account_id: MARCS }]) })
+    expect(removed.status).toBe(200)
+    expect(admin.readable(removed.body.data)).toEqual({ rule: { id: RULE, accountId: MARCS, label: "Mail Marc" } })
+    expect(removed.journal).toMatchObject([{ tool: "DELETE admin/account-rules", target: "account:Mail Marc", is_error: false }])
+  })
+
+  it("should answer 404 without a write to a member on the personal account of another, and on its rule", async () => {
+    const posed = await call("marc", { method: "POST", path: "admin/account-rules", body: { accountId: ADAS, subject: { kind: "org" }, level: "read" }, change: (all) => accounts(all) })
+    expect([posed.status, posed.body.error.code, posed.writes]).toEqual([404, "not_found", []])
+
+    const removed = await call("marc", { method: "DELETE", path: `admin/account-rules/${RULE}`, change: (all) => accounts(all, [{ ...orgRule(), account_id: ADAS, subject_org: false, subject_user_id: PERSONS.claire.id }]) })
+    expect([removed.status, removed.body.error.code, removed.writes]).toEqual([404, "not_found", []])
+  })
+
+  it("should refuse a member the management level, which only an administrator grants (403)", async () => {
+    const refused = await call("marc", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "org" }, level: "manage" }, change: (all) => accounts(all) })
+    expect([refused.status, refused.body.error.code, refused.writes]).toEqual([403, "forbidden", []])
+  })
+
+  it("should keep an administrator out of the personal account of a member, as before: 404 unseen, 403 once shared with all in read", async () => {
+    const unseen = await call("ada", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "user", id: PERSONS.ada.id }, level: "read" }, change: (all) => accounts(all) })
+    expect([unseen.status, unseen.body.error.code, unseen.writes]).toEqual([404, "not_found", []])
+
+    const sharedRule = { ...orgRule(), account_id: MARCS }
+    const seen = await call("ada", { method: "POST", path: "admin/account-rules", body: { accountId: MARCS, subject: { kind: "user", id: PERSONS.marc.id }, level: "read" }, change: (all) => accounts(all, [sharedRule]) })
+    expect([seen.status, seen.body.error.code, seen.writes]).toEqual([403, "forbidden", []])
+    const removal = await call("ada", { method: "DELETE", path: `admin/account-rules/${RULE}`, change: (all) => accounts(all, [sharedRule]) })
+    expect([removal.status, removal.body.error.code, removal.writes]).toEqual([403, "forbidden", []])
   })
 })

@@ -6,27 +6,12 @@
 // sujet ou un auteur sans nom (équipe supprimée, personne qui n'est plus membre) et un geste hors d'une session se
 // disent tels quels.
 import { useState } from "react"
-import type { AccountLevelName, AccountShareEventView, AccountView } from "../../../schemas"
+import type { AccountShareEventView, AccountView } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
 import { Alert, Button } from "../../ds/react/primitives"
 import { dateEtHeureLisibles } from "../../format/dates"
-
-const NIVEAUX: Record<AccountLevelName, string> = {
-  none: "sans accès",
-  read: "en lecture",
-  write: "en écriture",
-  sensitive: "jusqu'aux fonctions sensibles",
-  manage: "en gestion",
-}
-
-/** Le sujet d'une ligne : l'organisation, l'équipe ou la personne, nommée à la lecture. */
-function sujet(evenement: AccountShareEventView): string {
-  const { kind, name } = evenement.subject
-  if (kind === "org") return `toute l'organisation${name ? ` (${name})` : ""}`
-  if (kind === "team") return name ? `l'équipe ${name}` : "une équipe supprimée"
-  return name ?? "une personne qui n'est plus membre"
-}
+import { NIVEAUX_DU_COMPTE as NIVEAUX, sujetDuPartage } from "./libelles-des-partages"
 
 /** « 17 octobre 2026 à 09:12 · Claire Morel a partagé à l'équipe Ventes en écriture (avant : en lecture) ». */
 export function ligneDuJournal(evenement: AccountShareEventView): string {
@@ -34,8 +19,8 @@ export function ligneDuJournal(evenement: AccountShareEventView): string {
   const qui = evenement.by === null ? "Hors session" : (evenement.by.name ?? "Une personne qui n'est plus membre")
   const geste =
     evenement.action === "removed"
-      ? `a retiré le partage à ${sujet(evenement)} (${NIVEAUX[evenement.level]})`
-      : `a partagé à ${sujet(evenement)} ${NIVEAUX[evenement.level]}${evenement.previous ? ` (avant : ${NIVEAUX[evenement.previous]})` : ""}`
+      ? `a retiré le partage à ${sujetDuPartage(evenement.subject)} (${NIVEAUX[evenement.level]})`
+      : `a partagé à ${sujetDuPartage(evenement.subject)} ${NIVEAUX[evenement.level]}${evenement.previous ? ` (avant : ${NIVEAUX[evenement.previous]})` : ""}`
   return `${quand} · ${qui} ${geste}`
 }
 

@@ -2,8 +2,15 @@ import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement, EcranConnecteurs, EcranConnecteursChargement, issueDuConsentement, type DonneesDesConnecteurs } from "@otomata_tech/oto_platform/ui"
-import { choisirDansLaListe } from "../../helpers/liste-de-choix"
+import {
+  ContexteDeRafraichissement,
+  EcranConnecteurs,
+  EcranConnecteursChargement,
+  issueDuConsentement,
+  type DonneesDeMesComptes,
+  type DonneesDesConnecteurs,
+} from "@otomata_tech/oto_platform/ui"
+import { choisirDansLaListe, libellesDesChoix } from "../../helpers/liste-de-choix"
 
 // L'écran « Connecteurs » du tableau de bord (E08-S03 : AC4 à AC7, AC12 ; comptes-a-plusieurs-champs : saisie du
 // secret et des réglages d'un compte réel), sur le design system d'oto-frontend (E05-S09 partie d2) : `fetch` simulé
@@ -31,6 +38,7 @@ const DONNEES: DonneesDesConnecteurs = {
   impacts: { mail: { functions: ["mail.create_draft", "mail.send_draft"], procedures: ["ventes/qualifier_prospects"], accounts: 1 } },
   accounts: [MAIL_VENTES, { ...MAIL_VENTES, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Mail Ancien", owner: { kind: "org" }, status: "disabled" }],
   options: { teams: [{ id: VENTES, name: "Ventes" }] },
+  partages: {},
 }
 
 const fetchMock = vi.fn<typeof fetch>()
@@ -436,5 +444,111 @@ describe("EcranConnecteurs, the share journal of an account (#68)", () => {
   it("should offer no journal on an account the person does not manage", () => {
     rendre({ accounts: [{ ...MON_COMPTE, label: "Mail Claire", viewerLevel: "write" }] })
     expect(screen.queryByRole("button", { name: /Journal des partages/ })).toBeNull()
+  })
+})
+
+// L'écran ouvert aux membres (`connecteurs-et-comptes.md` § Écran Connecteurs) : à qui n'administre pas, ses seuls
+// comptes personnels, sans catalogue ni création ; sous chaque compte personnel qu'il gère, ses partages, retirés par un
+// geste confirmé, et le formulaire qui partage à toute l'organisation ou à une équipe.
+describe("EcranConnecteurs, a member's own accounts and their shares", () => {
+  const MON_COMPTE: AccountView = { ...MAIL_VENTES, label: "Mail Léa", owner: { kind: "user" } }
+  const REGLE_ORG = "1a2b3c4d-0000-4000-8000-000000000001"
+  const REGLE_VENTES = "1a2b3c4d-0000-4000-8000-000000000002"
+  const PARTAGES = {
+    [COMPTE]: { general: { id: REGLE_ORG, level: "write" as const }, rules: [{ id: REGLE_VENTES, subject: { kind: "team" as const, name: "Ventes" }, level: "read" as const }] },
+  }
+  const MES_COMPTES: DonneesDeMesComptes = { accounts: [MON_COMPTE], options: { teams: [{ id: VENTES, name: "Ventes" }] }, partages: PARTAGES }
+
+  function rendreMesComptes(donnees: Partial<DonneesDeMesComptes> = {}) {
+    return render(
+      <ContexteDeRafraichissement.Provider value={rafraichir}>
+        <EcranConnecteurs resultat={{ data: { ...MES_COMPTES, ...donnees } }} Lien={Lien} ici="/admin/connectors" />
+      </ContexteDeRafraichissement.Provider>,
+    )
+  }
+
+  it("should show a member their own accounts only, with neither the catalog nor the creation of an account", () => {
+    rendreMesComptes()
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Connecteurs")
+    const comptes = within(screen.getByRole("region", { name: "Mes comptes" }))
+    expect(comptes.getByText("1 compte")).toBeInTheDocument()
+    expect(comptes.getByText("Mail Léa · mail · personnel · simulé · actif")).toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Connecteurs" })).toBeNull()
+    expect(screen.queryByRole("region", { name: "Créer un compte" })).toBeNull()
+    expect(screen.queryByRole("region", { name: "Connecter mon compte" })).toBeNull()
+    expect(comptes.getByRole("button", { name: "Journal des partages de Mail Léa" })).toBeInTheDocument()
+  })
+
+  it("should say a member has no account yet, and offer to connect theirs where the host gave the port", () => {
+    rendreMesComptes({ accounts: [], partages: {}, formulaires: [FORMULAIRE_MS] })
+    expect(within(screen.getByRole("region", { name: "Mes comptes" })).getByText("Vous n'avez aucun compte personnel.")).toBeInTheDocument()
+    expect(within(screen.getByRole("region", { name: "Connecter mon compte" })).getByRole("button", { name: "Connecter mon compte Microsoft 365" })).toBeInTheDocument()
+  })
+
+  it("should list the shares of an account the person manages, and remove one after the question", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { rule: { id: REGLE_VENTES } } }))
+    rendreMesComptes()
+
+    const partages = within(screen.getByRole("list", { name: "Partages de Mail Léa" }))
+    expect(partages.getAllByRole("listitem").map((ligne) => ligne.querySelector("span")?.textContent)).toEqual([
+      "toute l'organisation · en écriture",
+      "l'équipe Ventes · en lecture",
+    ])
+    fireEvent.click(partages.getByRole("button", { name: "Retirer le partage à l'équipe Ventes" }))
+    const question = "Retirer le partage de « Mail Léa » à l'équipe Ventes ?"
+    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Retirer le partage" }))
+
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envoi()).toEqual({ url: `/api/platform/admin/account-rules/${REGLE_VENTES}`, methode: "DELETE", corps: undefined })
+    expect(screen.getByRole("heading", { level: 2, name: "Mes comptes" })).toHaveFocus()
+  })
+
+  it("should share an account with a team at a level of the account scale, never the management, then have the page re-read", async () => {
+    fetchMock.mockResolvedValue(reponse(201, { data: { rule: { id: REGLE_VENTES, created: true } } }))
+    rendreMesComptes({ partages: { [COMPTE]: { general: null, rules: [] } } })
+
+    expect(screen.getByText("Ce compte n'est partagé avec personne.")).toBeInTheDocument()
+    expect(libellesDesChoix(screen.getByLabelText("Partager à"))).toEqual(["toute l'organisation", "l'équipe Ventes"])
+    expect(libellesDesChoix(screen.getByLabelText("Niveau"))).toEqual(["en lecture", "en écriture", "jusqu'aux fonctions sensibles"])
+    choisirDansLaListe(screen.getByLabelText("Partager à"), "l'équipe Ventes")
+    choisirDansLaListe(screen.getByLabelText("Niveau"), "jusqu'aux fonctions sensibles")
+    fireEvent.click(screen.getByRole("button", { name: "Partager" }))
+
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envoi()).toEqual({
+      url: "/api/platform/admin/account-rules",
+      methode: "POST",
+      corps: { accountId: COMPTE, subject: { kind: "team", id: VENTES }, level: "sensitive" },
+    })
+    expect(within(screen.getByRole("form", { name: "Partager Mail Léa" })).getByRole("status")).toHaveTextContent("Partage enregistré.")
+  })
+
+  it("should share with the whole organisation by default, and say a refusal under the form", async () => {
+    fetchMock.mockResolvedValue(reponse(403, { error: { code: "forbidden", message: "server text" } }))
+    rendreMesComptes()
+    fireEvent.click(screen.getByRole("button", { name: "Partager" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Seule une personne qui gère ce compte peut le partager.")
+    expect(envoi().corps).toEqual({ accountId: COMPTE, subject: { kind: "org" }, level: "read" })
+    expect(rafraichir).not.toHaveBeenCalled()
+  })
+
+  it("should offer no share on an account the person does not manage, nor on an account of a team or of the organisation", () => {
+    rendreMesComptes({ accounts: [{ ...MON_COMPTE, viewerLevel: "write" }] })
+    expect(screen.queryByRole("form", { name: /^Partager/ })).toBeNull()
+    expect(screen.queryByText("Partages de Mail Léa")).toBeNull()
+    cleanup()
+
+    // L'administrateur garde sa vue : un compte d'équipe qu'il gère n'a que son journal, même si des partages arrivaient.
+    rendre({ partages: { [COMPTE]: { general: null, rules: [] } } })
+    expect(screen.queryByRole("form", { name: /^Partager/ })).toBeNull()
+    expect(screen.getByRole("button", { name: "Journal des partages de Mail Ventes" })).toBeInTheDocument()
+  })
+
+  it("should give an administrator the shares of their own personal account, beside the catalog", () => {
+    rendre({ accounts: [MAIL_VENTES, { ...MON_COMPTE, id: "8d4b5e3f-6a7c-4d8e-9f0a-1b2c3d4e5f60" }], partages: { "8d4b5e3f-6a7c-4d8e-9f0a-1b2c3d4e5f60": { general: null, rules: [] } } })
+    expect(screen.getByRole("region", { name: "Connecteurs" })).toBeInTheDocument()
+    expect(within(screen.getByRole("region", { name: "Comptes" })).getAllByRole("form", { name: /^Partager/ })).toHaveLength(1)
+    expect(screen.getByRole("form", { name: "Partager Mail Léa" })).toBeInTheDocument()
   })
 })

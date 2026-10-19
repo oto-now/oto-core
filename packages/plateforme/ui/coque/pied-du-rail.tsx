@@ -3,7 +3,7 @@
 // Porté d'oto-frontend (src/components/coque/compte-du-rail.tsx et le pied de rail-application.tsx) : la
 // ligne « Connecteurs », puis la ligne de compte et son menu, ouvert par l'engrenage. Changé : les
 // entrées sont celles de `ecransPermis` rangées au pied ou au compte, aux adresses que l'hôte sert
-// (E05-S11) — « Connecteurs » pour qui administre (AC-32), « Profil » ouvre la page Profil (AC-6),
+// (E05-S11) — « Connecteurs » (AC-32), pour chaque membre depuis que l'écran leur montre leurs comptes, « Profil » ouvre la page Profil (AC-6),
 // « Brancher un assistant », la Corbeille (AC-e22) —, puis un filet et la déconnexion de l'hôte. Retiré :
 // Agents, Procédures (portage-ecrans.md § 0), la ligne « Couleur » et « Apparence » (E05-S11, AC-6 : la
 // couleur de la personne se choisit dans Profil, celle de l'organisation dans Organisation), la ligne
@@ -59,11 +59,11 @@ export type PiedDuRailProps = {
   /** Le nom de la personne ; `null` quand l'identité n'a pas été lue (« Mon compte »). */
   compte: string | null
   adresses: AdressesDuRail
-  /** `isOrgAdmin` de l'identité : « Connecteurs ». */
+  /** `isOrgAdmin` de l'identité : les écrans d'administration que `ecransPermis` réserve. */
   administre: boolean
 }
 
-/** Le pied du rail : « Connecteurs » (qui administre), puis le compte et son menu. */
+/** Le pied du rail : « Connecteurs », puis le compte et son menu. */
 export function PiedDuRail({ compte, adresses, administre }: PiedDuRailProps) {
   const hote = useHote()
   const ecrans = ecransPermis(adresses, administre)

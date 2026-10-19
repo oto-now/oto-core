@@ -1,7 +1,7 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-10-18
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -137,12 +137,12 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 ## Écart avec le code
 
 - `default_team_id` et `lead_user_id` vidés restent en base, à retirer en 1.1 ; services et API des règles d'accès et des accès plateforme sans écran client (M73).
-- Partage des comptes : l'écran Connecteurs est réservé à l'administrateur, si bien qu'un propriétaire qui n'administre pas lit le journal de son compte par la route seule ; aucune porte ne lui permet encore de poser une règle sur son compte (services seuls ; `admin_connector add_account_rule` ne prend ni l'organisation pour sujet ni un compte personnel qu'un administrateur ne gère pas) ; aucune pause d'un membre n'existe, `owner_left` d'`accountRows` est son point d'entrée (oto-now/oto-core#68).
+- Partage des comptes : l'écran Connecteurs, ouvert aux membres, partage un compte personnel à l'organisation ou à une équipe (`POST admin/account-rules`, [connecteurs et comptes](connecteurs-et-comptes.md) § Écran Connecteurs) ; `admin_connector add_account_rule` ne prend ni l'organisation pour sujet ni un compte personnel qu'un administrateur ne gère pas ; aucune pause d'un membre n'existe, `owner_left` d'`accountRows` est son point d'entrée (oto-now/oto-core#68).
 - Upsert et vue du sujet des règles (`server/rules.ts`), curseur au-delà de 200 éléments (M18b) ; `DirectoryEntry.email` et `StaffEntry` en `string | null`, `server/admin/grants.ts` sur `sameEmail` (M20b) ; commentaires de `server/` rendus faux par l'isolation par organisation (M15b).
 
 ## Questions ouvertes
 
-Aucune à ce jour.
+- Deux questions sur le compte personnel, l'administrateur qui le restreindrait et le propriétaire qui s'en retirerait la gestion, vivent dans [connecteurs et comptes](connecteurs-et-comptes.md) § Questions ouvertes.
 
 ## Historique
 

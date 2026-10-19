@@ -219,9 +219,9 @@ describe("RailApplication zones (AC-a3)", () => {
     expect(within(rail).queryByRole("button", { name: /^(Agents|Couleur du thème)$/ })).toBeNull()
   })
 
-  it("should keep Connecteurs out of the foot for a person who does not administer, and mark it current on its screens (AC-32)", () => {
+  it("should give Connecteurs to a person who does not administer too, where they see their own accounts, and mark it current on its screens (AC-32)", () => {
     const membre = monter({ administre: false })
-    expect(within(membre).queryByRole("link", { name: "Connecteurs" })).toBeNull()
+    expect(within(membre).getByRole("link", { name: "Connecteurs" })).toHaveAttribute("href", "/admin/connectors")
     cleanup()
 
     const admin = monter({}, "/admin/connectors")
