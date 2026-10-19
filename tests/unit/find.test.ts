@@ -236,14 +236,20 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
           "   3 of 5 matching blocks shown: read the page for the others, or search more exact words.",
           // E11-S19 (AC-e5) : Ada, administratrice, écrit la page ; ses blocs simulés n'ont pas de section en base.
           `   To edit: ${ref.org.prefix}_write {"path": "ventes/c_bloc", "base_revision": ${cRevision}, "ops": [...]}.`,
-          "More nodes match (at least 1): add words or set type to narrow the search.",
+          // Le quatrième nœud, en une ligne : l'agent le voit et peut le lire.
+          "Other matches:",
+          "- ventes/d_bloc (page, score 0.03): Page D. Une autre page dont un bloc porte le mot.",
           readLine(ref.org.prefix),
         ].join("\n"),
       )
-      expect(result.data).toMatchObject({ more_nodes: 1, matches: [{}, {}, { path: "ventes/c_bloc", blocks_total: 5 }] })
+      expect(result.data).toMatchObject({
+        more_nodes: 1,
+        others: [{ path: "ventes/d_bloc", kind: "page", title: "Page D", score: 0.03 }],
+        matches: [{}, {}, { path: "ventes/c_bloc", blocks_total: 5 }],
+      })
       const whole = await find(db, ada, { query: "zorglub seul" }, NO_CATALOG)
-      expect(whole.text).not.toContain("More nodes match")
-      expect(whole.data).toMatchObject({ more_nodes: 0 })
+      expect(whole.text).not.toContain("Other matches")
+      expect(whole.data).toMatchObject({ more_nodes: 0, others: [] })
     })
   })
 
@@ -390,7 +396,7 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
 
       const found = await session.call("find", { ctx: code, query })
       expect(found.isError).toBe(false)
-      expect(Object.keys(found.result.structuredContent ?? {}).sort()).toEqual(["functions", "matches", "more_nodes", "next_actions", "text"])
+      expect(Object.keys(found.result.structuredContent ?? {}).sort()).toEqual(["functions", "matches", "more_nodes", "next_actions", "others", "text"])
       expect(found.result.structuredContent).toMatchObject({
         text: found.text,
         matches: [{ path: GRILLE, kind: "page", title: "Grille tarifaire 2026", score: 1, places: [{ match: "title", block: null, block_type: null, column: null }] }],

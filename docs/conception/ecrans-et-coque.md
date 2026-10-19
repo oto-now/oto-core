@@ -1,7 +1,7 @@
 # Écrans et coque
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-02
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -45,7 +45,7 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 
 ### Rail et menus
 
-- Sous 768 px, un bouton « Menu » ouvre le rail en tiroir, sans piège du focus (D90).
+- Sous 1 024 px, un bouton « Menu » ouvre le rail en tiroir, sans piège du focus (D90) ; le tiroir garde les noms du rail complet. Le palier « icônes seules » d'oto-frontend (56 px entre 768 et 1 024 px) est retiré : un arbre de pages, chaque ligne un même glyphe, ne s'y lisait plus. Le bouton « Menu » se pose sur la première ligne de l'en-tête d'écran (le fil, sinon le titre), qui lui fait place : seul sur sa rangée, il coûtait environ 60 px en haut d'un téléphone (premier bloc d'une procédure à 380 px sur 844, 310 px depuis) ; sans en-tête d'écran, il garde sa rangée.
 - L'arbre des écrans d'un admin est celui d'un membre, calculé par le service (`visibleTree` sur l'identité de membre) : il y voit ses équipes et une page partagée avec lui, son équipe ou toute l'organisation ; ses droits ne changent pas (HN-E11S10-5, validée par le responsable d'Oto). Un admin ne voit dans le rail que ses équipes ; le créateur d'une équipe en devient responsable (D136). `admin_team create` avec `email` : la personne nommée devient la seule responsable, le créateur reste membre, la description de l'outil ne change pas (HN-E11S10-9).
 - Le Contexte reste dans le rail : ligne « Contexte · <section> », son « + », glisser-déposer ; la fiche D110 ne change pas (HN-E11S10-13, tranchée par le responsable d'Oto). Son titre est composé à l'écran (`titreDeContexte(section)`), jamais un champ ; le titre enregistré ne change pas (HN-E05S11-13). Le « ⋯ » d'un Contexte offre « Télécharger en .md », son seul geste (D139).
 - L'espace Privé existe dès la première connexion : `ensure_private_space` n'écrit rien sous un `private/<handle>` tenu par une autre personne, ni Contexte, ni changement de propriétaire (HN-E11S10-A) ; la renumérotation `<handle>_<n>` est sautée quand l'espace est déjà à `private/<handle>`, un second appel n'écrit rien (HN-E11S10-B). Sa migration (`20260929160000`, après `20260929140000` d'E11-S04) est réunie dans la migration unique de 1.1.0 (HN-E11S10-C ; D131, D145, D124, [distribution du paquet](distribution-du-paquet.md)).
@@ -114,4 +114,5 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-008, les fiches D15, D16, D90, D136, D139, P16, les questions Q3 et Q4 et les choix des stories E05-S07, E05-S09, E05-S11, E11-S09, E11-S10, E11-S20 — décidé par Alexis, accord de JB.
 - 2026-10-02 : ADR-008 § 5 appliqué : le widget routeur dans la conversation rend les composants du design system — proposé par la session de la story widgets-dans-la-conversation, avec ADR-009 § 3 ([outils MCP](outils-mcp.md)).
 - 2026-10-03 : le menu du compte du rail offre la bascule jour ou nuit quand l'hôte la sert (`Hote.apparence` : le mode et le geste) ; le mode reste à l'hôte, le paquet ne l'écrit pas — demandé par JB (source : hôte SaaS, aucun moyen de changer de mode dans l'application).
+- 2026-10-19 : le rail passe en tiroir sous 1 024 px, le palier « icônes seules » est retiré — décidé par JB (source : session du 19/10/2026).
 - 2026-10-15 : un « ⋯ » à chaque équipe du rail, qui ouvre sur place ses personnes et, pour qui administre, sa suppression — demandé par JB (source : session du 2026-10-15).

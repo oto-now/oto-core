@@ -21,8 +21,16 @@ import { FUNCTIONS_PATH } from "./reserved-paths"
 import { formatScore, roundScore } from "./routing"
 import type { ToolOutput } from "./tool-output"
 
-/** Nœuds et fonctions servis au plus : la description figée de `find` le promet (N13). */
+/** Nœuds servis en détail et fonctions servies au plus : la description de `find` le promet (N13). */
 const FIND_LIMIT = 3
+/**
+ * Les nœuds suivants, servis en une ligne chacun (chemin, genre, score, titre et début du résumé) : sans eux, l'agent
+ * savait qu'il en existait d'autres sans pouvoir juger s'ils étaient meilleurs (« créer une tâche » cachait la bonne
+ * procédure au-delà du troisième rang).
+ */
+const OTHERS_MAX = 10
+/** Le titre et le résumé d'un nœud suivant, sur une ligne. */
+const OTHER_LINE_MAX = 160
 /** `p_limit` de `search_content`, sa borne : les emplacements des trois premiers nœuds y sont presque toujours. */
 const SEARCH_ROWS = 50
 /** Un rang de `search_content` est dans [0, 3] (titre, résumé, bloc) ; le score d'un nœud, dans [0, 1]. */
@@ -85,11 +93,11 @@ function placeOf(row: SearchRow): Place {
 }
 
 /**
- * Les lignes regroupées par nœud (N11) : trois nœuds au plus, dans l'ordre de leur première ligne,
- * chacun avec ses emplacements dans l'ordre des lignes et son score (meilleur rang / 3, N13), et le
- * nombre des autres nœuds vus. Sur les lignes que le filtre de niveau a gardées (HN-E01S07-8).
+ * Les lignes regroupées par nœud (N11) : trois nœuds servis en détail, dans l'ordre de leur première ligne,
+ * chacun avec ses emplacements dans l'ordre des lignes et son score (meilleur rang / 3, N13), les dix suivants
+ * (`others`), et le nombre des nœuds vus au-delà des trois premiers. Sur les lignes que le filtre de niveau a gardées (HN-E01S07-8).
  */
-function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; moreNodes: number } {
+function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; others: NodeMatch[]; moreNodes: number } {
   const byNode = new Map<string, NodeMatch>()
   for (const row of rows) {
     const found = byNode.get(row.node_id)
@@ -100,7 +108,7 @@ function groupMatches(rows: readonly SearchRow[]): { nodes: NodeMatch[]; moreNod
     if (!found) byNode.set(row.node_id, node)
   }
   const nodes = [...byNode.values()]
-  return { nodes: nodes.slice(0, FIND_LIMIT), moreNodes: Math.max(0, nodes.length - FIND_LIMIT) }
+  return { nodes: nodes.slice(0, FIND_LIMIT), others: nodes.slice(FIND_LIMIT, FIND_LIMIT + OTHERS_MAX), moreNodes: Math.max(0, nodes.length - FIND_LIMIT) }
 }
 
 /** Première phrase d'une description : jusqu'au premier point suivi d'une espace ou de la fin, point final redit. */
@@ -175,15 +183,21 @@ function nodeLines(node: NodeMatch, index: number, prefix: string): string[] {
   return [`${index + 1}. ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${title}. ${summary}`, ...blocks, ...hidden, ...edit]
 }
 
+/** Un nœud suivant en une ligne : chemin, genre, score, titre et début du résumé. */
+function otherLine(node: NodeMatch): string {
+  return `- ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${cut(`${oneLine(node.title)}. ${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
+}
+
 /**
- * Le texte de `find` (AC10 à AC15) : l'en-tête, les nœuds, « More nodes match … » si d'autres nœuds ont
- * été vus, la consigne de lecture s'il y a un nœud, la borne des lignes si une ligne de tableau est
+ * Le texte de `find` (AC10 à AC15) : l'en-tête, les nœuds, les suivants en une ligne, « More nodes match … » si d'autres
+ * nœuds ont été vus au-delà, la consigne de lecture s'il y a un nœud, la borne des lignes si une ligne de tableau est
  * montrée, puis les fonctions ; « No match » quand rien n'est trouvé, un résultat et non une erreur (N6).
  */
 function renderFind(result: {
   query: string
   type?: FindType
   nodes: readonly NodeMatch[]
+  others: readonly NodeMatch[]
   moreNodes: number
   functions: readonly FunctionMatch[]
   prefix: string
@@ -197,7 +211,9 @@ function renderFind(result: {
     return `No match for « ${query} ». Ask the user to rephrase or to say what they are looking for; do not guess.`
   }
   const lines = [`Top matches for « ${query} »:`, ...nodes.flatMap((node, index) => nodeLines(node, index, prefix))]
-  if (result.moreNodes > 0) lines.push(`More nodes match (at least ${result.moreNodes}): add words or set type to narrow the search.`)
+  if (result.others.length > 0) lines.push("Other matches:", ...result.others.map(otherLine))
+  const beyond = result.moreNodes - result.others.length
+  if (beyond > 0) lines.push(`More nodes match (at least ${beyond}): add words or set type to narrow the search.`)
   if (nodes.length > 0) lines.push(`Read one with ${prefix}_read {"path": "<path>"}; a procedure's steps are in its sections.`)
   if (nodes.some((node) => node.places.some((place) => place.block_type === "row"))) {
     lines.push(`At most 3 rows per table are shown: for every matching row, run ${prefix}_call table.rows with a filter or q.`)
@@ -293,14 +309,15 @@ export async function find(
   const { query, type } = input
   const prefix = identity.org.prefix
   const readable = type === "function" ? null : await readableRows(db, identity, query, type)
-  const { nodes, moreNodes } = readable === null ? { nodes: [], moreNodes: 0 } : groupMatches(readable.rows)
+  const { nodes, others, moreNodes } = readable === null ? { nodes: [], others: [], moreNodes: 0 } : groupMatches(readable.rows)
   if (readable) await withSections(db, identity, nodes, readable.levels)
   const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
   const functions = type === undefined || type === "function" ? matchFunctions(active, query) : []
   return {
-    text: renderFind({ query, type, nodes, moreNodes, functions, prefix }),
+    text: renderFind({ query, type, nodes, others, moreNodes, functions, prefix }),
     data: {
       matches: nodes.map(matchData),
+      others: others.map((node) => ({ path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),
       more_nodes: moreNodes,
       functions: functions.map(({ fn, score }) => ({ name: fn.name, class: fn.class, connector: fn.connector, score: roundScore(score) })),
     },

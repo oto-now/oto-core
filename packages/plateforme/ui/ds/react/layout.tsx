@@ -2,7 +2,7 @@
 
 // Porté d'oto-frontend (src/design-system/components/react/layout.jsx) : `Desk`, `Content`, `Rail`,
 // `RailScroll`, `RailGroup`, `RailFoot`, `RailItem`, tels quels, en TypeScript. La page EST le bureau,
-// chaque région un îlot ; seul le rail devenu tiroir sous 768 px a un état. Changé : le tiroir fermé est
+// chaque région un îlot ; seul le rail devenu tiroir sous 1 024 px a un état. Changé : le tiroir fermé est
 // `inert`, hors de la tabulation (oto-frontend ne le cachait qu'aux lecteurs d'écran), et son voile est un
 // bouton (un `div` cliquable). Retiré : `DeskGroup`,
 // `Island`, `Topbar`, `Inspector`, `Grid`, `TwoColumns`, `useDeskChrome`, que la coque n'emploie pas.
@@ -32,12 +32,12 @@ export const Content = forwardRef<HTMLElement, ComponentProps<"main"> & { max?: 
 type RailProps = ComponentProps<"nav"> & { open?: boolean; onClose?: () => void }
 
 /**
- * Le rail : complet dès 1 024 px, réduit à ses icônes en dessous, tiroir sous 768 px — le seul palier
+ * Le rail : complet dès 1 024 px, tiroir en dessous (réduit à ses icônes, un arbre de pages ne se lisait plus) — le seul palier
  * où le JS intervient (un tiroir a un état ouvert et un voile).
  */
 export const Rail = forwardRef<HTMLElement, RailProps>(function Rail({ open, onClose, className, children, ...rest }, ref) {
   const interne = useRef<HTMLElement>(null)
-  const tiroir = useBreakpoint("md")
+  const tiroir = useBreakpoint("lg")
 
   useDismiss(tiroir && Boolean(open), () => onClose?.(), [interne])
 

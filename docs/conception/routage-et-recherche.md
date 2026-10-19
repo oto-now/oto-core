@@ -1,7 +1,7 @@
 # Routage et recherche
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -55,8 +55,8 @@ L'utilisateur parle ; une phrase doit trouver seule la bonne procédure, sans qu
 
 ### `find` : la longue traîne
 
-- `find` rend trois nœuds au plus par `search_content` (titre, puis résumé, puis blocs publiés, lignes comprises), chacun avec ses emplacements (la section d'un bloc de page trouvé, E11-S19), la ligne « To edit » avec sa révision pour qui écrit un nœud hors tableau dont des blocs sont montrés (E11-S19), puis trois fonctions au plus du catalogue, un nom exact en tête (H44).
-- `find` demande 50 lignes à `search_content` et les regroupe par nœud : trois nœuds au plus, dans l'ordre de leur première ligne, chacun avec ses emplacements dans l'ordre des lignes (trois blocs au plus) (E03-S02 N11). Il sert trois nœuds et trois fonctions au plus sous sa description figée ; le score d'un nœud est son meilleur rang divisé par 3, dans [0, 1] comme celui des fonctions (E03-S02 N13).
+- `find` rend trois nœuds en détail par `search_content` (titre, puis résumé, puis blocs publiés, lignes comprises), chacun avec ses emplacements (la section d'un bloc de page trouvé, E11-S19), la ligne « To edit » avec sa révision pour qui écrit un nœud hors tableau dont des blocs sont montrés (E11-S19), puis les dix nœuds suivants en une ligne chacun (chemin, genre, score, titre et début du résumé ; `others` en données), puis trois fonctions au plus du catalogue, un nom exact en tête (H44). Sans les suivants, l'agent savait qu'il existait d'autres résultats sans pouvoir juger s'ils étaient meilleurs.
+- `find` demande 50 lignes à `search_content` et les regroupe par nœud : trois nœuds au plus, dans l'ordre de leur première ligne, chacun avec ses emplacements dans l'ordre des lignes (trois blocs au plus) (E03-S02 N11). Il sert trois nœuds en détail, les dix suivants en une ligne, et trois fonctions au plus, comme sa description le dit ; `more_nodes` compte les nœuds vus au-delà des trois premiers, « More nodes match » ceux qui ne sont pas listés ; le score d'un nœud est son meilleur rang divisé par 3, dans [0, 1] comme celui des fonctions (E03-S02 N13).
 - `find` ne dit pas « The best match is weak » : le rang de `search_content` classe des emplacements sans mesurer une confiance ; le seuil de l'organisation ne sert que le routage de `context` (E03-S02 N14). « No match » est un résultat, pas une erreur, avec la consigne de faire reformuler (E03-S02 N6). Une liste coupée le dit : « More nodes match (at least <n>) … » quand d'autres nœuds ont été vus, « At most 3 rows per table are shown … » quand une ligne de tableau est montrée, « <n> of <total> matching blocks shown … » quand une page a plus de blocs trouvés que les trois montrés (E03-S02 N15).
 - `find` de `type: "page"` cherche les pages et les Contextes (`p_kinds` = `page`, `context`) : l'énumération figée de `find` n'a pas de valeur `context` (E03-S02 N12).
 - **Extraits** : un extrait tient sur une ligne (blancs et sauts de ligne réduits à une espace) ; titre et résumé sont remplacés par leur extrait quand la correspondance y est (E03-S02 N16). L'extrait d'un bloc va jusqu'à la fin du bloc quand il en reste au plus huit mots (D43) : le fragment `ts_headline`, qui ne finit jamais sur un nombre, est prolongé ainsi (« participant supplémentaire » rend « … 250 € HT. ») (E03-S02 N31), dans la borne de 300 caractères ; un fragment introuvable dans le bloc laisse l'extrait inchangé (HN-E01S13-7).
@@ -105,4 +105,5 @@ Aucune à ce jour.
 - 2026-09-29 : formulations du résumé, mots rares, correction toujours tentée par le routage, questions « comment », nouveaux poids — décidé par JB (source : fiche D132, story E11-S04, amendement d'ADR-003 § 2).
 - 2026-09-30 : trois candidates par titre et résumé, l'assistant arbitre ; une procédure servie l'est « si la demande porte sur son titre » — décidé par JB (source : story E11-S16, amendement d'ADR-003 § 2).
 - 2026-09-30 : demandes d'édition (`edit`, marche `find` puis `write`), sections et ligne « To edit » dans `find` — décidé par JB (source : story E11-S19).
+- 2026-10-19 : `find` liste en une ligne les dix nœuds qui suivent les trois premiers — décidé par JB (source : retours d'usage du MCP Démo, session du 19/10/2026).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-003, les fiches D9 et D43, les choix H37, H40, H43, H44 et ceux des stories E03-S02, E01-S13 et E11-S04 — décidé par Alexis, accord de JB.
