@@ -85,7 +85,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     }])
     forgetDictionaries()
     await seed.admin`delete from platform.journal where org_id = ${ref.org.id}`
-    await seed.admin`delete from platform.pseudonym_orgs`
+    await seed.admin`delete from platform.pseudonym_orgs where org_id in ${seed.admin([ref.org.id, ref.other.id])}`
   })
 
   afterEach(() => {
@@ -214,9 +214,13 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     expect((await pseudonymize(db, ref.org, { b: "Lucie Bernard" })).b).toBe("Lucie Bernard")
   })
 
-  it("should keep the state table out of reach of sessions, and its functions to the organisation's members", async () => {
+  it("should let a member read the state of its organisations only, write none, and keep the functions to its organisations", async () => {
     const db = await ref.db("claire")
-    await expect(db.tx((sql) => sql`select * from platform.pseudonym_orgs`)).rejects.toThrow()
+    await pseudonymize(db, ref.org, { a: "Camille Dupré" })
+    await seed.admin`insert into platform.pseudonym_orgs (org_id, salt, witness) values (${ref.other.id}, ${"s".repeat(20)}, ${"witness1"}) on conflict do nothing`
+    const seen = await db.tx((sql) => sql<{ org_id: string }[]>`select org_id from platform.pseudonym_orgs`)
+    expect(seen.map((row) => row.org_id)).toEqual([ref.org.id])
+    await expect(db.tx((sql) => sql`update platform.pseudonym_orgs set generation = 9 where org_id = ${ref.org.id}`)).rejects.toThrow()
     await expect(db.tx((sql) => sql`select * from platform.pseudonym_org(${ref.other.id}, ${"s".repeat(20)}, ${"witness1"})`)).rejects.toThrow()
     await expect(db.tx((sql) => sql`select platform.invalidate_pseudonyms(${ref.other.id})`)).rejects.toThrow()
   })

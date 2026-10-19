@@ -224,8 +224,9 @@ export const TABLES = [
  */
 export const NEVER_EXPORTED = ['platform_staff', 'identities']
 // Le lexique (E01-S13) a une organisation, mais se dérive de son contenu publié : jamais exporté,
-// l'import le reconstruit par les déclencheurs de `nodes` et de `blocks`.
-NEVER_EXPORTED.push('lexicon')
+// l'import le reconstruit par les déclencheurs de `nodes` et de `blocks`. L'état de pseudonymisation (pseudonymisation,
+// J2) se pose de même au premier jeton servi : l'organisation importée reçoit un sel neuf, donc d'autres jetons.
+NEVER_EXPORTED.push('lexicon', 'pseudonym_orgs')
 // Les tickets de dépôt par lien (E10-S02 lot f, ADR-018) : 15 minutes, un envoi, liés à une conversation ; un ticket
 // ne se transfère pas (AC-f10).
 NEVER_EXPORTED.push('upload_tickets')

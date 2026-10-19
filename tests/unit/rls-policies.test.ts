@@ -117,6 +117,9 @@ ADDED.push("hosted_link_requests_select_own", "hosted_link_requests_insert_own",
 // Le journal des partages d'un compte (partage des comptes) : lu dans son organisation, écrit par le seul déclencheur
 // d'`access_rules` ; qui le lit, le service le décide (la personne qui gère le compte).
 ADDED.push("account_share_events_select_member")
+// L'état de pseudonymisation d'une organisation (sel, témoin, génération ; aucune personne) : lu dans son organisation,
+// jamais écrit par une session (`pseudonym_org` et `invalidate_pseudonyms`, `security definer`).
+ADDED.push("pseudonym_orgs_select_member")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

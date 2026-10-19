@@ -239,6 +239,10 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   (le premier sel gagne) et la rend avec le slug, et ne change que par `platform.invalidate_pseudonyms(org)`, qui
   avance la génération ; toutes deux pour un membre de l'organisation ou l'équipe plateforme (42501 sinon). La ligne
   part avec l'organisation (`ON DELETE CASCADE`).
+- `20261019120000_platform_pseudonymes_lecture.sql` (pseudonymisation, J2) : `select` sur `platform.pseudonym_orgs`
+  pour `authenticated`, sous la politique `pseudonym_orgs_select_member` (les organisations de l'appelant) : toute
+  table de `platform` porte la RLS et une politique (suite d'isolation). La ligne ne nomme personne et ne porte aucune
+  clé ; aucune session ne l'écrit.
 
 ## Installer sur un hôte neuf
 

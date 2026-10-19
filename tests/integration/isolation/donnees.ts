@@ -327,6 +327,8 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`
     insert into platform.hosted_link_requests (org_id, user_id, connector, kind, return_to, expires_at)
     values (${b.id}, ${people.b.id}, 'mail', 'create', '/admin/connectors', now() + interval '1 hour')`
+  // L'état de pseudonymisation de B (sel, témoin, génération) : posé par le serveur au premier jeton servi.
+  await admin`insert into platform.pseudonym_orgs (org_id, salt, witness) values (${b.id}, ${hex(12)}, 'AAAAAAAA')`
   // Une personne retirée de B (entrée sans invitation) : son exclusion.
   await admin`insert into platform.member_exclusions (org_id, user_id, excluded_by) values (${b.id}, gen_random_uuid(), ${people.b.id})`
   // L'accès général de B (ADR-014) : toute l'organisation B peut modifier son tableau.
