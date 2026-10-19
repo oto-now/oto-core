@@ -14,6 +14,7 @@ import * as z from "zod/v4"
 import { isRecord } from "../../schemas/tables"
 import { isPlatformError, issuesText, PlatformError } from "../errors"
 import { VIEW_NAME_PATTERN } from "../../schemas/views"
+import type { EntityFields } from "../pseudonym/outputs"
 import { KIND_PATTERN } from "../pseudonym/token"
 import { contractNames } from "./contracts"
 import {
@@ -59,6 +60,13 @@ type ErpFunctionInput<S extends Schema> = {
    * identifiant ; l'hôte lit sa propre base, sous sa RLS (`pseudonymisation.md` § Les jetons dans les arguments).
    */
   entityArguments?: Readonly<Record<string, string>>
+  /**
+   * Les champs de `data` qui nomment une entité déclarée, e.g. `{ entityFields: [{ kind: "client", id: "id", fields:
+   * ["nom", "prenoms"] }] }`, `at` pour une liste (`"clients"`) : servis à l'assistant, ils deviennent le jeton de
+   * l'entité, et ces valeurs quittent le texte ; inconnue du dictionnaire, la valeur est retenue (`pseudonymisation.md`
+   * § Les champs déclarés). `callFunction` reste en clair.
+   */
+  output?: { entityFields?: readonly EntityFields[] }
   run: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionOutput>
   summarize?: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionSummary>
 }
@@ -199,7 +207,7 @@ function functionProblem(fn: ErpFunction, reserved: ReadonlySet<string>): string
   if (examples) return examples
   if (fn.class === "sensitive" && typeof fn.summarize !== "function") return `${name}: a sensitive function needs summarize (two-step confirmation).`
   if (fn.serverOnly !== undefined && typeof fn.serverOnly !== "boolean") return `${name}: serverOnly must be true or false.`
-  return entityArgumentsProblem(fn) ?? viewProblem(fn)
+  return entityArgumentsProblem(fn) ?? outputProblem(fn) ?? viewProblem(fn)
 }
 
 /** Un chemin pointé d'argument : des noms de propriété séparés par des points. */
@@ -216,6 +224,37 @@ function entityArgumentsProblem(fn: ErpFunction): string | null {
   for (const [path, kind] of Object.entries(fn.entityArguments)) {
     if (!ARGUMENT_PATH.test(path)) return `${fn.name}: entityArguments: ${JSON.stringify(path)} is not an argument path such as client or dossier.client.`
     if (typeof kind !== "string" || !KIND_PATTERN.test(kind)) return `${fn.name}: entityArguments.${path}: ${JSON.stringify(kind)} is not a kind (2 to 10 lowercase ASCII letters or digits).`
+  }
+  return null
+}
+
+/** Un champ déclaré bien formé : sorte, chemins de `at`, de `id` et de chaque champ ; `null` : aucun problème. */
+function entityFieldsProblem(name: string, declared: unknown, index: number): string | null {
+  const where = `${name}: output.entityFields[${index}]`
+  if (!isRecord(declared)) return `${where} must be { kind, id, fields, at? }.`
+  const { kind, at, id, fields, ...rest } = declared
+  const unknown = Object.keys(rest)
+  if (unknown.length > 0) return `${where}: unknown key ${unknown[0]}; expected kind, id, fields and at.`
+  if (typeof kind !== "string" || !KIND_PATTERN.test(kind)) return `${where}.kind: ${JSON.stringify(kind)} is not a kind (2 to 10 lowercase ASCII letters or digits).`
+  if (at !== undefined && (typeof at !== "string" || !ARGUMENT_PATH.test(at))) return `${where}.at: ${JSON.stringify(at)} is not a path in data such as clients.`
+  if (typeof id !== "string" || !ARGUMENT_PATH.test(id)) return `${where}.id: ${JSON.stringify(id)} is not a path in the record such as id.`
+  if (!Array.isArray(fields) || fields.length === 0) return `${where}.fields must list at least one path in the record, such as nom.`
+  const bad = fields.find((field) => typeof field !== "string" || !ARGUMENT_PATH.test(field))
+  return bad === undefined ? null : `${where}.fields: ${JSON.stringify(bad)} is not a path in the record such as nom.`
+}
+
+/** `output` : un objet dont la seule clé est `entityFields`, une liste de champs déclarés bien formés. */
+function outputProblem(fn: ErpFunction): string | null {
+  if (fn.output === undefined) return null
+  if (!isRecord(fn.output)) return `${fn.name}: output must be { entityFields }.`
+  const unknown = Object.keys(fn.output).find((key) => key !== "entityFields")
+  if (unknown !== undefined) return `${fn.name}: output: unknown key ${unknown}; expected entityFields.`
+  const declared: unknown = fn.output.entityFields
+  if (declared === undefined) return null
+  if (!Array.isArray(declared)) return `${fn.name}: output.entityFields must be a list.`
+  for (const [index, item] of declared.entries()) {
+    const problem = entityFieldsProblem(fn.name, item, index)
+    if (problem) return problem
   }
   return null
 }

@@ -4,7 +4,7 @@
 // mémoire, puis par le MCP sur une base jetable.
 import * as z from "zod/v4"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
+import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { createPlatformDb, type PlatformDb } from "../../packages/plateforme/server/db"
 import { isPlatformError } from "../../packages/plateforme/server/errors"
 import type { Identity } from "../../packages/plateforme/server/identity"
@@ -13,6 +13,7 @@ import { registerSensitiveEntities, type SensitiveEntity, type SensitiveKind } f
 import { buildDictionary, type Dictionary } from "../../packages/plateforme/server/pseudonym/dictionary"
 import { pseudonymizedPlaces, pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
 import { resolvedCallArguments } from "../../packages/plateforme/server/pseudonym/inputs"
+import { WITHHELD, withEntityTokens } from "../../packages/plateforme/server/pseudonym/outputs"
 import { forgetDictionaries } from "../../packages/plateforme/server/pseudonym/service"
 import { HMAC_BODY_SOURCE, orgKey, token, tokenSource } from "../../packages/plateforme/server/pseudonym/token"
 import { connectMcp } from "../helpers/mcp"
@@ -65,6 +66,22 @@ describe("the tokens in the arguments, on a dictionary in memory", () => {
     expect(withEntityIds(dictionary, { client: "issue#12" }, { client: "client" })).toEqual({ client: "issue#12" })
     expect(() => refuseTokens(dictionary, "mail.send", { body: "voir guide#installation" })).not.toThrow()
     expect(await refusal(() => checkTokens(dictionary, token("client", "0".repeat(13)), "content"))).toBe("invalid_arguments unknown_pseudonym")
+  })
+
+  it("should serve the declared fields of a host function as the entity's token, withhold an unknown entity, and clear the text", () => {
+    const output = {
+      text: "Martin (Camille), Dupré (Camille) ; Martin (Paul).",
+      data: { clients: [{ id: "c-1", identite: { nom: "Dupré", prenoms: "Camille" } }, { id: "c-9", identite: { nom: "Martin", prenoms: "Paul" } }], total: 2 },
+    }
+    const fields = [{ kind: "client", at: "clients", id: "id", fields: ["identite.nom", "identite.prenoms"] }]
+    const served = withEntityTokens(dictionary, output, fields)
+    expect(served.data).toEqual({
+      clients: [{ id: "c-1", identite: { nom: camille, prenoms: camille } }, { id: "c-9", identite: { nom: WITHHELD, prenoms: WITHHELD } }],
+      total: 2,
+    })
+    expect(served.text).toBe(`${WITHHELD} (${camille}), ${camille} (${camille}) ; ${WITHHELD} (${WITHHELD}).`)
+    // La sortie de la fonction n'est pas touchée : `callFunction` la rend en clair.
+    expect(output.data.clients[0].identite.nom).toBe("Dupré")
   })
 
   it("should give a query the designation of the entity, and a phrase too, keeping a shared value's token there", () => {
@@ -138,13 +155,44 @@ const clientCard = defineErpFunction({
   run: async (_context, args) => ({ text: `Card of ${args.client}: Camille Dupré.${args.note ? ` ${args.note}` : ""}` }),
 })
 
+const clientFiche = defineErpFunction({
+  name: "erp.client_fiche",
+  class: "read",
+  description: "Reads the fiche of a client of the ERP.",
+  schema: z.strictObject({ client: z.string().regex(/^c-\d+$/u) }),
+  examples: [{ client: "c-2" }],
+  entityArguments: { client: "client" },
+  output: { entityFields: [{ kind: "client", id: "id", fields: ["nom", "prenoms"] }] },
+  run: async (_context, args) => ({ text: `Fiche de Morin (Jean), ${args.client}.`, data: { id: args.client, nom: "Morin", prenoms: "Jean", ville: "Nantes" } }),
+})
+
+describe("the declared fields of a host function, at registration", () => {
+  afterEach(() => registerFunctions([]))
+
+  it("should refuse a malformed output declaration, naming it", () => {
+    const declared = (output: unknown) => {
+      try {
+        registerFunctions([defineErpFunction({ ...clientFiche, run: async () => ({ text: "" }), output } as Parameters<typeof defineErpFunction>[0])])
+      } catch (error) {
+        return error instanceof CatalogRegistrationError ? error.message : String(error)
+      }
+      return "registered"
+    }
+    expect(declared({ entityFields: [{ kind: "client", id: "id", fields: ["nom"] }] })).toBe("registered")
+    expect(declared({ withhold: ["nom"] })).toBe("erp.client_fiche: output: unknown key withhold; expected entityFields.")
+    expect(declared({ entityFields: [{ kind: "Client", id: "id", fields: ["nom"] }] })).toMatch(/output\.entityFields\[0\]\.kind/u)
+    expect(declared({ entityFields: [{ kind: "client", id: "id", fields: [] }] })).toMatch(/fields must list at least one path/u)
+    expect(declared({ entityFields: [{ kind: "client", id: "id", fields: ["nom"], at: "a b" }] })).toMatch(/\.at: "a b" is not a path/u)
+  })
+})
+
 describe.skipIf(!sqlConfigured)(portable("the tokens in the arguments, through MCP on a real database"), { timeout: 60_000 }, () => {
   const CTX = "7K3Q-M2XC"
   let seed: SeededData
   let ref: ReferenceOrgSql
 
   beforeAll(async () => {
-    registerFunctions([clientCard])
+    registerFunctions([clientCard, clientFiche])
     const tables = contentTables()
     tables.orgs[0].rules_version = 1
     tables.ctx = [{ code: CTX, org_id: ORG.id, user_id: PEOPLE.claire.id, rules_version: 1, host: null }]
@@ -242,12 +290,17 @@ describe.skipIf(!sqlConfigured)(portable("the tokens in the arguments, through M
     ])
   })
 
-  it("should refuse an unknown token, give a host function the id, and refuse a token toward a connector", async () => {
-    const { run, camille } = await session()
+  it("should refuse an unknown token, give a host function the id, serve its declared fields as tokens, and refuse a token toward a connector", async () => {
+    const { run, camille, jean } = await session()
     const unknown = await run("read", { path: `ventes/${token("client", "0000000000000")}` })
     expect([unknown.isError, unknown.text]).toEqual([true, expect.stringMatching(/^Unknown token /u)])
     const card = await run("call", { function: "erp.client_card", arguments: { client: camille, note: `Pour ${camille}.` } })
     expect([card.isError, card.text]).toEqual([false, `Card of c-1: ${camille}. Pour ${camille}.`])
+    // Les champs déclarés d'une fiche : le jeton de Jean, dans les données et dans le texte, nom et prénom compris.
+    const fiche = await run("call", { function: "erp.client_fiche", arguments: { client: jean } })
+    expect([fiche.isError, fiche.text]).toEqual([false, expect.stringContaining(`Fiche de ${jean} (${jean}), c-2.`)])
+    expect(JSON.stringify(fiche.result)).not.toMatch(/Morin|"Jean"/u)
+    expect(JSON.stringify(fiche.result.structuredContent)).toContain(`"nom":"${jean}"`)
     const draft = await run("call", { function: "mail.create_draft", arguments: { to: "x@acme.test", subject: "Relance", body: `Bonjour ${camille}` } })
     expect([draft.isError, draft.text]).toEqual([true, expect.stringMatching(/^mail\.create_draft does not take a token/u)])
   })

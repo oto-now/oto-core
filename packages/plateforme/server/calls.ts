@@ -29,6 +29,7 @@ import type { Identity } from "./identity"
 import type { Dictionary } from "./pseudonym/dictionary"
 import { pseudonymizedText } from "./pseudonym/gate"
 import { resolvedCallArguments } from "./pseudonym/inputs"
+import { withEntityTokens } from "./pseudonym/outputs"
 import type { ToolOutput } from "./tool-output"
 
 /**
@@ -286,12 +287,15 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   // Le secret ne va qu'à `run`, déchiffré au dernier moment : jamais au récapitulatif, ni au journal, ni au texte.
   const credential = openCredential ? await openCredential() : undefined
   // Arguments validés par `fn.schema` : le type commun du catalogue les efface en `never`.
-  const output = await fn.run({ ...context, credential }, args as never).catch((error: unknown) => {
+  const ran = await fn.run({ ...context, credential }, args as never).catch((error: unknown) => {
     // Un refus qui a marqué le compte le dit à la ligne de l'échec.
     const marked = markOutcome(credential)
     if (Object.keys(marked).length > 0) trace.outcome = marked
     throw error
   })
+  // Pour l'assistant seulement (le dictionnaire ne vient que du MCP) : les champs déclarés deviennent des jetons.
+  const entityFields = fn.output?.entityFields
+  const output = deps.dictionary && entityFields ? { ...ran, ...withEntityTokens(deps.dictionary, ran, entityFields) } : ran
   const outcome = { ...output.outcome, ...markOutcome(credential) }
   return {
     text: data.account ? [output.text, ...accountLines(team, data.account)].join("\n") : output.text,

@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-19] — Pseudonymisation : les champs déclarés d'une fiche (J3, seconde partie)
+**Quoi :** `defineErpFunction` prend `output.entityFields` (type `EntityFields` : `{ kind, at?, id, fields }`, chemins pointés dans `data`) : les champs qui portent le nom d'une personne déclarée. Pour l'assistant seulement (`runCall` avec le dictionnaire du MCP), chacun devient le jeton de l'entité que donne `id` (`entityToken`, recherche du dictionnaire par sorte et identifiant), et chaque valeur remplacée quitte le texte de la fonction ; une entité inconnue du dictionnaire est retenue (`[withheld]`). `callFunction` reste en clair ; `registerFunctions` refuse une déclaration mal formée.
+**Pourquoi :** Condition d'allumage de l'hôte demandeur : les champs nom et prénoms d'une fiche, dont le nom seul peut être un prénom ou un mot (« Martin ») et le prénom seul n'est jamais masqué par la porte. Rattaché à J3 depuis J5 par Alexis le 19/10, de préférence à `withhold` : l'assistant garde un jeton qu'il recopie.
+**Problèmes :** Aucun.
+**Fichiers :** `packages/plateforme/server/pseudonym/outputs.ts` (nouveau), `server/pseudonym/dictionary.ts`, `server/catalog/{define,erp}.ts`, `server/calls.ts`, `server/index.ts`, `packages/plateforme/{README,CHANGELOG}.md`, `docs/conception/pseudonymisation.md`, `tests/unit/pseudonymisation-arguments.test.ts`.
+
 ## [2026-10-19] — Pseudonymisation : le nom seul masqué (J3, première partie)
 **Quoi :** Le nom de famille seul d'une personne déclarée devient une forme, s'il a au moins 3 lettres et n'est ni un mot commun ni un prénom courant (`isCommonWord`, `server/pseudonym/common-words.ts`) ; partagé par deux personnes, il reçoit un jeton de valeur, à sens unique. Chaque forme de mots a aussi sa forme à tirets (`camille-dupre`, d'une adresse web), qui sortait en clair. La liste des mots courants est générée par `scripts/mots-courants.mjs` dans `server/pseudonym/words/`, de deux sources épinglées par version et empreinte : les mots communs du lexique de Grammalecte 7.7 (MPL 2.0, sans noms propres, prénoms ni patronymes, vus au moins 100 000 fois : 34 972 formes) et les prénoms de l'Insee donnés au moins 1 000 fois de 1900 à 2025 (Licence Ouverte 2.0 : 3 221 formes).
 **Pourquoi :** Condition d'allumage de l'hôte demandeur : ses intitulés ne citent souvent que le nom (« Vente Lefort / Garnier »). Sources validées par Alexis le 19/10 ; la MPL 2.0 est confirmée sur le fichier de la version téléchargée.

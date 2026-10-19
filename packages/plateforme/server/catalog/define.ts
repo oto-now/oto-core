@@ -10,6 +10,7 @@ import type { AccountCredential } from "../connectors/auth"
 import type { ResolvedAccount } from "../connectors/resolution"
 import type { PlatformDb } from "../db"
 import type { Identity } from "../identity"
+import type { EntityFields } from "../pseudonym/outputs"
 import type { JsonSchemaArguments } from "./arguments"
 
 /** read : lecture ; write : écriture ; sensitive : envoie, supprime ou paie → deux temps (H86). */
@@ -108,6 +109,11 @@ export type CatalogFunction = {
    * les arguments) ; le jeton reçu de l'assistant y devient l'identifiant de l'entité.
    */
   entityArguments?: Readonly<Record<string, string>>
+  /**
+   * Une fonction de l'ERP : les champs de `data` qui nomment une entité déclarée (`pseudonymisation.md` § Les champs
+   * déclarés) ; servis à l'assistant, ils deviennent le jeton de l'entité.
+   */
+  output?: { entityFields?: readonly EntityFields[] }
   run: (context: FunctionContext, args: never) => Promise<FunctionOutput>
   /** Fonctions sensibles : récapitulatif nominatif montré avant l'accord, sans rien exécuter. */
   summarize?: (context: FunctionContext, args: never) => Promise<FunctionSummary>
@@ -131,6 +137,7 @@ export function defineFunction<S extends StrictSchema>(fn: {
   view?: string
   serverOnly?: boolean
   entityArguments?: Readonly<Record<string, string>>
+  output?: { entityFields?: readonly EntityFields[] }
   run: (context: FunctionContext, args: z.output<S>) => Promise<FunctionOutput>
   summarize?: (context: FunctionContext, args: z.output<S>) => Promise<FunctionSummary>
   checkArgs?: CheckArgs

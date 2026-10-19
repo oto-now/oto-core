@@ -569,6 +569,10 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
 - **Fonctions de l'hôte** : `entityArguments` de `defineErpFunction` (chemin pointé de l'argument → sorte, e.g.
   `{ client: "client" }`) ; le jeton que l'assistant y passe arrive à `run` en identifiant, et un jeton d'une autre
   sorte est refusé. Ailleurs, vos arguments reçoivent le jeton tel quel.
+- **Fiches** : `output.entityFields` de `defineErpFunction` nomme les champs de `data` qui portent le nom d'une
+  personne, e.g. `{ entityFields: [{ kind: "client", id: "id", fields: ["nom", "prenoms"] }] }` (`at: "clients"` pour
+  une liste). Servis à l'assistant, ils deviennent le jeton de la personne, et ces valeurs quittent votre texte ; une
+  personne inconnue du dictionnaire : `[withheld]`. `callFunction` reste en clair.
 - **Bornes** : 50 000 entités par organisation (mesuré : 2,8 s de construction, 83 Mo gardés) ; au-delà, refus.
 - Ce qui est reconnu : prénoms et nom dans les deux ordres, premier prénom, initiale, civilité devant le nom, forme en
   chemin de chacune (`camille_dupre`, `acme_sa`) et d'adresse web (`camille-dupre`), le nom seul, courriels, désignations
@@ -588,7 +592,7 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
   (l'ancre `guide#installation` d'une adresse) ; d'une sorte déclarée, elle est un jeton, refusé s'il est inconnu.
   Choisissez une sorte que vos textes n'écrivent pas devant un `#` (`client` plutôt que `issue`).
 - **Limite** : un nom qui est aussi un prénom courant ou un mot commun (« Martin », « Brun ») reste en clair quand il est
-  seul, sans prénom ni civilité ; le prénom seul aussi.
+  seul, sans prénom ni civilité, hors champ déclaré ; le prénom seul aussi.
 
 ## Widgets dans la conversation
 

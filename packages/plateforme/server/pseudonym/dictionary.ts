@@ -42,6 +42,8 @@ export type Dictionary = {
   byToken: ReadonlyMap<string, TokenTarget>
   /** Jeton d'entité → sa désignation et ses formes en chemin. */
   details: ReadonlyMap<string, EntityDetail>
+  /** Le jeton de chaque entité, par sorte et identifiant (`entityToken`). */
+  byEntity: ReadonlyMap<string, string>
   /** Les sortes qu'un jeton reçu peut porter : celles que l'hôte déclare, et les réservées (jetons de valeur). */
   kinds: ReadonlySet<string>
   entities: number
@@ -54,6 +56,7 @@ type Draft = {
   key: Buffer
   tokens: string[]
   byToken: Map<string, TokenTarget>
+  byEntity: Map<string, string>
   details: Map<string, EntityDetail>
   forms: Map<string, Owned>
   titled: Map<string, Owned>
@@ -157,17 +160,25 @@ async function addKind(draft: Draft, kind: SensitiveKind, org: SensitiveOrg, tot
     const entityToken = token(kind.kind, body)
     addCarried(draft, carried, addTarget(draft, entityToken, { kind: kind.kind, id: entity.id }))
     draft.details.set(entityToken, { designation: designationOf(values), slugs: slugForms(carried.forms) })
+    draft.byEntity.set(entityKey(kind.kind, entity.id), entityToken)
   }
+}
+
+const entityKey = (kind: string, id: string): string => `${kind}\u0000${id}`
+
+/** Le jeton de l'entité `id` de la sorte `kind`, ou `null` : non déclarée, ou effacée depuis. */
+export function entityToken(dictionary: Dictionary, kind: string, id: string): string | null {
+  return dictionary.byEntity.get(entityKey(kind, id)) ?? null
 }
 
 /** Le dictionnaire de `org`, sous la clé de l'organisation `key`, des sortes déclarées. */
 export async function buildDictionary(kinds: readonly SensitiveKind[], org: SensitiveOrg, key: Buffer): Promise<Dictionary> {
-  const draft: Draft = { key, tokens: [], byToken: new Map(), details: new Map(), forms: new Map(), titled: new Map(), phones: new Map(), shared: new Map(), maxRuns: 1, titledRuns: 1 }
+  const draft: Draft = { key, tokens: [], byToken: new Map(), byEntity: new Map(), details: new Map(), forms: new Map(), titled: new Map(), phones: new Map(), shared: new Map(), maxRuns: 1, titledRuns: 1 }
   const total = { count: 0 }
   for (const kind of kinds) await addKind(draft, kind, org, total)
   const targets = (map: Map<string, Owned>) => new Map([...map].map(([value, { target, boundary }]): [string, FormTarget] => [value, { target, boundary }]))
   const phones = new Map([...draft.phones].map(([phone, { target }]): [string, number] => [phone, target]))
   const table: FormTable = { forms: targets(draft.forms), maxRuns: draft.maxRuns, titled: targets(draft.titled), titledRuns: draft.titledRuns }
   const tokenKinds = new Set([...kinds.map((declared) => declared.kind), ...RESERVED_KINDS])
-  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, details: draft.details, kinds: tokenKinds, entities: total.count }
+  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, byEntity: draft.byEntity, details: draft.details, kinds: tokenKinds, entities: total.count }
 }
