@@ -1,9 +1,11 @@
 // Les formes reconnues d'une personne déclarée (`pseudonymisation.md` § Le dictionnaire et la détection) : ses noms dans
 // les deux ordres, premier prénom et nom, initiale et nom, le nom après une civilité, chaque courriel, chaque désignation libre, la
-// ligne de voie de chaque adresse, et la forme en chemin de chacune (`jean_dupont`, `acme_sa`), pour un chemin de page. Un téléphone
-// se compare en chiffres (E.164, `+33` par défaut). Le nom seul n'est pas une forme tant que la liste des mots courants
-// n'est pas livrée (J3) : « Martin » ou « Rose » seuls restent en clair. Sans ce module, seule la forme exacte que l'hôte
-// déclare serait reconnue.
+// ligne de voie de chaque adresse, la forme en chemin de chacune (`jean_dupont`, `acme_sa`), pour un chemin de page, et sa
+// forme à tirets (`jean-dupont`, d'une adresse web). Un téléphone se compare en chiffres (E.164, `+33` par défaut). Le nom
+// seul est une forme s'il a au moins 3 lettres et n'est ni un mot commun ni un prénom courant (J3) : « Lefort » seul se
+// masque, « Martin » ou « Rose » seuls restent en clair. Sans ce module, seule la forme exacte que l'hôte déclare serait
+// reconnue.
+import { isCommonWord } from "./common-words"
 import { normalizedText } from "./normalize"
 import { trimmedForm } from "./mentions"
 import type { SensitiveValues } from "./declaration"
@@ -32,6 +34,13 @@ function nameForms(values: SensitiveValues): string[] {
   return forms
 }
 
+/** Le nom seul d'une entité (J3), ou `null` : moins de 3 lettres, mot commun ou prénom courant, qui restent en clair. */
+function lastNameAlone(values: SensitiveValues): string | null {
+  const last = trimmedForm(normalizedText(values.lastName ?? ""))
+  if (last === null || (last.match(/\p{L}/gu)?.length ?? 0) < MIN_FORM_CHARS || isCommonWord(last)) return null
+  return last
+}
+
 /** Le nom d'une entité tel qu'il suit une civilité (`mme dupre` : `dupre`), ou `null` sans nom ni prénom. */
 export function titledName(values: SensitiveValues): string | null {
   const last = trimmedForm(normalizedText(values.lastName ?? ""))
@@ -53,10 +62,15 @@ export function entityForms(values: SensitiveValues): EntityForm[] {
     const form = trimmedForm(normalizedText(raw))
     if (form === null) return
     keep(form, boundary, detector)
+    if (boundary !== "word") return
     // La forme en chemin d'une page (`jean_dupont`, `acme_sa`) : les segments sont faits de `[a-z0-9_]`.
-    if (boundary === "word") keep(form.replace(/[^a-z0-9]+/gu, "_"), boundary, detector)
+    keep(form.replace(/[^a-z0-9]+/gu, "_"), boundary, detector)
+    // Celle d'une adresse web (`jean-dupont`) : le tiret n'est pas un blanc, à cause des prénoms composés.
+    keep(form.replace(/[^a-z0-9]+/gu, "-"), boundary, detector)
   }
   for (const form of nameForms(values)) add(form, "word", "name")
+  const alone = lastNameAlone(values)
+  if (alone !== null) add(alone, "word", "name")
   for (const email of strings(values.emails, "emails")) add(email, "email", "email")
   for (const alias of strings(values.aliases, "aliases")) add(alias, "word", "name")
   for (const address of strings(values.addresses, "addresses")) add(streetLine(address), "word", "name")

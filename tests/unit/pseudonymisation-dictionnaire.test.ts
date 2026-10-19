@@ -8,7 +8,7 @@ import { registerSensitiveEntities, type SensitiveEntity, type SensitiveKind } f
 import { buildDictionary, DictionaryError, type Dictionary } from "../../packages/plateforme/server/pseudonym/dictionary"
 import { entityForms, phoneDigits, titledName } from "../../packages/plateforme/server/pseudonym/forms"
 import { pseudonymizedJson, pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
-import { normalized } from "../../packages/plateforme/server/pseudonym/normalize"
+import { normalized, normalizedText } from "../../packages/plateforme/server/pseudonym/normalize"
 import { entityBody, HMAC_BODY_SOURCE, keyWitness, orgKey, pseudonymKey, token, tokenSource, TOKEN_PATTERN } from "../../packages/plateforme/server/pseudonym/token"
 
 const MASTER = Buffer.alloc(32, 7)
@@ -47,12 +47,13 @@ describe("normalisation, forms and tokens", () => {
 
   it("should give a person's names in both orders, with the first given name, the initial, a civility, a path and the street line", () => {
     const forms = entityForms(CAMILLE.values).map((form) => form.form)
-    for (const form of ["camille helene dupre", "dupre camille helene", "camille dupre", "dupre camille", "c. dupre", "camille_dupre", "camille.dupre@valbrune.test", "dupre conseil", "12 rue des lilas"]) {
+    for (const form of ["camille helene dupre", "dupre camille helene", "camille dupre", "dupre camille", "c. dupre", "camille_dupre", "camille-dupre", "dupre", "camille.dupre@valbrune.test", "dupre conseil", "12 rue des lilas"]) {
       expect(forms).toContain(form)
     }
-    // Le nom seul attend la liste des mots courants (J3) ; le prénom seul n'est jamais masqué.
-    expect(forms).not.toContain("dupre")
+    // Le prénom seul n'est jamais masqué ; le nom seul l'est s'il a 3 lettres et n'est ni un mot commun ni un prénom courant.
     expect(forms).not.toContain("camille")
+    const alone = (lastName: string) => entityForms({ firstNames: "Paul", lastName }).some((form) => form.form === normalizedText(lastName))
+    expect([alone("Lefort"), alone("Moreau"), alone("Brun"), alone("Martin"), alone("Rose"), alone("Ba")]).toEqual([true, true, false, false, false, false])
     expect(titledName(CAMILLE.values)).toBe("dupre")
     expect(titledName({ lastName: "Dupré" })).toBeNull()
     expect(phoneDigits("06 12 34 56 78")).toBe("+33612345678")
@@ -120,16 +121,20 @@ describe("the gate", () => {
     const camille = tokenOf("c-1")
     const jean = tokenOf("c-2")
     expect(pseudonymizedText(built, "Rendez-vous de MME DUPRE avec jean morin.")).toBe(`Rendez-vous de ${camille} avec ${jean}.`)
-    // Une civilité, avec ou sans point, devant le nom ; pas devant un autre mot, ni collée par un tiret.
-    expect(pseudonymizedText(built, "Me. Dupré, Dr Morin, M.Morin, Mme Durand, X-Mme Dupré")).toBe(`${camille}, ${jean}, M.Morin, Mme Durand, X-Mme Dupré`)
+    // Une civilité, avec ou sans point, devant le nom ; le nom seul se masque aussi sans elle.
+    expect(pseudonymizedText(built, "Me. Dupré, Dr Morin, M.Morin, Mme Durand, X-Mme Dupré")).toBe(`${camille}, ${jean}, M.${jean}, Mme Durand, X-Mme ${camille}`)
+    // Un nom qui est un mot commun ne se masque qu'avec une civilité : pas devant un autre mot, ni collée par un tiret.
+    const paul = (await dictionary([{ id: "c-4", values: { firstNames: "Paul", lastName: "Brun" } }]))
+    expect(pseudonymizedText(paul, "Mme Brun, un manteau brun, M.Brun, X-Mme Brun")).toBe(`${tokenOf("c-4")}, un manteau brun, M.Brun, X-Mme Brun`)
     expect(pseudonymizedText(built, "Écrire à camille.dupre@valbrune.test ou au 06.12.34.56.78, +33 6 12 34 56 78."))
       .toBe(`Écrire à ${camille} ou au ${camille}, ${camille}.`)
     expect(pseudonymizedText(built, "Page clients/camille_dupre/notes")).toBe(`Page clients/${camille}/notes`)
     expect(pseudonymizedText(built, "Au 12 rue des Lilas, chez Dupré Conseil")).toBe(`Au ${camille}, chez ${camille}`)
-    // Ni dans un mot plus long, ni dans un nom composé, ni dans un courriel plus long, ni dans un jeton déjà posé.
-    expect(pseudonymizedText(built, "Jean Morinière, Marie-Jean Morin, anne.camille.dupre@valbrune.test")).toBe("Jean Morinière, Marie-Jean Morin, anne.camille.dupre@valbrune.test")
+    // Ni dans un mot plus long, ni dans un jeton déjà posé ; dans un prénom composé ou un courriel plus long, le nom seul.
+    expect(pseudonymizedText(built, "Jean Morinière, Marie-Jean Morin, anne.camille.dupre@valbrune.test")).toBe(`Jean Morinière, Marie-Jean ${jean}, anne.camille.${camille}@valbrune.test`)
     expect(pseudonymizedText(built, `${jean} et Jean Morin`)).toBe(`${jean} et ${jean}`)
-    expect(pseudonymizedText(built, "Morin seul, Camille seule")).toBe("Morin seul, Camille seule")
+    // Le nom seul (J3) et la forme d'une adresse web ; le prénom seul reste en clair.
+    expect(pseudonymizedText(built, "Vente Morin / Dupré, Camille seule, https://crm.test/fiche/camille-dupre")).toBe(`Vente ${jean} / ${camille}, Camille seule, https://crm.test/fiche/${camille}`)
   })
 
   it("should pseudonymize every string of a JSON value, keys untouched", async () => {

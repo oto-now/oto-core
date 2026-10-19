@@ -571,8 +571,13 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
   sorte est refusé. Ailleurs, vos arguments reçoivent le jeton tel quel.
 - **Bornes** : 50 000 entités par organisation (mesuré : 2,8 s de construction, 83 Mo gardés) ; au-delà, refus.
 - Ce qui est reconnu : prénoms et nom dans les deux ordres, premier prénom, initiale, civilité devant le nom, forme en
-  chemin de chacune (`camille_dupre`, `acme_sa`), courriels, désignations libres, ligne de voie, téléphones en chiffres. Le nom seul ou le
-  prénom seul restent en clair. Une forme commune à deux personnes devient un jeton à sens unique (`name#…`).
+  chemin de chacune (`camille_dupre`, `acme_sa`) et d'adresse web (`camille-dupre`), le nom seul, courriels, désignations
+  libres, ligne de voie, téléphones en chiffres. Le nom seul se masque s'il a au moins 3 lettres et n'est ni un mot commun
+  ni un prénom courant (« Lefort », « Durand ») ; le prénom seul reste en clair. Une forme commune à deux personnes devient
+  un jeton à sens unique (`name#…`).
+- Mots courants : `server/pseudonym/words/`, généré par `scripts/mots-courants.mjs` du dépôt ; les mots communs du lexique
+  de Grammalecte 7.7 (MPL 2.0, sa notice en tête du fichier) et les prénoms du fichier des prénoms de l'Insee (Source :
+  Insee, paru le 16/07/2026, Licence Ouverte 2.0).
 - Un jeton que l'assistant recopie se résout : chemin de `read`, de `write` et d'une fonction native (la page qui
   existe), requête de `find`, phrase de `context` et `q` d'un tableau (« prénoms nom »), argument d'entité de vos
   fonctions, clé de ligne d'un tableau (la ligne qui existe) ; `find` de `replace_text` et un filtre de `table.*` se
@@ -582,8 +587,8 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
 - Un jeton s'écrit `<sorte>#<corps>`. Une suite de cette forme dont la sorte n'est ni déclarée ni réservée est du texte
   (l'ancre `guide#installation` d'une adresse) ; d'une sorte déclarée, elle est un jeton, refusé s'il est inconnu.
   Choisissez une sorte que vos textes n'écrivent pas devant un `#` (`client` plutôt que `issue`).
-- **Pas encore** : le nom seul et le prénom seul restent en clair (« Martin » sans prénom ni civilité). Ne déclarez pas
-  vos personnes en production avant la version qui masque le nom seul.
+- **Limite** : un nom qui est aussi un prénom courant ou un mot commun (« Martin », « Brun ») reste en clair quand il est
+  seul, sans prénom ni civilité ; le prénom seul aussi.
 
 ## Widgets dans la conversation
 

@@ -83,7 +83,7 @@ describe("the tokens in the arguments, on a dictionary in memory", () => {
   })
 
   it("should try the path forms of an entity, prenoms_nom first, each giving back the path received", () => {
-    expect(pathCandidates(dictionary, `clients/${camille}`)).toEqual(["clients/camille_dupre", "clients/dupre_camille", "clients/c_dupre"])
+    expect(pathCandidates(dictionary, `clients/${camille}`)).toEqual(["clients/camille_dupre", "clients/dupre_camille", "clients/c_dupre", "clients/dupre"])
     expect(pathCandidates(dictionary, `clients/fiche_${acme}_2026`)).toEqual(["clients/fiche_acme_sa_2026"])
     expect(pathCandidates(dictionary, "ventes/devis")).toEqual(["ventes/devis"])
     // La forme en chemin d'une désignation libre est servie masquée, comme celle d'un nom.
