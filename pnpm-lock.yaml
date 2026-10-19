@@ -266,6 +266,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
+      '@otomata_tech/connectors':
+        specifier: github:otomata-tech/connectors#683229a3f6c0583ff013193ed859de0fa5c473a9&path:/ts
+        version: https://codeload.github.com/otomata-tech/connectors/tar.gz/683229a3f6c0583ff013193ed859de0fa5c473a9#path:/ts
       '@playwright/test':
         specifier: ^1
         version: 1.58.2
@@ -1138,6 +1141,10 @@ packages:
   '@nolyfill/is-core-module@1.0.39':
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
+
+  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/683229a3f6c0583ff013193ed859de0fa5c473a9#path:/ts':
+    resolution: {gitHosted: true, integrity: sha512-BncbjMzJBZSSFtTU7fzGSl96vv2gRRC52MHlTHYqqlai591dvY/XMZcEo4Wq8IbYCXsDR0d6tlGUphJDPzh3YA==, path: /ts, tarball: https://codeload.github.com/otomata-tech/connectors/tar.gz/683229a3f6c0583ff013193ed859de0fa5c473a9}
+    version: 0.0.0
 
   '@phosphor-icons/react@2.1.10':
     resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
@@ -5137,6 +5144,8 @@ snapshots:
       fastq: 1.20.1
 
   '@nolyfill/is-core-module@1.0.39': {}
+
+  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/683229a3f6c0583ff013193ed859de0fa5c473a9#path:/ts': {}
 
   '@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
