@@ -1,4 +1,4 @@
-// Le jeton d'une personne (`pseudonymisation.md` § Le jeton) : `⟦<sorte>:<corps>⟧`. Le corps est, par défaut, les 64
+// Le jeton d'une personne (`pseudonymisation.md` § Le jeton) : `⟦<sorte>:<corps>⟧`, dans l'enveloppe `TOKEN_ENVELOPE`. Le corps est, par défaut, les 64
 // premiers bits d'un HMAC-SHA-256 de l'identifiant sous la clé de l'organisation, en 13 caractères de base32 de
 // Crockford minuscule ; ou la référence que l'hôte fournit pour une sorte (`tokens: "reference"`). La clé de
 // l'organisation dérive de la clé maître (`PLATFORM_PSEUDONYM_KEY`) et d'un sel propre à l'organisation. Sans clé, nul
@@ -14,12 +14,36 @@ const WITNESS_BYTES = 6
 const CROCKFORD = "0123456789abcdefghjkmnpqrstvwxyz"
 export const HMAC_BODY_CHARS = 13
 
+/**
+ * L'enveloppe d'un jeton, seule définition de sa forme écrite : l'expression qui le reconnaît et son rendu en dérivent.
+ * Changer de format (`‹client:…›`, `client#…`), c'est changer ces trois chaînes, et rien d'autre.
+ */
+export const TOKEN_ENVELOPE: { readonly open: string; readonly separator: string; readonly close: string } = { open: "⟦", separator: ":", close: "⟧" }
+
+/** L'expression d'une sorte, d'un corps HMAC et d'un corps quelconque (HMAC ou référence fournie par l'hôte). */
+export const KIND_SOURCE = "[a-z][a-z0-9]{1,9}"
+export const HMAC_BODY_SOURCE = "[0-9a-hjkmnp-tv-z]{13}"
+const BODY_SOURCE = "[0-9a-z][0-9a-z-]{0,23}"
+
+const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
+
+/**
+ * L'expression, sans drapeaux, des jetons d'une sorte et d'un corps donnés (par défaut : tous). Une enveloppe sans
+ * ouverture ou sans fermeture (`client#…`) borne le jeton au mot : ni lettre ni chiffre avant la sorte, ni après le corps.
+ */
+export function tokenSource(kind: string = KIND_SOURCE, body: string = BODY_SOURCE): string {
+  const { open, separator, close } = TOKEN_ENVELOPE
+  const before = open === "" ? "(?<![0-9A-Za-z])" : escaped(open)
+  const after = close === "" ? "(?![0-9a-z-])" : escaped(close)
+  return `${before}${kind}${escaped(separator)}${body}${after}`
+}
+
 /** Un jeton, de corps HMAC ou de référence : la sorte et le corps. */
-export const TOKEN_PATTERN = /⟦([a-z][a-z0-9]{1,9}):([0-9a-z][0-9a-z-]{0,23})⟧/gu
+export const TOKEN_PATTERN = new RegExp(tokenSource(`(${KIND_SOURCE})`, `(${BODY_SOURCE})`), "gu")
 /** Le corps d'une référence fournie par l'hôte. */
-export const REFERENCE_PATTERN = /^[0-9a-z][0-9a-z-]{0,23}$/u
+export const REFERENCE_PATTERN = new RegExp(`^${BODY_SOURCE}$`, "u")
 /** Une sorte déclarable : ASCII minuscule, 2 à 10 caractères. */
-export const KIND_PATTERN = /^[a-z][a-z0-9]{1,9}$/u
+export const KIND_PATTERN = new RegExp(`^${KIND_SOURCE}$`, "u")
 /** Les sortes des jetons de valeur, à sens unique : réservées, jamais déclarées par l'hôte. */
 export const RESERVED_KINDS: ReadonlySet<string> = new Set(["email", "phone", "iban", "nir", "card", "name"])
 
@@ -69,6 +93,7 @@ export function valueBody(key: Buffer, detector: string, value: string): string 
   return crockford64(createHmac("sha256", key).update(`value|${detector}|${value}`).digest())
 }
 
+/** Le rendu d'un jeton, dans l'enveloppe. */
 export function token(kind: string, body: string): string {
-  return `⟦${kind}:${body}⟧`
+  return `${TOKEN_ENVELOPE.open}${kind}${TOKEN_ENVELOPE.separator}${body}${TOKEN_ENVELOPE.close}`
 }

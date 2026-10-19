@@ -98,6 +98,11 @@ export type CatalogFunction = {
    * ne la voit jamais (`assistantFunctions`) ; par le MCP, elle est inconnue.
    */
   serverOnly?: boolean
+  /**
+   * Une fonction de l'ERP : ses arguments d'entité (chemin pointé → sorte déclarée, `pseudonymisation.md` § Les jetons dans
+   * les arguments) ; le jeton reçu de l'assistant y devient l'identifiant de l'entité.
+   */
+  entityArguments?: Readonly<Record<string, string>>
   run: (context: FunctionContext, args: never) => Promise<FunctionOutput>
   /** Fonctions sensibles : récapitulatif nominatif montré avant l'accord, sans rien exécuter. */
   summarize?: (context: FunctionContext, args: never) => Promise<FunctionSummary>
@@ -120,6 +125,7 @@ export function defineFunction<S extends StrictSchema>(fn: {
   next?: string[]
   view?: string
   serverOnly?: boolean
+  entityArguments?: Readonly<Record<string, string>>
   run: (context: FunctionContext, args: z.output<S>) => Promise<FunctionOutput>
   summarize?: (context: FunctionContext, args: z.output<S>) => Promise<FunctionSummary>
   checkArgs?: CheckArgs

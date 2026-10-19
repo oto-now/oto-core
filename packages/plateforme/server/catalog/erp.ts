@@ -14,6 +14,7 @@ import * as z from "zod/v4"
 import { isRecord } from "../../schemas/tables"
 import { isPlatformError, issuesText, PlatformError } from "../errors"
 import { VIEW_NAME_PATTERN } from "../../schemas/views"
+import { KIND_PATTERN } from "../pseudonym/token"
 import { contractNames } from "./contracts"
 import {
   defineFunction,
@@ -52,6 +53,12 @@ type ErpFunctionInput<S extends Schema> = {
   view?: string
   /** Réservée au serveur de l'hôte : `callFunction` la court, l'assistant ne la voit jamais (`pseudonymisation.md`). */
   serverOnly?: boolean
+  /**
+   * Les arguments qui désignent une entité déclarée (`registerSensitiveEntities`) : chemin pointé de l'argument → sorte,
+   * e.g. `{ client: "client" }` ou `{ "dossier.client": "client" }`. Le jeton que l'assistant y passe arrive à `run` en
+   * identifiant ; l'hôte lit sa propre base, sous sa RLS (`pseudonymisation.md` § Les jetons dans les arguments).
+   */
+  entityArguments?: Readonly<Record<string, string>>
   run: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionOutput>
   summarize?: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionSummary>
 }
@@ -192,7 +199,25 @@ function functionProblem(fn: ErpFunction, reserved: ReadonlySet<string>): string
   if (examples) return examples
   if (fn.class === "sensitive" && typeof fn.summarize !== "function") return `${name}: a sensitive function needs summarize (two-step confirmation).`
   if (fn.serverOnly !== undefined && typeof fn.serverOnly !== "boolean") return `${name}: serverOnly must be true or false.`
-  return viewProblem(fn)
+  return entityArgumentsProblem(fn) ?? viewProblem(fn)
+}
+
+/** Un chemin pointé d'argument : des noms de propriété séparés par des points. */
+const ARGUMENT_PATH = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u
+
+/**
+ * `entityArguments` : un objet, chaque clé un chemin pointé d'argument, chaque valeur une sorte bien formée. La sorte
+ * n'est pas cherchée parmi les sortes déclarées : l'hôte peut déclarer ses entités après ses fonctions ; un jeton d'une
+ * autre sorte est refusé à l'appel.
+ */
+function entityArgumentsProblem(fn: ErpFunction): string | null {
+  if (fn.entityArguments === undefined) return null
+  if (!isRecord(fn.entityArguments)) return `${fn.name}: entityArguments must map argument paths to kinds.`
+  for (const [path, kind] of Object.entries(fn.entityArguments)) {
+    if (!ARGUMENT_PATH.test(path)) return `${fn.name}: entityArguments: ${JSON.stringify(path)} is not an argument path such as client or dossier.client.`
+    if (typeof kind !== "string" || !KIND_PATTERN.test(kind)) return `${fn.name}: entityArguments.${path}: ${JSON.stringify(kind)} is not a kind (2 to 10 lowercase ASCII letters or digits).`
+  }
+  return null
 }
 
 /** La vue déclarée est dans le bundle inscrit : sinon le widget recevrait un nom qu'il ne sait pas rendre. */

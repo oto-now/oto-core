@@ -4,7 +4,7 @@
 // référence absente, en double, mal écrite ou qui contient une forme de l'entité le refusent : rien n'est servi.
 // Une forme partagée par deux entités ne désigne personne : elle reçoit un jeton de valeur, à sens unique.
 import type { SensitiveEntity, SensitiveKind, SensitiveOrg, SensitiveValues } from "./declaration"
-import { checkedValues, entityForms, entityPhones, titledName, type EntityForm } from "./forms"
+import { checkedValues, designationOf, entityForms, entityPhones, slugForms, titledName, type EntityForm } from "./forms"
 import { formRuns, type FormTable, type FormTarget } from "./mentions"
 import { normalizedText } from "./normalize"
 import { entityBody, REFERENCE_PATTERN, token, valueBody } from "./token"
@@ -18,8 +18,9 @@ export class DictionaryError extends Error {
 }
 
 /**
- * Au-delà, la construction est refusée. Mesuré (J2, entités synthétiques à cinq valeurs) : 45 µs et 1,35 Ko par entité,
- * soit 2,3 s et 67 Mo à cette borne, par organisation gardée (16 au plus par processus).
+ * Au-delà, la construction est refusée. Mesuré (J2, entités synthétiques à cinq valeurs, formes en chemin et désignation
+ * comprises) : 55 µs et 1,7 Ko par entité, soit 2,8 s et 83 Mo à cette borne, par organisation gardée (16 au plus par
+ * processus).
  */
 export const MAX_ENTITIES = 50_000
 /** La construction rend la main à la boucle d'événements toutes les `YIELD_EVERY` entités : elle ne gèle pas le serveur. */
@@ -27,6 +28,9 @@ const YIELD_EVERY = 1_000
 
 /** Ce qu'un jeton désigne : une entité, ou une valeur partagée (à sens unique). */
 export type TokenTarget = { kind: string; id: string } | { oneWay: true }
+
+/** Ce qu'un jeton d'entité rend à l'entrée : sa désignation (requête, phrase) et ses formes en chemin (chemin reçu). */
+export type EntityDetail = { designation: string | null; slugs: readonly string[] }
 
 export type Dictionary = {
   table: FormTable
@@ -36,6 +40,8 @@ export type Dictionary = {
   phones: ReadonlyMap<string, number>
   /** La recherche inverse : jeton → ce qu'il désigne. */
   byToken: ReadonlyMap<string, TokenTarget>
+  /** Jeton d'entité → sa désignation et ses formes en chemin. */
+  details: ReadonlyMap<string, EntityDetail>
   entities: number
 }
 
@@ -46,6 +52,7 @@ type Draft = {
   key: Buffer
   tokens: string[]
   byToken: Map<string, TokenTarget>
+  details: Map<string, EntityDetail>
   forms: Map<string, Owned>
   titled: Map<string, Owned>
   phones: Map<string, Owned>
@@ -145,17 +152,19 @@ async function addKind(draft: Draft, kind: SensitiveKind, org: SensitiveOrg, tot
     if (typeof entity?.id !== "string" || entity.id === "") throw new DictionaryError(`kind ${kind.kind}: an entity without id`)
     const { values, carried } = carriedOf(kind.kind, entity)
     const body = kind.tokens === "reference" ? referenceBody(kind.kind, entity, values, references) : entityBody(draft.key, kind.kind, entity.id)
-    addCarried(draft, carried, addTarget(draft, token(kind.kind, body), { kind: kind.kind, id: entity.id }))
+    const entityToken = token(kind.kind, body)
+    addCarried(draft, carried, addTarget(draft, entityToken, { kind: kind.kind, id: entity.id }))
+    draft.details.set(entityToken, { designation: designationOf(values), slugs: slugForms(carried.forms) })
   }
 }
 
 /** Le dictionnaire de `org`, sous la clé de l'organisation `key`, des sortes déclarées. */
 export async function buildDictionary(kinds: readonly SensitiveKind[], org: SensitiveOrg, key: Buffer): Promise<Dictionary> {
-  const draft: Draft = { key, tokens: [], byToken: new Map(), forms: new Map(), titled: new Map(), phones: new Map(), shared: new Map(), maxRuns: 1, titledRuns: 1 }
+  const draft: Draft = { key, tokens: [], byToken: new Map(), details: new Map(), forms: new Map(), titled: new Map(), phones: new Map(), shared: new Map(), maxRuns: 1, titledRuns: 1 }
   const total = { count: 0 }
   for (const kind of kinds) await addKind(draft, kind, org, total)
   const targets = (map: Map<string, Owned>) => new Map([...map].map(([value, { target, boundary }]): [string, FormTarget] => [value, { target, boundary }]))
   const phones = new Map([...draft.phones].map(([phone, { target }]): [string, number] => [phone, target]))
   const table: FormTable = { forms: targets(draft.forms), maxRuns: draft.maxRuns, titled: targets(draft.titled), titledRuns: draft.titledRuns }
-  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, entities: total.count }
+  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, details: draft.details, entities: total.count }
 }

@@ -1,6 +1,6 @@
 // Les formes reconnues d'une personne déclarée (`pseudonymisation.md` § Le dictionnaire et la détection) : ses noms dans
 // les deux ordres, premier prénom et nom, initiale et nom, le nom après une civilité, chaque courriel, chaque désignation libre, la
-// ligne de voie de chaque adresse, et la forme en chemin (`jean_dupont`) des noms, pour un chemin de page. Un téléphone
+// ligne de voie de chaque adresse, et la forme en chemin de chacune (`jean_dupont`, `acme_sa`), pour un chemin de page. Un téléphone
 // se compare en chiffres (E.164, `+33` par défaut). Le nom seul n'est pas une forme tant que la liste des mots courants
 // n'est pas livrée (J3) : « Martin » ou « Rose » seuls restent en clair. Sans ce module, seule la forme exacte que l'hôte
 // déclare serait reconnue.
@@ -29,8 +29,6 @@ function nameForms(values: SensitiveValues): string[] {
   const hyphenated = normalizedText(values.firstNames ?? "")
   const forms = [`${all} ${last}`, `${last} ${all}`, `${hyphenated} ${last}`, `${last} ${hyphenated}`, `${first} ${last}`, `${last} ${first}`]
   forms.push(`${first[0]}. ${last}`, `${first[0]} ${last}`)
-  // La forme en chemin d'une page : les segments sont faits de `[a-z0-9_]`.
-  for (const name of [`${all} ${last}`, `${first} ${last}`, `${last} ${first}`]) forms.push(name.replace(/[\s'-]+/gu, "_"))
   return forms
 }
 
@@ -48,15 +46,41 @@ function streetLine(address: string): string {
 /** Les formes d'une entité, sans doublon ; une valeur mal typée lève (la source de l'hôte rend une forme invalide). */
 export function entityForms(values: SensitiveValues): EntityForm[] {
   const out = new Map<string, EntityForm>()
+  const keep = (form: string, boundary: EntityForm["boundary"], detector: EntityForm["detector"]) => {
+    if (form.length >= MIN_FORM_CHARS && !out.has(form)) out.set(form, { form, boundary, detector })
+  }
   const add = (raw: string, boundary: EntityForm["boundary"], detector: EntityForm["detector"]) => {
     const form = trimmedForm(normalizedText(raw))
-    if (form !== null && form.length >= MIN_FORM_CHARS && !out.has(form)) out.set(form, { form, boundary, detector })
+    if (form === null) return
+    keep(form, boundary, detector)
+    // La forme en chemin d'une page (`jean_dupont`, `acme_sa`) : les segments sont faits de `[a-z0-9_]`.
+    if (boundary === "word") keep(form.replace(/[^a-z0-9]+/gu, "_"), boundary, detector)
   }
   for (const form of nameForms(values)) add(form, "word", "name")
   for (const email of strings(values.emails, "emails")) add(email, "email", "email")
   for (const alias of strings(values.aliases, "aliases")) add(alias, "word", "name")
   for (const address of strings(values.addresses, "addresses")) add(streetLine(address), "word", "name")
   return [...out.values()]
+}
+
+/** Au plus, les formes en chemin d'une entité qu'un chemin reçu essaie à la place de son jeton. */
+const MAX_SLUGS = 8
+const SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/u
+
+/** Les formes d'une entité qui peuvent être un segment de chemin, ou en faire partie (`clients/jean_dupont`). */
+export function slugForms(forms: readonly EntityForm[]): string[] {
+  return forms.filter(({ form, boundary }) => boundary === "word" && SLUG.test(form)).slice(0, MAX_SLUGS).map(({ form }) => form)
+}
+
+/**
+ * La désignation d'une entité, ce que reçoit une requête de `find` ou la phrase de `context` à la place de son jeton :
+ * « prénoms nom », sinon sa première désignation libre, sinon son nom ; `null` sans aucun des trois.
+ */
+export function designationOf(values: SensitiveValues): string | null {
+  const name = [values.firstNames, values.lastName].map((part) => part?.trim() ?? "").filter((part) => part !== "")
+  if (name.length === 2) return name.join(" ")
+  const alias = (values.aliases ?? []).find((item) => item.trim() !== "")
+  return alias?.trim() ?? (name[0] || null)
 }
 
 /** Les téléphones d'une entité, en chiffres E.164 ; un numéro trop court n'est pas cherché. */

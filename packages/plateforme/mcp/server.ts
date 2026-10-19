@@ -36,7 +36,7 @@ import { writeNode } from "../server/nodes/write"
 import { listPrompts, type ProcedurePrompt, unknownPromptMessage } from "../server/prompts"
 import { pseudonymizerFor, type Pseudonymizer } from "../server/pseudonym/service"
 import type { ToolOutput } from "../server/tool-output"
-import { gatedOutput, gatedPrompt, gatedPrompts } from "./pseudonym"
+import { gatedOutput, gatedPrompt, gatedPrompts, resolvedToolInput } from "./pseudonym"
 import { formatError, formatResult, type ToolResult } from "./result"
 import { inputSchemas, parseInput, type ToolInput } from "./schemas"
 import { buildTools, displayOrg, serverInstructions, toolKey, type ToolKey, type ToolOrg } from "./tools"
@@ -79,7 +79,8 @@ export type McpDeps = {
 }
 
 /** `trace` : ce qu'un `call` a établi avant d'échouer (équipe, compte), pour sa ligne de journal (E03-S04, AC16). */
-type MemberDeps = McpDeps & { identity: Identity; trace?: CallTrace }
+/** `gate` : la porte de l'organisation, lue avant le service ; `null` quand l'hôte ne déclare aucune personne. */
+type MemberDeps = McpDeps & { identity: Identity; trace?: CallTrace; gate?: Pseudonymizer | null }
 type ValidCtx = { code: string; host: string | null; changed?: CtxChange }
 
 /** Titre posé entre l'avis d'un Contexte changé et ce que l'appel a rendu. */
@@ -114,8 +115,8 @@ const SERVICES: { [K in ToolKey]: Service<K> } = {
   find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: assistantFunctions(), activeConnectors: await activeConnectors() }),
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
   read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
-  call: ({ db, identity, origin, activeConnectors, trace, accessToken }, input, ctx) =>
-    runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken }, input),
+  call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate }, input, ctx) =>
+    runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: gate?.dictionary }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
   write: ({ db, identity }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null }),
   // `ctx` est toujours validé ici : la garde précède tout outil autre que `context`.
@@ -165,7 +166,9 @@ async function serve(deps: MemberDeps, call: ToolCall, validated: { ctx: ValidCt
   }
   // `feedback` accepte un code connu mais périmé (E11-S03, AC-a6) : un retour sur la panne n'exige pas de relire le contexte.
   if (key !== "context") validated.ctx = await requireCtx(deps.db, deps.identity, args.ctx, { staleAllowed: key === "feedback" })
-  const parsed = parseInput(inputSchemas(prefix)[key], args)
+  // Les jetons de l'assistant (pseudonymisation), résolus avant le schéma : un chemin de `write` n'admet pas de jeton.
+  const inputs = deps.gate ? { db: deps.db, identity: deps.identity, dictionary: deps.gate.dictionary } : null
+  const parsed = parseInput(inputSchemas(prefix)[key], await resolvedToolInput(inputs, key, args))
   if ("issues" in parsed) throw new PlatformError("invalid_arguments", `Invalid arguments for ${name}: ${parsed.issues}`)
   // `parsed.data` suit le schéma de `key` : TypeScript ne relie pas `SERVICES[key]` à ce schéma.
   const service = SERVICES[key] as Service<ToolKey>
@@ -193,6 +196,7 @@ async function runTool(
   let gate: Pseudonymizer | null = null
   try {
     gate = await pseudonymizerFor(member.db, member.identity.org.id)
+    member.gate = gate
     const served = await serve(member, { name, args, size: opened.args_chars }, validated)
     // Un code périmé : l'avis en tête du texte, le nouveau code aussi en champ (`new_ctx`).
     const output = validated.ctx?.changed

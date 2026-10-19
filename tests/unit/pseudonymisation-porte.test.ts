@@ -13,6 +13,7 @@ import { recordFeedback } from "../../packages/plateforme/server/feedback"
 import { callFunction } from "../../packages/plateforme/server/function-call"
 import { writeJournal } from "../../packages/plateforme/server/journal"
 import { registerSensitiveEntities, type SensitiveEntity } from "../../packages/plateforme/server/pseudonym/declaration"
+import { HMAC_BODY_SOURCE, TOKEN_ENVELOPE, tokenSource } from "../../packages/plateforme/server/pseudonym/token"
 import { forgetDictionaries, invalidateSensitiveEntities, pseudonymize } from "../../packages/plateforme/server/pseudonym/service"
 import { connectMcp } from "../helpers/mcp"
 import { connectAdminMcp } from "../helpers/mcp-admin"
@@ -27,7 +28,9 @@ vi.mock("../../packages/plateforme/server/db", async (importOriginal) => {
 })
 
 const KEY = Buffer.alloc(32, 3).toString("base64")
-const TOKEN_OF_A_PERSON = /⟦client:[0-9a-hjkmnp-tv-z]{13}⟧/u
+/** Le jeton HMAC d'une personne de la sorte `client`, en source d'expression. */
+const PERSON = tokenSource("client", HMAC_BODY_SOURCE)
+const TOKEN_OF_A_PERSON = new RegExp(PERSON, "u")
 const CAMILLE: SensitiveEntity = { id: "c-1", values: { firstNames: "Camille", lastName: "Dupré", phones: ["06 12 34 56 78"] } }
 const JEAN: SensitiveEntity = { id: "c-2", values: { firstNames: "Jean", lastName: "Morin" } }
 
@@ -111,7 +114,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     expect(read.isError).toBe(false)
     expect(read.text).not.toMatch(/Camille|Dupré|Morin|06 12/u)
     const [camille] = read.text.match(TOKEN_OF_A_PERSON) ?? []
-    expect(read.text).toContain(`Appeler ${camille} au ${camille}, puis ⟦client:`)
+    expect(read.text).toContain(`Appeler ${camille} au ${camille}, puis ${TOKEN_ENVELOPE.open}client${TOKEN_ENVELOPE.separator}`)
     expect(JSON.stringify(read.result.structuredContent)).not.toMatch(/Camille|Dupré|Morin/u)
     // Une autre conversation, le même jeton ; le dictionnaire rebâti (autre processus), le même jeton encore.
     forgetDictionaries()
@@ -128,7 +131,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     const served = await client.getPrompt({ name: "rappel" })
     expect(JSON.stringify(served)).not.toMatch(/Camille|Dupré|Morin/u)
     expect(JSON.stringify(served)).toMatch(TOKEN_OF_A_PERSON)
-    await expect(client.getPrompt({ name: "relance_jean_morin" })).rejects.toThrow(/Unknown prompt relance_⟦client:/u)
+    await expect(client.getPrompt({ name: "relance_jean_morin" })).rejects.toThrow(`Unknown prompt relance_${TOKEN_ENVELOPE.open}client${TOKEN_ENVELOPE.separator}`)
     const opened = await openContext("a quote")
     expect(opened.text).toContain("copy the token exactly as written")
   })
@@ -144,10 +147,10 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
   it("should pseudonymize a function's result and a refusal that names a person, and journal them pseudonymized", async () => {
     const { run, flush } = await session()
     const served = await run("call", { function: "erp.lookup_client", arguments: { name: "Jean Morin" } })
-    expect(served.text).toMatch(/^Client ⟦client:[0-9a-hjkmnp-tv-z]{13}⟧ found: call ⟦client:[0-9a-hjkmnp-tv-z]{13}⟧\./u)
+    expect(served.text).toMatch(new RegExp(`^Client ${PERSON} found: call ${PERSON}\\.`, "u"))
     const refused = await run("call", { function: "erp.lookup_client", arguments: { name: "Nobody, not Jean Morin" } })
     expect(refused.isError).toBe(true)
-    expect(refused.text).toMatch(/^No client named Nobody, not ⟦client:[0-9a-hjkmnp-tv-z]{13}⟧; did you mean ⟦client:[0-9a-hjkmnp-tv-z]{13}⟧\?/u)
+    expect(refused.text).toMatch(new RegExp(`^No client named Nobody, not ${PERSON}; did you mean ${PERSON}\\?`, "u"))
     await flush()
     const rows = await journalRows()
     expect(rows.length).toBeGreaterThanOrEqual(2)
@@ -168,7 +171,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     expect(JSON.stringify(rows)).not.toMatch(/Camille|Dupré|camille_dupre/u)
     await recordFeedback(db, identity, { type: "error", text: "The page of Camille Dupré is wrong", target: "Jean Morin" }, null)
     const [ticket] = await seed.admin<{ text: string; target: string }[]>`select text, target from platform.feedback where org_id = ${ref.org.id} order by created_at desc limit 1`
-    expect(ticket.text).toMatch(/^The page of ⟦client:[0-9a-hjkmnp-tv-z]{13}⟧ is wrong$/u)
+    expect(ticket.text).toMatch(new RegExp(`^The page of ${PERSON} is wrong$`, "u"))
     expect(ticket.target).toMatch(TOKEN_OF_A_PERSON)
   })
 
@@ -262,7 +265,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate of the admin
     const node = (args: Record<string, unknown>) => mcp.call("admin_node", { ctx: code, org: admin.orgs.acme.slug, ...args })
     const moved = await node({ op: "move", path: "ventes/tarifs", new_path: "ventes/jean_morin" })
     expect(moved.isError).toBe(false)
-    expect(moved.text).toMatch(/^ventes\/tarifs moved to ventes\/⟦client:[0-9a-hjkmnp-tv-z]{13}⟧ /u)
+    expect(moved.text).toMatch(new RegExp(`^ventes/tarifs moved to ventes/${PERSON} `, "u"))
     expect(JSON.stringify(moved.structured)).not.toContain("jean_morin")
     const refused = await node({ op: "move", path: "ventes/jean_morin/nothing", new_path: "conseil/x" })
     expect(refused.isError).toBe(true)

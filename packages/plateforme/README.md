@@ -540,7 +540,8 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
 - **Clé** : `PLATFORM_PSEUDONYM_KEY`, 32 octets en base64 (`openssl rand -base64 32`), dans l'environnement serveur
   seulement. Absente, mal écrite ou changée (chaque organisation garde un témoin de la clé), tout appel MCP d'une
   organisation est refusé (`internal`) : rien ne part en clair.
-- **Base** : migration `20261019110000_platform_pseudonymes.sql` (sel et génération par organisation).
+- **Base** : migrations `20261019110000_platform_pseudonymes.sql` et `20261019120000_platform_pseudonymes_lecture.sql`
+  (sel et génération par organisation).
 - **Déclarer** : au chargement de la route, avec vos autres déclarations.
 
   ```ts
@@ -561,12 +562,19 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
 - **Invalider** : `await invalidateSensitiveEntities(db, org)` après toute écriture d'une personne déclarée
   (création, changement, effacement) ; sinon le dictionnaire gardé sert l'ancienne liste jusqu'à 5 minutes.
 - **Repasser un résultat** de `callFunction` à un assistant : `await pseudonymize(db, org, result)` d'abord.
-- **Bornes** : 50 000 entités par organisation (mesuré : 2,3 s de construction, 67 Mo gardés) ; au-delà, refus.
+- **Fonctions de l'hôte** : `entityArguments` de `defineErpFunction` (chemin pointé de l'argument → sorte, e.g.
+  `{ client: "client" }`) ; le jeton que l'assistant y passe arrive à `run` en identifiant, et un jeton d'une autre
+  sorte est refusé. Ailleurs, vos arguments reçoivent le jeton tel quel.
+- **Bornes** : 50 000 entités par organisation (mesuré : 2,8 s de construction, 83 Mo gardés) ; au-delà, refus.
 - Ce qui est reconnu : prénoms et nom dans les deux ordres, premier prénom, initiale, civilité devant le nom, forme en
-  chemin (`camille_dupre`), courriels, désignations libres, ligne de voie, téléphones en chiffres. Le nom seul ou le
+  chemin de chacune (`camille_dupre`, `acme_sa`), courriels, désignations libres, ligne de voie, téléphones en chiffres. Le nom seul ou le
   prénom seul restent en clair. Une forme commune à deux personnes devient un jeton à sens unique (`⟦name:…⟧`).
-- **Pas encore** : un jeton que l'assistant recopie dans un argument (chemin, recherche, fonction) n'est pas encore
-  résolu. Ne déclarez pas vos personnes en production avant la version qui le fait.
+- Un jeton que l'assistant recopie se résout : chemin de `read`, de `write` et d'une fonction native (la page qui
+  existe), requête de `find` et phrase de `context` (« prénoms nom »), argument d'entité de vos fonctions. Un jeton
+  inconnu est refusé (`invalid_arguments`, raison `unknown_pseudonym`), comme un jeton à sens unique là où il faut une
+  personne (`one_way_pseudonym`) ; une fonction de connecteur refuse tout jeton (`forbidden`, `pseudonym_not_accepted`).
+- **Pas encore** : un jeton dans `find` de `replace_text`, ou dans une clé ou un filtre de `table.*`, ne se compare pas
+  au texte en clair. Ne déclarez pas vos personnes en production avant la version qui le fait.
 
 ## Widgets dans la conversation
 

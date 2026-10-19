@@ -1,7 +1,7 @@
 // La normalisation des textes comparés par la pseudonymisation (`pseudonymisation.md` § Le dictionnaire et la
 // détection) : NFKD, diacritiques retirés, casse repliée, ligatures (`œ`, `æ`, `ß`), apostrophes et tirets unifiés,
-// blancs resserrés. Chaque caractère normalisé garde sa place dans le texte d'origine : une mention trouvée dans le
-// texte normalisé se coupe dans l'original. Sans ce module, « Hélène » et « HELENE » seraient deux personnes, et une
+// blancs resserrés (l'astérisque d'une emphase Markdown en est un). Chaque caractère normalisé garde sa place dans le
+// texte d'origine : une mention trouvée dans le texte normalisé se coupe dans l'original. Sans ce module, « Hélène » et « HELENE » seraient deux personnes, et une
 // coupe tomberait au mauvais endroit dès qu'un accent change la longueur du texte.
 
 /** Les ligatures que NFKD ne décompose pas, et `ß`, que la casse repliée de JavaScript garde. */
@@ -9,7 +9,11 @@ const LIGATURES: Readonly<Record<string, string>> = { "œ": "oe", "æ": "ae", "�
 const APOSTROPHES = /['’‘ʼ`´]/u
 const DASHES = /[‐‑‒–—―−]/u
 const COMBINING = /\p{M}/u
-const BLANK = /\s/u
+/**
+ * Un blanc, ou l'astérisque d'une emphase Markdown : `find` met en gras chaque mot trouvé (« **Jean** **Morin** »), et
+ * un nom ainsi coupé doit rester une mention.
+ */
+const BLANK = /[\s*]/u
 
 /** Un texte normalisé : `text`, et pour chaque unité de `text`, sa place `[start, end)` dans le texte d'origine. */
 export type Normalized = { text: string; starts: number[]; ends: number[] }
@@ -65,6 +69,6 @@ export function normalized(text: string): Normalized {
 /** La seule forme normalisée d'un texte, sans table : celle des formes du dictionnaire. */
 export function normalizedText(text: string): string {
   // Le même résultat que `normalized`, sans table, en un passage pour l'ASCII : les formes du dictionnaire en sont presque toutes.
-  if (/^[\x00-\x7f]*$/u.test(text)) return text.toLowerCase().replaceAll("`", "'").replace(/\s+/gu, " ").trim()
+  if (/^[\x00-\x7f]*$/u.test(text)) return text.toLowerCase().replaceAll("`", "'").replace(/[\s*]+/gu, " ").trim()
   return normalized(text).text
 }

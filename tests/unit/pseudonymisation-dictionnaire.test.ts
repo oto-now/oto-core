@@ -9,7 +9,7 @@ import { buildDictionary, DictionaryError, type Dictionary } from "../../package
 import { entityForms, phoneDigits, titledName } from "../../packages/plateforme/server/pseudonym/forms"
 import { pseudonymizedJson, pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
 import { normalized } from "../../packages/plateforme/server/pseudonym/normalize"
-import { entityBody, keyWitness, orgKey, pseudonymKey, TOKEN_PATTERN } from "../../packages/plateforme/server/pseudonym/token"
+import { entityBody, HMAC_BODY_SOURCE, keyWitness, orgKey, pseudonymKey, token, tokenSource, TOKEN_PATTERN } from "../../packages/plateforme/server/pseudonym/token"
 
 const MASTER = Buffer.alloc(32, 7)
 const KEY = orgKey(MASTER, "org-1", "salt-of-the-organisation")
@@ -29,7 +29,9 @@ async function dictionary(entities: readonly SensitiveEntity[] = [CAMILLE, JEAN]
   return buildDictionary([kind(entities, options)], ORG, KEY)
 }
 
-const tokenOf = (id: string) => `⟦client:${entityBody(KEY, "client", id)}⟧`
+const tokenOf = (id: string) => token("client", entityBody(KEY, "client", id))
+/** Un jeton de valeur `name`, de corps HMAC, seul dans le texte. */
+const NAME_TOKEN = tokenSource("name", HMAC_BODY_SOURCE)
 
 afterEach(() => registerSensitiveEntities(null))
 
@@ -66,7 +68,7 @@ describe("normalisation, forms and tokens", () => {
     expect(entityBody(KEY, "person", "c-1")).not.toBe(body)
     expect(entityBody(orgKey(MASTER, "org-2", "salt-of-the-organisation"), "client", "c-1")).not.toBe(body)
     expect(entityBody(orgKey(MASTER, "org-1", "another-salt-value"), "client", "c-1")).not.toBe(body)
-    expect([...`a ⟦client:${body}⟧ b ⟦client:c-12⟧`.matchAll(TOKEN_PATTERN)].map((match) => match[2])).toEqual([body, "c-12"])
+    expect([...`a ${token("client", body)} b ${token("client", "c-12")}`.matchAll(TOKEN_PATTERN)].map((match) => match[2])).toEqual([body, "c-12"])
   })
 
   it("should read the master key from the environment, refuse a missing or malformed one, and name its witness", () => {
@@ -84,8 +86,8 @@ describe("the dictionary", () => {
     expect(built.byToken.get(tokenOf("c-1"))).toEqual({ kind: "client", id: "c-1" })
     expect(built.entities).toBe(3)
     const shared = pseudonymizedText(built, "Camille Dupré called.")
-    expect(shared).toMatch(/^⟦name:[0-9a-hjkmnp-tv-z]{13}⟧ called\.$/u)
-    expect(pseudonymizedText(built, "Mme Dupré")).toMatch(/^⟦name:[0-9a-hjkmnp-tv-z]{13}⟧$/u)
+    expect(shared).toMatch(new RegExp(`^${NAME_TOKEN} called\\.$`, "u"))
+    expect(pseudonymizedText(built, "Mme Dupré")).toMatch(new RegExp(`^${NAME_TOKEN}$`, "u"))
     expect(built.byToken.get(shared.split(" ")[0])).toEqual({ oneWay: true })
     // Le nom complet avec le second prénom reste à Camille seule.
     expect(pseudonymizedText(built, "Camille Hélène Dupré")).toBe(tokenOf("c-1"))
@@ -101,8 +103,8 @@ describe("the dictionary", () => {
   it("should take the host's reference as the body, and refuse a missing, malformed, duplicated or revealing one", async () => {
     const reference = (ref: string | undefined, entity = JEAN): SensitiveEntity => ({ ...entity, reference: ref })
     const built = await dictionary([reference("c-7k2"), reference("x-91", CAMILLE)], { tokens: "reference" })
-    expect(pseudonymizedText(built, "Jean Morin et Camille Dupré")).toBe("⟦client:c-7k2⟧ et ⟦client:x-91⟧")
-    expect(built.byToken.get("⟦client:c-7k2⟧")).toEqual({ kind: "client", id: "c-2" })
+    expect(pseudonymizedText(built, "Jean Morin et Camille Dupré")).toBe(`${token("client", "c-7k2")} et ${token("client", "x-91")}`)
+    expect(built.byToken.get(token("client", "c-7k2"))).toEqual({ kind: "client", id: "c-2" })
     await expect(dictionary([reference(undefined)], { tokens: "reference" })).rejects.toThrow("has no reference")
     await expect(dictionary([reference("C-12")], { tokens: "reference" })).rejects.toThrow("has no reference")
     await expect(dictionary([reference("c-1"), reference("c-1", CAMILLE)], { tokens: "reference" })).rejects.toThrow("given twice")

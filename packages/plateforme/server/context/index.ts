@@ -28,6 +28,7 @@ import {
 } from "../routing"
 import type { ToolOutput } from "../tool-output"
 import { sensitiveKinds } from "../pseudonym/declaration"
+import { token } from "../pseudonym/token"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
 import { newsBlock, newsItems } from "./blocks/news"
@@ -236,7 +237,7 @@ async function sinceOf(db: PlatformDb, identity: Identity, raw: string | undefin
  * se devine pas. Sans jeton réel : la porte le laisserait tel quel, mais l'exemple ne doit désigner personne.
  */
 export const PSEUDONYM_NOTICE =
-  "People's names, emails and phone numbers appear as tokens such as ⟦client:…⟧. To refer to a person (in a path, a search or a function argument), copy the token exactly as written; never guess a token or try to recover the value behind it."
+  `People's names, emails and phone numbers appear as tokens such as ${token("client", "…")}. To refer to a person (in a path, a search or a function argument), copy the token exactly as written; never guess a token or try to recover the value behind it.`
 
 export async function buildContext(
   db: PlatformDb,

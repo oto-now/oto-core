@@ -26,6 +26,8 @@ import type { PlatformDb } from "./db"
 import { memberDirectory } from "./directory"
 import { issuesText, PlatformError } from "./errors"
 import type { Identity } from "./identity"
+import type { Dictionary } from "./pseudonym/dictionary"
+import { resolvedCallArguments } from "./pseudonym/inputs"
 import type { ToolOutput } from "./tool-output"
 
 /**
@@ -94,6 +96,8 @@ export type CallDeps = {
    */
   functions?: readonly CatalogFunction[]
   trace?: CallTrace
+  /** Le dictionnaire de l'organisation quand la porte MCP pseudonymise : les jetons des arguments se résolvent par lui. */
+  dictionary?: Dictionary | null
 }
 
 const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true."
@@ -244,7 +248,9 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   if (personal.length > 0) trace.personal = personal
   const active = await deps.activeConnectors()
   if (!isActive(fn, active)) throw await notEnabled(db, identity, fn)
-  const args = checkedArguments(fn, input.arguments ?? {}, prefix)
+  // Les jetons de l'assistant (pseudonymisation) : résolus avant le contrôle du schéma, qui attend un identifiant.
+  const received = deps.dictionary ? await resolvedCallArguments({ db, identity, dictionary: deps.dictionary }, fn, input.arguments ?? {}) : (input.arguments ?? {})
+  const args = checkedArguments(fn, received, prefix)
   const tablePath = fn.connector === NATIVE_CONNECTOR && typeof args.table === "string" ? args.table : undefined
   const team = await runningTeam(db, identity, { fn, team: input.team, tablePath, ctxCode: deps.ctxCode })
   trace.teamId = journalTeam(identity, team?.id)
