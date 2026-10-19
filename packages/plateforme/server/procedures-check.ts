@@ -15,6 +15,7 @@ import {
   formatCallLocation,
   isPlaceholderValue,
   orderBlocks,
+  PROCEDURE_MAX_CHARS,
   renderBlocks,
   sectionOfBlock,
   type ProcedureRefusal,
@@ -29,9 +30,6 @@ import { boundedList, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { cut } from "./journal"
 import { charCount, formatCount, type DocBlock } from "./nodes/document"
-
-/** Une procédure est servie entière par `context` (H30, P24) : son rendu, sans titre ni résumé (N6). */
-export const PROCEDURE_MAX_CHARS = 8000
 
 /** Nom d'une fonction (règle 3) : `table.rows`, `mail.create_draft`, jamais `<p>_call`. */
 const FUNCTION_NAME = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/

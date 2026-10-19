@@ -11,7 +11,7 @@ import * as z from "zod/v4"
 import { tableHeaderPatchSchema } from "../../schemas/tables"
 import { UPLOAD_RULE } from "../../schemas/uploads"
 import { formatCount } from "../nodes/document"
-import { PROCEDURE_MAX_CHARS } from "../procedures-check"
+import { PROCEDURE_MAX_CHARS } from "../../schemas/procedures"
 
 /** Le contenu d'un contrat au préfixe de l'organisation (`acme_write`…), dans l'ordre de `renderContract`. */
 type ContractContent = {

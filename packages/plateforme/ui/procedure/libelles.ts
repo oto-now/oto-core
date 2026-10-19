@@ -2,11 +2,12 @@
 // emplacements, aide du résumé, texte d'un bloc `call`, liste des procédures. Tout autre refus prend le texte
 // de `messageDErreur` (`ui/api/messages.ts`), jamais une seconde table. M59 (fiche D104) : à l'écran, une
 // procédure est une page ; les champs d'appel, le contrôle du brouillon et l'aperçu d'une phrase sont partis.
-import type { ProcedureRefusalKind, ProcedureSummary } from "../../schemas"
+import { PROCEDURE_MAX_CHARS, type ProcedureRefusalKind, type ProcedureSummary } from "../../schemas"
+import { nombreLisible } from "../format/nombres"
 
 /** Les huit genres d'un refus (E03-S06), dits en français (AC7) ; tout autre genre : `GENRE_INCONNU`. */
 export const GENRES_DE_REFUS: Record<ProcedureRefusalKind, string> = {
-  too_long: "procédure de plus de 8 000 caractères : déplacez les informations de référence dans une page et liez-la",
+  too_long: `procédure de plus de ${nombreLisible(PROCEDURE_MAX_CHARS)} caractères : déplacez les informations de référence dans une page et liez-la`,
   invalid_block: "bloc d'appel mal formé",
   unknown_function: "fonction inconnue",
   function_not_active: "fonction non activée pour l'organisation",

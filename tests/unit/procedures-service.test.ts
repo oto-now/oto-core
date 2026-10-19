@@ -79,9 +79,9 @@ const AT = "section « Étapes », call block 1 (step 1)"
 const CASES: { rule: string; blocks: BlockInput[]; active?: string[]; kind: string; problem: (prefix: string) => string }[] = [
   {
     rule: "R1",
-    blocks: [heading("Étapes"), paragraph("x".repeat(9_521))],
+    blocks: [heading("Étapes"), paragraph("x".repeat(13_521))],
     kind: "too_long",
-    problem: (p) => `steps: 9,532 characters; a procedure is served whole by ${p}_context and holds at most 8,000: move reference material to a page and link to it`,
+    problem: (p) => `steps: 13,532 characters; a procedure is served whole by ${p}_context and holds at most 12,000: move reference material to a page and link to it`,
   },
   {
     rule: "R2 (code block)",

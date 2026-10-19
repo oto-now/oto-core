@@ -1,7 +1,7 @@
 # Tableaux
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
@@ -28,7 +28,7 @@ Les équipes tiennent des listes (prospects, devis, fiches) qu'un assistant doit
 - E07-S01 N2 : une colonne texte sans `max_length` tient 2 000 caractères au plus ; `max_length` va jusqu'à 10 000.
 - HN-E11S01-3 : l'attribut de colonne `allow_verified_empty` (défaut `true`) vaut pour toute colonne ; « obligatoire strict » = `required: true` et `allow_verified_empty: false` (D132). HN-E11S01-24 : dans `table.schema`, la clé et la colonne d'état se disent `required` seul, `verified_empty` y étant toujours refusé. HN-E11S01-25 : publier `allow_verified_empty: false` sur une colonne déjà requise avertit (`missing_required`) des seules lignes qui n'y ont qu'un `verified_empty` ; une colonne rendue requise et stricte d'un coup avertit de toute ligne sans vraie valeur.
 - HN-E11S01-23 : la description de `required` du patch d'en-tête (`tableColumnPatchSchema`) reprend celle du schéma de colonne, avec son exemple et son défaut (« e.g. true (default: unchanged; false for a new column) »).
-- P24 : la clé d'un tableau ne change que s'il est vide ; une colonne qui a des valeurs ne se renomme ni ne change de type ; une procédure tient en 8 000 caractères rendus ; un brouillon n'est servi qu'à partir du niveau écriture.
+- P24 : la clé d'un tableau ne change que s'il est vide ; une colonne qui a des valeurs ne se renomme ni ne change de type ; une procédure tient en 12 000 caractères rendus ; un brouillon n'est servi qu'à partir du niveau écriture.
 - E07-S04 N6 : une ligne que la purge des colonnes retirées ne peut écrire (changée trois fois, panne) ne fait pas échouer la publication, déjà faite : journalisée, dite en avertissement `not_purged`, purgée si la colonne revient.
 - E07-S01 N13 : un tableau sans en-tête publié rend `conflict` ; un en-tête publié ou en attente invalide rend `internal`, le problème au log du serveur.
 - HN-E11S01-9 : la révision servie par `table.schema` est celle du nœud publié, celle que `write` attend en `base_revision`. E07-S01 N15 : le contrat d'un tableau (`read`, `table.schema`) ne cite `table.write`, `table.claim` ou `table.release` que s'ils sont au catalogue.

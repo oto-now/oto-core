@@ -3,8 +3,8 @@
 // inconnue ; la section la plus proche d'une demande, et les propositions de `context` quand aucune procédure ne
 // convient (fonctions, puis section du guide).
 import { describe, expect, it } from "vitest"
-import { catalogFunctions, searchFunctions } from "../../packages/plateforme/server/catalog/registry"
-import { hintLines } from "../../packages/plateforme/server/context/hints"
+import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
+import { hintLines, proposedFunctions } from "../../packages/plateforme/server/context/hints"
 import { closestHelpSection, helpGuide, HELP_PATH } from "../../packages/plateforme/server/help"
 
 describe("helpGuide", () => {
@@ -30,9 +30,10 @@ describe("closestHelpSection and hintLines", () => {
     expect(closestHelpSection("Bonjour")).toBeNull()
   })
 
-  it("should find node.export_tree among the functions for a request to export a team's pages", () => {
-    const found = searchFunctions(catalogFunctions(), "Exporte toutes les pages de l'équipe SAV", 3)
-    expect(found.filter(({ score }) => score >= 0.25).map(({ fn }) => fn.name)).toContain("node.export_tree")
+  it("should propose node.export_tree for a request to export a team's pages, and no function on a single common word", () => {
+    expect(proposedFunctions(catalogFunctions(), "Exporte toutes les pages de l'équipe SAV").map(({ name }) => name)).toContain("node.export_tree")
+    // Un seul mot commun avec `node.export_tree` et `node.import_tree` : rien n'est proposé.
+    expect(proposedFunctions(catalogFunctions(), "créer une tâche")).toEqual([])
   })
 
   it("should list the functions that may do it, then the section of the guide, and nothing without hints", () => {
