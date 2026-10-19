@@ -8,7 +8,8 @@ import { isRecord } from "../../schemas/tables"
 import { PlatformError } from "../errors"
 import type { Dictionary } from "./dictionary"
 import { pseudonymizedText } from "./gate"
-import { TOKEN_PATTERN, tokenMatches, tokenSource } from "./token"
+import { DETECTORS } from "./detectors"
+import { HMAC_BODY_SOURCE, TOKEN_PATTERN, tokenMatches, tokenSource } from "./token"
 
 /** Ce que l'argument fait d'un jeton : un contenu le garde, jeton de valeur compris ; une désignation vise une entité. */
 export type TokenUse = "content" | "designation"
@@ -18,6 +19,11 @@ export const MAX_PATH_CANDIDATES = 16
 
 /** Un jeton seul, sans rien autour. */
 const LONE_TOKEN = new RegExp(`^${tokenSource()}$`, "u")
+/**
+ * Un jeton de valeur d'un détecteur (`email#…`, `phone#…`) : posé par la porte sans passer par le dictionnaire, il ne
+ * désigne personne, et nul ne le résout ; reçu, il vaut comme tout jeton à sens unique.
+ */
+const DETECTED_VALUE = new RegExp(`^${tokenSource(`(?:${DETECTORS.join("|")})`, HMAC_BODY_SOURCE)}$`, "u")
 
 type EntityTarget = { kind: string; id: string }
 
@@ -45,14 +51,14 @@ function unknownPseudonym(found: string): PlatformError {
 function oneWayPseudonym(found: string): PlatformError {
   return new PlatformError(
     "invalid_arguments",
-    `${found} stands for a value that several people share: it designates no one and cannot be used here. Use the token of one person.`,
+    `${found} stands for a value, not a person (shared by several people, or of someone this workspace does not declare): it designates no one and cannot be used here. Use the token of one person.`,
     { reason: "one_way_pseudonym" },
   )
 }
 
 /** L'entité d'un jeton reçu ; `null` pour un jeton de valeur dans un contenu. Inconnu, ou de valeur pour désigner : refusé. */
 function targetOf(dictionary: Dictionary, found: string, use: TokenUse): EntityTarget | null {
-  const target = dictionary.byToken.get(found)
+  const target = dictionary.byToken.get(found) ?? (DETECTED_VALUE.test(found) ? { oneWay: true as const } : undefined)
   if (!target) throw unknownPseudonym(found)
   if ("oneWay" in target) {
     if (use === "designation") throw oneWayPseudonym(found)

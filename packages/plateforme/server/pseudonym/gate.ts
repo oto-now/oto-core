@@ -1,7 +1,8 @@
 // La porte (`pseudonymisation.md` § La porte) : une fonction pure du dictionnaire, qui remplace dans un texte, ou dans
 // chaque chaîne d'une valeur JSON à toute profondeur, chaque mention d'une personne déclarée par son jeton. Les clés
 // d'objet ne sont pas touchées ; rien n'est cherché dans un jeton déjà posé. Un téléphone se reconnaît en chiffres, quel
-// que soit son format.
+// que soit son format. Un courriel ou un téléphone qu'aucune personne déclarée ne porte devient un jeton de valeur.
+import { detectedValues } from "./detectors"
 import type { Dictionary } from "./dictionary"
 import { findMentions } from "./mentions"
 import { normalized } from "./normalize"
@@ -24,6 +25,14 @@ function phoneCuts(dictionary: Dictionary, text: string): Cut[] {
   return cuts
 }
 
+/** Les courriels et téléphones trouvés par forme : le jeton de l'entité qui les porte, sinon leur jeton de valeur. */
+function detectedCuts(dictionary: Dictionary, text: string): Cut[] {
+  return detectedValues(text).map(({ start, end, detector, value }) => {
+    const target = detector === "phone" ? dictionary.phones.get(value) : dictionary.table.forms.get(value)?.target
+    return { start, end, token: target === undefined ? dictionary.valueToken(detector, value) : dictionary.tokens[target] }
+  })
+}
+
 /** Les coupes d'un morceau de texte sans jeton, décalées de `offset`, de gauche à droite, sans chevauchement. */
 function segmentCuts(dictionary: Dictionary, text: string, offset: number): Cut[] {
   if (text === "") return []
@@ -33,7 +42,8 @@ function segmentCuts(dictionary: Dictionary, text: string, offset: number): Cut[
     end: norm.ends[mention.end - 1],
     token: dictionary.tokens[mention.target],
   }))
-  const all = [...cuts, ...phoneCuts(dictionary, text)].sort((a, b) => a.start - b.start || b.end - a.end)
+  // À même place, la mention d'une personne déclarée passe avant la valeur détectée (le tri est stable).
+  const all = [...cuts, ...phoneCuts(dictionary, text), ...detectedCuts(dictionary, text)].sort((a, b) => a.start - b.start || b.end - a.end)
   const kept: Cut[] = []
   let at = 0
   for (const cut of all) {

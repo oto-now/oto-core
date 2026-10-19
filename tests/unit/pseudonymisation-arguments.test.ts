@@ -97,6 +97,13 @@ describe("the tokens in the arguments, on a dictionary in memory", () => {
     expect(await refusal(() => designatedText(dictionary, `devis ${shared}`))).toBe("invalid_arguments one_way_pseudonym")
     expect(await refusal(() => pathCandidates(dictionary, `clients/${shared}`))).toBe("invalid_arguments one_way_pseudonym")
     expect(() => checkTokens(dictionary, { text: `écrire à ${shared}` }, "content")).not.toThrow()
+    // Le jeton d'une valeur détectée (courriel, téléphone d'une personne non déclarée) : à sens unique, sans dictionnaire.
+    const detected = pseudonymizedText(dictionary, "lea.roux@ailleurs.test")
+    expect(detected).toMatch(/^email#/u)
+    expect(await refusal(() => designatedText(dictionary, `devis ${detected}`))).toBe("invalid_arguments one_way_pseudonym")
+    expect(() => checkTokens(dictionary, { text: `écrire à ${detected}` }, "content")).not.toThrow()
+    expect(await refusal(() => refuseTokens(dictionary, "mail.create_draft", { to: detected }))).toBe("forbidden pseudonym_not_accepted")
+    expect(await refusal(() => checkTokens(dictionary, { text: "voir iban#0000000000000" }, "content"))).toBe("invalid_arguments unknown_pseudonym")
   })
 
   it("should try the path forms of an entity, prenoms_nom first, each giving back the path received", () => {

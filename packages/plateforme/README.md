@@ -579,6 +579,10 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
   libres, ligne de voie, téléphones en chiffres. Le nom seul se masque s'il a au moins 3 lettres et n'est ni un mot commun
   ni un prénom courant (« Lefort », « Durand ») ; le prénom seul reste en clair. Une forme commune à deux personnes devient
   un jeton à sens unique (`name#…`).
+- Courriels et téléphones de personnes non déclarées : trouvés par leur forme (courriel à domaine, téléphone en `+` ou
+  `00`, ou français à dix chiffres par paires), servis en jeton à sens unique (`email#…`, `phone#…`), le même pour la
+  même valeur ; dans toute organisation de l'hôte, même sans entité. Un numéro national étranger sans indicatif reste en
+  clair.
 - Mots courants : `server/pseudonym/words/`, généré par `scripts/mots-courants.mjs` du dépôt ; les mots communs du lexique
   de Grammalecte 7.7 (MPL 2.0, sa notice en tête du fichier) et les prénoms du fichier des prénoms de l'Insee (Source :
   Insee, paru le 16/07/2026, Licence Ouverte 2.0).

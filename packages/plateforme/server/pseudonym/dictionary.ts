@@ -47,6 +47,8 @@ export type Dictionary = {
   /** Les sortes qu'un jeton reçu peut porter : celles que l'hôte déclare, et les réservées (jetons de valeur). */
   kinds: ReadonlySet<string>
   entities: number
+  /** Le jeton de valeur, à sens unique, d'une valeur trouvée par un détecteur (`detectors.ts`) : le même dans l'organisation. */
+  valueToken(detector: string, value: string): string
 }
 
 /** Une forme, un nom après une civilité ou un téléphone, et l'entité qui le porte (`-1` : partagé par deux entités). */
@@ -180,5 +182,6 @@ export async function buildDictionary(kinds: readonly SensitiveKind[], org: Sens
   const phones = new Map([...draft.phones].map(([phone, { target }]): [string, number] => [phone, target]))
   const table: FormTable = { forms: targets(draft.forms), maxRuns: draft.maxRuns, titled: targets(draft.titled), titledRuns: draft.titledRuns }
   const tokenKinds = new Set([...kinds.map((declared) => declared.kind), ...RESERVED_KINDS])
-  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, byEntity: draft.byEntity, details: draft.details, kinds: tokenKinds, entities: total.count }
+  const valueToken = (detector: string, value: string): string => token(detector, valueBody(key, detector, value))
+  return { table, tokens: draft.tokens, phones, byToken: draft.byToken, byEntity: draft.byEntity, details: draft.details, kinds: tokenKinds, entities: total.count, valueToken }
 }

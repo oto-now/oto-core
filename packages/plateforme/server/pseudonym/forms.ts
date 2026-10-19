@@ -102,9 +102,12 @@ export function entityPhones(values: SensitiveValues): string[] {
   return strings(values.phones, "phones").map(phoneDigits).filter((digits): digits is string => digits !== null)
 }
 
-/** Un numéro en E.164 (`+33612345678`), `+33` par défaut pour un numéro national à 10 chiffres, ou `null`. */
+/**
+ * Un numéro en E.164 (`+33612345678`), `+33` par défaut pour un numéro national à 10 chiffres, ou `null`. Le `(0)` d'un
+ * numéro international (`+33 (0)6…`) ne compte pas.
+ */
 export function phoneDigits(text: string): string | null {
-  const trimmed = text.trim()
+  const trimmed = text.trim().replaceAll("(0)", "")
   const digits = trimmed.replace(/\D/gu, "")
   let e164: string
   if (trimmed.startsWith("+")) e164 = `+${digits}`

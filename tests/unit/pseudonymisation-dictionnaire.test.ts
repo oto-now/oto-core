@@ -9,7 +9,7 @@ import { buildDictionary, DictionaryError, type Dictionary } from "../../package
 import { entityForms, phoneDigits, titledName } from "../../packages/plateforme/server/pseudonym/forms"
 import { pseudonymizedJson, pseudonymizedText } from "../../packages/plateforme/server/pseudonym/gate"
 import { normalized, normalizedText } from "../../packages/plateforme/server/pseudonym/normalize"
-import { entityBody, HMAC_BODY_SOURCE, keyWitness, orgKey, pseudonymKey, token, tokenSource, TOKEN_PATTERN } from "../../packages/plateforme/server/pseudonym/token"
+import { entityBody, HMAC_BODY_SOURCE, keyWitness, orgKey, pseudonymKey, token, tokenSource, TOKEN_PATTERN, valueBody } from "../../packages/plateforme/server/pseudonym/token"
 
 const MASTER = Buffer.alloc(32, 7)
 const KEY = orgKey(MASTER, "org-1", "salt-of-the-organisation")
@@ -32,6 +32,7 @@ async function dictionary(entities: readonly SensitiveEntity[] = [CAMILLE, JEAN]
 const tokenOf = (id: string) => token("client", entityBody(KEY, "client", id))
 /** Un jeton de valeur `name`, de corps HMAC, seul dans le texte. */
 const NAME_TOKEN = tokenSource("name", HMAC_BODY_SOURCE)
+const valueOf = (detector: string, value: string) => token(detector, valueBody(KEY, detector, value))
 
 afterEach(() => registerSensitiveEntities(null))
 
@@ -130,8 +131,9 @@ describe("the gate", () => {
       .toBe(`Écrire à ${camille} ou au ${camille}, ${camille}.`)
     expect(pseudonymizedText(built, "Page clients/camille_dupre/notes")).toBe(`Page clients/${camille}/notes`)
     expect(pseudonymizedText(built, "Au 12 rue des Lilas, chez Dupré Conseil")).toBe(`Au ${camille}, chez ${camille}`)
-    // Ni dans un mot plus long, ni dans un jeton déjà posé ; dans un prénom composé ou un courriel plus long, le nom seul.
-    expect(pseudonymizedText(built, "Jean Morinière, Marie-Jean Morin, anne.camille.dupre@valbrune.test")).toBe(`Jean Morinière, Marie-Jean ${jean}, anne.camille.${camille}@valbrune.test`)
+    // Ni dans un mot plus long, ni dans un jeton déjà posé ; dans un prénom composé, le nom seul ; un courriel non déclaré
+    // qui le contient, entier, par son détecteur.
+    expect(pseudonymizedText(built, "Jean Morinière, Marie-Jean Morin, anne.camille.dupre@valbrune.test")).toBe(`Jean Morinière, Marie-Jean ${jean}, ${valueOf("email", "anne.camille.dupre@valbrune.test")}`)
     expect(pseudonymizedText(built, `${jean} et Jean Morin`)).toBe(`${jean} et ${jean}`)
     // Le nom seul (J3) et la forme d'une adresse web ; le prénom seul reste en clair.
     expect(pseudonymizedText(built, "Vente Morin / Dupré, Camille seule, https://crm.test/fiche/camille-dupre")).toBe(`Vente ${jean} / ${camille}, Camille seule, https://crm.test/fiche/${camille}`)
@@ -141,6 +143,36 @@ describe("the gate", () => {
     const built = await dictionary()
     const value = { "Jean Morin": ["Jean Morin", 3, null, { note: "vu J. Morin" }], when: "today" }
     expect(pseudonymizedJson(built, value)).toEqual({ "Jean Morin": [tokenOf("c-2"), 3, null, { note: `vu ${tokenOf("c-2")}` }], when: "today" })
+  })
+})
+
+describe("the detectors by shape", () => {
+  it("should give an undeclared email or phone a one-way value token, the same whatever its writing, and a declared one its entity's", async () => {
+    const built = await dictionary()
+    const camille = tokenOf("c-1")
+    const lea = valueOf("email", "lea.roux@ailleurs.test")
+    const phone = valueOf("phone", "+33698765432")
+    expect(pseudonymizedText(built, "Copie à Lea.Roux@Ailleurs.test et à camille.dupre@valbrune.test.")).toBe(`Copie à ${lea} et à ${camille}.`)
+    expect(pseudonymizedText(built, "06 98 76 54 32, 06.98.76.54.32, 0698765432, +33 6 98 76 54 32, +33 (0)6 98 76 54 32, 0033 6 98 76 54 32"))
+      .toBe([phone, phone, phone, phone, phone, phone].join(", "))
+    expect(pseudonymizedText(built, "Tél. : +44 20 7946 0958 ; fax 01-23-45-67-89")).toBe(`Tél. : ${valueOf("phone", "+442079460958")} ; fax ${valueOf("phone", "+33123456789")}`)
+    expect(pseudonymizedText(built, "au 06 12 34 56 78 ou +33 6 12 34 56 78")).toBe(`au ${camille} ou ${camille}`)
+    // Une organisation sans entité déclarée garde les détecteurs ; la clé de l'organisation fait le jeton.
+    expect(pseudonymizedText(await dictionary([]), "lea.roux@ailleurs.test")).toBe(lea)
+    expect(pseudonymizedText(await buildDictionary([kind([])], ORG, orgKey(MASTER, "org-2", "salt")), "lea.roux@ailleurs.test")).not.toBe(lea)
+  })
+
+  it("should leave numbers, dates, anchors, handles and a value token as they are", async () => {
+    const built = await dictionary([])
+    for (const text of [
+      "1914-1918, 01.02.2024 10:30, 01 02 2024, 75001 Paris, 2 873 000 habitants, +3,5 %, +1 234 567",
+      "SIRET 123 456 789 00012, ISBN 978-2-07-036024-5, IBAN FR76 3000 6000 0112 3456 7890 189",
+      "réf. A0612345678, 0612345678B, 06 12 34 56 7, version 1.2.3.4",
+      "@otomata_tech/oto_platform, git@host, user@localhost, https://crm.test/guide#installation, a@b.c",
+      `voir ${valueOf("email", "x@y.test")} et ${valueOf("phone", "+33600000000")}`,
+    ]) expect(pseudonymizedText(built, text)).toBe(text)
+    // La forme d'un jeton ne cache pas un numéro : il est trouvé derrière.
+    expect(pseudonymizedText(built, "phone#0033612345678")).toBe(`phone#${valueOf("phone", "+33612345678")}`)
   })
 })
 
