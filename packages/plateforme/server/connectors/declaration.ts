@@ -18,6 +18,7 @@ import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
+import { probeProblem } from "./probe-declaration"
 import { signalProblem } from "./signal-declaration"
 import { baseAddress, settingProblem } from "./settings"
 
@@ -236,18 +237,6 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
     run: (context, args: Record<string, unknown>) => runDescribed(prepared, describedCall(prepared, context), args),
     summarize: fn.class === "sensitive" && summary !== undefined ? async (_context, args: Record<string, unknown>) => describedSummary(summary, args) : undefined,
   }
-}
-
-/** La sonde (`probe`) : une lecture du connecteur, sans argument requis, et des chemins à trouver non vides. */
-function probeProblem(definition: ConnectorDefinition): string | null {
-  const probe = definition.probe
-  if (probe === undefined) return null
-  const fn = definition.functions.find((candidate) => candidate.name === probe.function)
-  const required = fn && Array.isArray(fn.schema.required) ? fn.schema.required : []
-  if (!fn || fn.class !== "read" || required.length > 0 || !Array.isArray(probe.nonEmpty) || probe.nonEmpty.some((path) => typeof path !== "string")) {
-    return `${definition.name}: probe must name a read function of the connector without required arguments, and list nonEmpty paths.`
-  }
-  return null
 }
 
 /**

@@ -31,8 +31,12 @@ export type PreparedFunction = {
   cursorArgument: string | null
 }
 
-/** Ce qu'il faut pour un appel : le compte résolu (champs, réglages, jeton), son identifiant (clé du rythme), et `fetch`. */
-export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch }
+/**
+ * Ce qu'il faut pour un appel : le compte résolu (champs, réglages, jeton), son identifiant (clé du rythme), et `fetch`.
+ * `settlesMark` : l'appelant lève ou pose la marque du compte lui-même après un succès (la sonde à solde, qui juge le
+ * solde lu) ; un refus qui marque la pose toujours ici.
+ */
+export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true }
 
 /** Le code du paquet d'un statut du tiers (H04, liste fermée) ; le refus nommé par la description reste dans le message. */
 export function platformCode(status: number): PlatformErrorCode {
@@ -199,7 +203,8 @@ function nextCursor(answer: unknown, pagination: ConnectorPagination | undefined
  * traduite par la table ; un contrôle de la réponse ; une adresse saisie qui mène à un hôte interne. Sans secret :
  * `internal` (le compte réel en a un, `runCall` l'a vérifié). Une adresse issue d'une saisie part par le transport gardé
  * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf. État du
- * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`).
+ * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`), sauf
+ * quand l'appelant la décide (`settlesMark`).
  */
 export async function executeDescribed(
   prepared: PreparedFunction,
@@ -242,8 +247,16 @@ export async function executeDescribed(
   }
   // Le premier appel réussi lève la marque du compte ; une levée qui échoue ne rend jamais l'appel en échec.
   const mark = credential.mark
-  if (mark) await mark.set(null).catch((error: unknown) => markWriteFailed(mark, "lift_failed", `connector ${connector.name}: account ${call.accountId}`, error))
+  if (mark && !call.settlesMark) await settleMark(mark, null, `connector ${connector.name}: account ${call.accountId}`)
   return { answers, next }
+}
+
+/**
+ * Pose (une raison) ou lève (`null`) la marque d'un compte après une réponse du tiers : une écriture qui échoue ne change
+ * jamais l'issue que le tiers a rendue (`markWriteFailed`).
+ */
+export async function settleMark(mark: AccountMarker, reason: AccountMarkReason | null, where: string): Promise<void> {
+  await mark.set(reason).catch((error: unknown) => markWriteFailed(mark, reason === null ? "lift_failed" : "mark_failed", where, error))
 }
 
 const isMarkReason = (code: PlatformErrorCode): code is AccountMarkReason => code === "credential_rejected" || code === "quota_exhausted"

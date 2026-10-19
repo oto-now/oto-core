@@ -469,7 +469,9 @@ registerConnectors([messagerie.connector], {
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
 
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
-  qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }`.
+  qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }` ; une sonde à solde (`probe.balance`) y
+  ajoute `balance: { value, unit, min }`, non saine sous le seuil, solde absent ou illisible, et pose ou lève la
+  marque `quota_exhausted` du compte selon le solde lu.
 
 - **Clé** : `PLATFORM_VAULT_KEY`, 32 octets en base64 (`openssl rand -base64 32`), dans l'environnement serveur de
   l'application, jamais en `NEXT_PUBLIC_`. Lue à l'usage seulement : sans elle, l'application démarre, et poser un

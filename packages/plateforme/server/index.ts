@@ -122,6 +122,7 @@ export type {
   ConnectorAccountIdentity,
   ConnectorDefinition,
   ConnectorFunctionDefinition,
+  ConnectorProbeBalance,
   HostCredentialReader,
   HostedLinkProvider,
   OAuthApplication,
@@ -132,8 +133,8 @@ export { CONNECTOR_CONSENT_CALLBACK_PATH, connectorConsentRedirectUri, startConn
 // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ pour la personne connectée
 // (l'adresse où l'envoyer), et l'adresse de retour que le paquet donne au tiers par le port `hostedLinks`.
 export { HOSTED_LINK_CALLBACK_PATH, hostedLinkReturnUrl, startHostedLink } from "./connectors/hosted-link"
-export { probeAccount } from "./connectors/account-secret"
-export type { AccountHealth } from "./connectors/account-secret"
+export { probeAccount } from "./connectors/probe"
+export type { AccountHealth, ProbedBalance } from "./connectors/probe"
 // Une fonction du catalogue lancée par le serveur de l'hôte, sous la personne connectée : contrôles et journal de
 // `<p>_call`, `method` `api` au journal.
 export { callFunction, HOST_CALL_JOURNAL } from "./function-call"

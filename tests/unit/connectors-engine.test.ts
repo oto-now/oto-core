@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { checkArguments } from "../../packages/plateforme/server/catalog/arguments"
 import type { FunctionContext } from "../../packages/plateforme/server/catalog/define"
 import { catalogFunctions, findFunction } from "../../packages/plateforme/server/catalog/registry"
+import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
+import { executeDescribed } from "../../packages/plateforme/server/connectors/engine"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, markingConnector, memoryMark, memoryTokens } from "../factories/described-connector"
@@ -267,6 +269,19 @@ describe("described connector engine, account state (oto-core#69)", () => {
     expect({ code: error.code, message: error.message }).toEqual({ code: "credential_rejected", message: "Crm refused the key. (key_rejected)" })
     expect(mark.effect).toBe("mark_failed")
     expect(loggedText(errors)).toContain("mark not set (internal)")
+  })
+
+  it("should leave the mark to a caller that settles it after a success (the balance probe), and still mark on a refusal", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const prepared = declaredConnector("crm")?.probe
+    if (!prepared) throw new Error("crm declares no probe")
+    stub(json({ name: "Contoso", scopes: ["read"] }), json({}, 401))
+    const mark = memoryMark({ reason: "quota_exhausted", at: "2026-10-16T08:00:00.000Z" })
+    const call = { credential: { fields: { api_key: secret() }, settings: {}, tokens: memoryTokens(), mark }, accountId: "account-settles", settlesMark: true as const }
+    await executeDescribed(prepared, call, {})
+    expect({ sets: mark.sets, effect: mark.effect }).toEqual({ sets: [], effect: null })
+    expect((await refusal(executeDescribed(prepared, call, {}))).code).toBe("credential_rejected")
+    expect(mark.sets).toEqual(["credential_rejected"])
   })
 
   it("should keep the date of a mark when the marked account fails again for the same reason, and refuse by name", async () => {

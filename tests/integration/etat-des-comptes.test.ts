@@ -11,6 +11,7 @@
 import { randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
+import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
 import { listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { teamConnectorLines } from "../../packages/plateforme/server/connectors/lines"
@@ -31,6 +32,8 @@ const CONNECTOR = `t${hex(4)}`
 const READ = `${CONNECTOR}.get_company`
 /** Un connecteur à compte rattaché dont la table marque : sa clé est celle de l'hôte, le compte se reconnecte. */
 const HOSTED = `t${hex(4)}`
+/** Le connecteur qui marque, sa sonde lisant le solde du compte (`credits.remaining`, sain à 10 crédits ou plus). */
+const PAID = `t${hex(4)}`
 const ORIGIN = "https://acme.test"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
@@ -82,15 +85,18 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
 
   beforeAll(async () => {
     process.env.PLATFORM_VAULT_KEY = randomBytes(32).toString("base64")
-    registerConnectors([markingConnector(CONNECTOR), { ...hostedConnector(HOSTED), errors: markingConnector(HOSTED).errors }], {
+    const paid = markingConnector(PAID)
+    const balance = { path: "credits.remaining", min: 10, unit: "credits" }
+    registerConnectors([markingConnector(CONNECTOR), { ...hostedConnector(HOSTED), errors: markingConnector(HOSTED).errors }, { ...paid, probe: { function: `${PAID}.get_company`, nonEmpty: [], balance } }], {
       hostCredentials: { [HOSTED]: () => ({ api_key: `hk_${randomBytes(12).toString("hex")}` }) },
     })
     fx = createSqlFixtures()
-    await fx.admin`insert into platform.connectors (name, label) values (${CONNECTOR}, 'Crm'), (${HOSTED}, 'Hosted Crm')`
+    await fx.admin`insert into platform.connectors (name, label) values (${CONNECTOR}, 'Crm'), (${HOSTED}, 'Hosted Crm'), (${PAID}, 'Paid Crm')`
     o = await fx.buildReferenceOrg()
     outside = await fx.buildReferenceOrg()
     await fx.addActivation(o.org.id, CONNECTOR)
     await fx.addActivation(o.org.id, HOSTED)
+    await fx.addActivation(o.org.id, PAID)
     ada = await person(o, o.people.ada)
     claire = await person(o, o.people.claire)
     stranger = await person(outside, outside.people.ada)
@@ -103,7 +109,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     await fx?.cleanup()
     const admin = testAdminSql()
     try {
-      await admin`delete from platform.connectors where name in (${CONNECTOR}, ${HOSTED})`
+      await admin`delete from platform.connectors where name in (${CONNECTOR}, ${HOSTED}, ${PAID})`
     } finally {
       await admin.end({ timeout: 5 })
     }
@@ -265,5 +271,95 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
              exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
                       where p.oid = 'platform.mark_account(uuid, text)'::regprocedure and a.grantee = 0) as public`
     expect(grants).toEqual({ anon: false, public: false })
+  })
+
+  describe("the probe that reads the balance of a paid account (connectors#117)", () => {
+    /** Un compte du connecteur payant, sa clé posée par Ada, qui le gère et seule le sonde. */
+    const paidAccount = async () => {
+      const label = `Paid ${hex(3)}`
+      const id = await fx.createAccount(o.org.id, { connector: PAID, ownerKind: "org", label, mode: "reel" })
+      await setAccountSecret(ada.db, ada.identity, { account_id: id, input: { secret: { api_key: `k_${randomBytes(12).toString("hex")}` } } })
+      return { id, label }
+    }
+    const probe = (id: string, answer: Response) => {
+      vi.stubGlobal("fetch", vi.fn(async () => answer))
+      return probeAccount(ada.db, ada.identity, { account_id: id })
+    }
+    const markOf = async (id: string) => ((await row(id)).health.mark ?? null) as { reason: string; at: string } | null
+    const journalCount = async () => Number((await fx.admin<{ n: string }[]>`select count(*) as n from platform.journal where org_id = ${o.org.id}`)[0].n)
+    const credits = (remaining: unknown) => json({ name: "Contoso", credits: { remaining } })
+    const BALANCE = { unit: "credits", min: 10 }
+
+    it("should say healthy at the threshold and above, with the value, its unit and the threshold, and write nothing", async () => {
+      const paid = await paidAccount()
+      const before = await row(paid.id)
+      const lines = await journalCount()
+      expect(await probe(paid.id, credits(250))).toEqual({ healthy: true, balance: { value: 250, ...BALANCE } })
+      expect(await probe(paid.id, credits(10))).toEqual({ healthy: true, balance: { value: 10, ...BALANCE } })
+      expect(await probe(paid.id, credits(10.5))).toEqual({ healthy: true, balance: { value: 10.5, ...BALANCE } })
+      expect((await row(paid.id)).updated_at).toBe(before.updated_at)
+      expect(await journalCount()).toBe(lines)
+    })
+
+    it("should say not healthy under the threshold, mark the account quota_exhausted, keep its date, and lift it once the balance is back", async () => {
+      const paid = await paidAccount()
+      const lines = await journalCount()
+      expect(await probe(paid.id, credits(9))).toEqual({ healthy: false, reason: "Crm balance is 9 credits, under 10 credits.", balance: { value: 9, ...BALANCE } })
+      const spent = await markOf(paid.id)
+      expect(spent?.reason).toBe("quota_exhausted")
+      expect(await probe(paid.id, credits(0))).toEqual({ healthy: false, reason: "Crm balance is 0 credits, under 10 credits.", balance: { value: 0, ...BALANCE } })
+      expect(await markOf(paid.id)).toEqual(spent)
+      const view = (await listOrgAccounts(ada.db, ada.identity)).find((candidate) => candidate.id === paid.id)
+      expect(view).toMatchObject({ status: "active", mark: { reason: "quota_exhausted" } })
+
+      expect(await probe(paid.id, credits(12))).toEqual({ healthy: true, balance: { value: 12, ...BALANCE } })
+      expect((await row(paid.id)).health).toEqual({})
+      expect(await journalCount()).toBe(lines)
+    })
+
+    it.each<[string, unknown, string]>([
+      ["absent", undefined, "Crm answered without its balance credits.remaining."],
+      ["null", null, "Crm answered a balance credits.remaining that is not a number."],
+      ["a numeric text", "12", "Crm answered a balance credits.remaining that is not a number."],
+      ["an object", { amount: 12 }, "Crm answered a balance credits.remaining that is not a number."],
+    ])("should never say healthy on a balance %s, and keep a quota_exhausted mark", async (_case, remaining, reason) => {
+      const paid = await paidAccount()
+      const answer = remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining)
+      expect(await probe(paid.id, answer)).toEqual({ healthy: false, reason, balance: { value: null, ...BALANCE } })
+      expect((await row(paid.id)).health).toEqual({})
+      await probe(paid.id, credits(1))
+      const spent = await markOf(paid.id)
+      expect(spent?.reason).toBe("quota_exhausted")
+      vi.stubGlobal("fetch", vi.fn(async () => (remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining))))
+      expect((await probeAccount(ada.db, ada.identity, { account_id: paid.id })).healthy).toBe(false)
+      expect(await markOf(paid.id)).toEqual(spent)
+    })
+
+    it("should mark a key refused by the probe, without a balance, and turn it into quota_exhausted once the key answers with a low balance", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const paid = await paidAccount()
+      const refused = await probe(paid.id, json({}, 401))
+      expect(refused.healthy).toBe(false)
+      expect(refused).not.toHaveProperty("balance")
+      expect((await markOf(paid.id))?.reason).toBe("credential_rejected")
+      // Le tiers accepte de nouveau la clé : la marque de clé refusée tombe, comme au premier appel réussi ; le solde
+      // décide de la suite.
+      await probe(paid.id, credits(3))
+      expect((await markOf(paid.id))?.reason).toBe("quota_exhausted")
+      await probe(paid.id, json({}, 401))
+      expect((await markOf(paid.id))?.reason).toBe("credential_rejected")
+      await probe(paid.id, credits("n/a"))
+      expect(await markOf(paid.id)).toBeNull()
+    })
+
+    it("should keep the probe without balance as before: healthy on its paths, a mark lifted by its success", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const crm = await account()
+      await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))
+      expect((await markOf(crm.id))?.reason).toBe("quota_exhausted")
+      vi.stubGlobal("fetch", vi.fn(async () => json({ name: "Contoso", scopes: ["read"] })))
+      expect(await probeAccount(ada.db, ada.identity, { account_id: crm.id })).toEqual({ healthy: true })
+      expect((await row(crm.id)).health).toEqual({})
+    })
   })
 })

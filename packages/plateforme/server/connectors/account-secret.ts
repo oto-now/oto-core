@@ -1,23 +1,22 @@
 // Le secret et les réglages d'un compte réel (`connecteurs-et-comptes.md` § Comptes à plusieurs champs et réglages) :
 // la saisie par qui gère le compte (`setAccountSecret`, de l'écran Connecteurs ou d'un service), qui fusionne avec ce
-// qui est posé ; le compte ouvert pour un appel (`liveCredential`, lu par `runCall`) ; la sonde (`probeAccount`). Les
+// qui est posé ; le compte ouvert pour un appel (`liveCredential`, lu par `runCall` et par la sonde, `probe.ts`). Les
 // champs sont contrôlés contre la déclaration du connecteur, chiffrés ensemble (`vault.ts`) ; les réglages restent en
 // clair ; le jeton d'un échange est chiffré à part (`token_ciphertext`), pour qu'un renouvellement n'écrase jamais une
 // saisie. Sans ce module, un compte ne porterait qu'un jeton posé par l'outillage. Rien du secret n'est jamais rendu,
 // ni par un résultat, ni par un refus, ni par un log.
 import { mergeCredential } from "../../cli/vault.mjs"
-import { disableAccountSchema, type AccountMarkReason, type AccountMode, type ConnectorAccountForm } from "../../schemas"
+import type { AccountMarkReason, AccountMode, ConnectorAccountForm } from "../../schemas"
 import { accountSecretSchema } from "../../schemas/connectors"
 import { describeOwner } from "../access"
 import { declaredConnector, declaredConnectors, type DeclaredConnector } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
-import { inTransaction, invalidInput, isPlatformError, PlatformError } from "../errors"
+import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
-import { accountOwner, managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
+import { managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
 import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
-import { executeDescribed, nonEmpty, valueAt } from "./engine"
 import { accountMode } from "./modes"
 import { reconnectRefusal } from "./consent-accounts"
 import { accountFieldNames, hostFieldsOf, readHostFields } from "./host-fields"
@@ -353,36 +352,4 @@ async function linkedIdOf(db: PlatformDb, identity: Identity, account: CallAccou
     throw new PlatformError("not_enabled", `Account « ${account.label} » must be connected again to ${label}. ${await remedy()}`)
   }
   return row.linked_id
-}
-
-/** La santé d'un compte selon la sonde de son connecteur : sain, ou non sain et pourquoi, jamais le secret. */
-export type AccountHealth = { healthy: true } | { healthy: false; reason: string }
-
-/**
- * Joue la sonde du connecteur déclaré (`probe`) sur un compte : sa fonction de lecture appelée avec `{}`, le compte
- * ouvert pour ce seul appel, puis chaque chemin de `nonEmpty` exigé non vide dans la réponse. Réservée à qui gère le
- * compte (niveau 3, comme `setAccountSecret`) ; hors `call`, elle n'écrit aucune ligne de journal et ne compte dans
- * aucun quota. Refus : compte inconnu ou non géré ; connecteur sans sonde déclarée (`invalid_arguments`). Un compte
- * simulé, sans secret ou mal réglé, un refus ou une panne du tiers : non sain, avec la raison ; une panne du coffre lève.
- * Comme un appel, un refus qui marque le compte pose sa marque, une réponse du tiers la lève.
- */
-export async function probeAccount(db: PlatformDb, identity: Identity, input: unknown): Promise<AccountHealth> {
-  // La même saisie que la désactivation : le compte visé, par son identifiant.
-  const parsed = disableAccountSchema.safeParse(input)
-  if (!parsed.success) throw invalidInput(parsed.error)
-  const id = parsed.data.account_id
-  const row = await managedAccount(db, identity, id, { service: "probeAccount", gesture: "Probing" })
-  const connector = declaredConnector(row.connector)
-  const paths = connector?.definition.probe?.nonEmpty
-  if (!connector?.probe || !paths) throw new PlatformError("invalid_arguments", `Connector ${row.connector} declares no probe.`)
-  const account = { id, label: row.label, mode: accountMode(row.mode), owner: accountOwner(row) }
-  try {
-    const open = await liveCredential(db, identity, account, row.connector)
-    const { answers } = await executeDescribed(connector.probe, { credential: await open(), accountId: id }, {})
-    const missing = paths.find((path) => !nonEmpty(valueAt(answers[0], path)))
-    return missing === undefined ? { healthy: true } : { healthy: false, reason: `${connector.definition.label} answered without ${missing}.` }
-  } catch (error) {
-    if (isPlatformError(error) && error.code !== "internal") return { healthy: false, reason: error.message }
-    throw error
-  }
 }

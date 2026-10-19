@@ -8,7 +8,7 @@ import { checkArguments } from "../../packages/plateforme/server/catalog/argumen
 import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { catalogFunctions, describeFunction, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
 import { errorTable } from "../../packages/plateforme/server/connectors/engine"
 import { describedConnector, markingConnector } from "../factories/described-connector"
 
@@ -29,6 +29,12 @@ function withFunction(short: string, change: (fn: ConnectorFunctionDefinition) =
 function withError(error: ConnectorApiError): ConnectorDefinition {
   const base = describedConnector()
   return { ...base, errors: [...base.errors, error] }
+}
+
+/** Le connecteur de test, sa sonde (`get_company`) lisant un solde ; `cost` : le coût déclaré de sa fonction. */
+function withBalance(balance: ConnectorProbeBalance, cost?: ConnectorFunctionDefinition["cost"]): ConnectorDefinition {
+  const base = cost ? withFunction("get_company", (fn) => ({ ...fn, cost })) : describedConnector()
+  return { ...base, probe: { function: "crm.get_company", nonEmpty: [], balance } }
 }
 
 function refusalOf(definitions: readonly ConnectorDefinition[]): string {
@@ -222,10 +228,40 @@ describe("registerConnectors", () => {
       () => [{ ...describedConnector(), probe: { function: "crm.get_contact", nonEmpty: ["email"] } }],
       "crm: probe must name a read function of the connector without required arguments, and list nonEmpty paths.",
     ],
+    [
+      "a probe that reads a balance with a function that costs",
+      () => [withBalance({ path: "credits.remaining", min: 1, unit: "credits" }, { per: "request" })],
+      "crm: probe crm.get_company reads a balance, so it must declare no cost: one never pays to learn whether one can pay.",
+    ],
+    ...(
+      [
+        ["an empty balance path", { path: "", min: 1, unit: "credits" }],
+        ["a balance path with an empty segment", { path: "credits..remaining", min: 1, unit: "credits" }],
+        ["a balance path with a leading dot", { path: ".credits", min: 1, unit: "credits" }],
+        ["a balance path with a space", { path: "credits remaining", min: 1, unit: "credits" }],
+        ["a balance threshold that is not a number", { path: "credits", min: "1", unit: "credits" }],
+        ["a negative balance threshold", { path: "credits", min: -1, unit: "credits" }],
+        ["an infinite balance threshold", { path: "credits", min: Number.POSITIVE_INFINITY, unit: "credits" }],
+        ["a balance without unit", { path: "credits", min: 1 }],
+        ["a balance with an empty unit", { path: "credits", min: 1, unit: "" }],
+        ["a balance with an unknown key", { path: "credits", min: 1, unit: "credits", covers: "quota" }],
+      ] as const
+    ).map(([what, balance]): [string, () => ConnectorDefinition[], string] => [
+      what,
+      () => [withBalance(balance as unknown as ConnectorProbeBalance)],
+      "crm: probe balance must give a dotted path, a min of zero or more and a unit, and nothing else.",
+    ]),
   ])("should refuse %s by name, and declare nothing (AC3)", (_case, definitions, message) => {
     registerConnectors([describedConnector("crm_before")])
     expect(refusalOf(definitions())).toBe(message)
     expect(catalogFunctions().filter((fn) => fn.connector === "crm_before")).toHaveLength(6)
+  })
+
+  it("should accept a probe that reads a balance with a function that declares no cost, and a probe without balance whose function costs", () => {
+    registerConnectors([withBalance({ path: "accounts.0.balance", min: 0, unit: "EUR" })])
+    expect(declaredNames()).toHaveLength(6)
+    registerConnectors([withFunction("get_company", (fn) => ({ ...fn, cost: { per: "request" } }))])
+    expect(declaredNames()).toHaveLength(6)
   })
 
   it("should accept the service's refusal signal (body, marksAccount) and give a marking row the code of its mark", () => {

@@ -270,9 +270,19 @@ export type ConnectorFunctionDefinition = {
   readonly request: ConnectorRequest
   readonly pagination?: ConnectorPagination
   readonly output?: ConnectorOutput
+  /** Unité décomptée (`per: request` ou `page`), ignorée par le moteur (aucun quota d'appel) ; lue pour refuser une sonde à solde qui coûterait. */
+  readonly cost?: { readonly per: "request" | "page" }
   /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */
   readonly confirm?: { readonly summary: string }
 }
+
+/**
+ * Le solde d'un compte payant, lu par la sonde : un nombre au chemin pointé `path` de sa réponse (un indice de liste en
+ * chiffres), sain à `min` ou au-dessus, en `unit` (`credits`, `requests`, `EUR`). Sous `min`, absent ou qui n'est pas
+ * un nombre JSON, la sonde n'est pas saine. Sa fonction ne déclare aucun coût : on ne paie pas pour savoir si l'on peut
+ * payer.
+ */
+export type ConnectorProbeBalance = { readonly path: string; readonly min: number; readonly unit: string }
 
 export type ConnectorDefinition = {
   readonly name: string
@@ -297,7 +307,10 @@ export type ConnectorDefinition = {
   /** Débit maximal du tiers, par compte : `requests` par fenêtre de `intervalMs`. */
   readonly rateLimit?: { readonly requests: number; readonly intervalMs: number }
   readonly errors: readonly ConnectorApiError[]
-  /** Une lecture sans argument requis, appelée avec `{}` ; chaque chemin de `nonEmpty` doit être non vide. */
-  readonly probe?: { readonly function: string; readonly nonEmpty: readonly string[] }
+  /**
+   * Une lecture sans argument requis, appelée avec `{}` ; chaque chemin de `nonEmpty` doit être non vide ; `balance`, le
+   * solde d'un compte payant, lu dans sa réponse.
+   */
+  readonly probe?: { readonly function: string; readonly nonEmpty: readonly string[]; readonly balance?: ConnectorProbeBalance }
   readonly functions: readonly ConnectorFunctionDefinition[]
 }
