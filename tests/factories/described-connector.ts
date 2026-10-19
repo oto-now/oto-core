@@ -4,8 +4,9 @@
 // curseur, sortie taillée, refus propre à une fonction, contrôle avant l'appel (`equal_sums`) et sur la réponse
 // (`non_empty`), constantes, `PUT`, `DELETE` à corps, fonction sensible et sonde. Et ses variantes : sous le
 // consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
-// table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; enfin à fonctions qui ont
-// leur délai propre (`timedConnector`).
+// table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; à fonctions qui ont
+// leur délai propre (`timedConnector`) ; enfin à lot payant soumis puis relevé (`billedConnector`), coût à l'élément,
+// quantité relue et travail asynchrone.
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
@@ -361,4 +362,44 @@ export function fakeHostedLinks(accounts: FakeHostedAccount[] = []) {
     },
   }
   return { port, calls, state }
+}
+
+/**
+ * Le connecteur de test avec un lot payant : `submit_enrichment` coûte à l'élément (`contacts` × `fields`, en `fields`),
+ * soumet un travail relevé par `get_enrichment` (identifiant `job.id` → `enrichment_id`, dix minutes), qui en dit la
+ * quantité trouvée (`summary.found`).
+ */
+export function billedConnector(name = "crm"): ConnectorDefinition {
+  const base = describedConnector(name)
+  const list = (items: object) => ({ type: "array", minItems: 1, items })
+  const submit: ConnectorFunctionDefinition = {
+    name: `${name}.submit_enrichment`,
+    connector: name,
+    class: "write",
+    act: true,
+    description: "Submit contacts to enrich with the fields asked; collect the result with get_enrichment.",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["contacts", "fields"],
+      properties: { contacts: list({ type: "string" }), fields: list({ enum: ["email", "phone"] }) },
+    },
+    examples: [{ title: "Two contacts, email and phone", input: { contacts: ["c-1", "c-2"], fields: ["email", "phone"] } }],
+    refusals: [],
+    request: { method: "POST", path: "/enrichments", pathParams: [], query: {}, body: { contacts: "contacts", fields: "fields" }, headers: {} },
+    cost: { per: "item", items: "contacts", times: "fields", unit: "fields", settle: { path: "summary.found" } },
+    async: { collect: `${name}.get_enrichment`, jobId: { from: "job.id", to: "enrichment_id" }, withinMs: 600_000 },
+  }
+  const collect: ConnectorFunctionDefinition = {
+    name: `${name}.get_enrichment`,
+    connector: name,
+    class: "read",
+    act: false,
+    description: "Read the state and the result of an enrichment.",
+    schema: { type: "object", additionalProperties: false, required: ["enrichment_id"], properties: { enrichment_id: ID } },
+    examples: [{ title: "One enrichment", input: { enrichment_id: "e-1" } }],
+    refusals: [],
+    request: { method: "GET", path: "/enrichments/{enrichment_id}", pathParams: ["enrichment_id"], query: {}, body: {}, headers: {} },
+  }
+  return { ...base, functions: [...base.functions, submit, collect] }
 }

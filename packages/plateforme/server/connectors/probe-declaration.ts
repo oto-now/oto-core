@@ -1,12 +1,13 @@
 // La sonde dans la déclaration d'un connecteur décrit (`connecteurs-et-comptes.md` § Moteur des connecteurs décrits) :
 // une lecture du connecteur sans argument requis, ses chemins à trouver non vides et, pour un compte payant, son solde
-// (`balance`), contrôlés comme la règle 5 de la fabrique du dépôt `connectors`. Tenu à part de `declaration.ts`, qui
-// l'appelle une fois les fonctions préparées.
+// (`balance`), contrôlés comme la règle 5 de la fabrique du dépôt `connectors`, qui vaut aussi pour l'identité d'un
+// consentement lue par une fonction. Tenu à part de `declaration.ts`, qui l'appelle une fois les fonctions préparées.
 import { isJsonObject } from "../json"
+import type { PreparedAuth } from "./auth"
 import type { ConnectorDefinition } from "./definition"
 
 /** Un chemin pointé bien formé : des segments non vides, sans espace (`credits.remaining`, `accounts.0.balance`). */
-const DOTTED_PATH = /^[^.\s]+(\.[^.\s]+)*$/
+export const DOTTED_PATH = /^[^.\s]+(\.[^.\s]+)*$/
 
 /**
  * Le solde d'une sonde (`balance`), comme la fabrique le contrôle : un chemin pointé, un seuil numérique positif ou nul,
@@ -45,4 +46,17 @@ export function probeProblem(definition: ConnectorDefinition): string | null {
   if (probe.balance === undefined) return null
   if (fn.cost !== undefined) return `${definition.name}: probe ${fn.name} reads a balance, so it must declare no cost: one never pays to learn whether one can pay.`
   return balanceProblem(definition.name, probe.balance)
+}
+
+/**
+ * L'identité d'un consentement (`oauth2_user`) par une fonction : une lecture du connecteur, sans argument requis, comme
+ * la sonde (règle 5 de la fabrique). Celle à une adresse est contrôlée avec l'authentification (`oauth-user.ts`).
+ */
+export function identityProblem(definition: ConnectorDefinition, auth: PreparedAuth): string | null {
+  if (auth.kind !== "user_consent" || !("function" in auth.identity)) return null
+  const name = auth.identity.function
+  const fn = definition.functions.find((candidate) => candidate.name === name)
+  const required = fn && Array.isArray(fn.schema.required) ? fn.schema.required : []
+  if (!fn || fn.class !== "read" || required.length > 0) return `${definition.name}: identity must name a read function of the connector without required arguments.`
+  return null
 }

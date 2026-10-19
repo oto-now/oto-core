@@ -120,7 +120,10 @@ export { registerConnectors } from "./connectors/declaration"
 export type { ConnectorOptions } from "./connectors/declaration"
 export type {
   ConnectorAccountIdentity,
+  ConnectorAsyncJob,
+  ConnectorCostSettle,
   ConnectorDefinition,
+  ConnectorFunctionCost,
   ConnectorFunctionDefinition,
   ConnectorProbeBalance,
   HostCredentialReader,
@@ -133,6 +136,10 @@ export { CONNECTOR_CONSENT_CALLBACK_PATH, connectorConsentRedirectUri, startConn
 // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ pour la personne connectée
 // (l'adresse où l'envoyer), et l'adresse de retour que le paquet donne au tiers par le port `hostedLinks`.
 export { HOSTED_LINK_CALLBACK_PATH, hostedLinkReturnUrl, startHostedLink } from "./connectors/hosted-link"
+// Ce que coûte un appel d'une fonction décrite, en fonctions pures : pire cas, quantité à régler, relève d'un travail
+// asynchrone ; le paquet ne réserve ni ne règle rien.
+export { collectionOf, ConnectorCostError, costOf, settledQuantity } from "./connectors/cost"
+export type { ConnectorCollection, ConnectorCostQuantity, ConnectorSettlement } from "./connectors/cost"
 export { probeAccount } from "./connectors/probe"
 export type { AccountHealth, ProbedBalance } from "./connectors/probe"
 // Une fonction du catalogue lancée par le serveur de l'hôte, sous la personne connectée : contrôles et journal de

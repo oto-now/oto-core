@@ -16,9 +16,10 @@ import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
+import { asyncProblem, costProblem } from "./cost-declaration"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
-import { probeProblem } from "./probe-declaration"
+import { identityProblem, probeProblem } from "./probe-declaration"
 import { signalProblem } from "./signal-declaration"
 import { baseAddress, settingProblem } from "./settings"
 
@@ -259,19 +260,6 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
 }
 
 /**
- * L'identité d'un consentement (`oauth2_user`) par une fonction : une lecture du connecteur, sans argument requis, comme
- * la sonde. Celle à une adresse est contrôlée avec l'authentification (`oauth-user.ts`).
- */
-function identityProblem(definition: ConnectorDefinition, auth: PreparedAuth): string | null {
-  if (auth.kind !== "user_consent" || !("function" in auth.identity)) return null
-  const name = auth.identity.function
-  const fn = definition.functions.find((candidate) => candidate.name === name)
-  const required = fn && Array.isArray(fn.schema.required) ? fn.schema.required : []
-  if (!fn || fn.class !== "read" || required.length > 0) return `${definition.name}: identity must name a read function of the connector without required arguments.`
-  return null
-}
-
-/**
  * Les droits qu'une fonction exige (`scopes`) : exigés dans un connecteur à niveaux d'accès, refusés ailleurs, comme le
  * format le dit. Gardés sans être appliqués (issue oto-now/oto-core#71).
  */
@@ -321,7 +309,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -368,7 +356,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre ; enfin la sonde et
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre, coût (`cost`) et travail
+ * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`) ; enfin la sonde et
  * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; tous fournis par l'hôte. Au premier refus,

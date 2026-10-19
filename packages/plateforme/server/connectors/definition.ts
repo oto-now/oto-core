@@ -248,6 +248,33 @@ export type ConnectorCheck = {
 /** Contrôle de la réponse : le refus nommé au lieu de la réponse s'il échoue. */
 export type ConnectorExpectation = { readonly kind: string; readonly refusal: string; readonly path: string }
 
+/** Où lire la quantité réelle d'un appel : un nombre JSON fini, positif ou nul, au chemin pointé `path` de sa réponse. */
+export type ConnectorCostSettle = { readonly path: string }
+
+/**
+ * Ce que coûte un appel (`connectors : docs/conception/format-de-description.md` § Coût d'un appel). Avant lui, son pire
+ * cas, calculé sur les arguments : `request` et `page`, une unité par requête envoyée (chaque page avec `all_pages`) ;
+ * `item`, la taille de la liste `items` fois celle de `times` (une si absente), deux arguments requis d'au moins un
+ * élément, jamais sur une fonction paginée. Après lui, `settle` : la quantité réelle, lue dans sa réponse (celle de sa
+ * relève pour une fonction asynchrone). `unit`, ce que comptent les deux, telle que l'éditeur la nomme : exigée par
+ * `item` et `settle`, sinon `requests` ou `pages`.
+ */
+export type ConnectorFunctionCost =
+  | { readonly per: "request" | "page"; readonly unit?: string; readonly settle?: ConnectorCostSettle }
+  | { readonly per: "item"; readonly items: string; readonly times?: string; readonly unit: string; readonly settle?: ConnectorCostSettle }
+
+/**
+ * Une fonction qui soumet un travail relevé plus tard (`connectors : docs/conception/format-de-description.md` § Travail
+ * asynchrone) : `collect`, la lecture du connecteur qui le relève (nom qualifié), dont `jobId.to` est le seul argument
+ * requis, reçoit l'identifiant lu au chemin pointé `jobId.from` de la réponse de la soumission. `withinMs`, le délai de
+ * relève après la soumission, exigé quand le coût se règle : sa quantité se lit alors dans les réponses de la relève.
+ */
+export type ConnectorAsyncJob = {
+  readonly collect: string
+  readonly jobId: { readonly from: string; readonly to: string }
+  readonly withinMs?: number
+}
+
 export type ConnectorFunctionDefinition = {
   /** `<connecteur>.<fonction>`. */
   readonly name: string
@@ -275,8 +302,10 @@ export type ConnectorFunctionDefinition = {
    * connecteur, plus court ou plus long, jamais égal ; absent, celui du connecteur.
    */
   readonly timeoutMs?: number
-  /** Unité décomptée (`per: request` ou `page`), ignorée par le moteur (aucun quota d'appel) ; lue pour refuser une sonde à solde qui coûterait. */
-  readonly cost?: { readonly per: "request" | "page" }
+  /** Le travail que la fonction soumet, relevé plus tard ; contrôlé à la déclaration, rien n'est relevé par le moteur. */
+  readonly async?: ConnectorAsyncJob
+  /** Ce que coûte un appel ; contrôlé à la déclaration, lu par `costOf` et `settledQuantity`, ni réservé ni réglé par le moteur. */
+  readonly cost?: ConnectorFunctionCost
   /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */
   readonly confirm?: { readonly summary: string }
 }

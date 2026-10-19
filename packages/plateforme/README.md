@@ -413,6 +413,9 @@ registerFunctions([/* fonctions de l'ERP */])
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon
   celui du connecteur. Le JSON Schema d'entrée est validé et servi tel quel.
+- **Coût d'un appel** : `cost` (pire cas avant l'appel, quantité relue après) et `async` (travail soumis, relevé plus
+  tard) sont contrôlés à la déclaration, sans rien réserver ni régler ; `costOf`, `settledQuantity` et `collectionOf`
+  (face `server`), fonctions pures, en donnent le pire cas, la quantité à régler et la relève à votre service.
 - **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
   lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa

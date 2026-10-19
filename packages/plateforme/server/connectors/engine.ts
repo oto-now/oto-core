@@ -198,6 +198,16 @@ function nextCursor(answer: unknown, pagination: ConnectorPagination | undefined
 }
 
 /**
+ * Les pages qu'un appel lit au plus : une ; avec `all_pages`, `max_pages` de l'appel borné par `maxPages` (celui-ci quand
+ * l'appel n'en donne pas). Partagé par l'exécution et le pire cas d'un coût (`cost.ts`).
+ */
+export function pageCount(fn: ConnectorFunctionDefinition, args: Record<string, unknown>): number {
+  const pagination = fn.pagination
+  const wanted = typeof args.max_pages === "number" ? args.max_pages : (pagination?.maxPages ?? 1)
+  return pagination && args.all_pages === true ? Math.max(1, Math.min(wanted, pagination.maxPages)) : 1
+}
+
+/**
  * Exécute la fonction et rend ses réponses, une par page, et le curseur de la suite. Sans `all_pages`, une page ; avec,
  * jusqu'à `max_pages` (borné par `maxPages`). Refus : un contrôle des arguments, rien d'envoyé ; une erreur du tiers
  * traduite par la table ; un contrôle de la réponse ; une adresse saisie qui mène à un hôte interne. Sans secret :
@@ -225,8 +235,7 @@ export async function executeDescribed(
   const api: ConnectorApi = { ...prepared.api, baseUrl: address.url }
   const signer: Signer = { auth: prepared.auth, definition: connector, credential, accountId: call.accountId, fetcherFor }
   const pagination = fn.pagination
-  const wanted = typeof args.max_pages === "number" ? args.max_pages : (pagination?.maxPages ?? 1)
-  const pages = pagination && args.all_pages === true ? Math.max(1, Math.min(wanted, pagination.maxPages)) : 1
+  const pages = pageCount(fn, args)
   const answers: unknown[] = []
   let current = args
   let next: string | null = null
