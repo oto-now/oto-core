@@ -127,6 +127,7 @@ export type {
   ConnectorAccountIdentity,
   ConnectorAsyncJob,
   ConnectorCostSettle,
+  ConnectorCostWeights,
   ConnectorDefinition,
   ConnectorFunctionCost,
   ConnectorFunctionDefinition,

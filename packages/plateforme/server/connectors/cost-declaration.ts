@@ -6,8 +6,8 @@ import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "./definition"
 import { DOTTED_PATH } from "./probe-declaration"
 
-const COST_KEYS = ["per", "items", "times", "unit", "settle"]
-const ASYNC_KEYS = ["collect", "jobId", "withinMs"]
+const COST_KEYS = ["per", "items", "times", "weights", "unit", "settle"]
+const ASYNC_KEYS = ["collect", "jobId", "withinMs", "noDeadline"]
 /** Le délai de relève : des secondes entières dans la description (`within_s`), d'une seconde à un jour. */
 const COLLECT_MIN_MS = 1_000
 const COLLECT_MAX_MS = 86_400_000
@@ -25,15 +25,43 @@ function countedListProblem(fn: ConnectorFunctionDefinition, key: "items" | "tim
 }
 
 /**
+ * Le poids d'une valeur (`weights`), comme la règle 12 de la fabrique : une table de valeurs à poids entiers d'un ou plus ;
+ * `field`, un champ de chaque élément de `items`, requis, une liste d'au moins une valeur sans doublon, dont les valeurs
+ * admises (`items.enum`) sont exactement les clés de la table : une valeur sans poids est refusée par le schéma, avant
+ * l'appel, jamais comptée pour rien. `null` : bon.
+ */
+function weightsProblem(fn: ConnectorFunctionDefinition, items: string, weights: unknown): string | null {
+  const values = isJsonObject(weights) ? weights.values : undefined
+  if (!onlyKeys(weights, ["field", "values"]) || typeof weights.field !== "string" || !isJsonObject(values) || Object.keys(values).length === 0
+    || !Object.entries(values).every(([value, weight]) => value !== "" && Number.isInteger(weight) && Number(weight) >= 1)) {
+    return `${fn.name}: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value.`
+  }
+  const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
+  const list = properties[items]
+  const element = isJsonObject(list) && isJsonObject(list.items) ? list.items : {}
+  const field = isJsonObject(element.properties) ? element.properties[weights.field] : undefined
+  const required = Array.isArray(element.required) ? element.required : []
+  const listed = isJsonObject(field) && field.type === "array" && Number.isInteger(field.minItems) && Number(field.minItems) >= 1 && field.uniqueItems === true
+  if (!listed || !required.includes(weights.field)) {
+    return `${fn.name}: cost.weights.field ${JSON.stringify(weights.field)} must be a required list of each element of ${items} (type array, minItems 1 or more, uniqueItems true), so that each element counts at least one weight, each value once.`
+  }
+  const allowed = isJsonObject(field.items) ? field.items.enum : undefined
+  const keys = Object.keys(values).sort()
+  const same = Array.isArray(allowed) && allowed.every((value) => typeof value === "string") && JSON.stringify([...new Set(allowed)].sort()) === JSON.stringify(keys)
+  return same ? null : `${fn.name}: cost.weights.field ${weights.field}: its allowed values (items.enum) must be exactly the weighted values (${keys.join(", ")}), so that a value without a weight is refused before the call.`
+}
+
+/**
  * Le problème du coût d'une fonction (`cost`), comme la règle 12 de la fabrique et son schéma : `per` `request`, `page`
- * ou `item` ; `items` (exigé) et `times` sur `item` seulement, deux listes distinctes, requises et non vides ; `unit`
- * non vide, exigée par `item` et `settle` ; `settle` un chemin pointé ; ni `item` ni `settle` sur une fonction paginée.
+ * ou `item` ; `items` (exigé) et `times` ou `weights` sur `item` seulement, `times` une liste distincte, les deux listes
+ * requises et non vides, `weights` exclusif de `times` ; `unit` non vide, exigée par `item` et `settle` ; `settle` un
+ * chemin pointé ; ni `item` ni `settle` sur une fonction paginée.
  */
 export function costProblem(fn: ConnectorFunctionDefinition): string | null {
   const cost: unknown = fn.cost
   if (cost === undefined) return null
   if (!onlyKeys(cost, COST_KEYS) || !["request", "page", "item"].includes(String(cost.per))) {
-    return `${fn.name}: cost must be {per: request, page or item, items?, times?, unit?, settle?}.`
+    return `${fn.name}: cost must be {per: request, page or item, items?, times? or weights?, unit?, settle?}.`
   }
   const settle = cost.settle
   if (settle !== undefined && !(onlyKeys(settle, ["path"]) && typeof settle.path === "string" && DOTTED_PATH.test(settle.path))) {
@@ -41,9 +69,16 @@ export function costProblem(fn: ConnectorFunctionDefinition): string | null {
   }
   const needsUnit = cost.per === "item" || settle !== undefined
   if (cost.unit !== undefined ? typeof cost.unit !== "string" || cost.unit === "" : needsUnit) return `${fn.name}: cost.unit must be non-empty, and is required per item or with settle.`
-  if (cost.per !== "item") return cost.items === undefined && cost.times === undefined ? paginationProblem(fn, settle !== undefined) : `${fn.name}: cost.items and cost.times go with per item only.`
+  if (cost.per !== "item") {
+    return cost.items === undefined && cost.times === undefined && cost.weights === undefined ? paginationProblem(fn, settle !== undefined) : `${fn.name}: cost.items, cost.times and cost.weights go with per item only.`
+  }
   const counted = countedListProblem(fn, "items", cost.items)
-  if (counted || cost.times === undefined) return counted ?? paginationProblem(fn, true)
+  if (counted) return counted
+  if (cost.weights !== undefined) {
+    if (cost.times !== undefined) return `${fn.name}: cost.weights replaces cost.times: declare one of them.`
+    return weightsProblem(fn, String(cost.items), cost.weights) ?? paginationProblem(fn, true)
+  }
+  if (cost.times === undefined) return paginationProblem(fn, true)
   if (cost.times === cost.items) return `${fn.name}: cost.times names the items argument ${String(cost.items)} again.`
   return countedListProblem(fn, "times", cost.times) ?? paginationProblem(fn, true)
 }
@@ -57,14 +92,15 @@ function paginationProblem(fn: ConnectorFunctionDefinition, itemOrSettle: boolea
  * Le problème du travail asynchrone d'une fonction (`async`), comme la règle 13 de la fabrique et son schéma : `collect`
  * nomme une autre lecture du connecteur, non asynchrone, dont `jobId.to` est le seul argument requis ; `jobId.from` un
  * chemin pointé ; `withinMs` un entier d'une seconde à un jour, au-delà du délai de la soumission, exigé quand le coût
- * se règle, la relève n'étant alors ni paginée ni réglée de son côté.
+ * se règle, sauf `noDeadline: true` (l'éditeur ne fixe aucune échéance), exclusif de `withinMs` ; la relève n'est
+ * alors ni paginée ni réglée de son côté.
  */
 export function asyncProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string | null {
   const job: unknown = fn.async
   if (job === undefined) return null
   const jobId = isJsonObject(job) ? job.jobId : undefined
   if (!onlyKeys(job, ASYNC_KEYS) || typeof job.collect !== "string" || !onlyKeys(jobId, ["from", "to"]) || typeof jobId.from !== "string" || !DOTTED_PATH.test(jobId.from) || typeof jobId.to !== "string") {
-    return `${fn.name}: async must be {collect, jobId: {from: a dotted path, to}, withinMs?}.`
+    return `${fn.name}: async must be {collect, jobId: {from: a dotted path, to}, withinMs? or noDeadline: true?}.`
   }
   const collect = definition.functions.find((candidate) => candidate.name === job.collect)
   if (!collect || collect === fn) return `${fn.name}: async.collect ${job.collect} is not another function of the connector.`
@@ -75,12 +111,17 @@ export function asyncProblem(definition: ConnectorDefinition, fn: ConnectorFunct
     return `${fn.name}: async.jobId.to ${jobId.to} must be the only required argument of ${collect.name}.`
   }
   const within = job.withinMs
+  if (job.noDeadline !== undefined && (job.noDeadline !== true || within !== undefined)) {
+    return `${fn.name}: async.noDeadline is true or absent, and excludes async.withinMs: the vendor sets no deadline, or one is declared.`
+  }
   const timeout = fn.timeoutMs ?? definition.timeoutMs
   if (within !== undefined && !(Number.isInteger(within) && Number(within) >= COLLECT_MIN_MS && Number(within) <= COLLECT_MAX_MS && Number(within) > timeout)) {
     return `${fn.name}: async.withinMs must be an integer from ${COLLECT_MIN_MS} to ${COLLECT_MAX_MS}, beyond the timeout of the submission (${timeout}).`
   }
   if (fn.cost?.settle === undefined) return null
-  if (within === undefined) return `${fn.name}: async.withinMs is required when the cost is settled: its quantity is read when collected.`
+  if (within === undefined && job.noDeadline !== true) {
+    return `${fn.name}: async.withinMs, or async.noDeadline when the vendor sets no deadline, is required when the cost is settled: its quantity is read when collected.`
+  }
   if (collect.pagination !== undefined || collect.cost?.settle !== undefined) {
     return `${fn.name}: its quantity is read in the responses of ${collect.name}, which must be neither paginated nor settled on its own.`
   }

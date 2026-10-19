@@ -418,8 +418,8 @@ registerFunctions([/* fonctions de l'ERP */])
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon
   celui du connecteur. Le JSON Schema d'entrée est validé et servi tel quel.
-- **Coût d'un appel** : `cost` (pire cas avant l'appel, quantité relue après) et `async` (travail soumis, relevé plus
-  tard) sont contrôlés à la déclaration, sans rien réserver ni régler ; `costOf`, `settledQuantity` et `collectionOf`
+- **Coût d'un appel** : `cost` (pire cas avant l'appel, à la requête, à l'élément ou au poids des valeurs que liste chaque
+  élément, quantité relue après) et `async` (travail soumis, relevé plus tard, avec ou sans échéance) sont contrôlés à la déclaration, sans rien réserver ni régler ; `costOf`, `settledQuantity` et `collectionOf`
   (face `server`), fonctions pures, en donnent le pire cas, la quantité à régler et la relève à votre service.
 - **Fichiers envoyés à un tiers** : `request.files` envoie en `multipart/form-data` un fichier en transit de la
   personne qui appelle, lu sous son identité et consommé après un appel réussi ; l'agent ne passe que son identifiant.

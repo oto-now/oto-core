@@ -258,27 +258,38 @@ export type ConnectorExpectation = { readonly kind: string; readonly refusal: st
 export type ConnectorCostSettle = { readonly path: string }
 
 /**
+ * Le poids d'une valeur, à la place de `times` : chaque élément de la liste `items` compte la somme des poids des valeurs
+ * que liste son champ `field` (une liste requise de l'élément, d'au moins une valeur, sans doublon, dont les valeurs
+ * admises sont exactement les clés de `values`). Un poids est un entier d'un ou plus, dans l'unité du coût.
+ */
+export type ConnectorCostWeights = { readonly field: string; readonly values: Readonly<Record<string, number>> }
+
+/**
  * Ce que coûte un appel (`connectors : docs/conception/format-de-description.md` § Coût d'un appel). Avant lui, son pire
  * cas, calculé sur les arguments : `request` et `page`, une unité par requête envoyée (chaque page avec `all_pages`) ;
  * `item`, la taille de la liste `items` fois celle de `times` (une si absente), deux arguments requis d'au moins un
- * élément, jamais sur une fonction paginée. Après lui, `settle` : la quantité réelle, lue dans sa réponse (celle de sa
+ * élément, ou la somme des poids des valeurs que liste chaque élément (`weights`), jamais sur une fonction paginée. Après lui, `settle` : la quantité réelle, lue dans sa réponse (celle de sa
  * relève pour une fonction asynchrone). `unit`, ce que comptent les deux, telle que l'éditeur la nomme : exigée par
  * `item` et `settle`, sinon `requests` ou `pages`.
  */
 export type ConnectorFunctionCost =
   | { readonly per: "request" | "page"; readonly unit?: string; readonly settle?: ConnectorCostSettle }
-  | { readonly per: "item"; readonly items: string; readonly times?: string; readonly unit: string; readonly settle?: ConnectorCostSettle }
+  | { readonly per: "item"; readonly items: string; readonly times?: string; readonly unit: string; readonly settle?: ConnectorCostSettle; readonly weights?: undefined }
+  | { readonly per: "item"; readonly items: string; readonly weights: ConnectorCostWeights; readonly unit: string; readonly settle?: ConnectorCostSettle; readonly times?: undefined }
 
 /**
  * Une fonction qui soumet un travail relevé plus tard (`connectors : docs/conception/format-de-description.md` § Travail
  * asynchrone) : `collect`, la lecture du connecteur qui le relève (nom qualifié), dont `jobId.to` est le seul argument
  * requis, reçoit l'identifiant lu au chemin pointé `jobId.from` de la réponse de la soumission. `withinMs`, le délai de
- * relève après la soumission, exigé quand le coût se règle : sa quantité se lit alors dans les réponses de la relève.
+ * relève après la soumission, exigé quand le coût se règle : sa quantité se lit alors dans les réponses de la relève ; sauf
+ * `noDeadline`, exclusif de `withinMs`, quand la référence de l'éditeur dit qu'un travail n'a pas d'échéance : la
+ * réservation court alors jusqu'à la quantité lue, ou jusqu'au plafond que fixe le service qui réserve.
  */
 export type ConnectorAsyncJob = {
   readonly collect: string
   readonly jobId: { readonly from: string; readonly to: string }
   readonly withinMs?: number
+  readonly noDeadline?: true
 }
 
 export type ConnectorFunctionDefinition = {
