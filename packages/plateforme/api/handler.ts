@@ -10,7 +10,7 @@ import type { Json } from "../server/database"
 import type { PlatformDb } from "../server/db"
 import { PlatformError } from "../server/errors"
 import type { Identity } from "../server/identity"
-import { journalError, loggedArgs, wellFormed, writeJournal } from "../server/journal"
+import { journalError, loggedArgs, wellFormed, withheldValues, withoutWithheld, writeJournal } from "../server/journal"
 import { brandRoutes } from "./brand"
 import { cellRoutes } from "./cell"
 import { connectorConsentRoutes } from "./connector-consent"
@@ -84,7 +84,9 @@ type Route = {
   journaled?: boolean
   /**
    * Liste blanche des arguments journalisés, tirée de l'adresse, du corps et, servie, de la réponse, au lieu du corps
-   * entier : posée, un refus se journalise par son seul code, son message pouvant citer le corps (un nom de fichier).
+   * entier : posée, un refus se journalise par son seul code, son message pouvant citer le corps (un nom de fichier), et
+   * toute valeur du corps qu'elle ne garde pas est retirée de la cible. C'est ainsi qu'une route tient une donnée
+   * personnelle hors du journal ; elle peut y mettre `PERSONAL` (`[personal]`) à sa place.
    */
   journalArgs?: (request: { params: string[]; body: unknown; data?: unknown }) => Json
 }
@@ -232,10 +234,22 @@ type Served = {
   error: string | null
 }
 
-/** Arguments et erreur de la ligne : le corps masqué (`loggedArgs`), sinon la liste blanche de la route. */
-function journaled(route: Route, request: { params: string[]; body: Json | undefined; data?: unknown }, failure: PlatformError | null): Pick<Served, "args" | "error"> {
-  if (route.journalArgs) return { args: wellFormed(route.journalArgs(request)), error: failure ? failure.code : null }
-  return { args: request.body === undefined ? null : loggedArgs(request.body), error: failure ? journalError(failure.code, failure.message) : null }
+/**
+ * Arguments, erreur et cible de la ligne : le corps masqué (`loggedArgs`), sinon la liste blanche de la route. Sous la
+ * liste blanche, une valeur du corps qu'elle ne garde pas (une donnée personnelle, un nom de fichier) ne revient ni par
+ * l'erreur, réduite à son code, ni par la cible, d'où elle est retirée (`pseudonymisation.md` § Les quatre primitives).
+ */
+function journaled(
+  route: Route,
+  request: { params: string[]; body: Json | undefined; data?: unknown },
+  failure: PlatformError | null,
+  target: string | null,
+): Pick<Served, "args" | "error" | "target"> {
+  if (route.journalArgs) {
+    const args = wellFormed(route.journalArgs(request))
+    return { args, error: failure ? failure.code : null, target: withoutWithheld(target, withheldValues(request.body, args)) }
+  }
+  return { args: request.body === undefined ? null : loggedArgs(request.body), error: failure ? journalError(failure.code, failure.message) : null, target }
 }
 
 async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" | "body">): Promise<Served> {
@@ -248,18 +262,16 @@ async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" |
     return {
       response: result.redirect ? redirection(result.redirect, result.status) : Response.json({ data: result.data }, { status: result.status }),
       failure,
-      target: result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null,
       teamId: result.journal?.teamId ?? null,
-      ...journaled(match.route, { params: match.params, body, data: result.data }, failure),
+      ...journaled(match.route, { params: match.params, body, data: result.data }, failure, result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null),
     }
   } catch (error) {
     const failure = asPlatformError(error)
     return {
       response: errorResponse(failure),
       failure,
-      target: match.route.target?.({ params: match.params, body }) ?? null,
       teamId: null,
-      ...journaled(match.route, { params: match.params, body }, failure),
+      ...journaled(match.route, { params: match.params, body }, failure, match.route.target?.({ params: match.params, body }) ?? null),
     }
   }
 }

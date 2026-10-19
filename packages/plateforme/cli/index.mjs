@@ -2,7 +2,8 @@
  * oto-platform — la ligne de commande du paquet, pour l'application hôte qui l'installe : copie
  * et contrôle des migrations du schéma `platform` (ADR-006), préparation d'une base (ADR-012 § 1),
  * bundle du widget avec les vues de l'ERP (story widgets-dans-la-conversation), secret et réglages d'un
- * compte réel de connecteur (connecteurs-et-comptes).
+ * compte réel de connecteur (connecteurs-et-comptes), purge du journal et des retours au-delà de la rétention de l'hôte
+ * (pseudonymisation).
  *
  * `run(argv)` rend le code de sortie : 0 succès, 1 copie ou migration refusée, préparation ou build en
  * échec, 2 usage incorrect. Appelée par `bin.mjs` (le `bin` du paquet) et par les scripts `migrations:sync`
@@ -21,6 +22,7 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
         oto-platform db prepare --db-url <url>
         oto-platform widgets build --views <dossier> --out <fichier>
         oto-platform accounts secret --db-url <url> --account <id> [--setting nom=valeur …] < champs.json
+        oto-platform journal purge --db-url <url> [--journal-days <jours>] [--feedback-days <jours>]
 
   migrations sync [--from <dossier>] [--to <dossier>]
     Copie les migrations du paquet dans celles de l'application hôte. Une copie qui diffère
@@ -65,9 +67,19 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --account  identifiant (uuid) du compte
     --setting  un réglage non secret, nom=valeur (nom= l'efface) ; répétable
 
+  journal purge --db-url <url> [--journal-days <jours>] [--feedback-days <jours>]
+    Retire, pour toutes les organisations, les lignes du journal des appels et du journal de l'équipe
+    plateforme plus anciennes que --journal-days, et les retours (feedback) plus anciens que
+    --feedback-days ; une table sans durée reste telle quelle. À lancer par la tâche planifiée de
+    l'hôte. Rend le nombre de lignes retirées.
+    --db-url         URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
+                     écrit dans l'URL
+    --journal-days   rétention du journal, en jours (1 à 36 500)
+    --feedback-days  rétention des retours, en jours (1 à 36 500)
+
   -h, --help  cette aide
 
-Codes de sortie : 0 succès, 1 copie, migration, préparation, build ou secret refusé, 2 usage incorrect.`
+Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret ou purge refusé, 2 usage incorrect.`
 
 const OPTIONS = {
   from: { type: 'string' },
@@ -78,6 +90,8 @@ const OPTIONS = {
   out: { type: 'string' },
   account: { type: 'string' },
   setting: { type: 'string', multiple: true },
+  'journal-days': { type: 'string' },
+  'feedback-days': { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 }
 // Options de chaque sous-commande : celle d'une autre y est une option inconnue.
@@ -86,6 +100,7 @@ const COMMANDS = {
   db: { prepare: ['db-url'] },
   widgets: { build: ['views', 'out'] },
   accounts: { secret: ['db-url', 'account', 'setting'] },
+  journal: { purge: ['db-url', 'journal-days', 'feedback-days'] },
 }
 
 /** Usage incorrect : le problème nommé sur stderr, puis l'usage, code 2. */
@@ -129,6 +144,7 @@ function parse(argv) {
   }
   if (command === 'db' && !values['db-url']) throw new UsageError("« db prepare » attend --db-url <url>")
   if (command === 'accounts' && (!values['db-url'] || !values.account)) throw new UsageError('« accounts secret » attend --db-url <url> et --account <id>')
+  if (command === 'journal' && !values['db-url']) throw new UsageError('« journal purge » attend --db-url <url>')
   if (command === 'widgets' && (!values.views || !values.out)) throw new UsageError('« widgets build » attend --views <dossier> et --out <fichier>')
   return { command, subcommand, ...values }
 }
@@ -165,6 +181,17 @@ export async function run(argv) {
       settings: options.setting ?? [],
       env: process.env,
       readSecret: () => readStdin(),
+      print: (line) => console.log(line),
+      printError: (line) => console.error(line),
+    })
+  }
+  if (options.command === 'journal') {
+    // Chargé à la demande, comme `db prepare` : le pilote Postgres ne sert qu'ici.
+    const { purgeCommand } = await import('./purge.mjs')
+    return purgeCommand({
+      dbUrl: options['db-url'],
+      journalDays: options['journal-days'],
+      feedbackDays: options['feedback-days'],
       print: (line) => console.log(line),
       printError: (line) => console.error(line),
     })

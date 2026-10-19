@@ -23,7 +23,7 @@ import {
 import { listItemTexts, tableCells } from "../schemas/blocks"
 import { argumentNames, checkArguments } from "./catalog/arguments"
 import type { CatalogFunction } from "./catalog/define"
-import { catalogFunctions, findFunction, isActive } from "./catalog/registry"
+import { assistantFunctions, findFunction, isActive } from "./catalog/registry"
 import { loadActiveConnectors } from "./connectors/activations"
 import type { PlatformDb } from "./db"
 import { boundedList, PlatformError } from "./errors"
@@ -243,7 +243,7 @@ export async function checkProcedureBlocks(db: PlatformDb, identity: Identity, b
   }
   const calls = ordered.some((block) => block.type === "call")
   const active = calls ? await loadActiveConnectors(db, identity.org.id) : new Set<string>()
-  const scope: Scope = { db, identity, blocks: ordered, functions: catalogFunctions(), active }
+  const scope: Scope = { db, identity, blocks: ordered, functions: assistantFunctions(), active }
   for (const block of ordered) refusals.push(...(block.type === "call" ? await callRefusals(scope, block) : fenceRefusals(ordered, block)))
   return refusals
 }

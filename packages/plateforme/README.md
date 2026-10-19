@@ -16,7 +16,7 @@ sans étape de build, sous licence MIT.
 | `api/` | `@otomata_tech/oto_platform/api` | Route handlers `/api/platform/*` : adaptateurs des services |
 | `server/` | `@otomata_tech/oto_platform/server` | Services : la seule porte d'écriture (Zod → droits → écriture → journal) |
 | `migrations/` | `@otomata_tech/oto_platform/migrations/*` | SQL du schéma `platform`, additif, copié par l'application hôte |
-| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) |
+| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) |
 | `widgets/` | `@otomata_tech/oto_platform/widgets` | Widget routeur dans la conversation (sources construites par Vite) ; l'export ne porte que les types d'une vue de l'ERP (`ErpView`, `ErpViewProps`) |
 
 ## Règle de dépendance entre faces
@@ -483,6 +483,19 @@ registerConnectors([messagerie.connector], {
   qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }` ; une sonde à solde (`probe.balance`) y
   ajoute `balance: { value, unit, min }`, non saine sous le seuil, solde absent ou illisible, et pose ou lève la
   marque `quota_exhausted` du compte selon le solde lu.
+
+- **Réservé au serveur** : `registerConnectors(defs, { serverOnly: { <connecteur>: "all" | ["crm.get_contact", …] } })`
+  (noms servis), ou `defineErpFunction({ serverOnly: true })` : la fonction est inconnue de l'assistant (ni `find`, ni
+  `read`, `call` la refuse comme absente) et courue par `callFunction`. Un nom qu'un connecteur ne sert pas lève
+  `CatalogRegistrationError`.
+- **Données personnelles au journal** : marquez une propriété d'arguments `.meta({ personal: true })` (Zod) ou
+  `personal: true` (JSON Schema d'un connecteur décrit) ; sa valeur n'est jamais journalisée : `[personal]` dans les arguments,
+  retirée de la cible et du message d'erreur.
+- **Contenu des fichiers** : `registerDataPolicy({ fileContents: "metadata" })` (ou une fonction de l'organisation)
+  fait refuser `read {file}` à l'assistant (`file_contents_withheld`) ; nom, taille et type restent servis.
+- **Rétention** : migration `20261019100000_platform_retention.sql`, puis, de votre tâche planifiée, sur la connexion
+  d'administration : `pnpm exec oto-platform journal purge --db-url "$ADMIN_DATABASE_URL" --journal-days 365
+  --feedback-days 730` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
 
 - **Clé** : `PLATFORM_VAULT_KEY`, 32 octets en base64 (`openssl rand -base64 32`), dans l'environnement serveur de
   l'application, jamais en `NEXT_PUBLIC_`. Lue à l'usage seulement : sans elle, l'application démarre, et poser un

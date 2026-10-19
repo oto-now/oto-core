@@ -6,7 +6,7 @@
 import { FILES_ROUTE, type BlockView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
 import { contractNames, getContract, renderContract } from "../catalog/contracts"
-import { catalogFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
+import { assistantFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
 import { loadActiveConnectors } from "../connectors/activations"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
@@ -39,7 +39,7 @@ import { familyOf, kindOf, memberNames, ownerOf, ownerTexts, ownerView, statusOf
  */
 async function readFunction(db: PlatformDb, identity: Identity, name: string): Promise<ToolOutput> {
   const prefix = identity.org.prefix
-  const fn = findFunction(catalogFunctions(), name)
+  const fn = findFunction(assistantFunctions(), name)
   const contract = fn ? null : getContract(name)
   if (contract) return { ...renderContract(contract, prefix), nextActions: [`${prefix}_write`], target: contract.name }
   if (!fn || !isActive(fn, await loadActiveConnectors(db, identity.org.id))) {
@@ -157,7 +157,7 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
   if (path === JOURNAL_PATH) return readJournal(db, identity, input)
   if (path === FUNCTIONS_PATH) {
     const active = await loadActiveConnectors(db, identity.org.id)
-    return functionCatalog(catalogFunctions().filter((fn) => isActive(fn, active)), contractNames(), prefix)
+    return functionCatalog(assistantFunctions().filter((fn) => isActive(fn, active)), contractNames(), prefix)
   }
   // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
   if (path === HELP_PATH) return helpGuide(input.section, prefix)

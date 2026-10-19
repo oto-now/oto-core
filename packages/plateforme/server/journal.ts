@@ -12,7 +12,7 @@ import type { StaffCaller } from "./admin/context"
 import type { Database, Json } from "./database"
 import type { PlatformDb } from "./db"
 import type { Identity } from "./identity"
-import { isJsonObject } from "./json"
+import { isJsonObject, jsonLeaves } from "./json"
 import type { ToolOutput } from "./tool-output"
 
 export type JournalEntry = Database["platform"]["Tables"]["journal"]["Insert"]
@@ -142,6 +142,55 @@ export function openedEntry(identity: Identity, request: { method: string; param
  */
 export type ServedEntry = { ctx: string | null; host: string | null; resultChars: number }
 
+/** Ce qui remplace, dans une ligne de journal, la valeur d'un argument marqué « donnée personnelle ». */
+export const PERSONAL = "[personal]"
+
+/** Au-dessous, une valeur personnelle n'est retirée que là où elle est seule : retirée d'un texte, elle le hacherait. */
+const MIN_PERSONAL_CHARS = 3
+
+/** `text` sans aucune des `values` : seule, elle devient `[personal]` ; dans un texte, chaque occurrence aussi. */
+function scrubbed(text: string, values: readonly string[]): string {
+  if (values.includes(text)) return PERSONAL
+  let out = text
+  for (const value of values) if (value.length >= MIN_PERSONAL_CHARS) out = out.split(value).join(PERSONAL)
+  return out
+}
+
+function scrubbedJson(value: unknown, values: readonly string[]): unknown {
+  if (typeof value === "string") return scrubbed(value, values)
+  if (typeof value === "number") return values.includes(String(value)) ? PERSONAL : value
+  if (Array.isArray(value)) return value.map((item) => scrubbedJson(item, values))
+  if (value === null || typeof value !== "object") return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubbedJson(item, values)]))
+}
+
+/**
+ * Les valeurs du corps d'une requête HTTP que la liste blanche de sa route (`journalArgs`) n'a pas gardées : la porte
+ * les retire de la cible, comme celles d'un argument marqué (`pseudonymisation.md` § Les quatre primitives).
+ */
+export function withheldValues(body: unknown, kept: Json | null): string[] {
+  const journaled = jsonLeaves(kept)
+  return [...jsonLeaves(body)].filter((value) => !journaled.has(value))
+}
+
+/** `text` sans aucune des `values` retenues hors du journal (`withheldValues`) ; `null` reste `null`. */
+export function withoutWithheld(text: string | null, values: readonly string[]): string | null {
+  return text === null || values.length === 0 ? text : scrubbed(text, values)
+}
+
+/**
+ * La ligne sans les valeurs des arguments marqués « donnée personnelle » (`pseudonymisation.md` § Les quatre
+ * primitives) : dans les arguments gardés (leur `head` coupé compris), la cible et le message d'erreur, où qu'un tiers
+ * les ait recopiées. Une valeur égale à toute une chaîne ou à un nombre devient `[personal]` ; une valeur d'au moins
+ * trois caractères est retirée de tout texte.
+ */
+function withoutPersonal(entry: JournalEntry, values: readonly string[] | undefined): void {
+  if (!values || values.length === 0) return
+  entry.args = scrubbedJson(entry.args, values) as Json
+  if (typeof entry.target === "string") entry.target = scrubbed(entry.target, values)
+  if (typeof entry.error === "string") entry.error = clip(scrubbed(entry.error, values), MAX_ERROR_CHARS)
+}
+
 /** Les clés réservées des arguments d'une ligne de `call` : ce que la fonction a fait, et à qui était le compte servi. */
 function reservedArgs(entry: JournalEntry, output: Pick<ToolOutput, "outcome" | "lentBy">): void {
   if (!isJsonObject(entry.args)) return
@@ -164,6 +213,7 @@ export function servedEntry(entry: JournalEntry, output: ToolOutput, served: Ser
     account_id: output.accountId ?? null,
     result_chars: served.resultChars,
   })
+  withoutPersonal(entry, output.personal)
   reservedArgs(entry, output)
 }
 
@@ -175,7 +225,7 @@ export function servedEntry(entry: JournalEntry, output: ToolOutput, served: Ser
 export function failedEntry(
   entry: JournalEntry,
   failure: { code: string; message: string },
-  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy"> },
+  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy" | "personal"> },
 ): void {
   Object.assign(entry, {
     ctx: served.ctx,
@@ -186,6 +236,7 @@ export function failedEntry(
     error: journalError(failure.code, failure.message),
     result_chars: served.resultChars,
   })
+  withoutPersonal(entry, served.trace.personal)
   reservedArgs(entry, served.trace)
 }
 

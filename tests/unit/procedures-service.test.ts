@@ -22,7 +22,12 @@ import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../help
 vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
   const { TEST_FUNCTIONS } = await import("../factories/test-functions")
-  return { ...original, catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS] }
+  // Le catalogue de l'assistant aussi : les portes qui servent un assistant le lisent (`assistantFunctions`).
+  return {
+    ...original,
+    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS],
+    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS],
+  }
 })
 
 const NETWORK_TIMEOUT = 60_000

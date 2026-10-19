@@ -27,6 +27,10 @@ export { FLAGS, isEnabled, listFlags, setFlag } from "./flags"
 // E12-S02 (ADR-022) : les capacités d'une organisation, dont l'hôte enregistre la source ; l'état pour les écrans.
 export { orgLimitsView, orgUsage, registerOrgLimits } from "./limits"
 export { readOpenEntry, setOpenEntry } from "./open-entry"
+// Les données servies aux assistants (`pseudonymisation.md` § Les quatre primitives) : le contenu des fichiers joints
+// servi ou retenu, par l'hôte.
+export { registerDataPolicy } from "./data-policy"
+export type { DataPolicy, FileContentsPolicy } from "./data-policy"
 export type { OrgLimitsSource, OrgUsage } from "./limits"
 export {
   identityInOrg,
@@ -118,6 +122,7 @@ export { connectorAccountForms, setAccountSecret } from "./connectors/account-se
 // routes ; la sonde d'un compte, pour qui le gère.
 export { registerConnectors } from "./connectors/declaration"
 export type { ConnectorOptions } from "./connectors/declaration"
+export type { ServerOnlyOption } from "./connectors/server-only"
 export type {
   ConnectorAccountIdentity,
   ConnectorAsyncJob,

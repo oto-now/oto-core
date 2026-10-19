@@ -16,7 +16,8 @@ import { ERP_VIEW_PREFIX } from "../schemas/views"
 import { administratorNames } from "./access"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
-import { actName, catalogFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
+import { personalValues } from "./catalog/personal"
+import { actName, assistantFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
 import type { AccountCredential } from "./connectors/auth"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
@@ -44,9 +45,10 @@ export type CallInput = {
  * Ce que l'appel a établi pour sa ligne de journal, rempli à mesure (AC16, N7) : la porte le garde
  * quand l'appel échoue ensuite. Vide tant que le refus précède le choix de l'équipe ; `outcome` : la
  * marque posée sur le compte par l'échec (`account_marked`), ou sa pose qui a échoué (`account_mark_failed`) ;
- * `lentBy` : la personne qui a partagé le compte personnel servi.
+ * `lentBy` : la personne qui a partagé le compte personnel servi ; `personal` : les valeurs des arguments marqués
+ * « donnée personnelle », que la ligne retire, posées dès la fonction connue.
  */
-export type CallTrace = Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy">
+export type CallTrace = Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy" | "personal">
 
 /** L'équipe sous laquelle l'appel court (F8), telle que ses données la rendent. */
 export type CallTeam = { slug: string; name: string }
@@ -86,8 +88,9 @@ export type CallDeps = {
   /** Connecteurs actifs de l'organisation, lus une fois pour la requête (`McpDeps`, E04-S01 N27). */
   activeConnectors: () => Promise<ReadonlySet<string>>
   /**
-   * Le catalogue (défaut : `catalogFunctions()`). Les tests passent leurs fonctions : sans elles, la
-   * matrice des classes ne se teste pas, faute de fonction de lecture ou native en V1 avant E07.
+   * Le catalogue (défaut : `assistantFunctions()`, ce que l'assistant voit ; `callFunction` passe `catalogFunctions()`,
+   * fonctions réservées au serveur comprises). Les tests passent leurs fonctions : sans elles, la matrice des classes ne
+   * se teste pas, faute de fonction de lecture ou native en V1 avant E07.
    */
   functions?: readonly CatalogFunction[]
   trace?: CallTrace
@@ -232,15 +235,18 @@ function markOutcome(credential: AccountCredential | undefined): Record<string, 
 export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOutput> {
   const { db, identity } = deps
   const prefix = identity.org.prefix
-  const functions = deps.functions ?? catalogFunctions()
+  const functions = deps.functions ?? assistantFunctions()
   const fn = findFunction(functions, input.function.trim().toLowerCase())
   if (!fn) throw unknownFunction(functions, input.function, prefix)
+  const trace: CallTrace = deps.trace ?? {}
+  // Dès la fonction connue : un refus qui suit (activation, arguments, tiers) ne garde pas ses valeurs au journal.
+  const personal = personalValues(fn, input.arguments ?? {})
+  if (personal.length > 0) trace.personal = personal
   const active = await deps.activeConnectors()
   if (!isActive(fn, active)) throw await notEnabled(db, identity, fn)
   const args = checkedArguments(fn, input.arguments ?? {}, prefix)
   const tablePath = fn.connector === NATIVE_CONNECTOR && typeof args.table === "string" ? args.table : undefined
   const team = await runningTeam(db, identity, { fn, team: input.team, tablePath, ctxCode: deps.ctxCode })
-  const trace: CallTrace = deps.trace ?? {}
   trace.teamId = journalTeam(identity, team?.id)
   const account =
     fn.origin === "connecteur"
@@ -261,7 +267,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     origin: deps.origin,
     accessToken: fn.origin === "erp" ? deps.accessToken : undefined,
   }
-  const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId, lentBy: trace.lentBy }
+  const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId, lentBy: trace.lentBy, personal: trace.personal }
   if (fn.class === "sensitive" && input.confirm !== true) {
     const { text, summary } = await confirmationRequest(fn, context, args, { team, account: data.account })
     return { text, data: { ...data, status: "needs_confirmation", summary }, nextActions: [], ...journal }

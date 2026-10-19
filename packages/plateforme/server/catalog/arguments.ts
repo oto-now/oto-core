@@ -6,6 +6,9 @@ import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020"
 import * as z from "zod/v4"
 import type { CatalogFunction } from "./define"
 
+/** Le mot d'un JSON Schema, ou la clé de `.meta()` d'un schéma Zod, qui marque un argument « donnée personnelle ». */
+export const PERSONAL_KEYWORD = "personal"
+
 /** Le JSON Schema d'entrée d'une fonction de connecteur décrit, compilé une fois à la déclaration. */
 export class JsonSchemaArguments {
   constructor(
@@ -27,7 +30,11 @@ let validator: Ajv2020 | null = null
  * permis par JSON Schema) passe sans avertissement (`allowUnionTypes`), toutes les erreurs sont rendues.
  */
 function ajv(): Ajv2020 {
-  validator ??= new Ajv2020({ allErrors: true, strictRequired: false, validateFormats: false, allowUnionTypes: true })
+  if (validator) return validator
+  validator = new Ajv2020({ allErrors: true, strictRequired: false, validateFormats: false, allowUnionTypes: true })
+  // `personal: true` marque un argument « donnée personnelle », jamais journalisé (`personal.ts`) : une annotation, sans
+  // effet sur la validation ; sans elle, le mode strict d'Ajv refuserait le mot inconnu à la déclaration.
+  validator.addKeyword({ keyword: PERSONAL_KEYWORD, schemaType: "boolean" })
   return validator
 }
 

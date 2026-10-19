@@ -46,6 +46,11 @@ export type ToolOutput = {
    */
   lentBy?: string | null
   /**
+   * Pour le journal : les valeurs des arguments marqués « donnée personnelle » (`catalog/personal.ts`), retirées de la
+   * ligne de l'appel (arguments, cible, erreur) ; jamais servies.
+   */
+  personal?: readonly string[]
+  /**
    * La vue du widget qui rend ce résultat ; ses données sont déjà dans `data`. La porte la sert avec le thème quand
    * les widgets sont allumés (`structuredContent.view`), l'ignore sinon (story widgets-dans-la-conversation).
    */

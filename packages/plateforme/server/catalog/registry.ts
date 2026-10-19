@@ -64,6 +64,15 @@ export function catalogFunctions(): CatalogFunction[] {
 }
 
 /**
+ * Le catalogue que voit l'assistant : sans les fonctions réservées au serveur de l'hôte (`serverOnly`), que seul
+ * `callFunction` court. Toute porte qui sert un assistant (`find`, `read`, `call`, exemples de `call`, procédures) lit
+ * celui-ci ; les écrans et l'activation lisent `catalogFunctions()`.
+ */
+export function assistantFunctions(): CatalogFunction[] {
+  return catalogFunctions().filter((fn) => fn.serverOnly !== true)
+}
+
+/**
  * Les noms des fonctions du catalogue : la description d'un tableau (`read`, `table.schema`) ne cite
  * `table.write`, `table.claim` ou `table.release` que s'ils y sont (E07-S01, N15).
  */

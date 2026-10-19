@@ -1,7 +1,7 @@
 // Ce que `context` propose quand aucune procédure ne convient à la demande (1.4.3) : les fonctions dont la description y
 // répond (`searchFunctions`, trois au plus) et la section du guide de la plateforme la plus proche (`help`). Sans lui,
 // « exporte toutes les pages de l'équipe SAV » répondait « no procedure matches », alors que `node.export_tree` le fait.
-import { catalogFunctions, isActive, searchFunctions } from "../catalog/registry"
+import { assistantFunctions, isActive, searchFunctions } from "../catalog/registry"
 import { loadActiveConnectors } from "../connectors/activations"
 import type { PlatformDb } from "../db"
 import { firstSentence } from "../find"
@@ -25,7 +25,7 @@ export async function routingHints(db: PlatformDb, identity: Identity, phrase: s
   const functions =
     active === null
       ? []
-      : searchFunctions(catalogFunctions().filter((fn) => isActive(fn, active)), phrase, 3)
+      : searchFunctions(assistantFunctions().filter((fn) => isActive(fn, active)), phrase, 3)
           .filter(({ score }) => score >= FUNCTION_SCORE_MIN)
           .map(({ fn }) => ({ name: fn.name, sentence: firstSentence(fn.description) }))
   return { functions, help: closestHelpSection(phrase) }

@@ -38,7 +38,8 @@ import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../help
 
 vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
-  return { ...original, catalogFunctions: vi.fn(() => []) }
+  const catalogFunctions = vi.fn((): ReturnType<typeof original.catalogFunctions> => [])
+  return { ...original, catalogFunctions, assistantFunctions: () => catalogFunctions().filter((fn) => fn.serverOnly !== true) }
 })
 
 afterEach(() => {

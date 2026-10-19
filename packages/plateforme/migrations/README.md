@@ -227,6 +227,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   fichiers en transit des autres compris, une somme et rien d'autre) et `purge_transit_files` (les échus de
   l'organisation, de toute personne, identifiants seuls). Premier `alter column … drop not null` du paquet, admis par
   `check:migrations` : la colonne admet toute ligne qu'elle admettait.
+- `20261019100000_platform_retention.sql` (pseudonymisation, J1) : la fonction `platform.purge_expired(journal_days,
+  feedback_days)`, qui retire les lignes de `journal` et `admin_journal` plus anciennes que `journal_days` jours et les
+  tickets `feedback` plus anciens que `feedback_days` ; une durée `null` laisse sa table, une durée hors de 1 à 36 500
+  est refusée (22023) ; elle rend le nombre de lignes retirées par table. Aucun rôle de session ne l'exécute (`REVOKE`
+  de `PUBLIC`, `anon`, `authenticated`) : la connexion d'administration la lance, par `oto-platform journal purge`.
+  Aucune table, colonne ni index : elle lit par les index `ts` de la ligne de base.
 
 ## Installer sur un hôte neuf
 

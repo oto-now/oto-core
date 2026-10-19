@@ -1,11 +1,13 @@
 // L'appel d'une fonction du catalogue par le serveur de l'hôte : un écran de l'application hôte (des contrôles
 // automatiques lancés depuis un dossier, par exemple) court une fonction sous l'identité de la personne connectée.
-// Mêmes contrôles que `<p>_call`, puisque c'est `runCall` qui court : fonction, activation de son connecteur,
+// Mêmes contrôles que `<p>_call`, puisque c'est `runCall` qui court, sur tout le catalogue, fonctions réservées au serveur
+// (`serverOnly`) comprises : fonction, activation de son connecteur,
 // arguments, équipe, compte et niveau sur lui (la classe `write` comprise), secret d'un compte réel, récapitulatif sans
 // rien exécuter d'une fonction sensible appelée sans `confirm` ; chaque refus remonte tel quel (`PlatformError`). Même
 // ligne de journal que la porte MCP (`openedEntry`, `servedEntry`, `failedEntry`), à l'origine près : `method` `api`,
 // celle des portes des écrans, au lieu de `tools/call`, et ni `ctx` ni `host`, aucune conversation d'assistant n'étant
 // en jeu. Sans ce module, l'hôte n'atteindrait une fonction que par le MCP, sous le jeton d'un assistant.
+import { catalogFunctions } from "./catalog/registry"
 import { runCall, type CallAccount, type CallInput, type CallOutput, type CallTeam, type CallTrace } from "./calls"
 import { loadActiveConnectors } from "./connectors/activations"
 import type { PlatformDb } from "./db"
@@ -79,7 +81,17 @@ export async function callFunction(db: PlatformDb, identity: Identity, input: Fu
   const trace: CallTrace = {}
   try {
     const output = await runCall(
-      { db, identity, ctxCode: null, origin: options.origin, accessToken: options.accessToken, activeConnectors: () => loadActiveConnectors(db, identity.org.id), trace },
+      {
+        db,
+        identity,
+        ctxCode: null,
+        origin: options.origin,
+        accessToken: options.accessToken,
+        activeConnectors: () => loadActiveConnectors(db, identity.org.id),
+        // Tout le catalogue : une fonction réservée au serveur (`serverOnly`) ne court que par ici.
+        functions: catalogFunctions(),
+        trace,
+      },
       input,
     )
     servedEntry(entry, output, { ...served, resultChars: output.text.length })

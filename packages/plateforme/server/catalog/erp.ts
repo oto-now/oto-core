@@ -50,6 +50,8 @@ type ErpFunctionInput<S extends Schema> = {
   next?: string[]
   /** La vue de l'hôte qui rend `data` dans la conversation, inscrite par `registerWidgetViews` (story widgets-dans-la-conversation). */
   view?: string
+  /** Réservée au serveur de l'hôte : `callFunction` la court, l'assistant ne la voit jamais (`pseudonymisation.md`). */
+  serverOnly?: boolean
   run: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionOutput>
   summarize?: (context: ErpFunctionContext, args: z.output<S>) => Promise<FunctionSummary>
 }
@@ -189,6 +191,7 @@ function functionProblem(fn: ErpFunction, reserved: ReadonlySet<string>): string
   const examples = examplesProblem(fn)
   if (examples) return examples
   if (fn.class === "sensitive" && typeof fn.summarize !== "function") return `${name}: a sensitive function needs summarize (two-step confirmation).`
+  if (fn.serverOnly !== undefined && typeof fn.serverOnly !== "boolean") return `${name}: serverOnly must be true or false.`
   return viewProblem(fn)
 }
 

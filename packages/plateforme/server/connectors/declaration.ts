@@ -21,6 +21,7 @@ import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAM
 import { callerTransitFiles, filesProblem } from "./multipart"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
 import { identityProblem, probeProblem } from "./probe-declaration"
+import { withServerOnly, type ServerOnlyOption } from "./server-only"
 import { signalProblem } from "./signal-declaration"
 import { baseAddress, settingProblem } from "./settings"
 
@@ -332,6 +333,11 @@ export type ConnectorOptions = HostOptions & {
    * elle, la connexion d'un compte et l'appel sont refusés nommément.
    */
   oauthApplications?: Readonly<Record<string, OAuthApplication>>
+  /**
+   * Les fonctions réservées au serveur de l'hôte, par connecteur : `"all"`, ou les noms servis de certaines
+   * (`<connecteur>.<f>`, `<connecteur>_act.<f>`). `callFunction` les court ; l'assistant ne les voit jamais.
+   */
+  serverOnly?: ServerOnlyOption
 }
 
 /** Les applications OAuth contrôlées : chacune d'un connecteur `oauth2_user` déclaré, identifiant et secret non vides. */
@@ -360,7 +366,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`) ; enfin la sonde et
  * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
- * le port du branchement hébergé d'un connecteur à `accountIdentity` ; tous fournis par l'hôte. Au premier refus,
+ * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au
+ * serveur de l'hôte (`server-only.ts`) ; tous fournis par l'hôte. Au premier refus,
  * `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
@@ -373,7 +380,7 @@ export function registerConnectors(definitions: readonly ConnectorDefinition[], 
   const { readers, ports } = checkedHostGifts(definitions, options)
   const gift = (name: string): HostGiven => ({ application: applications.get(name) ?? null, hostCredentials: readers.get(name) ?? null, hostedLinks: ports.get(name) ?? null })
   const connectors = definitions.map((definition) => declared(definition, reserved, seen, gift(definition.name)))
-  replaceDeclaredConnectors(connectors)
+  replaceDeclaredConnectors(withServerOnly(connectors, options.serverOnly))
 }
 
 /**

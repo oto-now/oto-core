@@ -21,7 +21,7 @@ import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
-import { callExamples, catalogFunctions, findFunction } from "../server/catalog/registry"
+import { assistantFunctions, callExamples, findFunction } from "../server/catalog/registry"
 import { buildContext } from "../server/context"
 import { changedCtxMessage, requireCtx, type CallOutcome, type CtxChange } from "../server/ctx"
 import type { PlatformDb } from "../server/db"
@@ -109,7 +109,7 @@ class JsonRpcError extends Error {
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
   context: ({ db, identity, userAgent }, input) => buildContext(db, identity, input, { userAgent }),
-  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: catalogFunctions(), activeConnectors: await activeConnectors() }),
+  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: assistantFunctions(), activeConnectors: await activeConnectors() }),
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
   read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
   call: ({ db, identity, origin, activeConnectors, trace, accessToken }, input, ctx) =>
@@ -270,7 +270,8 @@ function promptFailure(deps: McpDeps, request: HandledRequest, error: unknown, f
 }
 
 export function installPlatformMcp(server: McpServer, deps: McpDeps): void {
-  const functions = catalogFunctions()
+  // Ce que voit l'assistant : sans les fonctions réservées au serveur de l'hôte (`serverOnly`).
+  const functions = assistantFunctions()
 
   // Servie à tout jeton valide, membre ou non (banc E03) : la connexion passe, les appels sont refusés.
   server.server.setRequestHandler(ListToolsRequestSchema, async (request) => {

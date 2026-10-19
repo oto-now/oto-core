@@ -85,6 +85,10 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - **L'hôte inscrit** les formats qui demandent un programme tiers (plans DWG/DXF, modèles 3D, reconnaissance de caractères d'un scan). Son lecteur appelle le service qu'il veut, isolé s'il le faut (processus jetable, sans réseau sortant, temps et mémoire bornés) : l'isolation est sa responsabilité, le paquet ne porte aucun contrat de service. Un plan ou un modèle 3D rend la même forme `{ title, summary, parts, text }`. Sans lecteur inscrit, un format reste « nom, taille, type ».
 - **Paramétrer une lecture** : `section` choisit la partie ; filtrer ou croiser des lignes passe par l'import de la feuille en tableau puis `table.rows`, pas par des arguments du lecteur.
 
+### Contenu retenu par l'hôte
+
+- Une organisation dont l'hôte retient le contenu des fichiers (`registerDataPolicy({ fileContents: "metadata" })`, [contenu HTML isolé](contenu-html-isole.md) § Côté assistant) ne sert ni le texte, ni le plan, ni une partie, ni `raw` : `read {file}` refuse avant toute lecture (`file_contents_withheld`) ; l'aperçu au dépôt suivra la même option quand il sera écrit. Écrit le 19/10 pour `read {file}` (pseudonymisation, J1).
+
 ### Bornes
 
 - Un fichier texte reste borné à 4 Mo (HN-E10S02-9). Un format binaire se lit jusqu'à 50 Mo, la taille admise d'un fichier : le serveur lit l'objet, la réponse ne porte que le texte.
