@@ -3,8 +3,10 @@
 // qui est posé ; le compte ouvert pour un appel (`liveCredential`, lu par `runCall` et par la sonde, `probe.ts`). Les
 // champs sont contrôlés contre la déclaration du connecteur, chiffrés ensemble (`vault.ts`) ; les réglages restent en
 // clair ; le jeton d'un échange est chiffré à part (`token_ciphertext`), pour qu'un renouvellement n'écrase jamais une
-// saisie. Sans ce module, un compte ne porterait qu'un jeton posé par l'outillage. Rien du secret n'est jamais rendu,
-// ni par un résultat, ni par un refus, ni par un log.
+// saisie. Ses écritures (secret, réglages, jetons, droits accordés, état, marque) courent sous le rôle du serveur
+// (`inTransaction(…, "server")`), seul à pouvoir les faire, après la décision du service. Sans ce module, un compte ne
+// porterait qu'un jeton posé par l'outillage. Rien du secret n'est jamais rendu, ni par un résultat, ni par un refus,
+// ni par un log.
 import { mergeCredential } from "../../cli/vault.mjs"
 import type { AccountMarkReason, AccountMode, ConnectorAccountForm } from "../../schemas"
 import { accountSecretSchema } from "../../schemas/connectors"
@@ -56,7 +58,7 @@ async function remedyOf(reason: AccountMarkReason, remedy: MarkRemedy): Promise<
 
 /**
  * La marque du compte d'un appel (`AccountMarker`) : la seule écriture de `accounts.health` est `platform.mark_account`,
- * qui pose ou lève la marque d'un compte d'une organisation de l'appelant, et rien d'autre ; elle garde la date d'une
+ * réservée au rôle du serveur, qui pose ou lève la marque d'un compte d'une organisation de l'appelant, et rien d'autre ; elle garde la date d'une
  * marque reposée pour la même raison. Rien n'est écrit quand la marque lue ne change pas : un appel réussi sur un compte
  * sans marque ne touche pas la base.
  */
@@ -68,7 +70,7 @@ function accountMarker(db: PlatformDb, row: SecretRow, remedy: MarkRemedy): Acco
     async set(reason) {
       if ((marker.current?.reason ?? null) === reason) return
       const [written] = await inTransaction(db, "accountMarker: mark_account", (sql) => sql<{ changed: boolean; mark: unknown }[]>`
-        select changed, mark from platform.mark_account(${account.id}, ${reason})`)
+        select changed, mark from platform.mark_account(${account.id}, ${reason})`, "server")
       marker.current = markOf(written?.mark)
       if (written?.changed) marker.effect = reason === null ? "lifted" : "marked"
     },
@@ -150,7 +152,7 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
        set secret_ciphertext = ${ciphertext}, secret_fields = ${Object.keys(fields).sort()}::text[], settings = ${sql.json(nextSettings)},
            secret_updated_at = now(), token_ciphertext = null, token_expires_at = null
      where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
-     returning id`)
+     returning id`, "server")
   // Aucune ligne après la décision : une autre saisie a été écrite depuis la lecture qui fonde la fusion.
   if (updated.length === 0) {
     console.error(`[platform] setAccountSecret: account ${id} changed since its secret was read`)
@@ -189,7 +191,7 @@ export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
     async write({ token, expiresAt }: StoredToken) {
       const ciphertext = encryptToken(accountId, token)
       await inTransaction(db, "tokenStore: accounts update", (sql) => sql`
-        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt} where id = ${accountId}`)
+        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt} where id = ${accountId}`, "server")
     },
   }
 }
@@ -239,7 +241,7 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredCon
         if (rotated === null) {
           await inTransaction(db, "consent: renewed", (sql) => sql`
             update platform.accounts set token_ciphertext = ${access}, token_expires_at = ${token.expiresAt}, granted_scopes = coalesce(${scopes}::text[], granted_scopes)
-             where id = ${id}`)
+             where id = ${id}`, "server")
           return
         }
         const secret = encryptCredential(id, { refresh_token: rotated })
@@ -248,7 +250,7 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredCon
              set secret_ciphertext = ${secret}, secret_fields = ${["refresh_token"]}::text[], secret_updated_at = now(),
                  token_ciphertext = ${access}, token_expires_at = ${token.expiresAt}, granted_scopes = coalesce(${scopes}::text[], granted_scopes)
            where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
-           returning to_json(secret_updated_at) #>> '{}' as version`)
+           returning to_json(secret_updated_at) #>> '{}' as version`, "server")
         if (!written) {
           console.error(`[platform] connector ${definition.name}: account ${id} renewed meanwhile, its newer refresh token kept`)
           return
@@ -259,7 +261,7 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredCon
       async revoked(reason) {
         await inTransaction(db, "consent: revoked", (sql) => sql`
           update platform.accounts set status = 'error', status_reason = ${cut(reason, 500)}
-           where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz`)
+           where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz`, "server")
         console.error(`[platform] connector ${definition.name}: the consent of account ${id} no longer holds, account to connect again`)
         return reconnectRefusal(definition.name, account.label, reason, own)
       },

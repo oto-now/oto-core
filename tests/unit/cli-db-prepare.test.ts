@@ -42,17 +42,20 @@ async function prepare(options: { supabase: boolean; failOn?: RegExp; failWith?:
 }
 
 describe("oto-platform db prepare", () => {
-  it("should only create platform_app on Supabase, login and noinherit, member of anon and authenticated, neither bypassrls nor createrole, and say so (AC11)", async () => {
+  it("should only create platform_app and platform_server on Supabase, platform_app login and noinherit, member of anon, authenticated and platform_server, platform_server nologin and member of authenticated, neither bypassrls nor createrole, and say so (AC11)", async () => {
     const plan = codeOf(preparePlan(true))
     expect(plan.match(/'create role [^']*'/g)).toEqual(["'create role platform_app login noinherit nocreatedb nocreaterole nobypassrls password %L'"])
+    expect(plan.match(/^\s*create role [^;]*;/gm)?.map((statement) => statement.trim())).toEqual(["create role platform_server nologin inherit nocreatedb nocreaterole nobypassrls;"])
     expect(plan).toContain("array['anon', 'authenticated']")
     expect(plan).toContain("grant %I to platform_app")
+    expect(plan).toContain("array[array['authenticated', 'platform_server'], array['platform_server', 'platform_app']]")
+    expect(plan).not.toMatch(/authenticator/i)
     expect(plan).not.toMatch(/create (schema|extension|function)/i)
 
     const { code, executed, printed } = await prepare({ supabase: true })
     expect(code).toBe(0)
     expect(executed.slice(2).map(({ query }) => query)).toEqual(preparePlan(true))
-    expect(printed).toContain("seul le rôle platform_app est préparé")
+    expect(printed).toContain("seuls les rôles platform_app et platform_server sont préparés")
   })
 
   it("should prepare a bare Postgres once: roles, the auth schema reading request.jwt.claims, the extensions schema with its three extensions, then platform_app, checking each object before creating it (AC10)", async () => {

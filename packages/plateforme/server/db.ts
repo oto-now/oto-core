@@ -9,20 +9,28 @@
 // n'importe jamais `src/`.
 //
 // Jamais de clé de service ici (architecture §6) : sans appelant, `tx` lève une erreur nommée, il ne se
-// replie sur rien.
-import { PlatformConfigError, translateCaller, withAnonSession, withCallerSession, type Caller, type TranslatedCaller, type Tx } from "./sql"
+// replie sur rien. Une écriture que le serveur seul affirme passe par `tx(fn, "server")` : même appelant, rôle
+// `platform_server` (`withServerSession`).
+import { PlatformConfigError, translateCaller, withAnonSession, withCallerSession, withServerSession, type Caller, type TranslatedCaller, type Tx } from "./sql"
 
 // Déclarée dans `sql.ts`, que `db.ts` importe : l'inverse ferait deux modules qui s'importent.
 export { PlatformConfigError }
 
 export const PLATFORM_SCHEMA = "platform" as const
 
+/**
+ * La session d'une transaction : `"server"`, celle du serveur pour l'appelant de la requête (rôle `platform_server`,
+ * mêmes claims), pour une écriture que le serveur seul affirme ; omise, celle de l'appelant.
+ */
+export type TxSession = "server"
+
 export type PlatformDb = {
   /**
    * `fn` dans une transaction où la base voit l'appelant de la requête, ou `anon` pour le client sans
-   * session. Un `tx` appelé pendant un autre, sous la même session, reprend sa transaction.
+   * session ; avec `"server"`, sous le rôle du serveur pour ce même appelant (jamais sans appelant). Un `tx`
+   * appelé pendant un autre, sous la même session, reprend sa transaction ; sous une autre, il est refusé.
    */
-  tx<T>(fn: (sql: Tx) => Promise<T>): Promise<T>
+  tx<T>(fn: (sql: Tx) => Promise<T>, session?: TxSession): Promise<T>
   /**
    * Oublie la traduction de l'appelant gardée par ce client : la transaction suivante le retraduit. Pour une entrée faite
    * pendant la requête (`join_org`), qui crée l'identité d'un sujet que la base ne connaissait pas.
@@ -49,9 +57,10 @@ export function createPlatformDb(session: { caller: Caller | undefined }): Platf
   const sessionCaller = (known: Caller) =>
     (translated ??= "userId" in known ? Promise.resolve(known) : translateCaller(known).then((userId) => ({ ...known, userId })))
   return {
-    tx: async <T>(fn: (sql: Tx) => Promise<T>): Promise<T> => {
+    tx: async <T>(fn: (sql: Tx) => Promise<T>, session?: TxSession): Promise<T> => {
       if (!designates(caller)) throw new PlatformConfigError("caller absent : l'hôte doit passer l'appelant vérifié de la session")
-      return withCallerSession(await sessionCaller(caller), fn)
+      const known = await sessionCaller(caller)
+      return session === "server" ? withServerSession(known, fn) : withCallerSession(known, fn)
     },
     retranslate: () => {
       translated = undefined
@@ -65,5 +74,11 @@ export function createPlatformDb(session: { caller: Caller | undefined }): Platf
  * l'adresse avant la connexion. Jamais de clé de service.
  */
 export function createAnonPlatformDb(): PlatformDb {
-  return { tx: withAnonSession }
+  return {
+    tx: <T>(fn: (sql: Tx) => Promise<T>, session?: TxSession): Promise<T> => {
+      // Le rôle du serveur écrit pour un appelant vérifié, jamais pour le client sans session.
+      if (session === "server") throw new PlatformConfigError("session du serveur sans appelant : elle exige l'appelant vérifié de la session")
+      return withAnonSession(fn)
+    },
+  }
 }

@@ -1,7 +1,7 @@
 // Erreurs nommées des services (H04) : une liste fermée de codes, un statut HTTP par code. Sans ce
 // module, chaque porte (écrans, API, MCP) inventerait sa forme d'erreur, et une panne ne se
 // distinguerait plus d'un refus à montrer.
-import type { PlatformDb } from "./db"
+import type { PlatformDb, TxSession } from "./db"
 import type { Tx } from "./sql"
 
 export const PLATFORM_ERROR_CODES = [
@@ -180,11 +180,11 @@ export function fromDatabaseError(error: { code?: string } | null | undefined, c
  * traduite, mêmes codes et mêmes messages (AC-x2 d'E01-S10) ; un refus ou un conflit décidé dans la
  * transaction rendu tel quel ; une erreur sans code (`PlatformConfigError`, bogue) relancée (HN-E01S10-15).
  * La seule aide de transaction traduite des services (M32) : sans elle, chaque transaction recopie sa
- * capture.
+ * capture. `session` : `"server"` pour une écriture que le serveur seul affirme (`PlatformDb.tx`).
  */
-export async function inTransaction<T>(db: PlatformDb, context: string, fn: (sql: Tx) => Promise<T>): Promise<T> {
+export async function inTransaction<T>(db: PlatformDb, context: string, fn: (sql: Tx) => Promise<T>, session?: TxSession): Promise<T> {
   try {
-    return await db.tx(fn)
+    return await db.tx(fn, session)
   } catch (error) {
     // Le `catch` ne connaît pas le type de ce que rejette `db.tx` : une erreur de la base ou du pilote
     // porte son `code`, ce qui n'en vient pas est rendu ou relancé tel quel par `fromDatabaseError`.

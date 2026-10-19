@@ -9,7 +9,7 @@ import { randomUUID } from "crypto"
 import type postgres from "postgres"
 import { decodeJwt } from "jose"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
-import { callerName, withCallerSession, type Caller, type Tx } from "../../packages/plateforme/server/sql"
+import { callerName, withCallerSession, withServerSession, type Caller, type Tx } from "../../packages/plateforme/server/sql"
 import { platformAdminSql } from "./admin-sql"
 import { hex, platformSeeds, referencePeople, SKIP_REASON, step, supabaseConfigured, type AccountCopy, type ReferenceOrg } from "./plateforme"
 
@@ -45,7 +45,8 @@ export function testAdminSql(): TestSql {
  * que `accept_invitations` copie dans `members` (HN-E01S10-9).
  */
 export function asCaller(userId: string, email?: string, name?: string): PlatformDb {
-  return { tx: (fn) => withCallerSession({ userId, email: email ?? null, name: name ?? null }, fn) }
+  const caller = { userId, email: email ?? null, name: name ?? null }
+  return { tx: (fn, session) => (session === "server" ? withServerSession(caller, fn) : withCallerSession(caller, fn)) }
 }
 
 /** Une personne réduite à son identifiant (E01-S09 : aucune clé vers un annuaire) et une adresse jetable. */
@@ -305,7 +306,7 @@ function watchedSql(sql: postgres.TransactionSql, sent: SentQuery[], options: Sp
  */
 export function spyDb(db: PlatformDb, options: SpyOptions = {}): { db: PlatformDb; sent: SentQuery[] } {
   const sent: SentQuery[] = []
-  return { db: { tx: (fn) => db.tx((sql) => fn(watchedSql(sql, sent, options))) }, sent }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(watchedSql(sql, sent, options)), session) }, sent }
 }
 
 /**
@@ -414,10 +415,10 @@ export function recordDb(db: PlatformDb) {
   // contexte, pas par l'objet `sql` reçu, qu'un espion enveloppé (`spyDb`) rend neuf à chaque `tx`.
   const inside = new AsyncLocalStorage<true>()
   const recorded: PlatformDb = {
-    tx: (fn) =>
+    tx: (fn, session) =>
       inside.getStore()
-        ? db.tx((sql) => fn(recordedStatements(sql, requests)))
-        : db.tx((sql) => inside.run(true, () => recordedTransaction(sql, fn, requests))),
+        ? db.tx((sql) => fn(recordedStatements(sql, requests)), session)
+        : db.tx((sql) => inside.run(true, () => recordedTransaction(sql, fn, requests)), session),
   }
   return { db: recorded, requests, writes: () => recordedWritesOf(requests) }
 }
@@ -473,7 +474,7 @@ export function spyRequests(db: PlatformDb): { db: PlatformDb; requests: SpiedRe
         return Reflect.apply(target, self, args)
       },
     })
-  return { db: { tx: (fn) => db.tx((sql) => fn(recorded(sql))) }, requests }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(recorded(sql)), session) }, requests }
 }
 
 // ------------------------------------------------------------ Instants sur les deux faces (E01-S10, lot t1-d2b)

@@ -129,5 +129,5 @@ function spiedSql(sql: Tx, spy: Spy): Tx {
  */
 export function spyDb(db: PlatformDb, hooks: DbHooks = {}): { db: PlatformDb; calls: DbCall[] } {
   const spy: Spy = { calls: [], hooks }
-  return { db: { tx: (fn) => db.tx((sql) => fn(spiedSql(sql, spy))) }, calls: spy.calls }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(spiedSql(sql, spy)), session) }, calls: spy.calls }
 }

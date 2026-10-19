@@ -92,7 +92,7 @@ export function recordRequests(
     requests.push(request)
     await options.before?.(request)
   }
-  return { db: { tx: (fn) => db.tx((sql) => fn(watchedSql(sql, send))) }, requests }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(watchedSql(sql, send)), session) }, requests }
 }
 
 /**

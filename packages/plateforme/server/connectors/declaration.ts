@@ -385,7 +385,8 @@ export function registerConnectors(definitions: readonly ConnectorDefinition[], 
 
 /**
  * Tient la liste `platform.connectors` depuis la déclaration : le nom d'un connecteur déclaré et son libellé s'y
- * ajoutent avant la première ligne qui le cite (activation, compte), dans la transaction de cette écriture ; un nom
+ * ajoutent avant la première ligne qui le cite (activation, compte), dans la transaction de cette écriture, qui court
+ * sous le rôle du serveur (`declare_connector` lui est réservée : le libellé est celui que déclare l'hôte) ; un nom
  * présent ne change pas, et rien n'est jamais retiré. Un connecteur non déclaré (`mail`, natif) n'écrit rien.
  */
 export async function keepDeclaredConnector(sql: Tx, name: string): Promise<void> {

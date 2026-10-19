@@ -372,11 +372,13 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(await rowsOf(FRESH)).toEqual([{ name: FRESH, label: "Crm" }])
     })
 
-    it("should let a member of an organisation add a name only, never change one, and refuse a name the table refuses (moteur AC13)", async () => {
+    it("should let the server add a name only for a member of an organisation, never change one, and refuse a name the table refuses (moteur AC13)", async () => {
       const stranger = await fx.createUser()
-      const declare = (db: PlatformDb, name: string, label: string | null) => db.tx((sql) => sql`select platform.declare_connector(${name}, ${label})`)
+      const declare = (db: PlatformDb, name: string, label: string | null) => db.tx((sql) => sql`select platform.declare_connector(${name}, ${label})`, "server")
       expect(await codeOf(declare(fx.as(stranger), `t${hex(4)}`, "X"))).toBe("42501")
       const lea = as("lea").db
+      // Le libellé est celui que déclare l'hôte : sous la session de la personne, la fonction est refusée.
+      expect(await codeOf(lea.tx((sql) => sql`select platform.declare_connector(${`t${hex(4)}`}, ${"X"})`))).toBe("42501")
       await declare(lea, "mail", "Changed")
       expect(await rowsOf("mail")).toEqual([{ name: "mail", label: "Mail" }])
       expect(await codeOf(declare(lea, "Bad Name", null))).toBe("23514")

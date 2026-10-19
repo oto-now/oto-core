@@ -166,7 +166,7 @@ function watchSql(sql: postgres.TransactionSql, spied: Spied): postgres.Transact
  */
 export function watchDb(db: PlatformDb, options: WatchOptions = {}): { db: PlatformDb; calls: DbCall[] } {
   const spied: Spied = { calls: [], options }
-  return { db: { tx: (fn) => db.tx((sql) => fn(watchSql(sql, spied))) }, calls: spied.calls }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(watchSql(sql, spied)), session) }, calls: spied.calls }
 }
 
 /** La requête lit ou écrit `platform.<table>` : le nom qualifié dans le texte SQL. */

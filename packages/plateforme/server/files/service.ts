@@ -30,7 +30,7 @@ import type { Identity } from "../identity"
 import type { Mutation } from "../members"
 import { findNode, unknownNode } from "../nodes/lookup"
 import { ownerOf, teamOf } from "../nodes/view"
-import { insertPending, markReady } from "./rows"
+import { insertPending, markReady, readyFiles } from "./rows"
 import { fileStore, objectKey, storageNotEnabled, type FileStore, type ObjectResponse } from "./store"
 
 /** Une ligne `pending` plus vieille est un envoi abandonné, purgé avec son objet (AC-a6). */
@@ -132,8 +132,9 @@ const COPIES_AT_ONCE = 8
 /**
  * Les objets des fichiers copiés par la duplication d'une page (AC-e3, ADR-016 § 6), après son commit : chaque paire
  * (ancien, nouveau) copiée côté bucket (`copy`), par lots de `COPIES_AT_ONCE`, puis les lignes copiées passées à `ready`,
- * en une mise à jour sous la session. Une copie en échec, ou un stockage retiré depuis, laisse sa ligne `pending`, nommée
- * au log serveur : purgée ensuite avec les envois abandonnés (AC-a6), le bloc de la copie dit « Fichier indisponible » (AC-b8).
+ * en une écriture sous le rôle du serveur (`readyFiles`). Une copie en échec, ou un stockage retiré depuis, laisse sa
+ * ligne `pending`, nommée au log serveur : purgée ensuite avec les envois abandonnés (AC-a6), le bloc de la copie dit
+ * « Fichier indisponible » (AC-b8).
  */
 export async function copyFileObjects(db: PlatformDb, identity: Identity, pairs: readonly (readonly [string, string])[]): Promise<void> {
   if (pairs.length === 0) return
@@ -152,9 +153,7 @@ export async function copyFileObjects(db: PlatformDb, identity: Identity, pairs:
   for (let at = 0; at < pairs.length; at += COPIES_AT_ONCE) copied.push(...(await Promise.all(pairs.slice(at, at + COPIES_AT_ONCE).map(copyOne))))
   const ready = copied.filter((id): id is string => id !== null)
   if (ready.length === 0) return
-  await inTransaction(db, "files: copied", (sql) => sql`
-    update platform.files set status = 'ready'
-     where org_id = ${identity.org.id} and status = 'pending' and id = any(${ready}::uuid[])`)
+  await readyFiles(db, identity, ready, "files: copied")
 }
 
 /**

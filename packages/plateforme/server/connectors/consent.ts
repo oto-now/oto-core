@@ -70,7 +70,7 @@ export async function startConnectorConsent(db: PlatformDb, identity: Identity, 
         insert into platform.connector_consents (state_hash, org_id, user_id, connector, return_to, expires_at)
         values (${stateHash(state)}, ${identity.org.id}, ${identity.user.id}, ${connector.definition.name}, ${parsed.data.return_to ?? null},
                 now() + make_interval(mins => ${CONSENT_TTL_MINUTES}))`
-    })
+    }, "server")
     .catch((error) => {
       throw fromDatabaseError(error, "startConnectorConsent: connector_consents")
     })
@@ -148,7 +148,8 @@ export function consentLabel(who: string, connector: string): string {
 /**
  * Range le consentement sur le compte personnel de la personne : le sien de ce connecteur et de ce libellé s'il
  * existe (une reconnexion : actif de nouveau, raison effacée), sinon un compte neuf, réel. Jetons chiffrés : le jeton
- * de rafraîchissement dans le secret du compte, le jeton d'accès et son échéance à part, les droits accordés en clair.
+ * de rafraîchissement dans le secret du compte, le jeton d'accès et son échéance à part, les droits accordés en clair ;
+ * écrits sous le rôle du serveur, seul à pouvoir les écrire.
  */
 async function keepConsent(db: PlatformDb, identity: Identity, consent: { connector: string; label: string; tokens: ConsentTokens; scopes: string[] }): Promise<AccountSummary> {
   const { connector, label, tokens, scopes } = consent
@@ -163,8 +164,8 @@ async function keepConsent(db: PlatformDb, identity: Identity, consent: { connec
       if (!id) {
         await keepDeclaredConnector(sql, connector)
         const [created] = await sql<{ id: string }[]>`
-          insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode, status)
-          values (${orgId}, ${connector}, 'user', null, ${userId}, ${label}, 'reel', 'active')
+          insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode)
+          values (${orgId}, ${connector}, 'user', null, ${userId}, ${label}, 'reel')
           returning id`
         id = created.id
       }
@@ -181,7 +182,7 @@ async function keepConsent(db: PlatformDb, identity: Identity, consent: { connec
         throw new PlatformError("internal", "Internal error.")
       }
       return summary(written)
-    })
+    }, "server")
     .catch((error) => {
       if (isUniqueViolation(error)) throw new PlatformError("conflict", `An account labelled ${label} already exists in ${identity.org.name}, held by someone else. Ask an administrator of ${identity.org.name}.`)
       throw fromDatabaseError(error, "completeConnectorConsent: accounts")

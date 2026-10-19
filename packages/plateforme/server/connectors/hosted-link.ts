@@ -4,8 +4,9 @@
 // retour sur l'adresse de retour du paquet, qui liste les comptes de la clé de l'hôte, applique les gardes, sonde les
 // candidats et ne lie que s'il en reste un seul vivant. Le tiers n'est joint que par le port que l'hôte a fourni à
 // `registerConnectors` (`hostedLinks`), construit avec sa clé : aucun champ de l'hôte ni secret n'y passe par le
-// paquet. L'écriture de `accounts.linked_id` revient à `platform.link_hosted_account` seule, qui refait les gardes sous
-// verrou : ce module décide des candidats, la base garde le point d'écriture. Sans lui, un compte rattaché ne se
+// paquet. L'écriture de `accounts.linked_id` revient à `platform.link_hosted_account` seule, réservée au rôle du serveur
+// (`db.tx(…, "server")`), qui refait les gardes sous verrou : ce module décide des candidats, la base garde le point
+// d'écriture. Sans lui, un compte rattaché ne se
 // connecterait pas. Un refus ne dit jamais combien de comptes porte la clé ni à qui est un compte.
 import { hostedLinkReturnSchema, hostedLinkSchema } from "../../schemas/connectors"
 import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
@@ -214,7 +215,7 @@ async function link(db: PlatformDb, identity: Identity, connector: HostedConnect
         throw new PlatformError("internal", "Internal error.")
       }
       return summary(written)
-    })
+    }, "server")
     .catch((error) => {
       if (isUniqueViolation(error)) throw new PlatformError("conflict", `An account labelled ${label} already exists in ${identity.org.name}, held by someone else. Ask an administrator of ${identity.org.name}.`)
       throw fromDatabaseError(error, "linkHostedAccount: link_hosted_account")
@@ -273,7 +274,7 @@ export async function startHostedLink(db: PlatformDb, identity: Identity, input:
       values (${identity.org.id}, ${identity.user.id}, ${name}, ${kind}, ${parsed.data.return_to ?? null}, now() + make_interval(mins => ${HOSTED_LINK_TTL_MINUTES}))
       returning id, created_at, expires_at`
     return row
-  })
+  }, "server")
   if (plan !== null && "relink" in plan) {
     const account = await link(db, identity, connector, { requestId: posted.id, id: plan.relink, createdAt: null, who: plan.who })
     return { url: returnAddress(options.origin, returnTo, { hosted: "connected", account: account.label }) }

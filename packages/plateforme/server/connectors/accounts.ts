@@ -250,7 +250,9 @@ export function refuseLinkedId(input: unknown, at: Record<string, unknown> | nul
  * Crée un compte pour un connecteur activable, actif ou non (N12), au mode que son connecteur admet
  * (`requireCreatableMode`). Le mode est posé explicitement : le défaut de la colonne est `reel`. Un libellé déjà
  * pris dans l'organisation, sans casse, tous connecteurs et comptes invisibles compris, est refusé par l'index
- * unique d'E01-S06 (`23505` → `conflict`). L'identifiant chez un tiers (`linked_id`) n'est jamais une saisie.
+ * unique d'E01-S06 (`23505` → `conflict`). L'identifiant chez un tiers (`linked_id`) n'est jamais une saisie. Écrit sous
+ * le rôle du serveur, qui tient la liste des connecteurs (`keepDeclaredConnector`) ; l'état prend sa valeur par défaut,
+ * actif : `authenticated` n'insère que ce que la personne fournit.
  */
 export async function createAccount(db: PlatformDb, identity: Identity, input: unknown): Promise<AccountSummary> {
   refuseLinkedId(input)
@@ -270,8 +272,8 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
     .tx(async (sql) => {
       await keepDeclaredConnector(sql, account.connector)
       const [created] = await sql<{ id: string }[]>`
-        insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode, status)
-        values (${orgId}, ${account.connector}, ${account.owner_kind}, ${teamId}, ${userId}, ${label}, ${account.mode}, 'active')
+        insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode)
+        values (${orgId}, ${account.connector}, ${account.owner_kind}, ${teamId}, ${userId}, ${label}, ${account.mode})
         returning id`
       const [written] = await accountRows(sql, orgId, { id: created.id })
       // Relue dans la transaction qui l'écrit, la ligne ne manque que si sa lecture la refuse : une panne,
@@ -281,7 +283,7 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
         throw new PlatformError("internal", "Internal error.")
       }
       return written
-    })
+    }, "server")
     .catch((error) => {
       if (isUniqueViolation(error)) {
         throw new PlatformError("conflict", `An account labelled ${account.label} already exists in ${identity.org.name}.`)
@@ -369,7 +371,8 @@ export async function managedAccount(db: PlatformDb, identity: Identity, id: str
  * Désactive un compte (AC9) : réservé à qui le gère (la gestion : responsable d'un compte d'équipe,
  * administrateur d'un compte d'organisation, propriétaire d'un compte personnel), décidé avant
  * l'écriture. Inconnu ou invisible (niveau 0) : `not_found`. Déjà désactivé : rien n'est écrit. Une
- * écriture qui ne rend aucune ligne après la décision est un conflit (HN-E01S07-6).
+ * écriture qui ne rend aucune ligne après la décision est un conflit (HN-E01S07-6). L'état d'un compte ne s'écrit
+ * que sous le rôle du serveur.
  */
 export async function disableAccount(
   db: PlatformDb,
@@ -385,6 +388,7 @@ export async function disableAccount(
       db,
       "disableAccount: accounts update",
       (sql) => sql`update platform.accounts set status = 'disabled' where id = ${id} returning id`,
+      "server",
     )
     // Aucune ligne après la décision : le compte a changé entre la lecture et l'écriture.
     if (updated.length === 0) {

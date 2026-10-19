@@ -45,13 +45,13 @@ async function ownTransitRow(db: PlatformDb, identity: Identity, id: string, sta
 }
 
 /**
- * Purge les fichiers en transit échus de l'organisation, de toute personne (`purge_transit_files`, qui ne rend que leurs
- * identifiants), puis leurs objets après le commit. Le paquet n'a pas de tâche planifiée : elle court à chaque entrée en
+ * Purge les fichiers en transit échus de l'organisation, de toute personne (`purge_transit_files`, réservée au rôle du
+ * serveur, qui ne rend que leurs identifiants), puis leurs objets après le commit. Le paquet n'a pas de tâche planifiée : elle court à chaque entrée en
  * transit ; d'ici là, un fichier échu est déjà illisible et hors du quota.
  */
 export async function purgeTransitFiles(db: PlatformDb, identity: Identity): Promise<void> {
   const purged = await inTransaction(db, "files: transit purge", (sql) => sql<{ id: string }[]>`
-    select id from platform.purge_transit_files(${identity.org.id}) as id`)
+    select id from platform.purge_transit_files(${identity.org.id}) as id`, "server")
   await removeObjects(identity.org.id, purged.map((row) => row.id))
 }
 

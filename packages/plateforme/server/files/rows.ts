@@ -1,5 +1,6 @@
 // Les lignes `files` d'un envoi (ADR-016 § 4) : le quota de l'organisation, lu sous son verrou ; la ligne `pending`
-// insérée sous ce quota, jointe à un nœud ou en transit ; son passage à `ready`. Communes au fichier joint
+// insérée sous ce quota, jointe à un nœud ou en transit ; son passage à `ready`, que le serveur seul affirme après avoir
+// lu l'objet (`mark_files_ready`, réservée au rôle du serveur). Communes au fichier joint
 // (`service.ts`) et au fichier en transit (`transit.ts`) : sans elles, chacun recompterait le quota et réécrirait
 // l'insertion. Le quota compte aussi les fichiers en transit des autres, que la RLS cache : il se lit par
 // `org_files_bytes`, qui ne rend qu'une somme.
@@ -57,14 +58,21 @@ export async function insertPending(db: PlatformDb, identity: Identity, file: Pe
 }
 
 /**
+ * Les lignes `pending` de l'organisation dont le serveur a lu les objets, passées à `ready` sous le rôle du serveur
+ * (`mark_files_ready`, aux droits de la RLS de `files` pour l'appelant) ; rend celles qui l'ont été.
+ */
+export async function readyFiles(db: PlatformDb, identity: Identity, ids: readonly string[], context: string): Promise<string[]> {
+  const rows = await inTransaction(db, context, (sql) => sql<{ id: string }[]>`
+    select id from platform.mark_files_ready(${identity.org.id}, ${ids}::uuid[]) as id`, "server")
+  return rows.map((row) => row.id)
+}
+
+/**
  * La ligne `pending` d'un objet lu passée à `ready` : la confirmation de l'écran (AC-a4), l'envoi par le serveur (lot f) et
  * la confirmation d'un fichier en transit. Aucune ligne : la ligne a changé entre-temps (ou, en transit, elle est échue et
  * purgée), `conflict` journalisé d'abord (`changedMeanwhile`).
  */
 export async function markReady(db: PlatformDb, identity: Identity, file: { id: string; name: string }, meanwhile: { label: string; advice: string }): Promise<void> {
-  const updated = await inTransaction(db, meanwhile.label, (sql) => sql<{ id: string }[]>`
-    update platform.files set status = 'ready'
-     where org_id = ${identity.org.id} and id = ${file.id} and status = 'pending'
-    returning id`)
+  const updated = await readyFiles(db, identity, [file.id], meanwhile.label)
   if (updated.length === 0) throw changedMeanwhile(meanwhile.label, file.id, `${file.name} changed meanwhile: ${meanwhile.advice}.`)
 }

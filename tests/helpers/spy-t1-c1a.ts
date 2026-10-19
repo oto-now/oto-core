@@ -168,6 +168,6 @@ function spiedSql(state: SpyState, sql: TxSql): TxSql {
  */
 export function dbSpy(before?: SpyHook): DbSpy {
   const state: SpyState = { calls: [], before }
-  const wrap = (db: PlatformDb): PlatformDb => ({ tx: (fn) => db.tx((sql) => fn(spiedSql(state, sql))) })
+  const wrap = (db: PlatformDb): PlatformDb => ({ tx: (fn, session) => db.tx((sql) => fn(spiedSql(state, sql)), session) })
   return { calls: state.calls, wrap }
 }

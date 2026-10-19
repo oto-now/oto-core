@@ -156,7 +156,7 @@ function spiedSql(sql: Tx, spy: Spy): Tx {
  */
 export function spyDb(db: PlatformDb, hook?: SpyHook): { db: PlatformDb; calls: SpiedCall[] } {
   const spy: Spy = { calls: [], hook }
-  return { db: { tx: (fn) => db.tx((sql) => fn(spiedSql(sql, spy))) }, calls: spy.calls }
+  return { db: { tx: (fn, session) => db.tx((sql) => fn(spiedSql(sql, spy)), session) }, calls: spy.calls }
 }
 
 /** Les tables du contenu d'une organisation : ce qu'un test de service pose, et que le suivant remplace. */

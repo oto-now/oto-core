@@ -243,20 +243,23 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(loggedText(errors)).toContain(`[platform] connector ${CONNECTOR}: account ${crm.id}: mark not set (internal)`)
   })
 
-  it("should let a person who does not manage the account set or lift its mark through the function, and change nothing else", async () => {
+  it("should let the server set or lift the mark of an account for a person who does not manage it, through the function only, and change nothing else", async () => {
     const crm = await account()
     await fx.admin`update platform.accounts set health = ${fx.admin.json({ seen: { by: "probe" } })} where id = ${crm.id}`
     const before = await row(crm.id)
-    const [marked] = await claire.db.tx((sql) => sql<{ changed: boolean; mark: { reason: string } }[]>`select changed, mark from platform.mark_account(${crm.id}, 'quota_exhausted')`)
+    // La marque vient du refus du tiers : sous la session de la personne, la fonction est refusée.
+    expect(await codeOf(claire.db.tx((sql) => sql`select * from platform.mark_account(${crm.id}, 'quota_exhausted')`))).toBe("42501")
+    const [marked] = await claire.db.tx((sql) => sql<{ changed: boolean; mark: { reason: string } }[]>`select changed, mark from platform.mark_account(${crm.id}, 'quota_exhausted')`, "server")
     expect(marked).toMatchObject({ changed: true, mark: { reason: "quota_exhausted" } })
-    const [same] = await claire.db.tx((sql) => sql<{ changed: boolean }[]>`select changed from platform.mark_account(${crm.id}, 'quota_exhausted')`)
+    const [same] = await claire.db.tx((sql) => sql<{ changed: boolean }[]>`select changed from platform.mark_account(${crm.id}, 'quota_exhausted')`, "server")
     expect(same.changed).toBe(false)
     const after = await row(crm.id)
     expect({ ...after, health: { seen: after.health.seen }, updated_at: null }).toEqual({ ...before, updated_at: null })
 
     expect(await codeOf(claire.db.tx((sql) => sql`update platform.accounts set health = '{}'::jsonb where id = ${crm.id}`))).toBe("42501")
-    expect(await codeOf(claire.db.tx((sql) => sql`select * from platform.mark_account(${crm.id}, 'banned')`))).toBe("22023")
-    const [cleared] = await claire.db.tx((sql) => sql<{ changed: boolean }[]>`select changed from platform.mark_account(${crm.id}, null)`)
+    expect(await codeOf(claire.db.tx((sql) => sql`update platform.accounts set health = '{}'::jsonb where id = ${crm.id}`, "server"))).toBe("42501")
+    expect(await codeOf(claire.db.tx((sql) => sql`select * from platform.mark_account(${crm.id}, 'banned')`, "server"))).toBe("22023")
+    const [cleared] = await claire.db.tx((sql) => sql<{ changed: boolean }[]>`select changed from platform.mark_account(${crm.id}, null)`, "server")
     expect(cleared.changed).toBe(true)
     expect((await row(crm.id)).health).toEqual({ seen: { by: "probe" } })
   })

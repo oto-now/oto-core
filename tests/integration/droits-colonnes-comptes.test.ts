@@ -4,22 +4,44 @@
 // par colonne pour tenir `linked_id` hors de portée : une colonne ajoutée sans son `GRANT INSERT(…)` casserait la
 // création d'un compte en silence, et une colonne ajoutée sans son `GRANT SELECT(…)` sa lecture. Toute colonne
 // s'insère et se lit, sauf les listes fermées ci-dessous, chacune avec sa raison. Depuis `20261017150000`, `health` (la
-// marque d'un compte) se lit mais ne s'insère ni ne se met à jour : `platform.mark_account` seule l'écrit.
+// marque d'un compte) se lit mais ne s'insère ni ne se met à jour : `platform.mark_account` seule l'écrit. Depuis
+// `20261019130000`, `authenticated` n'insère que ce que la personne fournit et ne modifie aucune colonne ; l'état, sa
+// raison, les réglages, le secret, les jetons et les droits accordés se modifient sous le rôle du serveur seul.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../helpers/sql"
 
 const VERSION = "20261017090000"
 const MARK_VERSION = "20261017150000"
+const SERVER_VERSION = "20261019130000"
+const VERSIONS = [VERSION, MARK_VERSION, SERVER_VERSION]
 const missing = await pendingMigrations()
-const pending = missing.includes(VERSION) || missing.includes(MARK_VERSION)
+const pending = VERSIONS.some((version) => missing.includes(version))
 
-/** Colonnes qu'`authenticated` n'insère pas : la base seule les écrit. */
+/** Ce que pose le serveur, jamais la personne : un compte neuf en prend la valeur par défaut. */
+const BY_THE_SERVER = "set by the server only, under platform_server; a new account takes its default"
+
+/** Colonnes qu'`authenticated` n'insère pas : la base ou le serveur seuls les écrivent. */
 const NOT_INSERTED: Record<string, string> = {
+  id: "drawn by the database",
+  created_at: "set by the database",
+  updated_at: "set by the database",
   linked_id: "written only by platform.link_hosted_account (a person connects their own account)",
   linked_at: "written only by platform.link_hosted_account, with linked_id",
   health: "written only by platform.mark_account (the mark of an account); a new account takes its default",
+  status: BY_THE_SERVER,
+  status_reason: BY_THE_SERVER,
+  settings: BY_THE_SERVER,
+  secret_ciphertext: BY_THE_SERVER,
+  secret_fields: BY_THE_SERVER,
+  secret_updated_at: BY_THE_SERVER,
+  token_ciphertext: BY_THE_SERVER,
+  token_expires_at: BY_THE_SERVER,
+  granted_scopes: BY_THE_SERVER,
 }
+
+/** Colonnes que `platform_server` modifie, et lui seul : `authenticated` ne modifie aucune colonne d'un compte. */
+const UPDATED_BY_SERVER = ["status", "status_reason", "settings", "secret_ciphertext", "secret_fields", "secret_updated_at", "token_ciphertext", "token_expires_at", "granted_scopes"]
 
 /** Colonnes qu'`authenticated` ne lit pas : chiffrés, et l'identifiant d'un compte rattaché. */
 const NOT_READ: Record<string, string> = {
@@ -35,12 +57,12 @@ const NEVER = ["linked_id", "linked_at"]
 /** Colonnes qu'`authenticated` lit sans les écrire : une seule fonction les écrit. */
 const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account" }
 
-type Privileges = { column_name: string; can_insert: boolean; can_select: boolean; can_update: boolean }
+type Privileges = { column_name: string; can_insert: boolean; can_select: boolean; can_update: boolean; server_updates: boolean }
 
 const suite = !sqlConfigured
   ? `accounts column privileges (${SQL_SKIP_REASON})`
   : pending
-    ? `accounts column privileges (${pendingReason([VERSION, MARK_VERSION].filter((version) => missing.includes(version)))})`
+    ? `accounts column privileges (${pendingReason(VERSIONS.filter((version) => missing.includes(version)))})`
     : "column privileges of platform.accounts for authenticated"
 
 describe.skipIf(!sqlConfigured || pending)(suite, () => {
@@ -53,7 +75,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
       select column_name,
              has_column_privilege('authenticated', 'platform.accounts', column_name, 'INSERT') as can_insert,
              has_column_privilege('authenticated', 'platform.accounts', column_name, 'SELECT') as can_select,
-             has_column_privilege('authenticated', 'platform.accounts', column_name, 'UPDATE') as can_update
+             has_column_privilege('authenticated', 'platform.accounts', column_name, 'UPDATE') as can_update,
+             has_column_privilege('platform_server', 'platform.accounts', column_name, 'UPDATE') as server_updates
         from information_schema.columns
        where table_schema = 'platform' and table_name = 'accounts'
        order by ordinal_position`
@@ -109,5 +132,10 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
           .map((privilege) => `platform.accounts.${column.column_name}: authenticated can ${privilege.toUpperCase()} it. Revoke it in its migration: only ${WRITTEN_BY_FUNCTION[column.column_name]} writes it.`),
       ])
     expect(problems).toEqual([])
+  })
+
+  it("should let authenticated update no column of accounts, and platform_server only the state, settings, secret, tokens and granted scopes", () => {
+    expect(columns.filter((column) => column.can_update).map((column) => `platform.accounts.${column.column_name}: authenticated can UPDATE it. Grant it to platform_server only: the service writes an account under the server role.`)).toEqual([])
+    expect(columns.filter((column) => column.server_updates).map((column) => column.column_name).sort()).toEqual([...UPDATED_BY_SERVER].sort())
   })
 })

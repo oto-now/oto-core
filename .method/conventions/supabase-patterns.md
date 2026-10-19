@@ -156,7 +156,8 @@ franchit une de ces règles passe par un ADR.
 - **La face SQL ne pose aucun état de session, et n'en hérite d'aucun** : le pooler de
   Supabase en mode transaction rend une connexion serveur à d'autres clients de `platform_app` sans
   la remettre à zéro, et un rôle ou des claims posés pour la connexion passent aux transactions
-  suivantes. Rôle, claims, délais et fuseau (`TimeZone` UTC) se posent par
+  suivantes. Rôle (`authenticated`, `anon`, ou `platform_server` pour une écriture que le serveur seul
+  affirme : `withServerSession`), claims, délais et fuseau (`TimeZone` UTC) se posent par
   `set_config(…, true)` ou `set local`, dans la transaction de la session (`server/sql.ts`), qui vide
   aussi `request.jwt.claim.sub` et `request.jwt.claim` : `auth.uid()` et `auth.jwt()` de Supabase les
   lisent avant `request.jwt.claims`. **Vérifiable :**

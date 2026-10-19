@@ -88,11 +88,13 @@ Pour une application Next 15 (App Router) sur Supabase.
    Et `PLATFORM_DATABASE_URL`, la connexion du serveur du paquet à la base (port de base, ADR-012),
    **exigée dès la version qui passe un premier service en SQL** ; sans elle, ces services lèvent
    `PlatformConfigError`. Avant : une fois, `oto-platform db prepare` sur le projet (section
-   « Installer sur un Postgres sans Supabase », point 2 : sur Supabase, elle ne crée que le rôle
-   `platform_app`). La valeur : l'URL du pooler en mode transaction (port 6543, utilisateur
+   « Installer sur un Postgres sans Supabase », point 2 : sur Supabase, elle ne crée que les rôles
+   `platform_app` et `platform_server`). La valeur : l'URL du pooler en mode transaction (port 6543, utilisateur
    `platform_app.<ref du projet>`, mot de passe de `PLATFORM_APP_PASSWORD`), dans l'environnement
    serveur de l'application seulement, jamais en `NEXT_PUBLIC_`. Le rôle `platform_app` ne peut que
-   devenir `authenticated` ou `anon` : chaque requête porte l'appelant vérifié, sous RLS. TLS est
+   devenir `authenticated`, `anon` ou `platform_server` : chaque requête porte l'appelant vérifié, sous RLS ;
+   `platform_server` (`nologin`, membre d'`authenticated`) écrit en plus ce que le serveur seul affirme (marque
+   d'un compte, compte lié chez un tiers, fichier prêt, état d'un compte). TLS est
    exigé hors de la machine locale.
 
    Et `PLATFORM_VAULT_KEY` dès qu'un compte réel de connecteur se pose (« Connecteurs réels et coffre »),
@@ -303,8 +305,10 @@ d'identité de l'hôte dans une version prochaine, qui en portera le guide compl
    Elle crée les rôles `anon` et `authenticated`, le schéma `auth` réduit à `uid()`, `jwt()` et
    `role()` (lus dans `request.jwt.claims`), le schéma `extensions` et ses trois extensions, et le
    rôle `platform_app`, la connexion du serveur, dont le mot de passe vient de
-   `PLATFORM_APP_PASSWORD` (jamais affiché). Un second passage ne change rien ; une extension
-   refusée arrête la commande en la nommant. Sur Supabase, elle ne crée que `platform_app`. La
+   `PLATFORM_APP_PASSWORD` (jamais affiché), et le rôle `platform_server` (`nologin`), qu'elle accorde à
+   `platform_app`. Un second passage ne change rien ; une extension
+   refusée arrête la commande en la nommant. Sur Supabase, elle ne crée que `platform_app` et
+   `platform_server`. La
    connexion passe en TLS, sauf `sslmode` écrit dans l'URL (`?sslmode=disable` pour un Postgres
    local sans TLS).
 3. Les migrations, comme sur Supabase (section « Migrations ») : `migrations sync`, puis

@@ -145,7 +145,7 @@ export async function activateConnector(db: PlatformDb, identity: Identity, inpu
       on conflict (org_id, connector) do update set state = excluded.state, activated_by = excluded.activated_by
       returning connector, state, activated_by, to_json(updated_at) as updated_at`
     return written
-  })
+  }, "server")
   return connectorView(connector, functions, row, await memberDirectory(db, orgId))
 }
 

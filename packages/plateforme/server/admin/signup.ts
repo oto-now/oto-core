@@ -66,10 +66,11 @@ export async function signUp(
   if (confirm !== true) return { created: false, org: draft, addresses }
 
   const { hosts } = addresses
-  // Sa propre transaction : un refus de `signup_org` la perd, et `createConflict` relit dans une autre.
+  // Sa propre transaction : un refus de `signup_org` la perd, et `createConflict` relit dans une autre. Sous le rôle du
+  // serveur : `signup_org` croit les adresses que l'hôte a données.
   const [row] = await db
     .tx((sql) => sql<{ id: string }[]>`
-      select platform.signup_org(p_name => ${name}, p_slug => ${slug}, p_prefix => ${prefix}, p_hosts => ${hosts}::text[]) as id`)
+      select platform.signup_org(p_name => ${name}, p_slug => ${slug}, p_prefix => ${prefix}, p_hosts => ${hosts}::text[]) as id`, "server")
     .catch(async (error: { code?: string; message?: string }) => {
       if (isPlatformError(error)) throw error
       throw (await createConflict(db, error, draft, hosts)) ?? fromDatabaseError(error, "signUp: signup_org")

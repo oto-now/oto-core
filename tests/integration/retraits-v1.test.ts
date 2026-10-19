@@ -78,9 +78,10 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
 
   // Les contrôles de niveau quittent la base (ADR-012 § 3), le service décidant chacun avant sa requête :
   // Marc, qui lit `contexte` sans l'écrire, en ouvre le brouillon et invite ; Léa, qui écrit dans Ventes sans
-  // la gérer, publie une page puis la renomme ; Claire, responsable de Ventes, fait sien un compte de son
-  // équipe. L'isolation reste : un nœud d'une autre organisation est refusé (42501).
-  it("should leave the levels to the service: a reader opens a draft and invites, a writer publishes and renames, a lead makes her team's account her own; a node of another organisation is refused (AC-c1)", async () => {
+  // la gérer, publie une page puis la renomme. Claire, responsable de Ventes, ne fait plus sien un compte de son
+  // équipe : depuis 20261019130000, `authenticated` ne modifie plus le propriétaire d'un compte, que le service
+  // n'écrit jamais (42501). L'isolation reste : un nœud d'une autre organisation est refusé (42501).
+  it("should leave the levels to the service: a reader opens a draft and invites, a writer publishes and renames, a lead cannot change the owner of her team's account; a node of another organisation is refused (AC-c1)", async () => {
     const opened = await fx.as(o.people.marc).tx((sql) => sql<{ created: boolean }[]>`select created from platform.open_draft(${o.nodes.contexte})`)
     const page = await fx.createNode(o.org.id, { parentId: o.nodes.ventes, path: `ventes/page_${hex(3)}`, title: "Page" })
     const written = await fx.as(o.people.lea).tx(async (sql) => {
@@ -109,7 +110,7 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
       opened: [{ created: true }],
       written: { revision: 1, renamed: 1 },
       invited: null,
-      personal: null,
+      personal: "42501",
       outside: ["42501", "42501"],
     })
     await fx.admin`delete from platform.node_drafts where node_id = ${o.nodes.contexte}`

@@ -4,7 +4,11 @@
 // l'appelant vérifié : la RLS d'isolation, `auth.uid()` et `auth.jwt()` fonctionnent sans changement,
 // sur Supabase comme sur un Postgres nu (`oto-platform db prepare`). Sans ce module, aucune requête ne
 // porterait l'appelant, et la RLS refuserait tout : `platform_app` ne peut que devenir l'un de ces deux
-// rôles (`noinherit`), jamais contourner la RLS.
+// rôles (`noinherit`), jamais contourner la RLS. Une écriture que le serveur seul affirme (un fait venu d'un tiers ou du
+// serveur : la liaison d'un compte hébergé, la marque, les jetons et l'état d'un compte, l'entrée dans une organisation,
+// le passage d'un fichier à `ready`…) court sous `platform_server` (`withServerSession`), aux mêmes claims : ce rôle
+// hérite d'`authenticated` (mêmes policies, mêmes droits), reçoit en plus ces fonctions et colonnes, et seul
+// `platform_app` peut le prendre. Ce module est le seul à poser un rôle.
 import { AsyncLocalStorage } from "node:async_hooks"
 import postgres from "postgres"
 import { PlatformError } from "./errors"
@@ -66,8 +70,9 @@ const CONNECT_TIMEOUT_S = 10
 const IDLE_TIMEOUT_S = 20
 // Les délais que PostgREST applique aujourd'hui, lus sur les rôles de notre projet (HN-E01S10-6) :
 // `statement_timeout` de `authenticated` (8 s) et d'`anon` (3 s), `lock_timeout` du rôle de PostgREST
-// (8 s). Devenir un rôle n'applique pas ses réglages : la session les pose elle-même.
-const STATEMENT_TIMEOUT = { authenticated: "8s", anon: "3s" } as const
+// (8 s). Devenir un rôle n'applique pas ses réglages : la session les pose elle-même. Le rôle du serveur prend ceux
+// d'`authenticated`, dont il hérite.
+const STATEMENT_TIMEOUT = { authenticated: "8s", platform_server: "8s", anon: "3s" } as const
 const LOCK_TIMEOUT = "8s"
 // PostgREST n'a jamais de transaction inactive ; une transaction de la face SQL attend son JavaScript
 // entre deux requêtes. Au-delà de cette borne, la base la coupe : elle ne tient plus sa connexion du
@@ -163,21 +168,36 @@ async function inSession<T>(role: Role, claims: Record<string, unknown>, fn: (sq
 }
 
 /**
- * `fn` dans une transaction sous l'appelant vérifié (ADR-012 § 1) : rôle `authenticated`, claims
- * `sub` (l'identifiant interne, une fois connu), `iss`, `ext_sub` et `issuer_kind` d'un appelant émis
- * (ce que lit `identity_for_caller()`), `email` et `name` ; un claim absent n'est pas posé : sans
- * identifiant interne, `auth.uid()` est nul et la RLS ne lui montre rien.
+ * Les claims de l'appelant vérifié (ADR-012 § 1) : `sub` (l'identifiant interne, une fois connu), `iss`, `ext_sub` et
+ * `issuer_kind` d'un appelant émis (ce que lit `identity_for_caller()`), `email` et `name` ; un claim absent n'est pas
+ * posé : sans identifiant interne, `auth.uid()` est nul et la RLS ne lui montre rien.
  */
-export function withCallerSession<T>(caller: Caller | TranslatedCaller, fn: (sql: Tx) => Promise<T>): Promise<T> {
+function callerClaims(caller: Caller | TranslatedCaller): Record<string, unknown> {
   const userId = "userId" in caller ? caller.userId : null
-  const claims = {
+  return {
     ...(userId ? { sub: userId } : {}),
     role: "authenticated",
     ...("issuer" in caller ? { iss: caller.issuer, ext_sub: caller.subject, issuer_kind: caller.issuerKind } : {}),
     ...(caller.email ? { email: caller.email } : {}),
     ...(caller.name ? { name: caller.name } : {}),
   }
-  return inSession("authenticated", claims, fn)
+}
+
+/** `fn` dans une transaction sous l'appelant vérifié : rôle `authenticated`, ses claims (`callerClaims`). */
+export function withCallerSession<T>(caller: Caller | TranslatedCaller, fn: (sql: Tx) => Promise<T>): Promise<T> {
+  return inSession("authenticated", callerClaims(caller), fn)
+}
+
+/**
+ * `fn` dans une transaction du serveur pour l'appelant vérifié : rôle `platform_server`, les mêmes claims que
+ * `withCallerSession` ; la RLS, `auth.uid()` et `auth.jwt()` y voient le même appelant. Pour une écriture que le serveur
+ * seul affirme, après la décision du service : les fonctions et colonnes réservées à ce rôle la refusent sous
+ * `authenticated`. Les déclencheurs qui distinguent `authenticated` (`nodes_guard`, `platform_grants_guard`,
+ * `team_members_guard`) ne voient jamais ce rôle : aucune écriture directe de ces tables ne court sous lui. Pendant une
+ * transaction de l'appelant, l'appel est refusé comme toute autre session (`inSession`) : ouvrir l'une après l'autre.
+ */
+export function withServerSession<T>(caller: Caller | TranslatedCaller, fn: (sql: Tx) => Promise<T>): Promise<T> {
+  return inSession("platform_server", callerClaims(caller), fn)
 }
 
 /** Un sujet plus long que la table ne l'admet (`identities_subject_check`, 255 caractères) : personne à traduire. */

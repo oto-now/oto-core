@@ -1,7 +1,8 @@
 -- oto-platform db prepare : ce qu'un Postgres doit porter avant les migrations du paquet (E01-S09,
 -- ADR-012 § 1). Les migrations ne touchent que le schéma `platform` (ADR-006 § 1) : ni rôle, ni
 -- schéma `auth`, ni schéma `extensions`. Sur un Postgres sans Supabase, cette préparation les pose
--- une fois ; sur Supabase, qui les a déjà, seule la section « tout hôte » s'exécute.
+-- une fois ; sur Supabase, qui les a déjà, seule la section « tout hôte » s'exécute : les rôles
+-- `platform_app` et `platform_server`.
 --
 -- Lu par `db-prepare.mjs` : une section commence à sa ligne `-- section: <nom>` ; chaque instruction
 -- s'exécute seule, dans une même transaction. Chacune regarde d'abord ce qui existe et le dit par une
@@ -150,6 +151,43 @@ begin
     else
       execute pg_catalog.format('grant %I to platform_app', v_role);
       raise notice 'platform_app membre de % : accordé', v_role;
+    end if;
+  end loop;
+end
+$$;
+
+-- Le rôle du serveur (lot 1 du correctif des faits affirmés) : ce que le serveur seul écrit, un fait venu d'un tiers ou
+-- du serveur (liaison d'un compte hébergé, marque, jetons et état d'un compte, entrée dans une organisation, passage
+-- d'un fichier à `ready`…), passe par lui, aux mêmes claims que l'appelant (`server/sql.ts`). `nologin` : personne ne
+-- s'y connecte ; il hérite d'`authenticated` (mêmes policies et mêmes droits, `auth.uid()` et `auth.jwt()` lus comme
+-- lui), jamais au-delà de la RLS (ni `bypassrls` ni `createrole`). Seul `platform_app` le prend ; `authenticator`
+-- (PostgREST) n'en est jamais membre, et la migration qui s'en sert le vérifie.
+do $$
+begin
+  if exists (select 1 from pg_catalog.pg_roles where rolname = 'platform_server') then
+    raise notice 'rôle platform_server : déjà présent, inchangé';
+  else
+    begin
+      create role platform_server nologin inherit nocreatedb nocreaterole nobypassrls;
+    exception when others then
+      raise exception 'rôle platform_server refusé par l''hôte : %', sqlerrm;
+    end;
+    raise notice 'rôle platform_server : créé (nologin, hérite d''authenticated, ni bypassrls ni createrole)';
+  end if;
+end
+$$;
+
+do $$
+declare
+  v_grant text[];
+begin
+  foreach v_grant slice 1 in array array[array['authenticated', 'platform_server'], array['platform_server', 'platform_app']] loop
+    if exists (select 1 from pg_catalog.pg_auth_members m
+                where m.roleid = v_grant[1]::regrole and m.member = v_grant[2]::regrole) then
+      raise notice '% membre de % : déjà', v_grant[2], v_grant[1];
+    else
+      execute pg_catalog.format('grant %I to %I', v_grant[1], v_grant[2]);
+      raise notice '% membre de % : accordé', v_grant[2], v_grant[1];
     end if;
   end loop;
 end

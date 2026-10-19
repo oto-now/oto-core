@@ -4,10 +4,11 @@
  *
  * Ce que ça empêche : qu'un hôte sans Supabase (Postgres managé de Scaleway, Postgres nu) doive écrire
  * à la main le schéma `auth`, les rôles et le schéma `extensions` avant la ligne de base ; et qu'un
- * hôte Supabase n'ait aucun moyen de créer le rôle de connexion du serveur, `platform_app`.
+ * hôte Supabase n'ait aucun moyen de créer le rôle de connexion du serveur, `platform_app`, ni le rôle du
+ * serveur, `platform_server`, sous lequel il écrit ce que lui seul affirme.
  *
  * Sur Supabase (rôle `supabase_auth_admin` et table `auth.users` avec `instance_id`), seule la section
- * `tout-hote` de `db-prepare.sql` s'exécute : le rôle `platform_app`. Ailleurs, la section
+ * `tout-hote` de `db-prepare.sql` s'exécute : les rôles `platform_app` et `platform_server`. Ailleurs, la section
  * `postgres-nu` d'abord. Tout dans une transaction : une extension refusée par l'hôte l'annule et
  * arrête la commande en la nommant. Le mot de passe de `platform_app` vient de
  * `PLATFORM_APP_PASSWORD`, passé en paramètre ; il n'est jamais écrit, ni lui ni celui de l'URL. La
@@ -81,8 +82,8 @@ export async function prepareDatabase({ dbUrl, password, print, printError, conn
   try {
     const [{ supabase }] = await sql.unsafe(DETECT_SUPABASE)
     say(supabase
-      ? 'Base Supabase (rôle supabase_auth_admin, table auth.users) : seul le rôle platform_app est préparé.'
-      : 'Base Postgres sans Supabase : rôles, schéma auth, schéma extensions et extensions, puis platform_app.')
+      ? 'Base Supabase (rôle supabase_auth_admin, table auth.users) : seuls les rôles platform_app et platform_server sont préparés.'
+      : 'Base Postgres sans Supabase : rôles, schéma auth, schéma extensions et extensions, puis platform_app et platform_server.')
     await sql.begin(async (tx) => {
       if (password) await tx.unsafe("select pg_catalog.set_config('oto_platform.app_password', $1, true)", [password])
       for (const statement of preparePlan(supabase)) await tx.unsafe(statement)

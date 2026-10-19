@@ -243,6 +243,16 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   pour `authenticated`, sous la politique `pseudonym_orgs_select_member` (les organisations de l'appelant) : toute
   table de `platform` porte la RLS et une politique (suite d'isolation). La ligne ne nomme personne et ne porte aucune
   clé ; aucune session ne l'écrit.
+- `20261019130000_platform_role_serveur.sql` (faits affirmés, lot 1) : exige le rôle `platform_server`, posé par
+  `oto-platform db prepare` (lève en le nommant s'il manque, s'il n'hérite pas d'`authenticated` ou si
+  `authenticator` en est membre). Réserve à ce rôle `link_hosted_account`, `mark_account`, `join_org`, `signup_org`,
+  `purge_transit_files`, `pseudonym_org` et `declare_connector` (révoquées à `public`, `anon`, `authenticated`) ;
+  crée `platform.mark_files_ready(org, files)`, seul passage d'un fichier à `ready`, et révoque `update(status)` sur
+  `files`. Sur `accounts` : plus d'`update` des colonnes de propriété et d'identité pour `authenticated` ; état,
+  raison, réglages, secret, jeton et portées écrits par `platform_server` seul ; l'`insert` réduit aux colonnes que
+  la personne choisit. Les échéances que pose le serveur (`files.expires_at` d'un fichier en transit,
+  `upload_tickets`, `connector_consents`) sont gardées à l'horloge de la base par `platform.expires_at_clock`
+  (42501 sur une autre valeur). Avant de l'appliquer : relancer `oto-platform db prepare`.
 
 ## Installer sur un hôte neuf
 
@@ -256,11 +266,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
    Elle pose ce que les migrations supposent sans le créer (elles ne touchent que `platform`) : les
    rôles `anon` et `authenticated`, le schéma `auth` avec `uid()`, `jwt()` et `role()` (ils lisent
    `request.jwt.claims`), le schéma `extensions` avec `pg_trgm`, `unaccent` et `ltree`, et le rôle
-   `platform_app` (`login`, `noinherit`, membre d'`anon` et d'`authenticated`, ni `bypassrls` ni
-   `createrole`), la connexion du serveur. Un second passage ne change rien ; une extension que
+   `platform_app` (`login`, `noinherit`, membre d'`anon`, d'`authenticated` et de `platform_server`, ni
+   `bypassrls` ni `createrole`), la connexion du serveur, et `platform_server` (`nologin`, `inherit`, membre
+   d'`authenticated`), le rôle sous lequel le serveur écrit ce qu'il affirme seul. Un second passage ne change rien ; une extension que
    l'hôte refuse arrête la commande en la nommant (code 1), comme une des trois déjà installée
    hors du schéma `extensions`. Sur Supabase, qui porte tout le reste, la commande ne crée que
-   `platform_app`. La connexion passe en TLS, sauf `sslmode` écrit dans l'URL
+   `platform_app` et `platform_server`. La connexion passe en TLS, sauf `sslmode` écrit dans l'URL
    (`?sslmode=disable` pour un Postgres local sans TLS).
 2. `pnpm exec oto-platform migrations sync --to supabase/migrations`, puis le workflow de
    migrations de l'hôte, ou `supabase db push --db-url '<url>?sslmode=require'`.

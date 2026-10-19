@@ -727,7 +727,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       let stage: "storing" | "ready" | "failed" = "storing"
       const spy = spyDb(lea.db, {
         fail: (query) => {
-          if (stage === "storing" && query.op === "update" && query.target === "files") stage = "ready"
+          if (stage === "storing" && query.op === "call" && query.target === "mark_files_ready") stage = "ready"
           else if (stage !== "storing" && writesOf([query]).length > 0 && query.target === "blocks") {
             stage = "failed"
             return { code: "57014" }

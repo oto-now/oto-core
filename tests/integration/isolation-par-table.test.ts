@@ -116,6 +116,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   const insert = (who: Who, table: string, row: Row) => outcome(as(who).tx((sql) => sql`insert into ${sql(`platform.${table}`)} ${sql(row)}`), false)
   /** Une instruction sous la session, rendant ses lignes : son code d'erreur, ou le nombre de lignes. */
   const counted = (who: Who, run: (sql: Tx) => Promise<readonly unknown[]>) => outcome(as(who).tx(run), true)
+  /** Une écriture sous le rôle du serveur pour la personne : il hérite des policies d'`authenticated`. */
+  const countedByServer = (who: Who, run: (sql: Tx) => Promise<readonly unknown[]>) => outcome(as(who).tx(run, "server"), true)
 
   async function scopeOf(org: string): Promise<Scope> {
     const teams = await fx.admin<{ id: string }[]>`select id from platform.teams where org_id = ${org}`
@@ -305,7 +307,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         ],
         ["team_members delete", "0 rows", () => bea((sql) => sql`delete from platform.team_members where team_id = ${a.teams.ventes} and user_id = ${lea.id} returning user_id`)],
         ["accounts insert", "42501", () => insert("bea", "accounts", { org_id: org, connector: "mail", owner_kind: "org", label: `Intrus ${hex(2)}` })],
-        ["accounts update", "0 rows", () => bea((sql) => sql`update platform.accounts set label = 'Intrus' where id = ${ids.accountA} returning id`)],
+        // `authenticated` ne modifie aucune colonne d'un compte (20261019130000) ; le rôle du serveur, sous la RLS.
+        ["accounts update", "42501", () => bea((sql) => sql`update platform.accounts set label = 'Intrus' where id = ${ids.accountA} returning id`)],
+        ["accounts update by the server", "0 rows", () => countedByServer("bea", (sql) => sql`update platform.accounts set status = 'disabled' where id = ${ids.accountA} returning id`)],
         ["accounts delete", "0 rows", () => bea((sql) => sql`delete from platform.accounts where id = ${ids.accountA} returning id`)],
         ["ctx insert", "42501", () => insert("bea", "ctx", { code: ctxCode(), org_id: org, user_id: people.bea.id, rules_version: 1 })],
         ["journal insert", "42501", () => insert("bea", "journal", { org_id: org, user_id: people.bea.id, method: "tools/call" })],
@@ -379,7 +383,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
           "42501",
           () => insert("bea", "files", { org_id: org, node_id: ids.pageA, name: "intrus.pdf", mime: "application/pdf", size: 3, status: "pending", created_by: people.bea.id }),
         ],
-        ["files update", "0 rows", () => bea((sql) => sql`update platform.files set status = 'pending' where id = ${ids.fileA} returning id`)],
+        // Le passage à `ready` est une fonction du serveur (20261019130000) : aucune colonne de `files` ne se modifie.
+        ["files update", "42501", () => bea((sql) => sql`update platform.files set status = 'pending' where id = ${ids.fileA} returning id`)],
+        ["files ready by the server", "42501", () => countedByServer("bea", (sql) => sql`select id from platform.mark_files_ready(${org}, ${[ids.fileA]}::uuid[]) as id`)],
         ["files delete", "0 rows", () => bea((sql) => sql`delete from platform.files where id = ${ids.fileA} returning id`)],
         // Une ligne de B qu'une mise à jour déplacerait dans A : refusée par le `with check`.
         ["members move", "42501", () => bea((sql) => sql`update platform.members set org_id = ${org} where org_id = ${b.id} and user_id = ${people.bea.id} returning user_id`)],

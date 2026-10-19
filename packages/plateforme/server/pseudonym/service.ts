@@ -40,7 +40,7 @@ async function orgState(db: PlatformDb, orgId: string, witness: string): Promise
   const salt = randomBytes(18).toString("base64url")
   const rows = await db.tx((sql) => sql<OrgState[]>`
     select slug, key_version, salt, witness, generation::text as generation
-      from platform.pseudonym_org(${orgId}, ${salt}, ${witness})`)
+      from platform.pseudonym_org(${orgId}, ${salt}, ${witness})`, "server")
   if (rows.length !== 1) throw new Error("no state row")
   return rows[0]
 }

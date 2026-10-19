@@ -58,7 +58,8 @@ export async function enterOrg(db: PlatformDb, org: IdentityOrg): Promise<boolea
   const [gate] = await inTransaction(db, "enterOrg: open_entry_admits", (sql) => sql<{ admits: boolean }[]>`select platform.open_entry_admits(${org.id}) as admits`)
   if (!gate?.admits) return false
   const max = (await orgLimits(org)).members_max ?? null
-  const [row] = await inTransaction(db, "enterOrg: join_org", (sql) => sql<{ outcome: string }[]>`select platform.join_org(${org.id}, ${max}) as outcome`)
+  // `join_org` croit le plafond lu chez l'hôte : réservée au rôle du serveur.
+  const [row] = await inTransaction(db, "enterOrg: join_org", (sql) => sql<{ outcome: string }[]>`select platform.join_org(${org.id}, ${max}) as outcome`, "server")
   if (row?.outcome === "limit" && max !== null) {
     throw new PlatformError("forbidden", `${org.name} is limited to ${max} ${max > 1 ? "members" : "member"}, pending invitations included. Ask an administrator of ${org.name} about it.`, {
       reason: "limit",
