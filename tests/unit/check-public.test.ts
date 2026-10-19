@@ -141,6 +141,8 @@ describe("check-public on a throwaway repository (AC11)", { timeout: 60_000 }, (
         "PLATFORM_SMTP_URL=smtp://relay.example.invalid:587",
         "PLATFORM_SMTP_URL=smtps://relay-user@relay.example.invalid:465",
         "# Adresse du relais SMTP, `smtp://` (port 587) ou `smtps://` (port 465)",
+        // Un mot de passe interpolé, composé à l'exécution : jamais un secret en clair.
+        "const url = `postgresql://admin:${password}@db.example.invalid:5432/app`",
         "",
       ].join("\n"),
     })
