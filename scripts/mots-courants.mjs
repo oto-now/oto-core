@@ -87,7 +87,7 @@ function firstNames(text) {
 
 function tsModule(notice, name, words) {
   const list = [...words].sort().join(" ")
-  return `${notice}\n// Généré par \`scripts/mots-courants.mjs\` : ne pas modifier à la main.\n\n/** ${words.size} formes normalisées, séparées par une espace. */\nexport const ${name} = "${list}"\n`
+  return `${notice}\n// Généré par le script \`mots-courants.mjs\` du dépôt : ne pas modifier à la main.\n\n/** ${words.size} formes normalisées, séparées par une espace. */\nexport const ${name} = "${list}"\n`
 }
 
 const dir = mkdtempSync(join(tmpdir(), "mots-courants-"))
