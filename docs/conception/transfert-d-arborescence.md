@@ -63,7 +63,7 @@ Avant, déplacer une base d'une organisation à l'autre passait par l'assistant,
 
 ## Écart avec le code
 
-- Un export expiré reste dans le bucket jusqu'au geste suivant de l'organisation (export, import, corbeille), ou à jamais si l'hôte donne des clés qui ne listent pas le bucket ; la suppression d'une organisation ne retire pas ses exports.
+- Un export expiré reste dans le bucket jusqu'au geste suivant de l'organisation (export, import, corbeille), ou à jamais si l'hôte donne des clés qui ne listent pas le bucket ; la suppression d'une organisation (`oto-platform org delete`) les retire avec tout son préfixe.
 - Une page qui porte de gros fichiers les relit et les envoie dans une seule étape : au-delà de la borne de la route (60 s), l'étape échoue, et un nouvel appel la rejoue (fichiers déjà joints en double).
 - Un pivot JSON gardé sur le disque ne s'importe pas comme fichier joint (`json` n'est pas un type admis) : il faut l'exporter de nouveau, ou son ZIP.
 

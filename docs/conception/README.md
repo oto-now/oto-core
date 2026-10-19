@@ -81,7 +81,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 
 | Document | La question à laquelle il répond | Statut |
 |---|---|---|
-| [Administration et cellule](administration-et-cellule.md) | Comment l'équipe plateforme administre-t-elle une cellule et ses organisations (MCP admin, tableau de bord, drapeaux, marque, sous-domaines, export-import) ? | proposé |
+| [Administration et cellule](administration-et-cellule.md) | Comment l'équipe plateforme administre-t-elle une cellule et ses organisations (MCP admin, tableau de bord, drapeaux, marque, sous-domaines, export-import, suppression) ? | proposé |
 | [Journal et retours](journal-et-retours.md) | Qu'est-ce qui est tracé de chaque appel, qui le lit, et comment un assistant signale-t-il un problème ? | proposé |
 | [Tests et données de démonstration](tests-et-donnees-de-demo.md) | Comment le paquet se teste-t-il, et d'où viennent les données de démonstration ? | proposé |
 

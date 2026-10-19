@@ -1,11 +1,11 @@
 # Administration et cellule
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-19
 
 ## Résumé
 
-L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. Une organisation créée par l'équipe plateforme a toujours un premier administrateur : le créateur lui-même, membre sans email, ou une personne invitée. Drapeaux, marque, état de la cellule et export-import d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
+L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. Une organisation créée par l'équipe plateforme a toujours un premier administrateur : le créateur lui-même, membre sans email, ou une personne invitée. Drapeaux, marque, état de la cellule, export-import et suppression d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
 
 ## Contexte
 
@@ -35,7 +35,7 @@ Une cellule est un déploiement de l'application hôte : une base, un émetteur,
 ### Organisations
 
 - E08-S02 N9 : le staff ne voit et n'administre que les organisations où il est membre ou a un accès en cours, décidé par le service (`listOrgs`, `resolveAdminOrg`) ; une organisation sans accès rend le même `not_found` qu'un slug inconnu.
-- E08-S02 N8 : `admin_org create` est en deux temps : le préfixe nomme les outils pour toujours, et aucune opération ne supprime une organisation. E08-S02 N18 : slug `^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$` (étiquette DNS de 2 à 40 caractères, pour `<slug>.<base>`) ; nom de 1 à 80 caractères. E08-S02 N24 : la contrainte d'un `23505` de `create_org` (slug, préfixe, adresse) se reconnaît par `uniqueConstraint` de `server/errors.ts`, seul lieu d'une hypothèse sur la forme d'une erreur PostgREST.
+- E08-S02 N8 : `admin_org create` est en deux temps : le préfixe nomme les outils pour toujours, et aucune opération ne supprime une organisation (la commande de l'outillage le fait, § Suppression d'une organisation). E08-S02 N18 : slug `^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$` (étiquette DNS de 2 à 40 caractères, pour `<slug>.<base>`) ; nom de 1 à 80 caractères. E08-S02 N24 : la contrainte d'un `23505` de `create_org` (slug, préfixe, adresse) se reconnaît par `uniqueConstraint` de `server/errors.ts`, seul lieu d'une hypothèse sur la forme d'une erreur PostgREST.
 - E08-S02 N10 : `orgs.settings.domains` est une chaîne libre en anglais (domaines de travail cités par `<prefix>_context`, 200 caractères au plus, vide = retirer) ; les adresses sont la table `org_domains` (`host`, `add_host`, `remove_host`).
 - E08-S02 N12 : `orgs.settings.routing {threshold, gap}` (0 à 1, défauts 0,65 et 0,1) se règle par `updateOrg`, que servent `admin_org update` et la page Organisation du tableau de bord (voir [routage et recherche](routage-et-recherche.md)).
 - E08-S02 N19 : `admin_org update` écrit nom et `settings` en une écriture sous garde `updated_at`, puis la marque par `updateBrand`, seul écrivain d'`orgs.brand` (dernière écriture gagnante sur la marque).
@@ -110,6 +110,20 @@ Décision du 2026-10-14 : une organisation créée par l'équipe plateforme a to
 - HN-E09S04-24 : seuls les comptes de la cible à l'email confirmé sont rapprochés ; les autres comptent comme absents (appartenances et accès sautés) et le résumé les nomme ; l'auteur par défaut doit être confirmé. HN-E09S04-25 : vers un autre projet (hôte cible différent de `source.host`), les accès plateforme en cours sont importés révoqués et comptés au résumé ; dans le même projet, recopiés tels quels ; `granted_by` prend la politique `null`.
 - HN-E09S04-22 : délai de la suite d'intégration de l'export-import : 600 s (lecture de la spécification OpenAPI et semis Démo lents sous charge).
 
+### Suppression d'une organisation
+
+Décision du 2026-10-19 (besoin d'un hôte en fin de contrat, RGPD) : `oto-platform org delete` retire tout ce que `platform` et le stockage tiennent d'une organisation (`cli/org-delete.mjs`, `deleteOrg`).
+
+- **Qui** : l'outillage de l'hôte seul, par la commande du paquet sur la connexion d'administration (`--db-url`, comme `journal purge`), au nom d'un membre de l'équipe plateforme (`--by <email>`, lu dans `platform_staff`). Aucune route web ni opération du MCP admin (N8 tient) : la suppression traverse toutes les tables, `admin_journal` compris, qu'aucun rôle de session n'écrit ; `platform_server` porte les faits que le serveur affirme au fil d'une requête, pas un geste irréversible sur une organisation entière.
+- **Deux temps** : sans `--yes`, la commande compte et n'écrit rien (lignes par table, objets, lignes du journal admin à anonymiser) ; ce compte rendu est la confirmation, `--yes --by <email>` supprime.
+- **Ordre** : (1) les objets du stockage sous `<org_id>/` (fichiers joints, en transit, exports d'un arbre), listés et supprimés jusqu'à un préfixe vide ; (2) la base, en une transaction : la ligne `orgs` verrouillée (`for update` : une insertion qui la référence attend), le journal admin anonymisé, les comptes de connecteur supprimés (leurs règles partent sans écrire au journal des partages), `orgs` supprimée (les cascades emportent le reste), un contrôle qu'aucune table de la carte ne garde une ligne de l'organisation (sinon tout est annulé), la ligne « organisation supprimée » ; (3) un second passage sur le stockage, pour un objet arrivé entre (1) et (2).
+- **Échec à mi-chemin, relance** : en (1), l'organisation reste en base, ses fichiers déjà supprimés ne se lisent plus, la même commande reprend ; en (2), rien n'est écrit ; en (3), la base est vidée : relancée, la commande retrouve l'organisation par sa ligne « organisation supprimée » (`target` `org:<slug>`, `args.org_id`), dit « déjà supprimée » et ne repasse que sur le stockage ; une telle ligne qui nommerait une organisation encore en base est refusée (l'équipe plateforme écrit ce journal). Une relance ne change rien à ce qui est déjà supprimé.
+- **Inventaire** : la carte `ORG_TABLES` range chaque table de `platform` qui tient l'organisation, par `org_id` ou par son parent (`team_members`, `node_drafts`, `node_versions`) : supprimée, ou anonymisée (`admin_journal`) ; `NOT_DELETED` nomme les autres avec leur raison. `tests/integration/suppression-organisation.test.ts` confronte la carte au catalogue et sème une ligne dans chaque table : une table nouvelle le fait échouer tant qu'elle n'est pas rangée.
+- **`admin_journal`** (décision d'Alexis) : une ligne de l'organisation garde sa date, sa méthode, son outil et son opération, la personne de l'équipe plateforme, sa durée, ses tailles et son issue ; `args`, `target`, `error` et `ctx` sont vidés, `org_id` mis à null. La ligne ajoutée : `method` `cli`, `tool` `org`, `op` `delete`, `target` `org:<slug>`, `args` `{org_id}`, la personne de `--by`, la date et la durée ; `forget_user` l'efface de `user_id` comme toute autre.
+- **Pas supprimé** : `platform_staff` (l'équipe de la cellule, sans organisation) ; `identities` (le lien d'une personne à son émetteur, sans organisation : une personne qui n'est plus membre nulle part le garde, la commande la compte, et l'oublier est `forget_user`, que l'hôte joue en supprimant son compte) ; `connectors` (la liste de l'hôte) ; une ligne du journal admin sans `org_id` (un refus avant que l'organisation soit résolue). Le compte d'une personne chez l'émetteur reste à l'hôte.
+- **Stockage** : les cinq variables `PLATFORM_STORAGE_*` sont exigées ; un hôte sans stockage passe `--without-storage`, refusé si l'organisation porte une ligne `files`. Liste par préfixe et suppression d'un objet vivent dans `cli/storage.mjs`, partagé avec l'adaptateur du serveur (`server/files/s3.ts`).
+- **Sortie** : une ligne par table de la carte (lignes supprimées ou anonymisées), les objets supprimés, les personnes qui ne sont plus membres d'aucune organisation ; code 0 fait (ou rien à faire), 1 refusé ou en panne (organisation inconnue, `--by` hors de l'équipe plateforme, stockage absent, bucket ou base en échec), 2 usage. Rien du mot de passe de l'URL ni des clés n'est écrit.
+
 ### Déploiement du SaaS
 
 - D126 : oto-saas n'est pas rebranché sur Vercel : le responsable du déploiement le déploie chez Scaleway, base PostgreSQL managée et Keycloak (procédure : oto-saas : `docs/deploiement.md`). Le projet Vercel actuel reste sur l'ancien dépôt tant que le déploiement Scaleway n'est pas fait (JB, 2026-09-28).
@@ -119,7 +133,10 @@ Décision du 2026-10-14 : une organisation créée par l'équipe plateforme a to
 - **Outils d'administration dans la même liste que les outils métier** (le modèle d'Oto, `oto_admin_*`) : écarté ; un MCP admin séparé, sans préfixe d'organisation, et un tableau de bord.
 - **E08-S04 NH9, plus en vigueur** : `setFlag` décidait par `member.role` ; il décide désormais par `isOrgAdmin` (administrateur, ou staff avec un accès en cours, membre simple compris), comme toutes les décisions d'administration.
 - **Sous-domaines posés par le paquet** : écarté (D24) ; un appel à un hébergeur n'entre ni dans le paquet ni dans `src/`, sauf désactivé par une variable et listé (`CLAUDE.md § Projet`).
-- **Supprimer une organisation par une opération** : écarté (E08-S02 N8) ; le préfixe nomme les outils pour toujours.
+- **Supprimer une organisation par une opération** : écarté (E08-S02 N8) ; le préfixe nomme les outils pour toujours. La suppression d'une organisation passe par l'outillage de l'hôte (§ Suppression d'une organisation).
+- **Supprimer une organisation par le MCP admin, par une route web ou au rôle `platform_server`** : écarté ; un geste irréversible sur toutes les tables d'un client n'a pas de porte dans l'application, et l'outillage tient déjà la connexion d'administration.
+- **Supprimer la base d'abord, le stockage ensuite** : écarté ; une panne du bucket laisserait des objets sans ligne qui les nomme. Le stockage d'abord garde l'organisation, donc sa clé, jusqu'à la transaction, et la ligne « organisation supprimée » garde son identifiant pour le dernier passage.
+- **`--confirm <slug>` à retaper** : écarté au profit des deux temps (`--yes`), le modèle de `pnpm test:cleanup --delete` et du MCP admin : le premier temps montre ce qui partira.
 - **Rebrancher oto-saas sur Vercel** : écarté par D126 au profit d'un déploiement Scaleway.
 - **Inviter le premier administrateur depuis l'écran Équipes après la création** (le parcours jusqu'au 2026-10-14) : écarté ; une organisation pouvait rester sans membre, et le créateur qui en était le premier administrateur devait s'inviter et accepter son propre email.
 - **Retirer l'accès `creation` quand le créateur devient membre** : écarté ; l'accès trace l'entrée de l'équipe plateforme pour le client (D2) et survit au retrait du membre.
@@ -137,7 +154,8 @@ Décision du 2026-10-14 : une organisation créée par l'équipe plateforme a to
 ## Écart avec le code
 
 - M73 : services et API des règles d'accès et des accès plateforme sans écran client ; `EcranUsage` et `usageSummary` sans page.
-- M85 : `org:export`, `org:import`, `test:cleanup` et `oauth:clients` n'ont pas de mode sans Supabase. M86, M87 : objets orphelins du stockage après une suppression hors purge, et `org:export --force` qui peut laisser l'ancien JSON à côté d'objets en partie réécrits.
+- M85 : `org:export`, `org:import`, `test:cleanup` et `oauth:clients` n'ont pas de mode sans Supabase. M86, M87 : objets orphelins du stockage après une suppression hors purge (`forget_user`, `test:cleanup`, `demo:seed` ; `org delete` retire ceux de l'organisation), et `org:export --force` qui peut laisser l'ancien JSON à côté d'objets en partie réécrits.
+- `org delete` : un envoi signé avant la suppression peut encore arriver dans le bucket pendant sa durée (5 minutes, `UPLOAD_URL_SECONDS`) ; relancer la commande après ce délai le retire. La policy `orgs_delete_admin` laisse encore toute session membre supprimer la ligne `orgs` (`member_orgs()`), sans stockage ni journal admin : aucun service ne l'emploie.
 - M65 : `RailThemePicker`, les écrans Marque, Drapeaux et Accès plateforme et leurs clés d'adresse restent à retirer.
 - V2 : registre central des versions de plusieurs applications (E08-S10), sondes de santé et alertes des comptes (E08-S08).
 - Le déploiement Scaleway d'oto-saas (D126) est une action réservée à JB, pas encore faite.
@@ -152,3 +170,4 @@ Aucune à ce jour.
 - 2026-09-29 : MCP admin en huit outils, journal à part, tableau de bord, drapeaux, état de la cellule ; sous-domaines hors du paquet par un point d'extension de l'hôte, marque, export-import d'une organisation, livrés dans la 1.0.0 — décision de JB (fiche D24) et choix du projet (source : H105 à H107, H110 à H112, P29, stories E08-S02 à E08-S06, E09-S02, E09-S04).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend D24, D126, H105 à H107, H110 à H112, P29, H-cellule-saas et les choix des stories E08-S02, E08-S03, E08-S04, E08-S06, E09-S02, E09-S04 — décidé par Alexis, accord de JB.
 - 2026-10-14 : premier administrateur exigé à la création d'une organisation par l'équipe plateforme (`admin_email` : l'appelant membre `admin` sans email, ou une invitation `admin`), et `admin_org add_admin` pour une organisation existante ; l'accès `creation` reste — décidé par Alexis (source : une organisation de production créée par un membre de l'équipe plateforme qui n'en était pas membre).
+- 2026-10-19 : suppression d'une organisation par la commande de l'outillage `oto-platform org delete` (stockage d'abord, base en une transaction, journal admin anonymisé, ligne « organisation supprimée ») — décidé par Alexis (source : un hôte en fin de contrat).

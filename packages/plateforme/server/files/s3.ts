@@ -6,33 +6,23 @@
 // Repris d'Oto (`oto_mcp/media_store.py`) : la lecture par URL présignée courte, le bucket privé sans ACL
 // publique, cinq variables. Retiré : `boto3`, le téléversement par le serveur pour l'écran (ici, envoi direct
 // au bucket), les images publiques par ACL (ici, tout passe par une route qui décide).
-import { AwsClient } from "aws4fetch"
+//
+// L'adresse du bucket, le client, la liste par préfixe et la suppression vivent dans `cli/storage.mjs`, partagé avec la
+// commande `oto-platform org delete`.
+import type { AwsClient } from "aws4fetch"
+import { bucketBase, listKeys, OPERATION_TIMEOUT_MS, removeObject, s3Client, storageFailure, type StorageConfig } from "../../cli/storage.mjs"
 import { PlatformConfigError } from "../db"
 import { READ_URL_SECONDS, UPLOAD_URL_SECONDS, type FileStore, type ObjectHead, type ObjectResponse } from "./store"
 
-export type S3Config = { endpoint: string; bucket: string; region: string; accessKeyId: string; secretAccessKey: string }
+export { s3Client }
 
-/** Délai d'une opération du serveur sur le bucket (`HEAD`, copie, suppression). */
-const OPERATION_TIMEOUT_MS = 10_000
-
-/** Un envoi de plus : `aws4fetch` rejoue une réponse 5xx ou 429 ; dix fois par défaut, trop long dans une requête. */
-const RETRIES = 1
+export type S3Config = StorageConfig
 
 /**
  * `datetime` : l'instant de la signature (`AAAAMMJJTHHMMSSZ`), fixé par les tests sur les vecteurs publiés
  * d'AWS ; l'heure courante sinon.
  */
 type SignOptions = { method: string; headers?: Record<string, string>; query?: Record<string, string>; seconds: number; datetime?: string }
-
-/** L'adresse sans barre finale : `https://s3.fr-par.scw.cloud/` → `https://s3.fr-par.scw.cloud`. */
-function trimmedEndpoint(endpoint: string): string {
-  let base = endpoint
-  while (base.endsWith("/")) base = base.slice(0, -1)
-  if (!URL.canParse(base)) throw new PlatformConfigError("PLATFORM_STORAGE_ENDPOINT is not an address")
-  const { protocol } = new URL(base)
-  if (protocol !== "https:" && protocol !== "http:") throw new PlatformConfigError("PLATFORM_STORAGE_ENDPOINT is not an http(s) address")
-  return base
-}
 
 /**
  * Une URL présignée (signature dans la requête, `X-Amz-Expires` en secondes). Les en-têtes passés sont tous
@@ -53,16 +43,6 @@ export async function presign(client: AwsClient, address: string, options: SignO
   return `${result.origin}${result.pathname}${result.search.split("+").join("%20")}`
 }
 
-/** Le client SigV4 d'une configuration, service `s3`. */
-export function s3Client(config: S3Config): AwsClient {
-  return new AwsClient({ accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey, service: "s3", region: config.region, retries: RETRIES })
-}
-
-/** L'échec d'une opération sur le bucket : son nom et le statut rendu, jamais l'adresse signée. */
-function failed(operation: string, status: number): Error {
-  return new Error(`storage ${operation} answered HTTP ${status}`)
-}
-
 /** Une taille écrite en chiffres seuls, sinon `null` : jamais `Number(null)` (0) ni `NaN`. */
 function digits(value: string | null | undefined): number | null {
   return value && /^\d{1,15}$/.test(value) ? Number(value) : null
@@ -80,28 +60,11 @@ function sizeHeaders(answer: Response): Record<string, string | number | null> {
   return { status: answer.status, "content-length": read("content-length"), "content-encoding": read("content-encoding"), "transfer-encoding": read("transfer-encoding"), "content-range": read("content-range"), "content-type": read("content-type") }
 }
 
-/** Pages de 1 000 clés au plus lues par `list`. */
-const LIST_PAGES_MAX = 10
-
-const XML_ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" }
-
-/** Les valeurs des balises `<name>` d'une réponse XML du bucket, entités décodées, par un parcours linéaire. */
-function xmlValues(xml: string, name: string): string[] {
-  const values: string[] = []
-  const open = `<${name}>`
-  const close = `</${name}>`
-  for (let at = xml.indexOf(open); at !== -1; at = xml.indexOf(open, at)) {
-    const end = xml.indexOf(close, at + open.length)
-    if (end === -1) break
-    values.push(xml.slice(at + open.length, end).replace(/&(?:amp|lt|gt|quot|apos);/g, (entity) => XML_ENTITIES[entity] ?? entity))
-    at = end + close.length
-  }
-  return values
-}
-
 export function s3FileStore(config: S3Config): FileStore {
   const client = s3Client(config)
-  const base = `${trimmedEndpoint(config.endpoint)}/${encodeURIComponent(config.bucket)}`
+  const bucket = bucketBase(config)
+  if ("problem" in bucket) throw new PlatformConfigError(bucket.problem)
+  const { base } = bucket
   const objectUrl = (key: string) => `${base}/${key}`
   const call = (key: string, init: { method: string; headers?: Record<string, string> }) =>
     client.fetch(objectUrl(key), { ...init, signal: AbortSignal.timeout(OPERATION_TIMEOUT_MS) })
@@ -138,7 +101,7 @@ export function s3FileStore(config: S3Config): FileStore {
       const answer = await sized(key, "HEAD")
       // Un objet absent : 404, ou 403 quand les clés ne listent pas le bucket (comme la lecture, HN-E10S02-32).
       if (answer.status === 404 || answer.status === 403) return null
-      if (!answer.ok) throw failed("HEAD", answer.status)
+      if (!answer.ok) throw storageFailure("HEAD", answer.status)
       const mime = answer.headers.get("content-type") ?? ""
       const size = plainLength(answer.headers)
       if (size !== null) return { size, mime }
@@ -151,7 +114,7 @@ export function s3FileStore(config: S3Config): FileStore {
       const answer = await call(to, { method: "PUT", headers: { "x-amz-copy-source": `/${encodeURIComponent(config.bucket)}/${from}` } })
       // S3 peut rendre 200 avec une erreur dans le corps d'une copie : le corps se lit aussi.
       const body = await answer.text()
-      if (!answer.ok || body.includes("<Error>")) throw failed("copy", answer.status)
+      if (!answer.ok || body.includes("<Error>")) throw storageFailure("copy", answer.status)
     },
 
     async put(key: string, bytes: Uint8Array, mime: string) {
@@ -162,29 +125,11 @@ export function s3FileStore(config: S3Config): FileStore {
         signal: AbortSignal.timeout(OPERATION_TIMEOUT_MS),
       })
       await answer.body?.cancel()
-      if (!answer.ok) throw failed("PUT", answer.status)
+      if (!answer.ok) throw storageFailure("PUT", answer.status)
     },
 
-    // ListObjectsV2, page par page : les `<Key>` de la réponse, lus à la main (une réponse du bucket, pas d'un client).
-    async list(prefix: string) {
-      const keys: string[] = []
-      let token: string | null = null
-      for (let page = 0; page < LIST_PAGES_MAX; page++) {
-        const query = new URLSearchParams({ "list-type": "2", prefix, ...(token ? { "continuation-token": token } : {}) })
-        const answer = await client.fetch(`${base}?${query.toString()}`, { method: "GET", signal: AbortSignal.timeout(OPERATION_TIMEOUT_MS) })
-        const body = await answer.text()
-        if (!answer.ok) throw failed("list", answer.status)
-        keys.push(...xmlValues(body, "Key"))
-        token = xmlValues(body, "NextContinuationToken")[0] ?? null
-        if (token === null) break
-      }
-      return keys
-    },
+    list: (prefix: string) => listKeys(client, base, prefix),
 
-    async remove(key: string) {
-      const answer = await call(key, { method: "DELETE" })
-      await answer.body?.cancel()
-      if (!answer.ok && answer.status !== 404) throw failed("DELETE", answer.status)
-    },
+    remove: (key: string) => removeObject(client, base, key),
   }
 }

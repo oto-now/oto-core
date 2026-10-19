@@ -3,9 +3,9 @@
  * et contrôle des migrations du schéma `platform` (ADR-006), préparation d'une base (ADR-012 § 1),
  * bundle du widget avec les vues de l'ERP (story widgets-dans-la-conversation), secret et réglages d'un
  * compte réel de connecteur (connecteurs-et-comptes), purge du journal et des retours au-delà de la rétention de l'hôte
- * (pseudonymisation).
+ * (pseudonymisation), suppression d'une organisation (administration-et-cellule).
  *
- * `run(argv)` rend le code de sortie : 0 succès, 1 copie ou migration refusée, préparation ou build en
+ * `run(argv)` rend le code de sortie : 0 succès, 1 copie ou migration refusée, préparation, build ou suppression en
  * échec, 2 usage incorrect. Appelée par `bin.mjs` (le `bin` du paquet) et par les scripts `migrations:sync`
  * et `check:migrations` du dépôt.
  */
@@ -23,6 +23,7 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
         oto-platform widgets build --views <dossier> --out <fichier>
         oto-platform accounts secret --db-url <url> --account <id> [--setting nom=valeur …] < champs.json
         oto-platform journal purge --db-url <url> [--journal-days <jours>] [--feedback-days <jours>]
+        oto-platform org delete --db-url <url> --org <slug> [--yes --by <email>] [--without-storage]
 
   migrations sync [--from <dossier>] [--to <dossier>]
     Copie les migrations du paquet dans celles de l'application hôte. Une copie qui diffère
@@ -77,9 +78,26 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --journal-days   rétention du journal, en jours (1 à 36 500)
     --feedback-days  rétention des retours, en jours (1 à 36 500)
 
+  org delete --db-url <url> --org <slug> [--yes --by <email>] [--without-storage]
+    Supprime une organisation : toutes ses lignes de platform, et ses objets du stockage (sous <org_id>/).
+    Sans --yes, compte ce qui serait supprimé, table par table, et n'écrit rien. Avec --yes : le stockage
+    d'abord, puis la base en une transaction ; les lignes de l'organisation dans le journal de l'équipe
+    plateforme restent, arguments, cible, erreur et code de session vidés, et une ligne « organisation
+    supprimée » s'y ajoute au nom de --by. Relancée après un échec, elle reprend ; après une suppression
+    complète, elle dit « déjà supprimée » et repasse sur le stockage. Le stockage se lit dans
+    PLATFORM_STORAGE_ENDPOINT, _BUCKET, _REGION, _ACCESS_KEY_ID et _SECRET_ACCESS_KEY.
+    --db-url           URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
+                       écrit dans l'URL
+    --org              slug de l'organisation
+    --yes              supprime (sans lui, rien n'est écrit)
+    --by               email d'un membre de l'équipe plateforme (platform_staff), au nom de qui supprimer ;
+                       exigé avec --yes
+    --without-storage  hôte sans stockage ; refusé si les variables sont posées ou si l'organisation
+                       porte un fichier joint
+
   -h, --help  cette aide
 
-Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret ou purge refusé, 2 usage incorrect.`
+Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, purge ou suppression refusé, 2 usage incorrect.`
 
 const OPTIONS = {
   from: { type: 'string' },
@@ -92,6 +110,10 @@ const OPTIONS = {
   setting: { type: 'string', multiple: true },
   'journal-days': { type: 'string' },
   'feedback-days': { type: 'string' },
+  org: { type: 'string' },
+  by: { type: 'string' },
+  yes: { type: 'boolean' },
+  'without-storage': { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 }
 // Options de chaque sous-commande : celle d'une autre y est une option inconnue.
@@ -101,6 +123,7 @@ const COMMANDS = {
   widgets: { build: ['views', 'out'] },
   accounts: { secret: ['db-url', 'account', 'setting'] },
   journal: { purge: ['db-url', 'journal-days', 'feedback-days'] },
+  org: { delete: ['db-url', 'org', 'by', 'yes', 'without-storage'] },
 }
 
 /** Usage incorrect : le problème nommé sur stderr, puis l'usage, code 2. */
@@ -145,6 +168,8 @@ function parse(argv) {
   if (command === 'db' && !values['db-url']) throw new UsageError("« db prepare » attend --db-url <url>")
   if (command === 'accounts' && (!values['db-url'] || !values.account)) throw new UsageError('« accounts secret » attend --db-url <url> et --account <id>')
   if (command === 'journal' && !values['db-url']) throw new UsageError('« journal purge » attend --db-url <url>')
+  if (command === 'org' && (!values['db-url'] || !values.org)) throw new UsageError('« org delete » attend --db-url <url> et --org <slug>')
+  if (command === 'org' && values.yes && !values.by) throw new UsageError('« org delete --yes » attend --by <email>')
   if (command === 'widgets' && (!values.views || !values.out)) throw new UsageError('« widgets build » attend --views <dossier> et --out <fichier>')
   return { command, subcommand, ...values }
 }
@@ -192,6 +217,20 @@ export async function run(argv) {
       dbUrl: options['db-url'],
       journalDays: options['journal-days'],
       feedbackDays: options['feedback-days'],
+      print: (line) => console.log(line),
+      printError: (line) => console.error(line),
+    })
+  }
+  if (options.command === 'org') {
+    // Chargé à la demande, comme `db prepare` : le pilote Postgres et le client du stockage ne servent qu'ici.
+    const { orgDeleteCommand } = await import('./org-delete.mjs')
+    return orgDeleteCommand({
+      dbUrl: options['db-url'],
+      org: options.org,
+      by: options.by,
+      yes: options.yes === true,
+      withoutStorage: options['without-storage'] === true,
+      env: process.env,
       print: (line) => console.log(line),
       printError: (line) => console.error(line),
     })

@@ -3,8 +3,12 @@
 // adaptateur en mémoire pour les tests (`memory.ts`). L'hôte le configure par cinq variables ; sans l'une
 // d'elles, `fileStore()` rend `null` et les fichiers sont désactivés, tout le reste fonctionne. Les clés
 // d'accès restent dans `server/` : jamais dans `ui/`, jamais la clé secrète de la base, réservée à l'outillage.
+import { STORAGE_VARIABLES, storageConfig } from "../../cli/storage.mjs"
 import { PlatformError } from "../errors"
 import { s3FileStore } from "./s3"
+
+/** Les cinq variables de l'hôte (ADR-016 § 2), toutes exigées ; écrites une fois, dans `cli/storage.mjs`. */
+export { STORAGE_VARIABLES }
 
 /** Ce que le bucket dit d'un objet (`HEAD`) : sa taille en octets et son type. */
 export type ObjectHead = { size: number; mime: string }
@@ -41,15 +45,6 @@ export const UPLOAD_URL_SECONDS = 300
 /** 60 secondes pour lire (ADR-016 § 5) : une URL rejouable par qui la détient, le temps d'une redirection. */
 export const READ_URL_SECONDS = 60
 
-/** Les cinq variables de l'hôte (ADR-016 § 2), toutes exigées. */
-export const STORAGE_VARIABLES = [
-  "PLATFORM_STORAGE_ENDPOINT",
-  "PLATFORM_STORAGE_BUCKET",
-  "PLATFORM_STORAGE_REGION",
-  "PLATFORM_STORAGE_ACCESS_KEY_ID",
-  "PLATFORM_STORAGE_SECRET_ACCESS_KEY",
-] as const
-
 /** La clé d'un objet : `<org_id>/<id>`, jamais le nom d'origine (`uploads-patterns.md § Nommage du chemin`). */
 export function objectKey(orgId: string, fileId: string): string {
   return `${orgId}/${fileId}`
@@ -60,9 +55,8 @@ export function objectKey(orgId: string, fileId: string): string {
  * (AC-a1). `env` : l'environnement lu, `process.env` par défaut.
  */
 export function fileStore(env: Record<string, string | undefined> = process.env): FileStore | null {
-  const [endpoint, bucket, region, accessKeyId, secretAccessKey] = STORAGE_VARIABLES.map((name) => env[name]?.trim() ?? "")
-  if (!endpoint || !bucket || !region || !accessKeyId || !secretAccessKey) return null
-  return s3FileStore({ endpoint, bucket, region, accessKeyId, secretAccessKey })
+  const config = storageConfig(env)
+  return config ? s3FileStore(config) : null
 }
 
 /** Le refus d'un geste de fichier sans stockage configuré (AC-a1) : il nomme les cinq variables. */

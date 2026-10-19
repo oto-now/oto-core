@@ -16,7 +16,7 @@ sans étape de build, sous licence MIT.
 | `api/` | `@otomata_tech/oto_platform/api` | Route handlers `/api/platform/*` : adaptateurs des services |
 | `server/` | `@otomata_tech/oto_platform/server` | Services : la seule porte d'écriture (Zod → droits → écriture → journal) |
 | `migrations/` | `@otomata_tech/oto_platform/migrations/*` | SQL du schéma `platform`, additif, copié par l'application hôte |
-| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) |
+| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) ; suppression d'une organisation (`org delete`) |
 | `widgets/` | `@otomata_tech/oto_platform/widgets` | Widget routeur dans la conversation (sources construites par Vite) ; l'export ne porte que les types d'une vue de l'ERP (`ErpView`, `ErpViewProps`) |
 
 ## Règle de dépendance entre faces
@@ -501,6 +501,10 @@ registerConnectors([messagerie.connector], {
 - **Rétention** : migration `20261019100000_platform_retention.sql`, puis, de votre tâche planifiée, sur la connexion
   d'administration : `pnpm exec oto-platform journal purge --db-url "$ADMIN_DATABASE_URL" --journal-days 365
   --feedback-days 730` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
+- **Suppression d'une organisation** : `pnpm exec oto-platform org delete --db-url "$ADMIN_DATABASE_URL" --org <slug>`
+  compte ce qui partirait ; `--yes --by <email>` (un membre de l'équipe plateforme) supprime ses objets du stockage
+  (les cinq variables `PLATFORM_STORAGE_*`, ou `--without-storage`), puis toutes ses lignes ; ses lignes du journal de
+  l'équipe plateforme restent, anonymisées. Relancez la même commande après un échec.
 
 - **Clé** : `PLATFORM_VAULT_KEY`, 32 octets en base64 (`openssl rand -base64 32`), dans l'environnement serveur de
   l'application, jamais en `NEXT_PUBLIC_`. Lue à l'usage seulement : sans elle, l'application démarre, et poser un
