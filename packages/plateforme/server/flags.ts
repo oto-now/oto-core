@@ -5,7 +5,7 @@
 //
 // Repris d'Oto (`oto_mcp/datastore/definition.py`, rapport `tableaux.md` § 1) : un nom inconnu se
 // refuse. Retiré : le simple signalement d'un attribut inconnu, qui laisse passer une coquille.
-import { flagToggleSchema, type FlagView } from "../schemas"
+import { FEEDBACK_VISIBLE, flagToggleSchema, type FlagView } from "../schemas"
 import { describeOwner, isOrgAdmin } from "./access"
 import type { Json } from "./database"
 import type { PlatformDb } from "./db"
@@ -18,10 +18,12 @@ type FlagDeclaration = { name: string; description: string }
 
 /**
  * Registre des drapeaux : déclarer ici chaque drapeau lu par du code (`isEnabled`). `setFlag`
- * refuse un nom absent d'ici, `listFlags` ne rend que ceux-ci. Vide en V1 : aucune fonctionnalité
- * ne lit de drapeau ; le premier arrive avec la fonctionnalité qui le lit (NH1).
+ * refuse un nom absent d'ici, `listFlags` ne rend que ceux-ci (NH1).
  */
-export const FLAGS: readonly FlagDeclaration[] = []
+export const FLAGS: readonly FlagDeclaration[] = [
+  // Lu par `handlesFeedback` : les administrateurs de l'organisation entrent dans les retours.
+  { name: FEEDBACK_VISIBLE, description: "Les administrateurs de l'organisation lisent et traitent les retours des assistants (menu « Retours »)." },
+]
 
 const INVALID_CHANGE = "Invalid flag change: send a snake_case name and enabled true or false, and no other field."
 
@@ -36,6 +38,12 @@ export function isEnabled(org: { flags: unknown }, name: string): boolean {
 /** Les drapeaux avec `name` posé à `enabled`, les autres clés gardées telles quelles ; mal formés, ils repartent de `{}`. */
 export function withFlag(flags: Json, name: string, enabled: boolean): { [key: string]: Json | undefined } {
   return { ...(isJsonObject(flags) ? flags : {}), [name]: enabled }
+}
+
+/** L'état d'un drapeau dans l'organisation de l'identité, en une lecture ; une organisation illisible vaut `false`. */
+export async function readFlag(db: PlatformDb, identity: Identity, name: string): Promise<boolean> {
+  const [org] = await inTransaction(db, "readFlag: orgs", (sql) => sql<{ flags: Json }[]>`select o.flags from platform.orgs o where o.id = ${identity.org.id}`)
+  return org ? isEnabled(org, name) : false
 }
 
 /**

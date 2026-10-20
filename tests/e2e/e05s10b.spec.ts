@@ -128,11 +128,11 @@ test.describe("E05-S10 partie b : la coque et les actions d'en-tête", () => {
         await expect(page.getByRole("button", { name: "Déplacer", exact: true })).toHaveCount(0)
         const partager = page.getByRole("button", { name: "Partager · Privé" })
 
-        // « Partager » (AC-b5) : le champ, qui a accès, l'accès général ; aucun mot « règle ».
+        // « Partager » (AC-b5) : le champ, l'accès par défaut, qui a accès ; aucun mot « règle ».
         await partager.click()
         const panneauPartager = page.getByRole("dialog", { name: "Partager — Privé" })
         await expect(panneauPartager.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeVisible()
-        await expect(panneauPartager.getByText("Accès général", { exact: true })).toBeVisible()
+        await expect(panneauPartager.getByText("Accès par défaut", { exact: true })).toBeVisible()
         await expect(panneauPartager.getByText("Seulement les personnes ajoutées")).toBeVisible()
         await expect(panneauPartager).not.toContainText(/règle/i)
         await panneauPartager.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }).fill("e")

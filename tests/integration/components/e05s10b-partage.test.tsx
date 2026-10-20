@@ -8,9 +8,9 @@ import { envoiDuNiveau } from "../../../packages/plateforme/ui/noeud/niveau-d-un
 import { vueDuNoeud } from "../../helpers/noeud"
 
 // « Partager » (E05-S10, partie b, AC-b5), ouvert depuis l'en-tête de l'écran d'un nœud : le champ qui ajoute
-// une personne ou une équipe, la liste de ceux qui ont accès avec leur niveau dans un menu, l'accès général ;
-// l'API simulée par `fetch`, la relecture espionnée. Les services et leurs refus sont ceux d'E05-S03 : ici,
-// l'écran seul.
+// une personne ou une équipe, l'accès par défaut (l'équipe propriétaire et toute l'organisation, 1.4.13), la liste
+// des ajoutés avec leur niveau dans un menu ; l'API simulée par `fetch`, la relecture espionnée. Les services et
+// leurs refus sont ceux d'E05-S03 : ici, l'écran seul.
 
 type Props = ComponentProps<typeof EcranDeNoeud>
 
@@ -26,7 +26,7 @@ const REGLE_MARC = "5e6f7a8b-9c0d-4e1f-8a2b-000000000013"
 const REGLES: NodeRulesView = {
   path: "ventes/modele_relance",
   title: "Modèle de relance",
-  owner: { kind: "team", teamName: "Ventes", leadName: "Claire Morel" },
+  owner: { kind: "team", teamId: VENTES, teamName: "Ventes", leadName: "Claire Morel" },
   viewerLevel: 3,
   rules: [
     { id: REGLE_VENTES, subject: { kind: "team", id: VENTES, name: "Ventes" }, level: "write" },
@@ -34,6 +34,9 @@ const REGLES: NodeRulesView = {
     { id: REGLE_MARC, subject: { kind: "user", id: MARC, name: "Marc Dupont" }, level: "manage" },
   ],
 }
+
+/** L'accès par défaut de l'équipe que sert `GET rules?path=` : sa règle sur la page, au niveau qu'elle aurait sans elle. */
+const EQUIPE: NonNullable<NodeRulesView["team"]> = { teamId: VENTES, level: "write", inherited: "write", ruleId: REGLE_VENTES }
 
 const SUJETS = {
   equipes: [
@@ -95,15 +98,15 @@ const LECTURE_DU_LIEN_PUBLIC = "/api/platform/shares?"
 
 const estLaLectureDuLien = (url: unknown) => String(url).startsWith(LECTURE_DU_LIEN_PUBLIC)
 
-/** La lecture des membres de l'équipe (1.4.12), faite à l'ouverture du panneau : hors des gestes comptés. */
+/** La lecture des membres et du niveau de l'équipe (1.4.12, 1.4.13), faite à l'ouverture du panneau : hors des gestes comptés. */
 const LECTURE_DES_MEMBRES = "/api/platform/rules?"
-const membresServis: { people: NonNullable<NodeRulesView["people"]> } = { people: [] }
+const servis: { people: NonNullable<NodeRulesView["people"]>; team: NodeRulesView["team"] } = { people: [], team: EQUIPE }
 const estUneLecture = (url: unknown) => estLaLectureDuLien(url) || String(url).startsWith(LECTURE_DES_MEMBRES)
 
 /** L'API simulée : la lecture du lien public rend « aucun lien », tout autre appel la réponse du cas. */
 function repondre(reponseDuGeste: () => Response) {
   fetchMock.mockImplementation(async (url) =>
-    estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : String(url).startsWith(LECTURE_DES_MEMBRES) ? reponse(200, { data: { ...REGLES, people: membresServis.people } }) : reponseDuGeste(),
+    estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : String(url).startsWith(LECTURE_DES_MEMBRES) ? reponse(200, { data: { ...REGLES, ...servis } }) : reponseDuGeste(),
   )
 }
 
@@ -115,7 +118,8 @@ const envoye = (rang = 0) => {
 beforeEach(() => {
   fetchMock.mockReset()
   rafraichir.mockReset()
-  membresServis.people = []
+  servis.people = []
+  servis.team = EQUIPE
   vi.stubGlobal("fetch", fetchMock)
   repondre(() => reponse(200, { data: {} }))
 })
@@ -126,51 +130,97 @@ afterEach(() => {
 })
 
 describe("Partager, who has access (AC-b5)", () => {
-  it("should list each team or person with its level in a menu of Notion's words, then the general access, without the word « règle »", () => {
+  it("should list each added team or person with its level in a menu of Notion's words, the owner team on its own line, without the word « règle »", async () => {
     const { panneau } = ouvrir()
-    const liste = within(panneau().getByRole("list", { name: "Ont accès" }))
-    expect(liste.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Équipe Ventes", "Accès de Léa Martin", "Accès de Marc Dupont"])
-    expect(liste.getAllByRole("listitem")[1]).toHaveTextContent("Léa Martin (vous)")
-    const menu = liste.getByRole("combobox", { name: "Accès de Équipe Ventes" })
-    expect(menu).toHaveValue("write")
+    const liste = within(panneau().getByRole("list", { name: "Personnes et équipes ajoutées" }))
+    // 1.4.13 : la règle de l'équipe propriétaire se règle sur sa ligne de l'accès par défaut, pas parmi les ajoutés.
+    expect(liste.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Léa Martin", "Accès de Marc Dupont"])
+    expect(liste.getAllByRole("listitem")[0]).toHaveTextContent("Léa Martinvous")
+    const menu = liste.getByRole("combobox", { name: "Accès de Léa Martin" })
+    expect(menu).toHaveValue("read")
     // 1.4.12 : « Aucun accès » rend le contenu et ce qu'il range invisibles à la personne ou à l'équipe.
     expect(libellesDesChoix(menu)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
     expect(liste.getByRole("combobox", { name: "Accès de Marc Dupont" })).toHaveValue("manage")
+    expect(panneau().getByRole("heading", { name: "Personnes et équipes ajoutées · 2" })).toBeInTheDocument()
 
-    expect(panneau().getByText("Accès général")).toBeInTheDocument()
-    // Partie d (AC-b13) : l'accès général se change ; sans règle d'organisation, l'équipe et les personnes ajoutées.
-    const general = panneau().getByRole("combobox", { name: "Qui a accès en général" })
-    expect(general).toHaveValue("restricted")
-    expect(general).toHaveTextContent("L'équipe Ventes et les personnes ajoutées")
-    expect(panneau().getByText("L'équipe peut modifier ; son responsable a l'accès complet.")).toBeInTheDocument()
-    expect(panneau().getByText("Votre accès : accès complet.")).toBeInTheDocument()
+    // L'accès par défaut : l'équipe, lue à l'ouverture, et toute l'organisation, chacune à son niveau.
+    const equipe = await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
+    expect(equipe).toHaveValue("write")
+    expect(libellesDesChoix(equipe)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    const organisation = panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
+    expect(organisation).toHaveValue("none")
+    expect(libellesDesChoix(organisation)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    // 1.4.13 : chaque niveau de la liste dit ce qu'il permet, en une ligne fine sous son nom.
+    fireEvent.click(equipe)
+    expect(screen.getByRole("option", { name: "Peut modifier" })).toHaveAccessibleDescription("Lit, écrit et publie.")
+    fireEvent.click(equipe)
+    expect(panneau().getByText("Votre accès").closest("p")).toHaveTextContent("Votre accèsAccès complet")
     expect(screen.getByRole("dialog", { name: "Partager — Ventes" }).textContent).not.toMatch(/règle/i)
   })
 
   // N6 : l'accès complet ne s'accorde que par un administrateur ; celui d'une ligne se garde, il est déjà là.
-  it("should not offer « Accès complet » to a manager who is not an administrator, except as the current level of a row", () => {
+  it("should not offer « Accès complet » to a manager who is not an administrator, except as the current level of a row", async () => {
     const { panneau } = ouvrir({ gestionAccordable: false })
     const options = (nom: string) => libellesDesChoix(panneau().getByRole("combobox", { name: nom }))
-    expect(options("Accès de Équipe Ventes")).toEqual(["Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
+    await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
+    expect(options("Niveau de l'équipe Ventes")).toEqual(["Peut modifier", "Peut lire", "Aucun accès"])
+    expect(options("Niveau de toute l'organisation")).toEqual(["Peut modifier", "Peut lire", "Aucun accès"])
     expect(options("Accès de Marc Dupont")).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
   })
 
-  it("should show the levels as text and change nothing for someone without full access", () => {
+  it("should show the levels as pills and change nothing for someone without full access", async () => {
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, viewerLevel: 2 } } })
+    expect(within(panneau().getByRole("list", { name: "Personnes et équipes ajoutées" })).getAllByRole("listitem")[1]).toHaveTextContent("Marc DupontAccès complet")
+    // La ligne de l'équipe se lit aussi pour qui ne gère pas : son niveau vient de la même lecture.
+    await waitFor(() => expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).toHaveTextContent("Équipe VentesPeut modifier"))
     expect(panneau().queryByRole("combobox")).toBeNull()
-    expect(within(panneau().getByRole("list", { name: "Ont accès" })).getAllByRole("listitem")[0]).toHaveTextContent("Équipe VentesPeut modifier")
-    expect(panneau().getByText("Votre accès : peut modifier.")).toBeInTheDocument()
+    expect(panneau().getByText("Votre accès").closest("p")).toHaveTextContent("Votre accèsPeut modifier")
     expect(panneau().getByText("Seules les personnes qui ont l'accès complet changent le partage.")).toBeInTheDocument()
   })
 
   it.each([
-    ["the organisation", { kind: "org" as const }, "Tous les membres de Démo", "Peut lire"],
+    ["the organisation", { kind: "org" as const }, "Toute l'organisation Démo", "Dans Tout le monde, chaque membre lit au moins ce contenu."],
     ["a person", { kind: "user" as const, userName: "Léa Martin" }, "Seulement les personnes ajoutées", "Léa Martin a l'accès complet."],
-  ])("should say the general access of a node owned by %s", (_cas, owner, libelle, detail) => {
+  ])("should say the default access of a node owned by %s", (_cas, owner, libelle, detail) => {
+    servis.team = null
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, owner, rules: [] } } })
     expect(panneau().getByText("Personne n'a été ajouté à ce contenu.")).toBeInTheDocument()
     expect(panneau().getByText(libelle)).toBeInTheDocument()
     expect(panneau().getByText(detail)).toBeInTheDocument()
+    expect(panneau().queryByText("Équipe Ventes")).toBeNull()
+  })
+})
+
+// 1.4.13 : l'équipe propriétaire et toute l'organisation se règlent chacune sur sa ligne ; l'équipe ne descend pas sous l'organisation.
+describe("Partager, default access of the owner team and of the organisation", () => {
+  it("should post the team's level, remove its rule when the level chosen is the one it inherits, and post the organisation's access", async () => {
+    repondre(() => reponse(200, { data: {} }))
+    const { panneau } = ouvrir()
+    choisirDansLaListe(await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" }), "Peut lire")
+    await waitFor(() => expect(panneau().getByRole("status")).toHaveTextContent("Équipe Ventes : peut lire."))
+    expect(envoye()).toEqual({ url: "/api/platform/rules", methode: "POST", corps: { path: "ventes/modele_relance", subject: { kind: "team", id: VENTES }, level: "read" } })
+
+    choisirDansLaListe(panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" }), "Peut lire")
+    await waitFor(() => expect(panneau().getByRole("status")).toHaveTextContent("Toute l'organisation : peut lire."))
+    expect(envoye(1)).toEqual({ url: "/api/platform/nodes/access", methode: "POST", corps: { path: "ventes/modele_relance", access: "organisation", level: "read" } })
+    expect(rafraichir).toHaveBeenCalledTimes(2)
+  })
+
+  it("should remove the team's rule to get back the inherited level, and offer nothing below the organisation", async () => {
+    servis.team = { ...EQUIPE, level: "manage", inherited: "write" }
+    const { panneau } = ouvrir({ regles: { data: { ...REGLES, general: { id: "regle-org", level: "read" } } } })
+    const equipe = await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
+    expect(libellesDesChoix(equipe)).toEqual(["Accès complet", "Peut modifier", "Peut lire"])
+    choisirDansLaListe(equipe, "Peut modifier")
+    await waitFor(() => expect(envoye()).toEqual({ url: `/api/platform/rules/${REGLE_VENTES}`, methode: "DELETE", corps: undefined }))
+  })
+
+  it("should mark an inherited team level, and leave the organisation at « Aucun accès » by removing its access", async () => {
+    servis.team = { ...EQUIPE, ruleId: null }
+    const { panneau } = ouvrir({ regles: { data: { ...REGLES, rules: REGLES.rules.slice(1), general: { id: "regle-org", level: "read" } } } })
+    await waitFor(() => expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).toHaveTextContent("Équipe Ventes" + "hérité"))
+    choisirDansLaListe(panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" }), "Aucun accès")
+    await waitFor(() => expect(envoye()).toEqual({ url: "/api/platform/nodes/access", methode: "POST", corps: { path: "ventes/modele_relance", access: "restricted" } }))
   })
 })
 
@@ -206,21 +256,26 @@ describe("Partager, adding someone (AC-b5)", () => {
 // 1.4.12 : les membres de l'équipe propriétaire, leur niveau hérité, et la règle de cette page qui le surcharge.
 describe("Partager, members of the owner team", () => {
   const PAUL = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c05"
+  const ZOE = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c06"
   const REGLE_PAUL = "5e6f7a8b-9c0d-4e1f-8a2b-000000000015"
   const people: NonNullable<NodeRulesView["people"]> = [
     { userId: NORA, name: "Nora Écoffier", lead: true, level: "manage", inherited: "manage", ruleId: null },
     { userId: PAUL, name: "Paul Henry", lead: false, level: "write", inherited: "write", ruleId: null },
+    { userId: ZOE, name: "Zoé Arnaud", lead: false, level: "read", inherited: "read", ruleId: null },
     { userId: LEA, name: "Léa Martin", lead: false, level: "read", inherited: "write", ruleId: REGLE_LEA },
   ]
 
-  it("should list the members without access of their own with their inherited level, and restrict one on this page only", async () => {
-    membresServis.people = people
+  it("should list the members without access of their own with their real level, mark an exception, and restrict one on this page only", async () => {
+    servis.people = people
     const { panneau } = ouvrir()
     // Lus à l'ouverture du panneau, par `GET rules?path=` : l'affichage de la page ne les calcule pas.
     const membres = within(await panneau().findByRole("list", { name: "Membres de l'équipe Ventes" }))
-    // Léa a une règle sur la page : elle est dans « Ont accès », où « Retirer » rend son niveau hérité.
-    expect(membres.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Nora Écoffier", "Accès de Paul Henry"])
-    expect(membres.getAllByRole("listitem")[0]).toHaveTextContent("Nora Écoffier · responsable")
+    // Léa a une règle sur la page : elle est parmi les ajoutés, où « Retirer » rend son niveau hérité.
+    expect(membres.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Nora Écoffier", "Accès de Paul Henry", "Accès de Zoé Arnaud"])
+    expect(membres.getAllByRole("listitem")[0]).toHaveTextContent("Nora Écoffierresponsable")
+    // 1.4.13 : Zoé n'a pas le niveau de l'équipe (une règle qui la nomme, posée plus haut) : « exception ».
+    expect(membres.getAllByRole("listitem")[2]).toHaveTextContent("Zoé Arnaudexception")
+    expect(membres.getAllByRole("listitem")[1]).not.toHaveTextContent("exception")
     const paul = membres.getByRole("combobox", { name: "Accès de Paul Henry" })
     expect(paul).toHaveValue("write")
     expect(libellesDesChoix(paul)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
@@ -253,16 +308,16 @@ describe("Partager, changing a level (AC-b5)", () => {
 
     // La relecture retire la ligne : le focus va à l'intitulé de la liste, jamais à `<body>`.
     relire({ regles: { data: { ...REGLES, rules: REGLES.rules.filter((regle) => regle.id !== REGLE_MARC) } } })
-    await waitFor(() => expect(document.activeElement).toBe(panneau().getByText("Ont accès")))
+    await waitFor(() => expect(document.activeElement).toBe(panneau().getByRole("heading", { name: "Personnes et équipes ajoutées · 1" })))
   })
 
   it("should say a refusal and bring the menu back to the served level", async () => {
     repondre(() => reponse(403, { error: { code: "forbidden", message: "refused" } }))
     const { panneau } = ouvrir()
-    const menu = panneau().getByRole("combobox", { name: "Accès de Équipe Ventes" })
-    choisirDansLaListe(menu, "Peut lire")
+    const menu = panneau().getByRole("combobox", { name: "Accès de Léa Martin" })
+    choisirDansLaListe(menu, "Peut modifier")
     expect(await panneau().findByRole("alert")).toHaveTextContent("Vous n'avez pas le droit de faire cela.")
-    expect(menu).toHaveValue("write")
+    expect(menu).toHaveValue("read")
     expect(rafraichir).not.toHaveBeenCalled()
   })
 })

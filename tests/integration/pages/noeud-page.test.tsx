@@ -6,6 +6,7 @@
 // depuis « Partager · <espace> » de l'en-tête (E05-S09, partie c1 ; E05-S10, AC-b5) ; les liens du nœud
 // (« Contenus liés », AC-b6) sont lus par `nodeLinks` dès le chemin connu, et arrivent après la page (M58).
 import type { ReactNode } from "react"
+import { after } from "next/server"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NodeRulesView, TreeNode } from "@otomata_tech/oto_platform/schemas"
@@ -18,6 +19,7 @@ import {
   PlatformError,
   previewContext,
   nodeLinks,
+  recordNodeView,
   visibleTree,
   type Identity,
   type PlatformDb,
@@ -32,6 +34,9 @@ import { libellesDesChoix } from "../../helpers/liste-de-choix"
 vi.mock("@/lib/plateforme/session", () => ({ getPlatformIdentitySafely: vi.fn() }))
 
 // redirect() lève NEXT_REDIRECT dans Next : le mock lève aussi, le rendu s'arrête comme en production.
+// La vue de la page se compte après la réponse (`after`, 1.4.13) : hors d'une requête de Next, `after` lèverait.
+vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<typeof import("next/server")>()), after: vi.fn() }))
+
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   redirect: vi.fn((url: string) => {
@@ -49,6 +54,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   checkProcedure: vi.fn(),
   previewContext: vi.fn(),
   nodeLinks: vi.fn(),
+  recordNodeView: vi.fn(),
 }))
 
 const LEA = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c02"
@@ -113,6 +119,7 @@ beforeEach(() => {
   vi.mocked(listMembers).mockResolvedValue([])
   vi.mocked(listNodeRules).mockResolvedValue(REGLES)
   vi.mocked(nodeLinks).mockResolvedValue({ links_out: [], links_out_total: 0, links_in: [], links_in_total: 0 })
+  vi.mocked(recordNodeView).mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -138,6 +145,35 @@ describe("/n/[...chemin] page session and addresses (AC1)", () => {
   })
 })
 
+describe("/n/[...chemin] page view (1.4.13)", () => {
+  /** Ce que la page a confié à `after`, joué comme Next le jouerait après la réponse. */
+  const apresLaReponse = async () => {
+    for (const [tache] of vi.mocked(after).mock.calls) if (typeof tache === "function") await tache()
+  }
+
+  it("should count the view after the response, by the path asked, with the session client", async () => {
+    await monter(await page(["ventes", "modele_relance"]))
+    expect(recordNodeView).not.toHaveBeenCalled()
+    await apresLaReponse()
+    expect(recordNodeView).toHaveBeenCalledWith(SESSION.db, identite("member"), { path: "ventes/modele_relance" })
+  })
+
+  it("should keep the page when the view cannot be counted, saying a failure other than an unknown page in the server log", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.mocked(recordNodeView).mockRejectedValueOnce(new PlatformError("not_found", "Unknown path."))
+    await monter(await page(["ventes", "modele_relance"]))
+    await apresLaReponse()
+    expect(log).not.toHaveBeenCalled()
+    vi.mocked(after).mockClear()
+    cleanup()
+    vi.mocked(recordNodeView).mockRejectedValueOnce(new PlatformError("internal", "Database unreachable."))
+    await monter(await page(["ventes", "modele_relance"]))
+    await apresLaReponse()
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Modèle de relance")
+  })
+})
+
 describe("/n/[...chemin] page reads (AC9, AC19, AC22)", () => {
   it("should read with the session client, range the person's own space under Privé, and give the rules panel to the header", async () => {
     // La navigation du fil passe par l'hôte, que le layout prête (`ContexteDeLHote`).
@@ -153,7 +189,7 @@ describe("/n/[...chemin] page reads (AC9, AC19, AC22)", () => {
     fireEvent.click(within(screen.getByRole("navigation", { name: "Chemin" })).getByRole("button", { name: "Ventes" }))
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Privé" }))
     expect(naviguer).toHaveBeenCalledWith("/n/private/lea/contexte")
-    expect(within(ouvrirLePartage().getByRole("list", { name: "Ont accès" })).getByRole("combobox", { name: "Accès de Équipe Ventes" })).toHaveValue("write")
+    expect(within(ouvrirLePartage().getByRole("list", { name: "Personnes et équipes ajoutées" })).getByRole("combobox", { name: "Accès de Équipe Ventes" })).toHaveValue("write")
   })
 
   it("should read the links of the node by nodeLinks, with the page, and fold them in « Cité dans » (E11-S05, AC-e1)", async () => {
@@ -254,6 +290,7 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     text: "ctx: XXXX-XXXX",
     blocks: [{ name: "code", chars: 14, status: "full" as const, path: null, head: 0 }],
     budget: 20_000,
+    whole: { total: 14, blocks: [{ name: "code", chars: 14 }] },
     served: { path: PROCEDURE, revision: 4, score: 0.82 },
     candidates: [{ path: PROCEDURE, title: "Qualifier les prospects à traiter", kind: "procedure", score: 0.82 }],
   }
@@ -308,6 +345,10 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     expect(encart.getByRole("link", { name: /^Contexte : Tout le monde/ })).toHaveAttribute("href", "/context#everyone-context")
     expect(encart.queryByRole("link", { name: "Règles Oto" })).toBeNull()
     expect(screen.queryByRole("region", { name: "Ma fiche" })).toBeNull()
+    // 2026-10-20 : la jauge du budget, tout en bas de la colonne, après l'aperçu et les encarts.
+    const jauge = screen.getByRole("meter", { name: "Part du budget du contexte" })
+    expect(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }).compareDocumentPosition(jauge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(jauge.closest(".oto-budget")?.nextElementSibling).toBeNull()
   })
 
   // E05-S11 (AC-17) : le titre du document d'un Contexte est celui de son `<h1>`, « Contexte · <section> » ;

@@ -3,7 +3,8 @@
 // (`seedReferenceOrg`), et P, dont Ada est aussi membre ici : la RLS d'isolation lui rend les lignes de P,
 // que le service doit écarter. Droits et filtres sont prouvés par les services eux-mêmes
 // (`security-patterns.md § Droits dans le service`) : `usageSummary` (AC2, AC7), `listFeedback` (AC12),
-// `setFeedbackState` (AC11), et le refus d'un membre qui n'administre pas l'organisation (N9) ; un refus
+// `setFeedbackState` (AC11), les statistiques de l'usage et l'option « Retours visibles » (1.4.13), et le refus d'un
+// membre qui n'administre pas l'organisation (N9) ; un refus
 // sans requête, par l'espion de `spyRequests` (AC-x3). En suite portable (`sqlConfigured`) : le projet, ou le Postgres nu du job `bare-postgres`.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { listFeedback, setFeedbackState } from "../../packages/plateforme/server/feedback"
@@ -210,6 +211,33 @@ describe.skipIf(!sqlConfigured)(portable("usage and feedback services on a real 
     })
   })
 
+  // 1.4.13 : les statistiques lues sur la base, la fenêtre et l'organisation posées dans chaque lecture.
+  it("should add the statistics of the window: conversations by assistant, the contents read named when the caller reads them, the calls by family", async () => {
+    await clear("journal")
+    await ref.write({
+      journal: [
+        ...usageLines(),
+        journalLine({ ctx: "CLA1-0001", person: "claire", tool: "read", at: DAY - 1, target: "ventes/qualifier_prospects" }),
+        journalLine({ ctx: "PAU1-0001", person: "paul", tool: "read", at: 179, target: "private/claire/relances" }),
+        { ...journalLine({ ctx: "LEA1-0001", person: "lea", tool: "call", at: 2 * DAY - 1, target: "table.rows" }), is_error: true, error: "not_found: x" },
+        // Hors de la fenêtre, et de P : jamais comptés.
+        journalLine({ ctx: "LEA0-0001", person: "lea", tool: "read", at: 10 * DAY, target: "ventes/qualifier_prospects" }),
+        journalLine({ ctx: "LEAP-0001", person: "lea", tool: "read", at: 60, target: "ventes/qualifier_prospects", org: OTHER_ORG.id }),
+      ],
+    })
+
+    const { statistics } = await usageSummary(await ref.db("ada"), ref.identityOf("ada"), { period: 7 })
+
+    expect(statistics.adoption.assistants).toEqual([{ name: "Claude", conversations: 3 }])
+    expect(statistics.adoption.weeks.reduce((total, week) => total + week.conversations, 0)).toBe(3)
+    expect(statistics.content.mostRead).toEqual([{ path: "ventes/qualifier_prospects", title: "Qualifier les prospects", reads: 1, conversations: 1 }])
+    expect(statistics.sharing.connectors.find((connector) => connector.name === "table")).toEqual({ name: "table", label: null, active: false, calls: 1, errors: 1 })
+    // Par personne : Claire, une conversation et deux appels dans la fenêtre ; son dernier appel est celui de sa lecture.
+    expect(statistics.people.find((person) => person.name === "Claire Morel")).toMatchObject({ conversations: 1, calls: 2, lastAssistantUse: minutesAgo(DAY - 1), assistant: "Claude" })
+    // Par équipe : Ventes, la procédure servie à Léa nommée.
+    expect(statistics.teams.find((team) => team.name === "Ventes")?.topProcedure).toEqual({ path: "ventes/qualifier_prospects", title: "Qualifier les prospects" })
+  })
+
   describe("listFeedback (AC12)", () => {
     // #1 à #50 ouverts, #51 pris en compte, #52 ouvert de type `error` ; #1 à #3 au même instant, à la
     // frontière de la page ; #53 résolu, #54 décliné ; #55 hors de la fenêtre ; le #1 de P, qu'Ada lit aussi ;
@@ -370,18 +398,34 @@ describe.skipIf(!sqlConfigured)(portable("usage and feedback services on a real 
     })
 
     // E05-S13 (AC-9, HN-E05S13-7) : les retours sont à l'équipe plateforme ; l'administratrice du client, qui lit
-    // l'usage, ne les lit ni ne les change, refusée sans aucune requête.
-    it("should refuse the feedback to an administrator of the client outside the platform team, before any request", async () => {
+    // l'usage, ne les lit ni ne les change tant que l'organisation ne les affiche pas (1.4.13), refusée sur la seule
+    // lecture de l'option.
+    it("should refuse the feedback to an administrator of the client outside the platform team while the organisation hides it, before reading a ticket", async () => {
       await writeTickets([{ number: 1, at: 20 }])
       const spy = spyRequests(await ref.db("ada"))
       const ada = ref.identityOf("ada")
-      const reserved = "Handling the feedback of Acme Test is reserved to the platform team that administers it. Ask them."
+      const reserved = "Handling the feedback of Acme Test is reserved to the platform team that administers it, and to its administrators when « Retours visibles » is on. Ask them."
 
       await expect(listFeedback(spy.db, ada, { days: 30 })).rejects.toMatchObject({ code: "forbidden", message: reserved })
       await expect(setFeedbackState(spy.db, ada, { ticket: "FB-0001", state: "resolved" })).rejects.toMatchObject({ code: "forbidden", message: reserved })
 
-      expect(spy.requests).toEqual([])
+      expect(spy.requests.filter((request) => request.write || request.tables.includes("feedback"))).toEqual([])
+      expect(spy.requests.some((request) => request.tables.includes("orgs"))).toBe(true)
       expect(await ticketOf(ORG.id, 1)).toMatchObject({ state: "open" })
+    })
+
+    // 1.4.13 : « Retours visibles » allumé, l'administratrice du client lit et change les tickets ; un membre, jamais.
+    it("should let an administrator of the client handle the feedback when the organisation shows it, never a member", async () => {
+      await writeTickets([{ number: 1, at: 20 }])
+      await seed.admin`update platform.orgs set flags = flags || '{"feedback_visible": true}'::jsonb where id = ${ref.org.id}`
+      try {
+        const ada = ref.identityOf("ada")
+        expect((await listFeedback(await ref.db("ada"), ada, { days: 30 })).tickets.map((ticket) => ticket.ticket)).toEqual(["FB-0001"])
+        expect(await setFeedbackState(await ref.db("ada"), ada, { ticket: "FB-0001", state: "acknowledged" })).toMatchObject({ changed: true })
+        await expect(listFeedback(await ref.db("lea"), ref.identityOf("lea"), { days: 30 })).rejects.toMatchObject({ code: "forbidden" })
+      } finally {
+        await seed.admin`update platform.orgs set flags = flags - 'feedback_visible' where id = ${ref.org.id}`
+      }
     })
   })
 })

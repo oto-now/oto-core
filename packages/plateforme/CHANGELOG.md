@@ -136,6 +136,35 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
 
+## 1.4.13 — 2026-10-20
+
+### Assistants
+- `node.access` reads who has access to a page: owner team and its default level, the whole organisation, people and teams added, each member's real level.
+- `node.share` sets or removes the access of a person, a team, the owner team or the whole organisation, by name; several matches are listed, nothing changes.
+- `node.public_link` creates or disables the public link of a page in two steps.
+- With a request, beyond three teams, `context` serves in full the three team contexts closest to it; the others in one line with how to read them.
+
+### Hosts
+- Migrations: `20261020090000_platform_vues.sql` (table `node_views`, one row per page, person and day).
+- Server: `listNodeRules(..., { people: true })` returns `team` (the owner team's default level, inherited level and rule) and `organisation` (the organisation's real level, a folder's rule included); `owner.teamId` is served.
+- Schemas: `generalAccessSchema` accepts `level: "none"`, an organisation rule that closes a page a folder opens.
+- Server: `setNodeRule` refuses an owner team rule below the organisation's real level on the node; `setGeneralAccess` raises the owner team rule with the organisation.
+- Server: `homeContents(db, identity, { tab, scope, offset })`, `homeNews(db, identity)`, `recordNodeView(db, identity, { path })` (call it after the response of a node page).
+- Server: `usageSummary` returns `statistics` (adoption, content, sharing and connectors, weekly series, `teams` and `people` tables).
+- Server: `handlesFeedback(db, identity)` is async and reads the `feedback_visible` flag; hosts decide the « Retours » entry on `isOrgAdmin(identity)` alone.
+- Server: `deleteTeam` erases the team's pages in the trash with it; `describeTeamDeletion` returns `trashed`; `TeamDeletion` is `TeamDeletionView` from schemas.
+- Server: `previewContext` returns `whole` (`WholeWeights`), the full weight of each block with no budget applied.
+- API: `GET /api/platform/home`, `GET /api/platform/teams/<slug>/deletion`.
+- Schemas: `SelectOption` takes `description` and `icon`; `FEEDBACK_VISIBLE`, `UsageStatistics`, `TeamDeletionView`, the home and share function types.
+- UI: « Partager » shows the default access of the owner team and of the organisation on two lines, in titled sections, levels as coloured pills with what each allows.
+- UI: home: « Reprendre » card (Récents, Les plus consultés, Fil), « Brancher votre assistant », « Lancer », « Nouveautés »; `EcranDAccueil` takes `reprendre` and `nouveautes`; the home search is removed.
+- UI: `EcranDActivite` on `/journal` (tabs Statistiques for administrators, Journal); « Activité » replaces « Journal » in the settings menu; `/admin/usage` leads to `/journal?tab=statistics`.
+- Schemas: `INACTIVE_DAYS` (30), the days after which a person who signed in once is inactive.
+- UI: `EcranEquipes` takes `prefixeDesPages` (as `EcranDeNoeud`): a page that blocks a team's deletion links to its address; pass it from the host's `/teams` page.
+- UI: `EcranOrganisation` takes `retoursVisibles`; `EcranRetours` takes `resultat: { masques: true }` and offers « Les afficher ».
+- UI: the team deletion dialog says what goes and what blocks; the lead buttons carry a tooltip; the page of a Contexte ends its right column with a thin budget gauge (`JaugeDuBudget`).
+- UI: `EcranDeNoeud` takes `piedDeColonne`; a host mounts `JaugeDuBudget` there for a Contexte (as the reference host does in `/n/[...chemin]`).
+
 ## 1.4.12 — 2026-10-20
 
 ### Assistants

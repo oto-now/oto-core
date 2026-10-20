@@ -96,13 +96,13 @@ async function connecteurs({ page, capturer }: Parcours) {
 
 /** Le fil des réglages ; les écrans retirés (E05-S11, AC-25) n'ont plus d'adresse, 404 (E11-S07, `e11s07-adresses.spec.ts`). */
 async function filDesReglages({ page, capturer }: Parcours) {
-  // Le maillon courant du fil ouvre ses frères (settings-shell) : les réglages, Journal compris (E05-S11, AC-33 ;
-  // E05-S13, AC-10), puis « Équipes & accès », sans onglet d'accès plateforme (E05-S13, AC-5).
+  // Le maillon courant du fil ouvre ses frères (settings-shell) : les réglages, « Activité » (l'ancien Journal) compris
+  // (E05-S11, AC-33 ; E05-S13, AC-10 ; 1.4.13), puis « Équipes & accès », sans onglet d'accès plateforme (E05-S13, AC-5).
   await ouvrir(page, "Organisation")
   await ecranOuvert(page, "Organisation").click()
   const freres = page.getByRole("menu")
   await auRepos(freres)
-  await expect(freres.getByRole("menuitemradio")).toHaveText(["Organisation", "Équipes & accès", "Journal"])
+  await expect(freres.getByRole("menuitemradio")).toHaveText(["Organisation", "Équipes & accès", "Activité"])
   await capturer("fil-des-reglages")
   await freres.getByRole("menuitemradio", { name: "Équipes & accès" }).click()
   await expect(page).toHaveURL(`${ADRESSE}/teams`)

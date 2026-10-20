@@ -308,6 +308,8 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   )
   // Le lien public de B (E05-S10, ADR-013 ; jeton tiré par la base).
   await admin`insert into platform.node_shares (org_id, node_id, created_by) values (${b.id}, ${table}, ${people.b.id})`
+  // Une vue du tableau de B à l'écran (1.4.13) : une ligne par page, personne et jour.
+  await admin`insert into platform.node_views (org_id, node_id, user_id) values (${b.id}, ${table}, ${people.b.id})`
   // Un fichier joint de B (E10-S02, ADR-016) : sa ligne seule, aucun objet dans un bucket.
   await admin`
     insert into platform.files (org_id, node_id, name, mime, size, status, created_by)

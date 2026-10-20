@@ -28,6 +28,7 @@ erDiagram
     nodes ||--o| node_drafts : "brouillon ouvert"
     nodes ||--o{ node_shares : "liens publics"
     nodes ||--o{ files : "fichiers joints"
+    nodes ||--o{ node_views : "vues à l'écran"
     orgs ||--o{ upload_tickets : ""
     orgs ||--o{ connector_consents : ""
     orgs ||--o{ hosted_link_requests : ""
@@ -64,6 +65,7 @@ erDiagram
 | `node_versions` | Historique publié | `node_id`, `revision`, `title`, `summary`, `kind`, `meta`, `blocks` (instantané des blocs publiés ; sans lignes pour un tableau), `author`, `created_at` |
 | `node_aliases` | Anciens chemins | `old_path`, `node_id` ; clé (`org_id`, `old_path`) |
 | `links` | Liens `[[…]]` et blocs `reference` | `source_node_id`, `source_block_id`, `target_path`, `target_key` (`[[chemin#clé]]`), `target_node_id` (null si sans cible) |
+| `node_views` | Vues des pages à l'écran (1.4.13), jamais exportées | `node_id`, `user_id` (clé vers `members` avec `org_id`, en cascade), `day` (jour de l'horloge de la base, jamais inséré), `views` (1 à 1 000 000, augmenté par une ouverture de plus le même jour : une vue à moins d'une minute de la précédente ne compte pas), `last_at` (la dernière vue, comptée ou non) ; clé (`org_id`, `node_id`, `user_id`, `day`), index (`org_id`, `day`), (`org_id`, `user_id`, `day`) et (`node_id`) ; lues dans l'organisation, écrites par la personne pour elle-même sur une page de son organisation (`insert … on conflict do update`, `update` accordé sur `views` et `last_at` seuls) ; les lignes de plus de 90 jours retirées par le service à chaque vue (policy `node_views_delete_expired`) |
 | `node_shares` | Lien public d'un nœud (ADR-013) | `node_id`, `token` (43 caractères base64url, unique), `include_children`, `created_by`, `created_at`, `revoked_at` ; un seul lien actif par nœud |
 | `files` | Fichier joint à un nœud (ADR-016), ou en transit (sans nœud, à échéance) : métadonnées seules, les octets dans le stockage sous la clé `<org_id>/<id>` | `node_id` (cascade ; nul pour un fichier en transit), `name` (1 à 255, jamais dans la clé), `mime`, `size` (1 octet à 50 Mo), `status` (`pending` · `ready` ; insertion `pending` seule ; passage à `ready` par `mark_files_ready` seule), `created_by`, `created_at`, `expires_at` (posée pour un fichier en transit, et pour lui seul : `files_transit_check` ; une heure, à l'horloge de la base : `expires_at_clock`) ; un fichier en transit ne se lit, ne se modifie et ne se supprime que par son auteur (RLS) ; quota de 10 Go par organisation sous le verrou 7501, lu par `org_files_bytes` ; un fichier appartient à un seul nœud |
 | `upload_tickets` | Ticket d'envoi d'`upload.link` (ADR-018), jamais exporté | `user_id`, `ctx`, `token_hash` et `form_token_hash` (empreintes SHA-256 des jetons de `curl` et du formulaire, uniques, jamais un jeton), `kind` (`file` · `md` · `csv`), `mode`, `target_path`, `name`, `title`, `summary`, `key`, `base_revision`, `publish`, `expires_at` (15 minutes, à l'horloge de la base : `expires_at_clock`), `used_at` ; lu par sa personne et, expiré, par tout membre ; aucune mise à jour hors `consume_upload_ticket` |

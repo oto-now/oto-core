@@ -15,6 +15,11 @@
 // (organisation, personne, équipe) et les connecteurs, puis le corps du Contexte quand il y en a un ;
 // procédures comprises dans ses enfants listés. Repris de la maquette (l. 108-135) : les faits des blocs
 // personne, organisation et équipe ; retirés : leurs en-têtes et la phrase « sans équipe ».
+//
+// 2026-10-20 : une personne de plus de trois équipes reçoit en entier les trois Contextes d'équipe les plus proches de
+// sa demande (`fullTeamContexts`, mots en commun comme `wordsInCommon` du routage) ; les autres gardent leur tête et
+// une ligne, leur résumé et comment les lire. Sans elle, dix Contextes d'équipe servis entiers, par nom, remplissaient le
+// budget et les derniers étaient coupés quelle que soit la demande.
 import { CONTEXT_INDEX, NODE_PATH_PATTERN, orderBlocks, renderBlocks } from "../../../schemas"
 import { ACCESS_LEVELS, nodeLevels, type AccessLevel } from "../../access"
 import type { PlatformDb } from "../../db"
@@ -24,6 +29,7 @@ import type { DocBlock } from "../../nodes/document"
 import { resolveTargets, targetKey, type TargetNode, type TargetResolution } from "../../nodes/link-resolution"
 import { contextReference, extractReferences, referenceLines, resolvedReferences, type ReferenceBlock } from "../../nodes/references"
 import { BLOCK_SQL_COLUMNS, docBlock } from "../../nodes/store"
+import { wordsInCommon } from "../../routing"
 import { readRest, type ContextBlock } from "../engine"
 
 /** Lignes des deux listes d'un Contexte, enfants d'abord (AC12) ; au-delà, son pointeur le dit (E11-S03, AC-b2). */
@@ -49,13 +55,25 @@ export type PartFacts = {
  */
 type ContextPath = { name: string; path: string | null; header: string; facts: (facts: PartFacts) => readonly string[] }
 
-/** Le corps rendu d'un Contexte servi : ses blocs, puis ses listes ; `listsCut` : listes arrêtées à 20 lignes. */
-export type ContextBody = { text: string; listsCut: boolean }
+/**
+ * Le corps rendu d'un Contexte servi : ses blocs, puis ses listes ; `listsCut` : listes arrêtées à 20 lignes ;
+ * `summary` : le résumé du nœud, sinon la première phrase de son texte, la ligne d'un Contexte servi en résumé.
+ */
+export type ContextBody = { text: string; listsCut: boolean; summary?: string }
+
+/** Contextes d'équipe servis en entier au plus (décidé par JB le 20/10/2026) ; Tout le monde et Privé s'y ajoutent toujours. */
+export const FULL_TEAM_CONTEXTS = 3
+
+/** La ligne d'un Contexte d'équipe servi en résumé, avant le pointeur vers `read`. */
+const CONDENSED = "Summarised here: other team contexts are closer to this request. Read it in full with"
+
+/** Une première phrase au plus de cette longueur, coupée à un mot. */
+const SUMMARY_MAX = 200
 
 /** Une ligne d'index d'un Contexte : sous-page, tableau, procédure ou page liée (« cité n'est pas injecté »). */
 type IndexNode = { path: string; title: string; summary: string }
 
-type ContextNode = { id: string; path: string }
+type ContextNode = { id: string; path: string; summary: string | null }
 type ChildRow = IndexNode & { id: string; parent_id: string | null }
 type LinkRow = { source_node_id: string; target_path: string }
 /** Un bloc publié d'un Contexte : les colonnes de `docBlock`, plus le nœud (les blocs de tous les Contextes se lisent ensemble). */
@@ -149,26 +167,53 @@ function contextBody(input: { markdown: string; children: readonly IndexNode[]; 
  * (E11-S03, AC-b1, AC-b4). Ses listes arrêtées à 20 lignes (N20), il finit par le pointeur qui le dit (AC-b2)
  * et la partie compte `cut`. `path` au rapport seulement quand le corps est servi (AC-4).
  */
-function partBlock(entry: ContextPath, factLines: readonly string[], prefix: string, content: { body?: ContextBody; notLoaded?: boolean }): ContextBlock {
+function partBlock(entry: ContextPath, factLines: readonly string[], prefix: string, content: { body?: ContextBody; notLoaded?: boolean; condensed?: boolean }): ContextBlock {
   const head = [headerOf(entry), ...factLines].join("\n")
   const part = { name: entry.name, head: head.length }
   const { body } = content
   if (content.notLoaded && entry.path) return { ...part, text: `${head}\n${CONTEXT_INDEX.notLoaded}${prefix}_read {"path": "${entry.path}"}.` }
   if (!body || body.text === "" || !entry.path) return { ...part, text: head }
+  if (content.condensed) return { ...part, text: `${head}\n${[body.summary, CONDENSED, `${prefix}_read {"path": "${entry.path}"}.`].filter(Boolean).join(" ")}` }
   if (!body.listsCut) return { ...part, text: `${head}\n${body.text}`, path: entry.path }
   const pointer = `${CONTEXT_INDEX.listsStopped}${CONTEXT_LIST_MAX} entries are listed. ${readRest(prefix, entry.path)}`
   return { ...part, text: `${head}\n${body.text}\n${pointer}`, path: entry.path, cut: true }
 }
 
+/** Les mots de la demande dans le nom d'une équipe et le corps de son Contexte (ses listes comprises : titres de ses pages). */
+function closeness(phrase: string | undefined, name: string, body: ContextBody | undefined): number {
+  return phrase === undefined ? 0 : wordsInCommon(phrase, { title: name, summary: body?.text ?? "" }).length
+}
+
+/**
+ * Les chemins des Contextes d'équipe servis en entier : tous jusqu'à trois équipes, et tous sans demande (seul le plafond
+ * de 35 000 caractères coupe, décidé par JB le 20/10/2026) ; au-delà, avec une demande, les trois les plus proches
+ * (mots en commun), puis ceux qui ont un corps, puis les équipes que la personne mène, puis l'ordre des parties (par nom).
+ */
+export function fullTeamContexts(identity: Identity, bodies: ReadonlyMap<string, ContextBody>, phrase?: string): Set<string> {
+  const teams = identity.teams.map((team, rank) => {
+    const path = `${team.slug}/contexte`
+    const body = bodies.get(path)
+    return { path, rank, lead: team.role === "lead", hasBody: Boolean(body?.text), score: closeness(phrase, team.name, body) }
+  })
+  if (phrase === undefined || teams.length <= FULL_TEAM_CONTEXTS) return new Set(teams.map((team) => team.path))
+  const ranked = [...teams].sort((a, b) => b.score - a.score || Number(b.hasBody) - Number(a.hasBody) || Number(b.lead) - Number(a.lead) || a.rank - b.rank)
+  return new Set(ranked.slice(0, FULL_TEAM_CONTEXTS).map((team) => team.path))
+}
+
 /**
  * Les parties de la personne (E05-S12, AC-1 à AC-4), dans l'ordre de `contextPaths`, chacune servie même
  * quand son Contexte manque : `bodies` = les corps lus par `contextBodies`, par chemin ; `null` quand leur
- * lecture a échoué (AC13) : chaque Contexte cherché dit alors de le lire par `read`.
+ * lecture a échoué (AC13) : chaque Contexte cherché dit alors de le lire par `read`. Au-delà de trois équipes, celles
+ * que `fullTeamContexts` ne retient pas pour `phrase` gardent leur tête et une ligne (2026-10-20).
  */
-export function contextParts(identity: Identity, facts: PartFacts, bodies: ReadonlyMap<string, ContextBody> | null): ContextBlock[] {
-  return contextPaths(identity).map((entry) =>
-    partBlock(entry, entry.facts(facts), identity.org.prefix, bodies === null ? { notLoaded: true } : { body: entry.path ? bodies.get(entry.path) : undefined }),
-  )
+export function contextParts(identity: Identity, facts: PartFacts, bodies: ReadonlyMap<string, ContextBody> | null, phrase?: string): ContextBlock[] {
+  const teamPaths = new Set(identity.teams.map((team) => `${team.slug}/contexte`))
+  const full = bodies === null ? null : fullTeamContexts(identity, bodies, phrase)
+  return contextPaths(identity).map((entry) => {
+    if (bodies === null) return partBlock(entry, entry.facts(facts), identity.org.prefix, { notLoaded: true })
+    const condensed = entry.path !== null && teamPaths.has(entry.path) && !full?.has(entry.path)
+    return partBlock(entry, entry.facts(facts), identity.org.prefix, { body: entry.path ? bodies.get(entry.path) : undefined, condensed })
+  })
 }
 
 /** La ligne d'un Contexte changé qui n'a plus de corps servi : retiré, dépublié, vidé ou devenu illisible (E11-S19). */
@@ -198,7 +243,7 @@ async function readableContexts(db: PlatformDb, identity: Identity, expected: re
     db,
     "context: contexts",
     (sql) => sql<ContextNode[]>`
-      select id, path from platform.nodes
+      select id, path, summary from platform.nodes
        where org_id = ${identity.org.id} and kind = 'context' and status = 'published' and revision >= 1
          and path = any(${expected})`,
   )
@@ -268,7 +313,17 @@ function renderContextNode(node: ContextNode, reads: ContextReads): ContextBody 
   const markdown = renderBlocks(reads.documents.get(node.id) ?? [], { headingBase: 3, reference: contextReference(lines) })
   const children = reads.children.filter((child) => child.parent_id === node.id).sort(byPath)
   const linked = linkedPages(node, new Set(children.map((child) => child.id)), reads)
-  return contextBody({ markdown, children, linked })
+  return { ...contextBody({ markdown, children, linked }), summary: (node.summary ?? "").trim() || firstSentence(markdown) }
+}
+
+/** La première phrase du texte d'un Contexte : la première ligne de prose (ni titre, ni liste, ni tableau, ni citation), coupée à 200 caractères. */
+function firstSentence(markdown: string): string {
+  const line = markdown.split("\n").map((text) => text.trim()).find((text) => text !== "" && !/^[#>|`*-]|^\d+\./.test(text)) ?? ""
+  const end = line.search(/[.!?](\s|$)/)
+  const sentence = end >= 0 ? line.slice(0, end + 1) : line
+  if (sentence.length <= SUMMARY_MAX) return sentence
+  const cut = sentence.slice(0, SUMMARY_MAX)
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1))}…`
 }
 
 /**

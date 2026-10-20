@@ -83,6 +83,9 @@ export { getConversation, listConversations } from "./journal-read"
 // E05-S12 (lot B) : les activités de l'accueil (le journal par gestes) et ses procédures utiles.
 export { listActivities } from "./activities"
 export { usefulProcedures } from "./context/blocks/procedures"
+// 1.4.13 : la carte « Reprendre », les nouveautés de l'accueil, et la vue d'une page que l'hôte enregistre.
+export { homeContents, homeNews } from "./home-contents"
+export { recordNodeView } from "./node-views"
 export { describeTeamDeletion } from "./teams"
 export type { TeamDeletion } from "./teams"
 export { setTeamMemberRole } from "./teams"

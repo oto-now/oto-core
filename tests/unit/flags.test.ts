@@ -121,8 +121,9 @@ describe("flag registry (AC7)", () => {
     expect(registryProblems(REGISTRY)).toEqual([])
   })
 
-  it("should be empty in V1: no feature reads a flag yet (NH1)", () => {
-    expect(FLAGS).toEqual([])
+  // 1.4.13 : le premier drapeau arrive avec la fonctionnalité qui le lit, « Retours visibles » (`handlesFeedback`, NH1).
+  it("should declare feedback_visible alone, the flag that handlesFeedback reads", () => {
+    expect(FLAGS.map((flag) => flag.name)).toEqual(["feedback_visible"])
   })
 
   it("should catch an invalid name, an invalid description and a duplicate", () => {
@@ -183,13 +184,23 @@ describe.skipIf(!sqlConfigured)(portable("setFlag on the real database, O"), { t
       expect(calls).toEqual([])
     })
 
-    it("should refuse every flag with the V1 registry, which declares none", async () => {
+    it("should refuse an unknown flag with the package registry, naming feedback_visible, before any read", async () => {
       const { db, calls } = watchDb(await ref.db("ada"))
       await expect(setFlag(db, ref.identityOf("ada"), { name: "nouvelle_grille", enabled: true })).rejects.toMatchObject({
         code: "invalid_arguments",
-        message: "Unknown flag nouvelle_grille. Declared flags: none.",
+        message: "Unknown flag nouvelle_grille. Declared flags: feedback_visible.",
       })
       expect(calls).toEqual([])
+    })
+
+    it("should accept feedback_visible with the package registry, then set it back", async () => {
+      const db = await ref.db("ada")
+      const ada = ref.identityOf("ada")
+      try {
+        expect((await setFlag(db, ada, { name: "feedback_visible", enabled: true })).data).toMatchObject({ name: "feedback_visible", enabled: true })
+      } finally {
+        await setFlag(db, ada, { name: "feedback_visible", enabled: false })
+      }
     })
 
     // Marc, membre simple de O : l'annuaire nomme les administrateurs, `orgs` n'est ni lue ni écrite.

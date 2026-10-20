@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { clientAuth, compteDuStaff } from "./fixtures/base"
+import { clientAuth } from "./fixtures/base"
 import { seConnecterSurLEspace } from "./fixtures/noeud"
 import { ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
@@ -59,8 +59,8 @@ test.describe("addresses in English", () => {
     for (const route of ["/platform", "/context", "/journal"]) {
       expect((await page.goto(`${adresse}${route}`))?.status(), route).toBe(200)
     }
-    const staff = await compteDuStaff(email)
-    expect((await page.goto(`${adresse}/admin/feedback`))?.status(), "/admin/feedback").toBe(staff ? 200 : 404)
+    // 1.4.13 : la page des retours sert tout administrateur ; option « Retours visibles » éteinte, elle le dit.
+    expect((await page.goto(`${adresse}/admin/feedback`))?.status(), "/admin/feedback").toBe(200)
 
     // `/admin` mène à `/admin/organization` (AC-a1).
     await page.goto(`${adresse}/admin`)

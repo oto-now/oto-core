@@ -12,7 +12,7 @@ export { NODE_PATH_PATTERN, nodePathSchema, WRITE_OPS } from "./nodes"
 export { CTX_PATTERN, ctxCodeSchema } from "./ctx"
 export { BLOCK_TYPES, blockTypeSchema, blockKeySchema, blockInputSchema, blockRef } from "./blocks"
 export type { BlockType, BlockInput } from "./blocks"
-export { flagNameSchema, flagToggleSchema, flagViewSchema } from "./flags"
+export { FEEDBACK_VISIBLE, flagNameSchema, flagToggleSchema, flagViewSchema } from "./flags"
 export type { FlagView } from "./flags"
 export { feedbackInputSchema, feedbackTypeSchema } from "./feedback"
 export type { FeedbackInput } from "./feedback"
@@ -28,8 +28,8 @@ export type {
   FeedbackTicketView,
   FeedbackType,
 } from "./feedback"
-export { USAGE_MAX_LINES, usageQuerySchema } from "./usage"
-export type { UsagePeriod, UsageQuery, UsageSummary } from "./usage"
+export { INACTIVE_DAYS, USAGE_MAX_LINES, usageQuerySchema } from "./usage"
+export type { UsagePeriod, UsagePersonRow, UsageQuery, UsageStatistics, UsageSummary, UsageTeamRow, UsageWeek } from "./usage"
 export {
   orderBlocks,
   renderBlock,
@@ -56,6 +56,7 @@ export type {
   PlatformAccessOverview,
   PlatformAccessView,
   StaffAddedMemberView,
+  TeamDeletionView,
   TeamView,
   UpdateTeam,
 } from "./teams"
@@ -81,6 +82,19 @@ export type {
 // E05-S12 (lot B) : les activités et les procédures utiles de l'accueil.
 export { USEFUL_PROCEDURES_SHOWN } from "./activity"
 export type { Activity, ActivityPage, ActivityVerb, UsefulProcedure } from "./activity"
+// 1.4.13 : la carte « Reprendre », les nouveautés et les vues des pages de l'accueil.
+export {
+  HOME_NEWS_DEFAULT_DAYS,
+  HOME_NEWS_MAX,
+  HOME_PAGE_SIZE,
+  HOME_SCOPES,
+  HOME_VIEWED_DAYS,
+  homeContentsQuerySchema,
+  LAUNCH_PROCEDURES_SHOWN,
+  NODE_VIEWS_KEPT_DAYS,
+  nodeViewSchema,
+} from "./accueil"
+export type { HomeContent, HomeContentsPage, HomeNews, HomeScope, HomeTab } from "./accueil"
 // Les bornes du nom, des domaines de travail, des seuils, du motif et du préfixe ne sortent que par les
 // schémas qui les composent : les schémas servis du MCP admin les en tirent (`orgSettingsSchema.shape`,
 // `platformAccessSchema.shape`). `hostSchema` sort seul : E09-S02 en passe chaque adresse d'une création
@@ -210,6 +224,8 @@ export type {
 } from "./node-gestures"
 export type { PublicTable } from "./node-gestures"
 export { PUBLIC_TABLE_ROWS_MAX } from "./node-gestures"
+export { nodeAccessArgsSchema, nodePublicLinkArgsSchema, nodeShareArgsSchema } from "./share-functions"
+export type { NodePublicLinkArgs, NodeShareArgs } from "./share-functions"
 // E10-S01 : Markdown et CSV. Le fichier d'une page (export et import), la lecture, la déduction, le contrôle et
 // l'écriture d'un CSV, les bornes d'un import et les corps de `tables/import` et des exports.
 export { NODE_HEAD_MAX, nodeExportQuerySchema, normalizeTitle, OP_TEXT_MAX, PAGE_MAX, slugOf } from "./nodes"

@@ -65,8 +65,10 @@ test.describe("le rail", () => {
         await expect(page).toHaveURL(`${ESPACE.adresse}/n/${CHEMINS.procedure}`)
 
         await rail.getByRole("button", { name: /^Entreprise : / }).click()
-        await expect(page.getByRole("menu").getByRole("menuitem", { name: "Journal" })).toBeVisible()
-        await expect(page.getByRole("menu").getByRole("menuitem", { name: "Usage" })).toHaveCount(0)
+        // 1.4.13 : « Activité » réunit Statistiques et Journal ; aucune des deux n'a d'entrée à part.
+        await expect(page.getByRole("menu").getByRole("menuitem", { name: "Activité" })).toBeVisible()
+        await expect(page.getByRole("menu").getByRole("menuitem", { name: "Journal" })).toHaveCount(0)
+        await expect(page.getByRole("menu").getByRole("menuitem", { name: "Statistiques" })).toHaveCount(0)
         await auRepos(page.getByRole("menu"))
         await page.screenshot({ path: testInfo.outputPath(`menu-entreprise-${mode}.png`) })
         await page.keyboard.press("Escape")

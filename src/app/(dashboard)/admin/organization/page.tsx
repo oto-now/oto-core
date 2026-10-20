@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { readOrgView } from "@otomata_tech/oto_platform/api"
-import { isOrgAdmin, listShares, loadNode, previewContext, readBrand } from "@otomata_tech/oto_platform/server"
+import { FEEDBACK_VISIBLE } from "@otomata_tech/oto_platform/schemas"
+import { isOrgAdmin, listFlags, listShares, loadNode, previewContext, readBrand } from "@otomata_tech/oto_platform/server"
 import { EcranOrganisation, reserveAuxAdministrateurs, resultatDe, type EcranOrganisationProps } from "@otomata_tech/oto_platform/ui"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { ADRESSES } from "../adresses"
@@ -33,6 +34,7 @@ export default async function OrganisationPage({ searchParams }: { searchParams:
   let resultat: EcranOrganisationProps["resultat"] = ECHEC
   let liensPublics: EcranOrganisationProps["liensPublics"]
   let contexte: EcranOrganisationProps["contexte"]
+  let retoursVisibles: EcranOrganisationProps["retoursVisibles"]
   if (identite && !administre) resultat = { error: reserveAuxAdministrateurs(identite.data.identity.org.name) }
   else if (identite) {
     const { db } = identite.data.session
@@ -47,7 +49,11 @@ export default async function OrganisationPage({ searchParams }: { searchParams:
       apercu: resultatDe(previewContext(db, identity, {})),
       prefixeDesPages: ADRESSES.pages,
     }
-    resultat = await resultatDe(readOrgView(db, identity))
+    // L'option « Retours visibles » (1.4.13), lue avec la vue : `setFlag` la redécide à l'écriture.
+    ;[resultat, retoursVisibles] = await Promise.all([
+      resultatDe(readOrgView(db, identity)),
+      resultatDe(listFlags(db, identity).then((drapeaux) => drapeaux.some((drapeau) => drapeau.name === FEEDBACK_VISIBLE && drapeau.enabled))),
+    ])
   }
   const marque = identite && administre ? readBrand(identite.data.identity.org) : null
   const { saved } = await searchParams
@@ -62,6 +68,7 @@ export default async function OrganisationPage({ searchParams }: { searchParams:
       fil={{ adresses: ADRESSES, administre }}
       liensPublics={liensPublics}
       contexte={contexte}
+      retoursVisibles={retoursVisibles}
     />
   )
 }

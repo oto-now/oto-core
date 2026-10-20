@@ -45,6 +45,7 @@ const TEXTE = "ctx: XXXX-XXXX\n\n## Context: everyone (contexte)\nNous vendons.\
 const APERCU = {
   text: TEXTE,
   budget: 20_000,
+  whole: { total: 112, blocks: [{ name: "code", chars: 14 }, { name: "contexte", chars: 45 }, { name: "ventes/contexte", chars: 49 }] },
   blocks: [
     { name: "code", chars: 14, status: "full" as const, path: null },
     { name: "contexte", chars: 45, status: "full" as const, path: "contexte" },

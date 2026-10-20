@@ -192,6 +192,17 @@ Delta : exploitation).
 | M3 | Importe ces 12 fiches markdown. | `acme_context` → `acme_call node.write_many` avec `set_markdown`, les parents d'abord ; aucun `acme_write` par fiche |
 | M4 | Remplace « SAV » par « Service client » partout dans la page. | `acme_context` → `acme_write` avec `replace_text` sans `section`, avec `count` ; aucun `replace_text` répété section par section |
 
+### Partage d'un nœud et lien public (1.4.13)
+
+| # | Prompt | Attendu au journal |
+|---|--------|--------------------|
+| SH1 | Qui a accès à la page ventes/devis ? | `acme_context` → `acme_call node.access {"path": "ventes/devis"}` → réponse : équipe propriétaire et son niveau par défaut, toute l'organisation, ajoutés, membres ; aucune écriture |
+| SH2 | Donne à Léa Roux l'accès en lecture à ventes/devis. | `acme_context` → `acme_call node.access` (facultatif) → `acme_call node.share {"path": "ventes/devis", "subject": "person", "name": "Léa Roux", "level": "read"}` ; un nom qui désigne plusieurs membres : la liste rendue, une question, aucun second appel avant la réponse |
+| SH3 | Ouvre ventes/devis en lecture à toute l'entreprise. | `acme_call node.share` avec `subject: "organisation"`, `level: "read"` ; aucun `node.public_link` |
+| SH4 | Mets l'équipe en lecture seule sur ventes/devis. | `acme_call node.share` avec `subject: "owner_team"`, `level: "read"` ; refusé si toute l'organisation a plus : le refus dit de la baisser d'abord, l'assistant le dit sans forcer |
+| SH5 | Rends ventes/offre accessible publiquement sur le web. | `acme_call node.public_link {"path": "ventes/offre", "action": "create"}` sans `confirm` (récapitulatif : ce qui devient public, sans compte) → question → après l'accord, le même appel avec `confirm: true` → le lien donné en lien markdown court |
+| SHN1 | Partage cette page avec mon équipe. (la page appartient déjà à l'équipe) | `acme_call node.access` → l'équipe a déjà accès : dit à l'utilisateur ; aucun `node.share` ni `node.public_link` |
+
 ### Transfert d'une arborescence
 
 | # | Prompt | Attendu au journal |
@@ -255,6 +266,7 @@ La phrase : « Au début de chaque conversation, appelle une fois l'outil de con
 | P4 | claude.ai : deux organisations branchées, la phrase posée pour Démo seulement ; nouvelle conversation : « Traduis « bonjour » en espagnol. » | `demo_context` seul ; le `context` de l'autre organisation jamais appelé |
 | P5 | ChatGPT, Le Chat, Claude Code, sans phrase ; nouvelle conversation : « Traduis « bonjour » en espagnol. » | Aucun appel `demo_*` |
 | P6 | Chaque assistant ; nouvelle conversation : une demande de travail du pilote (Q1) | `demo_context` en premier appel, `target` = la phrase ; son routage inchangé |
+| P7 | Personne membre de plus de trois équipes (dont Ventes) ; nouvelle conversation : « Relance les devis envoyés la semaine dernière. » | `demo_context` avec la phrase : Tout le monde, Privé et trois Contextes d'équipe entiers, dont celui de Ventes ; chaque autre équipe en une ligne qui finit par « Read it in full with demo_read … » ; aucun avis de budget atteint (2026-10-20) |
 
 ### Pilote V1 : qualification de prospects — E06-S01 (organisation Démo, `demo_`)
 
@@ -361,6 +373,8 @@ L'attendu se lit dans `admin_journal`.
 | 2026-10-19 | Texte servi de `<p>_context` : titre « ## Procedures you can run, most used first (<n>) », bloc « ## Pages and tables close to the request » (cinq au plus) avec une phrase, coupe au budget par priorité (procédures nommées par leurs titres) ; classement de `<p>_find` aligné sur celui de `context` (1.4.10) | Retours d'usage du MCP Démo : `find` et `context` donnaient deux réponses à la même phrase ; sur l'organisation du premier client, les procédures et les contenus récents partaient au budget derrière onze Contextes | à jouer après « Actualiser » : C1 à C7, F1 à F3, et « créer une tâche » sur Démo |
 | 2026-10-20 | Règle servie des genres : « Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps. » ; contrat `write.procedure` et guide de la plateforme (sous-procédures en pages) ; description de `node.check` (« …a procedure under a procedure ») ; `read` sert un lien vers un ancien chemin au chemin courant (1.4.11) | Retour d'usage : des procédures rangées sous une procédure, routées à la place de la principale ; un lien vers une page déplacée gardait l'ancien chemin dans le texte servi | à jouer après « Actualiser » : C1 à C7, et `read` d'une page qui cite une page déplacée |
 | 2026-10-20 | Règles servies : deux lignes sur les procédures (« A procedure is a page of numbered steps… », « A good procedure has a part « When to use it »… ») ; sans procédure servie, une demande qui mène à la section procedures du guide reçoit la section entière (« From the platform guide (section procedures): ») au lieu de son chemin (1.4.12) | Demande de JB : une notice des procédures au début de chaque contexte | à jouer après « Actualiser » : C1 à C7, et « écris une procédure pour relancer les devis » sur Démo |
+| 2026-10-20 | Fonctions `node.access` (lecture), `node.share` (écriture) et `node.public_link` (sensible, en deux temps) au catalogue, connecteur natif `node` : le partage d'un nœud et son lien public derrière `call`, sans outil nouveau (1.4.13, ADR-002 § 1) | — (demande de JB : que l'assistant gère le partage et le lien public) | à rejouer après « Actualiser » : SH1 à SH5, SHN1 ; et les phrases de suppression et de déplacement que les descriptions nouvelles pourraient attirer : PD2, M1, M2 |
+| 2026-10-20 | Texte servi de `<p>_context` : au-delà de trois équipes, trois Contextes d'équipe entiers au plus, les plus proches de la demande, les autres en une ligne « <résumé> Summarised here: other team contexts are closer to this request. Read it in full with <p>_read {"path": …}. » (1.4.13) | Retour d'usage : une personne de dix équipes recevait dix Contextes par nom, coupés au budget quelle que soit la demande | à jouer après « Actualiser » : P7, puis C1 à C7 |
 
 ## Rapports de frictions agent (mcp-patterns §8)
 

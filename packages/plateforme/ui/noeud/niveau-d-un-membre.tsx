@@ -12,8 +12,8 @@ import { ACCESS_LEVEL_NAMES, setNodeRuleSchema, type AccessLevelName, type NodeR
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
 import { Avatar, Button } from "../ds/react/primitives"
-import { Select } from "../ds/react/select"
 import { NIVEAUX_D_ACCES, PARTAGE } from "./libelles"
+import { ChoixDuNiveau, EtiquetteDeLigne, NiveauLu, optionDuNiveau } from "./partage-visuel"
 
 export type Membre = NonNullable<NodeRulesView["people"]>[number]
 
@@ -117,12 +117,11 @@ export function NiveauDUnMembre({ chemin, membre, gestionAccordable, envoyer, en
   }
 
   return (
-    <Select
-      size="sm"
-      className="oto-share-level"
+    <ChoixDuNiveau
+      valeur={choisi}
+      servi={membre.level}
       aria-label={PARTAGE.accesDe(membre.name)}
-      value={choisi}
-      options={proposes.map((niveau) => ({ value: niveau, label: NIVEAUX_D_ACCES[niveau] }))}
+      options={proposes.map(optionDuNiveau)}
       onChange={(evenement) => void changer(evenement.target.value)}
       disabled={enCours}
     />
@@ -136,27 +135,36 @@ type MembresDeLEquipeProps = Omit<NiveauDUnMembreProps, "membre"> & {
   /** Qui gère le nœud règle chaque membre ; les autres lisent son niveau. */
   gere: boolean
   moi: string | null
+  /** Le niveau de l'équipe sur ce nœud (1.4.13) : un membre qui en diffère porte « exception » ; absent pendant la lecture. */
+  niveauDeLEquipe?: AccessLevelName
 }
 
-/** « Membres de l'équipe … » dans « Partager » : chacun, son niveau hérité, et le menu qui le surcharge sur ce contenu. */
-export function MembresDeLEquipe({ membres, equipe, gere, moi, ...niveau }: MembresDeLEquipeProps) {
-  if (membres.length === 0) return null
+/** Les étiquettes d'un membre : « vous », « responsable », et « exception » quand une règle qui le nomme, posée plus haut, le règle autrement que l'équipe. */
+function EtiquettesDuMembre({ membre, moi, niveauDeLEquipe }: { membre: Membre; moi: string | null; niveauDeLEquipe?: AccessLevelName }) {
   return (
     <>
-      <p className="oto-pop-label">{PARTAGE.membresDe(equipe)}</p>
-      <ul aria-label={PARTAGE.membresDe(equipe)} className="flex flex-col">
-        {membres.map((membre) => (
-          <li key={membre.userId} className="oto-pop-row">
-            <Avatar name={membre.name} size="sm" aria-hidden="true" />
-            <span>
-              {membre.name}
-              {membre.userId === moi && <span className="oto-caption">{` (${PARTAGE.vous})`}</span>}
-              {membre.lead && <span className="oto-caption">{` · ${PARTAGE.responsable}`}</span>}
-            </span>
-            {gere ? <NiveauDUnMembre membre={membre} {...niveau} /> : <span className="oto-pop-meta">{NIVEAUX_D_ACCES[membre.level]}</span>}
-          </li>
-        ))}
-      </ul>
+      {membre.userId === moi && <EtiquetteDeLigne accent>{PARTAGE.vous}</EtiquetteDeLigne>}
+      {membre.lead && <EtiquetteDeLigne>{PARTAGE.responsable}</EtiquetteDeLigne>}
+      {!membre.lead && niveauDeLEquipe !== undefined && membre.level !== niveauDeLEquipe && <EtiquetteDeLigne>{PARTAGE.exception}</EtiquetteDeLigne>}
     </>
+  )
+}
+
+/** « Membres de l'équipe … » dans « Partager » : chacun, son niveau réel, et le menu qui le surcharge sur ce contenu. */
+export function MembresDeLEquipe({ membres, equipe, gere, moi, niveauDeLEquipe, ...niveau }: MembresDeLEquipeProps) {
+  if (membres.length === 0) return null
+  return (
+    <ul aria-label={PARTAGE.membresDe(equipe)} className="flex flex-col">
+      {membres.map((membre) => (
+        <li key={membre.userId} className="oto-pop-row">
+          <Avatar name={membre.name} size="sm" aria-hidden="true" />
+          <span className="oto-share-name">
+            {membre.name}
+            <EtiquettesDuMembre membre={membre} moi={moi} niveauDeLEquipe={niveauDeLEquipe} />
+          </span>
+          {gere ? <NiveauDUnMembre membre={membre} {...niveau} /> : <NiveauLu niveau={membre.level} />}
+        </li>
+      ))}
+    </ul>
   )
 }

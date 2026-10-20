@@ -1,9 +1,11 @@
-import { notFound } from "next/navigation"
+import { redirect } from "next/navigation"
+import { usageQuerySchema } from "@otomata_tech/oto_platform/schemas"
 
-// « Usage des assistants » (E08-S09), caché pour l'instant (E05-S13, AC-8, HN-E05S13-6, fiche D128) : la page rend
-// `notFound()` à tous, sans rien lire, et le layout ne donne plus son adresse au rail (menu, palette, fil). L'écran
-// (`EcranUsage`) et le service (`usageSummary`) du paquet restent tels quels ; la page d'E08-S09 se reprend de
-// l'historique (`git show 829dcfb:"src/app/(dashboard)/admin/usage/page.tsx"`) quand l'écran reviendra (V1.1).
-export default function UsagePage(): never {
-  notFound()
+// L'ancienne adresse des statistiques (E08-S09) : depuis la 1.4.13, elles sont l'onglet Statistiques d'« Activité »
+// (`/journal?tab=statistics`), qui décide le droit ; la fenêtre et l'équipe suivent, lues par `usageQuerySchema`.
+export default async function UsagePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<never> {
+  const { period, team } = usageQuerySchema.parse(await searchParams)
+  const recherche = new URLSearchParams({ tab: "statistics", period: String(period) })
+  if (team) recherche.set("team", team)
+  redirect(`/journal?${recherche}`)
 }

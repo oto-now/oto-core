@@ -85,6 +85,7 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   invitations: ["revoked_at"],
   members: ["org_id", "user_id", "role", "profile", "created_at"],
   node_drafts: ["title", "summary", "kind", "meta", "updated_by"],
+  node_views: ["views", "last_at"],
   node_shares: ["include_children", "created_by", "revoked_at"],
   nodes: [
     "id", "org_id", "parent_id", "path", "lpath", "kind", "title", "summary", "status", "revision", "meta", "owner_kind", "owner_team_id",
@@ -115,6 +116,7 @@ const DELETED_BY_AUTHENTICATED: Record<string, string> = {
   files: "trash purge, undone upload, abandoned pending files, size mismatch, the caller's transit file (server/nodes/trash.ts, server/uploads-write.ts, server/files/)",
   hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",
   members: "an administrator removes a member (removeMember, server/members.ts); the policy requires is_org_admin (20261019150000)",
+  node_views: "views older than 90 days swept on each view (server/node-views.ts)",
   nodes: "trash purge and an undone upload creation (server/nodes/trash.ts, server/uploads-write.ts)",
   org_domains: "a platform team member who administers the organisation removes an address (removeHost, server/admin/hosts.ts); the policy requires is_staff and is_org_admin (20261019150000)",
   team_members: "removeTeamMember (server/teams.ts): an administrator, or a lead removing a member; the policy requires the same (20261019150000)",

@@ -54,12 +54,21 @@ function optionsDe<T>(resultat: Resultat<T[]>, option: (element: T) => { value: 
   return resultat.error === undefined ? { data: resultat.data.map(option) } : { error: resultat.error }
 }
 
+/**
+ * Les paramètres de l'adresse de l'action, en champs cachés (l'onglet d'« Activité », 1.4.13) : un formulaire GET
+ * remplace la requête de son action par ses champs, et l'onglet serait perdu.
+ */
+function ParametresDeLAction({ adresse }: { adresse: string }) {
+  return [...new URL(adresse, "http://hote.invalid").searchParams].map(([nom, valeur]) => <input key={nom} type="hidden" name={nom} value={valeur} />)
+}
+
 export function FiltresDuJournal({ filtres, equipes, personnes, adresse, ici, filtrePose, Lien }: FiltresDuJournalProps) {
   return (
     <form method="get" action={adresse} aria-labelledby={TITRE} className="flex flex-col gap-2">
       <h2 id={TITRE} className="oto-label">
         Filtrer le journal
       </h2>
+      <ParametresDeLAction adresse={adresse} />
       <input type="hidden" name="period" value={filtres.period} />
       <div className="flex flex-wrap items-end gap-3">
         <ChoixDuFiltre

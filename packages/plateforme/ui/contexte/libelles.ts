@@ -87,6 +87,19 @@ export const APERCU_DU_CONTEXTE = {
 } as const
 
 /**
+ * La jauge du budget sur la page d'un Contexte (2026-10-20) : son poids, tout ce que l'assistant de la personne recevrait
+ * sans plafond, et ce qui se passe au-delà. Les nombres viennent de l'aperçu, jamais écrits ici.
+ */
+export const JAUGE_DU_BUDGET = {
+  nom: "Part du budget du contexte",
+  ligne: (total: string, budget: string, poids: string | null) =>
+    `${total} / ${budget} caractères · ${poids === null ? "ce contexte pas encore servi" : `ce contexte ${poids}`}`,
+  tient: "Tout tient : votre assistant reçoit chaque partie en entier.",
+  depasse:
+    "Au-delà du budget, les dernières parties sont coupées. Avec une demande, les contextes d'équipe les plus éloignés d'elle sont résumés en une ligne.",
+} as const
+
+/**
  * La vue « Contexte » (E05-S11, AC-13 à AC-15) : les parties du texte servi, empilées, sans chiffres (E05-S13) ; son écran
  * (E11-S10, AC-e2), la partie sans corps (AC-f2) et « Nouveautés » sans nouveauté servie (AC-f5).
  */

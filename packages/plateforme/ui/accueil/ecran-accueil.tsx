@@ -14,6 +14,10 @@
 //
 // E05-S12 (lot B, AC-18, HN-E05S12-20) : l'îlot principal seul à gauche ; à droite la recherche, « Brancher
 // un assistant », puis « Procédures les plus utilisées » ; « Contenus récents » quitte l'accueil.
+//
+// 1.4.13 : à gauche, la carte « Reprendre » (Récents, Les plus consultés, Fil) ; à droite, « Brancher votre
+// assistant », « Lancer » (les procédures les plus utilisées, la demande à copier), puis « Nouveautés depuis votre
+// dernière visite ». La recherche de l'accueil part : celle du rail suffit.
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
@@ -26,8 +30,9 @@ import { BranchementIA } from "./branchement-ia"
 import { ActivitesDeLAccueil } from "./fil-activite"
 import { FirstDay } from "./first-day"
 import { ACCUEIL } from "./libelles"
-import { ProceduresUtiles } from "./procedures-utiles"
-import { RechercheDeLAccueil } from "./recherche-de-l-accueil"
+import { Lancer } from "./lancer"
+import { Nouveautes } from "./nouveautes"
+import { Reprendre } from "./reprendre"
 import type { DonneesDeLAccueil } from "./types"
 
 /** Le salut, décoratif : le titre se lit sans lui. */
@@ -55,7 +60,7 @@ function estLePremierJour({ activites, connexions }: DonneesDeLAccueil): boolean
 
 type IlotDesActivitesProps = Omit<EcranDAccueilProps, "donnees"> & { lu: DonneesDeLAccueil; premierJour: boolean }
 
-/** L'îlot principal (AC-e3) : « Activités », le fil ou, le premier jour, sa phrase (HN-E05S11-11). */
+/** L'îlot principal : « Reprendre » et ses onglets, ou, le premier jour, sa phrase (HN-E05S11-11). */
 function IlotDesActivites({ lu, premierJour, Lien, hrefDuJournal, hrefDeConversation, prefixeDesPages }: IlotDesActivitesProps) {
   return (
     <Island aria-label={ACCUEIL.ilot}>
@@ -66,13 +71,19 @@ function IlotDesActivites({ lu, premierJour, Lien, hrefDuJournal, hrefDeConversa
         {premierJour ? (
           <FirstDay />
         ) : (
-          <ActivitesDeLAccueil
-            activites={lu.activites}
-            moi={lu.moi}
-            Lien={Lien}
-            hrefDuJournal={hrefDuJournal}
-            hrefDeConversation={hrefDeConversation}
+          <Reprendre
+            premiere={lu.reprendre}
             prefixeDesPages={prefixeDesPages}
+            fil={
+              <ActivitesDeLAccueil
+                activites={lu.activites}
+                moi={lu.moi}
+                Lien={Lien}
+                hrefDuJournal={hrefDuJournal}
+                hrefDeConversation={hrefDeConversation}
+                prefixeDesPages={prefixeDesPages}
+              />
+            }
           />
         )}
       </IslandBody>
@@ -90,7 +101,7 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
     return (
       <>
         <ScreenHeader icon={SALUT} title={ACCUEIL.bonjour(null)} />
-        <HomeLayout main={<ErreurDeLecture message={donnees.error} />} aside={<RechercheDeLAccueil />} />
+        <HomeLayout main={<ErreurDeLecture message={donnees.error} />} />
       </>
     )
   }
@@ -101,13 +112,12 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
       <ScreenHeader icon={SALUT} title={ACCUEIL.bonjour(lu.nom)} />
       <HomeLayout
         main={<IlotDesActivites {...props} lu={lu} premierJour={premierJour} />}
-        // La recherche passe à droite, au-dessus de « Brancher un assistant » (AC-18).
-        aside={<RechercheDeLAccueil />}
         cards={
           <>
             <BranchementIA adresse={lu.adresse} exemples={exemplesDe(lu.procedures)} connexions={lu.connexions} />
-            {/* Le premier jour retire les procédures : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
-            {!premierJour && <ProceduresUtiles procedures={lu.procedures} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
+            {/* Le premier jour retire les procédures et les nouveautés : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
+            {!premierJour && <Lancer procedures={lu.procedures} prefixeDesPages={props.prefixeDesPages} />}
+            {!premierJour && <Nouveautes nouveautes={lu.nouveautes} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
           </>
         }
       />
@@ -121,7 +131,7 @@ export function EcranDAccueilChargement() {
     <div role="status" aria-busy="true" className="flex flex-col gap-3">
       <span className="oto-sr-only">{ACCUEIL.chargement}</span>
       <Skeleton shape="text" width="16rem" />
-      <HomeLayout main={<Skeleton shape="card" />} aside={<Skeleton shape="row" />} cards={<Skeleton shape="card" />} />
+      <HomeLayout main={<Skeleton shape="card" />} cards={<Skeleton shape="card" />} />
     </div>
   )
 }

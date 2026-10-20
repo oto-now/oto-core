@@ -65,6 +65,7 @@ describe.skipIf(!sqlConfigured || privatePending)(name(SUITE), () => {
     await admin`select * from platform.open_draft(${page})`
     await admin`insert into platform.node_aliases (org_id, old_path, node_id) values (${org.org.id}, 'ventes/offre_ancienne', ${page})`
     await admin`insert into platform.node_shares (org_id, node_id, created_by) values (${org.org.id}, ${page}, ${claire.id})`
+    await admin`insert into platform.node_views (org_id, node_id, user_id) values (${org.org.id}, ${page}, ${claire.id})`
     const [file] = await admin<{ id: string }[]>`
       insert into platform.files (org_id, node_id, name, mime, size, status, created_by)
       values (${org.org.id}, ${page}, 'offre.pdf', 'application/pdf', 3, 'ready', ${claire.id}) returning id`

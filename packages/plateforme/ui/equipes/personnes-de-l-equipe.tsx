@@ -27,6 +27,7 @@ import { EmptyState } from "../ds/react/empty-state"
 import { AnimatedIcon, type Glyphe } from "../ds/react/icon"
 import { Alert, Avatar, Button } from "../ds/react/primitives"
 import { Row, RowList } from "../ds/react/row-list"
+import { Tooltip } from "../ds/react/tooltip"
 import { EtatDesNiveaux, useNiveauxDesMembres, type NiveauxDesMembres } from "../noeud/niveau-d-un-membre"
 import { useGeste } from "./gestes"
 import { NIVEAUX_DU_DOSSIER, pluriel, RESPONSABLES, ROLES_D_EQUIPE } from "./libelles"
@@ -43,7 +44,7 @@ const ANCRE = "equipe-composition"
 type Action = { cle: "role" | "retrait" | "ajout"; libelle: string; court: string; glyphe: Glyphe; enCours: boolean; faire: () => void }
 
 function BoutonDAction({ action }: { action: Action }) {
-  return (
+  const bouton = (
     <Button
       variant="secondary"
       size="sm"
@@ -56,6 +57,8 @@ function BoutonDAction({ action }: { action: Action }) {
       {action.court}
     </Button>
   )
+  // 1.4.13 : ce que change le rôle de responsable se lit au survol et au focus du geste même, qui reste le déclencheur.
+  return action.cle === "role" ? <Tooltip content={RESPONSABLES.aide}>{bouton}</Tooltip> : bouton
 }
 
 /** Une personne : son visage, son nom, son adresse et, au bout, son niveau sur les pages de l'équipe et les gestes qui la concernent. */

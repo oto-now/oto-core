@@ -39,11 +39,11 @@ function usePanneauDeLEquipe(slug: string) {
   return { lecture, relire: () => void lire() }
 }
 
-function PanneauDeLEquipe({ slug, nom, geste, onFermer }: { slug: string; nom: string; geste: Geste; onFermer: () => void }) {
+function PanneauDeLEquipe({ slug, nom, geste, prefixe, onFermer }: { slug: string; nom: string; geste: Geste; prefixe: string; onFermer: () => void }) {
   const { lecture, relire } = usePanneauDeLEquipe(slug)
   if (lecture.etat === "pret") {
     const { team, people, compose, admin } = lecture.panneau
-    if (geste === "supprimer") return <SuppressionDEquipe equipe={team} onFermer={onFermer} apresUnDepart={() => undefined} />
+    if (geste === "supprimer") return <SuppressionDEquipe equipe={team} onFermer={onFermer} apresUnDepart={() => undefined} prefixeDesPages={prefixe} />
     const personnes = people.map((personne) => ({ id: personne.id, nom: personne.name, email: personne.email }))
     return <PersonnesDeLEquipe equipe={team} personnes={personnes} compose={compose} nommeLesResponsables={admin} onFermer={onFermer} />
   }
@@ -65,7 +65,8 @@ function PanneauDeLEquipe({ slug, nom, geste, onFermer }: { slug: string; nom: s
   )
 }
 
-export function MenuDeLEquipe({ slug, nom, administre }: { slug: string; nom: string; administre: boolean }) {
+/** `prefixe` : celui des pages de l'hôte, que le rail reçoit (`adresses.pages`) ; une page qui bloque la suppression y mène. */
+export function MenuDeLEquipe({ slug, nom, administre, prefixe }: { slug: string; nom: string; administre: boolean; prefixe: string }) {
   const [geste, setGeste] = useState<Geste | null>(null)
   const items: MenuItem[] = [
     { label: MENU_DE_L_EQUIPE.personnes(nom), icon: <AnimatedIcon as={UsersThree} size="xs" />, onSelect: () => setGeste("personnes") },
@@ -81,7 +82,7 @@ export function MenuDeLEquipe({ slug, nom, administre }: { slug: string; nom: st
   return (
     <>
       <DropdownMenu trigger={declencheur} items={items} />
-      {geste && <PanneauDeLEquipe slug={slug} nom={nom} geste={geste} onFermer={() => setGeste(null)} />}
+      {geste && <PanneauDeLEquipe slug={slug} nom={nom} geste={geste} prefixe={prefixe} onFermer={() => setGeste(null)} />}
     </>
   )
 }

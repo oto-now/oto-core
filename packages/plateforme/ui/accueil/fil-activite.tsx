@@ -8,6 +8,9 @@
 // d'une prose du serveur, sur une ligne au lieu de deux (retour 3 d'E05-S12) ; une ligne ouvre le contenu, ou
 // la conversation d'une procédure lancée, et un contenu que la personne ne lit pas n'ouvre rien. Retiré : le
 // marqueur « vous en étiez ici » (aucun service ne sait quand la personne est passée) et les filtres par type.
+//
+// 1.4.13 : l'onglet « Fil » de la carte « Reprendre » ; dans une ligne qui ouvre un contenu, le contenu cité se montre
+// comme un lien (`oto-feed-cible`) : la ligne entière restait le lien, sans que rien ne dise qu'on pouvait y aller.
 import { Fragment } from "react"
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight"
 import type { Activity, ActivityPage } from "../../schemas"
@@ -77,10 +80,10 @@ function parJournee(activites: readonly Activity[], maintenant: number): Journee
  * Ce qui est arrivé : le verbe, la nature quand elle est sue, puis le titre d'un contenu lu, sinon son chemin tel
  * que le journal le montre ; des lignes à revoir parmi les lignes supprimées, à la fin (E11-S02, AC-h3).
  */
-function phraseDe({ verb, kind, title, path, inReview }: Activity, vous: boolean): string {
+function phraseDe({ verb, kind, title, path, inReview }: Activity, vous: boolean): { debut: string; cible: string; fin: string } {
   const nature = kind === null ? "" : `${NATURES_DES_ACTIVITES[kind]} `
-  const aRevoir = inReview ? ACTIVITES.dontARevoir(inReview) : ""
-  return `${VERBES_DES_ACTIVITES[verb][vous ? "vous" : "il"]} ${nature}${title ?? path}${aRevoir}`
+  const fin = inReview ? ACTIVITES.dontARevoir(inReview) : ""
+  return { debut: `${VERBES_DES_ACTIVITES[verb][vous ? "vous" : "il"]} ${nature}`, cible: title ?? path, fin }
 }
 
 /** Où mène la ligne (AC-15) : la conversation d'une procédure lancée, le contenu que la personne lit, sinon nulle part. */
@@ -109,7 +112,8 @@ function LigneDuFil({ activite, moi, Lien, ...adresses }: Omit<FilProps, "activi
   const auteur = vous ? ACTIVITES.vous : (activite.userName ?? PERSONNE_RETIREE)
   const href = adresseDe(activite, adresses)
   const lien = href === null ? {} : { as: Lien, href }
-  const phrase = phraseDe(activite, vous)
+  const { debut, cible, fin } = phraseDe(activite, vous)
+  const phrase = `${debut}${cible}${fin}`
   return (
     <FeedItem
       {...lien}
@@ -121,7 +125,13 @@ function LigneDuFil({ activite, moi, Lien, ...adresses }: Omit<FilProps, "activi
       }
       name={auteur}
       // La phrase se coupe par des points de suspension sur une ligne : son texte entier au survol.
-      what={<span title={phrase}>{phrase}</span>}
+      what={
+        <span title={phrase}>
+          {debut}
+          <span className={href === null ? undefined : "oto-feed-cible"}>{cible}</span>
+          {fin}
+        </span>
+      }
       when={<Quand activite={activite} />}
     />
   )

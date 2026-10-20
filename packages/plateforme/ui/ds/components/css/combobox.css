@@ -146,3 +146,12 @@
 .oto-select-list .oto-menu-item[aria-selected="true"] { font-weight: var(--fw-semibold); }
 .oto-select-list .oto-menu-item[aria-selected="true"] > .oto-menu-check { color: var(--primary-text); }
 .oto-select-list .oto-menu-check { inline-size: 16px; flex: none; margin-inline-start: auto; }
+
+/* Un choix décrit (1.4.13, les niveaux d'accès) : son glyphe devant, le libellé puis une ligne fine qui dit ce qu'il permet, en `--mute` sur l'îlot du popover (4,78:1 au pire des huit thèmes, jour et nuit, mesure de `button.css` ; `--faint` passerait sous 4,5:1 à `--fs-xs`) ; la liste s'élargit pour la tenir sur une ou deux lignes, sans dépasser l'écran. */
+.oto-select-list .oto-menu-text { display: flex; flex: 1; flex-direction: column; min-inline-size: 0; }
+.oto-select-list .oto-menu-text > .oto-menu-label { overflow: hidden; text-overflow: ellipsis; }
+.oto-select-list .oto-menu-description { font-size: var(--fs-xs); font-weight: var(--fw-regular); line-height: 1.35; color: var(--mute); white-space: normal; }
+.oto-select-list .oto-menu-item[data-decrit] { align-items: flex-start; padding-block: var(--space-1-5); }
+.oto-select-list .oto-menu-icon { display: inline-flex; flex: none; padding-block-start: 2px; color: var(--mute); }
+.oto-select-list .oto-menu-icon > svg { inline-size: 16px; block-size: 16px; }
+.oto-select-pop:has(.oto-menu-item[data-decrit]) { inline-size: 300px; max-inline-size: calc(100vw - var(--space-8)); }

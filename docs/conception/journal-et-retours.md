@@ -1,13 +1,13 @@
 # Journal et retours
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-16
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
 Chaque appel MCP et chaque mutation de l'API laisse une ligne de journal, écrite après la réponse, arguments bornés et secrets masqués ; les lignes d'un même `ctx` forment une conversation.
 Une personne lit ses lignes et celles des équipes qu'elle mène, l'administrateur toute l'organisation ; ce qui touche l'espace personnel d'autrui n'en livre que la forme.
-Un assistant signale une friction, un manque ou une erreur par `feedback` ; l'administrateur traite ces retours et lit l'usage dans le tableau de bord.
+Un assistant signale une friction, un manque ou une erreur par `feedback` ; l'équipe plateforme traite ces retours, et l'administrateur aussi quand l'organisation les affiche ; la page « Activité » réunit l'onglet Statistiques, pour l'administrateur, et l'onglet Journal, pour tous.
 
 ## Contexte
 
@@ -55,10 +55,11 @@ il faut que l'assistant puisse dire ce qui l'a gêné, et que l'administrateur v
 - Pour tout lecteur autre que son auteur, un appel sur l'espace personnel d'autrui ne livre au journal, à l'usage et à `admin_journal` que son outil, son heure, son issue et son code d'erreur, sa cible coupée à `private/<handle>` (`perso/<handle>` pour une ligne écrite avant D107, le journal n'étant pas réécrit) (D44).
 - Pour tout lecteur autre que son auteur, un message d'erreur servi au journal, à l'usage ou à `admin_journal` coupe chaque chemin `private/<handle>/…` (ou `perso/<handle>/…`, d'avant D107) à son espace (D52).
 
-### Usage (tableau de bord)
+### Usage et statistiques (tableau de bord)
 
-- L'usage est réservé à qui administre l'organisation : pas de vue du responsable pour son équipe en V1 (E08-S09 N6) ; `usageSummary` exige `isOrgAdmin` avant toute lecture, sinon `forbidden` « Reading the usage of <org> is reserved to <qui>. Ask them. » (E08-S09 N9). L'écran « Usage » est caché depuis la 1.0.0 (D128).
-- Traiter les retours (`listFeedback`, `setFeedbackState`) est réservé, depuis E05-S13, au membre de l'équipe plateforme qui administre l'organisation (`handlesFeedback` : `isStaff` et `isOrgAdmin`) ; l'administrateur du client n'y entre plus ; refus `forbidden` « Handling the feedback of <org> is reserved to the platform team that administers it. Ask them. » (HN-E05S13, lot B).
+- L'usage est réservé à qui administre l'organisation : pas de vue du responsable pour son équipe en V1 (E08-S09 N6) ; `usageSummary` exige `isOrgAdmin` avant toute lecture, sinon `forbidden` « Reading the usage of <org> is reserved to <qui>. Ask them. » (E08-S09 N9). Depuis la 1.4.13, l'usage est l'onglet « Statistiques » de la page « Activité » (`EcranDActivite`), à l'adresse du journal : `/journal?tab=statistics` pour l'administrateur, qui l'ouvre par défaut, puis `?tab=journal`, l'onglet Journal de tous ; l'onglet Statistiques n'est pas proposé à qui n'administre pas, et sa demande ouvre le journal. La page ne lit que l'onglet ouvert ; un en-tête, celui de l'onglet ouvert pour la méta et les réglages ; les formulaires GET des deux onglets gardent `tab` en champ caché. L'ancienne adresse `/admin/usage` mène à `/journal?tab=statistics`, sa fenêtre et son équipe gardées. Une seule entrée, « Activité », au menu de l'entreprise.
+- Les statistiques (1.4.13, `server/usage-statistics.ts`) s'ajoutent à l'usage, sur sa fenêtre et son filtre d'équipe, en quatre lectures agrégées et bornées, lancées ensemble dans la transaction unique de l'usage (`usageSummary` tient toutes ses lectures en une transaction, que chacune reprend), puis un calcul pur : **adoption** (chaque semaine de la fenêtre, les personnes qui y ont ouvert une conversation et ces conversations ; les conversations par assistant, le client MCP ramené à sa famille, Claude, ChatGPT, Mistral… ; chaque équipe, ou celle du filtre ; les invitations en attente ; les membres jamais connectés, 20 nommés au plus) ; **contenu** (contenus créés et publications par semaine ; blocs publiés écrits dans la fenêtre, par un assistant ou à la main, selon leur provenance ; les 10 contenus les plus lus par `read`, nommés seulement quand l'appelant les lit) ; **partage et connecteurs** (liens publics actifs et créés dans la fenêtre, de toute l'organisation ; appels de `call` par famille de fonctions, chaque connecteur activé compris). Une conversation compte dans la semaine de son premier appel. La courbe hebdomadaire (personnes actives et conversations) se dessine en SVG par le serveur, sans bibliothèque. S'y ajoutent deux tableaux triables par colonne (le `Table` du design system, tri sur les lignes servies, `usage-people.ts`) : **par équipe** (membres d'aujourd'hui qui sont membres de l'organisation, membres actifs sur la fenêtre et leur part, le taux d'usage, conversations, appels, contenus écrits, procédures servies et la plus servie, nommée seulement quand l'appelant la lit, dernier appel d'un membre) ; **par personne** (équipes, dernière connexion à l'écran `members.last_sign_in_at`, dernier appel d'assistant au-delà de la fenêtre, conversations, appels, contenus écrits à la main ou par son assistant selon la provenance des blocs publiés, assistant le plus employé ; « Jamais connecté » sans connexion, « Inactif depuis 30 j » quand la dernière connexion et le dernier appel ont plus de 30 jours). Le tableau « par équipe » remplace la liste des équipes de l'adoption.
+- Traiter les retours (`listFeedback`, `setFeedbackState`) est réservé au membre de l'équipe plateforme qui administre l'organisation (E05-S13) et, quand l'organisation a allumé « Retours visibles » (drapeau `feedback_visible`, 1.4.13), à ses administrateurs : `handlesFeedback` = `isOrgAdmin` et (`isStaff` ou l'option), l'option lue en une requête et pour un administrateur seulement ; refus `forbidden` « Handling the feedback of <org> is reserved to the platform team that administers it, and to its administrators when « Retours visibles » is on. Ask them. ». L'option se règle dans l'écran Organisation, îlot « Retours des assistants », par `PATCH admin/flags` (`setFlag`, administrateur). « Retours » est toujours montré à qui administre l'organisation (staff compris), sous « Suivi de l'entreprise », décidé sur l'identité seule (`isOrgAdmin`) : l'affichage d'une page ne lit pas l'option, son budget de requêtes ne bouge pas. La page `/admin/feedback` est introuvable pour qui n'administre pas ; pour un administrateur, elle lit `handlesFeedback` : vrai, la liste ; faux (option éteinte, pas du staff), elle dit « Les retours des assistants ne sont pas affichés pour votre organisation. » et « Les afficher » allume l'option sur place (`PATCH admin/flags`), puis la page se relit.
 - L'usage lit au plus les 20 000 appels les plus récents de la fenêtre, en une requête bornée, puis un calcul pur (aucune fonction SQL) ; au-delà, l'écran le dit et donne la date couverte (E08-S09 N2).
 - Fenêtre de 30 jours par défaut (usage et retours), au choix 7, 30 ou 90 ; toute valeur inconnue vaut 30 (E08-S09 N3). Paramètres d'URL de l'usage et des retours en anglais, comme ceux de `/journal` (`period`, `team`, `state`, `type`, `cursor`) ; un ancien nom est ignoré comme tout paramètre inconnu (E08-S09 N7, E11-S07, ADR-020).
 - Le filtre d'équipe de l'usage retient les lignes des personnes membres de l'équipe aujourd'hui (le journal ne porte l'équipe que pour les appels de connecteur) (E08-S09 N4).
@@ -86,10 +87,13 @@ Les procédures publiées lisibles se servent aussi en prompts MCP ([procédures
 ## Décisions et alternatives écartées
 
 - **Une vue de l'usage par le responsable pour son équipe** : écartée en V1, l'usage reste à l'administrateur (E08-S09 N6).
-- **Les retours traités par l'administrateur du client** (E08-S09 N6 et N9, pour `listFeedback` et `setFeedbackState`) : remplacé par E05-S13, les retours étant des frictions d'assistant destinées à l'équipe plateforme (`handlesFeedback`).
+- **Les retours traités par l'administrateur du client sans condition** (E08-S09 N6 et N9) : remplacé par E05-S13, les retours étant des frictions d'assistant destinées à l'équipe plateforme ; depuis la 1.4.13, l'organisation les ouvre à ses administrateurs par l'option « Retours visibles ».
+- **Une option qui coupe l'envoi des retours par les assistants** : écartée, l'outil `feedback` fait partie des outils figés (ADR-002) et l'équipe plateforme garde ses retours ; l'option ne règle que leur lecture par l'administrateur (décidé par JB le 20/10).
 - **Journaliser les exports** : écarté, un export est une lecture, et aucune lecture n'est journalisée (D138).
 - **La forme `perso/<handle>` des espaces personnels** : remplacée par `private/<handle>` (D107) ; les lignes anciennes ne sont pas réécrites et se coupent à leur forme d'origine (D44, D52).
-- **L'écran « Usage » visible** : caché depuis la 1.0.0, réduit à `notFound()` (D128, lot B d'HN-E05S13 dans [droits d'accès](droits-d-acces.md)).
+- **L'écran « Usage » caché** (D128, lot B d'HN-E05S13 dans [droits d'accès](droits-d-acces.md)) : remplacé en 1.4.13, l'écran revient sous le nom « Statistiques » pour l'administrateur.
+- **Une entrée « Statistiques » à part dans le menu** : écartée, Statistiques et Journal sont les deux onglets d'« Activité », une seule entrée (décidé par JB le 20/10).
+- **Une bibliothèque de graphiques pour la courbe hebdomadaire** : écartée, une polyligne SVG suffit à deux séries, sans dépendance.
 
 ## Sécurité et confidentialité
 
@@ -102,7 +106,7 @@ Les procédures publiées lisibles se servent aussi en prompts MCP ([procédures
 ## Écart avec le code
 
 - Curseur (instant, id) commun à `server/feedback.ts`, `server/usage.ts` et `server/admin/journal.ts` (M18b).
-- `EcranUsage` et `usageSummary` sans page (M73).
+- `EcranUsage` et `EcranDuJournal` restent exportés, montables seuls ; l'hôte de référence ne monte que `EcranDActivite`.
 - Lectures sans borne relevées en revue (M13).
 
 ## Questions ouvertes
@@ -119,3 +123,7 @@ Les procédures publiées lisibles se servent aussi en prompts MCP ([procédures
 - 2026-10-16 : le retour d'un consentement à un connecteur `oauth2_user`, un `GET` qui écrit, laisse sa ligne `api` comme une mutation, sans arguments — décidé par Alexis (lot du consentement d'une personne).
 - 2026-10-19 : arguments « donnée personnelle » retirés de la ligne aux portes MCP et `callFunction`, valeurs retenues par `journalArgs` retirées de la cible à la porte HTTP, rétention par `oto-platform journal purge` — décidé par Alexis (pseudonymisation, J1).
 - 2026-10-19 : journal, journal de l'équipe plateforme, retours et prompts pseudonymisés quand l'hôte déclare des personnes — écrit (pseudonymisation, J2).
+- 2026-10-20 : « Usage » revient sous le nom « Statistiques » avec l'adoption, le contenu, le partage et les connecteurs ; les retours s'ouvrent aux administrateurs de l'organisation qui allume « Retours visibles » — décidé par JB (source : session du 20/10/2026).
+- 2026-10-20 : page « Activité » à deux onglets (Statistiques pour l'administrateur, Journal pour tous) à l'adresse du journal, courbe hebdomadaire, tableaux triables par équipe et par personne — décidé par JB (source : session du 20/10/2026, issue du chantier).
+- 2026-10-20 : « Activité » se range dans les réglages, à la place du Journal ; « Suivi de l'entreprise » ne porte que Retours, un membre simple garde un seul groupe — décidé par JB (source : session du 20/10/2026).
+- 2026-10-20 : « Retours » toujours montré à l'administrateur, décidé sur l'identité sans requête ; la page des retours dit l'option éteinte et l'allume sur place — décidé par JB (source : session du 20/10/2026 ; plafond de requêtes de l'affichage d'une page).

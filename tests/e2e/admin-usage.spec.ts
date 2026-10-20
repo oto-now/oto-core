@@ -33,7 +33,7 @@ test.describe("admin usage and feedback", () => {
   })
 
   for (const mode of MODES) {
-    test(`should hide the usage, then acknowledge and reopen the open ticket (${mode})`, async ({ browser }, testInfo) => {
+    test(`should show the statistics, then acknowledge and reopen the open ticket (${mode})`, async ({ browser }, testInfo) => {
       const adresse = ESPACE.adresse
       // Plus haute que la fenêtre des captures d'oto-frontend : les retours tiennent en entier, le contenu défilant
       // dans son cadre, pas dans le document.
@@ -41,10 +41,13 @@ test.describe("admin usage and feedback", () => {
       const capturer = (nom: string) => page.screenshot({ path: testInfo.outputPath(`${nom}-${mode}.png`), caret: "initial" }).then(() => undefined)
       await seConnecterSurLEspace(page, { email, password })
 
-      // L'usage est caché : la page n'existe plus pour personne, staff compris (E05-S13, AC-8).
-      expect((await page.goto(`${adresse}/admin/usage?period=7`))?.status()).toBe(404)
-      await expect(page.getByRole("heading", { level: 1, name: "Usage des assistants" })).toHaveCount(0)
-      await capturer("usage-cache")
+      // 1.4.13 : l'usage est l'onglet Statistiques d'« Activité », où mène son ancienne adresse, avec ses îlots ajoutés.
+      expect((await page.goto(`${adresse}/admin/usage?period=7`))?.status()).toBe(200)
+      await expect(page).toHaveURL(`${adresse}/journal?tab=statistics&period=7`)
+      await expect(page.getByRole("heading", { level: 1, name: "Activité" })).toBeVisible()
+      await expect(page.getByRole("tab", { name: "Statistiques" })).toHaveAttribute("aria-selected", "true")
+      for (const titre of ["Adoption", "Par équipe", "Par personne", "Contenu", "Partage et connecteurs"]) await expect(page.getByRole("heading", { level: 2, name: titre })).toBeVisible()
+      await capturer("statistiques")
 
       await page.goto(`${adresse}/admin/feedback?state=all`)
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Retours des assistants")

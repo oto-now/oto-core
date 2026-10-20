@@ -1,7 +1,7 @@
 # Pseudonymisation des données servies à l'assistant
 
 - **Statut** : validé avec Alexis le 19/10/2026
-- **Dernière révision** : 2026-10-19 (J1 écrit)
+- **Dernière révision** : 2026-10-20 (membre désigné par son jeton dans `node.share`)
 
 ## Résumé
 
@@ -124,6 +124,7 @@ Un jeton reçu se cherche dans le dictionnaire avant le service. Inconnu : `inva
 - **Désigner une chose existante** dans le stockage du paquet (chemin de `read` et `write`, requête de `find`, phrase de `context`, `old` de `replace_text`, clé de ligne et filtre de `table.*`) : la comparaison se fait dans l'espace pseudonymisé. Un chemin essaie les formes en slug de l'entité (bornées) ; un texte à retrouver se cherche dans le texte stocké pseudonymisé, puis la coupe revient au texte en clair par la table de positions ; une requête reçoit la forme « prénoms nom ».
 - **Contenu écrit** dans le stockage du paquet (`write`, cellule de `table.*`) : le jeton est gardé tel quel. Rien ne fuit, et effacer la personne tue aussi ses mentions écrites par un assistant. L'écran le montre brut, ou résolu pour qui en a la portée (`resolveForDisplay`, J4).
 - **Argument d'entité d'une fonction de l'hôte** (`entityArguments` de `defineErpFunction`) : le jeton devient l'identifiant ; l'hôte lit sa propre base, sous sa RLS. Ailleurs dans les arguments d'une fonction de l'hôte, le jeton passe tel quel : l'hôte peut appeler `reidentify`.
+- **Membre désigné par une fonction native** (`name` de `node.share`, sujet `person`) : un jeton d'entité seul désigne le membre dont le nom ou l'email, pseudonymisé, le redonne (`FunctionContext.pseudonymized`, comparé dans l'espace pseudonymisé comme un filtre de `table.*`) ; un jeton de valeur ne désigne personne.
 - **Fonction de connecteur** (partagé ou propre à l'hôte) : jamais de réidentification générique, un outil d'envoi exfiltrerait. Un jeton y est refusé (`forbidden`, raison `pseudonym_not_accepted`), sauf vers une sortie de confiance (J4). Une valeur que la personne a donnée en clair dans la conversation passe, comme aujourd'hui.
 
 `context` ajoute, quand la pseudonymisation est active, un paragraphe court : ce qu'est un jeton, qu'il se recopie tel quel, qu'il ne se devine pas.
@@ -325,3 +326,4 @@ Relevé au banc de fidélité (19/10), hors pseudonymisation : l'assistant passe
 - 2026-10-20 : pseudonymisation allumée par organisation (`enabled`), lue à chaque appel ; éteinte, servie comme sans déclaration, les jetons d'une conversation commencée allumée encore résolus — à la demande d'un hôte, écrit.
 - 2026-10-19 : J3, troisième partie, écrite — détecteurs de courriels et de téléphones : jeton de la personne déclarée, sinon jeton de valeur à sens unique, toujours actifs ; 0,02 faux positif pour 10 000 mots sur Wikipédia ; banc de fidélité refait, sans altération ni fuite hors des limites prévues — écrit en J3.
 - 2026-10-19 : J3, seconde partie, écrite — champs déclarés d'une fonction de l'hôte (`output.entityFields`) servis en jeton de l'entité, rattachés à J3 depuis J5 sur décision d'Alexis ; retenus pour une entité inconnue — écrit en J3.
+- 2026-10-20 : dans une organisation pseudonymisée, `node.share` retrouve la personne désignée par le jeton de son nom ou de son email — décidé par JB (source : session du 20/10/2026).

@@ -11,7 +11,8 @@
 // Repris de la maquette (`mcp-test/src/proto/services/journal.ts` l. 38-49, `mcp/server.ts` l. 73-83) :
 // la forme des lignes lues (`tool` préfixé, `target` = chemin servi, phrase ou fonction). Repris d'Oto
 // (`outils-du-suivi.tsx`, `adoption-des-membres.tsx`) : aucun total recomposé depuis une liste coupée,
-// la troncature dite. Retiré : durées, adoption par personne, clés de connecteur (hors FR-OBS-04).
+// la troncature dite. Retiré : durées, adoption par personne, clés de connecteur (hors FR-OBS-04). 1.4.13 : l'écran
+// devient « Statistiques » et s'y ajoutent adoption, contenu, partage et connecteurs (`usage-statistics.ts`).
 import { NODE_PATH_PATTERN, USAGE_MAX_LINES, type UsageQuery, type UsageSummary } from "../schemas"
 import { ACCESS_LEVELS, describeOwner, isOrgAdmin, nodeLevels } from "./access"
 import type { PlatformDb } from "./db"
@@ -20,6 +21,7 @@ import { inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { cut } from "./journal"
 import { errorCode, errorFor, hidesContent, journalReader, targetFor } from "./journal-rows"
+import { usageStatistics } from "./usage-statistics"
 
 /** Procédures montrées, les plus servies (AC4). */
 export const TOP_PROCEDURES = 20
@@ -248,11 +250,22 @@ function teamOf(roster: Roster, names: ReadonlyMap<string, string>, teamId: stri
  */
 export async function usageSummary(db: PlatformDb, identity: Identity, query: UsageQuery): Promise<UsageSummary> {
   if (!isOrgAdmin(identity)) throw await reserved(db, identity)
-  const since = new Date(Date.now() - query.period * DAY_MS).toISOString()
-  const [directory, roster] = await Promise.all([memberDirectory(db, identity.org.id), query.team ? teamRoster(db, identity.org.id) : null])
+  // Une transaction pour toutes les lectures (`supabase-patterns.md § Couplage à Supabase`) : chaque lecture ci-dessous,
+  // ouverte pendant elle sous le même appelant, la reprend (`server/sql.ts`).
+  return inTransaction(db, "usageSummary", () => summaryOf(db, identity, query))
+}
+
+async function summaryOf(db: PlatformDb, identity: Identity, query: UsageQuery): Promise<UsageSummary> {
+  const now = new Date()
+  const since = new Date(now.getTime() - query.period * DAY_MS).toISOString()
+  // Les équipes, lues sans filtre aussi : les statistiques comptent chacune (1.4.13).
+  const [directory, roster] = await Promise.all([memberDirectory(db, identity.org.id), teamRoster(db, identity.org.id)])
   const names = new Map(directory.map((person) => [person.userId, person.name]))
-  const team = roster && query.team ? teamOf(roster, names, query.team) : null
-  const read = await windowLines(db, identity, { since, userIds: team?.userIds ?? null })
+  const team = query.team ? teamOf(roster, names, query.team) : null
+  const [read, statistics] = await Promise.all([
+    windowLines(db, identity, { since, userIds: team?.userIds ?? null }),
+    usageStatistics(db, identity, { since: new Date(since), now, roster, directory, team }),
+  ])
   const truncated = read.length > USAGE_MAX_LINES
   const lines = read.slice(0, USAGE_MAX_LINES)
   const [procedures, hidden] = await Promise.all([readProcedures(db, identity, lines), hiddenFailures(db, identity, lines)])
@@ -273,5 +286,6 @@ export async function usageSummary(db: PlatformDb, identity: Identity, query: Us
       // Une demande sur l'espace personnel d'autrui (procédure déplacée ou retirée depuis) : `private/<handle>` (D44).
       items: aggregate.unmatched.items.map(({ userId, ...item }) => ({ ...item, phrase: targetFor(reader, userId, item.phrase), person: userId ? (names.get(userId) ?? null) : null })),
     },
+    statistics,
   }
 }

@@ -13,6 +13,7 @@ import {
   PlatformError,
   removeRule,
   resolveIdentity,
+  setGeneralAccess,
   setNodeRule,
   type Identity,
   type PlatformDb,
@@ -166,6 +167,47 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect((await listNodeRules(as("lea").db, as("lea").identity, annonces, { people: true })).people).toEqual([])
         // Sans la demande, l'affichage d'une page ne paie pas ce calcul.
         expect((await listNodeRules(as("claire").db, as("claire").identity, page.path)).people).toEqual([])
+      })
+
+      // 1.4.13 : l'accès par défaut de l'équipe propriétaire, sa règle sur la page, et l'équipe qui suit l'organisation.
+      it("should give the owner team's default level, never below the whole organisation, and raise it with the organisation", async () => {
+        const page = await pageDeVentes()
+        const equipe = async () => (await listNodeRules(as("claire").db, as("claire").identity, page.path, { people: true })).team
+        expect(await equipe()).toEqual({ teamId: o.teams.ventes, level: "write", inherited: "write", ruleId: null })
+
+        const lire = await setNodeRule(as("claire").db, as("claire").identity, { path: page.path, subject: { kind: "team", id: o.teams.ventes }, level: "read" })
+        expect(await equipe()).toEqual({ teamId: o.teams.ventes, level: "read", inherited: "write", ruleId: lire.data.id })
+        // Un membre sans règle à lui suit l'équipe ; sa responsable garde la gestion.
+        const vue = await listNodeRules(as("claire").db, as("claire").identity, page.path, { people: true })
+        expect(vue.people?.map((membre) => [membre.name, membre.level])).toContainEqual(["Léa Roux", "read"])
+        expect(vue.people?.find((membre) => membre.lead)?.level).toBe("manage")
+
+        // Toute l'organisation monte au-dessus : l'équipe suit ; la poser sous l'organisation est refusé.
+        await setGeneralAccess(as("claire").db, as("claire").identity, { path: page.path, access: "organisation", level: "write" })
+        expect((await equipe())?.level).toBe("write")
+        const sous = await refusal(setNodeRule(as("claire").db, as("claire").identity, { path: page.path, subject: { kind: "team", id: o.teams.ventes }, level: "read" }))
+        expect(sous).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("cannot have less") })
+        // Une autre équipe n'est pas tenue par l'organisation.
+        await setNodeRule(as("claire").db, as("claire").identity, { path: page.path, subject: { kind: "team", id: o.teams.support }, level: "read" })
+      })
+
+      // 1.4.13 : l'accès de toute l'organisation hérité d'un dossier se lit sur la page, sert de plancher à l'équipe, et se ferme par « none ».
+      it("should give the organisation's real level inherited from a folder, floor the owner team on it, and close a page with a none rule", async () => {
+        const dossier = await pageDeVentes()
+        const page = { path: `${dossier.path}/detail`, id: "" }
+        page.id = await fx.createNode(o.org.id, { parentId: dossier.id, path: page.path, title: "Détail" })
+        await setGeneralAccess(as("claire").db, as("claire").identity, { path: dossier.path, access: "organisation", level: "write" })
+
+        const organisation = async () => (await listNodeRules(as("claire").db, as("claire").identity, page.path, { people: true })).organisation
+        expect(await organisation()).toEqual({ level: "write", inherited: "write" })
+        const sous = await refusal(setNodeRule(as("claire").db, as("claire").identity, { path: page.path, subject: { kind: "team", id: o.teams.ventes }, level: "read" }))
+        expect(sous.code).toBe("invalid_arguments")
+
+        await setGeneralAccess(as("claire").db, as("claire").identity, { path: page.path, access: "organisation", level: "none" })
+        expect(await organisation()).toEqual({ level: "none", inherited: "write" })
+        // Paul (Support) ne voit plus la page ; il garde le dossier.
+        expect((await listNodeRules(as("paul").db, as("paul").identity, dossier.path)).viewerLevel).toBe(2)
+        expect((await refusal(listNodeRules(as("paul").db, as("paul").identity, page.path))).code).toBe("not_found")
       })
 
       it("should describe an organisation node and a personal node", async () => {

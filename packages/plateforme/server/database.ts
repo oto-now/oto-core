@@ -1009,6 +1009,55 @@ export type Database = {
           },
         ]
       }
+      node_views: {
+        Row: {
+          day: string
+          last_at: string
+          node_id: string
+          org_id: string
+          user_id: string
+          views: number
+        }
+        Insert: {
+          day?: string
+          last_at?: string
+          node_id: string
+          org_id: string
+          user_id: string
+          views?: number
+        }
+        Update: {
+          day?: string
+          last_at?: string
+          node_id?: string
+          org_id?: string
+          user_id?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "node_views_member_fkey"
+            columns: ["org_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["org_id", "user_id"]
+          },
+          {
+            foreignKeyName: "node_views_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_views_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nodes: {
         Row: {
           created_at: string

@@ -1,22 +1,33 @@
 // Ressource `teams` de l'API du paquet (E05-S03, AC11 à AC14) : créer, renommer, supprimer ; composer
 // par `teams/<id>/members` ; nommer ou retirer un responsable par `PATCH teams/<id>/members/<userId>`
 // (E05-S13, AC-24). Adaptateur mince : la validation, les droits et l'écriture sont dans `server/teams.ts`.
-// `GET teams/<slug>` : le panneau d'une équipe, lu par le « ⋯ » de sa section du rail (`server/team-panel.ts`).
+// `GET teams/<slug>` : le panneau d'une équipe, lu par le « ⋯ » de sa section du rail (`server/team-panel.ts`) ;
+// `GET teams/<slug>/deletion` : ce que sa suppression emporterait ou ce qui la bloque, lu par la confirmation (1.4.13).
 import { createTeamSchema } from "../schemas"
 import { teamPanel } from "../server/team-panel"
-import { addTeamMember, createTeam, deleteTeam, removeTeamMember, setTeamMemberRole, teamSlug, updateTeam } from "../server/teams"
+import { addTeamMember, createTeam, deleteTeam, describeTeamDeletion, removeTeamMember, setTeamMemberRole, teamSlug, updateTeam } from "../server/teams"
 import type { ResourceRoutes } from "./handler"
 import { idOrNull } from "./ids"
 
 const MEMBERS = { 1: "members" } as const
+const DELETION = { 1: "deletion" } as const
 
 export const teamsRoutes: ResourceRoutes = {
-  GET: {
-    params: 1,
-    async handle({ db, identity, params }) {
-      return { status: 200, data: await teamPanel(db, identity, params[0]) }
+  GET: [
+    {
+      params: 1,
+      async handle({ db, identity, params }) {
+        return { status: 200, data: await teamPanel(db, identity, params[0]) }
+      },
     },
-  },
+    {
+      params: 2,
+      fixed: DELETION,
+      async handle({ db, identity, params }) {
+        return { status: 200, data: await describeTeamDeletion(db, identity, params[0]) }
+      },
+    },
+  ],
   POST: [
     {
       params: 0,

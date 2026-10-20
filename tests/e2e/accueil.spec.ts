@@ -15,7 +15,9 @@ import { ESPACE, SANS_ESPACE } from "./fixtures/espace"
 const email = process.env.E2E_USER_EMAIL ?? ""
 const password = process.env.E2E_USER_PASSWORD ?? ""
 const ADRESSE = ESPACE.adresse
-const BRANCHER = "Brancher mon Claude, ChatGPT ou Mistral"
+const BRANCHER = "Brancher votre assistant"
+/** La fenêtre du guide garde le titre long. */
+const GUIDE = "Brancher mon Claude, ChatGPT ou Mistral"
 const MODES = ["light", "dark"] as const
 const THEMES = ["manuscrit", "ardoise", "grenat", "brique", "foret", "lagune", "cobalt", "violet"]
 
@@ -46,7 +48,9 @@ test.describe("l'accueil", () => {
         // `caret: "initial"` : la capture n'écrit rien dans la page, l'hydratation reste gardée.
         await page.screenshot({ path: testInfo.outputPath(`accueil-${mode}.png`), caret: "initial" })
 
-        await contenu.getByRole("search").getByRole("searchbox", { name: "Chercher" }).click()
+        // 1.4.13 : l'accueil n'a plus de recherche, celle du rail s'ouvre au clavier.
+        await expect(contenu.getByRole("search")).toHaveCount(0)
+        await page.keyboard.press("ControlOrMeta+k")
         const palette = page.getByRole("dialog", { name: "Palette de commandes" })
         await expect(palette).toBeVisible()
         await page.keyboard.press("Escape")
@@ -54,7 +58,7 @@ test.describe("l'accueil", () => {
 
         const brancher = contenu.getByRole("region", { name: BRANCHER }).getByRole("button", { name: "Brancher" })
         await brancher.click()
-        const dialogue = page.getByRole("dialog", { name: BRANCHER })
+        const dialogue = page.getByRole("dialog", { name: GUIDE })
         await expect(dialogue).toHaveAttribute("data-size", "lg")
         await expect(dialogue.getByRole("tabpanel").getByText(`${ADRESSE}/api/mcp`, { exact: true })).toBeVisible()
         await expect(dialogue.getByRole("link", { name: /Guides d'installation/ })).toHaveCount(0)
@@ -87,7 +91,8 @@ test.describe("l'accueil", () => {
         // E05-S12 (AC-19) : les activités à 375, 1 024 et 1 280 px ; une activité tient sur une ligne à partir de
         // 1 024 px (son nom, ce qui est arrivé et l'heure sur la même rangée, la phrase sur une ligne), aucun
         // défilement horizontal à 375 px.
-        const fil = contenu.getByRole("region", { name: "Activités" })
+        const fil = contenu.getByRole("region", { name: "Reprendre" })
+        await fil.getByRole("tab", { name: "Fil" }).click()
         await expect(fil.locator(".oto-feed-item").first()).toBeVisible()
         for (const largeur of [375, 1024, 1280]) {
           await page.setViewportSize({ width: largeur, height: 900 })

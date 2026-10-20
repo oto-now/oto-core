@@ -11,7 +11,7 @@
 // dit pas « rien ne manque ». Changé : l'état et le type filtrent par l'adresse (liens d'E08-S09 devenus des
 // choix segmentés) ; « Voir les suivants » pagine. Retiré : manques agrégés par intention (→ conversations
 // sans procédure, écran Usage), verdicts d'outil, `resolved_by` caché (ici « Traité par » est montré),
-// TanStack Query.
+// TanStack Query. 1.4.13 : une organisation qui n'affiche pas ses retours le voit dit, et les affiche sur place.
 import { ChatCircleText } from "@phosphor-icons/react/dist/ssr/ChatCircleText"
 import {
   feedbackTypeSchema,
@@ -36,9 +36,14 @@ import { LienDeCellule, TableServeur } from "../../components/table-serveur"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AUCUN_RETOUR, AUCUN_RETOUR_FILTRE, comptes, ETATS, FILTRES_D_ETAT, MESSAGES_DU_RETOUR, TONS, TYPES } from "./libelles"
 import { RefusDuRetour } from "./refus-du-retour"
+import { RetoursMasques } from "./retours-masques"
 
 export type EcranRetoursProps = {
-  resultat: Resultat<FeedbackList>
+  /**
+   * La liste lue, ou `{ masques: true }` (1.4.13) : l'administrateur d'une organisation qui n'affiche pas ses retours,
+   * à qui l'écran propose de les afficher.
+   */
+  resultat: Resultat<FeedbackList> | { masques: true; data?: never; error?: never }
   /** Les paramètres de l'adresse, lus par `feedbackListQuerySchema`. */
   filtres: FeedbackListQuery
   Lien: LienDeLAdministration
@@ -231,7 +236,9 @@ export function EcranRetours({ resultat, fil, ...props }: EcranRetoursProps) {
         actions={liste && <Fenetre filtres={props.filtres} hrefDeFiltre={props.hrefDeFiltre} />}
       />
       {/* Une seule lecture : son échec, ou la réserve d'un non-administrateur (AC1), se dit une fois. */}
-      {resultat.error !== undefined ? (
+      {"masques" in resultat ? (
+        <RetoursMasques />
+      ) : resultat.error !== undefined ? (
         <ErreurDeLecture message={resultat.error} href={props.hrefDeFiltre(props.filtres)} Lien={props.Lien} />
       ) : (
         <Liste liste={resultat.data} {...props} />

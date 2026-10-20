@@ -44,6 +44,8 @@ export type TableauDesEquipesProps = {
   adresses: Record<Tri, Record<"asc" | "desc", string>>
   /** Le conteneur de l'onglet (`tabIndex={-1}`), qui reçoit le focus quand une ligne part avec son déclencheur. */
   ancre: string
+  /** Le préfixe des adresses de pages de l'hôte (`"/n/"`), en chaîne : une page qui bloque la suppression d'une équipe y mène. */
+  prefixeDesPages: string
 }
 
 const compose = (equipe: TeamView, moi: Moi) => moi.estAdmin || moi.equipesDirigees.includes(equipe.id)
@@ -108,14 +110,14 @@ type DialoguesProps = Omit<TableauDesEquipesProps, "equipes" | "tri" | "adresses
 }
 
 /** Le dialogue du geste ouvert, sur l'équipe relue : la composition suit la relecture. */
-function DialogueDuGeste({ ouvert, personnes, moi, nomOrganisation, onFermer, apresUnDepart }: DialoguesProps) {
+function DialogueDuGeste({ ouvert, personnes, moi, nomOrganisation, onFermer, apresUnDepart, prefixeDesPages }: DialoguesProps) {
   const { geste, equipe } = ouvert
   if (geste === "personnes") return <PersonnesDeLEquipe equipe={equipe} personnes={personnes} compose={compose(equipe, moi)} nommeLesResponsables={moi.estAdmin} onFermer={onFermer} />
-  if (geste === "supprimer") return <SuppressionDEquipe equipe={equipe} onFermer={onFermer} apresUnDepart={apresUnDepart} />
+  if (geste === "supprimer") return <SuppressionDEquipe equipe={equipe} onFermer={onFermer} apresUnDepart={apresUnDepart} prefixeDesPages={prefixeDesPages} />
   return <ReglagesDEquipe equipe={equipe} nomOrganisation={nomOrganisation} onFermer={onFermer} />
 }
 
-export function TableauDesEquipes({ equipes, personnes, moi, nomOrganisation, tri, adresses, ancre }: TableauDesEquipesProps) {
+export function TableauDesEquipes({ equipes, personnes, moi, nomOrganisation, tri, adresses, ancre, prefixeDesPages }: TableauDesEquipesProps) {
   const { naviguer } = useHote()
   const apresUnDepart = useRepliDuFocus(ancre, equipes)
   const [ouvert, setOuvert] = useState<{ geste: Geste; id: string } | null>(null)
@@ -139,7 +141,7 @@ export function TableauDesEquipes({ equipes, personnes, moi, nomOrganisation, tr
         }
       />
       {ouvert && equipe && (
-        <DialogueDuGeste ouvert={{ geste: ouvert.geste, equipe }} personnes={personnes} moi={moi} nomOrganisation={nomOrganisation} onFermer={() => setOuvert(null)} apresUnDepart={apresUnDepart} />
+        <DialogueDuGeste ouvert={{ geste: ouvert.geste, equipe }} personnes={personnes} moi={moi} nomOrganisation={nomOrganisation} onFermer={() => setOuvert(null)} apresUnDepart={apresUnDepart} prefixeDesPages={prefixeDesPages} />
       )}
     </>
   )

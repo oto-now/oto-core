@@ -266,6 +266,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   pour un membre d'une équipe, aussi le responsable qui retire un membre, par la fonction nouvelle `leads_team`),
   recréées sous leur nom. Un membre simple, sous sa session ou celle du serveur, n'y touche plus aucune ligne.
   `access_rules_delete_manager` et `nodes_delete_manager` restent à l'appartenance. Rien à relancer avant.
+- `20261020090000_platform_vues.sql` (1.4.13, accueil) : la table `node_views`, une ligne par page, par personne et
+  par jour, le nombre de vues à l'écran ; « Les plus consultés » et la dernière visite de l'accueil la lisent. RLS :
+  lecture dans l'organisation, écriture de ses propres lignes sur une page de son organisation, suppression des lignes
+  de plus de 90 jours ; clés vers `orgs`, `nodes` et `members` en cascade (une personne retirée ou oubliée emporte ses
+  lignes). Additive ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

@@ -89,6 +89,29 @@ export const RESPONSABLES = {
   aucun: "—",
   nommer: "Nommer responsable",
   retirer: "Retirer des responsables",
+  /** La bulle d'aide des deux gestes (1.4.13) : ce que donne le rôle, et qui le donne (`droits-d-acces.md`, H66 1 bis, H72). */
+  aide: "Un responsable a l'accès complet aux pages de l'équipe, ajoute ou retire des membres, invite et partage ses pages en lecture ou en écriture. Seul un administrateur nomme ou retire un responsable.",
+} as const
+
+/** La confirmation de la suppression d'une équipe (1.4.13) : ce qui part, ce qui bloque, puis le geste. */
+export const SUPPRESSION = {
+  titre: (equipe: string) => `Supprimer ${equipe}`,
+  lecture: "Lecture de ce que la suppression emporte…",
+  illisible: (message: string) => `Ce que la suppression emporte n'a pas pu être lu : ${message}`,
+  reessayer: "Réessayer",
+  part: "Ce qui part",
+  membres: (nombre: number) => (nombre === 0 ? "Personne n'en fait partie." : `${pluriel(nombre, "personne quitte", "personnes quittent")} l'équipe.`),
+  regles: (nombre: number) => (nombre === 0 ? "Aucune règle d'accès ne la nomme." : `${pluriel(nombre, "règle d'accès qui la nomme tombe", "règles d'accès qui la nomment tombent")}.`),
+  contexte: "Son Contexte est supprimé.",
+  corbeille: (nombre: number) => `${pluriel(nombre, "page de la corbeille est effacée", "pages de la corbeille sont effacées")} définitivement.`,
+  bloque: "Ce qui bloque",
+  bloqueDetail: "Déplacez ou supprimez d'abord :",
+  compte: (libelle: string) => `le compte de connecteur « ${libelle} »`,
+  sansRetour: "Il n'y a pas d'annulation.",
+  annuler: "Annuler",
+  geste: "Supprimer l'équipe",
+  enCours: "Suppression…",
+  refus: (equipe: string) => `${equipe} possède encore : {objets}. Transférez-les ou supprimez-les avant de supprimer l'équipe.`,
 } as const
 
 /** Les phrases du tableau des personnes (porté d'oto-frontend, `members-table.tsx`, `members-counters.tsx`). */

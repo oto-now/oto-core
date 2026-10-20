@@ -270,3 +270,27 @@
   padding: 0 var(--island-pad) var(--space-3);
   border-block-start: 1px solid var(--hair);
 }
+
+/* La carte « Reprendre » (1.4.13) : le filtre en pastilles au-dessus des lignes, « Voir plus » au bout ; les lignes sont celles du fil (`FeedItem`), une par contenu, le chemin et l'auteur à la suite du titre. */
+.oto-reprendre { display: grid; gap: var(--space-2); }
+.oto-reprendre-liste { display: grid; gap: var(--space-px); }
+.oto-reprendre-liste > .flex { padding-block-start: var(--space-2); }
+
+/* Dans une ligne du fil qui ouvre un contenu, le contenu cité se lit comme un lien : `--link`, 4,9:1 au moins sur l'îlot dans les huit teintes, jour et nuit (mesure d'`editeur.css`, même paire), souligné au survol de la ligne. */
+.oto-feed-cible { color: var(--link); }
+.oto-feed-item:hover .oto-feed-cible { text-decoration: underline; text-underline-offset: 2px; }
+
+/* L'îlot « Lancer » (1.4.13) : une ligne d'action par procédure, le titre (le lien) qui prend la place, le bouton de copie au bout. */
+.oto-lancer { display: grid; gap: var(--space-px); }
+.oto-lancer-ligne { display: flex; align-items: center; gap: var(--space-2); }
+.oto-lancer-titre {
+  display: flex; flex: 1; align-items: center; gap: var(--space-2); min-inline-size: 0;
+  padding: var(--space-1-5) var(--space-1); border-radius: var(--r-ctrl);
+  color: inherit; text-decoration: none; font-size: var(--fs-sm);
+}
+.oto-lancer-titre > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oto-lancer-titre:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.oto-lancer-titre:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* « Brancher votre assistant » (1.4.13) : les assistants pris en charge en pastilles, sous l'en-tête, avant l'état ; le titre court tient sur une ligne avec « Brancher ». */
+.oto-branchement-assistants { display: flex; flex-wrap: wrap; gap: var(--space-1-5); margin-block-end: var(--space-2); }

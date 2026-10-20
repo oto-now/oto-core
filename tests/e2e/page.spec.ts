@@ -228,7 +228,7 @@ test.describe("page d'un nœud", () => {
       // « Partager · Privé » ouvre le panneau des règles de la page, Échap le referme (AC19).
       await page.getByRole("button", { name: "Partager · Privé" }).click()
       const partage = page.getByRole("dialog", { name: "Partager — Privé" })
-      await attendre(partage.getByText("Accès général", { exact: true })).toBeVisible()
+      await attendre(partage.getByText("Accès par défaut", { exact: true })).toBeVisible()
       await capturer(page, testInfo, `partage-${mode}`)
       await page.keyboard.press("Escape")
       await expect(partage).toHaveCount(0)

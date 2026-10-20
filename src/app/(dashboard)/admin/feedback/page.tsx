@@ -2,15 +2,16 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { feedbackListQuerySchema, type FeedbackListQuery, type UsagePeriod } from "@otomata_tech/oto_platform/schemas"
-import { handlesFeedback, listFeedback, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { handlesFeedback, isOrgAdmin, listFeedback, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { EcranRetours, resultatDe, type EcranRetoursProps } from "@otomata_tech/oto_platform/ui"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { ADRESSES } from "../adresses"
 
 // « Retours des assistants » (E08-S09) : des frictions d'assistant, destinées à l'équipe plateforme. E05-S13 (AC-9,
-// HN-E05S13-7) : réservé au membre de l'équipe plateforme qui administre l'organisation de l'adresse
-// (`handlesFeedback`), décidé ici avant tout appel ; à tout autre, `notFound()` (l'administrateur du client ne
-// sait plus que l'écran existe) ; le service le redécide. L'écran change l'état d'un retour par
+// HN-E05S13-7) : réservé au membre de l'équipe plateforme qui administre l'organisation de l'adresse, et, quand elle a
+// allumé « Retours visibles » (1.4.13), à ses administrateurs (`handlesFeedback`), décidé ici avant la liste ; à un
+// administrateur d'une organisation qui ne les affiche pas, l'écran le dit et les affiche sur place ; à qui n'administre
+// pas, `notFound()` ; le service le redécide. L'écran change l'état d'un retour par
 // `PATCH /api/platform/feedback/<ticket>`, puis la page se relit.
 export const metadata: Metadata = {
   title: "Retours des assistants",
@@ -35,6 +36,13 @@ function lire(db: PlatformDb, identity: Identity, filtres: FeedbackListQuery): P
   return resultatDe(listFeedback(db, identity, { state, type: filtres.type, days: filtres.period, cursor: filtres.cursor }))
 }
 
+/** Les retours de qui les traite ; à un administrateur d'une organisation qui ne les affiche pas, leur absence dite. */
+async function lireOuMasquer(db: PlatformDb, identity: Identity, filtres: FeedbackListQuery): Promise<EcranRetoursProps["resultat"]> {
+  const traites = await resultatDe(handlesFeedback(db, identity))
+  if (traites.error !== undefined) return traites
+  return traites.data ? lire(db, identity, filtres) : { masques: true }
+}
+
 export default async function RetoursPage({
   searchParams,
 }: {
@@ -48,8 +56,8 @@ export default async function RetoursPage({
 
   // Aucune valeur de l'adresse ne va brute à un service : une valeur inconnue retombe sur son défaut (AC9).
   const filtres = feedbackListQuerySchema.parse(await searchParams)
-  if (identite && !handlesFeedback(identite.data.identity)) notFound()
-  const resultat: EcranRetoursProps["resultat"] = identite ? await lire(identite.data.session.db, identite.data.identity, filtres) : ECHEC
+  if (identite && !isOrgAdmin(identite.data.identity)) notFound()
+  const resultat: EcranRetoursProps["resultat"] = identite ? await lireOuMasquer(identite.data.session.db, identite.data.identity, filtres) : ECHEC
   return (
     <EcranRetours
       resultat={resultat}
@@ -57,7 +65,7 @@ export default async function RetoursPage({
       Lien={Link}
       hrefDeFiltre={hrefDeFiltre}
       hrefDeConversation={hrefDeConversation}
-      // Les adresses du rail du staff, que le layout lui donne aussi : Retours, hors du menu, n'a pas de fil.
+      // Les adresses du rail de qui traite les retours, que le layout lui donne aussi : le fil range Retours sous le suivi.
       fil={{ adresses: { ...ADRESSES, retours: "/admin/feedback" }, administre: identite !== null }}
     />
   )

@@ -9,7 +9,8 @@
 // tables du design system, un tiret pour « absent », la troncature dite comme une limite (`Alert` d'examen) et
 // non comme une panne, l'état vide qui propose d'élargir. Changé : les lentilles du suivi sont des écrans de
 // l'hôte (Usage, Journal, Retours), reliés par le fil, au lieu d'onglets d'une seule carte. Retiré : onglets,
-// durées, adoption par personne, TanStack Query.
+// durées, adoption par personne, TanStack Query. 1.4.13 : l'écran s'appelle « Statistiques » et gagne trois îlots, adoption,
+// contenu, partage et connecteurs (`statistiques.tsx`).
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar"
 import { JOURNAL_PERIODS, USAGE_MAX_LINES, type UsagePeriod, type UsageQuery, type UsageSummary } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
@@ -25,7 +26,9 @@ import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
 import { LienDeCellule, TableServeur } from "../../components/table-serveur"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
+import { ENTREPRISE } from "../../coque/libelles"
 import { ChiffresCles } from "./chiffres-cles"
+import { Adoption, Contenu, ParEquipe, ParPersonne, PartageEtConnecteurs } from "./statistiques"
 
 /** Ce que l'écran affiche : l'usage, et les équipes de la liste du filtre (`listTeams`). */
 export type DonneesDUsage = { usage: UsageSummary; equipes: { id: string; name: string }[] }
@@ -41,6 +44,8 @@ export type EcranUsageProps = {
   hrefDeFenetre: (periode: UsagePeriod) => string
   /** L'adresse du formulaire GET du filtre d'équipe. */
   actionDuFiltre: string
+  /** Les paramètres que le formulaire du filtre garde en champs cachés (`tab` de la page « Activité »). */
+  parametresCaches?: Readonly<Record<string, string>>
   /** Le fil de l'en-tête : les adresses que l'hôte donne au rail et le droit de la personne ; sans lui, pas de fil. */
   fil?: FilDeLEcran
 }
@@ -56,13 +61,19 @@ function troncature(depuis: string | null): string {
   return `Calculé sur les ${nombreLisible(USAGE_MAX_LINES)} appels les plus récents : la période n'est couverte qu'à partir du ${date}. Les appels plus anciens ne sont pas comptés.`
 }
 
-type FiltreDEquipeProps = { equipes: DonneesDUsage["equipes"]; equipe: string | undefined; periode: UsagePeriod; action: string }
+type FiltreDEquipeProps = { equipes: DonneesDUsage["equipes"]; equipe: string | undefined; periode: UsagePeriod; action: string; caches: Readonly<Record<string, string>> }
+
+/** Les champs cachés du formulaire : la page qui le monte les nomme. */
+function ChampsCaches({ caches }: { caches: Readonly<Record<string, string>> }) {
+  return Object.entries(caches).map(([nom, valeur]) => <input key={nom} type="hidden" name={nom} value={valeur} />)
+}
 
 /** Le filtre d'équipe, sans JavaScript (AC2) ; la fenêtre suit en champ caché. */
-function FiltreDEquipe({ equipes, equipe, periode, action }: FiltreDEquipeProps) {
+function FiltreDEquipe({ equipes, equipe, periode, action, caches }: FiltreDEquipeProps) {
   const choisie = equipes.some((candidate) => candidate.id === equipe) ? equipe : ""
   return (
     <form method="get" action={action} aria-label="Filtrer par équipe" className="flex items-center gap-2">
+      <ChampsCaches caches={caches} />
       <input type="hidden" name="period" value={periode} />
       <label htmlFor="usage-equipe" className="oto-sr-only">
         Équipe
@@ -193,7 +204,9 @@ function SansProcedure({ sansProcedure, periode, Lien, hrefDeConversation }: San
   )
 }
 
-function Usage({ donnees, ...props }: Omit<EcranUsageProps, "resultat" | "fil" | "filtres" | "hrefDeFenetre" | "actionDuFiltre"> & { donnees: DonneesDUsage }) {
+type UsageProps = Pick<EcranUsageProps, "Lien" | "hrefDuNoeud" | "hrefDeConversation"> & { donnees: DonneesDUsage }
+
+function Usage({ donnees, ...props }: UsageProps) {
   const { usage } = donnees
   const { Lien } = props
   return (
@@ -201,48 +214,65 @@ function Usage({ donnees, ...props }: Omit<EcranUsageProps, "resultat" | "fil" |
       {/* Une limite du calcul, pas une panne : une information d'examen (AC8), jamais une alerte d'erreur. */}
       {usage.truncated && <Alert tone="review" title={troncature(usage.coveredFrom)} />}
       <ChiffresCles totaux={usage.totals} />
+      <Adoption adoption={usage.statistics.adoption} />
+      <ParEquipe equipes={usage.statistics.teams} hrefDuNoeud={props.hrefDuNoeud} />
+      <ParPersonne personnes={usage.statistics.people} />
+      <Contenu contenu={usage.statistics.content} Lien={Lien} hrefDuNoeud={props.hrefDuNoeud} />
       <Procedures procedures={usage.procedures} Lien={Lien} hrefDuNoeud={props.hrefDuNoeud} />
       <Fonctions fonctions={usage.functions} />
       <SansProcedure sansProcedure={usage.unmatched} periode={usage.periode} Lien={Lien} hrefDeConversation={props.hrefDeConversation} />
+      <PartageEtConnecteurs partage={usage.statistics.sharing} />
     </>
   )
 }
 
-/** La fenêtre et l'équipe, dans les actions de l'en-tête : elles règlent l'écran entier. */
-function Reglages({ donnees, filtres, hrefDeFenetre, actionDuFiltre }: Pick<EcranUsageProps, "filtres" | "hrefDeFenetre" | "actionDuFiltre"> & { donnees: DonneesDUsage }) {
+export type ReglagesDeLUsageProps = Pick<EcranUsageProps, "filtres" | "hrefDeFenetre" | "actionDuFiltre" | "parametresCaches"> & { donnees: DonneesDUsage }
+
+/** La fenêtre et l'équipe, dans les actions de l'en-tête : elles règlent l'écran entier, ou l'onglet Statistiques. */
+export function ReglagesDeLUsage({ donnees, filtres, hrefDeFenetre, actionDuFiltre, parametresCaches = {} }: ReglagesDeLUsageProps) {
   const fenetres = JOURNAL_PERIODS.map((jours) => ({ valeur: String(jours), libelle: `${jours} jours`, adresse: hrefDeFenetre(jours) }))
   return (
     <>
-      <FiltreDEquipe equipes={donnees.equipes} equipe={donnees.usage.team?.id} periode={filtres.period} action={actionDuFiltre} />
+      <FiltreDEquipe equipes={donnees.equipes} equipe={donnees.usage.team?.id} periode={filtres.period} action={actionDuFiltre} caches={parametresCaches} />
       <FiltreSegmente libelle="La période observée" choix={fenetres} valeur={String(filtres.period)} />
     </>
   )
 }
 
+/** « Sur les 30 derniers jours · équipe Ventes » : la méta de l'en-tête ; rien sans données. */
+export function metaDeLUsage(resultat: EcranUsageProps["resultat"]): string | undefined {
+  const usage = resultat.data?.usage
+  return usage && `Sur les ${usage.periode} derniers jours${usage.team ? ` · équipe ${usage.team.name}` : ""}`
+}
+
+/**
+ * Les îlots de l'usage, ou l'échec de leur lecture, dit une fois avec « Réessayer » : le corps de l'écran, et de l'onglet
+ * Statistiques d'« Activité ».
+ */
+export function CorpsDeLUsage({ resultat, ...props }: Omit<EcranUsageProps, "fil" | "actionDuFiltre" | "parametresCaches">) {
+  // Une seule lecture nourrit les îlots : son échec, ou la réserve d'un non-administrateur (AC1), se dit une fois.
+  if (resultat.error !== undefined) return <ErreurDeLecture message={resultat.error} href={props.hrefDeFenetre(props.filtres.period)} Lien={props.Lien} />
+  return <Usage donnees={resultat.data} Lien={props.Lien} hrefDuNoeud={props.hrefDuNoeud} hrefDeConversation={props.hrefDeConversation} />
+}
+
 export function EcranUsage({ resultat, fil, ...props }: EcranUsageProps) {
   const donnees = resultat.data
-  const meta = donnees && `Sur les ${donnees.usage.periode} derniers jours${donnees.usage.team ? ` · équipe ${donnees.usage.team.name}` : ""}`
   return (
     <>
       <EnTeteDAdministration
         courant="usage"
         fil={fil}
-        titre="Usage des assistants"
+        titre={ENTREPRISE.usage}
         glyphe={ChartBar}
-        meta={meta}
-        actions={donnees && <Reglages donnees={donnees} filtres={props.filtres} hrefDeFenetre={props.hrefDeFenetre} actionDuFiltre={props.actionDuFiltre} />}
+        meta={metaDeLUsage(resultat)}
+        actions={donnees && <ReglagesDeLUsage donnees={donnees} {...props} />}
       />
-      {/* Une seule lecture nourrit les îlots : son échec, ou la réserve d'un non-administrateur (AC1), se dit une fois. */}
-      {resultat.error !== undefined ? (
-        <ErreurDeLecture message={resultat.error} href={props.hrefDeFenetre(props.filtres.period)} Lien={props.Lien} />
-      ) : (
-        <Usage donnees={resultat.data} {...props} />
-      )}
+      <CorpsDeLUsage resultat={resultat} {...props} />
     </>
   )
 }
 
 /** L'état de chargement, rendu par le `loading.tsx` de l'hôte (AC15). */
 export function EcranUsageChargement() {
-  return <Chargement texte="Chargement de l'usage…" />
+  return <Chargement texte="Chargement des statistiques…" />
 }

@@ -331,19 +331,40 @@ export type MemberLevel = { level: AccessLevel; inherited: AccessLevel }
 /**
  * Les niveaux des membres d'une équipe sur un nœud (1.4.12, droits par personne) : chacun tel que le calcul le décide
  * (`nodeLevelOf`, sur les faits de chaque membre, comme `moveLevels`), et ce qu'il aurait sans sa règle nominative sur ce
- * nœud (`inherited`), ce que « Rétablir » rend. Vide quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.
+ * nœud (`inherited`), ce que « Rétablir » rend. Avec eux, l'accès par défaut de l'équipe (`team`) : le niveau d'un membre sans
+ * règle qui le nomme ni responsabilité, et celui qu'il aurait sans la règle de l'équipe sur ce nœud. `null` quand le nœud
+ * manque. Calcul pur sur les faits lus, sans rien écrire.
  */
-export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeId: string, teamId: string): Promise<Map<string, MemberLevel>> {
+export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeId: string, teamId: string): Promise<{ members: Map<string, MemberLevel>; team: MemberLevel } | null> {
   const [chains, callers] = await Promise.all([readNodeChains(db, identity.org.id, [nodeId]), readMemberCallers(db, identity.org.id)])
   const read = chains.get(nodeId)
-  if (!read) return new Map()
+  if (!read) return null
   const chain = await completedChain(db, nodeId, read)
-  return new Map(
+  const members = new Map(
     callers
       .filter((caller) => caller.teamIds.has(teamId))
-      .map((caller) => {
+      .map((caller): [string, MemberLevel] => {
         const without: NodeChain = { ...chain, rules: chain.rules.filter((rule) => rule.targetId !== nodeId || rule.userId !== caller.userId) }
         return [caller.userId, { level: nodeLevelOf(caller, chain), inherited: nodeLevelOf(caller, without) }]
       }),
   )
+  // Un membre de l'équipe que rien ne nomme : aucune règle de personne ne le vise (identifiant vide), aucune équipe qu'il mène.
+  const plain: Caller = { userId: "", orgId: identity.org.id, isOrgAdmin: false, teamIds: new Set([teamId]), ledTeamIds: new Set() }
+  const withoutTeam: NodeChain = { ...chain, rules: chain.rules.filter((rule) => rule.targetId !== nodeId || rule.teamId !== teamId) }
+  return { members, team: { level: nodeLevelOf(plain, chain), inherited: nodeLevelOf(plain, withoutTeam) } }
+}
+
+/**
+ * L'accès de toute l'organisation sur un nœud (1.4.13) : le niveau d'un membre qu'aucune règle ne nomme, ni lui ni une
+ * équipe, donc la règle d'organisation la plus proche, posée sur le nœud ou héritée d'un dossier, ou le défaut du
+ * propriétaire (Tout le monde lit) ; et celui qu'il aurait sans la règle d'organisation du nœud même (`inherited`).
+ * `null` quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.
+ */
+export async function organisationLevel(db: PlatformDb, identity: Identity, nodeId: string): Promise<MemberLevel | null> {
+  const read = (await readNodeChains(db, identity.org.id, [nodeId])).get(nodeId)
+  if (!read) return null
+  const chain = await completedChain(db, nodeId, read)
+  const anyone: Caller = { userId: "", orgId: identity.org.id, isOrgAdmin: false, teamIds: new Set(), ledTeamIds: new Set() }
+  const withoutOrg: NodeChain = { ...chain, rules: chain.rules.filter((rule) => rule.targetId !== nodeId || rule.org !== true) }
+  return { level: nodeLevelOf(anyone, chain), inherited: nodeLevelOf(anyone, withoutOrg) }
 }

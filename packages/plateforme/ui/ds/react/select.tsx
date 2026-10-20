@@ -13,9 +13,15 @@
 import { Children, forwardRef, isValidElement, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from "react"
 import { useAnchor, useDismiss, useIsoLayoutEffect } from "./hooks"
 import { cx } from "./outils"
+import { ListeDesChoix } from "./select-liste"
 import { Portail, racineOto } from "./overlays"
 
-export type SelectOption = { value: string; label: string; disabled?: boolean; group?: string }
+/**
+ * Un choix. `description` : une ligne fine sous le libellé, qui dit ce que le choix permet (les niveaux d'accès, 1.4.13) ;
+ * `icon` : son glyphe, devant. Le nom du choix reste son libellé (`aria-labelledby`), la description le décrit
+ * (`aria-describedby`), et la liste s'élargit pour la tenir.
+ */
+export type SelectOption = { value: string; label: string; disabled?: boolean; group?: string; description?: string; icon?: ReactNode }
 
 /** Ce que reçoivent `onChange` et `onBlur` : l'entrée cachée, sa valeur posée ; la forme d'évènement que lit `register`. */
 export type SelectEvent = { target: HTMLInputElement; type: "change" | "blur" }
@@ -107,61 +113,6 @@ const CHEVRON = (
     <path d="m6 9 6 6 6-6" />
   </svg>
 )
-
-const COCHE = (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M20 6 9 17l-5-5" />
-  </svg>
-)
-
-type ListeProps = { id: string; nom: string | undefined; options: readonly SelectOption[]; valeur: string; index: number; surSurvol: (rang: number) => void; choisir: (rang: number) => void }
-
-/** Les options, groupées sous leur intitulé ; le survol et le clavier partagent la ligne surlignée. */
-function ListeDesChoix({ id, nom, options, valeur, index, surSurvol, choisir }: ListeProps) {
-  const ligne = (rang: number) => {
-    const option = options[rang]
-    return (
-      <div
-        key={`${rang}-${option.value}`}
-        id={`${id}-${rang}`}
-        role="option"
-        aria-selected={option.value === valeur}
-        aria-disabled={option.disabled || undefined}
-        className="oto-menu-item"
-        data-highlighted={index === rang ? "" : undefined}
-        onMouseEnter={() => !option.disabled && surSurvol(rang)}
-        onClick={() => choisir(rang)}
-      >
-        <span className="oto-menu-label">{option.label}</span>
-        <span className="oto-menu-check" aria-hidden="true">
-          {option.value === valeur && COCHE}
-        </span>
-      </div>
-    )
-  }
-  const groupes: { intitule: string | undefined; rangs: number[] }[] = []
-  options.forEach((option, rang) => {
-    const dernier = groupes.at(-1)
-    if (dernier && dernier.intitule === option.group) dernier.rangs.push(rang)
-    else groupes.push({ intitule: option.group, rangs: [rang] })
-  })
-  return (
-    <div id={id} role="listbox" aria-label={nom} className="oto-select-list">
-      {groupes.map(({ intitule, rangs }, rangDuGroupe) =>
-        intitule === undefined ? (
-          rangs.map(ligne)
-        ) : (
-          <div key={`groupe-${rangDuGroupe}`} role="group" aria-label={intitule}>
-            <p className="oto-menu-group-label" aria-hidden="true">
-              {intitule}
-            </p>
-            {rangs.map(ligne)}
-          </div>
-        ),
-      )}
-    </div>
-  )
-}
 
 /** La couche où le popover se monte : le panneau ou le dialogue qui contient le déclencheur, sinon la racine `.oto`. */
 const coucheDe = (element: Element | null): Element | null => element?.closest(".oto-pop, dialog") ?? racineOto(element)

@@ -61,7 +61,7 @@ function Lien({ children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & 
   return <a {...props}>{children}</a>
 }
 
-type Options = Pick<EcranOrganisationProps, "marque" | "enregistre" | "contexte"> & { administre?: boolean }
+type Options = Pick<EcranOrganisationProps, "marque" | "enregistre" | "contexte" | "retoursVisibles"> & { administre?: boolean }
 
 function ecran(organisation: OrgView | { error: string } = DEMO, { administre = true, ...props }: Options = {}) {
   const resultat = "error" in organisation ? organisation : { data: organisation }
@@ -200,11 +200,11 @@ describe("EcranOrganisation, the trail of the settings (E05-S09, AC-d2 ; setting
     expect(courant).toHaveAttribute("aria-current", "page")
     fireEvent.click(courant)
     const freres = within(screen.getByRole("menu")).getAllByRole("menuitemradio")
-    // E05-S13 (AC-10) : « Journal » se range dans les réglages.
+    // E05-S13 (AC-10) : le Journal se range dans les réglages ; 1.4.13 : il y devient « Activité ».
     expect(freres.map((frere) => [frere.textContent, frere.getAttribute("aria-checked")])).toEqual([
       ["Organisation", "true"],
       ["Équipes & accès", "false"],
-      ["Journal", "false"],
+      ["Activité", "false"],
     ])
     fireEvent.click(freres[1])
     expect(naviguer).toHaveBeenCalledWith("/teams")
@@ -213,6 +213,35 @@ describe("EcranOrganisation, the trail of the settings (E05-S09, AC-d2 ; setting
   it("should show no trail to a person who does not administer the organisation", () => {
     render(ecran({ error: "Cette page est réservée aux administrateurs de Démo." }, { administre: false }))
     expect(screen.queryByRole("navigation", { name: "Chemin" })).toBeNull()
+  })
+})
+
+// 1.4.13 : l'option « Retours visibles », dite par son état et basculée par `PATCH admin/flags`, puis la page relue.
+describe("EcranOrganisation, « Retours des assistants » (1.4.13)", () => {
+  it("should say the feedback is hidden and show it by PATCH admin/flags, then have the page re-read", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { flag: { name: "feedback_visible", description: "…", enabled: true } } }))
+    render(ecran(DEMO, { retoursVisibles: { data: false } }))
+    const ilot = within(screen.getByRole("region", { name: "Retours des assistants" }))
+    expect(ilot.getByText("Retours masqués")).toBeInTheDocument()
+
+    fireEvent.click(ilot.getByRole("button", { name: "Afficher les retours des assistants aux administrateurs" }))
+
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envoi()).toEqual({ url: "/api/platform/admin/flags", methode: "PATCH", corps: { name: "feedback_visible", enabled: true } })
+  })
+
+  it("should offer to hide the feedback when shown, say a failed read with a way to retry, and show nothing without the reading", () => {
+    const { unmount } = render(ecran(DEMO, { retoursVisibles: { data: true } }))
+    expect(screen.getByText("Retours affichés")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Masquer les retours des assistants aux administrateurs" })).toBeInTheDocument()
+    unmount()
+
+    const lu = render(ecran(DEMO, { retoursVisibles: { error: "Une erreur est survenue. Réessayez." } }))
+    expect(within(screen.getByRole("region", { name: "Retours des assistants" })).getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez.")
+    lu.unmount()
+
+    render(ecran())
+    expect(screen.queryByRole("region", { name: "Retours des assistants" })).toBeNull()
   })
 })
 

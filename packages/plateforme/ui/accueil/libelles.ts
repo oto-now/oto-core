@@ -1,14 +1,36 @@
 // Les mots de l'accueil (E05-S09, partie b) : ceux d'oto-frontend (`src/components/accueil/`), adaptés à la
 // plateforme (des assistants branchés, pas des agents d'Oto). Constantes du paquet, jamais un texte venu du
 // service (`portage-ecrans.md § 4`) ; une seule table, lue par l'écran et ses îlots.
-import type { ActivityVerb, NodeKind } from "../../schemas"
+import { HOME_VIEWED_DAYS, type ActivityVerb, type NodeKind } from "../../schemas"
 
 export const ACCUEIL = {
   bonjour: (nom: string | null) => (nom ? `Bonjour ${nom}` : "Bonjour"),
-  chercher: "Chercher",
   chargement: "Chargement de l'accueil…",
-  /** L'îlot principal, sans onglets (E11-S10, AC-e3). */
-  ilot: "Activités",
+  /** L'îlot principal (1.4.13) : « Reprendre », trois onglets. */
+  ilot: "Reprendre",
+} as const
+
+/** La carte « Reprendre » (1.4.13) : ses onglets, ses filtres, ses lignes. */
+export const REPRENDRE = {
+  onglets: "Contenus à reprendre",
+  recents: "Récents",
+  consultes: "Les plus consultés",
+  fil: "Fil",
+  filtres: "Contenus de",
+  moi: "Moi",
+  equipes: "Mes équipes",
+  organisation: "Toute l'organisation",
+  voirPlus: "Voir plus",
+  chargement: "Chargement…",
+  reessayer: "Réessayer",
+  rienRecent: "Aucun contenu modifié ici pour l'instant",
+  rienConsulte: `Aucun contenu consulté ces ${HOME_VIEWED_DAYS} derniers jours`,
+  rienTexte: "Changez de filtre pour voir plus large.",
+  vous: "vous",
+  aLEcran: "à l'écran",
+  parLAssistant: "via l'assistant",
+  /** Les consultations d'un contenu sur la période des plus consultés, à l'écran et par un assistant. */
+  consultations: (total: number) => `${total} consultation${total > 1 ? "s" : ""}`,
 } as const
 
 /** L'îlot « Activités » : ce qui est arrivé aux contenus, lu au journal (E05-S12, AC-13). */
@@ -49,14 +71,34 @@ export const NATURES_DES_ACTIVITES: Record<NodeKind, string> = {
   context: "le Contexte",
 }
 
-/** L'îlot « Procédures les plus utilisées » (E05-S12, AC-18) : celles du bloc servi par `context`, dans son ordre. */
-export const PROCEDURES_UTILES = {
-  titre: "Procédures les plus utilisées",
+/**
+ * L'îlot « Lancer » (1.4.13) : les procédures les plus utilisées de la personne, celles du bloc servi par
+ * `context`, chacune avec la demande à coller dans son assistant.
+ */
+export const LANCER = {
+  titre: "Lancer",
   rien: "Aucune procédure publiée",
+  copier: "Copier la demande",
+  copierPour: (titre: string) => `Copier la demande : ${titre}`,
+  copiee: "Demande copiée",
+  /** La demande prête à coller : le titre et le chemin, par lesquels l'assistant retrouve la procédure. */
+  demande: (titre: string, chemin: string) => `Suis la procédure « ${titre} » (${chemin}).`,
 } as const
 
-/** L'aparté « Brancher mon Claude, ChatGPT ou Mistral » (E02-S04, E11-S09) : l'état et la fenêtre du guide. */
+/** L'îlot « Nouveautés depuis votre dernière visite » (1.4.13) : ce que d'autres ont publié depuis. */
+export const NOUVEAUTES = {
+  titre: "Nouveautés depuis votre dernière visite",
+  depuis: (date: string) => `Depuis le ${date}`,
+  rien: "Rien de nouveau depuis votre dernière visite",
+  publiePar: (qui: string | null) => (qui ? `publié par ${qui}` : "publié"),
+} as const
+
+/** L'aparté « Brancher votre assistant » (E02-S04, E11-S09 ; 1.4.13) : l'état et la fenêtre du guide. */
 export const BRANCHEMENT = {
+  /** Le titre court de l'îlot (1.4.13) : il tient sur une ligne avec « Brancher » ; les assistants se nomment dessous. */
+  titre: "Brancher votre assistant",
+  assistants: ["Claude", "ChatGPT", "Mistral"],
+  assistantsLu: "Assistants pris en charge",
   brancher: "Brancher",
   fermer: "Fermer",
   aucun: "Aucun assistant branché",
@@ -66,5 +108,5 @@ export const BRANCHEMENT = {
 export const PREMIER_JOUR = {
   rien: "Rien n'a encore tourné",
   texte:
-    "Votre assistant lit vos pages, suit vos procédures et appelle vos outils, dans la limite de vos droits. Branchez-le d'abord : « Brancher mon Claude, ChatGPT ou Mistral » vous guide pas à pas.",
+    "Votre assistant lit vos pages, suit vos procédures et appelle vos outils, dans la limite de vos droits. Branchez-le d'abord : « Brancher votre assistant » vous guide pas à pas.",
 } as const

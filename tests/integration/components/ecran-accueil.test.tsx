@@ -6,17 +6,19 @@
 // la vue « Contexte » a son écran (`contexte-page.test.tsx`, `e05s11-contexte-servi.test.tsx`).
 // E05-S12 (lot B) : le fil est fait d'activités et « Procédures les plus utilisées » remplace « Contenus récents » ; la
 // ligne d'une activité, ses liens et la mise en page sont éprouvés par `e05s12-accueil.test.tsx`.
+// 1.4.13 : l'îlot principal est « Reprendre », le fil son onglet « Fil » ; la recherche de l'accueil part (celle du rail
+// suffit) ; « Brancher votre assistant », « Lancer » et « Nouveautés » à droite. La carte elle-même :
+// `accueil-reprendre.test.tsx`.
 import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { Activity, ActivityPage, TreeNode } from "@otomata_tech/oto_platform/schemas"
+import type { Activity, ActivityPage } from "@otomata_tech/oto_platform/schemas"
 import {
   ContexteDeLHote,
   ContexteDeRafraichissement,
   CoquilleOto,
   EcranDAccueil,
   EcranDAccueilChargement,
-  RechercheDuRail,
   type DonneesDeLAccueil,
   type EcranDAccueilProps,
 } from "@otomata_tech/oto_platform/ui"
@@ -26,7 +28,9 @@ import { simulerLesDialogues } from "../../helpers/dialogue"
 const MAINTENANT = new Date("2026-09-26T10:00:00Z")
 const MOI = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c02"
 const ADRESSE = { url: "https://demo.example.test/api/mcp", nom: "Démo", nomCli: "demo", phrase: "Commence par le contexte de « Démo »." }
-const BRANCHER = "Brancher mon Claude, ChatGPT ou Mistral"
+const BRANCHER = "Brancher votre assistant"
+/** La fenêtre du guide garde le titre long : elle nomme ce qu'elle branche. */
+const GUIDE = "Brancher mon Claude, ChatGPT ou Mistral"
 const ECHEC = "Une erreur est survenue. Réessayez."
 
 const activite = (id: number, at: string, surcharge: Partial<Activity> = {}): Activity => ({
@@ -49,6 +53,8 @@ const DONNEES: DonneesDeLAccueil = {
   nom: "Claire Morel",
   moi: MOI,
   activites: { data: pageDe([activite(1, "2026-09-26T08:10:00Z")]) },
+  reprendre: { data: { items: [], hasMore: false } },
+  nouveautes: { data: { since: "2026-09-20T00:00:00.000Z", items: [] } },
   adresse: ADRESSE,
   connexions: { data: [] },
   procedures: { data: [] },
@@ -56,7 +62,6 @@ const DONNEES: DonneesDeLAccueil = {
 
 const CLAUDE = { famille: "claude.ai", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }
 
-const ARBRE: TreeNode[] = [{ path: "guide", kind: "page", title: "Guide de Démo", status: "published", children: [{ path: "ventes", kind: "page", title: "Ventes", status: "published", children: [] }] }]
 
 /** Le lien de l'hôte : une ancre marquée, pour reconnaître ce qu'il rend. */
 function LienDeLHote({ href, children, ...reste }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
@@ -69,13 +74,12 @@ function LienDeLHote({ href, children, ...reste }: AnchorHTMLAttributes<HTMLAnch
 
 const hote = vi.hoisted(() => ({ naviguer: vi.fn(), rafraichir: vi.fn() }))
 
-/** L'écran sous la racine `.oto`, avec ce que l'hôte prête ; `rail` monte aussi la recherche du rail, et sa palette. */
-function monter(donnees: EcranDAccueilProps["donnees"], { rail = false }: { rail?: boolean } = {}) {
+/** L'écran sous la racine `.oto`, avec ce que l'hôte prête. */
+function monter(donnees: EcranDAccueilProps["donnees"]) {
   render(
     <CoquilleOto pleinePage>
       <ContexteDeRafraichissement.Provider value={hote.rafraichir}>
         <ContexteDeLHote.Provider value={{ Lien: LienDeLHote, chemin: "/", naviguer: hote.naviguer }}>
-          {rail && <RechercheDuRail arbre={{ tree: ARBRE, equipes: [] }} handle="claire" adresses={{ pages: "/n/" }} administre={false} />}
           <EcranDAccueil
             donnees={donnees}
             Lien={LienDeLHote}
@@ -90,9 +94,10 @@ function monter(donnees: EcranDAccueilProps["donnees"], { rail = false }: { rail
 }
 
 const ilot = (nom: string) => within(screen.getByRole("region", { name: nom }))
-/** L'îlot principal, « Activités » (E11-S10, AC-e3). */
-const activites = () => ilot("Activités")
-const paletteOuverte = () => document.querySelector("dialog.oto-palette")?.hasAttribute("open") ?? false
+/** L'îlot principal, « Reprendre » (1.4.13). */
+const activites = () => ilot("Reprendre")
+/** Ouvre l'onglet « Fil » de « Reprendre », fermé par défaut. */
+const ouvrirLeFil = () => fireEvent.click(activites().getByRole("tab", { name: "Fil" }))
 /** Ce que la carte montre d'une valeur à copier, hors de la fenêtre qui porte le guide. */
 const copiesSurLaCarte = () =>
   [...ilot(BRANCHER).queryAllByText(ADRESSE.url, { selector: "code" }), ...ilot(BRANCHER).queryAllByRole("button", { name: /^Copier/ })].filter(
@@ -113,14 +118,17 @@ afterEach(() => {
 })
 
 describe("home screen (AC-b1)", () => {
-  it("should greet the person and lay out the activities, the search, Brancher mon Claude, ChatGPT ou Mistral and the useful procedures", () => {
+  it("should greet the person and lay out « Reprendre », Brancher votre assistant, Lancer and the news, without a home search", () => {
     monter({ data: DONNEES })
 
     expect(screen.getByRole("heading", { level: 1, name: "Bonjour Claire Morel" })).toBeInTheDocument()
-    expect(within(screen.getByRole("search")).getByRole("searchbox", { name: "Chercher" })).toBeInTheDocument()
+    expect(screen.queryByRole("search")).toBeNull()
     expect(ilot(BRANCHER).getByRole("heading", { level: 2, name: BRANCHER })).toBeInTheDocument()
+    expect(ilot(BRANCHER).getAllByRole("listitem").map((pastille) => pastille.textContent).slice(0, 3)).toEqual(["Claude", "ChatGPT", "Mistral"])
+    ouvrirLeFil()
     expect(activites().getByRole("link", { name: "Tout le journal" })).toHaveAttribute("href", "/journal")
-    expect(ilot("Procédures les plus utilisées").getByRole("heading", { level: 2, name: "Procédures les plus utilisées" })).toBeInTheDocument()
+    expect(ilot("Lancer").getByRole("heading", { level: 2, name: "Lancer" })).toBeInTheDocument()
+    expect(ilot("Nouveautés depuis votre dernière visite").getByRole("heading", { level: 2 })).toBeInTheDocument()
     // E05-S12 (AC-18) : « Contenus récents » quitte l'accueil.
     expect(screen.queryByRole("region", { name: "Contenus récents" })).toBeNull()
   })
@@ -134,13 +142,14 @@ describe("home screen (AC-b1)", () => {
       activite(1, "2026-09-22T09:00:00Z"),
     ]
     monter({ data: { ...DONNEES, activites: { data: pageDe(activites) } } })
+    ouvrirLeFil()
 
     // Les journées et leurs lignes, dans l'ordre du document : chaque ligne sous le titre de sa journée, un
-    // niveau sous le titre « Activités » de l'îlot.
-    const ordre = [...screen.getByRole("region", { name: "Activités" }).querySelectorAll("h2, h3, a[href^='/n/']")].map((element) =>
+    // niveau sous le titre « Reprendre » de l'îlot.
+    const ordre = [...screen.getByRole("region", { name: "Reprendre" }).querySelectorAll("h2, h3, a[href^='/n/']")].map((element) =>
       element.tagName === "A" ? element.getAttribute("href") : `${element.tagName} ${element.textContent}`,
     )
-    expect(ordre).toEqual(["H2 Activités", "H3 Aujourd'hui", "/n/ventes/page_4", "/n/ventes/page_3", "H3 Hier", "/n/ventes/page_2", "H3 22 septembre 2026", "/n/ventes/page_1"])
+    expect(ordre).toEqual(["H2 Reprendre", "H3 Aujourd'hui", "/n/ventes/page_4", "/n/ventes/page_3", "H3 Hier", "/n/ventes/page_2", "H3 22 septembre 2026", "/n/ventes/page_1"])
   })
 })
 
@@ -156,28 +165,36 @@ describe("home screen first day (AC-b1 ; E05-S12, AC-16)", () => {
   ])("with %s, should show the first day: %s", (_cas, surcharge, premierJour) => {
     monter({ data: { ...DONNEES, ...surcharge } })
 
-    // Le premier jour prend la place du fil, dans l'îlot « Activités » (HN-E05S11-11), et retire l'îlot des
-    // procédures ; « Brancher » reste.
+    // Le premier jour prend la place de « Reprendre » (HN-E05S11-11), et retire « Lancer » et les nouveautés ;
+    // « Brancher » reste.
     expect(activites().queryByText("Rien n'a encore tourné") !== null).toBe(premierJour)
+    expect(activites().queryByRole("tab", { name: "Fil" }) !== null).toBe(!premierJour)
+    if (!premierJour) ouvrirLeFil()
     expect(activites().queryByRole("link", { name: "Tout le journal" }) !== null).toBe(!premierJour)
-    expect(screen.queryByRole("region", { name: "Procédures les plus utilisées" }) !== null).toBe(!premierJour)
+    expect(screen.queryByRole("region", { name: "Lancer" }) !== null).toBe(!premierJour)
+    expect(screen.queryByRole("region", { name: "Nouveautés depuis votre dernière visite" }) !== null).toBe(!premierJour)
     expect(screen.getByRole("region", { name: BRANCHER })).toBeInTheDocument()
   })
 
   it("should say an empty week without any action when an assistant is connected", () => {
     monter({ data: { ...DONNEES, activites: { data: vide }, connexions: { data: [CLAUDE] } } })
+    ouvrirLeFil()
 
     expect(activites().getByText("Aucune activité cette semaine")).toBeInTheDocument()
-    expect(activites().queryByRole("button")).toBeNull()
+    expect(within(activites().getByRole("tabpanel")).queryByRole("button")).toBeNull()
   })
 })
 
-describe("home screen main island (E11-S10, AC-e3)", () => {
-  it("should title the main island « Activités » without any tab, and read no Contexte", () => {
+describe("home screen main island (E11-S10, AC-e3 ; 1.4.13)", () => {
+  it("should title the main island « Reprendre », open « Récents », keep « Fil » closed, and read no Contexte", () => {
     monter({ data: DONNEES })
 
-    expect(activites().getByRole("heading", { level: 2, name: "Activités" })).toBeInTheDocument()
-    expect(screen.queryByRole("tablist")).toBeNull()
+    expect(activites().getByRole("heading", { level: 2, name: "Reprendre" })).toBeInTheDocument()
+    expect(activites().getAllByRole("tab").map((onglet) => [onglet.textContent, onglet.getAttribute("aria-selected")])).toEqual([
+      ["Récents", "true"],
+      ["Les plus consultés", "false"],
+      ["Fil", "false"],
+    ])
     expect(screen.queryByRole("tab", { name: "Contexte" })).toBeNull()
     expect(screen.queryByRole("region", { name: /^Contexte/ })).toBeNull()
   })
@@ -203,7 +220,7 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
   it("should name each connected assistant with its last connection", () => {
     monter({ data: { ...DONNEES, connexions: { data: [CLAUDE, { famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-20T09:00:00Z" }] } } })
 
-    expect(ilot(BRANCHER).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
+    expect(ilot(BRANCHER).getAllByRole("listitem").slice(3).map((ligne) => ligne.textContent)).toEqual([
       "claude.ai · dernière connexion le 24 septembre 2026",
       "Claude Code · dernière connexion le 20 septembre 2026",
     ])
@@ -213,7 +230,7 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
     monter({ data: { ...DONNEES, connexions: { data: [{ famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-24T09:00:00Z" }, CLAUDE] } } })
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
 
-    const fenetre = screen.getByRole("dialog", { name: BRANCHER })
+    const fenetre = screen.getByRole("dialog", { name: GUIDE })
     expect(fenetre).toHaveAttribute("data-size", "lg")
     const dedans = within(fenetre)
     expect(dedans.getByText("Ajoutez Démo à votre assistant : il agira avec votre compte, dans la limite de vos droits.")).toBeInTheDocument()
@@ -226,45 +243,28 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
   })
 })
 
-describe("home screen search (AC-b1)", () => {
-  it("should open the rail's palette from the home field, on a click and on Enter", async () => {
-    monter({ data: DONNEES }, { rail: true })
-    const champ = within(screen.getByRole("search")).getByRole("searchbox", { name: "Chercher" })
-
-    fireEvent.click(champ)
-    expect(paletteOuverte()).toBe(true)
-
-    // Échap : le `<dialog>` émet `cancel`, que la palette rend à sa fermeture (jsdom ne l'émet pas seul).
-    fireEvent(screen.getByRole("dialog", { name: "Palette de commandes" }), new Event("cancel"))
-    await waitFor(() => expect(paletteOuverte()).toBe(false))
-    const formulaire = champ.closest("form")
-    if (!formulaire) throw new Error("champ hors du formulaire de recherche")
-    fireEvent.submit(formulaire)
-    expect(paletteOuverte()).toBe(true)
-  })
-})
-
 describe("home screen failed reads (portage-ecrans.md § 4 ; E05-S12, AC-16, AC-18)", () => {
   it.each<[string, Partial<DonneesDeLAccueil>]>([
-    ["Activités", { activites: { error: ECHEC } }],
+    ["Reprendre", { activites: { error: ECHEC } }],
     [BRANCHER, { connexions: { error: ECHEC } }],
-    ["Procédures les plus utilisées", { procedures: { error: ECHEC } }],
+    ["Lancer", { procedures: { error: ECHEC } }],
+    ["Nouveautés depuis votre dernière visite", { nouveautes: { error: ECHEC } }],
   ])("should say a failed read in « %s » with « Réessayer », which reads the page again", (nom, surcharge) => {
     monter({ data: { ...DONNEES, ...surcharge } })
+    if (nom === "Reprendre") ouvrirLeFil()
 
     const zone = within(screen.getByRole("region", { name: nom }))
-    expect(screen.getAllByRole("alert")).toHaveLength(1)
+    expect(screen.getAllByRole("alert").filter((alerte) => alerte.textContent !== "")).toHaveLength(1)
     expect(zone.getByRole("alert")).toHaveTextContent(`Chargement impossible${ECHEC}`)
     fireEvent.click(zone.getByRole("button", { name: "Réessayer" }))
     expect(hote.rafraichir).toHaveBeenCalledTimes(1)
   })
 
-  it("should say once that the home could not be read when the identity could not, the search still there", () => {
+  it("should say once that the home could not be read when the identity could not", () => {
     monter({ error: ECHEC })
 
     expect(screen.getByRole("heading", { level: 1, name: "Bonjour" })).toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent(`Chargement impossible${ECHEC}`)
-    expect(screen.getByRole("search")).toBeInTheDocument()
     expect(screen.queryByRole("region")).toBeNull()
   })
 

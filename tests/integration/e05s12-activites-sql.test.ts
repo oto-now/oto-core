@@ -12,6 +12,7 @@ import { JOURNAL_ROWS_SCANNED } from "../../packages/plateforme/schemas/journal"
 import { listActivities } from "../../packages/plateforme/server/activities"
 import { proceduresBlock, usefulProcedures } from "../../packages/plateforme/server/context/blocks/procedures"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
+import { homeContents, homeNews } from "../../packages/plateforme/server/home-contents"
 import { resolveIdentity, type Identity } from "../../packages/plateforme/server/identity"
 import { ctxCode, hex } from "../helpers/plateforme"
 import { createSqlFixtures, portable, recordDb, spyDb, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
@@ -180,10 +181,14 @@ describe.skipIf(!sqlConfigured)(portable("listActivities on a real base: scope, 
   })
 
   // Un service de lecture tient ses requêtes en une transaction (`supabase-patterns.md § Couplage à Supabase
-  // (ADR-012)`) : les deux lectures de l'accueil, comptées par l'espion de la face SQL (`recordDb`).
+  // (ADR-012)`) : les lectures de l'accueil, comptées par l'espion de la face SQL (`recordDb`).
   it.each<[string, (db: PlatformDb, identity: Identity) => Promise<unknown>]>([
     ["listActivities", (db, identity) => listActivities(db, identity, { periodDays: 7 })],
     ["usefulProcedures", (db, identity) => usefulProcedures(db, identity, 6)],
+    // 1.4.13 : la carte « Reprendre » (une page par onglet) et les nouveautés.
+    ["homeContents (recent)", (db, identity) => homeContents(db, identity, { tab: "recent", scope: "teams" })],
+    ["homeContents (viewed)", (db, identity) => homeContents(db, identity, { tab: "viewed", scope: "org" })],
+    ["homeNews", (db, identity) => homeNews(db, identity)],
   ])("should read %s in one transaction", async (name, read) => {
     const person = o.people.claire
     const identity = await resolveIdentity(fx.as(person), o.host, { userId: person.id, email: person.email })
