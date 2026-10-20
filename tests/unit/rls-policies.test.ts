@@ -7,7 +7,8 @@
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
 // reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000` et `20261021090000`). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
-// dans git) : ce test lit les définitions finales, sans l'histoire des fichiers.
+// dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
+// `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000`).
 import fs from "fs"
 import path from "path"
 import { describe, expect, it } from "vitest"
@@ -193,6 +194,38 @@ const SUBLINK = /\(\s*select\b|\bexists\s*\(/i
 const READ_TABLE = /\b(?:from|join)\s+platform\.(\w+)/gi
 const COMMANDS = ["select", "insert", "update", "delete"]
 
+/**
+ * Les fonctions `security definer` qu'une session exécute (`authenticated`, `platform_server` qui en hérite, `anon`) et qui
+ * écrivent dans `nodes`, `blocks` ou `node_drafts` (migration `20261021100000`, décision d'Alexis du 20/10) : chacune
+ * exige en base, par `node_level_for`, le niveau que son service exige, ni plus dur ni plus large. Une fonction nouvelle
+ * de cette sorte s'ajoute ici en nommant ce service. La surcharge de `publish_node` sans tampon n'écrit rien elle-même :
+ * elle appelle celle-ci. Une fonction qui n'est accordée à aucune session (`org_skeleton`, `ensure_private_space`, les
+ * fonctions de déclencheur) n'est pas vue, même appelée par une fonction accordée (`create_org`, `signup_org` : les nœuds
+ * d'une organisation neuve).
+ */
+const LEVEL_REQUIRED_FUNCTIONS: Record<string, string> = {
+  "open_draft(p_node uuid)": "openDraft (server/nodes/store.ts), after requireNodeLevel write (edit, write.ts) or the write level of the parent of a creation (create): node_level_for >= 2",
+  "publish_node(p_node uuid, p_base_revision integer, p_draft_stamp timestamp with time zone, p_links jsonb)":
+    "publishNode (server/nodes/publish.ts): requireNodeLevel publish, node_level_for >= 2",
+  "discard_draft(p_node uuid, p_draft_stamp timestamp with time zone)": "discardPlan (server/nodes/discard.ts): requireNodeLevel write, node_level_for >= 2; a page never published refused",
+  "duplicate_subtree(p_source uuid, p_nodes uuid[], p_segment text, p_title text, p_position double precision)":
+    "duplicateNode (server/nodes/duplicate.ts): findNode and copiedDescendants, node_level_for >= 1; its parent, node_level_for >= 2",
+}
+
+/** Les rôles d'une session. */
+const SESSION_ROLES = ["authenticated", "platform_server", "anon"]
+const CREATE_FUNCTION = /^create (?:or replace )?function platform\.(\w+)\s*\((.*?)\)\s*returns\b/i
+const GRANTED_FUNCTION = /^(grant|revoke) (?:execute|all(?: privileges)?) on function platform\.(\w+)\s*\((.*)\) (?:to|from) (.+)$/i
+const WRITES_NODES = /\b(?:insert into|update|delete from) platform\.(?:nodes|blocks|node_drafts)\b/i
+
+/** La signature d'une fonction : son nom et ses arguments, sans leurs valeurs par défaut. */
+const signatureOf = (name: string, args: string) =>
+  `${name.toLowerCase()}(${args
+    .split(",")
+    .map((arg) => arg.replace(/\s+default\s+.*$/i, "").trim())
+    .join(", ")
+    .toLowerCase()})`
+
 type Policy = { name: string; table: string; command: string; body: string }
 /** Une définition, ou son retrait (`drop policy`), dans l'ordre des migrations. */
 type PolicyEvent = Policy & { dropped?: true }
@@ -311,5 +344,35 @@ describe("final policies of platform", () => {
       }),
     )
     expect(cycles).toEqual([])
+  })
+})
+
+describe("security definer functions of platform", () => {
+  it("should make every security definer function a session runs that writes a node, its blocks or its draft require the level of its service (20261021100000)", () => {
+    const statements = readMigrations().flatMap((migration) => migration.statements)
+    // La dernière définition de chaque signature, et les rôles de session qui exécutent chaque nom.
+    const bodies = new Map<string, string>()
+    const granted = new Map<string, Set<string>>()
+    for (const statement of statements) {
+      const created = statement.match(CREATE_FUNCTION)
+      if (created && /\bsecurity definer\b/i.test(statement)) bodies.set(signatureOf(created[1], created[2]), statement)
+      else if (created) bodies.delete(signatureOf(created[1], created[2]))
+      const grant = statement.match(GRANTED_FUNCTION)
+      if (!grant) continue
+      const signature = signatureOf(grant[2], grant[3])
+      const roles = granted.get(signature) ?? new Set<string>()
+      for (const role of grant[4].split(",").map((each) => each.trim().toLowerCase())) {
+        if (grant[1].toLowerCase() === "grant") roles.add(role)
+        else roles.delete(role)
+      }
+      granted.set(signature, roles)
+    }
+    const writers = [...bodies].filter(
+      ([signature, body]) => WRITES_NODES.test(body) && SESSION_ROLES.some((role) => granted.get(signature)?.has(role)),
+    )
+    expect({
+      writers: writers.map(([signature]) => signature).sort(),
+      withoutLevel: writers.filter(([, body]) => !/\bnode_level_for\s*\(/i.test(body)).map(([signature]) => signature),
+    }).toEqual({ writers: Object.keys(LEVEL_REQUIRED_FUNCTIONS).sort(), withoutLevel: [] })
   })
 })

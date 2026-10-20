@@ -298,6 +298,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   ou `is_org_admin` pour le désactiver), `sim_outbox_update_writer` (un brouillon envoyé au nom de l'appelant),
   `member_exclusions_insert_member` (`is_org_admin`). Une fonction et deux déclencheurs, aucune table ni colonne ; rien à
   relancer avant.
+- `20261021100000_platform_role_dans_les_fonctions.sql` (suite de `20261021090000`) : les fonctions `security definer`
+  qu'une session exécute et qui écrivent un nœud exigent, sous une personne, le niveau de leur service (`node_level_for`).
+  `open_draft`, `publish_node` (la surcharge au tampon ; l'autre l'appelle) et `discard_draft` : l'écriture (≥ 2), un
+  nœud caché refusé comme un nœud absent (`42501`) ; `discard_draft` refuse aussi une page jamais publiée (`42501`).
+  `duplicate_subtree` : la lecture du nœud (`P0002` comme un nœud absent) et de chaque descendant de `p_nodes` (`22023`
+  comme un nœud absent), l'écriture du parent de la copie (`42501`) : un membre ne copie plus sous un dossier qu'il lit
+  une page ou des descendants qui lui sont cachés, que la copie, héritant de son parent, lui rendait lisibles. Fonctions
+  recréées (`create or replace`) sous leur signature, leurs droits et leur `search_path` ; sans personne, rien ne change.
+  Aucune table ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -556,7 +565,9 @@ garde ; la ligne de base V1 les porte toutes.
   colonnes et la structure de l'arbre. Depuis `20261019150000` (suppressions), `20261020190000` (ajouts et
   modifications) et `20261021090000` (nœuds), sauf les policies qui reprennent le rôle ou le niveau exigé par leur
   service (liste fermée `ROLE_REQUIRED`) ; la mise à jour d'un nœud, dont une policy ne distingue pas les gestes, est
-  jugée par le déclencheur `nodes_gesture_guard`. Vérifié sans base par `tests/unit/rls-policies.test.ts`.
+  jugée par le déclencheur `nodes_gesture_guard`. Les fonctions `security definer` qu'une session exécute et qui écrivent
+  un nœud, ses blocs ou son brouillon exigent de même le niveau de leur service (`20261021100000`, liste fermée
+  `LEVEL_REQUIRED_FUNCTIONS`). Vérifié sans base par `tests/unit/rls-policies.test.ts`.
 - **Une sous-requête de policy ne revient jamais sur une table dont Postgres développe déjà les
   policies**, directement ou par une autre table (depuis `20260924150100`) : sous l'isolation, les
   policies de lecture portent une sous-requête (`(select platform.member_orgs())`), et Postgres

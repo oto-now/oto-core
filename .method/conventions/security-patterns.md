@@ -193,7 +193,11 @@ sur son `with check`, pour qu'un membre simple ne les fasse pas avec son seul je
 `tests/integration/role-dans-les-noeuds.test.ts`). Quand une seule policy couvre des gestes de niveaux différents, ou
 que la règle dépend de l'ancienne valeur, un déclencheur sous `authenticated` et `platform_server` juge le geste sur
 l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste). Une fonction `security definer` qui écrit à la place
-de la personne (invitation acceptée, entrée ouverte, première organisation) ne passe pas par la policy. Un refus précède la
+de la personne (invitation acceptée, entrée ouverte, première organisation) ne passe pas par la policy : quand elle écrit
+un nœud, ses blocs ou son brouillon et qu'une session l'exécute, elle reprend elle-même, sous une personne, le niveau de
+son service (`node_level_for`), un nœud caché refusé comme un nœud absent (`20261021100000` : `open_draft`,
+`publish_node`, `discard_draft`, `duplicate_subtree` ; liste fermée `LEVEL_REQUIRED_FUNCTIONS` de
+`tests/unit/rls-policies.test.ts`, refus et passages joués par `tests/integration/role-dans-les-fonctions.test.ts`). Un refus précède la
 requête et porte le message « à qui demander » ; « aucune ligne rendue » n'est jamais lu
 comme un refus. **Vérifiable :** un test par service, avec une base qui rend des lignes interdites, prouve que le
 service les filtre, et qu'il refuse une écriture interdite sans envoyer la requête ; retirer du

@@ -83,15 +83,16 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
     expect([await set("service"), await set("admin"), await set("member")]).toEqual(["23514", null, null])
   })
 
-  // Les contrôles de niveau quittent la base (ADR-012 § 3), le service décidant chacun avant sa requête :
-  // Marc, qui lit `contexte` sans l'écrire, en ouvre le brouillon ; Léa, qui écrit dans Ventes sans la gérer,
-  // publie une page puis la renomme. Marc, membre simple sans équipe qu'il dirige, n'invite plus : depuis
+  // Les contrôles de niveau quittent la base (ADR-012 § 3), le service décidant chacun avant sa requête ; ils y
+  // reviennent, le niveau du service et pas plus : Léa, qui écrit dans Ventes sans la gérer, publie une page puis la
+  // renomme. Marc, qui lit `contexte` sans l'écrire, n'en ouvre plus le brouillon : depuis 20261021100000, `open_draft`
+  // reprend le niveau d'`openDraft` (l'écriture, 42501). Marc, membre simple sans équipe qu'il dirige, n'invite plus : depuis
   // 20261020190000, `invitations_insert_admin` reprend la règle d'`inviteMember` (administrateur, ou responsable dans
   // son équipe), un rôle et non un niveau (42501). Claire, responsable de Ventes, ne fait plus sien un compte de son
   // équipe : depuis 20261019130000, `authenticated` ne modifie plus le propriétaire d'un compte, que le service
   // n'écrit jamais (42501). L'isolation reste : un nœud d'une autre organisation est refusé (42501).
-  it("should leave the levels to the service: a reader opens a draft but no longer invites, a writer publishes and renames, a lead cannot change the owner of her team's account; a node of another organisation is refused (AC-c1)", async () => {
-    const opened = await fx.as(o.people.marc).tx((sql) => sql<{ created: boolean }[]>`select created from platform.open_draft(${o.nodes.contexte})`)
+  it("should leave to the base the level of the service, no more: a reader no longer opens a draft nor invites, a writer publishes and renames, a lead cannot change the owner of her team's account; a node of another organisation is refused (AC-c1)", async () => {
+    const opened = await codeOf(fx.as(o.people.marc).tx((sql) => sql`select created from platform.open_draft(${o.nodes.contexte})`))
     const page = await fx.createNode(o.org.id, { parentId: o.nodes.ventes, path: `ventes/page_${hex(3)}`, title: "Page" })
     const written = await fx.as(o.people.lea).tx(async (sql) => {
       await sql`select * from platform.open_draft(${page})`
@@ -116,13 +117,12 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
       codeOf(fx.as(o.people.lea).tx((sql) => sql`select platform.publish_node(${elsewhere.nodes.ventes}, 0, null::jsonb)`)),
     ])
     expect({ opened, written, invited, personal, outside }).toEqual({
-      opened: [{ created: true }],
+      opened: "42501",
       written: { revision: 1, renamed: 1 },
       invited: "42501",
       personal: "42501",
       outside: ["42501", "42501"],
     })
-    await fx.admin`delete from platform.node_drafts where node_id = ${o.nodes.contexte}`
   })
 
   // Décision de JB du 2026-09-28 (« montrer les lignes ») : la page publique d'un tableau porte ses colonnes
