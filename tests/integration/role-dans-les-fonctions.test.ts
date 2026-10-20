@@ -125,14 +125,14 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
   })
 
   // `create` (`server/nodes/write.ts`) : `insertNode` puis `openDraft` dans une transaction ; le nœud neuf, sans
-  // propriétaire, hérite du niveau de son parent.
+  // propriétaire, hérite du niveau de son parent. Les colonnes d'`insertNode`, seules accordées depuis 20261021110000.
   it.each(SESSIONS)("should let whoever writes a parent create a page under it and open its draft in the same transaction (session %s)", async (session) => {
     const folder = await teamPage()
     const path = `${folder.path}/n${tag()}`
     const create = (sql: Tx) => sql`
       with made as (
-        insert into platform.nodes (org_id, parent_id, path, title, summary, status, revision, created_by)
-        values (${org.id}, ${folder.id}, ${path}, 'Neuve', 'Une page neuve.', 'draft', 0, ${marc.id}) returning id)
+        insert into platform.nodes (org_id, parent_id, path, kind, title, summary, created_by, updated_by)
+        values (${org.id}, ${folder.id}, ${path}, 'page', 'Neuve', 'Une page neuve.', ${marc.id}, ${marc.id}) returning id)
       select id from made`
     let created = ""
     const failure = await failureOf(

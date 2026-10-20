@@ -221,8 +221,13 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   })
 
   describe("personal space (AC13)", () => {
-    const personal = (who: Who, row: { path: string; owner_kind: string; owner_user_id: string; created_by: string }) =>
-      insertNode(who, { org_id: o.org.id, parent_id: o.nodes.private, kind: "page", title: "Perso", summary: "Espace.", ...row })
+    /**
+     * Un espace personnel posé par la connexion d'administration : depuis `20261021110000`, une session ne pose plus de
+     * propriétaire (droits de colonne) ; un espace se crée par `ensure_private_space`, `security definer`, et la garde de
+     * l'arbre, qui tient pour tout écrivain, se prouve ici.
+     */
+    const personal = (row: { path: string; owner_kind: string; owner_user_id: string; created_by: string }) =>
+      fx.admin`insert into platform.nodes ${fx.admin({ org_id: o.org.id, parent_id: o.nodes.private, kind: "page", title: "Perso", summary: "Espace.", ...row })} returning kind`
 
     it("should give a member joining after the tree a space and its Contexte, for them only", async () => {
       const contexte = await fx.nodeId(o.org.id, "private/marc/contexte")
@@ -243,9 +248,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     })
 
     it("should refuse by the guard a space whose segment is not the owner's handle (23514)", async () => {
-      const marc = personal("marc", { path: "private/claire", owner_kind: "user", owner_user_id: o.people.marc.id, created_by: o.people.marc.id })
+      const marc = personal({ path: "private/claire", owner_kind: "user", owner_user_id: o.people.marc.id, created_by: o.people.marc.id })
       expect(await codeOf(marc)).toBe("23514")
-      const claire = personal("claire", { path: "private/marc", owner_kind: "user", owner_user_id: o.people.claire.id, created_by: o.people.claire.id })
+      const claire = personal({ path: "private/marc", owner_kind: "user", owner_user_id: o.people.claire.id, created_by: o.people.claire.id })
       expect(await codeOf(claire)).toBe("23514")
       const orphan = fx.admin`insert into platform.nodes (org_id, parent_id, path, title, summary) values (${o.org.id}, ${o.nodes.private}, 'private/inconnu', 'Perso', 'Espace.')`
       expect(await codeOf(orphan)).toBe("23514")
@@ -263,6 +268,12 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     }, SETUP_TIMEOUT)
 
     const update = (id: string, patch: Record<string, unknown>) => updateNode("ada", id, patch)
+    /**
+     * Une mise à jour par la connexion d'administration : depuis `20261021110000`, une session n'écrit ni `org_id` ni le
+     * genre d'un nœud (droits de colonne) ; la garde de l'arbre, qui tient pour tout écrivain (`publish_node` change le
+     * genre), se prouve ici.
+     */
+    const adminUpdate = (id: string, patch: Record<string, unknown>) => fx.admin`update platform.nodes set ${fx.admin(patch)} where id = ${id} returning id`
 
     it("should refuse a parent taken in another organisation (23503)", async () => {
       const intrus = insertNode("ada", { org_id: o.org.id, parent_id: other.root, path: "intrus", title: "Intrus", summary: "Intrus.", created_by: o.people.ada.id })
@@ -270,21 +281,21 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     })
 
     it("should refuse changing org_id, or switching a page to a table and a table to a page (23514)", async () => {
-      expect(await codeOf(update(o.nodes.faq, { org_id: other.org }))).toBe("23514")
-      expect(await codeOf(update(o.nodes.faq, { kind: "table" }))).toBe("23514")
+      expect(await codeOf(adminUpdate(o.nodes.faq, { org_id: other.org }))).toBe("23514")
+      expect(await codeOf(adminUpdate(o.nodes.faq, { kind: "table" }))).toBe("23514")
       const table = await fx.createNode(o.org.id, { parentId: o.nodes.support, path: "support/tickets", kind: "table", title: "Tickets" })
-      const failure = await failureOf(update(table, { kind: "page" }))
+      const failure = await failureOf(adminUpdate(table, { kind: "page" }))
       expect(failure?.code).toBe("23514")
       expect(failure?.message).toContain("a table does not change kind")
       expect((await nodeRow(table)).kind).toBe("table")
     })
 
-    it("should let a manager switch a page to a procedure and back, never a Contexte (23514, P39)", async () => {
-      expect(await codeOf(update(o.nodes.faq, { kind: "procedure" }))).toBeNull()
-      expect(await codeOf(update(o.nodes.faq, { kind: "page" }))).toBeNull()
+    it("should let a page switch to a procedure and back, never a Contexte (23514, P39)", async () => {
+      expect(await codeOf(adminUpdate(o.nodes.faq, { kind: "procedure" }))).toBeNull()
+      expect(await codeOf(adminUpdate(o.nodes.faq, { kind: "page" }))).toBeNull()
       // Ni procédure ni page : un Contexte reste `context` (E01-S06 AC4, repris de `contenu-schema.test.ts`).
       for (const kind of ["procedure", "page"] as const) {
-        expect(await codeOf(update(o.nodes.ventesContexte, { kind })), kind).toBe("23514")
+        expect(await codeOf(adminUpdate(o.nodes.ventesContexte, { kind })), kind).toBe("23514")
       }
     })
 

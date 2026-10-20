@@ -323,7 +323,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
           "23503",
           () => insert("bea", "nodes", { org_id: org, parent_id: a.nodes.root, path: `intrus_${hex(3)}`, title: "Intrus", summary: "Intrus.", created_by: people.bea.id }),
         ],
-        ["nodes update", "0 rows", () => bea((sql) => sql`update platform.nodes set title = 'Intrus' where id = ${ids.pageA} returning id`)],
+        // Depuis `20261021110000`, le titre ne s'écrit plus sous une session (droit de colonne) : le refus doit venir de
+        // l'isolation, sur une colonne accordée.
+        ["nodes update", "0 rows", () => bea((sql) => sql`update platform.nodes set position = 1 where id = ${ids.pageA} returning id`)],
         ["nodes delete", "0 rows", () => bea((sql) => sql`delete from platform.nodes where id = ${ids.pageA} returning id`)],
         [
           "access_rules insert",

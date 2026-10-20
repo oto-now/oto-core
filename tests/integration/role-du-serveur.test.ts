@@ -87,10 +87,8 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   node_drafts: ["title", "summary", "kind", "meta", "updated_by"],
   node_views: ["views", "last_at"],
   node_shares: ["include_children", "created_by", "revoked_at"],
-  nodes: [
-    "id", "org_id", "parent_id", "path", "lpath", "kind", "title", "summary", "status", "revision", "meta", "owner_kind", "owner_team_id",
-    "owner_user_id", "created_by", "updated_by", "created_at", "updated_at", "search_tsv", "position", "deleted_at",
-  ],
+  // Depuis `20261021110000`, les seules colonnes que les services écrivent sous une session (`role-dans-la-creation.test.ts`).
+  nodes: ["parent_id", "path", "owner_kind", "owner_team_id", "owner_user_id", "updated_by", "position", "deleted_at"],
   orgs: ["id", "slug", "name", "prefix", "brand", "settings", "flags", "rules_version", "created_at", "updated_at"],
   platform_grants: ["revoked_at", "revoked_by"],
   sim_outbox: ["status", "sent_by", "sent_at"],

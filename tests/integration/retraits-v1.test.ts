@@ -85,7 +85,7 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
 
   // Les contrôles de niveau quittent la base (ADR-012 § 3), le service décidant chacun avant sa requête ; ils y
   // reviennent, le niveau du service et pas plus : Léa, qui écrit dans Ventes sans la gérer, publie une page puis la
-  // renomme. Marc, qui lit `contexte` sans l'écrire, n'en ouvre plus le brouillon : depuis 20261021100000, `open_draft`
+  // renomme (son chemin, comme `followTitle` ; le titre ne s'écrit que par la publication depuis 20261021110000). Marc, qui lit `contexte` sans l'écrire, n'en ouvre plus le brouillon : depuis 20261021100000, `open_draft`
   // reprend le niveau d'`openDraft` (l'écriture, 42501). Marc, membre simple sans équipe qu'il dirige, n'invite plus : depuis
   // 20261020190000, `invitations_insert_admin` reprend la règle d'`inviteMember` (administrateur, ou responsable dans
   // son équipe), un rôle et non un niveau (42501). Claire, responsable de Ventes, ne fait plus sien un compte de son
@@ -93,11 +93,12 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
   // n'écrit jamais (42501). L'isolation reste : un nœud d'une autre organisation est refusé (42501).
   it("should leave to the base the level of the service, no more: a reader no longer opens a draft nor invites, a writer publishes and renames, a lead cannot change the owner of her team's account; a node of another organisation is refused (AC-c1)", async () => {
     const opened = await codeOf(fx.as(o.people.marc).tx((sql) => sql`select created from platform.open_draft(${o.nodes.contexte})`))
-    const page = await fx.createNode(o.org.id, { parentId: o.nodes.ventes, path: `ventes/page_${hex(3)}`, title: "Page" })
+    const segment = `page_${hex(3)}`
+    const page = await fx.createNode(o.org.id, { parentId: o.nodes.ventes, path: `ventes/${segment}`, title: "Page" })
     const written = await fx.as(o.people.lea).tx(async (sql) => {
       await sql`select * from platform.open_draft(${page})`
       const [row] = await sql<{ revision: number }[]>`select platform.publish_node(${page}, 0, null::jsonb) as revision`
-      const renamed = await sql`update platform.nodes set title = 'Page renommée' where id = ${page} returning id`
+      const renamed = await sql`update platform.nodes set path = ${`ventes/${segment}_renommee`} where id = ${page} returning id`
       return { revision: row.revision, renamed: renamed.length }
     })
     const email = `test-${hex(4)}@example.invalid`

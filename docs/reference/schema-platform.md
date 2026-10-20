@@ -153,7 +153,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `platform_grants_identity_copy`, `platform_grants_guard` | Copie de l'email et du nom sur l'accès ; révocation datée par la base |
 | `invitations_guard` | Une seule invitation en attente par organisation et par email (verrou par adresse) ; « déjà membre » jugé par `members.email` ; équipe de l'organisation |
 | `nodes_guard` | Invariants de structure de l'arbre : chemin contrôlé, cycle refusé, un nœud Contexte ne bouge pas, genre `context` ⇔ chemin de Contexte, le dossier `private` ne bouge pas, `private/<handle>` n'a pour propriétaire que la personne de ce handle, propriétaire dans l'organisation ; verrou de l'arbre de l'organisation avant de lire le parent |
-| `nodes_guard_gesture`, `nodes_guard_trash` (`nodes_gesture_guard`) | Le geste d'une mise à jour d'un nœud sous `authenticated` et `platform_server` (`20261021090000`) : date de corbeille `null`, son ancienne valeur ou `now()` ; avant chaque ligne, déplacement et propriétaire à la gestion (`node_level_for` ≥ 3 sur la ligne d'avant), chemin sous le même parent et contenu à l'écriture (≥ 2), parent d'arrivée à l'écriture ; en fin d'instruction, corbeille et restauration à la gestion du nœud dont le parent reste en place, lecture de ce qui part dessous ; `position` seule libre ; refus `42501` |
+| `nodes_guard_gesture`, `nodes_guard_trash`, `nodes_guard_creation` (`nodes_gesture_guard`) | Le geste d'une mise à jour ou d'un ajout d'un nœud sous `authenticated` et `platform_server` (`20261021090000`, `20261021110000`) : à l'ajout, l'écriture du parent (`node_level_for` ≥ 2, parent caché refusé de même) ; date de corbeille `null`, son ancienne valeur ou `now()` ; avant chaque ligne, déplacement et propriétaire à la gestion (`node_level_for` ≥ 3 sur la ligne d'avant), chemin sous le même parent et dernier auteur à l'écriture (≥ 2), parent d'arrivée à l'écriture ; en fin d'instruction, corbeille et restauration à la gestion du nœud dont le parent reste en place, lecture de ce qui part dessous ; `position` seule libre ; refus `42501` |
 | `nodes_path_cascade`, `nodes_aliases_on_insert`, `nodes_aliases_on_move` | Réécrit dans la même transaction le chemin des descendants d'un nœud déplacé ou renommé ; inscrit un alias pour chaque chemin qui change ; un nœud nouveau sur l'ancien chemin d'un autre est refusé (`23505`), le nœud à qui l'alias appartient le reprend |
 | `teams_lead_sync`, `team_members_guard` | `teams.lead_user_id` est la source, `team_members.role` en est dérivé ; le responsable ne quitte pas son équipe |
 | `teams_tree_sync`, `members_tree_sync`, `teams_tree_cleanup` | Équipe créée : son dossier et son Contexte ; membre créé : `private/<handle>` (« Privé ») et son Contexte ; équipe supprimée dont le dossier ne contient que son Contexte : les deux nœuds partent avec elle |
@@ -189,7 +189,8 @@ son auteur, jamais publié), envoyer un courriel simulé (au nom de l'appelant, 
 membre de l'entrée sans invitation (`is_org_admin`) ; la mise à jour d'un nœud reste à l'appartenance et son geste est
 jugé par `nodes_gesture_guard`. Depuis `20261021100000`, les fonctions `security definer` qui écrivent un nœud :
 ouvrir, publier ou abandonner un brouillon (`node_level_for` ≥ 2 ; une page jamais publiée ne s'abandonne pas), dupliquer
-(≥ 1 sur le nœud et chaque descendant copié, ≥ 2 sur le parent). Un membre simple y touche zéro ligne (`using`) ou y est refusé (`42501`, `with check`). Les écritures sans porte de l'API passent
+(≥ 1 sur le nœud et chaque descendant copié, ≥ 2 sur le parent). Depuis `20261021110000`, créer un nœud : l'écriture du
+parent (`nodes_guard_creation`), propriétaire hérité. Un membre simple y touche zéro ligne (`using`) ou y est refusé (`42501`, `with check`). Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,
@@ -210,8 +211,12 @@ d'un tiers ou du serveur : les fonctions marquées ci-dessus et, sur `accounts`,
 `status`, `status_reason`, `settings`, `secret_ciphertext`, `secret_fields`, `secret_updated_at`,
 `token_ciphertext`, `token_expires_at` et `granted_scopes`. `authenticated` ne modifie aucune colonne
 d'`accounts` ni de `files`, et n'insère d'un compte que `org_id`, `connector`, `owner_kind`,
-`owner_team_id`, `owner_user_id`, `label` et `mode`. Les colonnes qu'`authenticated` modifie sont la
-liste fermée de `tests/integration/role-du-serveur.test.ts`.
+`owner_team_id`, `owner_user_id`, `label` et `mode`. Depuis `20261021110000`, `authenticated` n'insère d'un nœud
+que ce qu'écrit `insertNode` (`org_id`, `parent_id`, `path`, `kind`, `title`, `summary`, `created_by`, `updated_by`)
+et n'en modifie que `parent_id`, `path`, `owner_kind`, `owner_team_id`, `owner_user_id`, `updated_by`, `position` et
+`deleted_at` : l'identifiant et le contenu d'un nœud ne s'écrivent sous aucune session (`publish_node` publie le
+contenu). Les colonnes qu'`authenticated` modifie sont la liste fermée de `tests/integration/role-du-serveur.test.ts` ;
+celles de `nodes` qu'il insère, celle de `tests/integration/role-dans-la-creation.test.ts`.
 
 **Outillage.** Organisation Démo, équipe plateforme, export-import, oubli d'une personne, ménage
 OAuth, tests d'intégration : par la connexion d'administration (`PLATFORM_ADMIN_DATABASE_URL`),

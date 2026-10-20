@@ -108,14 +108,15 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     await seed?.cleanup()
   })
 
-  it.each(SESSIONS)("should refuse a plain member writing a page she only reads, and let whoever writes it (session %s)", async (session) => {
+  // Le contenu (titre, résumé, genre…) ne s'écrit plus sous une session (`20261021110000`, `role-dans-la-creation.test.ts`) :
+  // le dernier auteur est la seule colonne de contenu encore accordée.
+  it.each(SESSIONS)("should refuse a plain member signing a page she only reads, and let whoever writes it (session %s)", async (session) => {
     const [read, written] = [await orgPage(), await node(await teamPage())]
-    const title = (id: string, value: string) => (sql: Tx) => sql`update platform.nodes set title = ${value} where id = ${id} returning id`
-    expect(await attempt(lea, title(read.id, "Léa"), session)).toBe(GUARD)
-    expect(await attempt(lea, (sql) => sql`update platform.nodes set updated_by = ${lea.id} where id = ${read.id} returning id`, session)).toBe(GUARD)
-    expect(await seed.admin`select title, updated_by from platform.nodes where id = ${read.id}`).toEqual([{ title: "Page", updated_by: null }])
-    expect(await attempt(marc, title(written.id, "Marc"), session)).toBe(1)
-    expect(await seed.admin`select title from platform.nodes where id = ${written.id}`).toEqual([{ title: "Marc" }])
+    const sign = (id: string, who: SeededPerson) => (sql: Tx) => sql`update platform.nodes set updated_by = ${who.id} where id = ${id} returning id`
+    expect(await attempt(lea, sign(read.id, lea), session)).toBe(GUARD)
+    expect(await seed.admin`select updated_by from platform.nodes where id = ${read.id}`).toEqual([{ updated_by: null }])
+    expect(await attempt(marc, sign(written.id, marc), session)).toBe(1)
+    expect(await seed.admin`select updated_by from platform.nodes where id = ${written.id}`).toEqual([{ updated_by: marc.id }])
   })
 
   it.each(SESSIONS)("should refuse trashing a page by whoever does not manage it, and let a lead trash his team's page with what is under it (session %s)", async (session) => {

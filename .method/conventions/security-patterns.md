@@ -192,7 +192,12 @@ sur son `with check`, pour qu'un membre simple ne les fasse pas avec son seul je
 `tests/integration/role-dans-les-policies.test.ts`, `tests/integration/role-dans-les-ajouts-et-modifications.test.ts` et
 `tests/integration/role-dans-les-noeuds.test.ts`). Quand une seule policy couvre des gestes de niveaux différents, ou
 que la règle dépend de l'ancienne valeur, un déclencheur sous `authenticated` et `platform_server` juge le geste sur
-l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste). Une fonction `security definer` qui écrit à la place
+l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste) ; une
+policy de `nodes` ne relisant pas `nodes` (42P17), le niveau du parent d'une création s'y lit aussi, avant chaque ajout
+(`nodes_guard_creation`, `20261021110000`). Une colonne qu'aucun service n'écrit sous une session ne s'accorde pas : la
+table s'accorde colonne par colonne, à l'ajout comme à la mise à jour, et ce qu'on ne peut pas poser n'a pas à être
+vérifié (`nodes` : ni propriétaire ni corbeille à la création, ni identifiant ni contenu ensuite ; refus joués par
+`tests/integration/role-dans-la-creation.test.ts`). Une fonction `security definer` qui écrit à la place
 de la personne (invitation acceptée, entrée ouverte, première organisation) ne passe pas par la policy : quand elle écrit
 un nœud, ses blocs ou son brouillon et qu'une session l'exécute, elle reprend elle-même, sous une personne, le niveau de
 son service (`node_level_for`), un nœud caché refusé comme un nœud absent (`20261021100000` : `open_draft`,

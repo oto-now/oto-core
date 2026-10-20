@@ -307,6 +307,17 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   une page ou des descendants qui lui sont cachés, que la copie, héritant de son parent, lui rendait lisibles. Fonctions
   recréées (`create or replace`) sous leur signature, leurs droits et leur `search_path` ; sans personne, rien ne change.
   Aucune table ni colonne ; rien à relancer avant.
+- `20261021110000_platform_role_dans_la_creation.sql` (suite de `20261021100000`) : créer un nœud exige l'écriture de
+  son parent (`create`), par la fonction de déclencheur `nodes_gesture_guard`, recréée (`create or replace`) et posée
+  avant chaque ajout (`nodes_guard_creation`), sous `authenticated` et `platform_server` seulement (refus `42501`, un
+  parent caché comme un parent lu) ; sa branche du contenu ne garde que `updated_by`. `nodes` s'accorde colonne par
+  colonne à `authenticated` (et à `platform_server`, qui en hérite) : l'ajout, les colonnes d'`insertNode` (`org_id`,
+  `parent_id`, `path`, `kind`, `title`, `summary`, `created_by`, `updated_by`) ; la mise à jour, `parent_id`, `path`,
+  `owner_kind`, `owner_team_id`, `owner_user_id`, `updated_by`, `position` et `deleted_at`. Un membre ne se pose plus
+  propriétaire d'une page qu'il crée, n'en choisit ni la corbeille, ni l'état, ni la révision, ni l'identifiant, ni les
+  dates, ni les métadonnées, ni la position, et ne change plus l'identifiant ni le contenu d'une page (que seul
+  `publish_node` publie). `nodes_insert_writer` inchangée. Une fonction recréée, un déclencheur, des droits ; aucune
+  table ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -578,6 +589,11 @@ garde ; la ligne de base V1 les porte toutes.
   `accounts_update_admin`) : un `insert … returning` évalue la policy de lecture sur la ligne à
   écrire, avant qu'elle n'existe, et le `with check` d'une mise à jour, relu par l'id, verrait la
   ligne d'avant (`supabase-patterns.md § RLS Patterns`).
+- **`nodes` : insertion et mise à jour colonne par colonne** (depuis `20261021110000`). L'ajout n'accorde que les
+  colonnes d'`insertNode`, la mise à jour que celles des services qui écrivent sous une session (déplacement,
+  restauration, propriétaire, position, corbeille) ; une colonne ajoutée qu'un service doit écrire s'ajoute au
+  `grant insert (…)` ou au `grant update (…)` dans sa migration ; vérifié sur base par
+  `tests/integration/role-dans-la-creation.test.ts` et `tests/integration/role-du-serveur.test.ts`.
 - **`accounts` : mise à jour colonne par colonne** (depuis `20260924120200`). `id`, `org_id`,
   `created_at` et `updated_at` ne sont pas accordées ; une colonne ajoutée qu'un service doit
   modifier s'ajoute au `grant update (…)` dans sa migration.
