@@ -184,6 +184,8 @@ describe("the declaration", () => {
     expect(() => registerSensitiveEntities([valid, valid])).toThrow("declared twice")
     expect(() => registerSensitiveEntities([{ ...valid, tokens: "plain" as "hmac" }])).toThrow('tokens is "hmac" or "reference"')
     expect(() => registerSensitiveEntities([{ ...valid, read: undefined as unknown as SensitiveKind["read"] }])).toThrow("both required")
+    expect(() => registerSensitiveEntities([valid], { enabled: true as unknown as () => Promise<boolean> })).toThrow("enabled is a function")
     expect(() => registerSensitiveEntities([valid])).not.toThrow()
+    expect(() => registerSensitiveEntities([valid], { enabled: async () => true })).not.toThrow()
   })
 })

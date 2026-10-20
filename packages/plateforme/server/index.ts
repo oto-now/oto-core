@@ -31,7 +31,7 @@ export { readOpenEntry, setOpenEntry } from "./open-entry"
 // servi ou retenu, par l'hôte.
 export { registerDataPolicy } from "./data-policy"
 export { registerSensitiveEntities } from "./pseudonym/declaration"
-export type { SensitiveEntity, SensitiveKind, SensitiveOrg, SensitiveValues } from "./pseudonym/declaration"
+export type { SensitiveEntity, SensitiveKind, SensitiveOptions, SensitiveOrg, SensitiveValues } from "./pseudonym/declaration"
 export type { EntityFields } from "./pseudonym/outputs"
 export { invalidateSensitiveEntities, pseudonymize } from "./pseudonym/service"
 export type { DataPolicy, FileContentsPolicy } from "./data-policy"

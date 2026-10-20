@@ -27,7 +27,6 @@ import {
   type RoutingSettings,
 } from "../routing"
 import type { ToolOutput } from "../tool-output"
-import { sensitiveKinds } from "../pseudonym/declaration"
 import { token } from "../pseudonym/token"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
@@ -211,7 +210,7 @@ async function lightContext(
   db: PlatformDb,
   identity: Identity,
   input: { phrase?: string; since: { code: string; host: string | null; changed: string[]; seen: Record<string, number> } },
-  request: { userAgent: string | null },
+  request: ContextRequest,
 ): Promise<ToolOutput> {
   const { since } = input
   const phrase = input.phrase?.trim() || undefined
@@ -263,11 +262,14 @@ async function sinceOf(db: PlatformDb, identity: Identity, raw: string | undefin
 export const PSEUDONYM_NOTICE =
   `People's names, emails and phone numbers appear as tokens such as ${token("client", "…")}. To refer to a person (in a path, a search or a function argument), copy the token exactly as written; never guess a token or try to recover the value behind it.`
 
+/** La requête d'un `context` : son agent, et `pseudonymized` quand la porte pseudonymise ce qui part (l'avis des jetons). */
+export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean }
+
 export async function buildContext(
   db: PlatformDb,
   identity: Identity,
   input: { phrase?: string; since_ctx?: string },
-  request: { userAgent: string | null },
+  request: ContextRequest,
 ): Promise<ToolOutput> {
   const since = await sinceOf(db, identity, input.since_ctx)
   if (since) return lightContext(db, identity, { phrase: input.phrase, since }, request)
@@ -278,7 +280,7 @@ async function fullContext(
   db: PlatformDb,
   identity: Identity,
   input: { phrase?: string },
-  request: { userAgent: string | null },
+  request: ContextRequest,
 ): Promise<ToolOutput> {
   // La conversation précédente borne les nouveautés : lue avant l'émission du nouveau code (AC2).
   const since = await newsSince(db, identity)
@@ -291,7 +293,7 @@ async function fullContext(
   })
   const { host } = await issued
   return {
-    text: sensitiveKinds().length > 0 ? `${text}\n\n${PSEUDONYM_NOTICE}` : text,
+    text: request.pseudonymized ? `${text}\n\n${PSEUDONYM_NOTICE}` : text,
     data: { ctx: code, ...routingData(routing) },
     // La procédure servie, sinon la phrase : ce que relisent l'usage (E08-S09) et le bonus d'usage.
     target: routing.served?.path ?? (phrase === undefined ? null : clip(phrase, MAX_TARGET_CHARS)),

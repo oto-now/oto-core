@@ -34,7 +34,7 @@ import { preferredTheme } from "../server/language"
 import { readNode } from "../server/nodes/read"
 import { writeNode } from "../server/nodes/write"
 import { listPrompts, type ProcedurePrompt, unknownPromptMessage } from "../server/prompts"
-import { pseudonymizerFor, type Pseudonymizer } from "../server/pseudonym/service"
+import { pseudonymizationFor, pseudonymizerFor, type Pseudonymizer } from "../server/pseudonym/service"
 import type { ToolOutput } from "../server/tool-output"
 import { gatedOutput, gatedPrompt, gatedPrompts, resolvedToolInput } from "./pseudonym"
 import { formatError, formatResult, type ToolResult } from "./result"
@@ -79,8 +79,12 @@ export type McpDeps = {
 }
 
 /** `trace` : ce qu'un `call` a établi avant d'échouer (équipe, compte), pour sa ligne de journal (E03-S04, AC16). */
-/** `gate` : la porte de l'organisation, lue avant le service ; `null` quand l'hôte ne déclare aucune personne. */
-type MemberDeps = McpDeps & { identity: Identity; trace?: CallTrace; gate?: Pseudonymizer | null }
+/**
+ * `gate` : la porte de l'organisation, lue avant le service ; `null` quand l'hôte ne déclare aucune personne ou éteint
+ * l'organisation. `entry` : ce qui résout les jetons de l'assistant, la porte, ou, éteinte, le dictionnaire quand ses
+ * arguments portent un jeton (`pseudonymizationFor`).
+ */
+type MemberDeps = McpDeps & { identity: Identity; trace?: CallTrace; gate?: Pseudonymizer | null; entry?: Pseudonymizer | null }
 type ValidCtx = { code: string; host: string | null; changed?: CtxChange }
 
 /** Titre posé entre l'avis d'un Contexte changé et ce que l'appel a rendu. */
@@ -111,15 +115,15 @@ class JsonRpcError extends Error {
 
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
-  context: ({ db, identity, userAgent }, input) => buildContext(db, identity, input, { userAgent }),
+  context: ({ db, identity, userAgent, gate }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate) }),
   find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: assistantFunctions(), activeConnectors: await activeConnectors() }),
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
   read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
-  call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate }, input, ctx) =>
-    runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: gate?.dictionary }, input),
+  call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }, input, ctx) =>
+    runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
   // `places` : `find` de `replace_text` qui porte un jeton se cherche dans le texte pseudonymisé (pseudonymisation).
-  write: ({ db, identity, gate }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null, ...(gate ? { places: gate.places } : {}) }),
+  write: ({ db, identity, entry }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null, ...(entry ? { places: entry.places } : {}) }),
   // `ctx` est toujours validé ici : la garde précède tout outil autre que `context`.
   feedback: ({ db, identity }, input, ctx) => recordFeedback(db, identity, input, ctx?.code ?? null),
 }
@@ -168,7 +172,7 @@ async function serve(deps: MemberDeps, call: ToolCall, validated: { ctx: ValidCt
   // `feedback` accepte un code connu mais périmé (E11-S03, AC-a6) : un retour sur la panne n'exige pas de relire le contexte.
   if (key !== "context") validated.ctx = await requireCtx(deps.db, deps.identity, args.ctx, { staleAllowed: key === "feedback" })
   // Les jetons de l'assistant (pseudonymisation), résolus avant le schéma : un chemin de `write` n'admet pas de jeton.
-  const inputs = deps.gate ? { db: deps.db, identity: deps.identity, dictionary: deps.gate.dictionary } : null
+  const inputs = deps.entry ? { db: deps.db, identity: deps.identity, dictionary: deps.entry.dictionary } : null
   const parsed = parseInput(inputSchemas(prefix)[key], await resolvedToolInput(inputs, key, args))
   if ("issues" in parsed) throw new PlatformError("invalid_arguments", `Invalid arguments for ${name}: ${parsed.issues}`)
   // `parsed.data` suit le schéma de `key` : TypeScript ne relie pas `SERVICES[key]` à ce schéma.
@@ -196,8 +200,10 @@ async function runTool(
   // La porte (pseudonymisation) : lue avant le service, fermée en cas de panne ; rien ne part en clair.
   let gate: Pseudonymizer | null = null
   try {
-    gate = await pseudonymizerFor(member.db, member.identity.org.id)
+    const pseudonymization = await pseudonymizationFor(member.db, member.identity.org.id)
+    gate = pseudonymization.gate
     member.gate = gate
+    member.entry = await pseudonymization.entry(args)
     const served = await serve(member, { name, args, size: opened.args_chars }, validated)
     // Un code périmé : l'avis en tête du texte, le nouveau code aussi en champ (`new_ctx`).
     const output = validated.ctx?.changed

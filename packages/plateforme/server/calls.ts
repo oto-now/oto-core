@@ -98,8 +98,13 @@ export type CallDeps = {
    */
   functions?: readonly CatalogFunction[]
   trace?: CallTrace
-  /** Le dictionnaire de l'organisation quand la porte MCP pseudonymise : les jetons des arguments se résolvent par lui. */
+  /**
+   * Le dictionnaire de l'organisation quand le MCP résout des jetons : les jetons des arguments se résolvent par lui. Il
+   * vient aussi d'une organisation éteinte (`enabled`) dont l'assistant renvoie un jeton reçu plus tôt.
+   */
   dictionary?: Dictionary | null
+  /** Vrai quand la porte MCP pseudonymise ce qui part : les champs déclarés (`output.entityFields`) deviennent des jetons. */
+  gated?: boolean
 }
 
 const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true."
@@ -295,7 +300,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   })
   // Pour l'assistant seulement (le dictionnaire ne vient que du MCP) : les champs déclarés deviennent des jetons.
   const entityFields = fn.output?.entityFields
-  const output = deps.dictionary && entityFields ? { ...ran, ...withEntityTokens(deps.dictionary, ran, entityFields) } : ran
+  const output = deps.gated && deps.dictionary && entityFields ? { ...ran, ...withEntityTokens(deps.dictionary, ran, entityFields) } : ran
   const outcome = { ...output.outcome, ...markOutcome(credential) }
   return {
     text: data.account ? [output.text, ...accountLines(team, data.account)].join("\n") : output.text,

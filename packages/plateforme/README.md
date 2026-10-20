@@ -563,6 +563,11 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
   (`c-7k2`, `[0-9a-z][0-9a-z-]{0,23}`, unique, opaque, non séquentielle), corps de son jeton à la place du HMAC ; une
   référence absente, en double ou qui contient le nom, le prénom, le courriel ou six chiffres du téléphone refuse le
   dictionnaire.
+- **Allumer par organisation** : `registerSensitiveEntities(kinds, { enabled: async (org) => … })`, lu à chaque appel
+  (`org.id`), sans redémarrage ; mettez en cache de votre côté. Sans `enabled`, toutes les organisations sont allumées.
+  Éteinte, une organisation est servie comme sans déclaration (en clair, sans avis des jetons), mais une conversation
+  commencée allumée garde ses jetons : reçus en argument, ils se résolvent encore. Rallumée, les mêmes jetons. Un
+  `enabled` qui lève ou ne rend pas un booléen refuse l'appel (`internal`), rien en clair.
 - **Invalider** : `await invalidateSensitiveEntities(db, org)` après toute écriture d'une personne déclarée
   (création, changement, effacement) ; sinon le dictionnaire gardé sert l'ancienne liste jusqu'à 5 minutes.
 - **Repasser un résultat** de `callFunction` à un assistant : `await pseudonymize(db, org, result)` d'abord.
@@ -595,8 +600,9 @@ gardent pseudonymisés à l'écriture. Les écrans, l'API et `callFunction` rest
 - Un jeton s'écrit `<sorte>#<corps>`. Une suite de cette forme dont la sorte n'est ni déclarée ni réservée est du texte
   (l'ancre `guide#installation` d'une adresse) ; d'une sorte déclarée, elle est un jeton, refusé s'il est inconnu.
   Choisissez une sorte que vos textes n'écrivent pas devant un `#` (`client` plutôt que `issue`).
-- **Limite** : un nom qui est aussi un prénom courant ou un mot commun (« Martin », « Brun ») reste en clair quand il est
-  seul, sans prénom ni civilité, hors champ déclaré ; le prénom seul aussi.
+- **Limite assumée** : un nom qui est aussi un prénom courant ou un mot commun (« Martin », « Brun ») reste en clair quand
+  il est seul, sans prénom ni civilité ; le prénom seul aussi. Les masquer masquerait trop de mots ordinaires. Pour vos
+  fiches, déclarez les champs nom et prénoms (`output.entityFields`) : ils partent en jetons.
 
 ## Widgets dans la conversation
 

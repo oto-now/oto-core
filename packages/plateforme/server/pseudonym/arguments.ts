@@ -74,6 +74,12 @@ function* stringsOf(value: unknown): Generator<string> {
   else if (isRecord(value)) for (const item of Object.values(value)) yield* stringsOf(item)
 }
 
+/** Vrai si une chaîne de `value`, à toute profondeur, porte une suite qui a la forme d'un jeton d'une sorte de `kinds`. */
+export function carriesToken(value: unknown, kinds: ReadonlySet<string>): boolean {
+  for (const text of stringsOf(value)) if (!tokenMatches(text, (_found, kind) => kinds.has(kind)).next().done) return true
+  return false
+}
+
 /** Chaque jeton d'une valeur JSON (texte compris), contrôlé pour l'usage `use`. */
 export function checkTokens(dictionary: Dictionary, value: unknown, use: TokenUse): void {
   for (const text of stringsOf(value)) for (const match of tokensIn(dictionary, text)) targetOf(dictionary, match[0], use)

@@ -1,6 +1,6 @@
 // Ce que l'hôte déclare de ses personnes (`pseudonymisation.md` § Ce que l'hôte déclare) : des sortes, chacune avec deux
 // fonctions lues dans sa base, jamais par le paquet. La pseudonymisation est active pour toute organisation d'un hôte
-// qui déclare au moins une sorte. Une déclaration mal formée lève `TypeError` au chargement de la route,
+// qui déclare au moins une sorte, ou pour celles que son prédicat `enabled(org)` allume, lu à chaque appel. Une déclaration mal formée lève `TypeError` au chargement de la route,
 // comme `registerDataPolicy`, et non `CatalogRegistrationError` : l'importer de `catalog/erp` ferait entrer ce module
 // dans un cycle d'import avec le registre (`tests/unit/import-cycles.test.ts`), puisque le journal, que le registre
 // atteint, lit ce module. Sans ce module, le paquet n'aurait aucune personne à remplacer.
@@ -35,7 +35,18 @@ export type SensitiveKind = {
   read(org: SensitiveOrg, id: string): Promise<SensitiveValues | null>
 }
 
+/** Les réglages de la déclaration. */
+export type SensitiveOptions = {
+  /**
+   * Allume la pseudonymisation organisation par organisation, lu à chaque appel (son cache est à la charge de l'hôte).
+   * `false` : l'organisation est servie comme sans déclaration ; un jeton déjà reçu par l'assistant reste accepté en
+   * argument. Absent : toutes les organisations. Qui lève, ou rend autre chose qu'un booléen, ferme l'appel.
+   */
+  enabled?(org: { id: string }): Promise<boolean>
+}
+
 let declared: readonly SensitiveKind[] = []
+let options: SensitiveOptions = {}
 /** Change à chaque déclaration : un dictionnaire bâti sous une autre déclaration se rebâtit. */
 let version = 0
 
@@ -48,10 +59,15 @@ function kindProblem(kind: SensitiveKind, seen: Set<string>): string | null {
   return null
 }
 
-/** Déclare les sortes de l'hôte ; `null` ou une liste vide éteint la pseudonymisation. Remplace la déclaration précédente. */
-export function registerSensitiveEntities(kinds: readonly SensitiveKind[] | null): void {
+/**
+ * Déclare les sortes de l'hôte ; `null` ou une liste vide éteint la pseudonymisation. `enabled` l'allume organisation par
+ * organisation. Remplace la déclaration précédente.
+ */
+export function registerSensitiveEntities(kinds: readonly SensitiveKind[] | null, settings: SensitiveOptions = {}): void {
   const next = kinds ?? []
   if (!Array.isArray(next)) throw new TypeError("registerSensitiveEntities: a list of kinds, or null.")
+  if (typeof settings !== "object" || settings === null) throw new TypeError("registerSensitiveEntities: options are an object.")
+  if (settings.enabled !== undefined && typeof settings.enabled !== "function") throw new TypeError("registerSensitiveEntities: enabled is a function of the organisation.")
   const seen = new Set<string>()
   for (const kind of next) {
     const problem = kindProblem(kind, seen)
@@ -59,6 +75,7 @@ export function registerSensitiveEntities(kinds: readonly SensitiveKind[] | null
     seen.add(kind.kind)
   }
   declared = [...next]
+  options = { ...(settings.enabled ? { enabled: settings.enabled } : {}) }
   version += 1
 }
 
@@ -70,4 +87,9 @@ export function declarationVersion(): number {
 /** Les sortes déclarées ; vide : la pseudonymisation est éteinte. */
 export function sensitiveKinds(): readonly SensitiveKind[] {
   return declared
+}
+
+/** Les réglages de la déclaration courante. */
+export function sensitiveOptions(): SensitiveOptions {
+  return options
 }

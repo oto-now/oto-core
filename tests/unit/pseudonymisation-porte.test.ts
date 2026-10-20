@@ -3,7 +3,8 @@
 // qui citent une personne déclarée partent en jetons, au même endroit du texte et des données ; le même jeton d'une
 // conversation à l'autre, un autre dans une autre organisation ; le journal et les retours pseudonymisés à l'écriture ;
 // fermé en cas de panne (source de l'hôte, clé absente, témoin faux) ; l'invalidation fait rebâtir le dictionnaire ;
-// `pseudonymize` pour l'hôte qui repasse un résultat de `callFunction`.
+// `pseudonymize` pour l'hôte qui repasse un résultat de `callFunction` ; l'organisation allumée ou éteinte par le
+// prédicat de l'hôte (`enabled`), sur-le-champ, un jeton reçu allumée restant accepté éteinte.
 import * as z from "zod/v4"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
@@ -49,6 +50,20 @@ const lookupClient = defineErpFunction({
   },
 })
 
+/** La fiche d'un client par son identifiant : l'argument d'entité reçoit l'identifiant d'un jeton. */
+const clientCard = defineErpFunction({
+  name: "erp.client_card",
+  class: "read",
+  description: "Reads the card of a client of the ERP.",
+  schema: z.strictObject({ client: z.string().min(1) }),
+  examples: [{ client: "c-1" }],
+  entityArguments: { client: "client" },
+  run: async (_context, args) => {
+    const found = source.entities.find((entity) => entity.id === args.client)
+    return { text: found ? `Client ${args.client}: ${found.values.firstNames} ${found.values.lastName}, copy to lea.roux@ailleurs.test.` : `No client ${args.client}.` }
+  },
+})
+
 describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real database"), { timeout: 60_000 }, () => {
   const CTX = "7K3Q-M2XB"
   const ACCESS = "token-of-claire"
@@ -56,7 +71,7 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
   let ref: ReferenceOrgSql
 
   beforeAll(async () => {
-    registerFunctions([lookupClient])
+    registerFunctions([lookupClient, clientCard])
     const tables = contentTables()
     tables.orgs[0].rules_version = 1
     tables.ctx = [{ code: CTX, org_id: ORG.id, user_id: PEOPLE.claire.id, rules_version: 1, host: null }]
@@ -196,6 +211,59 @@ describe.skipIf(!sqlConfigured)(portable("the pseudonymization gate on a real da
     await writeJournal(await ref.db("claire"), [{ org_id: ref.org.id, user_id: ref.people.claire.id, method: "api", tool: "POST nodes", target: "Camille Dupré", args: { title: "Camille Dupré" }, is_error: true, error: "conflict: Camille Dupré exists." }])
     const rows = await journalRows()
     expect(rows.at(-1)).toMatchObject({ args: { _withheld: true }, target: null, error: "conflict" })
+  })
+
+  it("should switch the gate per organisation at once, keep the tokens, and accept while off a token received while on", async () => {
+    for (const tokens of ["hmac", "reference"] as const) {
+      const lit = { on: true }
+      const asked: string[] = []
+      registerSensitiveEntities(
+        [{
+          kind: "client",
+          ...(tokens === "reference" ? { tokens } : {}),
+          list: async () => source.entities.map((entity) => ({ ...entity, reference: `r-${entity.id.slice(2)}` })),
+          read: async (_org, id) => source.entities.find((entity) => entity.id === id)?.values ?? null,
+        }],
+        { enabled: async (org) => (asked.push(org.id), lit.on) },
+      )
+      forgetDictionaries()
+      const { run, openContext } = await session()
+      const on = await run("read", { path: "ventes/devis" })
+      const [camille] = on.text.match(tokens === "hmac" ? TOKEN_OF_A_PERSON : new RegExp(tokenSource("client", "r-1"), "u")) ?? []
+      expect([tokens, camille]).toEqual([tokens, expect.any(String)])
+      const card = await run("call", { function: "erp.client_card", arguments: { client: camille } })
+      expect(card.text).not.toMatch(/Camille|Dupré|lea\.roux/u)
+      const [email] = card.text.match(new RegExp(tokenSource("email", HMAC_BODY_SOURCE), "u")) ?? []
+      expect(email).toEqual(expect.any(String))
+      expect(asked).toContain(ref.org.id)
+      // Éteinte : servie en clair, sans l'avis des jetons ; le jeton reçu allumée désigne encore son entité.
+      lit.on = false
+      expect((await run("read", { path: "ventes/devis" })).text).toContain("Appeler Camille Dupré au 06 12 34 56 78")
+      expect((await openContext("a quote")).text).not.toContain("copy the token exactly as written")
+      const off = await run("call", { function: "erp.client_card", arguments: { client: camille } })
+      expect([off.isError, off.text]).toEqual([false, expect.stringContaining("Client c-1: Camille Dupré, copy to lea.roux@ailleurs.test.")])
+      // Un jeton de valeur reste à sens unique : refusé pour désigner une personne.
+      const oneWay = await run("call", { function: "erp.client_card", arguments: { client: email } })
+      expect([oneWay.isError, oneWay.text]).toEqual([true, expect.stringContaining("stands for a value, not a person")])
+      expect(await pseudonymize(await ref.db("claire"), { id: ref.org.id, slug: ref.org.slug }, { who: "Camille Dupré" })).toEqual({ who: "Camille Dupré" })
+      // Rallumée : les mêmes jetons.
+      lit.on = true
+      expect((await run("read", { path: "ventes/devis" })).text).toContain(camille)
+      expect((await openContext("a quote")).text).toContain("copy the token exactly as written")
+    }
+  })
+
+  it("should refuse rather than serve in clear when the host's predicate fails or answers something else than a boolean", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const kinds = [{ kind: "client", list: async () => source.entities, read: async () => null }]
+    registerSensitiveEntities(kinds, { enabled: async () => { throw new Error("the host cache is down") } })
+    const down = await (await session()).run("read", { path: "ventes/devis" })
+    expect([down.isError, down.text]).toEqual([true, expect.stringContaining("Internal error.")])
+    expect(down.text).not.toMatch(/Camille|Dupré/u)
+    registerSensitiveEntities(kinds, { enabled: async () => "yes" as unknown as boolean })
+    const odd = await (await session()).run("read", { path: "ventes/devis" })
+    expect(odd.isError).toBe(true)
+    expect(vi.mocked(console.error).mock.calls.flat().join(" ")).toContain("enabled(org) failed: the host cache is down")
   })
 
   it("should rebuild the dictionary after an invalidation: a new person masked, an erased one no longer", async () => {

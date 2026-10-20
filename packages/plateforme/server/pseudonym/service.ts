@@ -3,14 +3,17 @@
 // par organisation et par processus, gardé tant que la génération et la déclaration n'ont pas changé et 5 minutes au
 // plus, une seule construction à la fois. Fermé en cas de panne : une clé absente, un témoin faux, une source de l'hôte
 // qui lève ou une collision refusent l'appel (`internal`, raison `pseudonymization_unavailable`), jamais en clair.
+// Une organisation que le prédicat `enabled(org)` de l'hôte éteint est servie comme sans déclaration ; seuls les jetons
+// qu'un assistant lui renvoie (une conversation commencée allumée) se résolvent encore.
 import { randomBytes } from "node:crypto"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { PlatformError } from "../errors"
-import { declarationVersion, sensitiveKinds, type SensitiveOrg } from "./declaration"
+import { carriesToken } from "./arguments"
+import { declarationVersion, sensitiveKinds, sensitiveOptions, type SensitiveOrg } from "./declaration"
 import { buildDictionary, type Dictionary } from "./dictionary"
 import { pseudonymizedJson, pseudonymizedPlaces, pseudonymizedText, type Places } from "./gate"
-import { keyWitness, orgKey, pseudonymKey } from "./token"
+import { keyWitness, orgKey, pseudonymKey, RESERVED_KINDS } from "./token"
 
 /** Au-delà, un dictionnaire se rebâtit : une invalidation oubliée se rattrape en 5 minutes. */
 export const DICTIONARY_TTL_MS = 5 * 60_000
@@ -91,9 +94,7 @@ async function dictionaryFor(db: PlatformDb, orgId: string): Promise<Dictionary>
   return work
 }
 
-/** La porte de l'organisation `orgId`, ou `null` quand l'hôte ne déclare aucune sorte (rien n'est lu). */
-export async function pseudonymizerFor(db: PlatformDb, orgId: string): Promise<Pseudonymizer | null> {
-  if (sensitiveKinds().length === 0) return null
+async function pseudonymizerOf(db: PlatformDb, orgId: string): Promise<Pseudonymizer> {
   const dictionary = await dictionaryFor(db, orgId)
   return {
     dictionary,
@@ -103,9 +104,50 @@ export async function pseudonymizerFor(db: PlatformDb, orgId: string): Promise<P
   }
 }
 
+/** Vrai si le prédicat de l'hôte allume l'organisation (vrai sans prédicat) ; qui lève ou ne rend pas un booléen ferme l'appel. */
+async function enabledFor(orgId: string): Promise<boolean> {
+  const enabled = sensitiveOptions().enabled
+  if (!enabled) return true
+  let answer: unknown
+  try {
+    answer = await enabled({ id: orgId })
+  } catch (error) {
+    throw unavailable(orgId, `enabled(org) failed: ${error instanceof Error ? error.message : "unknown"}`)
+  }
+  if (typeof answer !== "boolean") throw unavailable(orgId, "enabled(org) did not return a boolean")
+  return answer
+}
+
+/**
+ * La pseudonymisation d'une organisation pour une requête : `gate`, la porte de ce qui part vers l'assistant, `null`
+ * quand rien n'est déclaré ou que `enabled(org)` l'éteint ; `entry(input)`, ce qui résout les jetons qu'il envoie : la
+ * porte, ou, éteinte, le dictionnaire bâti seulement quand `input` porte la forme d'un jeton d'une sorte déclarée ou
+ * réservée (une conversation commencée allumée garde ses jetons).
+ */
+export type Pseudonymization = { gate: Pseudonymizer | null; entry(input: unknown): Promise<Pseudonymizer | null> }
+
+const NONE: Pseudonymization = { gate: null, entry: async () => null }
+
+export async function pseudonymizationFor(db: PlatformDb, orgId: string): Promise<Pseudonymization> {
+  const kinds = sensitiveKinds()
+  if (kinds.length === 0) return NONE
+  if (await enabledFor(orgId)) {
+    const gate = await pseudonymizerOf(db, orgId)
+    return { gate, entry: async () => gate }
+  }
+  const tokenKinds = new Set([...kinds.map((kind) => kind.kind), ...RESERVED_KINDS])
+  return { gate: null, entry: async (input) => (carriesToken(input, tokenKinds) ? pseudonymizerOf(db, orgId) : null) }
+}
+
+/** La porte de l'organisation `orgId`, ou `null` quand l'hôte ne déclare aucune sorte ou l'éteint (`enabled`). */
+export async function pseudonymizerFor(db: PlatformDb, orgId: string): Promise<Pseudonymizer | null> {
+  return (await pseudonymizationFor(db, orgId)).gate
+}
+
 /**
  * Pseudonymise une valeur JSON pour l'organisation `org`, comme la porte du MCP : pour l'hôte qui repasse à un
- * assistant un résultat de `callFunction`, rendu en clair. Sans sorte déclarée, la valeur revient telle quelle.
+ * assistant un résultat de `callFunction`, rendu en clair. Sans sorte déclarée, ou l'organisation éteinte, la valeur
+ * revient telle quelle.
  */
 export async function pseudonymize<T extends Json>(db: PlatformDb, org: SensitiveOrg, payload: T): Promise<T> {
   const gate = await pseudonymizerFor(db, org.id)
