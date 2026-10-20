@@ -75,16 +75,26 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     await fx?.cleanup()
   }, NETWORK_TIMEOUT)
 
-  // Depuis E01-S08, la base laisse un membre de l'organisation rattacher un hôte (HN-E01S08-11) : la
-  // forme et l'unicité se prouvent sous la session de l'administratrice de A, sans membre du staff.
+  // Rattacher une adresse est réservé à l'équipe plateforme qui administre l'organisation (`addHost`), en base aussi
+  // depuis `20261020190000` (`org_domains_insert_admin`) : la forme et l'unicité se prouvent sous la session d'un membre
+  // de l'équipe plateforme avec un accès en cours à A, et non plus sous l'administratrice de A.
   describe("org_domains (AC9)", () => {
+    let platformTeam: PlatformDb
+
+    beforeAll(async () => {
+      const staff = await fx.createUser()
+      await fx.makeStaff(staff.id)
+      await fx.grantPlatformAccess(orgA.id, staff.id, null)
+      platformTeam = fx.as(staff)
+    })
+
     it("should refuse a malformed host, here with a port (23514)", async () => {
-      const insert = signedIn("adminA").tx((sql) => sql`insert into platform.org_domains (host, org_id) values ('acme.example.invalid:3000', ${orgA.id})`)
+      const insert = platformTeam.tx((sql) => sql`insert into platform.org_domains (host, org_id) values ('acme.example.invalid:3000', ${orgA.id})`)
       expect(await codeOf(insert)).toBe("23514")
     })
 
     it("should refuse a host already attached", async () => {
-      const insert = signedIn("adminA").tx((sql) => sql`insert into platform.org_domains (host, org_id) values (${hosts.a}, ${orgA.id})`)
+      const insert = platformTeam.tx((sql) => sql`insert into platform.org_domains (host, org_id) values (${hosts.a}, ${orgA.id})`)
       expect(await codeOf(insert)).toBe("23505")
     })
 

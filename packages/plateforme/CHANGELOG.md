@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Migrations: apply `20261020190000_platform_role_dans_les_ajouts_et_modifications.sql` (security fix). The INSERT and UPDATE policies of `members`, `teams`, `team_members`, `invitations`, `org_domains`, `platform_grants`, `accounts`, `connector_activations`, `feedback` and `access_rules` (and the DELETE policy of a node rule) now require the role their service requires: an administrator; a team lead for a member of her team, an invitation into it as `member`, or an account of her team; the sender to revoke an invitation; the platform team that administers for an address or a platform access; for a feedback, an administrator of the platform team or, with « Retours visibles » on, of the client; the management of the node (`node_level_for` ≥ 3) for a node rule, `manage` by an administrator. A plain member, under her session or the server's, touches no row (UPDATE) or gets 42501 (INSERT). Invitation acceptance, open entry, signup and the first administrator run in `security definer` functions and are unchanged. Nothing else to do: no `db prepare`, no code change; a host that wrote these rows under a plain member's session now sees zero rows or 42501.
+
 ## 1.5.0 — 2026-10-20
 
 ### Assistants

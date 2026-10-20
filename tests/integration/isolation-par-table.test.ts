@@ -16,7 +16,7 @@ import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { withAnonSession, type Tx } from "../../packages/plateforme/server/sql"
 import { TABLES } from "../../scripts/lib/org-transfer.mjs"
 import { ctxCode, hex, type TestOrg } from "../helpers/plateforme"
-import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser, type TestSql } from "../helpers/sql"
+import { codeOf, createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser, type TestSql } from "../helpers/sql"
 import { privateFolderPending, privateFolderSuite } from "../helpers/pending-migrations"
 
 // Ces tests supposent le dossier `private` en base (fiche D107) : sautés, la version nommée, tant que
@@ -388,7 +388,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         ["files update", "42501", () => bea((sql) => sql`update platform.files set status = 'pending' where id = ${ids.fileA} returning id`)],
         ["files ready by the server", "42501", () => countedByServer("bea", (sql) => sql`select id from platform.mark_files_ready(${org}, ${[ids.fileA]}::uuid[]) as id`)],
         ["files delete", "0 rows", () => bea((sql) => sql`delete from platform.files where id = ${ids.fileA} returning id`)],
-        // Une ligne de B qu'une mise à jour déplacerait dans A : refusée par le `with check`.
+        // Une ligne de B, que Bea administre le temps de la boucle, qu'une mise à jour déplacerait dans A : refusée par le
+        // `with check`.
         ["members move", "42501", () => bea((sql) => sql`update platform.members set org_id = ${org} where org_id = ${b.id} and user_id = ${people.bea.id} returning user_id`)],
         [
           "team_members move",
@@ -406,7 +407,15 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
       const before = await snapshot(scopeA)
       const outcomes: [string, string][] = []
-      for (const [label, , write] of writes) outcomes.push([label, await write()])
+      // Depuis `20261020190000`, le `using` d'une mise à jour de `members`, `team_members` ou `connector_activations` exige
+      // l'administrateur : membre simple de B, Bea n'y verrait pas ses lignes (0 ligne), et le `with check` ne serait pas
+      // joué. Administratrice de B le temps de la boucle, elle n'est toujours rien dans A.
+      await fx.admin`update platform.members set role = 'admin' where org_id = ${b.id} and user_id = ${people.bea.id}`
+      try {
+        for (const [label, , write] of writes) outcomes.push([label, await write()])
+      } finally {
+        await fx.admin`update platform.members set role = 'member' where org_id = ${b.id} and user_id = ${people.bea.id}`
+      }
       expect(outcomes).toEqual(writes.map(([label, expected]) => [label, expected]))
       expect(await snapshot(scopeA)).toEqual(before)
     },
@@ -484,27 +493,22 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     WRITES_TIMEOUT,
   )
 
-  // Option A de HN-E01S08-1, tranchée par JB : dans son organisation, une policy n'exige que
-  // l'appartenance et les invariants. Un seul cas est joué : une règle posée par un membre sans droit
-  // sur le nœud, que refusait `access_rules_insert_manager`. Les autres écritures que l'option ouvre
-  // sous une session sont nommées, jamais jouées : se donner le rôle d'admin (`members`), ajouter ou
-  // retirer un membre, supprimer l'organisation et tout son contenu (`orgs`, en cascade), rattacher ou
-  // retirer une adresse (`org_domains`), révoquer un accès plateforme (`platform_grants`), poser une
-  // règle `manage`, créer un nœud déjà publié, ou avec `meta` ou un propriétaire explicite, le déplacer
-  // ou le publier (`nodes_guard`, `publish_node` : aucun niveau depuis E01-S12 partie c), changer le
-  // propriétaire d'un compte (N30),
-  // activer un connecteur, traiter un ticket, révoquer l'invitation d'un autre. Elles se referment
-  // avant le premier client (action JB).
-  it("should let a plain member pose a rule on a node of another team, the policy asking membership only (AC8)", async () => {
-    const posed = await as("marc").tx(
+  // Option A de HN-E01S08-1, tranchée par JB (dans son organisation, une policy n'exige que l'appartenance et les
+  // invariants), remplacée par la décision d'Alexis du 20/10 : une policy d'écriture d'administration reprend le rôle
+  // que son service exige (`ROLE_REQUIRED` de `tests/unit/rls-policies.test.ts`, migrations `20261019150000` et
+  // `20261020190000`). Le cas joué ici, une règle posée par un membre sans la gestion du nœud, est de nouveau refusé
+  // par `access_rules_insert_manager` (`node_level_for`), et les refus de chaque policy sont joués par
+  // `role-dans-les-policies.test.ts` et `role-dans-les-ajouts-et-modifications.test.ts`. Restent ouvertes sous une
+  // session, nommées, jamais jouées : créer un nœud déjà publié, ou avec `meta` ou un propriétaire explicite, le
+  // modifier, le déplacer ou le publier (`nodes_guard`, `publish_node`, `nodes_update_writer` : aucun niveau depuis
+  // E01-S12 partie c), et poser ou retirer une règle d'un compte sans le gérer (`accountLevelOf`, sans pendant en base).
+  it("should refuse a plain member posing a rule on a node of another team, which she does not manage (AC8)", async () => {
+    const posed = as("marc").tx(
       (sql) => sql<{ id: string }[]>`
         insert into platform.access_rules (org_id, node_id, subject_team_id, level, created_by)
         values (${a.org.id}, ${a.nodes.devis}, ${a.teams.support}, 'read', ${a.people.marc.id}) returning id`,
     )
-    try {
-      expect(posed).toHaveLength(1)
-    } finally {
-      for (const row of posed) await fx.admin`delete from platform.access_rules where id = ${row.id}`
-    }
+    expect(await codeOf(posed)).toBe("42501")
+    expect(await fx.admin`select 1 from platform.access_rules where node_id = ${a.nodes.devis} and subject_team_id = ${a.teams.support}`).toHaveLength(0)
   })
 })

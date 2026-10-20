@@ -110,7 +110,7 @@ const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
  * fonction `security definer`, jamais par ce droit.
  */
 const DELETED_BY_AUTHENTICATED: Record<string, string> = {
-  access_rules: "removeRule, removeAccountRule, setGeneralAccess (server/rules.ts, server/general-access.ts): the person who manages the node or the account",
+  access_rules: "removeRule, removeAccountRule, setGeneralAccess (server/rules.ts, server/general-access.ts): the person who manages the node or the account; the policy requires the management of the node (node_level_for >= 3, 20261020190000), an account rule membership only",
   blocks: "draft blocks dropped on a save (server/nodes/store.ts), table rows by delete_rows (server/tables/delete-rows.ts)",
   connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
   files: "trash purge, undone upload, abandoned pending files, size mismatch, the caller's transit file (server/nodes/trash.ts, server/uploads-write.ts, server/files/)",

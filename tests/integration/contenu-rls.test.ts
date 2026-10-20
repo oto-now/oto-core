@@ -108,8 +108,14 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
     it("should refuse declining without a reason (23514), and filing a ticket already handled (42501)", async () => {
       const [row] = await ticket("lea", o.org.id)
+      // Le traitement d'un retour est à l'équipe plateforme qui administre l'organisation, en base aussi depuis
+      // `20261020190000` (`feedback_update_admin`) : la contrainte se prouve sous un membre de l'équipe plateforme avec un
+      // accès en cours à O, et non plus sous Ada, administratrice hors de l'équipe plateforme.
+      const handler = await fx.createUser()
+      await fx.makeStaff(handler.id)
+      await fx.grantPlatformAccess(o.org.id, handler.id, null)
       for (const resolution of [null, "   "]) {
-        const declined = as("ada").tx((sql) => sql`update platform.feedback set state = 'declined', resolution = ${resolution} where id = ${row.id} returning id`)
+        const declined = fx.as(handler).tx((sql) => sql`update platform.feedback set state = 'declined', resolution = ${resolution} where id = ${row.id} returning id`)
         expect(await codeOf(declined), String(resolution)).toBe("23514")
       }
       expect(await codeOf(ticket("lea", o.org.id, { state: "resolved" }))).toBe("42501")

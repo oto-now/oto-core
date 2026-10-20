@@ -293,6 +293,16 @@ describe.skipIf(!sqlConfigured)(portable("usage and feedback services on a real 
   })
 
   describe("setFeedbackState (AC11)", () => {
+    // `staffAda` n'était de l'équipe plateforme que dans l'identité : depuis 20261020190000, `feedback_update_admin` exige
+    // en base l'équipe plateforme qui administre (`handlesFeedback`). Ada y est inscrite le temps de ces cas.
+    beforeAll(async () => {
+      await ref.write({ platform_staff: [{ user_id: PEOPLE.ada.id, email: PEOPLE.ada.email, name: PEOPLE.ada.name }] })
+    })
+
+    afterAll(async () => {
+      await seed.admin`delete from platform.platform_staff where user_id = ${ref.id(PEOPLE.ada.id)}`
+    })
+
     beforeEach(async () => {
       await clear("feedback")
     })

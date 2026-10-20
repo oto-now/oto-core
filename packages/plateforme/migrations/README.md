@@ -271,6 +271,21 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   lecture dans l'organisation, écriture de ses propres lignes sur une page de son organisation, suppression des lignes
   de plus de 90 jours ; clés vers `orgs`, `nodes` et `members` en cascade (une personne retirée ou oubliée emporte ses
   lignes). Additive ; rien à relancer avant.
+- `20261020190000_platform_role_dans_les_ajouts_et_modifications.sql` (suite de `20261019150000`) : les policies
+  d'ajout et de modification exigent le rôle que leur service exige, sur leur `using` comme sur leur `with check`,
+  recréées sous leur nom : `members_insert_admin`, `members_update_admin`, `teams_insert_admin`, `teams_update_admin`,
+  `connector_activations_insert_admin` et `connector_activations_update_admin` (`is_org_admin`) ;
+  `team_members_insert_admin` (`is_org_admin`, ou responsable de l'équipe pour un membre, `leads_team`) et
+  `team_members_update_admin` (`is_org_admin`) ; `invitations_insert_admin` (`is_org_admin`, ou responsable au rôle
+  `member` dans son équipe) et `invitations_update_revoke` (l'émetteur ou `is_org_admin`) ; `org_domains_insert_admin` et
+  `platform_grants_insert_staff` (`is_staff()` et `is_org_admin`) ; `feedback_update_admin` (`is_org_admin`, et `is_staff()`
+  ou l'option « Retours visibles », `feedback_visible` ; `handled_by` à l'appelant) ; `platform_grants_update_revoke` (`is_org_admin` ou `is_staff()`) ; `accounts_insert_admin`
+  (compte d'organisation : `is_org_admin` ; d'équipe de l'organisation : `is_org_admin` ou `leads_team` ; le compte
+  personnel reste à `accounts_insert_own`) ; `access_rules_insert_manager`, `access_rules_update_manager` et
+  `access_rules_delete_manager` (sur un nœud, sa gestion, `node_level_for` ≥ 3 ; `manage` par `is_org_admin`, nœud ou
+  compte). Les fonctions `security definer` (`accept_invitations`, `join_org`, `signup_org`, `create_org`,
+  `seat_org_admin`, `claim_org_admin`, `teams_lead_sync`) n'y passent pas. Aucune table, colonne ni fonction ; rien à
+  relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -526,8 +541,9 @@ garde ; la ligne de base V1 les porte toutes.
   d'une équipe (`team_members.role` depuis `20260929090000`), et n'appelle `is_staff()` que pour une portée plateforme
   (`platform_staff`, lecture de `platform_grants` et d'`admin_journal`, écriture du journal admin) ;
   elle garde l'attribution à `auth.uid()`, l'état d'une ligne, la cohérence d'organisation entre
-  colonnes et la structure de l'arbre. Depuis `20261019150000`, sauf les policies d'administration qui reprennent
-  le rôle exigé par leur service (liste fermée `ROLE_REQUIRED`). Vérifié sans base par `tests/unit/rls-policies.test.ts`.
+  colonnes et la structure de l'arbre. Depuis `20261019150000` (suppressions) et `20261020190000` (ajouts et
+  modifications), sauf les policies d'administration qui reprennent le rôle exigé par leur service (liste fermée
+  `ROLE_REQUIRED`). Vérifié sans base par `tests/unit/rls-policies.test.ts`.
 - **Une sous-requête de policy ne revient jamais sur une table dont Postgres développe déjà les
   policies**, directement ou par une autre table (depuis `20260924150100`) : sous l'isolation, les
   policies de lecture portent une sous-requête (`(select platform.member_orgs())`), et Postgres

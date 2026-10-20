@@ -5,7 +5,7 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migration `20261019150000`). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000` et `20261020190000`). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers.
 import fs from "fs"
@@ -133,9 +133,10 @@ const PLATFORM_SCOPE = [
 ]
 
 /**
- * Les policies qui exigent le rôle que leur service exige (migration `20261019150000`, décision d'Alexis du 19/10) :
- * avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son
- * service, ni plus dure ni plus large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
+ * Les policies qui exigent le rôle que leur service exige (migrations `20261019150000` pour les suppressions,
+ * `20261020190000` pour les ajouts et modifications, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un
+ * membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
+ * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
  */
 const ROLE_REQUIRED: Record<string, string> = {
   members_delete_admin: "removeMember (server/members.ts): requireAdmin, isOrgAdmin",
@@ -143,10 +144,34 @@ const ROLE_REQUIRED: Record<string, string> = {
   team_members_delete_admin: "removeTeamMember (server/teams.ts): isOrgAdmin, or a lead of the team removing a member (leadsTeam)",
   org_domains_delete_admin: "removeHost (server/admin/hosts.ts): requireStaffAdmin, isStaff and isOrgAdmin",
   orgs_update_admin: "updateOrg, updateBrand, setFlag, setOpenEntry (server/admin/orgs.ts, brand.ts, flags.ts, open-entry.ts): isOrgAdmin",
+  platform_grants_insert_staff: "grantAccess (server/admin/grants.ts): requireStaffAdmin, isStaff and isOrgAdmin",
+  platform_grants_update_revoke: "revokePlatformAccess (server/members.ts): requireAccessManager, isOrgAdmin or isStaff",
+  members_insert_admin: "no service under a session (accept_invitations, join_org, signup_org, seat_org_admin are security definer): isOrgAdmin",
+  members_update_admin: "updateMember (server/members.ts): requireAdmin, isOrgAdmin",
+  invitations_insert_admin: "inviteMember (server/invitations.ts): invitationOptions, isOrgAdmin, or a lead inviting a member into a team she leads (leadsTeam)",
+  invitations_update_revoke: "revokeInvitation, withdraw (server/invitations.ts): its sender or isOrgAdmin",
+  teams_insert_admin: "createTeam (server/teams.ts): requireAdmin, isOrgAdmin",
+  teams_update_admin: "updateTeam (server/teams.ts): requireAdmin, isOrgAdmin",
+  team_members_insert_admin: "addTeamMember (server/teams.ts): requireComposer, isOrgAdmin, or a lead adding a member (leadsTeam); setSoleLead: isOrgAdmin",
+  team_members_update_admin: "setTeamMemberRole, setSoleLead (server/teams.ts): requireAdmin, isOrgAdmin",
+  org_domains_insert_admin: "addHost (server/admin/hosts.ts): requireStaffAdmin, isStaff and isOrgAdmin",
+  access_rules_insert_manager: "setNodeRule, setGeneralAccess, setAccountRule (server/rules.ts, general-access.ts): the share level of the node (node_level_for >= 3), manage by isOrgAdmin; an account rule otherwise left to membership (accountLevelOf)",
+  access_rules_update_manager: "saveRule for setNodeRule, setGeneralAccess, setAccountRule (server/rules.ts, general-access.ts): as access_rules_insert_manager",
+  access_rules_delete_manager: "removeRule, setGeneralAccess (server/rules.ts, general-access.ts): the share level of the node (node_level_for >= 3); an account rule left to membership (accountLevelOf)",
+  accounts_insert_admin: "createAccount (server/connectors/accounts.ts): requireCreationRight, isOrgAdmin, or a lead of the owning team (leadsTeam)",
+  connector_activations_insert_admin: "activateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
+  connector_activations_update_admin: "activateConnector, deactivateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
+  feedback_update_admin: "setFeedbackState (server/feedback.ts): handlesFeedback, isOrgAdmin, and isStaff or the feedback_visible flag",
 }
 
 /** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */
-const STAFF_ROLE_REQUIRED = ["org_domains_delete_admin"]
+const STAFF_ROLE_REQUIRED = [
+  "org_domains_delete_admin",
+  "org_domains_insert_admin",
+  "platform_grants_insert_staff",
+  "platform_grants_update_revoke",
+  "feedback_update_admin",
+]
 
 /** Un niveau ou un rôle calculé en base. */
 const RIGHT_FUNCTION = /\b(node_level_for|node_level_of|is_org_admin|leads_team)\s*\(/i
