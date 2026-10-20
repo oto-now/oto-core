@@ -186,13 +186,19 @@ qu'une personne sans compte est de l'équipe plateforme.
 Un service décide chaque droit et pose chaque filtre avant sa requête, avec `server/access.ts` ;
 la RLS est une seconde barrière, réduite à l'isolation par organisation et aux invariants (`supabase-patterns.md § RLS Patterns`), aucun test de service ne passe grâce à elle. Exception, les gestes d'administration
 (`20261019150000` pour les suppressions, `20261020190000` pour les ajouts et modifications, `20261021090000` pour les
-nœuds, `20261021120000` pour les blocs) : la policy y reprend le rôle ou le niveau que le service exige, ni plus dur ni plus large, sur son `using` comme
+nœuds, `20261021120000` pour les blocs, `20261021130000` pour la lecture du contenu) : la policy y reprend le rôle ou le niveau que le service exige, ni plus dur ni plus large, sur son `using` comme
 sur son `with check`, pour qu'un membre simple ne les fasse pas avec son seul jeton (liste fermée `ROLE_REQUIRED` de
 `tests/unit/rls-policies.test.ts`, chaque policy avec son service ; refus et passages joués par
 `tests/integration/role-dans-les-policies.test.ts`, `tests/integration/role-dans-les-ajouts-et-modifications.test.ts` et
-`tests/integration/role-dans-les-noeuds.test.ts` et `tests/integration/role-dans-les-blocs.test.ts`). Le dernier
+`tests/integration/role-dans-les-noeuds.test.ts`, `tests/integration/role-dans-les-blocs.test.ts` et
+`tests/integration/role-dans-la-lecture.test.ts`). La lecture du contenu d'un nœud suit la même règle : contenu publié
+à la lecture, brouillon à l'écriture, lien public à la gestion ou à l'administrateur ; le titre et le résumé d'un nœud
+(`nodes_select_level`) restent à l'appartenance, en attente d'une décision. Un agrégat de toute l'organisation qu'un
+service rend sans le contenu (statistiques d'usage, D44) passe par une fonction `security definer` qui exige le rôle du
+service, jamais par une policy élargie. Le dernier
 auteur d'un nœud (`nodes.updated_by`), que chaque service pose à l'appelant, vaut `auth.uid()` en base, posé à l'ajout
-ou changé (déclencheur des gestes, `20261021120000`) ; celui d'un bloc (`blocks.updated_by`) ne l'est pas encore. Quand une seule policy couvre des gestes de niveaux différents, ou
+ou changé (déclencheur des gestes, `20261021120000`) ; celui d'un bloc (`blocks.updated_by`) aussi, nul ou `auth.uid()`
+(`blocks_insert_writer`, `blocks_update_writer`, `20261021130000`). Quand une seule policy couvre des gestes de niveaux différents, ou
 que la règle dépend de l'ancienne valeur, un déclencheur sous `authenticated` et `platform_server` juge le geste sur
 l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste) ; une
 policy de `nodes` ne relisant pas `nodes` (42P17), le niveau du parent d'une création s'y lit aussi, avant chaque ajout

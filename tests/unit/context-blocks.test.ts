@@ -447,6 +447,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("C
     )
     // Un Contexte n'existe qu'au chemin d'une équipe de l'organisation (`is_context_path`) : l'équipe Conseil, sans Léa.
     tables.teams.push({ id: "team-conseil", org_id: O.id, slug: "conseil", name: "Conseil", lead_user_id: null })
+    // Léa est de Support en base aussi (`leaOf`) : la base ne rend le contenu d'un Contexte qu'à qui le lit
+    // (`20261021130000`).
+    tables.team_members.push({ team_id: TEAMS.support.id, user_id: PEOPLE.lea.id, role: "member" })
     addBlocks(tables, "guide", "published", [{ type: "paragraph", text: "Guide de l'organisation." }])
     addBlocks(tables, "contexte", "published", [
       { type: "heading", text: "Mission", data: { level: 1 } },

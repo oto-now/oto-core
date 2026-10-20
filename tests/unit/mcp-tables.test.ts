@@ -94,17 +94,25 @@ describe.skipIf(!sqlConfigured)(portable("the table functions through acme_call"
       blocks: rowBlocks(nodeId("ventes/t2"), PROSPECT_ROWS.slice(0, 2)),
     })
     const claire = await session("claire", { teams: [teamOf("ventes", "claire"), teamOf("support", "claire")] })
-    const moved = "ventes/t moved to ventes/t2 on 2026-09-24: use the new path."
-    for (const [fn, args] of [
-      ["table.schema", {}],
-      ["table.rows", {}],
-      ["table.write", { rows: [{ key: "Atelier 2", set: { notes: { value: "Relancer", comment: "Demande de Claire" } } }] }],
-    ] as const) {
-      const result = await claire.run(fn, { table: "ventes/t", ...args })
-      expect([result.isError, result.text.split("\n")[0]], fn).toEqual([false, moved])
-      expect(result.result.structuredContent, fn).toMatchObject({ result: { moved_from: "ventes/t" } })
+    // Claire est membre de Support en base aussi, le temps du cas : la base exige le niveau que le service décide, à
+    // la lecture des lignes (`20261021130000`) comme à leur écriture.
+    const support = ref.id(TEAMS.support.id)
+    await seed.admin`insert into platform.team_members (team_id, user_id, role) values (${support}, ${ref.people.claire.id}, 'member')`
+    try {
+      const moved = "ventes/t moved to ventes/t2 on 2026-09-24: use the new path."
+      for (const [fn, args] of [
+        ["table.schema", {}],
+        ["table.rows", {}],
+        ["table.write", { rows: [{ key: "Atelier 2", set: { notes: { value: "Relancer", comment: "Demande de Claire" } } }] }],
+      ] as const) {
+        const result = await claire.run(fn, { table: "ventes/t", ...args })
+        expect([result.isError, result.text.split("\n")[0]], fn).toEqual([false, moved])
+        expect(result.result.structuredContent, fn).toMatchObject({ result: { moved_from: "ventes/t" } })
+      }
+      expect(ref.readable(claire.journal.map((line) => [line.target, line.team_id]))).toEqual(["table.schema", "table.rows", "table.write"].map((fn) => [fn, TEAMS.support.id]))
+    } finally {
+      await seed.admin`delete from platform.team_members where team_id = ${support} and user_id = ${ref.people.claire.id}`
     }
-    expect(ref.readable(claire.journal.map((line) => [line.target, line.team_id]))).toEqual(["table.schema", "table.rows", "table.write"].map((fn) => [fn, TEAMS.support.id]))
   })
 
   describe("E11-S01 through acme_call", () => {

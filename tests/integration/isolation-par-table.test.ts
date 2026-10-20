@@ -29,6 +29,9 @@ const SETUP_TIMEOUT = 240_000
 const WRITES_TIMEOUT = 120_000
 const SUITE = "isolation between organisations, table by table"
 
+/** Les tables du contenu d'un nœud, que la base ne rend qu'à qui lit le nœud (`20261021130000`). */
+const CONTENT = ["blocks", "files", "links", "node_drafts", "node_shares", "node_versions"]
+
 /** Tables sans écriture accordée à `authenticated` : rien à tenter (AC4). */
 const SELECT_ONLY = ["links", "node_aliases", "node_versions"]
 
@@ -424,8 +427,25 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     WRITES_TIMEOUT,
   )
 
-  it("should let a plain member without a team read every row of his organisation, personal spaces and drafts included (AC5)", async () => {
-    expect(await keysOf(session("marc"), scopeA)).toEqual(await keysOf(service, scopeA))
+  // Depuis `20261021130000`, la lecture du contenu exige en base le niveau que son service décide : le contenu de A est
+  // semé sous `ventes/offre`, de l'équipe Ventes, dont Marc n'est pas. Une règle de lecture de l'organisation sur
+  // `ventes` lui en ouvre le publié (blocs, versions, liens, fichiers), jamais le brouillon (écriture) ni le lien
+  // public (partage).
+  it("should let a plain member without a team read every row of his organisation but the content he does not read (AC5)", async () => {
+    const all = await keysOf(service, scopeA)
+    const hidden = (tables: string[]) => Object.fromEntries(tables.map((table) => [table, []]))
+    expect(await keysOf(session("marc"), scopeA)).toEqual({ ...all, ...hidden(CONTENT) })
+    const [rule] = await fx.admin<{ id: string }[]>`
+      insert into platform.access_rules (org_id, node_id, subject_org, level, created_by)
+      values (${a.org.id}, ${a.nodes.ventes}, true, 'read', ${a.people.claire.id}) returning id`
+    try {
+      const opened = await keysOf(service, scopeA)
+      const published = (opened.blocks as string[]).filter((key) => key.endsWith("/published"))
+      expect(published.length).toBeGreaterThan(0)
+      expect(await keysOf(session("marc"), scopeA)).toEqual({ ...opened, ...hidden(["node_drafts", "node_shares"]), blocks: published })
+    } finally {
+      await fx.admin`delete from platform.access_rules where id = ${rule.id}`
+    }
   })
 
   // Seuls les invariants de policy qu'aucun test existant ne couvre (relevé à l'ouverture, story

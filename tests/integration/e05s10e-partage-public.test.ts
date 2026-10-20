@@ -267,7 +267,9 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
     const token = await sharedTree("pub_p", false)
     const [share] = await fx.admin<{ id: string }[]>`select id from platform.node_shares where token = ${token}`
     const spy = spyDb(claire.db)
-    await expect(revokeShare(spy.db, claire.identity, share.id)).rejects.toMatchObject({ code: "forbidden" })
+    // Depuis `20261021130000`, la base ne rend un lien qu'à qui partage son contenu (niveau 3) ou administre
+    // l'organisation : à Claire, lectrice, ce lien est inconnu, comme un lien d'un contenu qu'elle ne lit pas.
+    await expect(revokeShare(spy.db, claire.identity, share.id)).rejects.toMatchObject({ code: "not_found", message: `No public link ${share.id} in ${claire.identity.org.name}.` })
     expect(writesOf(spy.sent)).toEqual([])
   })
 

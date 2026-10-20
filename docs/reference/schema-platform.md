@@ -126,6 +126,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `public_file_by_token(org, token, file)` | Même règle pour un fichier (`anon` seul, ADR-016 § 7) : fichier `ready` cité par un bloc publié (`file` ou `image`) d'un nœud du périmètre ; rend `id`, `name`, `mime`, `size`, le chemin du nœud, jamais la clé ; null pour tout le reste |
 | `consume_upload_ticket(org, hash, form)` | Porte sans session du dépôt (`anon` seul, ADR-018 § 3) : un `update` conditionnel sert le ticket une fois, par le jeton de la porte appelante, dans sa propre transaction ; rend la personne, son e-mail dans `members` et la destination, ou null |
 | `org_files_bytes(org)` | Le quota de fichiers d'une organisation de l'appelant (`member_orgs`, sinon `42501`) : la somme des lignes `pending` et `ready`, jointes ou en transit non échues, de toute personne ; rien d'autre ne sort (lue par `requireQuota` sous le verrou 7501) |
+| `usage_authorship(org, since, users, limit)`, `usage_written(org, since, users)`, `usage_published_weeks(org, since, users)` | Les agrégats du contenu des statistiques d'usage, pour l'administrateur de l'organisation (`is_org_admin`, sinon `42501`) : auteur, origine et nœud des blocs publiés écrits depuis une date, nombre de blocs écrits par origine, versions publiées par semaine, espaces personnels compris ; jamais un texte (`20261021130000`, lus par `server/usage-statistics.ts`) |
 | `purge_transit_files(org)` | Supprime les fichiers en transit échus d'une organisation de l'appelant (`42501` sinon), de toute personne, et ne rend que leurs identifiants : le service retire les objets après le commit (`platform_server` seul) |
 | `mark_files_ready(org, files)` | Passe à `ready` les lignes `pending` d'une organisation de l'appelant (`42501` sinon) que la RLS de `files` lui laisse modifier (jointes, ou en transit à lui), après la lecture de l'objet par le serveur ; rend celles qui l'ont été. Seule écriture de `files.status` (`platform_server` seul) |
 | `norm(text)`, `norm_words(text)`, configuration `platform.fr` | Normalisation sans accent, mots `[a-z0-9]`, plein texte français |
@@ -193,7 +194,12 @@ ouvrir, publier ou abandonner un brouillon (`node_level_for` ≥ 2 ; une page ja
 parent (`nodes_guard_creation`), propriétaire hérité. Depuis `20261021120000`, les blocs : ajouter, modifier ou
 supprimer une ligne publiée d'un tableau ou un bloc du brouillon d'une page (`blocks_insert_writer`,
 `blocks_update_writer`, `blocks_delete_writer` : `node_level_for` ≥ 2 sur le nœud du bloc, comme `requireWrite` et
-`saveDraft`). Un membre simple y touche zéro ligne (`using`) ou y est refusé (`42501`, `with check`). Les écritures sans porte de l'API passent
+`saveDraft`). Un membre simple y touche zéro ligne (`using`) ou y est refusé (`42501`, `with check`). Depuis
+`20261021130000`, les lectures du contenu : un bloc publié, une version, un lien sortant (`node_level_for` ≥ 1 sur le
+nœud ; une ligne, parmi les tableaux lisibles de l'appelant), un bloc de brouillon et `node_drafts` (≥ 2), un fichier
+(son auteur ; joint, ≥ 1, ou son nœud à la corbeille), un lien public (≥ 3, ou `is_org_admin`) ; et le dernier auteur
+d'un bloc (`blocks.updated_by`), nul ou `auth.uid()` à l'ajout et à la modification. `nodes`, `node_aliases` et
+`node_views` restent lus à l'appartenance. Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,

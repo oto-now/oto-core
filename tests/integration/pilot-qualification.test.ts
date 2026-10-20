@@ -480,7 +480,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(isJsonObject(served.result.structuredContent) ? served.result.structuredContent.served : null).toMatchObject({ path: PATH })
     })
 
-    it("should give S, of Support only, no result of ventes/ for the same search, although the isolation policy lets S read those rows (AC15)", async () => {
+    it("should give S, of Support only, no result of ventes/ for the same search, which the base does not let S read either (AC15)", async () => {
       const session = await connect(s, `pilot-support-${hex(3)}`)
       const { code } = await session.openContext(`Cherche ${QUERY}`)
       const found = await session.call("find", { ctx: code, query: QUERY })
@@ -490,11 +490,12 @@ describe.skipIf(!sqlConfigured || privatePending)(
         ventes: [],
         cited: false,
       })
-      // La RLS d'isolation (E01-S08) laisse S lire ces blocs : le filtre vient du service (H123).
+      // Le filtre vient du service (H123) ; depuis `20261021130000`, la base exige aussi le niveau de lecture : S ne lit
+      // pas ces blocs.
       const readable = await asCaller(s.id, s.email).tx(
         (sql) => sql`select id from platform.blocks where node_id in ${sql([ids.notes, ids.table])} and state = 'published'`,
       )
-      expect(readable.length).toBeGreaterThan(0)
+      expect(readable).toEqual([])
     })
   },
 )

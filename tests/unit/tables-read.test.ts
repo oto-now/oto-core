@@ -15,7 +15,7 @@ import { tableAggregate } from "../../packages/plateforme/server/tables/aggregat
 import { loadTable, type RowBlock } from "../../packages/plateforme/server/tables/meta"
 import { tableRows } from "../../packages/plateforme/server/tables/rows"
 import { tableSchema } from "../../packages/plateforme/server/tables/schema"
-import { nodeId, teamOf, type RuleSpec } from "../helpers/reference-org"
+import { nodeId, TEAMS, teamOf, type RuleSpec } from "../helpers/reference-org"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import type { Tables } from "../helpers/simulated-db"
 import { dbSpy, type SpiedCall } from "../helpers/spy-t1-c1a"
@@ -67,6 +67,9 @@ describe.skipIf(!sqlConfigured)(portable("tables read on a real database"), { ti
     fixture = fixtureRows(seed, ref)
     prefix = ref.org.prefix
     MARC_SUPPORT = ref.identityOf("marc", { teams: [teamOf("support", "marc")] })
+    // Marc est membre de Support en base aussi : la lecture des lignes exige en base le niveau que le service décide
+    // (`20261021130000`), et une règle de Support ne lui ouvre le tableau que s'il est de l'équipe.
+    await seed.admin`insert into platform.team_members (team_id, user_id, role) values (${ref.id(TEAMS.support.id)}, ${ref.people.marc.id}, 'member')`
     UNKNOWN_FOR_MARC = `Unknown table ventes/suivi_prospects. Tables you can read: support/tickets. Use ${prefix}_find with type table for more.`
   }, SEED_TIMEOUT)
 

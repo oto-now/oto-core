@@ -326,6 +326,18 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   (zéro ligne, ou `42501`). `nodes_gesture_guard`, recréée (`create or replace`), vérifie aussi le dernier auteur d'un
   nœud : posé à l'ajout, ou changé, il vaut `auth.uid()` (`42501`). Les fonctions `security definer` et les cascades ne
   sont pas touchées. Trois policies et une fonction ; aucune table ni colonne ; rien à relancer avant.
+- `20261021130000_platform_role_dans_la_lecture.sql` (suite de `20261021120000`) : les policies de lecture du contenu,
+  recréées sous leur nom, exigent le niveau du service qui lit : `blocks_select_level` (un bloc publié, la lecture du
+  nœud, `node_level_for` ≥ 1, une ligne parmi les tableaux lisibles ; un bloc de brouillon, la lecture de son
+  brouillon), `node_drafts_select_writer` (≥ 2), `node_versions_select_level` et `links_select_level` (≥ 1),
+  `files_select_member` (son auteur ; un fichier joint, ≥ 1 ou son nœud à la corbeille), `node_shares_select_member`
+  (≥ 3 ou `is_org_admin`) : un membre ne lit plus le contenu d'une page qui lui est cachée, le brouillon d'une page
+  qu'il ne fait que lire, ni le jeton d'un lien public qu'il ne partage pas. `blocks_insert_writer` et
+  `blocks_update_writer` vérifient en plus le dernier auteur d'un bloc (nul ou `auth.uid()`, `42501`). Trois fonctions
+  `security definer` (`usage_authorship`, `usage_written`, `usage_published_weeks`) rendent à l'administrateur les
+  comptes des statistiques d'usage, que `server/usage-statistics.ts` de la même version appelle. `nodes_select_level`,
+  `node_aliases` et `node_views` inchangées. Huit policies et trois fonctions ; aucune table ni colonne ; rien à
+  relancer avant.
 
 ## Installer sur un hôte neuf
 

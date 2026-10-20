@@ -103,7 +103,7 @@ Le markdown et le CSV sont des gestes d'import et d'export vers la page et le ta
 
 ## Sécurité et confidentialité
 
-- Lire un tableau exige la lecture, écrire l'écriture, décidées par le service ([droits d'accès](droits-d-acces.md)) et, pour l'écriture, reprises en base depuis `20261021120000` (`blocks_*_writer` : ajouter, modifier ou supprimer une ligne exige l'écriture du tableau, sous la session de l'appelant comme sous celle du serveur) ; l'export est décidé par la lecture et borné à 5 000 lignes.
+- Lire un tableau exige la lecture, écrire l'écriture, décidées par le service ([droits d'accès](droits-d-acces.md)) et, pour l'écriture, reprises en base depuis `20261021120000` (`blocks_*_writer` : ajouter, modifier ou supprimer une ligne exige l'écriture du tableau, sous la session de l'appelant comme sous celle du serveur) ; la lecture aussi depuis `20261021130000` (`blocks_select_level` : lire une ligne exige la lecture du tableau, calculée une fois par instruction pour les tableaux lisibles de l'appelant) ; l'export est décidé par la lecture et borné à 5 000 lignes.
 - La provenance nomme qui a écrit (nom du membre, « former member » ensuite) et par quel client ; un commentaire ou un lien de preuve ne survit pas à une valeur changée (H94).
 - Un CSV est contrôlé deux fois : à l'écran avant l'envoi, puis dans le service sur chaque lot.
 
@@ -127,3 +127,4 @@ Le markdown et le CSV sont des gestes d'import et d'export vers la page et le ta
 - 2026-10-01 : refonte en document de conception vivant, qui reprend H90 à H97, H100, P24, D49, D120, D132, D150 et les choix des stories E07-S01, E07-S02, E07-S04, E10-S01, E11-S01 — décidé par Alexis, accord de JB.
 - 2026-10-06 : une clé répétée dans un même `table.write` fusionne avant écriture, le compte rendu le dit, une contradiction refuse l'appel — décidé par Alexis, à valider avec JB.
 - 2026-10-20 : écrire les lignes d'un tableau exige aussi en base l'écriture du tableau (`20261021120000`) ; un import de 5 000 lignes mesuré avant et après — décidé par Alexis (source : revue des policies de `blocks`).
+- 2026-10-21 : lire les lignes d'un tableau exige aussi en base la lecture du tableau (`20261021130000`), mesurée avant et après sur un tableau de 5 000 lignes — décidé par Alexis le 20/10 (source : revue des policies de lecture).

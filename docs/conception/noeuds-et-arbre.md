@@ -100,7 +100,7 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 ## Sécurité et confidentialité
 
 - Un nœud invisible répond comme un chemin inconnu ; un ancien chemin d'un nœud invisible reste « does not exist » (E03-S07 N17), et un refus de déplacement ne nomme personne (E03-S07 N25).
-- Les liens se relisent pour le lecteur : une cible qu'il ne voit pas est « sans cible » (E03-S07 N2) ; les droits se décident dans le service ([droits d'accès](droits-d-acces.md)).
+- Les liens se relisent pour le lecteur : une cible qu'il ne voit pas est « sans cible » (E03-S07 N2) ; les droits se décident dans le service ([droits d'accès](droits-d-acces.md)) et, pour le contenu, aussi en base depuis `20261021130000` : blocs publiés, versions, liens sortants et fichiers joints à la lecture du nœud, brouillon à l'écriture, lien public à la gestion ; le titre et le résumé restent lus par l'organisation (`nodes_select_level`, en attente d'une décision).
 - Abandon, corbeille et suppression de lignes sont `sensitive` : récapitulatif d'abord, exécution sur `confirm: true`.
 
 ## Écart avec le code
@@ -124,6 +124,7 @@ Aucune à ce jour.
 - 2026-10-15 : dans le rail, le quart bas de la ligne d'un Contexte range juste après lui, en tête de sa section (D110) — décidé par JB (source : session du 15/10/2026).
 - 2026-10-20 : un lien vers un ancien chemin est lu au chemin courant et enregistré à l'écriture suivante de sa page, sans réécrire les pages qui citent un nœud déplacé — décidé par JB (source : session du 20/10/2026).
 - 2026-10-20 : les pages d'une équipe à la corbeille sont effacées avec elle et ne bloquent plus sa suppression — décidé par JB (source : session du 20/10/2026).
+- 2026-10-21 : la base exige la lecture d'un nœud pour en lire le contenu publié (blocs, versions, liens sortants, fichiers joints), l'écriture pour son brouillon, la gestion ou l'administrateur pour son lien public, et le dernier auteur d'un bloc vaut l'appelant (`20261021130000`) — décidé par Alexis le 20/10 (source : revue des policies de lecture, restées à l'appartenance).
 - 2026-10-20 : la base exige l'écriture d'un nœud pour écrire ses blocs, lignes publiées d'un tableau comme brouillon d'une page (`blocks_*_writer`), et le dernier auteur d'un nœud (`updated_by`), posé à l'ajout ou changé, vaut l'appelant (`nodes_gesture_guard`, `20261021120000`) — décidé par Alexis (source : revue des policies de `blocks`).
 - 2026-10-20 : la base exige l'écriture du parent pour créer un nœud (déclencheur `nodes_guard_creation`) et n'accorde à une session que les colonnes de `nodes` que les services écrivent : à la création, celles d'`insertNode`, propriétaire hérité ; ensuite, parent, chemin, propriétaire, dernier auteur, position et corbeille (`20261021110000`) — décidé par Alexis (source : revue des droits de colonne de `nodes`).
 - 2026-10-20 : `open_draft`, `publish_node`, `discard_draft` et `duplicate_subtree` exigent en base le niveau de leur service (`20261021100000`) ; la duplication ne copie plus une page ni des descendants cachés — décidé par Alexis (source : revue des fonctions `security definer`).

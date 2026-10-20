@@ -201,12 +201,10 @@ async function readPeople(db: PlatformDb, scope: Scope): Promise<Omit<PeopleRead
         group by j.user_id, j.target
         order by count(*) desc, j.target
         limit ${ROWS_MAX}`,
+      // Tout le contenu de l'organisation, espaces personnels compris, que l'administrateur ne lit pas (D44) : la fonction
+      // `security definer` le compte pour lui seul (`20261021130000`).
       sql<PeopleReads["authorship"][number][]>`
-        select distinct b.provenance ->> 'by' as user_id, b.provenance ->> 'origin' as origin, b.node_id
-        from platform.blocks b
-        where b.org_id = ${scope.orgId} and b.state = 'published' and b.updated_at >= ${scope.since}
-          and (${users}::text[] is null or b.provenance ->> 'by' = any(${users}::text[]))
-        limit ${ROWS_MAX}`,
+        select user_id, origin, node_id from platform.usage_authorship(${scope.orgId}, ${scope.since}, ${users}::uuid[], ${ROWS_MAX})`,
     ])
     return { activity, demands, authorship }
   })
@@ -223,16 +221,9 @@ async function readOrgCounts(db: PlatformDb, scope: Scope): Promise<Omit<Statist
         where n.org_id = ${scope.orgId} and n.created_at >= ${scope.since} and (${users}::uuid[] is null or n.created_by = any(${users}::uuid[]))
         group by 2
         union all
-        select 'published', to_char(date_trunc('week', v.created_at at time zone 'UTC'), 'YYYY-MM-DD'), count(*)::int
-        from platform.node_versions v join platform.nodes n on n.id = v.node_id
-        where n.org_id = ${scope.orgId} and v.created_at >= ${scope.since} and (${users}::uuid[] is null or v.author = any(${users}::uuid[]))
-        group by 2`,
+        select 'published', p.week, p.count from platform.usage_published_weeks(${scope.orgId}, ${scope.since}, ${users}::uuid[]) p`,
       sql<StatisticsReads["written"]>`
-        select b.provenance ->> 'origin' as origin, count(*)::int as count
-        from platform.blocks b
-        where b.org_id = ${scope.orgId} and b.state = 'published' and b.updated_at >= ${scope.since}
-          and (${users}::uuid[] is null or b.updated_by = any(${users}::uuid[]))
-        group by 1`,
+        select origin, count from platform.usage_written(${scope.orgId}, ${scope.since}, ${users}::uuid[])`,
       sql<{ pending: number; active: number; created: number }[]>`
         select (select count(*)::int from platform.invitations i
                  where i.org_id = ${scope.orgId} and i.accepted_at is null and i.declined_at is null and i.revoked_at is null and i.expires_at > now()) as pending,

@@ -5,7 +5,7 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000` et `20261021120000`). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000` et `20261021130000`, lectures comprises). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
 // `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000`).
@@ -72,7 +72,8 @@ const RECREATED = [
 /**
  * Les policies sans droit, laissées par E01-S08 telles que leur migration les posait (19, HN-E01S08-5),
  * moins celle de l'insertion d'un espace personnel dans `nodes`, neutralisée puis retirée par E01-S12
- * partie c.
+ * partie c. Les lectures du contenu (`blocks_select_level`, `node_versions_select_level`, `links_select_level`)
+ * reprennent depuis `20261021130000` le niveau de leur service (`ROLE_REQUIRED`).
  */
 const UNCHANGED = [
   "orgs_select_member",
@@ -137,7 +138,7 @@ const PLATFORM_SCOPE = [
 /**
  * Les policies qui exigent le rôle que leur service exige (migrations `20261019150000` pour les suppressions,
  * `20261020190000` pour les ajouts et modifications, `20261021090000` pour les nœuds, `20261021120000` pour les blocs,
- * décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
+ * `20261021130000` pour la lecture du contenu, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
  * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
  */
 const ROLE_REQUIRED: Record<string, string> = {
@@ -176,6 +177,16 @@ const ROLE_REQUIRED: Record<string, string> = {
     "updateRow (server/tables/row-store.ts), writeDecision (server/tables/review.ts) after requireWrite for table.write, table.claim, table.release, the review and the import; writePurge (server/tables/evolution-publish.ts) after requireNodeLevel publish; writeUpdate of saveDraft (server/nodes/store.ts): node_level_for >= 2",
   blocks_delete_writer:
     "deleteJudged (server/tables/delete-rows.ts) after requireWrite; deleteBlocks of saveDraft (server/nodes/store.ts) after requireNodeLevel write: node_level_for >= 2",
+  // Les lectures du contenu (migration `20261021130000`) ; `nodes_select_level` reste à l'appartenance, en attente d'une décision.
+  blocks_select_level:
+    "a published block: findNode, lookupNode (server/nodes/lookup.ts), the lists filtered by nodeLevels (server/access.ts), requireRead of the tables: node_level_for >= 1, a row only through a table; a draft block: its draft (node_drafts_select_writer, node_level_for >= 2)",
+  node_drafts_select_writer: "loadDraft (server/nodes/store.ts) behind level >= write (server/nodes/read.ts, server/procedures.ts), requireNodeLevel write: node_level_for >= 2",
+  node_versions_select_level: "the revisions of read (server/nodes/read.ts), the news (server/context/blocks/news.ts, server/home-contents.ts), the ctx (server/ctx.ts): node_level_for >= 1",
+  links_select_level: "the outgoing links of a node read, the incoming links filtered by nodeLevels (server/nodes/link-lines.ts), the links of the Contextes read: node_level_for >= 1",
+  files_select_member:
+    "readableFile (server/files/service.ts): node_level_for >= 1; its author (pendingFile, a transit file); the files of a node in the trash, which purgeTrash (server/nodes/trash.ts) and eraseTrashedNodes (server/team-trash.ts) remove",
+  node_shares_select_member:
+    "managedNode (server/shares.ts), activeShareAt for node.access: node_level_for >= 3; listShares, revokeShare: isOrgAdmin",
 }
 
 /** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */

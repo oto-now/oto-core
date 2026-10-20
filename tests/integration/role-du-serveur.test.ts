@@ -61,6 +61,9 @@ const CALLABLE: Record<string, string> = {
   "platform.search_content(uuid,text,text[],integer)": "read",
   "platform.staff_directory()": "read",
   "platform.update_my_profile(uuid,jsonb)": "the person's own profile",
+  "platform.usage_authorship(uuid,timestamp with time zone,uuid[],integer)": "read (administrator)",
+  "platform.usage_published_weeks(uuid,timestamp with time zone,uuid[])": "read (administrator)",
+  "platform.usage_written(uuid,timestamp with time zone,uuid[])": "read (administrator)",
 }
 
 /** Les fonctions qui écrivent un fait venu d'un tiers ou du serveur : exécutables par `platform_server` seul. */
