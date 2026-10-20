@@ -318,6 +318,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   dates, ni les métadonnées, ni la position, et ne change plus l'identifiant ni le contenu d'une page (que seul
   `publish_node` publie). `nodes_insert_writer` inchangée. Une fonction recréée, un déclencheur, des droits ; aucune
   table ni colonne ; rien à relancer avant.
+- `20261021120000_platform_role_dans_les_blocs.sql` (suite de `20261021110000`) : les policies d'écriture de `blocks`
+  (`blocks_insert_writer`, `blocks_update_writer`, `blocks_delete_writer`), recréées sous leur nom, gardent leur
+  définition et exigent en plus l'écriture du nœud du bloc (`node_level_for` ≥ 2, comme `requireWrite` des fonctions
+  `table.*` et `saveDraft`), sur le `using` comme sur le `with check` : un membre simple n'ajoute, ne modifie ni ne
+  supprime plus une ligne d'un tableau qu'il ne fait que lire, ou qui lui est caché, ni le brouillon d'une telle page
+  (zéro ligne, ou `42501`). `nodes_gesture_guard`, recréée (`create or replace`), vérifie aussi le dernier auteur d'un
+  nœud : posé à l'ajout, ou changé, il vaut `auth.uid()` (`42501`). Les fonctions `security definer` et les cascades ne
+  sont pas touchées. Trois policies et une fonction ; aucune table ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
