@@ -181,7 +181,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     it("should refuse sending in someone else's name (42501), without a date (23514), or changing another column (42501)", async () => {
       const [created] = await draft()
       expect(await codeOf(updateAsLea(created.id, { status: "sent", sent_by: o.people.claire.id, sent_at: new Date() }))).toBe("42501")
-      expect(await codeOf(updateAsLea(created.id, { status: "sent" }))).toBe("23514")
+      // Depuis 20261021090000, un envoi se fait au nom de l'appelant (`mail.send_draft`) : la date manquante se prouve sur lui.
+      expect(await codeOf(updateAsLea(created.id, { status: "sent", sent_by: o.people.lea.id }))).toBe("23514")
       const payload = as("lea").tx((sql) => sql`update platform.sim_outbox set payload = ${sql.json({ to: "z@y.test" })} where id = ${created.id} returning id`)
       expect(await codeOf(payload)).toBe("42501")
     })

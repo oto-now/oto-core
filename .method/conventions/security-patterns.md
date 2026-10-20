@@ -185,11 +185,14 @@ qu'une personne sans compte est de l'équipe plateforme.
 
 Un service décide chaque droit et pose chaque filtre avant sa requête, avec `server/access.ts` ;
 la RLS est une seconde barrière, réduite à l'isolation par organisation et aux invariants (`supabase-patterns.md § RLS Patterns`), aucun test de service ne passe grâce à elle. Exception, les gestes d'administration
-(`20261019150000` pour les suppressions, `20261020190000` pour les ajouts et modifications) : la policy y reprend le
-rôle que le service exige, ni plus dur ni plus large, sur son `using` comme sur son `with check`, pour qu'un membre
-simple ne les fasse pas avec son seul jeton (liste fermée `ROLE_REQUIRED` de `tests/unit/rls-policies.test.ts`, chaque
-policy avec son service ; refus et passages joués par `tests/integration/role-dans-les-policies.test.ts` et
-`tests/integration/role-dans-les-ajouts-et-modifications.test.ts`). Une fonction `security definer` qui écrit à la place
+(`20261019150000` pour les suppressions, `20261020190000` pour les ajouts et modifications, `20261021090000` pour les
+nœuds) : la policy y reprend le rôle ou le niveau que le service exige, ni plus dur ni plus large, sur son `using` comme
+sur son `with check`, pour qu'un membre simple ne les fasse pas avec son seul jeton (liste fermée `ROLE_REQUIRED` de
+`tests/unit/rls-policies.test.ts`, chaque policy avec son service ; refus et passages joués par
+`tests/integration/role-dans-les-policies.test.ts`, `tests/integration/role-dans-les-ajouts-et-modifications.test.ts` et
+`tests/integration/role-dans-les-noeuds.test.ts`). Quand une seule policy couvre des gestes de niveaux différents, ou
+que la règle dépend de l'ancienne valeur, un déclencheur sous `authenticated` et `platform_server` juge le geste sur
+l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste). Une fonction `security definer` qui écrit à la place
 de la personne (invitation acceptée, entrée ouverte, première organisation) ne passe pas par la policy. Un refus précède la
 requête et porte le message « à qui demander » ; « aucune ligne rendue » n'est jamais lu
 comme un refus. **Vérifiable :** un test par service, avec une base qui rend des lignes interdites, prouve que le

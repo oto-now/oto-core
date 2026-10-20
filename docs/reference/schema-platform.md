@@ -101,7 +101,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 
 | Fonction | Rôle |
 |----------|------|
-| `member_orgs()`, `is_staff()`, `is_org_admin(org)` | Organisations de l'appelant (accès plateforme en cours compris), base des policies d'isolation ; équipe plateforme, pour la portée plateforme ; admin, pour les fonctions qui le décident (`platform_access_directory`, niveau de la recherche) et les policies d'administration (`20261019150000`, `20261020190000`) |
+| `member_orgs()`, `is_staff()`, `is_org_admin(org)` | Organisations de l'appelant (accès plateforme en cours compris), base des policies d'isolation ; équipe plateforme, pour la portée plateforme ; admin, pour les fonctions qui le décident (`platform_access_directory`, niveau de la recherche) et les policies d'administration (`20261019150000`, `20261020190000`, `20261021090000`) |
 | `leads_team(team)` | L'appelant est l'un des responsables de l'équipe (`team_members.role`) : `team_members_delete_admin` (`20261019150000`), `team_members_insert_admin`, `invitations_insert_admin`, `accounts_insert_admin` (`20261020190000`) ; `security definer`, une sous-requête sur `team_members` depuis sa propre policy bouclant (`42P17`) |
 | `identity_for_caller()` | Traduit l'appelant vérifié (claims `iss`, `ext_sub`, `issuer_kind`, `email` vérifié) en identifiant interne : sujet connu, sinon `sub` de Supabase Auth, sinon la ligne `platform_staff` la plus ancienne de l'email vérifié, sinon un identifiant neuf sur invitation ouverte, sinon null ; un identifiant déjà lié chez l'émetteur à un autre sujet n'est pas relié. Seule écriture d'`identities` ; appelée avant que `sub` soit posé |
 | `org_by_host(host)` | Organisation d'une adresse : id, slug, nom, préfixe, marque, domaines de travail (`anon` et `authenticated`) |
@@ -116,7 +116,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `org_usage(org)` | Compteurs d'une organisation lus sans session (ADR-022 § 10) : membres et invitations en attente, rien d'autre ; aucune ligne pour une organisation inconnue (`anon`) |
 | `is_context_path(org, path)` | Seule définition d'un chemin de Contexte : `contexte`, `<équipe>/contexte`, `private/<handle>/contexte` |
 | `node_owner(node)` | Propriétaire effectif d'un nœud : le plus proche ancêtre, lui compris, qui en porte un |
-| `level_rank(level)`, `node_level_of(user, …)`, `node_level_for(…)` | Rang d'un niveau ; `node_level_of` porte le seul corps SQL du niveau de lecture d'un nœud pour une personne (règles de personne, d'équipe et d'organisation, propriétaire, espaces personnels ; ADR-012 § 3, ADR-014), appelable par les fonctions du paquet seulement ; `node_level_for` l'applique à l'appelant pour la recherche, égal au calcul du service (test de parité) |
+| `level_rank(level)`, `node_level_of(user, …)`, `node_level_for(…)` | Rang d'un niveau ; `node_level_of` porte le seul corps SQL du niveau de lecture d'un nœud pour une personne (règles de personne, d'équipe et d'organisation, propriétaire, espaces personnels ; ADR-012 § 3, ADR-014), appelable par les fonctions du paquet seulement ; `node_level_for` l'applique à l'appelant pour la recherche, les policies qui reprennent le niveau d'un service (`20261020190000`, `20261021090000`) et `nodes_gesture_guard`, égal au calcul du service (test de parité) |
 | `member_directory(org)`, `staff_directory()`, `platform_access_directory(org)` | Annuaire des membres (seule lecture d'annuaire du paquet, par pages) ; annuaire de l'équipe plateforme ; qui a ou a eu un accès plateforme à l'organisation, et qui l'a accordé ou révoqué. Lisent les copies de `members`, `platform_staff` et `platform_grants` |
 | `open_draft(node)` | Ouvre le brouillon d'un nœud : ligne `node_drafts`, copie des blocs publiés sous les mêmes `id` ; rend la révision de base |
 | `publish_node(node, base_revision, draft_stamp, links)` | Publication atomique sous verrou consultatif : garde de révision et de tampon (`PT409` → `stale_revision`), blocs `draft` → `published`, révision + 1, instantané dans `node_versions`, liens écrits, brouillon effacé ; ne lit aucun niveau (le service décide, dès l'écriture) |
@@ -153,6 +153,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `platform_grants_identity_copy`, `platform_grants_guard` | Copie de l'email et du nom sur l'accès ; révocation datée par la base |
 | `invitations_guard` | Une seule invitation en attente par organisation et par email (verrou par adresse) ; « déjà membre » jugé par `members.email` ; équipe de l'organisation |
 | `nodes_guard` | Invariants de structure de l'arbre : chemin contrôlé, cycle refusé, un nœud Contexte ne bouge pas, genre `context` ⇔ chemin de Contexte, le dossier `private` ne bouge pas, `private/<handle>` n'a pour propriétaire que la personne de ce handle, propriétaire dans l'organisation ; verrou de l'arbre de l'organisation avant de lire le parent |
+| `nodes_guard_gesture`, `nodes_guard_trash` (`nodes_gesture_guard`) | Le geste d'une mise à jour d'un nœud sous `authenticated` et `platform_server` (`20261021090000`) : date de corbeille `null`, son ancienne valeur ou `now()` ; avant chaque ligne, déplacement et propriétaire à la gestion (`node_level_for` ≥ 3 sur la ligne d'avant), chemin sous le même parent et contenu à l'écriture (≥ 2), parent d'arrivée à l'écriture ; en fin d'instruction, corbeille et restauration à la gestion du nœud dont le parent reste en place, lecture de ce qui part dessous ; `position` seule libre ; refus `42501` |
 | `nodes_path_cascade`, `nodes_aliases_on_insert`, `nodes_aliases_on_move` | Réécrit dans la même transaction le chemin des descendants d'un nœud déplacé ou renommé ; inscrit un alias pour chaque chemin qui change ; un nœud nouveau sur l'ancien chemin d'un autre est refusé (`23505`), le nœud à qui l'alias appartient le reprend |
 | `teams_lead_sync`, `team_members_guard` | `teams.lead_user_id` est la source, `team_members.role` en est dérivé ; le responsable ne quitte pas son équipe |
 | `teams_tree_sync`, `members_tree_sync`, `teams_tree_cleanup` | Équipe créée : son dossier et son Contexte ; membre créé : `private/<handle>` (« Privé ») et son Contexte ; équipe supprimée dont le dossier ne contient que son Contexte : les deux nœuds partent avec elle |
@@ -181,8 +182,12 @@ accorder un accès plateforme (`is_staff()` et `is_org_admin`) ; traiter un reto
 visibles ») ; révoquer un accès plateforme
 (`is_org_admin` ou `is_staff()`) ; créer un compte d'organisation (`is_org_admin`) ou d'équipe (`is_org_admin` ou
 `leads_team`) ; ajouter, modifier ou supprimer une règle d'un nœud (`node_level_for` ≥ 3), au niveau `manage` par
-`is_org_admin`, la règle d'un compte restant à l'appartenance (`accountLevelOf`). Un membre simple y touche zéro ligne
-(`using`) ou y est refusé (`42501`, `with check`). Les écritures sans porte de l'API passent
+`is_org_admin`, la règle d'un compte restant à l'appartenance (`accountLevelOf`). Depuis `20261021090000`, les nœuds :
+écrire l'en-tête d'un brouillon (`node_level_for` ≥ 2), créer ou changer un lien public (≥ 3), le désactiver (≥ 3 ou
+`is_org_admin`), supprimer un nœud (à la corbeille depuis plus de 30 jours ; `is_org_admin` sur un nœud à la corbeille ;
+son auteur, jamais publié), envoyer un courriel simulé (au nom de l'appelant, jamais remis en brouillon), exclure un
+membre de l'entrée sans invitation (`is_org_admin`) ; la mise à jour d'un nœud reste à l'appartenance et son geste est
+jugé par `nodes_gesture_guard`. Un membre simple y touche zéro ligne (`using`) ou y est refusé (`42501`, `with check`). Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,

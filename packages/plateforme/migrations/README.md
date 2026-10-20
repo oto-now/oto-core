@@ -286,6 +286,18 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   compte). Les fonctions `security definer` (`accept_invitations`, `join_org`, `signup_org`, `create_org`,
   `seat_org_admin`, `claim_org_admin`, `teams_lead_sync`) n'y passent pas. Aucune table, colonne ni fonction ; rien à
   relancer avant.
+- `20261021090000_platform_role_dans_les_noeuds.sql` (suite de `20261020190000`) : les écritures des nœuds exigent le
+  niveau que leur service exige. Mise à jour de `nodes` : la fonction de déclencheur `nodes_gesture_guard` (déclencheurs
+  `nodes_guard_gesture`, avant chaque ligne, et `nodes_guard_trash`, en fin d'instruction), sous `authenticated` et
+  `platform_server` seulement : date de corbeille `null`, son ancienne valeur ou `now()` ; déplacement et propriétaire,
+  gestion (`node_level_for` ≥ 3 sur la ligne d'avant) ; chemin sous le même parent et contenu, écriture (≥ 2) ; parent
+  d'arrivée, écriture ; corbeille et restauration, gestion du nœud dont le parent reste en place, lecture de ce qui part
+  dessous ; `position` seule, rien ; refus `42501`. Policies recréées sous leur nom : `nodes_delete_manager` (plus de 30
+  jours à la corbeille, `is_org_admin` sur un nœud à la corbeille, l'auteur d'une page jamais publiée),
+  `node_drafts_update_writer` (≥ 2), `node_shares_insert_member` (≥ 3), `node_shares_update_member` (un lien actif, ≥ 3
+  ou `is_org_admin` pour le désactiver), `sim_outbox_update_writer` (un brouillon envoyé au nom de l'appelant),
+  `member_exclusions_insert_member` (`is_org_admin`). Une fonction et deux déclencheurs, aucune table ni colonne ; rien à
+  relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -541,9 +553,10 @@ garde ; la ligne de base V1 les porte toutes.
   d'une équipe (`team_members.role` depuis `20260929090000`), et n'appelle `is_staff()` que pour une portée plateforme
   (`platform_staff`, lecture de `platform_grants` et d'`admin_journal`, écriture du journal admin) ;
   elle garde l'attribution à `auth.uid()`, l'état d'une ligne, la cohérence d'organisation entre
-  colonnes et la structure de l'arbre. Depuis `20261019150000` (suppressions) et `20261020190000` (ajouts et
-  modifications), sauf les policies d'administration qui reprennent le rôle exigé par leur service (liste fermée
-  `ROLE_REQUIRED`). Vérifié sans base par `tests/unit/rls-policies.test.ts`.
+  colonnes et la structure de l'arbre. Depuis `20261019150000` (suppressions), `20261020190000` (ajouts et
+  modifications) et `20261021090000` (nœuds), sauf les policies qui reprennent le rôle ou le niveau exigé par leur
+  service (liste fermée `ROLE_REQUIRED`) ; la mise à jour d'un nœud, dont une policy ne distingue pas les gestes, est
+  jugée par le déclencheur `nodes_gesture_guard`. Vérifié sans base par `tests/unit/rls-policies.test.ts`.
 - **Une sous-requête de policy ne revient jamais sur une table dont Postgres développe déjà les
   policies**, directement ou par une autre table (depuis `20260924150100`) : sous l'isolation, les
   policies de lecture portent une sous-requête (`(select platform.member_orgs())`), et Postgres

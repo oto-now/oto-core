@@ -5,7 +5,7 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000` et `20261020190000`). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000` et `20261021090000`). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers.
 import fs from "fs"
@@ -106,7 +106,8 @@ ADDED.push("files_select_member", "files_insert_member", "files_update_member", 
 ADDED.push("upload_tickets_select_member", "upload_tickets_insert_own", "upload_tickets_delete_expired")
 // Les vues des pages (1.4.13) : lues dans l'organisation, écrites par la personne pour elle-même, ménage au-delà de 90 jours.
 ADDED.push("node_views_select_member", "node_views_insert_own", "node_views_update_own", "node_views_delete_expired")
-// Les exclusions de l'entrée sans invitation : lues et inscrites dans son organisation, jamais modifiées ni retirées par une session.
+// Les exclusions de l'entrée sans invitation : lues dans son organisation, inscrites par l'administrateur (`ROLE_REQUIRED`), jamais
+// modifiées ni retirées par une session.
 ADDED.push("member_exclusions_select_member", "member_exclusions_insert_member")
 // La ligne `ctx` de l'appelant avancée par l'auteur d'un Contexte (E11-S19, lot a) : isolation par organisation, attribution à l'appelant.
 ADDED.push("ctx_update_own")
@@ -134,8 +135,8 @@ const PLATFORM_SCOPE = [
 
 /**
  * Les policies qui exigent le rôle que leur service exige (migrations `20261019150000` pour les suppressions,
- * `20261020190000` pour les ajouts et modifications, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un
- * membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
+ * `20261020190000` pour les ajouts et modifications, `20261021090000` pour les nœuds, décisions d'Alexis du 19/10 et du
+ * 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
  * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
  */
 const ROLE_REQUIRED: Record<string, string> = {
@@ -162,6 +163,12 @@ const ROLE_REQUIRED: Record<string, string> = {
   connector_activations_insert_admin: "activateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
   connector_activations_update_admin: "activateConnector, deactivateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
   feedback_update_admin: "setFeedbackState (server/feedback.ts): handlesFeedback, isOrgAdmin, and isStaff or the feedback_visible flag",
+  nodes_delete_manager:
+    "purgeTrash (server/nodes/trash.ts): any member, trashed for more than 30 days; eraseTrashedNodes for deleteTeam (server/team-trash.ts): requireAdmin, isOrgAdmin on a trashed node; undoCreation (server/uploads-write.ts): its author, never published",
+  node_drafts_update_writer: "writeNode, saveDraft (server/nodes/write.ts, store.ts): requireNodeLevel write, node_level_for >= 2",
+  node_shares_insert_member: "shareNode (server/shares.ts): managedNode, the share level of the node (node_level_for >= 3)",
+  node_shares_update_member: "shareNode, revokeShare (server/shares.ts): the share level of the node (node_level_for >= 3), or isOrgAdmin to revoke",
+  member_exclusions_insert_member: "removeMember (server/members.ts): requireAdmin, isOrgAdmin",
 }
 
 /** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */

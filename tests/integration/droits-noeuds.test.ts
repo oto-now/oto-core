@@ -338,8 +338,16 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect(await as("claire").tx((sql) => sql`delete from platform.nodes where id = ${claireContexte} returning id`)).toEqual([])
     })
 
+    // Depuis 20261021090000, une session ne supprime qu'un nœud à la corbeille (l'administratrice, `deleteTeam`), dormant
+    // depuis plus de 30 jours (la purge) ou jamais publié par son auteur : la clé du parent se prouve sur un dossier mis
+    // à la corbeille sans ses sous-pages.
     it("should refuse deleting a node that has children (23503)", async () => {
-      expect(await codeOf(as("ada").tx((sql) => sql`delete from platform.nodes where id = ${o.nodes.devis} returning id`))).toBe("23503")
+      await fx.admin`update platform.nodes set deleted_at = now() where id = ${o.nodes.devis}`
+      try {
+        expect(await codeOf(as("ada").tx((sql) => sql`delete from platform.nodes where id = ${o.nodes.devis} returning id`))).toBe("23503")
+      } finally {
+        await fx.admin`update platform.nodes set deleted_at = null where id = ${o.nodes.devis}`
+      }
     })
 
     // N33 : `lpath` (`text2ltree`) se calcule avant la contrainte de `path` ; la garde contrôle le
