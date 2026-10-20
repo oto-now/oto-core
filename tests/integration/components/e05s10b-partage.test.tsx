@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NodeRulesView, TreeNode } from "@otomata_tech/oto_platform/schemas"
 import { ContexteDeLHote, ContexteDeRafraichissement, EcranDeNoeud } from "@otomata_tech/oto_platform/ui"
 import { choisirDansLaListe, libellesDesChoix } from "../../helpers/liste-de-choix"
+import { envoiDuNiveau } from "../../../packages/plateforme/ui/noeud/niveau-d-un-membre"
 import { vueDuNoeud } from "../../helpers/noeud"
 
 // « Partager » (E05-S10, partie b, AC-b5), ouvert depuis l'en-tête de l'écran d'un nœud : le champ qui ajoute
@@ -94,19 +95,27 @@ const LECTURE_DU_LIEN_PUBLIC = "/api/platform/shares?"
 
 const estLaLectureDuLien = (url: unknown) => String(url).startsWith(LECTURE_DU_LIEN_PUBLIC)
 
+/** La lecture des membres de l'équipe (1.4.12), faite à l'ouverture du panneau : hors des gestes comptés. */
+const LECTURE_DES_MEMBRES = "/api/platform/rules?"
+const membresServis: { people: NonNullable<NodeRulesView["people"]> } = { people: [] }
+const estUneLecture = (url: unknown) => estLaLectureDuLien(url) || String(url).startsWith(LECTURE_DES_MEMBRES)
+
 /** L'API simulée : la lecture du lien public rend « aucun lien », tout autre appel la réponse du cas. */
 function repondre(reponseDuGeste: () => Response) {
-  fetchMock.mockImplementation(async (url) => (estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : reponseDuGeste()))
+  fetchMock.mockImplementation(async (url) =>
+    estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : String(url).startsWith(LECTURE_DES_MEMBRES) ? reponse(200, { data: { ...REGLES, people: membresServis.people } }) : reponseDuGeste(),
+  )
 }
 
 const envoye = (rang = 0) => {
-  const [url, init] = fetchMock.mock.calls.filter(([adresse]) => !estLaLectureDuLien(adresse))[rang]
+  const [url, init] = fetchMock.mock.calls.filter(([adresse]) => !estUneLecture(adresse))[rang]
   return { url, methode: init?.method, corps: init?.body ? JSON.parse(String(init.body)) : undefined }
 }
 
 beforeEach(() => {
   fetchMock.mockReset()
   rafraichir.mockReset()
+  membresServis.people = []
   vi.stubGlobal("fetch", fetchMock)
   repondre(() => reponse(200, { data: {} }))
 })
@@ -124,7 +133,8 @@ describe("Partager, who has access (AC-b5)", () => {
     expect(liste.getAllByRole("listitem")[1]).toHaveTextContent("Léa Martin (vous)")
     const menu = liste.getByRole("combobox", { name: "Accès de Équipe Ventes" })
     expect(menu).toHaveValue("write")
-    expect(libellesDesChoix(menu)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Retirer"])
+    // 1.4.12 : « Aucun accès » rend le contenu et ce qu'il range invisibles à la personne ou à l'équipe.
+    expect(libellesDesChoix(menu)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
     expect(liste.getByRole("combobox", { name: "Accès de Marc Dupont" })).toHaveValue("manage")
 
     expect(panneau().getByText("Accès général")).toBeInTheDocument()
@@ -141,8 +151,8 @@ describe("Partager, who has access (AC-b5)", () => {
   it("should not offer « Accès complet » to a manager who is not an administrator, except as the current level of a row", () => {
     const { panneau } = ouvrir({ gestionAccordable: false })
     const options = (nom: string) => libellesDesChoix(panneau().getByRole("combobox", { name: nom }))
-    expect(options("Accès de Équipe Ventes")).toEqual(["Peut modifier", "Peut lire", "Retirer"])
-    expect(options("Accès de Marc Dupont")).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Retirer"])
+    expect(options("Accès de Équipe Ventes")).toEqual(["Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
+    expect(options("Accès de Marc Dupont")).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
   })
 
   it("should show the levels as text and change nothing for someone without full access", () => {
@@ -190,6 +200,39 @@ describe("Partager, adding someone (AC-b5)", () => {
     await waitFor(() => expect(envoye(1).corps).toEqual({ path: "ventes/modele_relance", subject: { kind: "team", id: CONSEIL }, level: "read" }))
     fireEvent.change(champ, { target: { value: "zzz" } })
     expect(panneau().getByText("Aucune personne ni équipe de ce nom.")).toBeInTheDocument()
+  })
+})
+
+// 1.4.12 : les membres de l'équipe propriétaire, leur niveau hérité, et la règle de cette page qui le surcharge.
+describe("Partager, members of the owner team", () => {
+  const PAUL = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c05"
+  const REGLE_PAUL = "5e6f7a8b-9c0d-4e1f-8a2b-000000000015"
+  const people: NonNullable<NodeRulesView["people"]> = [
+    { userId: NORA, name: "Nora Écoffier", lead: true, level: "manage", inherited: "manage", ruleId: null },
+    { userId: PAUL, name: "Paul Henry", lead: false, level: "write", inherited: "write", ruleId: null },
+    { userId: LEA, name: "Léa Martin", lead: false, level: "read", inherited: "write", ruleId: REGLE_LEA },
+  ]
+
+  it("should list the members without access of their own with their inherited level, and restrict one on this page only", async () => {
+    membresServis.people = people
+    const { panneau } = ouvrir()
+    // Lus à l'ouverture du panneau, par `GET rules?path=` : l'affichage de la page ne les calcule pas.
+    const membres = within(await panneau().findByRole("list", { name: "Membres de l'équipe Ventes" }))
+    // Léa a une règle sur la page : elle est dans « Ont accès », où « Retirer » rend son niveau hérité.
+    expect(membres.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Nora Écoffier", "Accès de Paul Henry"])
+    expect(membres.getAllByRole("listitem")[0]).toHaveTextContent("Nora Écoffier · responsable")
+    const paul = membres.getByRole("combobox", { name: "Accès de Paul Henry" })
+    expect(paul).toHaveValue("write")
+    expect(libellesDesChoix(paul)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    choisirDansLaListe(paul, "Peut lire")
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envoye()).toEqual({ url: "/api/platform/rules", methode: "POST", corps: { path: "ventes/modele_relance", subject: { kind: "user", id: PAUL }, level: "read" } })
+  })
+
+  it("should remove the member's own rule when the level chosen is the one they inherit, and post it otherwise", () => {
+    const restreint = { ...people[1], level: "read" as const, ruleId: REGLE_PAUL }
+    expect(envoiDuNiveau("ventes", restreint, "write")).toEqual({ methode: "DELETE", ressource: `rules/${REGLE_PAUL}` })
+    expect(envoiDuNiveau("ventes", restreint, "none")).toEqual({ methode: "POST", ressource: "rules", corps: { path: "ventes", subject: { kind: "user", id: PAUL }, level: "none" } })
   })
 })
 

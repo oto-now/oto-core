@@ -130,7 +130,8 @@ function Document({ vue, adresse, routeDesFichiers }: { vue: PublicNodeView; adr
   if (blocs.length === 0 && vue.node.kind === "table") return null
   return (
     <Island aria-label={vue.node.title}>
-      <Reader>
+      {/* La pleine largeur de l'îlot, comme dans l'éditeur (`data-reading="blocs"`), sans la place de la gouttière, absente ici ; la colonne centrée de la lecture (`content.css`) y laissait une grande marge à gauche (1.4.12). */}
+      <Reader data-reading="blocs">
         {blocs.length === 0 ? (
           <EmptyState title={PAGE_VIDE} />
         ) : (

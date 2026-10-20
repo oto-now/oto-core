@@ -1,7 +1,7 @@
 # Partage public
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -41,6 +41,7 @@ demande aussi un aperçu (Open Graph) qui ne trahisse rien d'une page privée.
 ### Qui lit
 
 - Une page publique de l'hôte (`/p/<jeton>`), à l'adresse de l'organisation, hors session, en lecture seule, au thème de l'organisation. Elle lit par une seule fonction de la base, `public_node_by_token(org, jeton, chemin)`, `security definer`, exécutable par `anon` seul, bornée au jeton et à l'organisation de l'adresse. Un jeton inconnu, révoqué ou d'une autre organisation, un chemin hors du lien, rendent 404, sans dire lequel (ADR-013 § 4).
+- Le document s'y lit sur toute la largeur de son îlot, comme dans l'éditeur (`data-reading="blocs"`), sans la colonne centrée de la lecture ni la place de la gouttière de l'éditeur, absente ici (1.4.12).
 - **Jamais indexée** : `noindex, nofollow` (en-tête `X-Robots-Tag` et balise), page exclue de tout sitemap (ADR-013 § 5).
 - **Portabilité** : la page, le service et la fonction sont dans le paquet (faces `ui/`, `api/`, `server/`, `migrations/`), sans Supabase ; l'hôte monte une route de plus, et une seconde pour l'image de partage (ADR-013 § 6, HN-E11S21-9).
 
@@ -85,3 +86,4 @@ Aucune à ce jour.
 - 2026-09-27 : partage public d'un contenu par lien à jeton, page `/p/<jeton>`, lecture par `public_node_by_token` ; la page d'un tableau montre ses lignes publiées, 500 au plus — décidé par JB (source : ADR-013, fiche D103).
 - 2026-09-30 : image de partage d'une adresse aux couleurs de l'organisation (1.1.5), entrée `/share` (1.1.6), `optimizePackageImports` chez l'hôte (1.1.7) — décidé par le pilote (source : story E11-S21, M104).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-013, la fiche D103 et les choix de la story E11-S21 — décidé par Alexis, accord de JB.
+- 2026-10-20 : la page publique lit son document en pleine largeur, sans marge à gauche — demandé par JB (source : session du 20/10/2026).

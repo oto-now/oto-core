@@ -71,6 +71,8 @@ describe("/p/<jeton> public page (AC-d2, AC-d3, AC-d4)", () => {
     // Lecture seule : aucun champ, aucun bouton d'écriture ; un bouton télécharge (E11-S05, AC-d2), le chevron d'un titre replie sa section.
     expect(screen.queryByRole("textbox")).toBeNull()
     expect(screen.getAllByRole("button").map((bouton) => bouton.textContent || bouton.getAttribute("aria-label"))).toEqual(["Télécharger en .md", "Replier la section — Prix"])
+    // 1.4.12 : le document prend la pleine largeur de son îlot, comme dans l'éditeur, sans la colonne centrée de la lecture.
+    expect(screen.getByRole("heading", { level: 2, name: "Prix" }).closest(".oto-island-body")).toHaveAttribute("data-reading", "blocs")
   })
 
   it("should open the sub-contents by the same token, and write a link outside the share as plain text", async () => {

@@ -146,6 +146,28 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect((await listNodeRules(as("lea").db, as("lea").identity, page.path)).viewerLevel).toBe(2)
       })
 
+      // 1.4.12 : le niveau de chaque membre de l'équipe ; une règle sur une page surcharge celle d'au-dessus.
+      it("should give each member of the owner team their level, what they would have without their own rule, and a page rule overriding the one above", async () => {
+        const dessus = await pageDeVentes()
+        const page = { path: `${dessus.path}/detail`, id: "" }
+        page.id = await fx.createNode(o.org.id, { parentId: dessus.id, path: page.path, title: "Détail" })
+        await fx.addRule({ orgId: o.org.id, nodeId: dessus.id, userId: o.people.lea.id, level: "read" })
+        await fx.addRule({ orgId: o.org.id, nodeId: page.id, userId: o.people.lea.id, level: "none" })
+
+        const lea = (vue: Awaited<ReturnType<typeof listNodeRules>>) => vue.people?.find((membre) => membre.name === "Léa Roux")
+        const enHaut = await listNodeRules(as("claire").db, as("claire").identity, dessus.path, { people: true })
+        expect(lea(enHaut)).toMatchObject({ lead: false, level: "read", inherited: "write", ruleId: expect.any(String) })
+        expect(enHaut.people?.[0]).toMatchObject({ name: "Claire Morel", lead: true, level: "manage", inherited: "manage", ruleId: null })
+        const enBas = await listNodeRules(as("claire").db, as("claire").identity, page.path, { people: true })
+        expect(lea(enBas)).toMatchObject({ level: "none", inherited: "read" })
+        // Hors d'une équipe, aucun membre.
+        const annonces = `annonces_${hex(3)}`
+        await fx.createNode(o.org.id, { parentId: o.nodes.root, path: annonces, title: "Annonces" })
+        expect((await listNodeRules(as("lea").db, as("lea").identity, annonces, { people: true })).people).toEqual([])
+        // Sans la demande, l'affichage d'une page ne paie pas ce calcul.
+        expect((await listNodeRules(as("claire").db, as("claire").identity, page.path)).people).toEqual([])
+      })
+
       it("should describe an organisation node and a personal node", async () => {
         const annonces = `annonces_${hex(3)}`
         await fx.createNode(o.org.id, { parentId: o.nodes.root, path: annonces, title: "Annonces" })

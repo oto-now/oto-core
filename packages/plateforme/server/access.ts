@@ -319,3 +319,26 @@ export async function moveLevels(db: PlatformDb, identity: Identity, move: { nod
     owners: { before: effectiveOwner(current), after: effectiveOwner(moved) },
   }
 }
+
+/** Le niveau d'un membre sur un nœud, et celui qu'il aurait sans la règle qui le nomme sur ce nœud même. */
+export type MemberLevel = { level: AccessLevel; inherited: AccessLevel }
+
+/**
+ * Les niveaux des membres d'une équipe sur un nœud (1.4.12, droits par personne) : chacun tel que le calcul le décide
+ * (`nodeLevelOf`, sur les faits de chaque membre, comme `moveLevels`), et ce qu'il aurait sans sa règle nominative sur ce
+ * nœud (`inherited`), ce que « Rétablir » rend. Vide quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.
+ */
+export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeId: string, teamId: string): Promise<Map<string, MemberLevel>> {
+  const [chains, callers] = await Promise.all([readNodeChains(db, identity.org.id, [nodeId]), readMemberCallers(db, identity.org.id)])
+  const read = chains.get(nodeId)
+  if (!read) return new Map()
+  const chain = await completedChain(db, nodeId, read)
+  return new Map(
+    callers
+      .filter((caller) => caller.teamIds.has(teamId))
+      .map((caller) => {
+        const without: NodeChain = { ...chain, rules: chain.rules.filter((rule) => rule.targetId !== nodeId || rule.userId !== caller.userId) }
+        return [caller.userId, { level: nodeLevelOf(caller, chain), inherited: nodeLevelOf(caller, without) }]
+      }),
+  )
+}
