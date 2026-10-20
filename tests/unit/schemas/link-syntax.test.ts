@@ -33,6 +33,15 @@ describe("link syntax (M15)", () => {
     }
   })
 
+  it("should read an escaped bar as the label separator, the form a table cell needs, for the publication and the screen alike", () => {
+    const text = String.raw`[[ventes/devis\|Le devis]] et [[ventes/suivi#a1\|Suivi]]`
+    expect(linksIn(text).map(({ link }) => link)).toEqual([
+      { path: "ventes/devis", key: null, label: "Le devis" },
+      { path: "ventes/suivi", key: "a1", label: "Suivi" },
+    ])
+    expect(cheminsCitesDans(text)).toEqual(["ventes/devis", "ventes/suivi"])
+  })
+
   it("should not open a link on an escaped bracket, for the publication and the screen alike (E10-S04, AC-c2)", () => {
     const text = "\\[[ventes/devis]], \\\\[[ventes/suivi]] et \\\\\\[[ventes/x]]"
     expect(linksIn(text).map(({ link }) => link?.path)).toEqual(["ventes/suivi"])

@@ -90,6 +90,16 @@ describe("parseMarkdown — page markdown forms read back (E10-S04)", () => {
     expect(parsed("- a\n    - b\n  - c\n\n  - d")).toEqual([{ type: "list", text: null, data: { items: [{ text: "a", children: { items: ["b", "c", "d"] } }] } }])
   })
 
+  it("should keep a titled link whole in a table cell, its bar written bare or escaped", () => {
+    const table = String.raw`| Page | Note |
+| --- | --- |
+| [[ventes/devis|Le devis]] | [[ventes/suivi\|Suivi]] |
+| [[a | b |`
+    expect(parsed(table)).toEqual([
+      { type: "simple_table", text: null, data: { columns: ["Page", "Note"], rows: [[String.raw`[[ventes/devis\|Le devis]]`, String.raw`[[ventes/suivi\|Suivi]]`], ["[[a", "b"]] } },
+    ])
+  })
+
   it("should settle each ambiguity as HN-E10S04-5 says", () => {
     expect(parsed("Texte\n---")).toEqual([{ type: "paragraph", text: "Texte\n---", data: {} }])
     expect(parsed("Texte\n| a |\n| --- |")).toEqual([{ type: "paragraph", text: "Texte\n| a |\n| --- |", data: {} }])

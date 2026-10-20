@@ -1,7 +1,7 @@
 # Éditeur de blocs
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-15
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -70,6 +70,7 @@ Le contenu est fait de nœuds et de blocs ([pages et blocs](pages-et-blocs.md), 
 - Menu dépliant (bloc `toggle`, « Repli » jusqu'au 2026-10-14, qui remplace HN-E10S06-22) : le dessin de Notion, à la lecture comme dans l'éditeur. Le chevron est à gauche du résumé, sans fond, ni filet, ni teinte primary, et le corps est décalé de sa largeur (`.oto-depliant`). Il est replié à l'ouverture de la page, sauf si ce navigateur l'a gardé ouvert, et ouvert quand on vient de l'insérer. Son chevron seul le replie et le déplie ; l'état n'est jamais envoyé. Au repos, une clôture de code du corps se lit en texte, comme dans un Texte au repos.
 - Plis des titres (révisé le 2026-10-15, qui retire la case « Repliable ») : chaque titre porte un chevron avant son champ, section ouverte par défaut ; il replie la section sans rien envoyer, et ce navigateur s'en souvient. Les rangées cachées restent montées (`hidden`), ↑ et ↓ les sautent, et un focus qui doit aller dans une section repliée (déplacement, « Annuler », fusion) ouvre d'abord ses titres (`plis-de-l-editeur.ts`). Un pli vide (titre sans section, menu dépliant sans corps) garde son chevron, à demi-opacité (2026-10-15).
 - Déplacer un titre (2026-10-15) : glissé, ⌥↑ / ⌥↓, « Monter » ou « Descendre », il emmène sa section, sous-titres compris, en un geste de groupe (une écriture, un « Annuler ») ; la section se lit au début d'un glissé et ne change plus en route (`avecLeursSections`, `groupe.ts`). Le glissé d'une poignée pose le bloc ou le groupe d'après le pointeur, plusieurs rangs d'un coup, sur les rangées montrées et dans leur ordre sans lui : une section repliée se passe d'un tenant, et la cible n'oscille pas (`glisser.ts`).
+- Cellules d'un tableau simple et corps d'un menu dépliant (1.4.11) : une cellule est un champ en place qui va à la ligne, sa largeur suivant son texte de 8 caractères à `--table-cell-max`, comme à la lecture ; une cellule tient sur une ligne de markdown, un saut de ligne collé y devient un blanc ; au repos, une cellule se lit comme en lecture, liens par leur titre (`RenduAuRepos`, partagé avec le repli). « @ » cite un contenu dans une cellule (la liste sous le tableau, une seule pour tout le tableau) et dans le corps d'un menu dépliant, comme dans un Texte (`useCitation`, `citer.tsx`) ; le lien part `[[chemin\|titre]]` dans une cellule, sa barre échappée, que la syntaxe des liens lit comme `|`. Le corps d'un menu dépliant reste un texte, pas une suite de blocs.
 - Choix du « + » et de « / » (2026-10-15) : chaque entrée porte son glyphe devant son libellé, un titre son niveau (H1, H2, H3), comme Notion (`GLYPHES_DES_CHOIX`, `choix-de-bloc.tsx`).
 - Lien d'un Texte au repos (corrigé le 2026-10-15) : son rendu est positionné au-dessus du champ, que le repos rend absolu ; sans quoi le clic sur un lien tombait dans le champ et ouvrait le panneau « Lien » au lieu de suivre le lien (`editeur.css`, gardé par `tests/unit/css-debordements.test.ts`).
 
@@ -129,3 +130,4 @@ Aucune à ce jour.
 - 2026-10-14 : pendant la frappe, un lien à libellé se montre par son titre entre ses crochets, le chemin gardé de côté ; revient sur la réponse du 30/09 — décidé par JB (source : session du 14/10/2026, story `liens-en-edition`).
 - 2026-10-14 : trois titres et préfixes à la Notion, titre repliable, menu dépliant au dessin de Notion, plis repliés par défaut et gardés dans le navigateur — décidé par JB (source : session de conception du 2026-10-14, story `titres-et-replis`).
 - 2026-10-15 : chaque titre se replie, ouvert par défaut ; glyphes au « + » et à « / » — décidé par JB (source : session du 2026-10-15).
+- 2026-10-20 : cellules d'un tableau simple en champs qui vont à la ligne, rendus au repos ; « @ » dans une cellule et dans le corps d'un menu dépliant ; le corps reste un texte, des blocs enfants écartés pour l'instant — décidé par JB (source : session du 20/10/2026).

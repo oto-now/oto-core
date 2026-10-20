@@ -141,13 +141,14 @@ test.describe("écrans d'un contenu (E11-S05)", () => {
         const aRevoir = await clesARevoir()
         const affichees = (await grille.locator("tbody td[data-primary]").allInnerTexts()).map((texte) => texte.split("\n")[0].trim())
         await expect(grille.locator('tbody tr[data-state="review"]')).toHaveCount(affichees.filter((cle) => aRevoir.has(cle)).length)
-        const summary = grille.locator("tbody .oto-cell-detail > summary").first()
-        if (largeur === 1_280 && (await summary.count()) > 0) {
-          await summary.locator("xpath=ancestor::td[1]").hover()
-          await attendre(summary.locator(".oto-cell-chevron")).toHaveCSS("opacity", "1")
+        // L'icône de provenance (le chevron d'un repli jusqu'à la 1.4.11) paraît au survol, puis ouvre son panneau.
+        const info = grille.locator("tbody .oto-cell-info > .oto-cell-info-btn").first()
+        if (largeur === 1_280 && (await info.count()) > 0) {
+          await info.locator("xpath=ancestor::td[1]").hover()
+          await attendre(info).toHaveCSS("opacity", "1")
           await capturer(page, testInfo, `cellule-survolee-${nom}`)
-          await summary.click()
-          await expect(summary.locator("xpath=..")).toHaveAttribute("open", "")
+          await info.click()
+          await expect(info).toHaveAttribute("aria-expanded", "true")
           await capturer(page, testInfo, `cellule-ouverte-${nom}`)
         }
         await capturer(page, testInfo, `tableau-${nom}`)

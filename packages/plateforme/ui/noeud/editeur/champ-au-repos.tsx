@@ -9,6 +9,8 @@
 //
 // 1.1.4 : un diagramme non vide se lit au repos comme à l'écran de lecture (`DiagrammeAuRepos`).
 import { useRef, type ReactNode } from "react"
+import { EnLigne } from "../rendu-des-blocs"
+import type { LiensDesBlocs } from "./champ-de-bloc"
 
 /**
  * Le rang, dans le texte brut du champ au repos, du caractère sous le pointeur (le rendu posé dessus laisse passer le
@@ -114,5 +116,17 @@ export function DiagrammeAuRepos({ nom, decritPar, ouvrir, children }: Diagramme
     >
       {children}
     </div>
+  )
+}
+
+/**
+ * Le texte d'un champ en place au repos (le résumé et le corps d'un repli, une cellule de tableau), rendu sur lui comme
+ * en lecture (marques, liens), dans la même case (`oto-block-pile`) : ses classes lui donnent la géométrie du champ.
+ */
+export function RenduAuRepos({ texte, liens }: { texte: string; liens: LiensDesBlocs }) {
+  return (
+    <span className="oto-inline-field oto-block-rendu">
+      <EnLigne texte={texte} Lien="a" hrefDuChemin={(chemin) => `${liens.prefixe}${chemin}`} cibles={liens.cibles} lecture={liens.lecture} />
+    </span>
   )
 }

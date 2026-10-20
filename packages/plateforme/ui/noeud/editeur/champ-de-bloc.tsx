@@ -48,19 +48,16 @@
 // E11-S17 (lot a) : ⌘A une seconde fois, le texte déjà tout sélectionné ou le bloc vide, prend tous les blocs de la page
 // (AC-a2, `selection-de-blocs.ts`).
 import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type SyntheticEvent } from "react"
-import type { SearchMatch } from "../../../schemas/search"
 import type { Resultat } from "../../api/resultat"
-import { useRechercheDeContenus } from "../../api/use-recherche-de-contenus"
 import { aDesLiens, aDuBalisage, type CiblesDesLiens } from "../en-ligne"
 import { LIEN_DU_BLOC } from "../libelles"
 import { EnLigne } from "../rendu-des-blocs"
 import { tableauColle } from "./blocs-de-page"
 import { ChampAuRepos, DiagrammeAuRepos } from "./champ-au-repos"
 import { ListeDesChoix, useChoixParBarre } from "./choix-de-bloc"
-import { citationAuCurseur, idDOption, lienVers, ListeACiter, useOptionActive, type Citation } from "./citer"
+import { idDOption, ListeACiter, useCitation } from "./citer"
 import { ElementsDeListe } from "./elements-de-liste"
 import type { Genre } from "./envoi-de-fichier"
-import { useCheminDeLaFile } from "./file-d-operations"
 import { useGestes } from "./gestes"
 import { lignesEstimees, useHauteurDuTexte } from "./hauteur-du-champ"
 import { PanneauDuLien, useLienAuCurseur } from "./lien-du-bloc"
@@ -143,47 +140,6 @@ function toutEnBlocs(evenement: KeyboardEvent<HTMLTextAreaElement>): boolean {
   return touche && (champ.value.trim() === "" || (champ.selectionStart === 0 && champ.selectionEnd === champ.value.length))
 }
 
-/** « @ » (AC-a9) : la citation en cours du champ, sa recherche, l'option active, et le choix qui insère le lien. */
-function useCitation(cle: string, texte: string) {
-  const gestes = useGestes()
-  const [citation, setCitation] = useState<Citation | null>(null)
-  const recherche = useRechercheDeContenus()
-  const chemin = useCheminDeLaFile()
-  const trouves = "trouves" in recherche.resultat ? recherche.resultat.trouves : []
-  const option = useOptionActive(trouves)
-  const suivre = (valeur: string, curseur: number) => {
-    const lue = citationAuCurseur(valeur, curseur)
-    setCitation(lue)
-    option.remettre()
-    // Avant toute frappe après « @ », les contenus récents hors de la page qu'on édite (E11-S15, AC-b4) ; dès la
-    // première, la recherche.
-    if (lue?.requete === "") recherche.recents(chemin)
-    else recherche.chercher(lue?.requete ?? "")
-  }
-  const fermer = () => {
-    setCitation(null)
-    recherche.chercher("")
-  }
-  const choisir = (trouve: SearchMatch) => {
-    if (!citation) return
-    const lien = lienVers(trouve)
-    const fin = citation.debut + 1 + citation.requete.length
-    fermer()
-    gestes.citer(cle, `${texte.slice(0, citation.debut)}${lien}${texte.slice(fin)}`, citation.debut + lien.length)
-  }
-  /** Le clavier de la liste ouverte : `true` si la touche est prise. */
-  const toucher = (evenement: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!citation) return false
-    if (evenement.key === "Escape") {
-      evenement.preventDefault()
-      fermer()
-      return true
-    }
-    return option.toucher(evenement, ["Enter", "Tab"], choisir)
-  }
-  return { ouverte: citation !== null, resultat: recherche.resultat, actif: option.actif, aDesOptions: trouves.length > 0, suivre, fermer, choisir, toucher }
-}
-
 /** Ctrl+Maj+V (⌘⇧V) : le collage qui suit reste du texte brut, quelle que soit sa longueur (AC-a1). */
 const collageBrut = (evenement: KeyboardEvent<HTMLTextAreaElement>) => (evenement.ctrlKey || evenement.metaKey) && evenement.shiftKey && evenement.key.toLowerCase() === "v"
 
@@ -225,7 +181,7 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
   const collage = useCollage(cle, lectureSeule, unTexte && texte === "")
   const idDeLaListe = useId()
   const idDesChoix = useId()
-  const citation = useCitation(cle, texte)
+  const citation = useCitation(texte, (nouveau, curseur) => gestes.citer(cle, nouveau, curseur))
   // Un fichier choisi par « / » : le Texte perd sa barre, le fichier se joint après lui.
   const joindreParBarre = joindre
     ? (quoi: Genre) => {

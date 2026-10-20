@@ -17,8 +17,8 @@ import { seConnecterSurLEspace } from "./fixtures/noeud"
 // HN-E01S10-f2e2e-3) : jamais écrits en dur. Une capture par étape et par thème, et la grille dans les huit
 // thèmes, posés sur la racine `.oto` de la page, sans écrire la marque.
 //
-// E11-S05 : le chevron d'un repli de cellule, invisible au repos, paraît au survol de la cellule, et reste montré sous le
-// profil mobile (AC-a1) ; une ligne à revoir est marquée, et l'îlot « À revoir » dit le cycle (AC-a4, AC-a5) ;
+// E11-S05 : l'icône de provenance d'une cellule (le chevron d'un repli jusqu'à la 1.4.11), invisible au repos, paraît au
+// survol de la cellule, et reste montrée sous le profil mobile (AC-a1) ; une ligne à revoir est marquée, et l'îlot « À revoir » dit le cycle (AC-a4, AC-a5) ;
 // « Télécharger en .csv », à gauche de « Partager », rend le fichier du tableau (AC-c1, AC-c2) ; la carte d'une page
 // citée ne montre pas son résumé (AC-f2).
 
@@ -170,8 +170,8 @@ test.describe("tableau, vue et revue", () => {
       expect((await telecharger.boundingBox())?.x ?? 0).toBeLessThan((await partager.boundingBox())?.x ?? 0)
       const [fichier] = await Promise.all([page.waitForEvent("download"), telecharger.click()])
       expect(fichier.suggestedFilename()).toBe(`${TABLEAU.split("/").at(-1)}.csv`)
-      // E11-S05 (AC-a1) : le chevron d'un repli, invisible au repos, paraît au survol de sa cellule.
-      const chevron = grille.locator("tbody .oto-cell-detail > summary .oto-cell-chevron").first()
+      // E11-S05 (AC-a1) : l'icône de provenance, invisible au repos, paraît au survol de sa cellule.
+      const chevron = grille.locator("tbody .oto-cell-info > .oto-cell-info-btn").first()
       if ((await chevron.count()) > 0) {
         await attendre(chevron).toHaveCSS("opacity", "0")
         await chevron.locator("xpath=ancestor::td[1]").hover()
@@ -240,12 +240,12 @@ test.describe("tableau, vue et revue", () => {
       expect(await page.evaluate(() => document.body.dataset.sansRechargement)).toBe("oui")
       await capturer(page, testInfo, `filtre-${mode}`)
 
-      // La provenance d'une cellule s'ouvre au clavier (AC3).
-      const cellule = filtree.locator("tbody td[data-primary]").first().locator("summary").first()
+      // La provenance d'une cellule s'ouvre au clavier, dans un panneau posé par-dessus la grille (AC3, 1.4.11).
+      const cellule = filtree.locator("tbody td[data-primary]").first().locator(".oto-cell-info-btn").first()
       await cellule.focus()
       await page.keyboard.press("Enter")
-      await expect(cellule.locator("xpath=..")).toHaveJSProperty("open", true)
-      await expect(cellule.locator("xpath=..").locator("p").first()).toBeVisible()
+      await expect(cellule).toHaveAttribute("aria-expanded", "true")
+      await expect(page.getByRole("dialog", { name: /^Provenance de / }).locator("p").first()).toBeVisible()
       await capturer(page, testInfo, `provenance-${mode}`)
 
       // Une recherche sans réponse (AC5, AC9) : le vide le dit, et son geste retire la recherche et les filtres.
@@ -322,14 +322,14 @@ test.describe("tableau, vue et revue", () => {
     })
   }
 
-  // E11-S05 (AC-a1) : sans survol (un écran tactile), le chevron d'un repli reste montré.
-  test("should show the chevron of a cell disclosure at once on a touch screen (E11-S05, AC-a1)", async ({ browser }, testInfo) => {
+  // E11-S05 (AC-a1) : sans survol (un écran tactile), l'icône de provenance reste montrée.
+  test("should show the provenance icon of a cell at once on a touch screen (E11-S05, AC-a1)", async ({ browser }, testInfo) => {
     test.setTimeout(300_000)
     const context = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true })
     const page = await context.newPage()
     await seConnecterSurLEspace(page, { email, password })
     await page.goto(`${ESPACE.adresse}/n/${TABLEAU}`)
-    const chevron = page.locator("tbody .oto-cell-detail > summary .oto-cell-chevron").first()
+    const chevron = page.locator("tbody .oto-cell-info > .oto-cell-info-btn").first()
     await attendre(chevron).toBeAttached()
     await attendre(chevron).toHaveCSS("opacity", "1")
     await capturer(page, testInfo, "chevron-mobile")

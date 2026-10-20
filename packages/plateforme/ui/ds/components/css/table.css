@@ -196,22 +196,29 @@
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 60%, transparent);
 }
 
-/* ── le repli d'une cellule (ajout du paquet, E11-S05, AC-a1) : ni triangle natif, un chevron après la valeur, présent dans la boîte même invisible (la cellule ne change pas de largeur), montré au survol de la cellule, au focus clavier du `summary` et une fois ouvert ; l'opacité bouge, jamais la boîte. */
-.oto-cell-detail > summary { list-style: none; display: inline-flex; align-items: center; gap: var(--space-1); }
-.oto-cell-detail > summary::marker { content: ""; }
-/* Safari dessine encore son propre triangle sans cette ligne. */
-.oto-cell-detail > summary::-webkit-details-marker { display: none; }
-.oto-cell-detail > summary .oto-cell-chevron {
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out), rotate var(--dur-fast) var(--ease-out);
+/* ── une cellule de texte (ajout du paquet, 1.4.11) : sa largeur suit son texte jusqu'à `--table-cell-max`, puis il va à la ligne ; elle ne descend jamais sous lui (`max-content`) : un tableau de nombreuses colonnes défile en largeur dans son cadre au lieu d'écraser ses cellules. */
+.oto-table .oto-cell-texte {
+  display: block;
+  inline-size: max-content;
+  max-inline-size: var(--table-cell-max);
+  padding-block: var(--space-1-5);
+  white-space: normal;
+  overflow-wrap: break-word;
 }
-.oto-table :is(td, th):hover .oto-cell-detail > summary .oto-cell-chevron,
-.oto-cell-detail > summary:focus-visible .oto-cell-chevron,
-.oto-cell-detail[open] > summary .oto-cell-chevron { opacity: 1; }
-.oto-cell-detail[open] > summary .oto-cell-chevron { rotate: 180deg; }
-/* Sans survol (un écran tactile), rien ne révélerait le repli : le chevron reste montré. */
+
+/* ── la provenance d'une cellule (ajout du paquet, 1.4.11, qui remplace le repli d'E11-S05) : une icône « info » après la valeur, présente dans la boîte même invisible (la cellule ne change pas de largeur), montrée au survol de la cellule, au focus et panneau ouvert ; le détail s'ouvre par-dessus le tableau (`Popover`), qui ne bouge pas. */
+.oto-cell-info { display: inline-flex; align-items: center; gap: var(--space-1); }
+.oto-cell-info > .oto-cell-info-btn {
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.oto-table :is(td, th):hover .oto-cell-info > .oto-cell-info-btn,
+.oto-cell-info > .oto-cell-info-btn:focus-visible,
+.oto-cell-info > .oto-cell-info-btn[aria-expanded="true"] { opacity: 1; }
+/* Sans survol (un écran tactile), rien ne révélerait l'icône : elle reste montrée. */
 @media (hover: none) {
-  .oto-cell-detail > summary .oto-cell-chevron { opacity: 1; }
+  .oto-cell-info > .oto-cell-info-btn { opacity: 1; }
 }
 
 /* ── colonne de sélection ────────────────────────────────────────── */

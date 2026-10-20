@@ -46,6 +46,8 @@ export type TableauDuNoeudProps = {
    * ligne seulement (E11-S05, AC-h1) ; absente, « votre assistant ».
    */
   assistant?: string
+  /** Le début de l'adresse d'un nœud (`/n/`) : les liens `[[…]]` d'une cellule s'y suivent ; absent, ils se lisent tels quels (1.4.11). */
+  prefixeDesPages?: string
 }
 
 export function TableauDuNoeud(props: TableauDuNoeudProps) {
@@ -62,6 +64,7 @@ export function TableauDuNoeud(props: TableauDuNoeudProps) {
       hrefDuTableau={hrefDuTableau}
       adresse={props.adresse}
       assistant={props.assistant}
+      prefixeDesPages={props.prefixeDesPages}
     />
   )
   return (
