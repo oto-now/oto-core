@@ -12,6 +12,8 @@ type Identifiants = { email: string; password: string }
  */
 export async function envoyerLaConnexion(page: Page, { email, password }: Identifiants, arrivee: () => Promise<void>): Promise<void> {
   await page.getByLabel("Adresse mail").fill(email)
+  // L'adresse d'abord (2026-10-20) : « Continuer » montre ensuite le mot de passe.
+  await page.getByRole("button", { name: "Continuer", exact: true }).click()
   const motDePasse = page.getByLabel("Mot de passe")
   // Le `try` couvre la saisie, l'envoi et l'attente : tout échec vide le champ avant d'être relancé.
   try {

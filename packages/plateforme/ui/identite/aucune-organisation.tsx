@@ -9,6 +9,7 @@
 
 import type { ReactNode } from "react"
 import { IlotDAuthentification } from "../authentification/ilot-d-authentification"
+import { LIEN } from "../components/classes"
 import { Alert, Button } from "../ds/react/primitives"
 import { Skeleton } from "../ds/react/skeleton"
 
@@ -21,6 +22,11 @@ type DonneesAucuneOrganisation = {
   hote: string | null
   /** L'organisation de l'adresse et son contact ; `null` quand l'adresse n'en désigne aucune. */
   organisation: { nom: string; contact: ContactDOrganisation | null } | null
+  /**
+   * Les organisations dont la personne est membre, chacune avec l'adresse où entrer (1.4.12) ; lues par l'hôte quand
+   * l'adresse n'en désigne aucune (l'adresse commune d'un hôte). Absentes ou vides : le texte d'avant.
+   */
+  organisations?: { nom: string; adresse: string }[]
 }
 
 /** Même forme que le retour des actions (`ActionResult`) : des données ou un message. */
@@ -40,8 +46,29 @@ function etat(resultat: ResultatAucuneOrganisation): { titre: string; corps: Rea
     return { titre: "Aucune organisation", corps: <Alert tone="fail">{resultat.error}</Alert> }
   }
 
-  const { email, hote, organisation } = resultat.data
+  const { email, hote, organisation, organisations = [] } = resultat.data
   const connexion = <p className="oto-caption">Connecté·e avec {email}.</p>
+  if (organisation === null && organisations.length > 0) {
+    return {
+      titre: organisations.length === 1 ? "Votre organisation" : "Vos organisations",
+      corps: (
+        <>
+          <p>L&apos;adresse {hote ?? "demandée"} est commune à toutes les organisations : chacune a la sienne, où entrer.</p>
+          <ul className="flex flex-col gap-1">
+            {organisations.map((une) => (
+              <li key={une.adresse}>
+                <a href={une.adresse} className={LIEN}>
+                  {une.nom}
+                </a>{" "}
+                <span className="oto-caption">{new URL(une.adresse).host}</span>
+              </li>
+            ))}
+          </ul>
+          {connexion}
+        </>
+      ),
+    }
+  }
   if (organisation === null) {
     return {
       titre: "Adresse inconnue",

@@ -179,6 +179,14 @@ describe("confirmerLienAction", () => {
     expect(acceptInvitations).toHaveBeenCalledTimes(1)
   })
 
+  // 2026-10-20 : une invitation acceptée mène à l'accueil, qui propose un mot de passe, puis à la page demandée.
+  it("should lead a person who just joined by an invitation to /welcome, carrying the page asked for", async () => {
+    auth.verifyOtp.mockResolvedValue({ data: { session: SESSION }, error: null })
+    vi.mocked(acceptInvitations).mockResolvedValueOnce([{ orgId: "o-1", slug: "acme", name: "Acme", role: "member" }])
+
+    await expect(confirmerLienAction(form(LINK))).rejects.toThrow("NEXT_REDIRECT:/welcome?next=%2Fplatform")
+  })
+
   it("should send a refused token to the login error", async () => {
     auth.verifyOtp.mockResolvedValue({ data: { session: null }, error: { status: 403, message: "expired" } })
 
@@ -262,6 +270,21 @@ describe("forgotPasswordAction", () => {
 })
 
 describe("resetPasswordAction", () => {
+  // 2026-10-20 : le mot de passe choisi à l'accueil d'une invitation ramène à la page demandée, jamais hors du site.
+  it.each([
+    ["/teams", "/teams"],
+    ["https://evil.test", "/"],
+    [undefined, "/"],
+  ])("should save the password, then go to next %j (%j)", async (next, attendu) => {
+    auth.getUser.mockResolvedValue({ data: { user: { id: "u-1" } }, error: null })
+    auth.updateUser.mockResolvedValue({ data: {}, error: null })
+
+    // `unstable_rethrow` est simulé : la redirection levée se lit sur `redirect`.
+    await resetPasswordAction(form({ password: "password123", confirmPassword: "password123", ...(next ? { next } : {}) }))
+    expect(redirect).toHaveBeenLastCalledWith(attendu)
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: "password123" })
+  })
+
   it("should redirect to /login without updating the password when there is no session", async () => {
     auth.getUser.mockResolvedValue({ data: { user: null }, error: null })
 

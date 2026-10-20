@@ -7,7 +7,7 @@
 import { randomUUID } from "crypto"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
-import { createPlatformDb, listMyOrganisations, resolveIdentity, signUp, type OrgCreationHook, type PlatformDb, type SignupOptions } from "@otomata_tech/oto_platform/server"
+import { createPlatformDb, listMyOrganisations, listOrganisationsOfPerson, resolveIdentity, signUp, type OrgCreationHook, type PlatformDb, type SignupOptions } from "@otomata_tech/oto_platform/server"
 import { hex } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
 import { failureOf, SQL_SKIP_REASON, sqlConfigured, type SqlReferenceOrg, type SqlUser } from "../helpers/sql"
@@ -97,6 +97,9 @@ describe.skipIf(!sqlConfigured || pending)(pending ? `${suite} (${pendingReason(
         [input.name, `${input.org}.signup.test`, false],
       ].sort(),
     )
+    // 1.4.12 : les mêmes, lues par la session seule à une adresse qui n'en désigne aucune (l'adresse commune).
+    const deLaSession = await listOrganisationsOfPerson(db, "signup.test")
+    expect(deLaSession.map((org) => [org.name, org.current]).sort()).toEqual([[o.org.name, false], [input.name, false]].sort())
   })
 
   it("should refuse a caller without an identity nor an issuer in signup_org itself", async () => {

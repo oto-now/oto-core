@@ -62,8 +62,8 @@ describe("/login with a way back (AC7)", () => {
 
     expect(retoursCaches()).toEqual([CONSENT, CONSENT])
     const [formulaire, fournisseurs] = document.querySelectorAll("form")
-    // « Se connecter » est au pied de l'îlot, relié au formulaire par `form` (E05-S09, partie d3).
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Se connecter" }).form).toBe(formulaire)
+    // Le bouton principal est au pied de l'îlot, relié au formulaire par `form` (E05-S09, partie d3) ; l'adresse d'abord.
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Continuer" }).form).toBe(formulaire)
     expect(fournisseurs.contains(screen.getByRole("button", { name: "Continuer avec Google" }))).toBe(true)
   })
 
@@ -91,7 +91,8 @@ describe("sign-in forms with a way back (AC7)", () => {
     vi.mocked(loginAction).mockResolvedValue({ error: "Email ou mot de passe incorrect." })
     render(<FormulaireDeConnexion retour={CONSENT} />)
     fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
-    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "password123" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
+    fireEvent.change(await screen.findByLabelText("Mot de passe"), { target: { value: "password123" } })
 
     fireEvent.click(screen.getByRole("button", { name: "Se connecter" }))
 
@@ -103,8 +104,9 @@ describe("sign-in forms with a way back (AC7)", () => {
     vi.mocked(magicLinkAction).mockResolvedValue({ data: { message: "Un lien vient de partir." } })
     render(<FormulaireDeConnexion retour={CONSENT} />)
     fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Recevoir un lien de connexion" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Recevoir un lien de connexion" }))
 
     await waitFor(() => expect(magicLinkAction).toHaveBeenCalledTimes(1))
     const envoye = vi.mocked(magicLinkAction).mock.calls[0][0]
@@ -116,8 +118,9 @@ describe("sign-in forms with a way back (AC7)", () => {
     vi.mocked(magicLinkAction).mockResolvedValue({ data: { message: "Un lien vient de partir." } })
     render(<FormulaireDeConnexion />)
     fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Recevoir un lien de connexion" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Recevoir un lien de connexion" }))
 
     await waitFor(() => expect(magicLinkAction).toHaveBeenCalledTimes(1))
     expect(vi.mocked(magicLinkAction).mock.calls[0][0].has("redirect")).toBe(false)

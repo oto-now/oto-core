@@ -44,11 +44,26 @@ export function reachableHost(hosts: readonly string[], requestHost: string | nu
  * organisations où elle n'a qu'un accès plateforme.
  */
 export async function listMyOrganisations(db: PlatformDb, identity: Identity, requestHost: string | null = null): Promise<PersonOrganisation[]> {
-  const rows = await inTransaction(db, "listMyOrganisations: members, orgs, org_domains", (sql) => sql<{ id: string; name: string; hosts: string[] | null }[]>`
+  const organisations = await organisationsOf(db, identity.user.id, requestHost)
+  return organisations.map((organisation) => ({ ...organisation, current: organisation.id === identity.org.id }))
+}
+
+/**
+ * Les mêmes organisations, pour une personne connectée à une adresse qui n'en désigne aucune (l'adresse commune d'un
+ * hôte, 1.4.12) : sans identité, aucune n'est `current`, et la personne est celle de la session (`auth.uid()`, traduit
+ * en mode OIDC). Sans elle, l'écran « Adresse inconnue » ne disait pas où aller.
+ */
+export async function listOrganisationsOfPerson(db: PlatformDb, requestHost: string | null = null): Promise<PersonOrganisation[]> {
+  return organisationsOf(db, null, requestHost)
+}
+
+/** Les organisations de `userId`, ou de la personne de la session sans lui ; le filtre est sur ses propres lignes `members`. */
+async function organisationsOf(db: PlatformDb, userId: string | null, requestHost: string | null): Promise<PersonOrganisation[]> {
+  const rows = await inTransaction(db, "listOrganisationsOfPerson: members, orgs, org_domains", (sql) => sql<{ id: string; name: string; hosts: string[] | null }[]>`
     select o.id, o.name, (select array_agg(d.host) from platform.org_domains d where d.org_id = o.id) as hosts
       from platform.members m join platform.orgs o on o.id = m.org_id
-     where m.user_id = ${identity.user.id}
+     where m.user_id = coalesce(${userId}::uuid, auth.uid())
      order by o.name, o.id
      limit ${MAX_LISTED}`)
-  return rows.map((row) => ({ id: row.id, name: row.name, host: reachableHost(row.hosts ?? [], requestHost), current: row.id === identity.org.id }))
+  return rows.map((row) => ({ id: row.id, name: row.name, host: reachableHost(row.hosts ?? [], requestHost), current: false }))
 }

@@ -50,4 +50,14 @@ describe("closestHelpSection and hintLines", () => {
     ])
     expect(hintLines(undefined, "acme")).toEqual([])
   })
+
+  // 1.4.12 : une demande d'écrire une procédure reçoit la notice entière, préfixe de l'organisation compris.
+  it("should serve the whole procedures section to a request about writing a procedure, and only a pointer to another section", () => {
+    const procedures = closestHelpSection("Écris une procédure pour relancer les devis")
+    const lines = hintLines({ functions: [], help: procedures }, "acme").join("\n")
+    expect(lines).toContain("From the platform guide (section procedures):\n## Procedures\nA procedure is a page of steps an assistant follows.")
+    expect(lines).toContain("acme_read path write.procedure")
+    expect(lines).not.toContain("<p>")
+    expect(closestHelpSection("Exporte toutes les pages de l'équipe SAV")?.text).toBeUndefined()
+  })
 })

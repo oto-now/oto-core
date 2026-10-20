@@ -7,7 +7,8 @@ import {
   type MarqueDOrganisation,
   type ResultatAucuneOrganisation,
 } from "@otomata_tech/oto_platform/ui"
-import { normalizeHost, orgContact, resolveOrg } from "@otomata_tech/oto_platform/server"
+import { listOrganisationsOfPerson, normalizeHost, orgContact, resolveOrg } from "@otomata_tech/oto_platform/server"
+import { linkOrigin } from "@otomata_tech/oto_platform/schemas"
 import { logoutAction } from "@/lib/actions/auth"
 import { marqueDOrganisation } from "@/lib/plateforme/marque-de-l-adresse"
 import {
@@ -53,11 +54,29 @@ async function nonMembre(session: PlatformSession): Promise<Etat> {
   }
 }
 
+/** L'adresse d'entrée d'une organisation : son origine (`linkOrigin`, `https` hors du poste local). */
+const adresseDEntree = (host: string) => linkOrigin(host) ?? `https://${host}`
+
+/**
+ * À une adresse qui n'en désigne aucune (l'adresse commune de l'hôte), les organisations de la personne, chacune à son
+ * adresse (1.4.12) : sans elles, l'écran « Adresse inconnue » ne disait pas où aller. Une lecture en échec rend l'écran
+ * d'avant, sans liste.
+ */
+async function sesOrganisations(session: PlatformSession): Promise<{ nom: string; adresse: string }[]> {
+  try {
+    const organisations = await listOrganisationsOfPerson(session.db, session.host)
+    return organisations.flatMap((une) => (une.host ? [{ nom: une.name, adresse: adresseDEntree(une.host) }] : []))
+  } catch (error) {
+    console.error("no-organization: lecture des organisations de la personne impossible", error)
+    return []
+  }
+}
+
 async function etatPour(session: PlatformSession, code: CodeDeRefus | null): Promise<Etat> {
   if (code === "not_member") return nonMembre(session)
   if (code === "unknown_org") {
     return {
-      resultat: { data: { email: session.user.email, hote: normalizeHost(session.host), organisation: null } },
+      resultat: { data: { email: session.user.email, hote: normalizeHost(session.host), organisation: null, organisations: await sesOrganisations(session) } },
       marque: null,
     }
   }

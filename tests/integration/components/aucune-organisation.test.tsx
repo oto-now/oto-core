@@ -32,6 +32,26 @@ describe("AucuneOrganisation", () => {
     expect(screen.getByRole("button", { name: "Se déconnecter" })).toBeInTheDocument()
   })
 
+  // 1.4.12 : à l'adresse commune, les organisations de la personne, chacune à son adresse.
+  it("should list the organisations of the person, each linked to its address, at an address that names none", () => {
+    rendre({
+      data: {
+        email: "claire@acme.test",
+        hote: "oto.cx",
+        organisation: null,
+        organisations: [
+          { nom: "Acme", adresse: "https://acme.oto.cx" },
+          { nom: "Démo", adresse: "https://demo.oto.cx" },
+        ],
+      },
+    })
+
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("Vos organisations")
+    expect(screen.getByRole("link", { name: "Acme" })).toHaveAttribute("href", "https://acme.oto.cx")
+    expect(screen.getByRole("link", { name: "Démo" })).toHaveAttribute("href", "https://demo.oto.cx")
+    expect(screen.getByText("Connecté·e avec claire@acme.test.")).toBeInTheDocument()
+  })
+
   it("should fall back on the administrators without a contact", () => {
     rendre({
       data: { email: "claire@ailleurs.test", hote: "acme.oto.cx", organisation: { nom: "Acme", contact: null } },

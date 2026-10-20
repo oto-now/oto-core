@@ -139,7 +139,13 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## 1.4.12 — 2026-10-20
 
+### Assistants
+- `<p>_context` says at every call what a procedure is and what makes one work well; a request to write one gets the whole procedures section of the guide.
+
 ### Hosts
+- Server: `listOrganisationsOfPerson(db, requestHost)` lists the organisations of the person of the session, each with an address to reach, without an identity: for an address that names no organisation (a host's common address).
+- UI: `AucuneOrganisation` takes `organisations` (`{ nom, adresse }[]`) in its data: at an address that names none, it lists them, each linked to its address, instead of « Adresse inconnue ».
+- MCP: the served rules gain two lines on procedures, and a request that leads to the procedures section of the guide gets it whole in `<p>_context`; no tool description changes.
 - Install: upgrade to 1.4.12; no migration, no new variable, no import to change. Published from 1.4.11, without what main carries for 1.5.0.
 - UI: « Les personnes de … » shows the level of each member on the pages of the team, « Peut lire » or « Peut modifier », and sets it as a rule naming the member on the team's folder; « Partager » of a page lists the members of the owner team with their inherited level and overrides it on that page only; every line of « Partager » now offers « Aucun accès », which hides the page and what it holds from that person or team, on screen and through the MCP.
 - API: `GET /api/platform/rules?path=` serves the rules panel of a node, read by « Les personnes de … ».

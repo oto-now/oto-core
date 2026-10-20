@@ -18,7 +18,8 @@ import { hintLines, type RoutingHints } from "../hints"
  * encore corriger ici seulement ; 1.4.3 : les pointeurs vers les références (`functions`, `help`, contrats, `table.schema`)
  * et les pièges qui coûtent le plus (titre qui déplace le chemin, `node.move`, `contexte`, outils sans préfixe) ; `<p>` devient le préfixe de l'organisation, rien d'autre ne varie. Sans
  * lui, l'assistant ne lit nulle part comment l'espace fonctionne (la notice n'est plus servie, § 10). E05-S13
- * (AC-16) : l'en-tête vient de `SERVED_RULES`, que l'écran relit ; exporté pour le test qui compte ses règles contre
+ * (AC-16) : l'en-tête vient de `SERVED_RULES`, que l'écran relit ; 1.4.12 : ce qu'est une procédure et ce qui la fait bien
+ * marcher, en deux lignes, à chaque contexte (la notice entière vient avec une demande d'en écrire une, `hints.ts`) ; exporté pour le test qui compte ses règles contre
  * leur traduction à l'écran.
  */
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
@@ -32,6 +33,8 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - When a request matches a procedure, its steps come right after this part: follow them in order. Otherwise the closest procedures are listed there: use the one that fits, or search; ask the user when nothing fits.
+- A procedure is a page of numbered steps an assistant follows to do one recurring task the same way every time; a one-off answer needs none. Its title and summary route requests to it: the summary says what it does and how people ask for it.
+- A good procedure has a part « When to use it » (and when not), one action per step, each call in a call block right after its step, what to do with each result (stop, branch, report), the expected output, and who to ask when a case is not covered. Before writing one, read path help, section procedures, then path write.procedure.
 - <p>_read with path journal shows what was done, call by call: trust it over memory.
 - Reference: <p>_read path functions lists every function (path <function>: its contract); path help is the platform guide (pages and blocks, tables, procedures, paths, import and export), one section at a time; read path write.procedure or write.table before writing one, and <p>_call table.schema before writing rows.
 - Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash. contexte is the context page of the organisation, a team or your space: give no other page that name.

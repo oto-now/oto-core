@@ -31,6 +31,8 @@ const RESET_CONFIRMATION = "Si un compte existe, un email vous a été envoyé."
 const MAGIC_LINK_CONFIRMATION =
   "Si une invitation ou un compte existe pour cette adresse, un lien de connexion vient de partir."
 const LINK_ERROR_PATH = "/login?error=auth_callback_error"
+/** L'accueil d'une personne qui vient d'entrer par une invitation : un mot de passe, un fournisseur, ou plus tard. */
+const WELCOME_PATH = "/welcome"
 const PROVIDER_UNAVAILABLE = "Ce mode de connexion n'est pas disponible."
 const PROVIDER_START_FAILED = "La connexion avec ce fournisseur n'a pas pu démarrer. Réessayez."
 
@@ -114,7 +116,8 @@ export async function connexionFournisseurAction(
 
 /**
  * Vérifie le jeton du lien de l'email au clic sur « Continuer » de `/auth/confirm`, jamais à
- * l'ouverture du lien (fiche D11 : une passerelle de messagerie l'ouvrirait avant la personne).
+ * l'ouverture du lien (fiche D11 : une passerelle de messagerie l'ouvrirait avant la personne). Une invitation
+ * acceptée mène à l'accueil (`/welcome`), qui propose de choisir comment revenir, puis à la page demandée.
  */
 export async function confirmerLienAction(formData: FormData): Promise<never> {
   const parsed = confirmerLienSchema.safeParse(Object.fromEntries(formData))
@@ -124,9 +127,10 @@ export async function confirmerLienAction(formData: FormData): Promise<never> {
   const { data, error } = await supabase.auth.verifyOtp({ type: "email", token_hash: parsed.data.token_hash })
   if (error) redirect(LINK_ERROR_PATH)
 
-  await acceptPendingInvitations(data.session)
+  const rejointes = await acceptPendingInvitations(data.session)
   revalidatePath("/", "layout")
-  redirect(safeNextPath(parsed.data.next))
+  const suite = safeNextPath(parsed.data.next)
+  redirect(rejointes.length > 0 ? `${WELCOME_PATH}?next=${encodeURIComponent(suite)}` : suite)
 }
 
 export async function forgotPasswordAction(
@@ -172,7 +176,8 @@ export async function resetPasswordAction(formData: FormData): Promise<ActionRes
     if (error) return { error: GENERIC_ERROR }
 
     revalidatePath("/", "layout")
-    redirect("/")
+    // Choisi à l'accueil d'une invitation, il ramène à la page demandée (`next`) ; à la réinitialisation, à `/`.
+    redirect(safeNextPath(formData.get("next")))
   } catch (error) {
     // redirect() lève NEXT_REDIRECT : sans ce rethrow, le catch avalerait la redirection.
     unstable_rethrow(error)
