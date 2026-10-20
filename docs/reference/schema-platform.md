@@ -99,7 +99,8 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 
 | Fonction | Rôle |
 |----------|------|
-| `member_orgs()`, `is_staff()`, `is_org_admin(org)` | Organisations de l'appelant (accès plateforme en cours compris), base des policies d'isolation ; équipe plateforme, pour la portée plateforme ; admin, pour les fonctions qui le décident (`platform_access_directory`, niveau de la recherche) |
+| `member_orgs()`, `is_staff()`, `is_org_admin(org)` | Organisations de l'appelant (accès plateforme en cours compris), base des policies d'isolation ; équipe plateforme, pour la portée plateforme ; admin, pour les fonctions qui le décident (`platform_access_directory`, niveau de la recherche) et les policies d'administration (`20261019150000`) |
+| `leads_team(team)` | L'appelant est l'un des responsables de l'équipe (`team_members.role`) : `team_members_delete_admin` (`20261019150000`) ; `security definer`, une sous-requête sur `team_members` depuis sa propre policy bouclant (`42P17`) |
 | `identity_for_caller()` | Traduit l'appelant vérifié (claims `iss`, `ext_sub`, `issuer_kind`, `email` vérifié) en identifiant interne : sujet connu, sinon `sub` de Supabase Auth, sinon la ligne `platform_staff` la plus ancienne de l'email vérifié, sinon un identifiant neuf sur invitation ouverte, sinon null ; un identifiant déjà lié chez l'émetteur à un autre sujet n'est pas relié. Seule écriture d'`identities` ; appelée avant que `sub` soit posé |
 | `org_by_host(host)` | Organisation d'une adresse : id, slug, nom, préfixe, marque, domaines de travail (`anon` et `authenticated`) |
 | `org_contact(org)` | Nom et email de l'admin le plus ancien, pour « aucune organisation » |
@@ -166,8 +167,11 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 Toute table de `platform` a la RLS activée et des policies d'appartenance : une ligne se lit et
 s'écrit par un membre de son organisation (`member_orgs()`, accès plateforme en cours compris),
 dans les colonnes accordées une à une. Seule la portée plateforme appelle `is_staff()`
-(`platform_staff`, `platform_grants`, `admin_journal`). Aucun niveau ni rôle dans une policy :
-les droits se décident dans le service (ADR-012 § 3). Les écritures sans porte de l'API passent
+(`platform_staff`, `platform_grants`, `admin_journal`), et le retrait d'une adresse. Aucun niveau ni rôle dans une policy :
+les droits se décident dans le service (ADR-012 § 3), sauf les policies d'administration, qui reprennent le
+rôle exigé par leur service (`20261019150000`) : supprimer un membre ou une équipe (`is_org_admin`), un membre
+d'une équipe (`is_org_admin`, ou responsable de l'équipe, `leads_team`, pour un membre), une adresse (`is_staff()`
+et `is_org_admin`), mettre à jour `orgs` (`is_org_admin`). Un membre simple y touche zéro ligne. Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,

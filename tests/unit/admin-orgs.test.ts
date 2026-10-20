@@ -257,7 +257,7 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
       const invited = `first-${admin.persons.ada.email}`.toUpperCase()
       const draft = draftOf("Acme Deux", invited)
       const email = invited.toLowerCase()
-      const link = `http://${draft.host}:3000`
+      const link = `https://${draft.host}`
       expect(await createOrg(await dbOf("sam"), as("sam"), draft, origin)).toMatchObject({ created: false, firstAdmin: { email, self: false, link } })
       expect(otp).not.toHaveBeenCalled()
 
@@ -328,7 +328,7 @@ describe.skipIf(!sqlConfigured)(portable("organisation services of the admin MCP
       expect(await addAdmin(db, identity, { admin_email: claire }, origin)).toEqual({ email: claire, self: false, outcome: "promoted" })
       const ada = admin.persons.ada.email
       expect(await addAdmin(db, identity, { admin_email: ada }, origin)).toEqual({ email: ada, self: false, outcome: "unchanged" })
-      const link = `http://${admin.orgs.acme.host}:3000`
+      const link = `https://${admin.orgs.acme.host}`
       expect(await addAdmin(db, identity, { admin_email: invited }, origin)).toMatchObject({ email: invited, self: false, outcome: "invited", link })
       expect(otp).toHaveBeenCalledTimes(1)
       const roles = await seed.admin`

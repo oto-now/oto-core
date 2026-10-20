@@ -4,7 +4,8 @@
 // graine de référence (`seedReferenceOrg`) ; Léa est membre des deux, et l'isolation seule (E01-S08) lui laisse
 // lire et écrire l'une et l'autre : chaque service lit et écrit l'organisation de l'identité, filtrée dans sa
 // requête (`security-patterns.md § Droits dans le service`). Léa y paraît en administratrice de O quand le cas
-// l'exige : le droit se décide sur l'identité (`isOrgAdmin`), la base n'en garde que l'isolation. Portable
+// l'exige : le droit se décide sur l'identité (`isOrgAdmin`), avant toute requête ; la base l'exige aussi depuis
+// `20261019150000` (`orgs_update_admin`), Léa est donc administratrice de O en base, membre simple de P. Portable
 // (AC-x3, fiche D76) : `asCaller` et la connexion d'administration ; le job `bare-postgres` joue ce fichier.
 // Les cas de la marque viennent de `tests/unit/server-brand.test.ts`, où ils tournaient sur une base simulée.
 import { randomUUID } from "crypto"
@@ -52,6 +53,8 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "the settings of orgs on a real 
   beforeAll(async () => {
     seed = seedWithAdmin()
     ref = await seedReferenceOrg(seed)
+    // La policy `orgs_update_admin` exige l'administrateur (20261019150000) : l'identité seule ne suffit plus à écrire.
+    await seed.admin`update platform.members set role = 'admin' where org_id = ${ref.org.id} and user_id = ${ref.people.lea.id}`
     await reset()
   }, SETUP_TIMEOUT)
 

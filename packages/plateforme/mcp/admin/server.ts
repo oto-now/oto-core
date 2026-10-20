@@ -33,7 +33,7 @@ export type AdminMcpDeps = {
   db: PlatformDb
   /** L'appelant, reconnu membre de l'équipe plateforme par la porte (`requireStaff`). */
   caller: StaffCaller
-  /** L'origine du MCP admin appelé (`requestOrigin`) : le lien d'une invitation en reprend protocole et port. */
+  /** L'origine du MCP admin appelé (`requestOrigin`) : le lien d'une invitation en reprend le port, sur le poste local seulement (`invitationLink`). */
   origin: string
   userAgent: string | null
   /** Lignes empilées pendant la requête ; la porte les écrit après la réponse (H07). */

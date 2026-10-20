@@ -145,8 +145,8 @@ réécrire ou supprimer les données d'un client. **Il n'écrit ni ne supprime u
 n'a pas créée** : il la reconnaît à une marque posée à sa création (`orgs.settings.demo` pour le script Démo, `guardOrg`
 de `scripts/demo-seed.mjs`) et refuse toute autre organisation existante, en la nommant, avant sa
 première écriture (code 1). La marque se lit « créée par le script, ou déclarée de démonstration par
-son admin » : la policy `orgs_update_admin` laisse l'admin écrire `settings` (aucune session ne supprime
-plus une organisation depuis `20261019140000`). **Vérifiable :** toute
+son admin » : la policy `orgs_update_admin` ne laisse que l'admin écrire `settings` (`is_org_admin` depuis
+`20261019150000` ; aucune session ne supprime plus une organisation depuis `20261019140000`). **Vérifiable :** toute
 écriture ou suppression d'`orgs` par un script passe d'abord par ce contrôle, et un test
 d'intégration joue le refus sur une organisation jetable sans marque, lignes identiques après.
 
@@ -184,7 +184,10 @@ qu'une personne sans compte est de l'équipe plateforme.
 ## Droits dans le service
 
 Un service décide chaque droit et pose chaque filtre avant sa requête, avec `server/access.ts` ;
-la RLS est une seconde barrière, réduite à l'isolation par organisation et aux invariants (`supabase-patterns.md § RLS Patterns`), aucun test de service ne passe grâce à elle. Un refus précède la
+la RLS est une seconde barrière, réduite à l'isolation par organisation et aux invariants (`supabase-patterns.md § RLS Patterns`), aucun test de service ne passe grâce à elle. Exception, les gestes d'administration
+(`20261019150000`) : la policy y reprend le rôle que le service exige, ni plus dur ni plus large, pour qu'un membre
+simple ne les fasse pas avec son seul jeton (liste fermée `ROLE_REQUIRED` de `tests/unit/rls-policies.test.ts`, refus
+joués par `tests/integration/role-dans-les-policies.test.ts`). Un refus précède la
 requête et porte le message « à qui demander » ; « aucune ligne rendue » n'est jamais lu
 comme un refus. **Vérifiable :** un test par service, avec une base qui rend des lignes interdites, prouve que le
 service les filtre, et qu'il refuse une écriture interdite sans envoyer la requête ; retirer du

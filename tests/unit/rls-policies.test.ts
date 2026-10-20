@@ -4,7 +4,8 @@
 // littéraux blanchis, instructions coupées hors des corps `$$`) ; la dernière définition d'un nom
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
-// la RLS ne garde que la frontière entre organisations et les invariants. Depuis E01-S09, la ligne de
+// la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migration `20261019150000`). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers.
 import fs from "fs"
@@ -129,8 +130,24 @@ const PLATFORM_SCOPE = [
   "platform_staff_select_staff",
 ]
 
+/**
+ * Les policies qui exigent le rôle que leur service exige (migration `20261019150000`, décision d'Alexis du 19/10) :
+ * avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son
+ * service, ni plus dure ni plus large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
+ */
+const ROLE_REQUIRED: Record<string, string> = {
+  members_delete_admin: "removeMember (server/members.ts): requireAdmin, isOrgAdmin",
+  teams_delete_admin: "deleteTeam (server/teams.ts): requireAdmin, isOrgAdmin",
+  team_members_delete_admin: "removeTeamMember (server/teams.ts): isOrgAdmin, or a lead of the team removing a member (leadsTeam)",
+  org_domains_delete_admin: "removeHost (server/admin/hosts.ts): requireStaffAdmin, isStaff and isOrgAdmin",
+  orgs_update_admin: "updateOrg, updateBrand, setFlag, setOpenEntry (server/admin/orgs.ts, brand.ts, flags.ts, open-entry.ts): isOrgAdmin",
+}
+
+/** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */
+const STAFF_ROLE_REQUIRED = ["org_domains_delete_admin"]
+
 /** Un niveau ou un rôle calculé en base. */
-const RIGHT_FUNCTION = /\b(node_level_for|node_level_of|is_org_admin)\s*\(/i
+const RIGHT_FUNCTION = /\b(node_level_for|node_level_of|is_org_admin|leads_team)\s*\(/i
 /** Le responsable d'équipe comparé à l'appelant, dans un sens ou dans l'autre. */
 const LEAD_IS_CALLER = /lead_user_id\s*=\s*\(?\s*(select\s+)?auth\.uid\(\)|auth\.uid\(\)\s*\)?\s*=\s*(\w+\.)?lead_user_id/i
 const CREATE_POLICY = /^create policy (\w+) on platform\.(\w+)(?: as \w+)?(?: for (\w+))?/i
@@ -205,7 +222,7 @@ function recursion(table: string, applied: Policy[], selectOf: (table: string) =
 }
 
 describe("final policies of platform", () => {
-  it("should keep no level nor role in any policy, the organisation boundary and the invariants only (AC2)", () => {
+  it("should keep no level nor role in any policy outside the closed list of the role its service requires, the organisation boundary and the invariants otherwise (AC2)", () => {
     const migrations = readMigrations()
     const definitions = definitionsOf(migrations)
     const final = [...lastOf(definitions).values()]
@@ -235,8 +252,8 @@ describe("final policies of platform", () => {
       disabled: statements.filter((statement) => /\bdisable row level security\b/i.test(statement)),
       withoutRead: tables.filter((table) => !readable.has(table)),
     }).toEqual({
-      rights: [],
-      staff: [...PLATFORM_SCOPE].sort(),
+      rights: Object.keys(ROLE_REQUIRED).sort(),
+      staff: [...PLATFORM_SCOPE, ...STAFF_ROLE_REQUIRED].sort(),
       updateWithoutCheck: [],
       usingWithoutMembership: [],
       names: [...RECREATED, ...UNCHANGED, ...ADDED].sort(),

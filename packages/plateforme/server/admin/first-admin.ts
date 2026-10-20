@@ -4,7 +4,7 @@
 // fait membre `admin` tout de suite, sans invitation ni email (`claim_org_admin`) ; une autre adresse reçoit une
 // invitation `admin` par `inviteMember`, le service et l'email de l'écran Équipes. Sans ce module, le créateur d'une
 // organisation n'en était pas membre et devait s'inviter lui-même pour l'administrer depuis l'application.
-import { addAdminSchema } from "../../schemas"
+import { addAdminSchema, linkOrigin } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { memberDirectory, sameEmail } from "../directory"
 import { fromDatabaseError, inTransaction, invalidInput, PlatformError } from "../errors"
@@ -32,14 +32,19 @@ const SEATS: readonly string[] = ["joined", "promoted", "unchanged"] satisfies A
 
 /**
  * L'origine du lien d'une invitation : une adresse de l'organisation (`reachableHost`, la plus proche de celle du MCP
- * admin appelé), au protocole et au port de celui-ci. L'invité revient ainsi sur l'adresse de son organisation, comme
- * depuis son écran Équipes (N2 d'E02-S01). Sans adresse, aucune invitation : `invalid_arguments`, avant toute écriture.
+ * admin appelé), bâtie par `linkOrigin` : `https` sans port, `http` et le port de l'adresse appelée sur le poste local
+ * seulement. Le protocole de l'adresse appelée n'est pas lu : `requestOrigin` le prend de `x-forwarded-proto`, qu'un
+ * proxy peut transmettre du client. L'invité revient ainsi sur l'adresse de son organisation, comme depuis son écran
+ * Équipes (N2 d'E02-S01). Sans adresse, aucune invitation : `invalid_arguments`, avant toute écriture.
  */
 export function invitationLink(origin: string, hosts: readonly string[], refusal: string): string {
   const called = new URL(origin)
   const host = reachableHost(hosts, called.hostname)
   if (!host) throw new PlatformError("invalid_arguments", refusal)
-  return `${called.protocol}//${host}${called.port ? `:${called.port}` : ""}`
+  const link = linkOrigin(called.port ? `${host}:${called.port}` : host)
+  // Une adresse d'`org_domains` suit le motif d'un nom d'hôte : sans origine, la base porte une adresse illisible.
+  if (!link) throw new PlatformError("internal", `invitationLink: address ${host} is not a host name.`)
+  return link
 }
 
 /**

@@ -260,6 +260,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   comptes se suppriment par `oto-platform org delete`, les comptes d'une personne oubliée par `forget_user`. Les
   tables où `authenticated` supprime encore sont la liste fermée de `tests/integration/role-du-serveur.test.ts`.
   Aucune table, colonne ni fonction ; rien à relancer avant.
+- `20261019150000_platform_role_dans_les_policies.sql` (faits affirmés, suite du lot 1) : les policies
+  `members_delete_admin`, `teams_delete_admin`, `team_members_delete_admin`, `org_domains_delete_admin` et
+  `orgs_update_admin` exigent le rôle que leur service exige (`is_org_admin` ; pour une adresse, `is_staff()` en plus ;
+  pour un membre d'une équipe, aussi le responsable qui retire un membre, par la fonction nouvelle `leads_team`),
+  recréées sous leur nom. Un membre simple, sous sa session ou celle du serveur, n'y touche plus aucune ligne.
+  `access_rules_delete_manager` et `nodes_delete_manager` restent à l'appartenance. Rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -515,7 +521,8 @@ garde ; la ligne de base V1 les porte toutes.
   d'une équipe (`team_members.role` depuis `20260929090000`), et n'appelle `is_staff()` que pour une portée plateforme
   (`platform_staff`, lecture de `platform_grants` et d'`admin_journal`, écriture du journal admin) ;
   elle garde l'attribution à `auth.uid()`, l'état d'une ligne, la cohérence d'organisation entre
-  colonnes et la structure de l'arbre. Vérifié sans base par `tests/unit/rls-policies.test.ts`.
+  colonnes et la structure de l'arbre. Depuis `20261019150000`, sauf les policies d'administration qui reprennent
+  le rôle exigé par leur service (liste fermée `ROLE_REQUIRED`). Vérifié sans base par `tests/unit/rls-policies.test.ts`.
 - **Une sous-requête de policy ne revient jamais sur une table dont Postgres développe déjà les
   policies**, directement ou par une autre table (depuis `20260924150100`) : sous l'isolation, les
   policies de lecture portent une sous-requête (`(select platform.member_orgs())`), et Postgres

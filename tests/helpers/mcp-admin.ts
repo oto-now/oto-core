@@ -58,7 +58,7 @@ export async function connectAdminMcp(deps: AdminMcpDeps) {
 
 export type AdminSession = Awaited<ReturnType<typeof connectAdminMcp>>
 
-/** L'origine du MCP admin des tests (`calledOrigin` de la route) : le lien d'une invitation en reprend protocole et port. */
+/** L'origine du MCP admin des tests (`calledOrigin` de la route) : le lien d'une invitation n'en reprend ni le protocole ni le port, hors du poste local. */
 export const ADMIN_ORIGIN = "http://cell.test:3000"
 
 // Les personnes, organisations et équipes de la base simulée des tests admin, en UUID : les services

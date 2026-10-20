@@ -31,7 +31,7 @@ export type AdminRequestFacts = {
   /** `extra` de l'`AuthInfo` rendu par `makeVerifyToken` : `sub`, `email` et `name` du jeton. */
   claims: Record<string, unknown> | undefined
   userAgent: string | null
-  /** L'origine appelée (`calledOrigin`) : le lien d'une invitation envoyée par `admin_org` en reprend protocole et port. */
+  /** L'origine appelée (`calledOrigin`) : le lien d'une invitation envoyée par `admin_org` en reprend le port, sur le poste local seulement (`invitationLink`). */
   origin: string
 }
 

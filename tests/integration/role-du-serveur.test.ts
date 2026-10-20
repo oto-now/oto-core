@@ -39,6 +39,7 @@ const CALLABLE: Record<string, string> = {
   "platform.invalidate_pseudonyms(uuid)": "advances a generation counter, no value affirmed",
   "platform.is_org_admin(uuid)": "read",
   "platform.is_staff()": "read",
+  "platform.leads_team(uuid)": "read: whether the caller leads the team, for the policy team_members_delete_admin",
   "platform.member_directory(uuid)": "read",
   "platform.member_orgs()": "read",
   "platform.my_hosted_accounts(text)": "read",
@@ -113,11 +114,11 @@ const DELETED_BY_AUTHENTICATED: Record<string, string> = {
   connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
   files: "trash purge, undone upload, abandoned pending files, size mismatch, the caller's transit file (server/nodes/trash.ts, server/uploads-write.ts, server/files/)",
   hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",
-  members: "an administrator removes a member (removeMember, server/members.ts)",
+  members: "an administrator removes a member (removeMember, server/members.ts); the policy requires is_org_admin (20261019150000)",
   nodes: "trash purge and an undone upload creation (server/nodes/trash.ts, server/uploads-write.ts)",
-  org_domains: "an administrator removes an address (removeHost, server/admin/hosts.ts)",
-  team_members: "removeTeamMember (server/teams.ts)",
-  teams: "deleteTeam (server/teams.ts)",
+  org_domains: "a platform team member who administers the organisation removes an address (removeHost, server/admin/hosts.ts); the policy requires is_staff and is_org_admin (20261019150000)",
+  team_members: "removeTeamMember (server/teams.ts): an administrator, or a lead removing a member; the policy requires the same (20261019150000)",
+  teams: "deleteTeam (server/teams.ts): an administrator; the policy requires is_org_admin (20261019150000)",
   upload_tickets: "expired tickets swept when a ticket is issued (server/uploads.ts)",
 }
 

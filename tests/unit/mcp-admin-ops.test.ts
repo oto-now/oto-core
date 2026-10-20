@@ -322,7 +322,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           "Its assistant tools will be named acmedeux_context, acmedeux_find, acmedeux_read, acmedeux_call, acmedeux_write, acmedeux_feedback, for good: the prefix never changes and no operation deletes an organisation.",
           `Address: ${draft.host}`,
           // Décision du 2026-10-14 : le récapitulatif dit lequel des deux cas se produira, ici une invitation.
-          `First administrator: alice@example.com, invited with the admin role once it is created, by the invitation email of the web app (Équipes), with a link to http://${draft.host}:3000, valid 7 days; they become a member when they sign in with that address.`,
+          `First administrator: alice@example.com, invited with the admin role once it is created, by the invitation email of the web app (Équipes), with a link to https://${draft.host}, valid 7 days; they become a member when they sign in with that address.`,
           // E05-S13 (AC-7) : plus de promesse d'un écran client qui montre et révoque l'accès.
           "You get a platform access to it. Your calls are recorded in its journal, which its administrators read.",
           "Nothing was created. Show this to the user and ask for explicit approval, then call again with confirm: true.",
