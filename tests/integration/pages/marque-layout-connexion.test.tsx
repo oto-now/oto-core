@@ -173,10 +173,9 @@ describe("(dashboard) layout brand (AC3, AC4)", () => {
 // au lieu d'arriver en streaming.
 describe("/login brand of the address (AC5 ; E05-S07, AC1, AC4, AC5)", () => {
   function formulaireInchange() {
+    // L'adresse d'abord (2026-10-20) : la première étape, son champ et « Continuer ».
     expect(screen.getByLabelText("Adresse mail")).toBeInTheDocument()
-    expect(screen.getByLabelText("Mot de passe")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Se connecter" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Recevoir un lien de connexion" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Continuer" })).toBeInTheDocument()
     expect(screen.getByRole("status")).toBeEmptyDOMElement()
   }
 

@@ -198,6 +198,8 @@ test.describe("rotation du mark et annonce (fiche D15 B ; E05-S07, AC3, AC6)", (
     const page = await ouvrir(browser, baseURL, { largeur: LARGEURS[0], schema: "light" })
     await page.goto("/login")
     await page.getByLabel("Adresse mail").fill(`test-${hex(6)}@example.invalid`)
+    // L'adresse d'abord (2026-10-20) : « Continuer » montre ensuite le lien de connexion.
+    await page.getByRole("button", { name: "Continuer", exact: true }).click()
 
     await page.getByRole("button", { name: "Recevoir un lien de connexion" }).click()
 

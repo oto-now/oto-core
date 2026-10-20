@@ -13,6 +13,7 @@ import LoginPage, { metadata as metadataConnexion } from "@/app/(auth)/login/pag
 import ResetPasswordPage, { metadata as metadataNouveauMotDePasse } from "@/app/(auth)/reset-password/page"
 import AucuneOrganisationPage, { metadata as metadataAucuneOrganisation } from "@/app/no-organization/page"
 import ConfirmerPage, { metadata as metadataConfirmer } from "@/app/auth/confirm/page"
+import WelcomePage from "@/app/(auth)/welcome/page"
 import { generateMetadata as metadataRacine } from "@/app/layout"
 import { forgotPasswordAction, loginAction, magicLinkAction, resetPasswordAction } from "@/lib/actions/auth"
 import { marqueDeLAdresse } from "@/lib/plateforme/marque-de-l-adresse"
@@ -39,6 +40,11 @@ vi.mock("@/lib/actions/auth", () => ({
   logoutAction: vi.fn(),
 }))
 
+// L'accueil d'une invitation lit la personne de la session (2026-10-20).
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(async () => ({ auth: { getUser: vi.fn(async () => ({ data: { user: { id: "u-claire", email: "claire@acme.test" } } })) } })),
+}))
+
 vi.mock("@/lib/plateforme/session", () => ({ getPlatformSession: vi.fn(), getPlatformIdentitySafely: vi.fn(), getRequestOrigin: vi.fn(async () => "https://demo.oto.test") }))
 
 // redirect() lève NEXT_REDIRECT dans Next : le mock lève aussi, le rendu s'arrête comme en production.
@@ -53,6 +59,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   resolveOrg: vi.fn(),
   orgContact: vi.fn(),
+  listOrganisationsOfPerson: vi.fn(async () => []),
 }))
 
 const LOGO = "https://example.com/logo.png"
@@ -184,6 +191,11 @@ describe("tab titles (E05-S07, AC1)", () => {
 describe("/login (AC-d3 ; E05-S07, AC6, AC7)", () => {
   it("should offer the forgotten password link in the island, and both buttons in its foot, tied to the form", async () => {
     await rendre(await LoginPage({ searchParams: Promise.resolve({}) }))
+    // L'adresse d'abord (2026-10-20) : « Continuer » est le bouton principal de la première étape.
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Continuer" }).form).toBe(screen.getByRole("region", { name: "Se connecter" }).querySelector("form"))
+    fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
+    await screen.findByLabelText("Mot de passe")
 
     const ilot = screen.getByRole("region", { name: "Se connecter" })
     expect(within(ilot).getByRole("link", { name: "Mot de passe oublié ?" })).toHaveAttribute("href", "/forgot-password")
@@ -200,8 +212,9 @@ describe("/login (AC-d3 ; E05-S07, AC6, AC7)", () => {
     vi.mocked(magicLinkAction).mockResolvedValue({ data: { message: MESSAGE_DU_LIEN } })
     await rendre(await LoginPage({ searchParams: Promise.resolve({}) }))
     fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Recevoir un lien de connexion" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Recevoir un lien de connexion" }))
 
     // La région montée d'emblée est la première ; l'`Alert` du statut s'y loge.
     await waitFor(() => expect(screen.getAllByRole("status")[0]).toHaveTextContent(MESSAGE_DU_LIEN))
@@ -212,7 +225,8 @@ describe("/login (AC-d3 ; E05-S07, AC6, AC7)", () => {
   it("should mark the sign-in button busy, and say so, while signing in", async () => {
     await rendre(await LoginPage({ searchParams: Promise.resolve({}) }))
     fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
-    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "password123" } })
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
+    fireEvent.change(await screen.findByLabelText("Mot de passe"), { target: { value: "password123" } })
     vi.mocked(loginAction).mockReturnValue(new Promise(() => {}))
 
     fireEvent.click(screen.getByRole("button", { name: "Se connecter" }))
@@ -245,6 +259,25 @@ describe("/forgot-password and /reset-password (AC-d3 ; E05-S07, AC6, AC8)", () 
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer le mot de passe" }))
 
     expect(await screen.findByRole("button", { name: "Enregistrement…" })).toHaveAttribute("aria-busy", "true")
+  })
+})
+
+// 2026-10-20 : l'accueil d'une personne qui vient d'entrer par son invitation.
+describe("/welcome", () => {
+  it("should welcome the person in the organisation of the address, offer a password that leads to the page asked for, and « Plus tard »", async () => {
+    vi.mocked(marqueDeLAdresse).mockResolvedValue(FORET)
+    vi.mocked(resetPasswordAction).mockReturnValue(new Promise(() => {}))
+    await rendre(await WelcomePage({ searchParams: Promise.resolve({ next: "/teams" }) }))
+
+    expect(screen.getByRole("heading", { level: 2, name: "Bienvenue dans Démo Forêt" })).toBeInTheDocument()
+    expect(screen.getByText(/Pour revenir avec claire@acme\.test, choisissez un mot de passe/)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Plus tard" })).toHaveAttribute("href", "/teams")
+    fireEvent.change(screen.getByLabelText("Nouveau mot de passe"), { target: { value: "nouveau-secret" } })
+    fireEvent.change(screen.getByLabelText("Confirmer le mot de passe"), { target: { value: "nouveau-secret" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer le mot de passe" }))
+
+    await waitFor(() => expect(resetPasswordAction).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(resetPasswordAction).mock.calls[0][0].get("next")).toBe("/teams")
   })
 })
 

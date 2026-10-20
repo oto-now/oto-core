@@ -46,10 +46,9 @@ function actifs(valeur: FournisseursActives) {
 }
 
 function formulaireInchange() {
+  // L'adresse d'abord (2026-10-20) : la première étape, son champ et « Continuer ».
   expect(screen.getByLabelText("Adresse mail")).toBeInTheDocument()
-  expect(screen.getByLabelText("Mot de passe")).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "Se connecter" })).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "Recevoir un lien de connexion" })).toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Continuer" })).toBeInTheDocument()
 }
 
 /** `true` quand `b` suit `a` dans le document. */
@@ -80,7 +79,7 @@ describe("/login providers (AC1, AC8)", () => {
     const ou = screen.getByText("ou")
     const google = screen.getByRole("button", { name: GOOGLE })
     expect(screen.queryByRole("button", { name: MICROSOFT })).toBeNull()
-    expect(suit(screen.getByRole("button", { name: "Recevoir un lien de connexion" }), ou)).toBe(true)
+    expect(suit(screen.getByRole("button", { name: "Continuer" }), ou)).toBe(true)
     expect(suit(ou, google)).toBe(true)
     formulaireInchange()
   })

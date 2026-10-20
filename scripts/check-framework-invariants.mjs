@@ -135,6 +135,7 @@ const SEGMENTS_ADMIS = [
   'trash',
   'upload',
   'usage',
+  'welcome',
 ]
 
 const PARAMETRES = {

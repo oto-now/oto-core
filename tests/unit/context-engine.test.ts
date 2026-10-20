@@ -263,8 +263,8 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
 
   // E05-S12 (AC-1) : une partie par Contexte, après la procédure servie ; le code porte ~1 750 caractères de
   // règles de plus, le budget de la coupe grandit d'autant (4 800 au lieu de 3 000) ; E11-S16 : les autres candidates
-  // par titre et résumé, et leur consigne, allongent le bloc code (5 800).
-  it("should order the blocks as P39 and, in a budget of 5,800, keep the code and the served procedure whole and name the omitted end blocks", async () => {
+  // par titre et résumé, et leur consigne, allongent le bloc code (5 800) ; 1.4.12 : la notice d'une procédure, ~580 de plus (6 400).
+  it("should order the blocks as P39 and, in a budget of 6,400, keep the code and the served procedure whole and name the omitted end blocks", async () => {
     const ref = await everyBlockRef()
     const db = await ref.db("claire")
     const assembly = { phrase: "relance les devis en attente", code: "AAAA-BBBB", since: new Date(Date.now() - 14 * 86_400_000).toISOString() }
@@ -274,8 +274,8 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
     )
     expect(full.text.length).toBeLessThanOrEqual(CONTEXT_BUDGET)
 
-    const cut = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget: 5800 })
-    expect(cut.text.length).toBeLessThanOrEqual(5800)
+    const cut = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget: 6400 })
+    expect(cut.text.length).toBeLessThanOrEqual(6400)
     // Le code et la procédure servie, entiers : le début du texte servi dans le budget complet.
     const head = full.text.slice(0, full.report[0].chars + 2 + full.report[1].chars)
     expect(head.startsWith("ctx: AAAA-BBBB\n")).toBe(true)

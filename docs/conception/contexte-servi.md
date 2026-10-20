@@ -1,7 +1,7 @@
 # Contexte servi
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-19
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -48,6 +48,8 @@ Le banc a mesuré que le seul levier qui force la lecture des règles sur tous l
 ### Ce que sert `context`
 
 Ordre servi : le bloc `code` (première ligne « ctx: XXXX-XXXX », règles « How this workspace works », langue de réponse, puis « ## This request » et la ligne du routage, la procédure reconnue suivant immédiatement sa ligne), une partie par Contexte, « What's new », « Procedures you can run », « Recent content ». Le routage lui-même : [routage et recherche](routage-et-recherche.md).
+
+Notice des procédures (1.4.12) : les règles « How this workspace works » disent à chaque contexte, en deux lignes, ce qu'est une procédure (des étapes numérotées pour une tâche qui revient, routées par titre et résumé) et ce qui la fait bien marcher (« When to use it », une action par étape, un bloc `call` après son étape, quoi faire de chaque résultat, la sortie attendue, à qui demander), puis où lire le reste (`help`, section procedures, et `write.procedure`). Une demande sans procédure servie qui mène à cette section du guide (`closestHelpSection`, en écrire ou en modifier une) reçoit la section entière dans le bloc `code`, au lieu du seul chemin pour la lire (`hintLines`) ; les autres sections restent un pointeur.
 
 - Les règles (1.4.3) tiennent en 16 lignes et 3 100 caractères au plus avec un préfixe de 10 caractères (1 200 de plus qu'avant, borne du cahier des charges) : en plus de la carte des outils, une ligne « Reference » (`read path functions` et le contrat d'une fonction, `read path help` le guide de la plateforme une section à la fois, `write.procedure` et `write.table` avant d'en écrire un, `call table.schema` avant d'écrire des lignes) et les pièges qui coûtent le plus : un titre publié déplace le chemin, réorganiser par `node.move` et jamais recréer puis jeter, `contexte` est le nom du Contexte de l'organisation, d'une équipe ou d'un espace, nommer les outils sans préfixe dans un texte.
 - Sans procédure servie (aucune candidate, ou aucune assez nette), la ligne du routage est suivie des fonctions actives dont la description couvre un mot sur quatre de la demande et deux mots au moins (`proposedFunctions`, trois au plus, `context/hints.ts` : un seul mot commun proposait `node.export_tree` à « créer une tâche ») et de la section du guide la plus proche (débuts de mots anglais et français de chaque section) : « exporte toutes les pages de l'équipe SAV » mène à `node.export_tree` et à la section `transfer`.
@@ -121,3 +123,4 @@ Relevées par la story E05-S12, à trancher par JB ; le code suit l'option A :
 - 2026-10-14 : règles v2 (références et pièges, 16 lignes et 3 100 caractères au plus), fonctions et section du guide proposées sans procédure servie, avis d'un code périmé qui dit un refus — décidé par JB (source : cahier des charges « un agent autonome sur Oto dès le premier appel », session du 14/10/2026).
 - 2026-10-19 : budget réparti par priorité, procédures nommées par leurs titres au budget, ordre des procédures dit, contenus proches de la demande — décidé par JB (source : retours d'usage du MCP Démo, session du 19/10/2026).
 - 2026-10-19 : une fonction proposée sans procédure servie couvre deux mots de la demande au moins — décidé par JB (source : retours d'usage du MCP Démo, session du 19/10/2026).
+- 2026-10-20 : notice des procédures servie à chaque contexte en deux lignes, et entière quand la demande est d'en écrire une — décidé par JB (source : session du 20/10/2026).

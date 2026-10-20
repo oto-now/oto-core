@@ -84,7 +84,7 @@ export type { OrgCreationHook } from "./admin/org-creation"
 // E12-S01 (ADR-023) : l'inscription libre, que l'hôte active par l'option `signup` de `handlePlateforme`.
 export { signUp } from "./admin/signup"
 // Les organisations de la personne, pour la bascule du menu de l'entreprise (décision du 2026-10-01).
-export { listMyOrganisations } from "./organisations"
+export { listMyOrganisations, listOrganisationsOfPerson } from "./organisations"
 export type { SignupOptions, SignupResult } from "./admin/signup"
 export { addHost, removeHost } from "./admin/hosts"
 export { grantAccess, revokeAccess } from "./admin/grants"

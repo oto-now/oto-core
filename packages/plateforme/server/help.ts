@@ -109,6 +109,9 @@ const SECTIONS: readonly HelpSection[] = [
   },
 ]
 
+/** Les sections que `context` sert entières quand la demande y mène (1.4.12) : la notice d'une procédure. */
+const SERVED_IN_FULL = new Set(["procedures"])
+
 function sectionText(section: HelpSection, prefix: string): string {
   return [`## ${section.title}`, ...section.lines].join("\n").replaceAll("<p>", prefix)
 }
@@ -136,9 +139,11 @@ export function helpGuide(section: string | undefined, prefix: string): ToolOutp
  * La section du guide la plus proche d'une demande : celle dont le plus de mots de la demande commencent par un de ses
  * débuts de mots (`exporte` mène à Import and export) ; `null` sans aucun. Les mots se lisent en un passage.
  */
-export function closestHelpSection(phrase: string): { id: string; title: string } | null {
+export function closestHelpSection(phrase: string): { id: string; title: string; text?: string } | null {
   const words = phrase.toLowerCase().split(/[^a-zà-ÿ0-9]+/).filter((word) => word.length > 2)
   const scored = SECTIONS.map((one) => ({ one, score: words.filter((word) => one.stems.some((stem) => word.startsWith(stem))).length }))
   const best = scored.sort((a, b) => b.score - a.score)[0]
-  return best && best.score > 0 ? { id: best.one.id, title: best.one.title } : null
+  if (!best || best.score === 0) return null
+  // Une demande qui mène aux procédures reçoit leur notice entière, préfixe à remplacer par l'appelant (`<p>`).
+  return { id: best.one.id, title: best.one.title, ...(SERVED_IN_FULL.has(best.one.id) ? { text: sectionText(best.one, "<p>") } : {}) }
 }

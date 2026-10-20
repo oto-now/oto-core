@@ -18,10 +18,25 @@ import { SERVEUR_INJOIGNABLE } from "@/app/(auth)/messages"
 // la session, l'action renvoie à la connexion sans elle. Retiré : le jeton de l'adresse et l'état « lien
 // plus valable » (la session en tient lieu), l'indication de longueur (la borne vit dans le schéma de
 // l'hôte, que son message d'erreur dit), TanStack Query.
+//
+// Aussi l'îlot « Choisir un mot de passe » de l'accueil d'une invitation (`/welcome`, 2026-10-20) : son titre, et la page
+// où revenir (`retour`, le champ `next` que suit l'action), une phrase avant les champs (`intro`) et d'autres façons
+// d'entrer au pied (`complement` : les fournisseurs).
 
 const FORMULAIRE = "nouveau-mot-de-passe"
 
-export function FormulaireNouveauMotDePasse() {
+type FormulaireNouveauMotDePasseProps = {
+  /** Le titre de l'îlot ; « Choisir un nouveau mot de passe » par défaut (réinitialisation). */
+  titre?: string
+  /** La page où l'action ramène après l'enregistrement ; `/` sans elle. */
+  retour?: string
+  /** Une phrase avant les champs. */
+  intro?: React.ReactNode
+  /** Sous le bouton, au pied de l'îlot : d'autres façons d'entrer. */
+  complement?: React.ReactNode
+}
+
+export function FormulaireNouveauMotDePasse({ titre = "Choisir un nouveau mot de passe", retour, intro, complement }: FormulaireNouveauMotDePasseProps = {}) {
   const [erreur, setErreur] = React.useState<string | null>(null)
   const form = useForm<ResetPasswordData>({
     resolver: zodResolver(resetPasswordSchema),
@@ -37,6 +52,7 @@ export function FormulaireNouveauMotDePasse() {
     const donnees = new FormData()
     donnees.set("password", password)
     donnees.set("confirmPassword", confirmPassword)
+    if (retour) donnees.set("next", retour)
     try {
       const resultat = await resetPasswordAction(donnees)
       if (resultat?.error) setErreur(resultat.error)
@@ -54,14 +70,18 @@ export function FormulaireNouveauMotDePasse() {
 
   return (
     <IlotDAuthentification
-      titre="Choisir un nouveau mot de passe"
+      titre={titre}
       pied={
-        <Button type="submit" form={FORMULAIRE} variant="primary" block disabled={isSubmitting} aria-busy={isSubmitting}>
-          {isSubmitting ? "Enregistrement…" : "Enregistrer le mot de passe"}
-        </Button>
+        <>
+          <Button type="submit" form={FORMULAIRE} variant="primary" block disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? "Enregistrement…" : "Enregistrer le mot de passe"}
+          </Button>
+          {complement}
+        </>
       }
     >
       <form id={FORMULAIRE} className="flex flex-col gap-3" noValidate onSubmit={envoyer}>
+        {intro}
         {erreur && (
           <Alert tone="fail" title="Le mot de passe n'a pas été enregistré">
             {erreur}

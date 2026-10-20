@@ -148,14 +148,15 @@ export async function getRequestOrigin(): Promise<string | null> {
 /**
  * Accepte les invitations en attente au retour de connexion (lien, code, mot de passe : N3), pour le
  * compte de la session ouverte (`data.session` de Supabase Auth).
- * Ne lève jamais : un échec part au log serveur et n'empêche pas la connexion.
+ * Ne lève jamais : un échec part au log serveur et n'empêche pas la connexion. Rend le nom des organisations rejointes
+ * (aucune après un échec) : un lien d'invitation mène alors à l'accueil (`/welcome`).
  */
-export async function acceptPendingInvitations(session: Pick<Session, "access_token" | "user"> | null | undefined): Promise<void> {
+export async function acceptPendingInvitations(session: Pick<Session, "access_token" | "user"> | null | undefined): Promise<string[]> {
   // En mode OIDC, seul le retour de l'émetteur accepte (`acceptOidcInvitations`) : une action de Supabase
   // Auth reste appelable par son identifiant, et la session qu'elle ouvrirait prendrait sous un
   // identifiant de Supabase l'invitation qu'attend une personne de l'émetteur (HN-E01S11b-12).
-  if (!session?.access_token || oidcEnabled()) return
-  await acceptFor(callerOf(session.user))
+  if (!session?.access_token || oidcEnabled()) return []
+  return acceptFor(callerOf(session.user))
 }
 
 /** La même acceptation au retour de l'émetteur OIDC (`/auth/oidc/callback`, AC-b2), par le service du paquet. */
@@ -163,10 +164,11 @@ export async function acceptOidcInvitations(session: OidcSession): Promise<void>
   await acceptFor(oidcCaller(session))
 }
 
-async function acceptFor(caller: Caller): Promise<void> {
+async function acceptFor(caller: Caller): Promise<string[]> {
   try {
-    await acceptInvitations(createPlatformDb({ caller }))
+    return (await acceptInvitations(createPlatformDb({ caller }))).map((rejointe) => rejointe.name)
   } catch (error) {
     console.error("acceptPendingInvitations: l'acceptation a échoué", isPlatformError(error) ? error.code : error)
+    return []
   }
 }

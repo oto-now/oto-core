@@ -1,6 +1,8 @@
 // Ce que `context` propose quand aucune procédure ne convient à la demande (1.4.3) : les fonctions dont la description y
 // répond (`searchFunctions`, trois au plus) et la section du guide de la plateforme la plus proche (`help`). Sans lui,
 // « exporte toutes les pages de l'équipe SAV » répondait « no procedure matches », alors que `node.export_tree` le fait.
+// 1.4.12 : une demande qui mène à la section des procédures (en écrire, en modifier une) reçoit sa notice entière, pas
+// seulement le chemin pour la lire.
 import type { CatalogFunction } from "../catalog/define"
 import { catalogFunctions, isActive, searchFunctions } from "../catalog/registry"
 import { loadActiveConnectors } from "../connectors/activations"
@@ -17,7 +19,7 @@ const FUNCTION_SCORE_MIN = 0.25
  */
 const FUNCTION_WORDS_MIN = 2
 
-export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string } | null }
+export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string; text?: string } | null }
 
 /**
  * Les fonctions actives de l'organisation qui répondent à la demande, et la section du guide la plus proche ; une panne de
@@ -46,6 +48,10 @@ export function hintLines(hints: RoutingHints | undefined, prefix: string): stri
     hints.functions.length === 0
       ? []
       : [`Functions that may do it (read a contract with ${prefix}_read path <function>, run it with ${prefix}_call):`, ...hints.functions.map((one) => `- ${one.name}: ${one.sentence}`)]
-  const help = hints.help ? [`Platform guide: ${prefix}_read {"path": "help", "section": "${hints.help.id}"} (${hints.help.title}).`] : []
+  const help = !hints.help
+    ? []
+    : hints.help.text
+      ? [`From the platform guide (section ${hints.help.id}):`, hints.help.text.replaceAll("<p>", prefix)]
+      : [`Platform guide: ${prefix}_read {"path": "help", "section": "${hints.help.id}"} (${hints.help.title}).`]
   return [...functions, ...help]
 }
