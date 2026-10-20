@@ -44,6 +44,7 @@ import {
 } from "./access"
 import type { PlatformDb } from "./db"
 import { leadNames, memberDirectory, teamsWithLeads } from "./directory"
+import { teamPeople } from "./team-people"
 import { changedMeanwhile, inTransaction, invalidInput, isPlatformError, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { parseId, requireAdmin, type Mutation } from "./members"
@@ -96,10 +97,11 @@ async function ownerTeam(db: PlatformDb, nodeId: string): Promise<string | null>
 
 /**
  * Le panneau d'un nœud (AC16) : son propriétaire effectif (H52), le niveau de l'appelant, ses
- * règles (les équipes, puis les personnes, par nom), et à part celle de toute l'organisation, l'accès
- * général (ADR-014).
+ * règles (les équipes, puis les personnes, par nom), à part celle de toute l'organisation, l'accès
+ * général (ADR-014), et, sur demande (`people`), les membres de l'équipe propriétaire avec leur niveau (1.4.12) : un calcul
+ * de plus, que l'affichage d'une page ne paie pas.
  */
-export async function listNodeRules(db: PlatformDb, identity: Identity, path: string): Promise<NodeRulesView> {
+export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean } = {}): Promise<NodeRulesView> {
   return inTransaction(db, "listNodeRules", async (sql) => {
     const node = await readNode({ db, sql }, identity, path)
     const [owner, [rules, teams], directory] = await Promise.all([
@@ -115,8 +117,10 @@ export async function listNodeRules(db: PlatformDb, identity: Identity, path: st
     const nameOf = (userId: string | null) => directory.find((person) => person.userId === userId)?.name
 
     let ownerView: NodeRulesView["owner"] = { kind: "org" }
+    let people: NodeRulesView["people"] = []
     if (owner?.kind === "team") {
       const team = owner.teamId ? teamOf.get(owner.teamId) : undefined
+      if (team && options.people) people = await teamPeople(db, identity, { nodeId: node.id, team, ruledUsers: rules.flatMap((rule) => (rule.subject_user_id ? [{ userId: rule.subject_user_id, ruleId: rule.id }] : [])), nameOf })
       const names = leadNames(team?.leads ?? [], (userId) => nameOf(userId))
       const led = names.length > 0
       ownerView = { kind: "team", teamName: team?.name, leadName: led ? names.join(", ") : undefined, leadCount: led ? names.length : undefined }
@@ -141,6 +145,7 @@ export async function listNodeRules(db: PlatformDb, identity: Identity, path: st
         .map(view)
         .sort((a, b) => Number(a.subject.kind === "user") - Number(b.subject.kind === "user") || a.subject.name.localeCompare(b.subject.name, "fr")),
       general: general ? { id: general.id, level: levelName(general.level) } : null,
+      people,
     }
   })
 }

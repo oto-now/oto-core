@@ -16,7 +16,8 @@
 // 1.4.11 : une cellule est un champ en place qui va à la ligne (sa largeur suit son texte jusqu'à `--table-cell-max`,
 // `editeur.css`) ; au repos, son texte se lit comme en lecture, liens compris (`RenduAuRepos`) ; « @ » y cite un
 // contenu, la liste ouverte sous le tableau (`citer.tsx`). Une cellule tient sur une ligne de markdown : un saut de
-// ligne collé y devient un blanc.
+// ligne collé y devient un blanc. 1.4.12 : au focus, ses liens se montrent réduits à leur titre, comme dans un Texte
+// (`useChampEnPlace`).
 import { useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react"
 import { simpleTableOf } from "../../../schemas/blocks"
 import type { MenuItem } from "../../ds/react/overlays"
@@ -38,7 +39,9 @@ import {
 } from "./blocs-de-page"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { RenduAuRepos } from "./champ-au-repos"
+import { useChampEnPlace } from "./champ-en-place"
 import { idDOption, ListeACiter, useCitation } from "./citer"
+import { placeDansLeChamp } from "./liens-masques"
 import { useGestes, type Gestes } from "./gestes"
 import type { BlocEdite } from "./modele"
 import { MESSAGES_DU_BLOC } from "./operations"
@@ -120,11 +123,14 @@ function Cellule({ tableau, position, decritPar, lectureSeule, liens, liste, sur
   const alignement = tableau.align?.[colonne] ?? null
   const texte = texteDeLaCellule(tableau, position)
   const rendu = aDuBalisage(texte)
+  const champ = useRef<HTMLTextAreaElement>(null)
+  const enPlace = useChampEnPlace(texte, champ, lectureSeule, (source, curseur) => surFrappe(position, surUneLigne(source), curseur))
   // La liste de « @ » n'est désignée que par la cellule où elle s'est ouverte.
   const ouverte = liste && liste.position.ligne === ligne && liste.position.colonne === colonne ? liste : null
   return (
     <span className="oto-block-pile oto-cellule-editee">
       <textarea
+        ref={champ}
         rows={1}
         data-champ=""
         data-cellule={`${ligne}-${colonne}`}
@@ -135,14 +141,20 @@ function Cellule({ tableau, position, decritPar, lectureSeule, liens, liste, sur
         aria-controls={ouverte?.id}
         aria-activedescendant={ouverte?.active}
         readOnly={lectureSeule}
-        value={texte}
+        {...enPlace.champ}
         className={`oto-inline-field field-sizing-content focus-visible:ring-2 focus-visible:ring-ink ${alignement ? CLASSE_D_ALIGNEMENT[alignement] : ""}`}
-        onChange={(evenement) => surFrappe(position, surUneLigne(evenement.target.value), evenement.target.selectionStart)}
         onKeyDown={(evenement) => surTouche(position, evenement)}
-        onFocus={() => surFocus(position)}
-        onBlur={surSortie}
+        onFocus={() => {
+          enPlace.suivreLeFocus(true)
+          surFocus(position)
+        }}
+        onBlur={(evenement) => {
+          enPlace.suivreLeFocus(false)
+          surSortie(evenement)
+        }}
       />
       {rendu && <RenduAuRepos texte={texte} liens={liens} />}
+      {enPlace.miroir}
     </span>
   )
 }
@@ -202,7 +214,9 @@ export function TableauEdite({ cle, bloc, decritPar, lectureSeule, liens, suivre
     setAFocaliser(null)
     const champ = grille.current?.querySelector<HTMLTextAreaElement>(`[data-cellule="${aFocaliser.ligne}-${aFocaliser.colonne}"]`)
     champ?.focus()
-    if (aFocaliser.curseur !== undefined) champ?.setSelectionRange(aFocaliser.curseur, aFocaliser.curseur)
+    // Le curseur est en position de la source : sa place dans le texte montré, liens réduits (`placeDansLeChamp`).
+    const place = champ && aFocaliser.curseur !== undefined ? placeDansLeChamp(champ, aFocaliser.curseur) : null
+    if (place !== null) champ?.setSelectionRange(place, place)
   }, [aFocaliser])
 
   const surTouche = (position: Position, evenement: KeyboardEvent<HTMLTextAreaElement>) => {

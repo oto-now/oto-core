@@ -251,6 +251,11 @@ export const PARTAGE = {
   ajoutesSeulement: "Seulement les personnes ajoutées",
   detailEquipe: "L'équipe peut modifier ; son responsable a l'accès complet.",
   detailPerso: (qui: string) => `${qui} a l'accès complet.`,
+  /** Les membres de l'équipe propriétaire, leur niveau hérité et le menu qui le surcharge (1.4.12). */
+  membresDe: (equipe: string) => `Membres de l'équipe ${equipe}`,
+  responsable: "responsable",
+  niveauxIllisibles: (message: string) => `Les niveaux d'accès n'ont pas pu être lus : ${message}`,
+  reessayer: "Réessayer",
   introuvable: INTROUVABLE,
 } as const
 

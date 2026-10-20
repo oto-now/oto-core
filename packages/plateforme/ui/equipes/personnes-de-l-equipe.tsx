@@ -12,8 +12,9 @@
 // fiche D94 B) : retirer quelqu'un demande confirmation, par un second dialogue qui se ferme au clic, avant la
 // réponse. Ajouté (E05-S13, AC-24) : une équipe a zéro, un ou plusieurs responsables ; l'administrateur nomme
 // chaque membre responsable ou le retire des responsables, sur sa ligne (`PATCH teams/<id>/members/<userId>`) ;
-// retirer de l'équipe un responsable lui est aussi réservé (HN-E05S13-20).
-import { useState } from "react"
+// retirer de l'équipe un responsable lui est aussi réservé (HN-E05S13-20). Ajouté (1.4.12) : le niveau de chaque membre
+// sur les pages de l'équipe, « Peut lire » ou « Peut modifier », réglé sur sa ligne par qui les gère (`niveaux-du-dossier.tsx`).
+import { useState, type ReactNode } from "react"
 import { Crown } from "@phosphor-icons/react/dist/csr/Crown"
 import { CrownCross } from "@phosphor-icons/react/dist/csr/CrownCross"
 import { UserMinus } from "@phosphor-icons/react/dist/csr/UserMinus"
@@ -26,8 +27,10 @@ import { EmptyState } from "../ds/react/empty-state"
 import { AnimatedIcon, type Glyphe } from "../ds/react/icon"
 import { Alert, Avatar, Button } from "../ds/react/primitives"
 import { Row, RowList } from "../ds/react/row-list"
+import { EtatDesNiveaux, useNiveauxDesMembres, type NiveauxDesMembres } from "../noeud/niveau-d-un-membre"
 import { useGeste } from "./gestes"
-import { pluriel, RESPONSABLES, ROLES_D_EQUIPE } from "./libelles"
+import { NIVEAUX_DU_DOSSIER, pluriel, RESPONSABLES, ROLES_D_EQUIPE } from "./libelles"
+import { NiveauDansLEquipe } from "./niveaux-du-dossier"
 import { useRepliDuFocus } from "./repli-du-focus"
 
 /** Une personne de l'organisation, telle que la composition la propose. */
@@ -55,14 +58,15 @@ function BoutonDAction({ action }: { action: Action }) {
   )
 }
 
-/** Une personne : son visage, son nom, son adresse et, au bout, les gestes qui la concernent. */
-function LigneDePersonne({ nom, email, precision, actions = [] }: { nom: string; email: string; precision?: string; actions?: Action[] }) {
+/** Une personne : son visage, son nom, son adresse et, au bout, son niveau sur les pages de l'équipe et les gestes qui la concernent. */
+function LigneDePersonne({ nom, email, precision, niveau, actions = [] }: { nom: string; email: string; precision?: string; niveau?: ReactNode; actions?: Action[] }) {
   return (
     <Row
       lead={<Avatar name={nom} size="sm" aria-hidden="true" />}
       end={
-        actions.length > 0 && (
+        (niveau || actions.length > 0) && (
           <span className="flex items-center gap-2">
+            {niveau}
             {actions.map((action) => (
               <BoutonDAction key={action.cle} action={action} />
             ))}
@@ -110,7 +114,7 @@ function gestesDe(personne: Membre, props: Omit<SectionsProps, "equipe" | "dehor
   return [...role, ...retrait]
 }
 
-function Dedans({ equipe, ...props }: Omit<SectionsProps, "dehors" | "ajouter">) {
+function Dedans({ equipe, niveaux, ...props }: Omit<SectionsProps, "dehors" | "ajouter"> & { niveaux: NiveauxDesMembres }) {
   return (
     <section aria-labelledby={`${ANCRE}-dedans`} className="flex flex-col gap-2">
       <h3 id={`${ANCRE}-dedans`} className="oto-caption">
@@ -131,10 +135,13 @@ function Dedans({ equipe, ...props }: Omit<SectionsProps, "dehors" | "ajouter">)
             nom={personne.name}
             email={personne.email}
             precision={personne.role === "lead" ? ROLES_D_EQUIPE.lead : undefined}
+            niveau={<NiveauDansLEquipe niveaux={niveaux} userId={personne.userId} gestionAccordable={props.nommeLesResponsables} />}
             actions={gestesDe(personne, props)}
           />
         ))}
       </RowList>
+      {equipe.members.length > 0 && <p className="oto-caption">{NIVEAUX_DU_DOSSIER.explication}</p>}
+      <EtatDesNiveaux niveaux={niveaux} />
     </section>
   )
 }
@@ -200,6 +207,8 @@ type PersonnesDeLEquipeProps = {
 export function PersonnesDeLEquipe({ equipe, personnes, compose, nommeLesResponsables, onFermer }: PersonnesDeLEquipeProps) {
   const geste = useGeste()
   const apresUnDepart = useRepliDuFocus(ANCRE, equipe.members)
+  // Relu quand la composition change : un membre ajouté ou nommé responsable change de niveau.
+  const niveaux = useNiveauxDesMembres(equipe.slug, equipe.members.map((membre) => `${membre.userId}:${membre.role}`).join(","))
   const [aRetirer, setARetirer] = useState<Membre | null>(null)
   const retirer = (personne: Membre) => {
     setARetirer(null)
@@ -231,6 +240,7 @@ export function PersonnesDeLEquipe({ equipe, personnes, compose, nommeLesRespons
       <div id={ANCRE} tabIndex={-1} className="flex flex-col gap-4">
         <Dedans
           equipe={equipe}
+          niveaux={niveaux}
           compose={compose}
           nommeLesResponsables={nommeLesResponsables}
           enCours={geste.enCours}

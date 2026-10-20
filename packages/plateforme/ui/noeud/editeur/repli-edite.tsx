@@ -13,7 +13,8 @@
 // focus (`editeur.css`). Le chevron replie et déplie le corps : replié à l'ouverture de la page, sauf s'il a été
 // gardé ouvert dans ce navigateur (`plis-gardes.ts`) ; un menu qu'on vient d'insérer est ouvert.
 //
-// 1.4.11 : « @ » dans le corps ouvre sous lui la liste des contenus à citer, comme dans un Texte (`citer.tsx`).
+// 1.4.11 : « @ » dans le corps ouvre sous lui la liste des contenus à citer, comme dans un Texte (`citer.tsx`). 1.4.12 : au
+// focus, les liens du résumé et du corps se montrent réduits à leur titre, comme dans un Texte (`useChampEnPlace`).
 import { useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react"
 import { IconButton } from "../../ds/react/primitives"
 import { uneLigne } from "../en-tete-modifiable"
@@ -23,8 +24,10 @@ import { usePliGarde } from "../plis-gardes"
 import { GlypheDuPli } from "../plis-lus"
 import type { LiensDesBlocs } from "./champ-de-bloc"
 import { RenduAuRepos } from "./champ-au-repos"
+import { useChampEnPlace } from "./champ-en-place"
 import { idDOption, ListeACiter, useCitation } from "./citer"
 import { useGestes } from "./gestes"
+import { placeDansLeChamp } from "./liens-masques"
 import type { BlocEdite } from "./modele"
 
 type RepliEditeProps = { cle: string; bloc: BlocEdite; mots: string; decritPar?: string; lectureSeule: boolean; liens: LiensDesBlocs }
@@ -47,14 +50,20 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
   const texteDuResume = typeof bloc.data.summary === "string" ? bloc.data.summary : ""
   const texteDuCorps = bloc.text ?? ""
   const ecrire = (nouveauResume: string, nouveauCorps: string) => gestes.modifierLeBloc(cle, { ...bloc, text: nouveauCorps, data: { ...bloc.data, summary: nouveauResume } })
+  // Le curseur est en position de la source : sa place dans le texte montré, liens réduits (`placeDansLeChamp`).
   const aller = (champ: HTMLTextAreaElement | null, curseur: number) => {
     champ?.focus()
-    champ?.setSelectionRange(curseur, curseur)
+    if (champ) champ.setSelectionRange(placeDansLeChamp(champ, curseur), placeDansLeChamp(champ, curseur))
   }
 
   const citation = useCitation(texteDuCorps, (nouveau, curseur) => {
     ecrire(texteDuResume, nouveau)
     setCurseurDuCorps(curseur)
+  })
+  const resumeEnPlace = useChampEnPlace(texteDuResume, resume, lectureSeule, (source) => ecrire(uneLigne(source), texteDuCorps))
+  const corpsEnPlace = useChampEnPlace(texteDuCorps, corps, lectureSeule, (source, curseur) => {
+    ecrire(texteDuResume, source)
+    citation.suivre(source, curseur)
   })
 
   useLayoutEffect(() => {
@@ -107,14 +116,20 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
             aria-label={REPLI_EDITE.resume(mots)}
             aria-describedby={decritPar}
             readOnly={lectureSeule}
-            value={texteDuResume}
+            {...resumeEnPlace.champ}
             className={champ}
-            onChange={(evenement) => ecrire(uneLigne(evenement.target.value), texteDuCorps)}
             onKeyDown={toucherLeResume}
-            onFocus={auFocus}
-            onBlur={quitter}
+            onFocus={() => {
+              resumeEnPlace.suivreLeFocus(true)
+              auFocus?.()
+            }}
+            onBlur={(evenement) => {
+              resumeEnPlace.suivreLeFocus(false)
+              quitter(evenement)
+            }}
           />
           {resumeAuRepos && <RenduAuRepos texte={texteDuResume} liens={liens} />}
+          {resumeEnPlace.miroir}
         </span>
       </div>
       <div id={idDuCorps} className="oto-depliant-corps" hidden={!ouvert}>
@@ -130,20 +145,21 @@ export function RepliEdite({ cle, bloc, mots, decritPar, lectureSeule, liens }: 
             aria-controls={citation.ouverte ? idDeLaListe : undefined}
             aria-activedescendant={citation.ouverte && citation.aDesOptions ? idDOption(idDeLaListe, citation.actif) : undefined}
             readOnly={lectureSeule}
-            value={texteDuCorps}
+            {...corpsEnPlace.champ}
             className={champ}
-            onChange={(evenement) => {
-              ecrire(texteDuResume, evenement.target.value)
-              citation.suivre(evenement.target.value, evenement.target.selectionStart)
-            }}
             onKeyDown={toucherLeCorps}
-            onFocus={auFocus}
+            onFocus={() => {
+              corpsEnPlace.suivreLeFocus(true)
+              auFocus?.()
+            }}
             onBlur={(evenement) => {
+              corpsEnPlace.suivreLeFocus(false)
               citation.fermer()
               quitter(evenement)
             }}
           />
           {corpsAuRepos && <RenduAuRepos texte={texteDuCorps} liens={liens} />}
+          {corpsEnPlace.miroir}
         </span>
         {citation.ouverte && <ListeACiter id={idDeLaListe} resultat={citation.resultat} actif={citation.actif} choisir={citation.choisir} />}
       </div>

@@ -494,7 +494,8 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
     expect(cellule).toHaveAttribute("aria-activedescendant", option.id)
     expect(cellule.closest("table")).not.toContainElement(option)
     fireEvent.keyDown(cellule, { key: "Enter" })
-    await waitFor(() => expect(cellule).toHaveValue("Voir [[ventes/grille_tarifaire|Grille tarifaire]]"))
+    // Au focus, le lien se montre réduit à son titre, comme dans un Texte (1.4.12) ; la source part entière.
+    await waitFor(() => expect(cellule).toHaveValue("Voir [[Grille tarifaire]]"))
     expect(screen.queryByRole("listbox")).toBeNull()
     await focusSur(cellule)
     expect(cellule).toHaveProperty("selectionStart", cellule.value.length)
@@ -526,7 +527,7 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
     const option = await screen.findByRole("option")
     expect(corps).toHaveAttribute("aria-activedescendant", option.id)
     fireEvent.keyDown(corps, { key: "Enter" })
-    await waitFor(() => expect(corps).toHaveValue("Voir [[ventes/grille_tarifaire|Grille tarifaire]]"))
+    await waitFor(() => expect(corps).toHaveValue("Voir [[Grille tarifaire]]"))
     await focusSur(corps)
     expect(corps).toHaveProperty("selectionStart", corps.value.length)
     ailleurs()

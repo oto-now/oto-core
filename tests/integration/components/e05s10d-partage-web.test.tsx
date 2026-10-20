@@ -75,7 +75,8 @@ function api(repondre: (appel: Appel) => Response) {
   fetchMock.mockImplementation(async (url, init) => repondre({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
 }
 
-const appels = (): Appel[] => fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
+// La lecture des membres de l'équipe propriétaire (1.4.12), faite par « Partager » à l'ouverture : hors des appels comptés.
+const appels = (): Appel[] => fetchMock.mock.calls.filter(([url]) => !String(url).startsWith("/api/platform/rules?")).map(([url, init]) => ({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
 
 const LECTURE = `/api/platform/shares?path=${encodeURIComponent(CHEMIN)}`
 

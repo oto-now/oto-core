@@ -348,7 +348,11 @@ describe("RailApplication menus (AC-a4)", () => {
     expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Supprimer l'équipe…"])
     fireEvent.click(menu().getByRole("menuitem", { name: "Les personnes de Ventes" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Les personnes de Ventes" })).toHaveTextContent("Claire Morel"))
-    expect(appels).toEqual([{ url: "/api/platform/teams/ventes", methode: "GET", corps: undefined }])
+    // Le dialogue lit ensuite le niveau de chaque membre sur les pages de l'équipe (1.4.12).
+    expect(appels).toEqual([
+      { url: "/api/platform/teams/ventes", methode: "GET", corps: undefined },
+      { url: "/api/platform/rules?path=ventes", methode: "GET", corps: undefined },
+    ])
     cleanup()
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))

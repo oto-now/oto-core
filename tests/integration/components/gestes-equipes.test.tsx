@@ -1,9 +1,10 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { MemberView, TeamView } from "@otomata_tech/oto_platform/schemas"
+import type { MemberView, NodeRulesView, TeamView } from "@otomata_tech/oto_platform/schemas"
 import { AccesPlateforme, ContexteDeLHote, ContexteDeRafraichissement, CoquilleOto, EcranEquipes, type EcranEquipesProps } from "@otomata_tech/oto_platform/ui"
 import { simulerLesDialogues } from "../../helpers/dialogue"
+import { choisirDansLaListe } from "../../helpers/liste-de-choix"
 
 // Les gestes de l'écran « Équipes et droits », portés sur les menus et les dialogues d'oto-frontend
 // (E05-S09 partie d1, AC-x2 ; E05-S03 : AC6 à AC9, AC11 à AC14, AC18 ; le focus rendu quand un geste emporte
@@ -87,6 +88,9 @@ function rendre(props: Partial<EcranEquipesProps> = {}) {
   return render(ecran(props))
 }
 
+/** Les membres que sert la lecture du dossier de l'équipe (`GET rules?path=`), par cas ; aucun par défaut. */
+const dossier: { people: NonNullable<NodeRulesView["people"]> } = { people: [] }
+
 const envoi = (rang = 0) => {
   const [url, init] = fetchMock.mock.calls[rang]
   return { url, methode: init?.method, corps: init?.body === undefined ? undefined : JSON.parse(String(init.body)) }
@@ -106,7 +110,12 @@ beforeEach(() => {
   fetchMock.mockReset()
   rafraichir.mockReset()
   naviguer.mockReset()
-  vi.stubGlobal("fetch", fetchMock)
+  dossier.people = []
+  // La lecture des niveaux du dossier d'une équipe (1.4.12), à l'ouverture de « Les personnes de … », répond à part :
+  // les gestes de ce fichier se comptent sur `fetchMock` seul.
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    String(url).startsWith("/api/platform/rules?") ? Promise.resolve(reponse(200, { data: { path: "ventes", title: "Ventes", owner: { kind: "team" }, viewerLevel: 3, rules: [], people: dossier.people } })) : fetchMock(url, init),
+  )
 })
 
 afterEach(() => {
@@ -319,6 +328,21 @@ describe("team gestures (AC11 to AC14)", () => {
     expect(personnes.getByRole("button", { name: "Retirer Ada Martin de cette équipe" })).toBeInTheDocument()
     expect(personnes.queryByRole("button", { name: "Retirer Claire Morel de cette équipe" })).toBeNull()
     expect(personnes.queryByRole("button", { name: /responsable/ })).toBeNull()
+  })
+
+  // 1.4.12 : le niveau de chaque membre sur les pages de l'équipe, réglé sur sa ligne.
+  it("should show the level of each member on the pages of the team, and set it on its line", async () => {
+    dossier.people = [{ userId: CLAIRE, name: "Claire Morel", lead: true, level: "manage", inherited: "manage", ruleId: null }]
+    fetchMock.mockResolvedValueOnce(reponse(201, { data: { rule: {} } }))
+    rendre({ onglet: "teams" })
+
+    fireEvent.click(screen.getByRole("button", { name: "Voir les personnes de Ventes" }))
+    const personnes = dialogue("Les personnes de Ventes")
+    const niveau = await personnes.findByRole("combobox", { name: "Accès de Claire Morel" })
+    expect(niveau).toHaveValue("manage")
+    choisirDansLaListe(niveau, "Peut lire")
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(envoi()).toEqual({ url: "/api/platform/rules", methode: "POST", corps: { path: "ventes", subject: { kind: "user", id: CLAIRE }, level: "read" } })
   })
 
   it("should add a person to the team and remove one, a lead included (AC13, AC-22)", async () => {

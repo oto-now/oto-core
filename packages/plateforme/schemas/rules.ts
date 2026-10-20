@@ -42,6 +42,12 @@ export type NodeRulesView = {
    * absent ou `null` : seulement les personnes ajoutées.
    */
   general?: { id: string; level: AccessLevelName } | null
+  /**
+   * Les membres de l'équipe propriétaire effective, chacun avec son niveau sur le nœud (`level`), celui qu'il aurait sans
+   * sa règle nominative sur ce nœud (`inherited`) et cette règle (`ruleId`, `null` sans elle), par nom (1.4.12, droits
+   * par personne) ; absent ou vide hors d'une équipe.
+   */
+  people?: { userId: string; name: string; lead: boolean; level: AccessLevelName; inherited: AccessLevelName; ruleId: string | null }[]
 }
 
 export type RuledNodeView = { path: string; title: string; rulesCount: number }

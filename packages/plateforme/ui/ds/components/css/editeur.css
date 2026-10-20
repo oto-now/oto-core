@@ -328,6 +328,11 @@
   overflow-wrap: break-word;
 }
 
+/* Hors du focus, le texte brut d'une cellule rendue (ses liens `[[…]]`, plus longs que leur titre) couvre la case de son rendu sans la régler : posé en absolu (`.oto-block-pile`), il prend la largeur du rendu, pas la sienne, sinon il laissait un blanc à droite et dessous et faisait défiler le tableau. */
+@media not (forced-colors: active) {
+  .oto-table[data-simple] .oto-cellule-editee > textarea[data-rendu]:not(:focus) { inline-size: auto; }
+}
+
 .oto-table[data-simple] :is(th, td):hover .oto-cellule-editee > textarea:not([readonly]) {
   border-color: var(--island-bd);
 }

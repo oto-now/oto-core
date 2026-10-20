@@ -125,3 +125,8 @@ export const COLONNES_DES_PERSONNES = {
   connexion: "Dernière connexion",
   actions: "Actions",
 } as const
+
+/** Le niveau de chaque membre sur le dossier de l'équipe, dans « Les personnes de … » (1.4.12). */
+export const NIVEAUX_DU_DOSSIER = {
+  explication: "Le niveau d'un membre vaut pour toutes les pages de l'équipe ; « Partager » le change sur une page.",
+} as const

@@ -137,6 +137,16 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
 
+## 1.4.12 — 2026-10-20
+
+### Hosts
+- Install: upgrade to 1.4.12; no migration, no new variable, no import to change. Published from 1.4.11, without what main carries for 1.5.0.
+- UI: « Les personnes de … » shows the level of each member on the pages of the team, « Peut lire » or « Peut modifier », and sets it as a rule naming the member on the team's folder; « Partager » of a page lists the members of the owner team with their inherited level and overrides it on that page only; every line of « Partager » now offers « Aucun accès », which hides the page and what it holds from that person or team, on screen and through the MCP.
+- API: `GET /api/platform/rules?path=` serves the rules panel of a node, read by « Les personnes de … ».
+- Schemas: `NodeRulesView.people` (optional) lists the members of the owner team, each with their level on the node, the level they would have without their own rule there, and that rule; `listNodeRules` serves it.
+- UI: in the editor, the links of a toggle and of a table cell show reduced to their title while typing, like a Texte; at rest, a table cell holding links no longer leaves blank space.
+- UI: the public page reads its document across the whole width of its island, without the left margin.
+
 ## 1.4.11 — 2026-10-20
 
 ### Assistants

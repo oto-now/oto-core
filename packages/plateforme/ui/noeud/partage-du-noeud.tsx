@@ -33,6 +33,7 @@ import { useRafraichir } from "../hote/rafraichir"
 import { PartageSurLeWeb } from "../public/partage-sur-le-web"
 import { AccesGeneral } from "./acces-general"
 import { NIVEAUX_D_ACCES, PARTAGE } from "./libelles"
+import { EtatDesNiveaux, MembresDeLEquipe, useNiveauxDesMembres } from "./niveau-d-un-membre"
 
 /**
  * L'ancre du panneau : l'intitulé de la liste, qui reçoit le focus quand la relecture emporte le contrôle
@@ -273,7 +274,12 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
   const [erreur, setErreur] = useState("")
   const [enCours, setEnCours] = useState(false)
   const gere = noeud.viewerLevel === 3
-  const niveaux = gestionAccordable ? ACCESS_LEVEL_NAMES.filter((niveau) => niveau !== "none") : ACCESS_LEVEL_NAMES.filter((niveau) => niveau === "read" || niveau === "write")
+  // Les membres de l'équipe, lus à l'ouverture du panneau et relus quand les règles servies changent (1.4.12).
+  const lusDesMembres = useNiveauxDesMembres(noeud.path, noeud.rules.map((regle) => `${regle.id}:${regle.level}`).join(","), gere)
+  const membres = lusDesMembres.lecture.etat === "pret" ? (lusDesMembres.lecture.vue.people ?? []).filter((membre) => membre.ruleId === null) : []
+  // « Aucun accès » (1.4.12) : la personne ou l'équipe ne voit plus ce contenu ni ce qu'il range, à l'écran comme par le MCP ;
+  // l'accès complet reste réservé à l'administrateur (N6).
+  const niveaux = gestionAccordable ? ACCESS_LEVEL_NAMES : ACCESS_LEVEL_NAMES.filter((niveau) => niveau !== "manage")
 
   const envoyer: Envoyer = async ({ methode, ressource, corps }, succes, refus) => {
     setErreur("")
@@ -297,6 +303,17 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
         {PARTAGE.ontAcces}
       </p>
       <ListeDesAcces regles={noeud.rules} chemin={noeud.path} gere={gere} niveaux={niveaux} moi={moi} envoyer={envoyer} enCours={enCours} />
+      <MembresDeLEquipe
+        membres={membres}
+        equipe={noeud.owner.teamName ?? ""}
+        chemin={noeud.path}
+        gere={gere}
+        moi={moi}
+        gestionAccordable={gestionAccordable}
+        envoyer={envoyer}
+        enCours={enCours}
+      />
+      {lusDesMembres.lecture.etat === "erreur" && <EtatDesNiveaux niveaux={lusDesMembres} />}
       <p className="oto-pop-label">{PARTAGE.accesGeneral}</p>
       <AccesGeneral noeud={noeud} nomOrganisation={nomOrganisation} gere={gere} gestionAccordable={gestionAccordable} envoyer={envoyer} enCours={enCours} />
       <p className="oto-caption">{PARTAGE.votreAcces(NIVEAUX_D_ACCES[ACCESS_LEVEL_NAMES[noeud.viewerLevel]])}</p>

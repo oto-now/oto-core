@@ -22,6 +22,11 @@ describe("overflows of the screens kept closed by their CSS", () => {
     expect(lead).not.toMatch(/(^|[^-])inline-size:\s*20px/)
   })
 
+  it("should keep the raw text of a rendered table cell, longer with its links, out of the width of its cell at rest (1.4.12)", () => {
+    const editeur = css("components/css/editeur.css")
+    expect(editeur).toMatch(/@media not \(forced-colors: active\) \{\s*\.oto-table\[data-simple\] \.oto-cellule-editee > textarea\[data-rendu\]:not\(:focus\) \{ inline-size: auto; \}/)
+  })
+
   it("should keep the raw text of a rendered field, longer with its links, out of the height of its block at rest", () => {
     const editeur = css("components/css/editeur.css")
     expect(editeur).toMatch(/@media not \(forced-colors: active\) \{\s*\.oto-block-pile > :is\(\.oto-block-field, \.oto-inline-field\)\[data-rendu\]:not\(:focus\) \{[^}]*position: absolute;[^}]*inset: 0;/)
