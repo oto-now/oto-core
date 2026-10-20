@@ -9,7 +9,7 @@ import { randomUUID } from "crypto"
 import type postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
-import { withAnonSession, withCallerSession } from "../../packages/plateforme/server/sql"
+import { withAnonSession, withCallerSession, withServerSession } from "../../packages/plateforme/server/sql"
 import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData, type SeededOrg, type SeededPerson } from "../helpers/sql"
 
 const NETWORK_TIMEOUT = 60_000
@@ -106,6 +106,21 @@ describe.skipIf(!sqlConfigured)(
       } finally {
         Object.assign(pool, { begin })
       }
+    })
+
+    it("should turn JIT off in a session, for it alone, and leave the setting of the server on the connection given back", async () => {
+      // Les policies évaluent le niveau du nœud par sous-requête, que le planificateur compte pour chaque ligne :
+      // JIT actif, la lecture d'un tableau de milliers de lignes était compilée.
+      const [inCaller] = await withCallerSession({ userId: lea.id }, (sql) => sql`select current_setting('jit') as jit`)
+      expect(inCaller).toEqual({ jit: "off" })
+      const [inServer] = await withServerSession({ userId: lea.id }, (sql) => sql`select current_setting('jit') as jit`)
+      expect(inServer).toEqual({ jit: "off" })
+      const [inAnon] = await withAnonSession((sql) => sql`select current_setting('jit') as jit`)
+      expect(inAnon).toEqual({ jit: "off" })
+
+      const pool = await packagePool()
+      const [after] = await pool`select current_setting('jit') as jit, (select reset_val from pg_settings where name = 'jit') as server`
+      expect(after.jit).toBe(after.server)
     })
 
     it("should render an instant read by to_json in UTC whatever time zone the connection carries (M32, HN-E01S10-b1-8)", async () => {

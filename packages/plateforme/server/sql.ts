@@ -148,6 +148,8 @@ async function inSession<T>(role: Role, claims: Record<string, unknown>, fn: (sq
     // par un autre client du pooler ne remplace jamais l'appelant. Le fuseau est UTC : `to_json` d'un
     // `timestamptz` rend l'instant dans celui de la session, et les services le servent tel quel, en texte
     // (`+00:00`, comme PostgREST sur un serveur en UTC), quel que soit le fuseau du serveur (M32, HN-E01S10-b1-8).
+    // Le JIT est coupé : les policies évaluent le niveau du nœud par sous-requête, que le planificateur compte pour
+    // chaque ligne, et la compilation multipliait la lecture d'un tableau de milliers de lignes.
     await sql`select pg_catalog.set_config('role', ${role}, true),
                      pg_catalog.set_config('TimeZone', 'UTC', true),
                      pg_catalog.set_config('request.jwt.claims', ${text}, true),
@@ -155,7 +157,8 @@ async function inSession<T>(role: Role, claims: Record<string, unknown>, fn: (sq
                      pg_catalog.set_config('request.jwt.claim', '', true),
                      pg_catalog.set_config('statement_timeout', ${STATEMENT_TIMEOUT[role]}, true),
                      pg_catalog.set_config('lock_timeout', ${LOCK_TIMEOUT}, true),
-                     pg_catalog.set_config('idle_in_transaction_session_timeout', ${IDLE_IN_TRANSACTION_TIMEOUT}, true)`
+                     pg_catalog.set_config('idle_in_transaction_session_timeout', ${IDLE_IN_TRANSACTION_TIMEOUT}, true),
+                     pg_catalog.set_config('jit', 'off', true)`
     const session: OpenSession = { role, claims: text, sql, open: true }
     try {
       return { value: await openSession.run(session, () => fn(sql)) }

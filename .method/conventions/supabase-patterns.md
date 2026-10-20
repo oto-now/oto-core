@@ -157,8 +157,8 @@ franchit une de ces règles passe par un ADR.
   Supabase en mode transaction rend une connexion serveur à d'autres clients de `platform_app` sans
   la remettre à zéro, et un rôle ou des claims posés pour la connexion passent aux transactions
   suivantes. Rôle (`authenticated`, `anon`, ou `platform_server` pour une écriture que le serveur seul
-  affirme : `withServerSession`), claims, délais et fuseau (`TimeZone` UTC) se posent par
-  `set_config(…, true)` ou `set local`, dans la transaction de la session (`server/sql.ts`), qui vide
+  affirme : `withServerSession`), claims, délais, fuseau (`TimeZone` UTC) et JIT coupé (`jit = off`) se
+  posent par `set_config(…, true)` ou `set local`, dans la transaction de la session (`server/sql.ts`), qui vide
   aussi `request.jwt.claim.sub` et `request.jwt.claim` : `auth.uid()` et `auth.jwt()` de Supabase les
   lisent avant `request.jwt.claims`. **Vérifiable :**
   `rg -niUP '(\w\x60|unsafe\(\s*[\x22\x27\x60]|;)\s*set\s+(?!(local|transaction|constraints)\b)[\w\x22]' packages/plateforme/server`
