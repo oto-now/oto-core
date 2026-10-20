@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-20] — Version 1.5.0 du paquet
+**À appliquer :** depuis 1.4.x, ce que dit la section 1.5.0 du `CHANGELOG.md` du paquet : `oto-platform db prepare` sur chaque base, `migrations sync`, puis les migrations du 06/10 au 19/10.
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet rejoint la section 1.5.0, datée du jour de la publication ; une section `## Unreleased` vide est rouverte au-dessus. L'étiquette `v1.5.0` publie le paquet sur npm.
+**Pourquoi :** 1.5.0 n'avait jamais été publiée ; ce qui s'était accumulé depuis sous `Unreleased` part avec elle.
+**Fichiers :** `packages/plateforme/CHANGELOG.md`, `docs/changelog.md`.
+
 ## [2026-10-20] — Pseudonymisation : allumée organisation par organisation
 **À appliquer :** rien sans geste ; un hôte qui veut choisir ses organisations passe `{ enabled: async (org) => … }` en second argument de `registerSensitiveEntities`, et met sa réponse en cache.
 **Quoi :** `enabled(org)` (`SensitiveOptions`, `server/pseudonym/declaration.ts`) est lu à chaque appel par `pseudonymizationFor` (`service.ts`), qui rend la porte (`gate`) et l'entrée (`entry`). Éteinte, l'organisation est servie comme sans déclaration : `pseudonymizerFor` rend `null`, pas d'avis des jetons dans `context` (`ContextRequest.pseudonymized`), journal, retours et `pseudonymize` en clair, ni clé ni état lus. Mais quand des arguments portent la forme d'un jeton d'une sorte déclarée ou réservée (`carriesToken`), le dictionnaire se bâtit et les résout comme allumée : argument d'entité, chemin, requête, clé de ligne, filtre, `replace_text`, jetons HMAC et de référence ; un jeton de valeur reste à sens unique. `runCall` ne fait des champs déclarés des jetons qu'allumée (`gated`). Rallumée : les mêmes jetons (même sel). Un prédicat qui lève ou ne rend pas un booléen ferme l'appel (`internal`). Le prénom seul et le nom seul courant sont inscrits comme limite assumée, couverte pour les fiches par `output.entityFields` (décision d'Alexis, option C), avec les mesures qui l'ont fondée.
