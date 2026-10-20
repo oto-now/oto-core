@@ -10,6 +10,8 @@ import { normalizeTitle } from "../../schemas"
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
 import { nodeDiscardDraft } from "../nodes/discard"
 import { nodeMove } from "../nodes/move-function"
+import { nodePublicLink } from "../nodes/public-link-function"
+import { nodeAccess, nodeShareFunction } from "../nodes/share-functions"
 import { nodeTrash } from "../nodes/trash"
 import { nodeWriteMany } from "../nodes/write-many"
 import { tableAggregate } from "../tables/aggregate"
@@ -33,7 +35,7 @@ export const NATIVE_CONNECTOR = "table"
  * Catalogue de la V1 (H80) : `mail` simulé (E04-S01), lecture des tableaux (E07-S01), écriture et file
  * de travail (E07-S02), import d'un CSV (E10-S01), suppression de lignes, abandon d'un brouillon et
  * corbeille (E11-S02, connecteur natif `node`) ; ERP (E08-S05) s'y ajoute ; le dépôt par lien (E10-S02 lot f, connecteur
- * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`).
+ * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`).
  */
 export function catalogFunctions(): CatalogFunction[] {
   return [
@@ -55,6 +57,9 @@ export function catalogFunctions(): CatalogFunction[] {
     nodeImportTree,
     nodeTree,
     nodeCheck,
+    nodeAccess,
+    nodeShareFunction,
+    nodePublicLink,
     uploadLink,
     ...erpFunctions(),
   ]

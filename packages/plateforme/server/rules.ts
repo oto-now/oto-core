@@ -39,7 +39,7 @@ import {
 } from "./access"
 import type { PlatformDb } from "./db"
 import { leadNames, memberDirectory, teamsWithLeads } from "./directory"
-import { teamPeople } from "./team-people"
+import { refuseOwnerTeamBelowOrg, teamPeople } from "./team-people"
 import { changedMeanwhile, inTransaction, invalidInput, isPlatformError, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { parseId, requireAdmin, type Mutation } from "./members"
@@ -52,7 +52,7 @@ type RuleRow = { id: string; subject_team_id: string | null; subject_user_id: st
 type TeamName = { id: string; name: string }
 
 /** Le client de l'opération et sa transaction ouverte (`inTransaction`), que les décisions d'`access.ts` reprennent par `db`. */
-type InOperation = { db: PlatformDb; sql: Tx }
+export type InOperation = { db: PlatformDb; sql: Tx }
 
 /** Le niveau d'une règle lu en base, nommé comme `ACCESS_LEVEL_NAMES` ; toute autre valeur : `none`. */
 function levelName(value: string): AccessLevelName {
@@ -97,52 +97,58 @@ async function ownerTeam(db: PlatformDb, nodeId: string): Promise<string | null>
  * de plus, que l'affichage d'une page ne paie pas.
  */
 export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean } = {}): Promise<NodeRulesView> {
-  return inTransaction(db, "listNodeRules", async (sql) => {
-    const node = await readNode({ db, sql }, identity, path)
-    const [owner, [rules, teams], directory] = await Promise.all([
-      nodeOwner(db, node.id),
-      Promise.all([
-        sql<RuleRow[]>`select id, subject_team_id, subject_user_id, subject_org, level from platform.access_rules where node_id = ${node.id}`,
-        // Les responsables de chaque équipe (`team_members.role`, E05-S13), dans la même lecture.
-        teamsWithLeads(sql, identity.org.id),
-      ]),
-      memberDirectory(db, identity.org.id),
-    ])
-    const teamOf = new Map(teams.map((team) => [team.id, team]))
-    const nameOf = (userId: string | null) => directory.find((person) => person.userId === userId)?.name
+  return inTransaction(db, "listNodeRules", (sql) => nodeRulesIn({ db, sql }, identity, path, options))
+}
 
-    let ownerView: NodeRulesView["owner"] = { kind: "org" }
-    let people: NodeRulesView["people"] = []
-    if (owner?.kind === "team") {
-      const team = owner.teamId ? teamOf.get(owner.teamId) : undefined
-      if (team && options.people) people = await teamPeople(db, identity, { nodeId: node.id, team, ruledUsers: rules.flatMap((rule) => (rule.subject_user_id ? [{ userId: rule.subject_user_id, ruleId: rule.id }] : [])), nameOf })
-      const names = leadNames(team?.leads ?? [], (userId) => nameOf(userId))
-      const led = names.length > 0
-      ownerView = { kind: "team", teamName: team?.name, leadName: led ? names.join(", ") : undefined, leadCount: led ? names.length : undefined }
-    } else if (owner?.kind === "user") {
-      ownerView = { kind: "user", userName: nameOf(owner.userId) }
-    }
+/**
+ * Le panneau d'un nœud dans la transaction `sql` d'un appelant : celle d'un service qui lit encore autre chose du même
+ * nœud (`node.access` et son lien public) sans ouvrir une seconde transaction (`supabase-patterns.md § Couplage à Supabase`).
+ */
+export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean } = {}): Promise<NodeRulesView> {
+  const node = await readNode({ db, sql }, identity, path)
+  const [owner, [rules, teams], directory] = await Promise.all([
+    nodeOwner(db, node.id),
+    Promise.all([
+      sql<RuleRow[]>`select id, subject_team_id, subject_user_id, subject_org, level from platform.access_rules where node_id = ${node.id}`,
+      // Les responsables de chaque équipe (`team_members.role`, E05-S13), dans la même lecture.
+      teamsWithLeads(sql, identity.org.id),
+    ]),
+    memberDirectory(db, identity.org.id),
+  ])
+  const teamOf = new Map(teams.map((team) => [team.id, team]))
+  const nameOf = (userId: string | null) => directory.find((person) => person.userId === userId)?.name
 
-    const view = (rule: RuleRow): NodeRulesView["rules"][number] => {
-      const subject = rule.subject_team_id
-        ? { kind: "team" as const, id: rule.subject_team_id, name: teamOf.get(rule.subject_team_id)?.name ?? rule.subject_team_id }
-        : { kind: "user" as const, id: rule.subject_user_id ?? "", name: nameOf(rule.subject_user_id) ?? rule.subject_user_id ?? "" }
-      return { id: rule.id, subject, level: levelName(rule.level) }
-    }
-    const general = rules.find((rule) => rule.subject_org)
-    return {
-      path: node.path,
-      title: node.title,
-      owner: ownerView,
-      viewerLevel: node.level,
-      rules: rules
-        .filter((rule) => !rule.subject_org)
-        .map(view)
-        .sort((a, b) => Number(a.subject.kind === "user") - Number(b.subject.kind === "user") || a.subject.name.localeCompare(b.subject.name, "fr")),
-      general: general ? { id: general.id, level: levelName(general.level) } : null,
-      people,
-    }
-  })
+  let ownerView: NodeRulesView["owner"] = { kind: "org" }
+  const team = owner?.kind === "team" && owner.teamId ? teamOf.get(owner.teamId) : undefined
+  // Les membres et l'accès par défaut de l'équipe propriétaire et de toute l'organisation, sur demande (`people`), hors Privé.
+  const owned = options.people && owner && owner.kind !== "user" ? await teamPeople(db, identity, { nodeId: node.id, team: team ?? null, rules, nameOf }) : { people: [], team: null }
+  if (owner?.kind === "team") {
+    const names = leadNames(team?.leads ?? [], (userId) => nameOf(userId))
+    const led = names.length > 0
+    ownerView = { kind: "team", teamId: team?.id, teamName: team?.name, leadName: led ? names.join(", ") : undefined, leadCount: led ? names.length : undefined }
+  } else if (owner?.kind === "user") {
+    ownerView = { kind: "user", userName: nameOf(owner.userId) }
+  }
+
+  const view = (rule: RuleRow): NodeRulesView["rules"][number] => {
+    const subject = rule.subject_team_id
+      ? { kind: "team" as const, id: rule.subject_team_id, name: teamOf.get(rule.subject_team_id)?.name ?? rule.subject_team_id }
+      : { kind: "user" as const, id: rule.subject_user_id ?? "", name: nameOf(rule.subject_user_id) ?? rule.subject_user_id ?? "" }
+    return { id: rule.id, subject, level: levelName(rule.level) }
+  }
+  const general = rules.find((rule) => rule.subject_org)
+  return {
+    path: node.path,
+    title: node.title,
+    owner: ownerView,
+    viewerLevel: node.level,
+    rules: rules
+      .filter((rule) => !rule.subject_org)
+      .map(view)
+      .sort((a, b) => Number(a.subject.kind === "user") - Number(b.subject.kind === "user") || a.subject.name.localeCompare(b.subject.name, "fr")),
+    general: general ? { id: general.id, level: levelName(general.level) } : null,
+    ...owned,
+  }
 }
 
 /**
@@ -241,6 +247,7 @@ export async function setNodeRule(
     if (level === "manage") requireAdmin(identity, "grant the manage level")
     await requireSubject(sql, identity, subject)
     const teamId = await ownerTeam(db, node.id)
+    if (subject.kind === "team" && subject.id === teamId) await refuseOwnerTeamBelowOrg(db, identity, node, level)
 
     const target = { column: "node_id" as const, id: node.id }
     const saved = await saveRule(sql, identity, { target, subject, level }, { context: "setNodeRule", message: rulesChanged(node.path) })

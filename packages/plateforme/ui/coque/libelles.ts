@@ -31,8 +31,12 @@ export const RAIL = {
 /** Le menu de l'entreprise (AC-a4) : les réglages d'oto-frontend, les écrans de la plateforme rangés dessous (E05-S11, AC-33). */
 export const ENTREPRISE = {
   reglages: "Réglages de l’entreprise",
-  usage: "Usage",
-  journal: "Journal",
+  /** Activité et Retours (1.4.13), sous les réglages. */
+  suivi: "Suivi de l’entreprise",
+  /** L'écran d'usage des assistants monté seul, sous le nom de son onglet d'« Activité » (1.4.13). */
+  usage: "Statistiques",
+  /** La page « Activité » (1.4.13), à l'adresse du journal : ses onglets Statistiques et Journal. */
+  journal: "Activité",
   retours: "Retours",
   organisation: "Organisation",
   equipes: "Équipes & accès",

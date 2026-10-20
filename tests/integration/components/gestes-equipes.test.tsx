@@ -76,6 +76,7 @@ function ecran(props: Partial<EcranEquipesProps> = {}) {
             equipes={{ data: EQUIPES }}
             Lien={Lien}
             hrefDOnglet={(onglet) => `/teams?tab=${onglet}`}
+            prefixeDesPages="/n/"
             {...props}
           />
         </ContexteDeLHote.Provider>
@@ -90,6 +91,10 @@ function rendre(props: Partial<EcranEquipesProps> = {}) {
 
 /** Les membres que sert la lecture du dossier de l'équipe (`GET rules?path=`), par cas ; aucun par défaut. */
 const dossier: { people: NonNullable<NodeRulesView["people"]> } = { people: [] }
+
+/** Le récapitulatif de la suppression d'une équipe (`GET teams/<slug>/deletion`, 1.4.13), servi à part des gestes comptés. */
+const RECAPITULATIF_VIDE = { team: { id: VENTES, slug: "ventes", name: "Ventes" }, blockedBy: null, members: [{ name: "Claire Morel", email: "claire@demo.test" }], rules: 2, trashed: 0 }
+const recapitulatif: { vue: Record<string, unknown> } = { vue: RECAPITULATIF_VIDE }
 
 const envoi = (rang = 0) => {
   const [url, init] = fetchMock.mock.calls[rang]
@@ -111,10 +116,15 @@ beforeEach(() => {
   rafraichir.mockReset()
   naviguer.mockReset()
   dossier.people = []
-  // La lecture des niveaux du dossier d'une équipe (1.4.12), à l'ouverture de « Les personnes de … », répond à part :
-  // les gestes de ce fichier se comptent sur `fetchMock` seul.
+  recapitulatif.vue = RECAPITULATIF_VIDE
+  // La lecture des niveaux du dossier d'une équipe (1.4.12), à l'ouverture de « Les personnes de … », et celle du
+  // récapitulatif d'une suppression (1.4.13) répondent à part : les gestes de ce fichier se comptent sur `fetchMock` seul.
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
-    String(url).startsWith("/api/platform/rules?") ? Promise.resolve(reponse(200, { data: { path: "ventes", title: "Ventes", owner: { kind: "team" }, viewerLevel: 3, rules: [], people: dossier.people } })) : fetchMock(url, init),
+    String(url).startsWith("/api/platform/rules?")
+      ? Promise.resolve(reponse(200, { data: { path: "ventes", title: "Ventes", owner: { kind: "team" }, viewerLevel: 3, rules: [], people: dossier.people } }))
+      : String(url).endsWith("/deletion")
+        ? Promise.resolve(reponse(200, { data: recapitulatif.vue }))
+        : fetchMock(url, init),
   )
 })
 
@@ -313,7 +323,12 @@ describe("team gestures (AC11 to AC14)", () => {
     fireEvent.click(dialogue("Les personnes de Ventes").getAllByRole("button", { name: "Fermer" }).at(-1) ?? document.body)
 
     fireEvent.click(screen.getByRole("button", { name: "Voir les personnes de Support" }))
-    fireEvent.click(dialogue("Les personnes de Support").getByRole("button", { name: "Nommer responsable : Claire Morel" }))
+    // 1.4.13 : ce que change le rôle se lit au focus du geste même.
+    const nommer = dialogue("Les personnes de Support").getByRole("button", { name: "Nommer responsable : Claire Morel" })
+    fireEvent.focus(nommer)
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Un responsable a l'accès complet aux pages de l'équipe")
+    expect(nommer).toHaveAttribute("aria-describedby", screen.getByRole("tooltip").id)
+    fireEvent.click(nommer)
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
     expect(envoi(1)).toEqual({ url: `/api/platform/teams/${SUPPORT}/members/${CLAIRE}`, methode: "PATCH", corps: { role: "lead" } })
   })
@@ -383,6 +398,29 @@ describe("team gestures (AC11 to AC14)", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  // 1.4.13 : trois blocs, ce qui part (pages de la corbeille comprises), ce qui bloque avec ses liens, puis le geste.
+  it("should say what goes with the team, list what blocks it with links, and keep the gesture off while something blocks", async () => {
+    recapitulatif.vue = { ...RECAPITULATIF_VIDE, trashed: 3, blockedBy: { nodes: [{ path: "ventes/devis" }], accounts: [{ label: "Mail Ventes" }] } }
+    rendre({ onglet: "teams" })
+
+    choisir("Gérer Ventes", "menuitem", "Supprimer l'équipe")
+    const suppression = dialogue("Supprimer Ventes")
+    const part = within(await suppression.findByRole("region", { name: "Ce qui part" }))
+    expect(part.getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
+      "1 personne quitte l'équipe.",
+      "2 règles d'accès qui la nomment tombent.",
+      "Son Contexte est supprimé.",
+      "3 pages de la corbeille sont effacées définitivement.",
+    ])
+    const bloque = within(suppression.getByRole("region", { name: "Ce qui bloque" }))
+    expect(bloque.getByRole("link", { name: "ventes/devis" })).toHaveAttribute("href", "/n/ventes/devis")
+    expect(bloque.getByText("le compte de connecteur « Mail Ventes »")).toBeInTheDocument()
+    const geste = suppression.getByRole("button", { name: "Supprimer l'équipe" })
+    expect(geste).toBeDisabled()
+    fireEvent.click(geste)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it("should say what the team still owns, by name, and keep the page as it is (AC14)", async () => {
     const details = { reason: "team_owns_objects", nodes: ["ventes/devis", "ventes/suivi_prospects"], accounts: ["Mail Ventes"], nodesTotal: 2, accountsTotal: 1 }
     fetchMock.mockResolvedValue(reponse(409, { error: { code: "conflict", message: "server text", details } }))
@@ -390,6 +428,8 @@ describe("team gestures (AC11 to AC14)", () => {
 
     choisir("Gérer Ventes", "menuitem", "Supprimer l'équipe")
     const suppression = dialogue("Supprimer Ventes")
+    // Une page rangée entre la lecture du récapitulatif et le geste : le refus du service se dit dans le dialogue.
+    await waitFor(() => expect(suppression.getByRole("button", { name: "Supprimer l'équipe" })).toBeEnabled())
     fireEvent.click(suppression.getByRole("button", { name: "Supprimer l'équipe" }))
 
     expect((await suppression.findByRole("alert")).textContent).toBe(
@@ -492,6 +532,7 @@ describe("focus after a gesture that takes its trigger away (AC20, accessibility
     const vue = rendre({ onglet: "teams" })
 
     choisir("Gérer Ventes", "menuitem", "Supprimer l'équipe")
+    await waitFor(() => expect(dialogue("Supprimer Ventes").getByRole("button", { name: "Supprimer l'équipe" })).toBeEnabled())
     fireEvent.click(dialogue("Supprimer Ventes").getByRole("button", { name: "Supprimer l'équipe" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     vue.rerender(ecran({ onglet: "teams", equipes: { data: [EQUIPES[0]] } }))

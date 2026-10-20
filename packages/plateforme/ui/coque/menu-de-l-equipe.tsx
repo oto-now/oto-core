@@ -5,7 +5,7 @@
 // l'écran Équipes (`PersonnesDeLEquipe`, `SuppressionDEquipe`), ouverts sur place, sur les données que lit
 // `GET teams/<slug>` (`server/team-panel.ts`) à l'ouverture, puis après chaque geste (la relecture du rail). Sans lui,
 // une équipe ne se composait ou ne se supprimait qu'en quittant la page pour l'écran Équipes.
-import { useCallback, useEffect, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { DotsThree } from "@phosphor-icons/react/dist/csr/DotsThree"
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
@@ -16,12 +16,15 @@ import { Dialog } from "../ds/react/dialog"
 import { AnimatedIcon } from "../ds/react/icon"
 import { DropdownMenu, type MenuItem } from "../ds/react/overlays"
 import { Alert, Button, IconButton } from "../ds/react/primitives"
-import { PersonnesDeLEquipe } from "../equipes/personnes-de-l-equipe"
-import { SuppressionDEquipe } from "../equipes/suppression-d-equipe"
 import { MENU_DE_L_EQUIPE } from "./libelles"
 import { surRelectureDuRail } from "./use-arbre-du-rail"
 
 type Geste = "personnes" | "supprimer"
+
+// Les deux dialogues se chargent à leur ouverture : chargés avec le rail, ils entraient dans le JavaScript de chaque page
+// du tableau de bord, au-delà de son budget (`performance-patterns.md § Bundle Size`, job `packed-host-build`).
+const PersonnesDeLEquipe = lazy(() => import("../equipes/personnes-de-l-equipe").then((module) => ({ default: module.PersonnesDeLEquipe })))
+const SuppressionDEquipe = lazy(() => import("../equipes/suppression-d-equipe").then((module) => ({ default: module.SuppressionDEquipe })))
 
 type Lecture = { etat: "chargement" } | { etat: "erreur"; message: string } | { etat: "pret"; panneau: TeamPanel }
 
@@ -39,23 +42,17 @@ function usePanneauDeLEquipe(slug: string) {
   return { lecture, relire: () => void lire() }
 }
 
-function PanneauDeLEquipe({ slug, nom, geste, onFermer }: { slug: string; nom: string; geste: Geste; onFermer: () => void }) {
-  const { lecture, relire } = usePanneauDeLEquipe(slug)
-  if (lecture.etat === "pret") {
-    const { team, people, compose, admin } = lecture.panneau
-    if (geste === "supprimer") return <SuppressionDEquipe equipe={team} onFermer={onFermer} apresUnDepart={() => undefined} />
-    const personnes = people.map((personne) => ({ id: personne.id, nom: personne.name, email: personne.email }))
-    return <PersonnesDeLEquipe equipe={team} personnes={personnes} compose={compose} nommeLesResponsables={admin} onFermer={onFermer} />
-  }
+/** Le dialogue d'attente : la lecture du panneau, ou le code du dialogue, en cours ; la lecture en échec, avec « Réessayer ». */
+function DialogueDAttente({ nom, erreur, relire, onFermer }: { nom: string; erreur: string | null; relire: () => void; onFermer: () => void }) {
   return (
     <Dialog open onClose={onFermer} title={MENU_DE_L_EQUIPE.personnes(nom)} size="md" footer={<Button variant="secondary" onClick={onFermer}>{MENU_DE_L_EQUIPE.fermer}</Button>}>
-      {lecture.etat === "chargement" ? (
+      {erreur === null ? (
         <p role="status" aria-busy="true">
           {MENU_DE_L_EQUIPE.chargement}
         </p>
       ) : (
         <Alert tone="fail" title={MENU_DE_L_EQUIPE.echec}>
-          {lecture.message}{" "}
+          {erreur}{" "}
           <Button variant="secondary" size="sm" onClick={relire}>
             {MENU_DE_L_EQUIPE.reessayer}
           </Button>
@@ -65,7 +62,25 @@ function PanneauDeLEquipe({ slug, nom, geste, onFermer }: { slug: string; nom: s
   )
 }
 
-export function MenuDeLEquipe({ slug, nom, administre }: { slug: string; nom: string; administre: boolean }) {
+function PanneauDeLEquipe({ slug, nom, geste, prefixe, onFermer }: { slug: string; nom: string; geste: Geste; prefixe: string; onFermer: () => void }) {
+  const { lecture, relire } = usePanneauDeLEquipe(slug)
+  const attente = <DialogueDAttente nom={nom} erreur={lecture.etat === "erreur" ? lecture.message : null} relire={relire} onFermer={onFermer} />
+  if (lecture.etat !== "pret") return attente
+  const { team, people, compose, admin } = lecture.panneau
+  const personnes = people.map((personne) => ({ id: personne.id, nom: personne.name, email: personne.email }))
+  return (
+    <Suspense fallback={attente}>
+      {geste === "supprimer" ? (
+        <SuppressionDEquipe equipe={team} onFermer={onFermer} apresUnDepart={() => undefined} prefixeDesPages={prefixe} />
+      ) : (
+        <PersonnesDeLEquipe equipe={team} personnes={personnes} compose={compose} nommeLesResponsables={admin} onFermer={onFermer} />
+      )}
+    </Suspense>
+  )
+}
+
+/** `prefixe` : celui des pages de l'hôte, que le rail reçoit (`adresses.pages`) ; une page qui bloque la suppression y mène. */
+export function MenuDeLEquipe({ slug, nom, administre, prefixe }: { slug: string; nom: string; administre: boolean; prefixe: string }) {
   const [geste, setGeste] = useState<Geste | null>(null)
   const items: MenuItem[] = [
     { label: MENU_DE_L_EQUIPE.personnes(nom), icon: <AnimatedIcon as={UsersThree} size="xs" />, onSelect: () => setGeste("personnes") },
@@ -81,7 +96,7 @@ export function MenuDeLEquipe({ slug, nom, administre }: { slug: string; nom: st
   return (
     <>
       <DropdownMenu trigger={declencheur} items={items} />
-      {geste && <PanneauDeLEquipe slug={slug} nom={nom} geste={geste} onFermer={() => setGeste(null)} />}
+      {geste && <PanneauDeLEquipe slug={slug} nom={nom} geste={geste} prefixe={prefixe} onFermer={() => setGeste(null)} />}
     </>
   )
 }

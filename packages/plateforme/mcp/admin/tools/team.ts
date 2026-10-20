@@ -218,7 +218,9 @@ async function remove(call: OpCall): Promise<AdminOutput> {
     const names = firstOf(plan.members.map((member) => member.name), NAMED)
     const members = plan.members.length > 0 ? `its ${plural(plan.members.length, "member", "members")} (${names}) lose this team` : "it has no member"
     const rules = plan.rules === 1 ? "1 access rule that names it is removed" : `${plan.rules} access rules that name it are removed`
-    const text = [`About to delete team ${team.name} (${team.slug}) of ${org}: ${members}; ${rules}.`, nothingWas("deleted")].join("\n")
+    // 1.4.13 : ses pages à la corbeille partent avec elle, pour de bon.
+    const trashed = plan.trashed > 0 ? `; ${plural(plan.trashed, "page in the trash is", "pages in the trash are")} erased for good` : ""
+    const text = [`About to delete team ${team.name} (${team.slug}) of ${org}: ${members}; ${rules}${trashed}.`, nothingWas("deleted")].join("\n")
     return { text, data: { summary: plan }, target: `team:${team.slug}`, nextActions: [] }
   }
   await deleteTeam(db, identity, team.id).catch((error: unknown) => {

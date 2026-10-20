@@ -32,7 +32,7 @@ export type NodeRulesView = {
    * Propriétaire effectif (H52) : l'équipe et ses responsables (`leadName` les joint par « , »,
    * `leadCount` les compte : E05-S13), l'organisation, ou la personne.
    */
-  owner: { kind: "org" | "team" | "user"; teamName?: string; leadName?: string; leadCount?: number; userName?: string }
+  owner: { kind: "org" | "team" | "user"; teamId?: string; teamName?: string; leadName?: string; leadCount?: number; userName?: string }
   /** Niveau de l'appelant sur le nœud, calculé par le service (`nodeLevel`, E01-S07). */
   viewerLevel: 0 | 1 | 2 | 3
   /** Les règles des équipes et des personnes. */
@@ -48,6 +48,17 @@ export type NodeRulesView = {
    * par personne) ; absent ou vide hors d'une équipe.
    */
   people?: { userId: string; name: string; lead: boolean; level: AccessLevelName; inherited: AccessLevelName; ruleId: string | null }[]
+  /**
+   * L'accès par défaut de l'équipe propriétaire effective, lu avec `people` : le niveau d'un membre sans règle qui le nomme
+   * ni responsabilité (`level`), celui qu'il aurait sans la règle de l'équipe sur ce nœud (`inherited`) et cette règle
+   * (`ruleId`) ; absent ou `null` hors d'une équipe.
+   */
+  team?: { teamId: string; level: AccessLevelName; inherited: AccessLevelName; ruleId: string | null } | null
+  /**
+   * L'accès de toute l'organisation, lu avec `people` : son niveau réel sur le nœud, règle d'un dossier au-dessus comprise
+   * (`level`), et celui qu'il aurait sans la règle d'organisation du nœud même (`inherited`) ; absent ou `null` dans Privé.
+   */
+  organisation?: { level: AccessLevelName; inherited: AccessLevelName } | null
 }
 
 export type RuledNodeView = { path: string; title: string; rulesCount: number }

@@ -28,6 +28,8 @@ export { EcranConnexion, EcranConnexionChargement } from "./connexion/ecran-conn
 export type { AdresseDeConnexion, DerniereConnexion, ExempleDePrompt } from "./connexion/types"
 export { EcranDuJournal, EcranDuJournalChargement } from "./journal/ecran-du-journal"
 export type { EcranDuJournalProps, ParametresDuJournal } from "./journal/ecran-du-journal"
+export { EcranDActivite } from "./journal/ecran-d-activite"
+export type { EcranDActiviteProps, OngletDActivite } from "./journal/ecran-d-activite"
 export { reserveAuxAdministrateurs } from "./admin/textes"
 export { EcranUsage, EcranUsageChargement } from "./admin/usage/ecran-usage"
 export type { EcranUsageProps } from "./admin/usage/ecran-usage"
@@ -56,6 +58,7 @@ export { ListeDesProcedures, ListeDesProceduresChargement } from "./procedure/li
 // Obsolète (M59, fiche D104) : ne rend plus rien, gardé pour les hôtes qui le montent (ADR-006).
 export { ProcedureDuNoeud } from "./procedure/procedure-du-noeud"
 export { AnnexesDuContexte } from "./contexte/annexes-du-contexte"
+export { JaugeDuBudget } from "./contexte/jauge-du-budget"
 export { genreDuNoeud } from "./noeud/libelles"
 export { FaviconDuTheme } from "./components/favicon-du-theme"
 // E05-S09 (partie a) : la coque unique, le rail d'oto-frontend, entier ou par morceaux, et les primitives

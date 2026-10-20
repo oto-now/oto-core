@@ -4,6 +4,9 @@
 // aucun `ctx` émis ni journal ; l'écran ne recompose rien. Server Component. Sans lui, personne ne sait ce
 // que son assistant lit de ce Contexte.
 //
+// 2026-10-20 (décidé par JB) : `whole` porte le poids sans plafond que lit la jauge du budget (`JaugeDuBudget`), montée tout
+// en bas de la colonne par l'hôte ; elle reprend les chiffres qu'E05-S13 avait retirés.
+//
 // E05-S11 (retour 4 de JB, AC-9 à AC-11) : « Voici ce que votre agent va lire », « Ordre de lecture », le
 // total en dernière ligne ; le texte servi replié part (il se lit dans la vue « Contexte » de l'accueil), et
 // chaque ligne y mène, ouverte sur la même partie (`/context#<ancre>`, E11-S10). E05-S13 (retour 7, AC-13) : plus
@@ -37,6 +40,8 @@ export type DonneesDeLApercu = {
    */
   blocks: readonly { name: string; chars: number; status: string; path: string | null; head?: number }[]
   budget: number
+  /** Le poids sans plafond de chaque bloc et leur total (`WholeWeights`, 2026-10-20) : la jauge du budget ; absent d'un hôte qui ne le sert pas. */
+  whole?: { total: number; blocks: readonly { name: string; chars: number }[] }
 }
 
 type ApercuDuContexteProps = {

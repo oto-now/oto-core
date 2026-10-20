@@ -1,46 +1,63 @@
 "use client"
 
-// « Accès général » du panneau « Partager » (E05-S10, AC-b13 ; ADR-014) : toute l'organisation, à un niveau
-// (« Peut lire », « Peut modifier », « Accès complet » pour l'administrateur), ou seulement les personnes
-// ajoutées ; lu dans `general` de `listNodeRules`, changé par `POST /api/platform/nodes/access` (le service
-// décide : la gestion du nœud, l'administrateur pour l'accès complet, jamais dans Privé). Ce que l'espace donne
-// déjà se dit à côté : dans Tout le monde chaque membre lit, l'équipe propriétaire modifie. Sans lui, l'accès
-// général se lisait sans se changer (HN-E05S10b-6). Un fichier à lui : `partage-du-noeud.tsx` touchait la borne
-// de 300 lignes.
-import { useState, type ReactNode } from "react"
-import { ACCESS_LEVEL_NAMES, generalAccessSchema, type AccessLevelName, type NodeRulesView } from "../../schemas"
+// « Accès par défaut » du panneau « Partager » (E05-S10, AC-b13 ; ADR-014 ; 1.4.13) : deux lignes indépendantes, l'équipe
+// propriétaire et toute l'organisation, chacune à son niveau. L'équipe : sa règle sur ce nœud (`POST rules`, sujet
+// l'équipe), retirée quand on revient au niveau qu'elle aurait sans elle (`DELETE rules/<id>`), son niveau lu avec les
+// membres (`team` de `GET rules?path=`). L'organisation : son niveau réel, règle d'un dossier au-dessus comprise (`organisation`
+// de la même lecture) ; `POST /api/platform/nodes/access` pose sa règle sur le nœud (« Aucun accès » compris, qui ferme une
+// page qu'un dossier ouvre), et revenir au niveau hérité la retire.
+// L'équipe suit l'organisation : sa liste ne propose rien sous le niveau de l'organisation, et le service monte sa règle
+// quand l'organisation monte au-dessus. Le service décide (la gestion du nœud, l'administrateur pour l'accès complet,
+// jamais Privé). Sans lui, le niveau de l'équipe était figé et l'équipe et l'organisation ne se réglaient pas ensemble.
+import type { ReactNode } from "react"
+import { ACCESS_LEVEL_NAMES, generalAccessSchema, setNodeRuleSchema, type AccessLevelName, type NodeRulesView } from "../../schemas"
 import type { MessagesDuGeste } from "../api/messages"
-import { Select, type SelectOption } from "../ds/react/select"
+import type { SelectOption } from "../ds/react/select"
 import { GlypheDePortee, type PorteeDEspace } from "./glyphes"
 import { ACCES_GENERAL, NIVEAUX_D_ACCES, PARTAGE, REFUS_DE_L_ACCES_GENERAL } from "./libelles"
+import { ChoixDuNiveau, EtiquetteDeLigne, NiveauLu, optionDuNiveau } from "./partage-visuel"
+
+type Envoi = { methode: "POST" | "DELETE"; ressource: string; corps?: unknown }
 
 /** Le geste d'un choix : la route, le corps validé par le schéma de l'API, l'annonce, les refus propres ; `true` s'il a abouti. */
-type EnvoyerLAcces = (envoi: { methode: "POST"; ressource: string; corps: unknown }, annonce: string, refus: MessagesDuGeste) => Promise<boolean>
+type EnvoyerLAcces = (envoi: Envoi, annonce: string, refus?: MessagesDuGeste) => Promise<boolean>
 
-type Choix = "organisation" | "restricted"
+/** L'accès par défaut de l'équipe, lu avec les membres ; `undefined` pendant la lecture. */
+export type EquipeParDefaut = NodeRulesView["team"] | undefined
 
-/** Les niveaux qu'on donne à toute l'organisation : jamais « aucun » ; l'accès complet à l'administrateur (D4), ou déjà là. */
-function niveauxOuverts(gestionAccordable: boolean, courant: AccessLevelName | null): AccessLevelName[] {
-  return ACCESS_LEVEL_NAMES.filter((niveau) => niveau !== "none" && (niveau !== "manage" || gestionAccordable || courant === "manage")).reverse()
+/** L'accès réel de toute l'organisation, lu avec les membres ; `undefined` pendant la lecture ou en échec. */
+type OrganisationParDefaut = NodeRulesView["organisation"] | undefined
+
+const rang = (niveau: AccessLevelName) => ACCESS_LEVEL_NAMES.indexOf(niveau)
+
+/** Les niveaux d'une liste, du plus haut au plus bas : à partir de `plancher`, l'accès complet à l'administrateur (D4) ou déjà là. */
+function niveauxDepuis(plancher: AccessLevelName, gestionAccordable: boolean, courant: AccessLevelName): SelectOption[] {
+  return ACCESS_LEVEL_NAMES.filter((niveau) => rang(niveau) >= rang(plancher) && (niveau !== "manage" || gestionAccordable || courant === "manage"))
+    .reverse()
+    .map(optionDuNiveau)
 }
 
-function optionsDuNiveau(niveaux: readonly AccessLevelName[]): SelectOption[] {
-  return niveaux.map((niveau) => ({ value: niveau, label: NIVEAUX_D_ACCES[niveau] }))
-}
+const niveauLu = (valeur: string): AccessLevelName | null => ACCESS_LEVEL_NAMES.find((niveau) => niveau === valeur) ?? null
 
-function Ligne({ portee, children }: { portee: PorteeDEspace; children: ReactNode }) {
+function Ligne({ portee, nom, etiquette, children }: { portee: PorteeDEspace; nom: string; etiquette?: ReactNode; children: ReactNode }) {
   return (
     <div className="oto-pop-row">
       <span className="oto-avatar" data-size="sm" aria-hidden="true">
         <GlypheDePortee portee={portee} />
+      </span>
+      <span className="oto-share-name">
+        {nom}
+        {etiquette}
       </span>
       {children}
     </div>
   )
 }
 
-type AccesGeneralProps = {
+type AccesParDefautProps = {
   noeud: NodeRulesView
+  equipe: EquipeParDefaut
+  organisation: OrganisationParDefaut
   nomOrganisation: string
   gere: boolean
   gestionAccordable: boolean
@@ -48,98 +65,121 @@ type AccesGeneralProps = {
   enCours: boolean
 }
 
-/** Ce qui se lit sans se changer : sans l'accès complet, ou dans Privé (le service refuse, ADR-014 § 2). */
-function AccesGeneralLu({ noeud, nomOrganisation, gere }: Pick<AccesGeneralProps, "noeud" | "nomOrganisation" | "gere">) {
-  const { owner } = noeud
-  const general = noeud.general ?? null
-  if (owner.kind === "user") {
+/** Le plancher de l'organisation : dans Tout le monde chacun lit déjà (H66 (3)) ; ailleurs, personne. */
+const plancherDe = (noeud: NodeRulesView): AccessLevelName => (noeud.owner.kind === "org" ? "read" : "none")
+
+/** Le niveau réel de toute l'organisation ; avant sa lecture, sa règle sur le nœud, sinon le plancher. */
+function niveauDeLOrganisation(noeud: NodeRulesView, organisation: OrganisationParDefaut): AccessLevelName {
+  return organisation?.level ?? noeud.general?.level ?? plancherDe(noeud)
+}
+
+/**
+ * Le corps de `POST nodes/access` : revenir au niveau hérité retire la règle du nœud ; tout autre niveau la pose, « Aucun
+ * accès » compris ; `null` quand rien ne change ou que le schéma refuse.
+ */
+function corpsDeLOrganisation(noeud: NodeRulesView, niveau: AccessLevelName, herite: AccessLevelName): unknown {
+  if (niveau === herite && !noeud.general) return null
+  const corps = generalAccessSchema.safeParse(niveau === herite ? { path: noeud.path, access: "restricted" } : { path: noeud.path, access: "organisation", level: niveau })
+  return corps.success ? corps.data : null
+}
+
+/** Le geste qui donne `niveau` à l'équipe : retirer sa règle si elle retrouve ainsi le niveau hérité, la poser sinon. */
+function envoiDeLEquipe(chemin: string, equipe: NonNullable<NodeRulesView["team"]>, niveau: AccessLevelName): Envoi | null {
+  if (niveau === equipe.inherited && equipe.ruleId !== null) return { methode: "DELETE", ressource: `rules/${equipe.ruleId}` }
+  const corps = setNodeRuleSchema.safeParse({ path: chemin, subject: { kind: "team", id: equipe.teamId }, level: niveau })
+  return corps.success ? { methode: "POST", ressource: "rules", corps: corps.data } : null
+}
+
+function LigneDeLEquipe({ noeud, equipe, organisation, gere, gestionAccordable, envoyer, enCours }: Omit<AccesParDefautProps, "nomOrganisation">) {
+  const nom = noeud.owner.teamName ?? ""
+  if (equipe === undefined || equipe === null) {
     return (
-      <>
-        <Ligne portee="private">
-          <span>{PARTAGE.ajoutesSeulement}</span>
-        </Ligne>
-        {owner.userName && <p className="oto-caption">{PARTAGE.detailPerso(owner.userName)}</p>}
-        {gere && <p className="oto-caption">{ACCES_GENERAL.prive}</p>}
-      </>
-    )
-  }
-  if (general || owner.kind === "org") {
-    return (
-      <Ligne portee="all">
-        <span>{PARTAGE.toutLeMonde(nomOrganisation)}</span>
-        <span className="oto-pop-meta">{NIVEAUX_D_ACCES[general?.level ?? "read"]}</span>
+      <Ligne portee="equipe" nom={PARTAGE.equipe(nom)}>
+        <span aria-busy={equipe === undefined} className="oto-pop-meta">
+          {equipe === undefined ? ACCES_GENERAL.lecture : ""}
+        </span>
       </Ligne>
     )
+  }
+  const etiquette = equipe.ruleId === null ? <EtiquetteDeLigne>{ACCES_GENERAL.herite}</EtiquetteDeLigne> : undefined
+  async function changer(valeur: string) {
+    const niveau = niveauLu(valeur)
+    const envoi = niveau && equipe ? envoiDeLEquipe(noeud.path, equipe, niveau) : null
+    if (niveau && envoi) await envoyer(envoi, PARTAGE.change(PARTAGE.equipe(nom), NIVEAUX_D_ACCES[niveau]))
   }
   return (
     <>
-      <Ligne portee="equipe">
-        <span>{PARTAGE.equipeEtAjoutes(owner.teamName ?? "")}</span>
+      <Ligne portee="equipe" nom={PARTAGE.equipe(nom)} etiquette={etiquette}>
+        {gere ? (
+          <ChoixDuNiveau
+            valeur={equipe.level}
+            servi={equipe.level}
+            aria-label={ACCES_GENERAL.niveauEquipe(nom)}
+            options={niveauxDepuis(niveauDeLOrganisation(noeud, organisation), gestionAccordable, equipe.level)}
+            disabled={enCours}
+            onChange={(evenement) => void changer(evenement.target.value)}
+          />
+        ) : (
+          <NiveauLu niveau={equipe.level} />
+        )}
       </Ligne>
-      <p className="oto-caption">{PARTAGE.detailEquipe}</p>
+      {gere && <p className="oto-caption">{ACCES_GENERAL.responsableGarde}</p>}
     </>
   )
 }
 
-/** Le niveau choisi dans un menu, lu dans la liste fermée des niveaux ; `null` pour toute autre valeur. */
-const niveauLu = (valeur: string): AccessLevelName | null => ACCESS_LEVEL_NAMES.find((niveau) => niveau === valeur) ?? null
-
-/** Le corps de `POST nodes/access` d'un choix, validé par le schéma que l'API applique ; `null` s'il est refusé. */
-function corpsDuChoix(chemin: string, choix: Choix, niveau: AccessLevelName | null): unknown {
-  const corps = generalAccessSchema.safeParse(choix === "restricted" ? { path: chemin, access: "restricted" } : { path: chemin, access: "organisation", level: niveau })
-  return corps.success ? corps.data : null
+function LigneDeLOrganisation({ noeud, organisation, nomOrganisation, gere, gestionAccordable, envoyer, enCours }: Omit<AccesParDefautProps, "equipe">) {
+  const niveau = niveauDeLOrganisation(noeud, organisation)
+  const plancher = plancherDe(noeud)
+  const herite = organisation?.inherited ?? plancher
+  // « hérité » : aucune règle sur le nœud, un dossier au-dessus ouvre ce contenu à toute l'organisation.
+  const etiquette = !noeud.general && niveau !== plancher ? <EtiquetteDeLigne>{ACCES_GENERAL.herite}</EtiquetteDeLigne> : undefined
+  async function changer(valeur: string) {
+    const voulu = niveauLu(valeur)
+    const corps = voulu ? corpsDeLOrganisation(noeud, voulu, herite) : null
+    if (!voulu || corps === null) return
+    const annonce = voulu === "none" ? ACCES_GENERAL.restreint : ACCES_GENERAL.ouvert(NIVEAUX_D_ACCES[voulu])
+    await envoyer({ methode: "POST", ressource: "nodes/access", corps }, annonce, REFUS_DE_L_ACCES_GENERAL)
+  }
+  return (
+    <>
+      <Ligne portee="all" nom={ACCES_GENERAL.toute(nomOrganisation)} etiquette={etiquette}>
+        {gere ? (
+          <ChoixDuNiveau
+            valeur={niveau}
+            servi={niveau}
+            aria-label={ACCES_GENERAL.niveau}
+            options={niveauxDepuis(plancher, gestionAccordable, niveau)}
+            disabled={enCours}
+            onChange={(evenement) => void changer(evenement.target.value)}
+          />
+        ) : (
+          <NiveauLu niveau={niveau} />
+        )}
+      </Ligne>
+      {noeud.owner.kind === "org" && <p className="oto-caption">{ACCES_GENERAL.toutLeMondeLit}</p>}
+    </>
+  )
 }
 
-export function AccesGeneral(props: AccesGeneralProps) {
-  const { noeud, nomOrganisation, gere, gestionAccordable, envoyer, enCours } = props
-  const general = noeud.general ?? null
-  // Le choix se montre tout de suite ; la relecture ou un refus le ramènent à l'état servi.
-  const servi: Choix = general ? "organisation" : "restricted"
-  const [choisi, setChoisi] = useState<Choix>(servi)
-  const [vu, setVu] = useState(servi)
-  if (vu !== servi) {
-    setVu(servi)
-    setChoisi(servi)
-  }
-  if (!gere || noeud.owner.kind === "user") return <AccesGeneralLu noeud={noeud} nomOrganisation={nomOrganisation} gere={gere} />
-
-  const niveau = general?.level ?? "read"
-  const niveaux = niveauxOuverts(gestionAccordable, general?.level ?? null)
-
-  async function poser(choix: Choix, voulu: AccessLevelName | null) {
-    const corps = corpsDuChoix(noeud.path, choix, voulu)
-    if (corps === null || voulu === null) return
-    setChoisi(choix)
-    const annonce = choix === "restricted" ? ACCES_GENERAL.restreint : ACCES_GENERAL.ouvert(NIVEAUX_D_ACCES[voulu])
-    if (!(await envoyer({ methode: "POST", ressource: "nodes/access", corps }, annonce, REFUS_DE_L_ACCES_GENERAL))) setChoisi(servi)
-  }
-
-  // Dans Tout le monde, chaque membre lit déjà (le propriétaire, H66 (3)) : « Peut lire » retire la règle.
-  if (noeud.owner.kind === "org") {
+/** Les deux lignes de l'accès par défaut ; dans Privé, la seule phrase de l'espace (le service refuse d'ouvrir, ADR-014 § 2). */
+export function AccesParDefaut(props: AccesParDefautProps) {
+  const { noeud, gere } = props
+  if (noeud.owner.kind === "user") {
     return (
       <>
-        <Ligne portee="all">
-          <span>{PARTAGE.toutLeMonde(nomOrganisation)}</span>
-          <Select size="sm" className="oto-share-level" aria-label={ACCES_GENERAL.niveau} value={niveau} disabled={enCours} options={optionsDuNiveau(niveaux)} onChange={(evenement) => void poser(evenement.target.value === "read" ? "restricted" : "organisation", niveauLu(evenement.target.value))} />
+        <Ligne portee="private" nom={PARTAGE.ajoutesSeulement}>
+          {null}
         </Ligne>
-        <p className="oto-caption">{ACCES_GENERAL.toutLeMondeLit}</p>
+        {noeud.owner.userName && <p className="oto-caption">{PARTAGE.detailPerso(noeud.owner.userName)}</p>}
+        {gere && <p className="oto-caption">{ACCES_GENERAL.prive}</p>}
       </>
     )
   }
-
-  const equipe = noeud.owner.teamName ?? ""
   return (
     <>
-      <Ligne portee={choisi === "organisation" ? "all" : "equipe"}>
-        <Select size="sm" aria-label={ACCES_GENERAL.qui} value={choisi} disabled={enCours} onChange={(evenement) => void poser(evenement.target.value === "organisation" ? "organisation" : "restricted", "read")}>
-          <option value="restricted">{PARTAGE.equipeEtAjoutes(equipe)}</option>
-          <option value="organisation">{ACCES_GENERAL.toute(nomOrganisation)}</option>
-        </Select>
-        {choisi === "organisation" && general && (
-          <Select size="sm" className="oto-share-level" aria-label={ACCES_GENERAL.niveau} value={niveau} disabled={enCours} options={optionsDuNiveau(niveaux)} onChange={(evenement) => void poser("organisation", niveauLu(evenement.target.value))} />
-        )}
-      </Ligne>
-      <p className="oto-caption">{PARTAGE.detailEquipe}</p>
+      {noeud.owner.kind === "team" && <LigneDeLEquipe {...props} />}
+      <LigneDeLOrganisation {...props} />
     </>
   )
 }

@@ -24,6 +24,8 @@ type OngletEquipesProps = {
   navigation: Navigation
   /** L'adresse de l'onglet sous d'autres réglages ; un réglage absent y prend son défaut. */
   adresseAvec: (reglages: Partial<ReglagesDesListes>) => string
+  /** Le préfixe des adresses de pages de l'hôte (`"/n/"`), en chaîne : une page qui bloque la suppression d'une équipe y mène. */
+  prefixeDesPages: string
 }
 
 /** Le tri sur les équipes reçues : par nom, ou par nombre de personnes (puis par nom). */
@@ -39,7 +41,7 @@ function personnesSansEquipe(membres: MemberView[]): string | undefined {
   return seules === 0 ? undefined : pluriel(seules, "personne dans aucune équipe", "personnes dans aucune équipe")
 }
 
-export function OngletEquipes({ nomOrganisation, moi, equipes, membres, reglages, navigation, adresseAvec }: OngletEquipesProps) {
+export function OngletEquipes({ nomOrganisation, moi, equipes, membres, reglages, navigation, adresseAvec, prefixeDesPages }: OngletEquipesProps) {
   if (equipes.error !== undefined) return <ErreurDeLecture message={equipes.error} href={navigation.ici} Lien={navigation.Lien} />
   if (membres.error !== undefined) return <ErreurDeLecture message={membres.error} href={navigation.ici} Lien={navigation.Lien} />
   const cle = reglages.sort ?? "team"
@@ -56,6 +58,7 @@ export function OngletEquipes({ nomOrganisation, moi, equipes, membres, reglages
         tri={{ cle, sens: reglages.order }}
         adresses={{ team: { asc: adresse("team", "asc"), desc: adresse("team", "desc") }, people: { asc: adresse("people", "asc"), desc: adresse("people", "desc") } }}
         ancre={ANCRE_DES_EQUIPES}
+        prefixeDesPages={prefixeDesPages}
       />
     </div>
   )

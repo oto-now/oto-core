@@ -111,6 +111,10 @@ describe("catalog (AC23)", () => {
       // 1.4.3 : inventaire et contrôle d'une arborescence.
       "node.tree",
       "node.check",
+      // 1.4.13 : le partage d'un nœud et son lien public.
+      "node.access",
+      "node.share",
+      "node.public_link",
       // E10-S02 (lot f) : le dépôt par lien à usage unique.
       "upload.link",
     ])

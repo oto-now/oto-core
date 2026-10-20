@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Suspense, use } from "react"
-import { journalFiltersSchema, USEFUL_PROCEDURES_SHOWN } from "@otomata_tech/oto_platform/schemas"
-import { connectAddress, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
+import { journalFiltersSchema, LAUNCH_PROCEDURES_SHOWN } from "@otomata_tech/oto_platform/schemas"
+import { connectAddress, homeContents, homeNews, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
 import {
   EcranDAccueil,
   EcranDAccueilChargement,
@@ -15,7 +15,7 @@ import {
 import { adresseDe } from "@/lib/plateforme/connexion"
 import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } from "@/lib/plateforme/session"
 
-// L'accueil (E05-S09, partie b ; E05-S12, lot B) : le salut, la recherche, les activités de la semaine
+// L'accueil (E05-S09, partie b ; E05-S12, lot B) : le salut, les activités de la semaine
 // (le journal par gestes), « Brancher un assistant » et les procédures utiles à droite. La page revérifie la session, hors de tout `try` (le layout
 // n'est pas une frontière, `nextjs-patterns.md § Layouts`), puis lit les services du paquet avec le jeton
 // de la session, en parallèle, chacun par `resultatDe` : une lecture en échec se dit dans son îlot, et
@@ -26,6 +26,9 @@ import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } fro
 //
 // E05-S12 (lot B) : les activités de la semaine (`listActivities`, le journal par gestes) au lieu des
 // conversations, qui restent à `/journal`, et les procédures utiles de l'îlot de droite (`usefulProcedures`).
+//
+// 1.4.13 : la première page de « Reprendre » (contenus récents de ses équipes, `homeContents`), les nouveautés depuis la
+// dernière visite (`homeNews`) et les cinq procédures de « Lancer » ; les autres pages de « Reprendre » passent par l'API.
 export const metadata: Metadata = {
   title: "Accueil",
   robots: { index: false },
@@ -50,15 +53,19 @@ function connexionsDe(connexions: LastConnection[]): DerniereConnexion[] {
 }
 
 async function lire({ identity, session }: { identity: Identity; session: PlatformSession }, origine: string): Promise<DonneesDeLAccueil> {
-  const [activites, connexions, procedures] = await Promise.all([
+  const [activites, reprendre, nouveautes, connexions, procedures] = await Promise.all([
     resultatDe(listActivities(session.db, identity, { periodDays: PERIODE })),
+    resultatDe(homeContents(session.db, identity, { tab: "recent", scope: "teams" })),
+    resultatDe(homeNews(session.db, identity)),
     resultatDe(lastConnections(session.db, identity).then(connexionsDe)),
-    resultatDe(usefulProcedures(session.db, identity, USEFUL_PROCEDURES_SHOWN)),
+    resultatDe(usefulProcedures(session.db, identity, LAUNCH_PROCEDURES_SHOWN)),
   ])
   return {
     nom: identity.member.profile.name || identity.user.name || null,
     moi: identity.user.id,
     activites,
+    reprendre,
+    nouveautes,
     adresse: adresseDe(connectAddress(identity, origine)),
     connexions,
     procedures,

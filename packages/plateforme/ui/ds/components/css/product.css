@@ -644,8 +644,42 @@
 /* E11-S05 (lot c) — « Télécharger » à gauche de « Partager » : les commandes de l'accès vont à la ligne plutôt que de déborder à 375 px, et le refus d'un téléchargement passe dessous, sur toute la largeur. */
 .oto-screen-header-access { flex-wrap: wrap; justify-content: flex-end; }
 
-/* Le niveau d'une ligne du partage : le `Select` à sa largeur, poussé en fin de ligne comme `.oto-pop-meta` ; son cadre arrondi est celui de toute liste de choix (E05-S11, retour 8). */
-.oto-share-level { flex: none; inline-size: auto; margin-inline-start: auto; }
+/* Le niveau d'une ligne du partage : le `Select` à sa largeur, poussé en fin de ligne comme `.oto-pop-meta` (E05-S11, retour 8). 1.4.13 : une pastille de la couleur du niveau, fond et texte d'un badge de ton (`badge.css` : couleur d'état à `--st-tint` sur l'îlot, texte `-text`, paire vérifiée à 4,5:1 dans les deux thèmes), un point devant le mot ; Aucun accès gris, Peut lire bleu, Peut modifier vert, Accès complet violet. */
+.oto-share-level { flex: none; inline-size: auto; margin-inline-start: auto; --niveau: var(--st-idle); --niveau-texte: var(--st-idle-text); }
+.oto-share-level[data-niveau="read"] { --niveau: var(--st-run); --niveau-texte: var(--st-run-text); }
+.oto-share-level[data-niveau="write"] { --niveau: var(--st-live); --niveau-texte: var(--st-live-text); }
+.oto-share-level[data-niveau="manage"] { --niveau: var(--st-think); --niveau-texte: var(--st-think-text); }
+.oto-share-level .oto-select-trigger,
+.oto-share-pill {
+  border-color: transparent;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--niveau) var(--st-tint), var(--island));
+  color: var(--niveau-texte);
+  font-weight: var(--fw-medium);
+}
+.oto-share-level .oto-select-trigger > .oto-icon { color: currentColor; }
+.oto-share-pill { display: inline-flex; align-items: center; block-size: var(--ctrl-h-sm); padding-inline: var(--space-2-5); font-size: var(--fs-xs); white-space: nowrap; }
+.oto-share-level .oto-select-trigger::before,
+.oto-share-pill::before { content: ""; flex: none; inline-size: 6px; block-size: 6px; margin-inline-end: var(--space-1-5); border-radius: 50%; background: var(--niveau); }
+
+/* Le panneau « Partager » en sections (1.4.13) : un intertitre en étiquette du ton Oto (le primary de l'organisation, `--oto-bg` et `--oto-ink`, la paire du badge `oto`), l'icône et le compte dedans ; des lignes resserrées, le nom suivi de ses étiquettes (« vous », « responsable », « exception »). Le pied « Votre accès » en `--mute` sur l'îlot : 4,78:1 au pire des huit thèmes, jour et nuit (mesure de `button.css`). */
+.oto-share-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+.oto-share-section { display: flex; flex-direction: column; gap: var(--space-1); }
+.oto-share-heading {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: var(--space-1-5);
+  block-size: 22px; margin: 0; padding-inline: var(--space-2);
+  border-radius: var(--r-pill);
+  background: var(--oto-bg); color: var(--oto-ink);
+  font-family: var(--mono); font-size: var(--fs-2xs); font-weight: var(--fw-semibold); letter-spacing: var(--tr-mono); text-transform: uppercase;
+}
+.oto-share-heading:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.oto-share-heading-icon { display: inline-flex; }
+.oto-share-heading-icon > svg { inline-size: 12px; block-size: 12px; }
+.oto-share-count { font-variant-numeric: tabular-nums; }
+.oto-share-section .oto-pop-row { padding-block: var(--space-1); }
+.oto-share-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1-5); min-inline-size: 0; }
+.oto-share-foot { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding-block-start: var(--space-2); border-block-start: 1px solid var(--hair); font-size: var(--fs-xs); color: var(--mute); }
+.oto-share-foot > .oto-share-level { margin-inline-start: 0; }
 
 /* Les suggestions du champ « Ajouter une personne ou une équipe » : dans le panneau, sous le champ, au pas d'un menu. */
 .oto-share-suggestions { display: flex; flex-direction: column; max-block-size: 240px; overflow: auto; padding: var(--space-1); border: 1px solid var(--island-bd); border-radius: var(--r-ctrl); }

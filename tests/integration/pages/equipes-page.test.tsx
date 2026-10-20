@@ -165,6 +165,13 @@ describe("/teams page reads (AC1, AC5)", () => {
     expect(screen.getByRole("tab", { name: /^Équipes/ })).toHaveAttribute("aria-selected", "true")
   })
 
+  // 1.4.13 : une page qui bloque la suppression d'une équipe mène à son adresse, sous la route des pages de l'hôte.
+  it("should give the screen the address prefix of the pages", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
+
+    expect((await page({ tab: "teams" })).props).toMatchObject({ prefixeDesPages: "/n/" })
+  })
+
   it("should read an unknown tab as Membres (AC1)", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
 

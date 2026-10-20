@@ -165,6 +165,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
 - `20261014130000_platform_chemin_help.sql` (version 1.4.3, guide de la plateforme) : `teams_slug_reserved` admet aussi
   `help`, le chemin où `read` sert le guide : une équipe dont le slug est déjà `help` fait échouer la migration, à renommer
   avant. Fichier à part de `20261014120000`, déjà poussée. Aucune table, colonne ni fonction.
+- `20261020090000_platform_vues.sql` (1.4.13, accueil) : la table `node_views`, une ligne par page, par personne et
+  par jour, le nombre de vues à l'écran ; « Les plus consultés » et la dernière visite de l'accueil la lisent. RLS :
+  lecture dans l'organisation, écriture de ses propres lignes sur une page de son organisation, suppression des lignes
+  de plus de 90 jours ; clés vers `orgs`, `nodes` et `members` en cascade (une personne retirée ou oubliée emporte ses
+  lignes). Additive ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

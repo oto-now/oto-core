@@ -266,18 +266,22 @@ describe("RailApplication zones (AC-a3)", () => {
 describe("RailApplication menus (AC-a4)", () => {
   // E05-S11 (AC-31, AC-32, AC-33) : « Réglages de l'entreprise » d'abord, « Équipes & accès » dedans ; ni Marque,
   // ni Drapeaux, ni Accès plateforme, ni Connecteurs (au pied du rail), même quand l'hôte en sert l'adresse.
-  // E05-S13 (AC-10) : « Journal » dans les réglages ; un seul groupe montré n'a pas de sous-titre. 1.1.3 : ni Usage
-  // ni Retours, même quand l'hôte en sert l'adresse ; « Suivi de l'entreprise » disparaît.
+  // E05-S13 (AC-10) : « Journal » dans les réglages ; un seul groupe montré n'a pas de sous-titre. 1.4.13 : « Suivi de
+  // l'entreprise » revient après les réglages avec Retours, pour qui administre quand l'hôte en sert l'adresse ;
+  // « Activité » (Statistiques et Journal) prend la place du Journal dans les réglages ; ni « Journal » ni
+  // « Statistiques » à part, même servis.
   it.each([
-    [true, ["Organisation", "Équipes & accès", "Journal"]],
-    [false, ["Équipes & accès", "Journal"]],
-  ])("should offer the company menu by administration right (%s), without follow-up screens, each entry navigating", (administre, attendues) => {
+    [true, ["Organisation", "Équipes & accès", "Activité", "Retours"], true],
+    [false, ["Équipes & accès", "Activité"], false],
+  ])("should offer the company menu by administration right (%s), the follow-up screens to an administrator, each entry navigating", (administre, attendues, groupes) => {
     const rail = monter({ administre, adresses: { ...ADRESSES, marque: "/admin/brand", drapeaux: "/admin/flags", acces: "/admin/access" } })
     fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
 
     expect(itemsDuMenu()).toEqual(attendues)
     const texte = screen.getByRole("menu").textContent ?? ""
-    expect(texte).not.toMatch(/Réglages de l’entreprise|Suivi de l’entreprise/)
+    // Deux groupes montrés ont leurs sous-titres ; un seul n'en a pas.
+    if (groupes) expect(texte).toMatch(/Réglages de l’entreprise.*Suivi de l’entreprise/)
+    else expect(texte).not.toMatch(/Réglages de l’entreprise|Suivi de l’entreprise/)
     expect(texte).not.toContain("Membres & équipes")
     fireEvent.click(menu().getByRole("menuitem", { name: "Équipes & accès" }))
     expect(hote.naviguer).toHaveBeenCalledWith("/teams")
@@ -357,6 +361,20 @@ describe("RailApplication menus (AC-a4)", () => {
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
     expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
+  })
+
+  // 1.4.13 : une page qui bloque la suppression mène à son adresse, bâtie sur le préfixe des pages que le rail reçoit.
+  it("should link a page that blocks the deletion of a team to its address under the pages of the host", async () => {
+    const equipe = { id: "t-ventes", slug: "ventes", name: "Ventes", leadName: null, members: [] }
+    const recapitulatif = { team: { id: "t-ventes", slug: "ventes", name: "Ventes" }, blockedBy: { nodes: [{ path: "ventes/devis" }], accounts: [] }, members: [], rules: 0, trashed: 0 }
+    const appels = simulerLAPI({ data: { team: equipe, people: [], compose: true, admin: true } }, { data: recapitulatif })
+    const rail = monter()
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer l'équipe…" }))
+    const suppression = within(await screen.findByRole("dialog", { name: "Supprimer Ventes" }))
+    expect(await suppression.findByRole("link", { name: "ventes/devis" })).toHaveAttribute("href", "/n/ventes/devis")
+    expect(suppression.getByRole("button", { name: "Supprimer l'équipe" })).toBeDisabled()
+    expect(appels.map((appel) => appel.url)).toEqual(["/api/platform/teams/ventes", "/api/platform/teams/ventes/deletion"])
   })
 
   it("should offer a page, a table and a procedure from the « + » of Privé as elsewhere, and create at the first free address: a visible one skipped, a taken one tried again (AC-34)", async () => {

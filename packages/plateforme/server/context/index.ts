@@ -156,7 +156,21 @@ type Assembly = {
   budget: number
 }
 
-type Assembled = { code: string; text: string; report: BlockReport[]; routing: Routing; phrase: string | undefined }
+/**
+ * Ce que `context` servirait sans plafond (2026-10-20, la jauge d'un Contexte) : le poids entier de chaque bloc non vide,
+ * dans l'ordre servi, et leur total, lignes vides entre blocs comprises. Sans lui, la page d'un Contexte ne peut dire ni son
+ * poids ni ce qui dépasse, le rapport ne comptant que ce que le plafond garde.
+ */
+export type WholeWeights = { total: number; blocks: { name: string; chars: number }[] }
+
+/** Le poids entier des blocs (`WholeWeights`), comme `renderContext` les assemblerait sans plafond. */
+function wholeWeights(blocks: readonly ContextBlock[]): WholeWeights {
+  const shown = blocks.filter((block) => block.text.trim() !== "").map((block) => ({ name: block.name, chars: block.text.length }))
+  const total = shown.reduce((sum, block) => sum + block.chars, 0) + 2 * Math.max(shown.length - 1, 0)
+  return { total, blocks: shown }
+}
+
+type Assembled = { code: string; text: string; report: BlockReport[]; routing: Routing; phrase: string | undefined; whole: WholeWeights }
 
 /**
  * L'assemblage commun de `context` et de l'aperçu (AC7, AC8, AC11) : en un seul `Promise.all`, le code,
@@ -190,12 +204,12 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
     { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints }), priority: PRIORITY.code },
     ...(procedure ? [{ ...procedure.block, priority: PRIORITY.procedure }] : []),
     ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
-    ...contextParts(identity, facts, bodies).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
+    ...contextParts(identity, facts, bodies, phrase).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
     ...withPriority(news, PRIORITY.news),
     ...withPriority(procedures, PRIORITY.procedures),
     ...withPriority(recent, PRIORITY.recent),
   ]
-  return { code, routing, phrase, ...renderContext(blocks, assembly.budget, prefix) }
+  return { code, routing, phrase, whole: wholeWeights(blocks), ...renderContext(blocks, assembly.budget, prefix) }
 }
 
 /**
@@ -296,6 +310,8 @@ export type ContextPreview = {
   text: string
   blocks: BlockReport[]
   budget: number
+  /** Le poids sans plafond (`WholeWeights`) : la jauge du budget sur la page d'un Contexte. */
+  whole: WholeWeights
 } & Pick<ReturnType<typeof routingData>, "served" | "candidates">
 
 /**
@@ -306,7 +322,7 @@ export type ContextPreview = {
  */
 export async function previewContext(db: PlatformDb, identity: Identity, input: { phrase?: string }): Promise<ContextPreview> {
   const since = await newsSince(db, identity)
-  const { text, report, routing } = await assembleContext(db, identity, { phrase: input.phrase, code: PREVIEW_CODE, since, budget: CONTEXT_BUDGET })
+  const { text, report, routing, whole } = await assembleContext(db, identity, { phrase: input.phrase, code: PREVIEW_CODE, since, budget: CONTEXT_BUDGET })
   const { served, candidates } = routingData(routing)
-  return { text, blocks: report, budget: CONTEXT_BUDGET, served, candidates }
+  return { text, blocks: report, budget: CONTEXT_BUDGET, whole, served, candidates }
 }

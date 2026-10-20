@@ -16,7 +16,8 @@ export function libellesDesChoix(declencheur: HTMLElement): (string | null)[] {
   fireEvent.click(declencheur)
   const libelles = within(listeDe(declencheur))
     .getAllByRole("option")
-    .map((option) => option.textContent)
+    // Le libellé seul : la ligne fine qui décrit un choix (les niveaux d'accès, 1.4.13) n'en fait pas partie.
+    .map((option) => (option.querySelector(".oto-menu-label") ?? option).textContent)
   fireEvent.click(declencheur)
   return libelles
 }

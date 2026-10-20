@@ -16,6 +16,7 @@ import { cellRoutes } from "./cell"
 import { feedbackRoutes } from "./feedback"
 import { filesRoutes } from "./files"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
+import { homeRoutes } from "./home"
 import { invitationsRoutes } from "./invitations"
 import { membersRoutes } from "./members"
 import { nodesRoutes } from "./nodes"
@@ -103,6 +104,8 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   profile: profileRoutes,
   // E05-S09 : la recherche de la palette du rail (⌘K).
   search: searchRoutes,
+  // 1.4.13 : la carte « Reprendre » de l'accueil, page par page.
+  home: homeRoutes,
   // E05-S10 : la corbeille (partie e) et les liens publics (partie d, ADR-013).
   trash: trashRoutes,
   shares: sharesRoutes,

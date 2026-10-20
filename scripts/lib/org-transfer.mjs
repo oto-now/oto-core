@@ -221,7 +221,9 @@ export const NEVER_EXPORTED = ['platform_staff', 'identities']
 NEVER_EXPORTED.push('lexicon')
 // Les tickets de dépôt par lien (E10-S02 lot f, ADR-018) : 15 minutes, un envoi, liés à une conversation ; un ticket
 // ne se transfère pas (AC-f10).
-NEVER_EXPORTED.push('upload_tickets')
+// Les vues des pages (1.4.13) : des comptes de consultation par personne et par jour, gardés 90 jours ; l'organisation
+// importée recommence à compter.
+NEVER_EXPORTED.push('upload_tickets', 'node_views')
 // Les exclusions (entrée sans invitation) nomment des personnes qui ne sont plus membres : l'export ne porte pas leur
 // email, l'import n'aurait rien pour les rapprocher.
 NEVER_EXPORTED.push('member_exclusions')

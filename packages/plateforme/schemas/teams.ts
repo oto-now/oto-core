@@ -78,6 +78,21 @@ export type TeamPanel = {
   admin: boolean
 }
 
+/**
+ * Ce que la suppression d'une équipe emporterait, ou ce qui la bloque (E08-S02, AC21 ; 1.4.13), lu par la confirmation
+ * de l'écran (`GET teams/<slug>/deletion`) et par `admin_team delete`.
+ */
+export type TeamDeletionView = {
+  team: { id: string; slug: string; name: string }
+  /** Ce qu'elle possède encore de vivant (H69), lu comme le refus `team_owns_objects` ; `null` : rien. */
+  blockedBy: { nodes: { path: string }[]; accounts: { label: string }[] } | null
+  members: { name: string; email: string }[]
+  /** Règles d'accès qui la nomment, qui tombent avec elle (cascade, H69). */
+  rules: number
+  /** Ses pages à la corbeille, sous-pages comprises, effacées définitivement avec elle. */
+  trashed: number
+}
+
 /** Un nom ou un email `null` : la personne n'est plus lisible (compte supprimé entre-temps). */
 export type PlatformAccessView = {
   id: string

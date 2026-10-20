@@ -14,7 +14,7 @@
 // unique sans casse, même refus au renommage, l'équipe s'excluant elle-même. Repris
 // (`groups/members.py` l. 127-150) : une équipe reste administrable. Retiré : la suppression ouverte au
 // chef d'équipe, le « groupe actif » (`_group=`), le refus de retirer le responsable (E05-S13).
-import { createTeamSchema, teamMemberSchema, teamRoleSchema, updateTeamSchema, type TeamView } from "../schemas"
+import { createTeamSchema, teamMemberSchema, teamRoleSchema, updateTeamSchema, type TeamDeletionView, type TeamView } from "../schemas"
 import { isOrgAdmin, leadsTeam } from "./access"
 import type { PlatformDb } from "./db"
 import { inTeam, memberDirectory, teamRoster, type DirectoryEntry } from "./directory"
@@ -24,6 +24,8 @@ import { limitedTx } from "./limits"
 import { slugOf } from "./nodes/segments"
 import { parseId, requireAdmin, type Mutation } from "./members"
 import { teamViews } from "./team-panel"
+import { eraseTrashedNodes, trashedNodesCount } from "./team-trash"
+import { removeObjects } from "./files/service"
 import type { Tx } from "./sql"
 
 /** Chemins de premier niveau pris par l'arbre, par `read journal` et `read functions` (P39, P22, E11-S19 ; `teams_slug_reserved`). */
@@ -218,15 +220,16 @@ export async function setTeamMemberRole(
 type OwnedObjects = { nodes: string[]; accounts: string[] }
 
 /**
- * Ce que l'équipe possède encore (H69, P39) : les nœuds dont elle est propriétaire, hors son
+ * Ce que l'équipe possède encore (H69, P39) : les nœuds vivants dont elle est propriétaire, hors son
  * dossier ; sous son dossier, tout ce qui n'est pas son Contexte (le dossier et le Contexte seuls
- * partent avec elle, `teams_tree_cleanup`) ; ses comptes. Listes triées, 20 au plus.
+ * partent avec elle, `teams_tree_cleanup`) ; ses comptes. Listes triées, 20 au plus. Ses pages à la
+ * corbeille ne bloquent pas : elles partent avec elle (`eraseTrashedNodes`, 1.4.13).
  */
 async function ownedObjects(sql: Tx, identity: Identity, team: TeamRow): Promise<OwnedObjects> {
   const escaped = team.slug.replace(/[\\%_]/g, "\\$&")
   const [owned, below, accounts] = await Promise.all([
-    sql<{ path: string }[]>`select path from platform.nodes where org_id = ${identity.org.id} and owner_team_id = ${team.id}`,
-    sql<{ path: string }[]>`select path from platform.nodes where org_id = ${identity.org.id} and path like ${`${escaped}/%`}`,
+    sql<{ path: string }[]>`select path from platform.nodes where org_id = ${identity.org.id} and owner_team_id = ${team.id} and deleted_at is null`,
+    sql<{ path: string }[]>`select path from platform.nodes where org_id = ${identity.org.id} and path like ${`${escaped}/%`} and deleted_at is null`,
     sql<{ label: string }[]>`select label from platform.accounts where org_id = ${identity.org.id} and owner_team_id = ${team.id}`,
   ])
   const folderOwned = owned.some((node) => node.path === team.slug)
@@ -250,9 +253,11 @@ function teamOwnsObjects(team: TeamRow, owned: OwnedObjects): PlatformError {
 }
 
 /**
- * Supprime une équipe sans nœud ni compte à elle (AC14, H69) : ses règles et ses appartenances tombent
- * en cascade. Sinon `team_owns_objects`, avec ce qu'il faut transférer ou supprimer. Lectures et
- * suppression dans une transaction.
+ * Supprime une équipe sans nœud vivant ni compte à elle (AC14, H69) : ses règles et ses appartenances tombent
+ * en cascade, ses pages à la corbeille sont effacées dans la même transaction, avant elle (le déclencheur
+ * `teams_tree_cleanup` ne voit plus que le dossier et le Contexte), et les objets de leurs fichiers partent
+ * après le `commit`, comme à la purge de la corbeille. Sinon `team_owns_objects`, avec ce qu'il faut
+ * transférer ou supprimer.
  */
 export async function deleteTeam(db: PlatformDb, identity: Identity, teamId: unknown): Promise<Mutation<{ id: string; slug: string }>> {
   const id = parseId(teamId, "team")
@@ -264,9 +269,10 @@ export async function deleteTeam(db: PlatformDb, identity: Identity, teamId: unk
       const team = await readTeam(sql, identity, id)
       read = { team, owned: await ownedObjects(sql, identity, team) }
       if (read.owned.nodes.length > 0 || read.owned.accounts.length > 0) throw teamOwnsObjects(team, read.owned)
+      const files = await eraseTrashedNodes(sql, identity, team)
       const deleted = await sql`delete from platform.teams where id = ${id} returning id`
       if (deleted.length === 0) throw teamChanged("deleteTeam", team)
-      return team
+      return { ...team, files }
     })
     .catch((error: { code?: string }) => {
       // Une page créée sous le dossier entre la lecture et la suppression : la clé différée
@@ -274,19 +280,13 @@ export async function deleteTeam(db: PlatformDb, identity: Identity, teamId: unk
       if (error.code === "23503" && read) throw teamOwnsObjects(read.team, read.owned)
       throw fromDatabaseError(error, "deleteTeam: teams delete")
     })
+  await removeObjects(identity.org.id, team.files)
   // L'équipe n'existe plus : la ligne de journal ne peut pas la référencer (`journal.team_id`).
   return { data: { id, slug: team.slug }, target: team.slug, teamId: null }
 }
 
-/** Ce que la suppression d'une équipe emporterait, ou ce qui la bloque (E08-S02, AC21). */
-export type TeamDeletion = {
-  team: { id: string; slug: string; name: string }
-  /** Ce qu'elle possède encore (H69), lu comme le refus `team_owns_objects` ; `null` : rien. */
-  blockedBy: { nodes: { path: string }[]; accounts: { label: string }[] } | null
-  members: { name: string; email: string }[]
-  /** Règles d'accès qui la nomment, qui tombent avec elle (cascade, H69). */
-  rules: number
-}
+/** Ce que la suppression d'une équipe emporterait, ou ce qui la bloque (E08-S02, AC21) : le type que l'écran lit aussi. */
+export type TeamDeletion = TeamDeletionView
 
 /**
  * Le récapitulatif de la suppression d'une équipe (E08-S02), décidé comme `deleteTeam` avant toute
@@ -302,12 +302,13 @@ export async function describeTeamDeletion(db: PlatformDb, identity: Identity, t
     if (!team) throw new PlatformError("not_found", `No team ${teamSlug} in ${identity.org.name}.`)
     // Ni les membres d'une équipe ni les règles qui la nomment n'ont de borne : la face SQL les lit en
     // entier (aucune page, la borne de PostgREST n'y est pas).
-    const [owned, links, [counted], directory] = await Promise.all([
+    const [owned, links, [counted], directory, trashed] = await Promise.all([
       ownedObjects(sql, identity, team),
       sql<{ user_id: string }[]>`select user_id from platform.team_members where team_id = ${team.id}`,
       sql<{ count: number }[]>`
         select count(*)::int as count from platform.access_rules where org_id = ${identity.org.id} and subject_team_id = ${team.id}`,
       memberDirectory(db, identity.org.id),
+      trashedNodesCount(sql, identity, team),
     ])
     const teamMembers = new Set(links.map((link) => link.user_id))
     const blocked = owned.nodes.length > 0 || owned.accounts.length > 0
@@ -316,6 +317,7 @@ export async function describeTeamDeletion(db: PlatformDb, identity: Identity, t
       blockedBy: blocked ? { nodes: owned.nodes.map((path) => ({ path })), accounts: owned.accounts.map((label) => ({ label })) } : null,
       members: directory.filter((person) => teamMembers.has(person.userId)).map((person) => ({ name: person.name, email: person.email })),
       rules: counted.count,
+      trashed,
     }
   })
 }

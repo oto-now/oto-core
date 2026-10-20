@@ -77,6 +77,14 @@
 /* Le thermomètre dans la note : `Progress` n'a pas de marge à lui, il ne sait pas ce qui le suit. */
 .oto-note .oto-progress { margin-block-end: var(--space-2-5); }
 
+/* La jauge du budget d'un Contexte (2026-10-20), tout en bas de la colonne et très compacte : la barre de `Progress` amincie à 4 px, le plafond marqué d'un trait d'encre (`--seuil`, posé par l'écran) ; dessous, une ligne en `--fs-xs` et `--mute` (4,78:1 au pire des huit thèmes jour et nuit, sur la carte, la mesure de `button.css` pour la même paire), l'icône de l'état au ton de l'état (`-text`, la paire vérifiée des badges) ; l'état se dit aussi en texte au lecteur d'écran, jamais la couleur seule. */
+.oto-budget { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-4); }
+.oto-budget .oto-progress { block-size: 4px; overflow: visible; }
+.oto-budget-seuil { position: absolute; inset-block: -3px; inset-inline-start: var(--seuil, 100%); inline-size: 2px; margin-inline-start: -1px; border-radius: 1px; background: var(--ink); }
+.oto-budget-ligne { display: flex; align-items: center; gap: var(--space-1-5); margin: 0; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--mute); }
+.oto-budget-ligne > .oto-icon { flex: none; color: var(--st-ok-text); }
+.oto-budget[data-depasse] .oto-budget-ligne > .oto-icon { color: var(--st-fail-text); }
+
 /* LayerStack, les couches comme elles sont vraiment (commun, équipe, soi) : `data-here` marque celle qu'on regarde, et l'écran pose aussi `aria-current`, un fond teinté n'est pas une information. */
 
 .oto-layers {

@@ -41,10 +41,11 @@ export type GeneralAccess = (typeof GENERAL_ACCESS)[number]
 
 /**
  * `POST nodes/access` (AC-b13) : `level`, le niveau de toute l'organisation (`read` par défaut ; `manage`,
- * l'accès complet, à l'administrateur, D4), avec `organisation` seulement.
+ * l'accès complet, à l'administrateur, D4 ; `none` ferme une page qu'un dossier au-dessus ouvre, 1.4.13), avec
+ * `organisation` seulement.
  */
 export const generalAccessSchema = z
-  .strictObject({ path: nodePathSchema, access: z.enum(GENERAL_ACCESS), level: z.enum(ACCESS_LEVEL_NAMES).exclude(["none"]).optional() })
+  .strictObject({ path: nodePathSchema, access: z.enum(GENERAL_ACCESS), level: z.enum(ACCESS_LEVEL_NAMES).optional() })
   .refine((input) => input.access === "organisation" || input.level === undefined, { message: "level goes with access organisation only.", path: ["level"] })
 
 /** `POST shares` (AC-d1) : le lien public d'un nœud, créé ou changé ; `include_children` : les sous-contenus aussi. */

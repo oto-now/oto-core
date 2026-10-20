@@ -46,6 +46,8 @@ export type EcranEquipesProps = {
   Lien: LienDeLHote
   /** L'adresse d'un onglet ; `reglages` : ceux de ses tableaux (un réglage absent y prend son défaut). */
   hrefDOnglet: (onglet: EquipesTab, reglages?: Partial<ReglagesDesListes>) => string
+  /** Le préfixe des adresses de pages de l'hôte (`"/n/"`), en chaîne : une page qui bloque la suppression d'une équipe y mène. */
+  prefixeDesPages: string
 }
 
 const PAR_DEFAUT: ReglagesDesListes = { q: "", order: "asc" }
@@ -87,7 +89,7 @@ function Contenu(props: EcranEquipesProps & { reglages: ReglagesDesListes }) {
   const adresseAvec = (autres: Partial<ReglagesDesListes>) => props.hrefDOnglet(onglet, autres)
   const navigation: Navigation = { Lien, ici: props.hrefDOnglet(onglet, reglages) }
   if (onglet === "teams") {
-    return <OngletEquipes nomOrganisation={nomOrganisation} moi={moi} equipes={props.equipes} membres={props.membres} reglages={reglages} navigation={navigation} adresseAvec={adresseAvec} />
+    return <OngletEquipes nomOrganisation={nomOrganisation} moi={moi} equipes={props.equipes} membres={props.membres} reglages={reglages} navigation={navigation} adresseAvec={adresseAvec} prefixeDesPages={props.prefixeDesPages} />
   }
   return (
     <OngletMembres

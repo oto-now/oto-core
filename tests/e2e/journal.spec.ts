@@ -42,8 +42,10 @@ test.describe("journal", () => {
       const page = await browser.newPage({ colorScheme: mode, viewport: { width: 1440, height: 900 } })
       try {
         await seConnecterSurLEspace(page, { email, password })
-        await page.goto(`${ESPACE.adresse}/journal`)
-        await expect(page.getByRole("heading", { level: 1 })).toHaveText("Journal")
+        // 1.4.13 : le journal est l'onglet Journal d'« Activité » ; un administrateur ouvre d'abord les statistiques.
+        await page.goto(`${ESPACE.adresse}/journal?tab=journal`)
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText("Activité")
+        await expect(page.getByRole("tab", { name: "Journal" })).toHaveAttribute("aria-selected", "true")
         await expect(page.getByRole("radiogroup", { name: "La période observée" }).getByRole("radio", { name: "7 jours" })).toHaveAttribute("aria-checked", "true")
         for (const code of CODES) await expect(ouvrir(page, code)).toBeVisible()
         await capturer(page, testInfo, `journal-liste-${mode}`)

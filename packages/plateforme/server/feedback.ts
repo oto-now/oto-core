@@ -13,6 +13,7 @@
 // remplace), `signal` et `kind` libres (→ `type` en liste fermée), la consigne portée par la notice
 // serveur (architecture § 10).
 import {
+  FEEDBACK_VISIBLE,
   feedbackStateChangeSchema,
   feedbackStateSchema,
   feedbackTypeSchema,
@@ -29,6 +30,7 @@ import { isOrgAdmin } from "./access"
 import type { PlatformDb } from "./db"
 import { memberDirectory } from "./directory"
 import { inTransaction, invalidInput, PlatformError } from "./errors"
+import { readFlag } from "./flags"
 import type { Identity } from "./identity"
 import type { Tx } from "./sql"
 import type { ToolOutput } from "./tool-output"
@@ -172,16 +174,21 @@ export function parseTicket(ticket: unknown): number {
 /**
  * Traiter les retours : des frictions d'assistant, destinées à l'équipe plateforme (E05-S13, AC-9, HN-E05S13-7),
  * donc au membre de l'équipe plateforme qui administre l'organisation, la règle de `requireStaffAdmin`
- * (`isStaff` et `isOrgAdmin`) ; l'administrateur du client n'y entre plus. Lu aussi par l'hôte, qui ne donne
- * l'adresse des retours qu'à lui.
+ * (`isStaff` et `isOrgAdmin`) ; l'administrateur du client y entre quand l'organisation a allumé « Retours visibles »
+ * (drapeau `feedback_visible`, 1.4.13), lu en une requête, et seulement pour lui. Lu aussi par l'hôte, qui ne donne
+ * l'adresse des retours qu'à qui les traite.
  */
-export function handlesFeedback(identity: Identity): boolean {
-  return identity.isStaff && isOrgAdmin(identity)
+export async function handlesFeedback(db: PlatformDb, identity: Identity): Promise<boolean> {
+  if (!isOrgAdmin(identity)) return false
+  return identity.isStaff || readFlag(db, identity, FEEDBACK_VISIBLE)
 }
 
-/** Le refus de qui ne traite pas les retours (AC-9), décidé sans requête, avec à qui s'adresser (H68). */
+/** Le refus de qui ne traite pas les retours (AC-9), avec à qui s'adresser (H68). */
 function handlingReserved(identity: Identity): PlatformError {
-  return new PlatformError("forbidden", `Handling the feedback of ${identity.org.name} is reserved to the platform team that administers it. Ask them.`)
+  return new PlatformError(
+    "forbidden",
+    `Handling the feedback of ${identity.org.name} is reserved to the platform team that administers it, and to its administrators when « Retours visibles » is on. Ask them.`,
+  )
 }
 
 async function namesOf(db: PlatformDb, identity: Identity): Promise<Map<string, string>> {
@@ -276,7 +283,7 @@ export type FeedbackListInput = { state?: FeedbackState | "to_handle"; type?: Fe
  * repartir la liste du début.
  */
 export async function listFeedback(db: PlatformDb, identity: Identity, input: FeedbackListInput): Promise<FeedbackList> {
-  if (!handlesFeedback(identity)) throw handlingReserved(identity)
+  if (!(await handlesFeedback(db, identity))) throw handlingReserved(identity)
   const window: Window = { since: new Date(Date.now() - input.days * DAY_MS).toISOString(), type: input.type }
   const cursor = input.cursor === undefined ? null : decodeCursor(input.cursor)
   const [rows, counts, names] = await Promise.all([
@@ -324,7 +331,7 @@ export async function setFeedbackState(
 ): Promise<{ changed: boolean; ticket: FeedbackTicketView }> {
   const number = parseTicket(request.ticket)
   const change = changeOf(request)
-  if (!handlesFeedback(identity)) throw handlingReserved(identity)
+  if (!(await handlesFeedback(db, identity))) throw handlingReserved(identity)
   const ticket = ticketNumber(number)
   const names = await namesOf(db, identity)
   return inTransaction(db, "setFeedbackState: feedback", async (sql) => {

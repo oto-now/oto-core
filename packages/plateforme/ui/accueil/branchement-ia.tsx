@@ -6,7 +6,10 @@
 // (`accueil/branchement-ia.tsx`). Repris : l'îlot et son en-tête, « Brancher » au bout de la bande et sans
 // `data-reveal` (c'est le sujet de la carte), l'état dans le corps. Changé : l'état vient des dernières
 // connexions de la personne (E02-S04) ; le tutoriel « Bientôt » est le guide servi, en fenêtre `lg`.
-// Retiré : l'adresse sur la carte (la fenêtre la porte), « Mistral Vibe », le libellé « Brancher votre IA ».
+// Retiré : l'adresse sur la carte (la fenêtre la porte), « Mistral Vibe ».
+//
+// 1.4.13 : le titre court « Brancher votre assistant » tient sur une ligne avec « Brancher » (le titre long passait sur
+// deux) ; les assistants pris en charge se nomment dessous, en pastilles, avant l'état.
 import { useState } from "react"
 import type { Resultat } from "../api/resultat"
 import { GuideDeBranchement } from "../connexion/guide-de-branchement"
@@ -25,6 +28,19 @@ type BranchementIAProps = {
   /** Les demandes à essayer du guide : les titres des procédures utiles (AC-7, AC-11). */
   exemples: Resultat<ExempleDePrompt[]>
   connexions: Resultat<DerniereConnexion[]>
+}
+
+/** Les assistants pris en charge, en pastilles : le titre court ne les nomme plus. */
+function Assistants() {
+  return (
+    <ul aria-label={BRANCHEMENT.assistantsLu} className="oto-branchement-assistants">
+      {BRANCHEMENT.assistants.map((nom) => (
+        <li key={nom} className="oto-badge">
+          {nom}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 /** L'état : un point décoratif, le mot le porte (`accessibility-patterns.md § Couleurs & Contraste`). */
@@ -61,9 +77,9 @@ export function BranchementIA({ adresse, exemples, connexions }: BranchementIAPr
   }
   const fermer = () => setOuverte(false)
   return (
-    <Island aria-label={COMPTE.brancher}>
+    <Island aria-label={BRANCHEMENT.titre}>
       <IslandHead>
-        <h2>{COMPTE.brancher}</h2>
+        <h2>{BRANCHEMENT.titre}</h2>
         {/* `ms-auto` sur le `<span>`, jamais sur le bouton : le reset du design system, hors couche, remet à zéro la marge des contrôles. */}
         <span className="ms-auto">
           <Button variant="secondary" size="sm" onClick={ouvrir}>
@@ -72,6 +88,7 @@ export function BranchementIA({ adresse, exemples, connexions }: BranchementIAPr
         </span>
       </IslandHead>
       <IslandBody>
+        <Assistants />
         <EtatDuBranchement connexions={connexions} />
       </IslandBody>
       <Dialog

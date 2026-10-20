@@ -94,6 +94,7 @@ function rendre(props: Partial<EcranEquipesProps> = {}) {
           equipes={{ data: EQUIPES }}
           Lien={LienDeTest}
           hrefDOnglet={hrefDOnglet}
+          prefixeDesPages="/n/"
           {...props}
         />
       </ContexteDeLHote.Provider>

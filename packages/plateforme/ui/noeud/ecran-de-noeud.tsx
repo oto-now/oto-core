@@ -81,6 +81,8 @@ type EcranDeNoeudProps = {
   complement?: ReactNode
   /** Les annexes d'un Contexte (E05-S04, AC10) : en tête de la colonne de droite dès 1 024 px, sous le document en dessous. */
   annexes?: ReactNode
+  /** Le pied de la colonne de droite, après les encarts : la jauge du budget d'un Contexte (2026-10-20), tout en bas. */
+  piedDeColonne?: ReactNode
   /** Le panneau « Partager » (AC19 ; E05-S10, AC-b5), ouvert depuis « Partager · <espace> » de l'en-tête. */
   partage?: LecturesDuPartage
   /**
@@ -206,6 +208,7 @@ function PageDuNoeud(props: PageDuNoeudProps) {
             <>
               {props.annexes}
               {encarts("colonne")}
+              {props.piedDeColonne}
             </>
           }
         >

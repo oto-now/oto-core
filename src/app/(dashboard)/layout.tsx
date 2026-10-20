@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { Content, CoquilleOto, Desk, RailApplication, resultatDe, type AdressesDuRail } from "@otomata_tech/oto_platform/ui"
-import { handlesFeedback, isOrgAdmin, listMyOrganisations, preferredTheme, readBrand, type Identity } from "@otomata_tech/oto_platform/server"
+import { isOrgAdmin, listMyOrganisations, preferredTheme, readBrand } from "@otomata_tech/oto_platform/server"
 import { lireLArbre, lireLesEquipes } from "@/lib/plateforme/lectures"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { FournisseurDeRafraichissement } from "./fournisseur-de-rafraichissement"
@@ -21,8 +21,10 @@ import { FournisseurDeRafraichissement } from "./fournisseur-de-rafraichissement
 // (`lectures.ts`) : la page d'un nœud reprend les mêmes (E05-S10, partie c).
 
 /**
- * Les écrans de l'hôte que le rail range dans ses menus et sa palette. E05-S13 : plus d'Usage, caché (AC-8) ; les
- * Retours pour l'équipe plateforme seule (AC-9), ajoutés par `adressesDe`.
+ * Les écrans de l'hôte que le rail range dans ses menus et sa palette. « Activité » à l'adresse du journal (1.4.13),
+ * ses Statistiques pour qui administre, la page le décide ; les Retours pour qui administre l'organisation, décidé sur
+ * l'identité seule, sans requête (1.4.13 : la page des retours dit l'option « Retours visibles » éteinte), ajoutés par
+ * `adressesDe`.
  */
 const ADRESSES: AdressesDuRail = {
   pages: "/n/",
@@ -38,9 +40,9 @@ const ADRESSES: AdressesDuRail = {
   contexte: "/context",
 }
 
-/** Les adresses du rail de la personne : les Retours au membre de l'équipe plateforme qui administre l'organisation. */
-function adressesDe(identity: Identity | undefined): AdressesDuRail {
-  return identity && handlesFeedback(identity) ? { ...ADRESSES, retours: "/admin/feedback" } : ADRESSES
+/** Les adresses du rail de la personne : les Retours à qui administre l'organisation (`isOrgAdmin`). */
+function adressesDe(retours: boolean): AdressesDuRail {
+  return retours ? { ...ADRESSES, retours: "/admin/feedback" } : ADRESSES
 }
 
 /** Une lecture impossible sans identité (panne de sa résolution) : le rail la dit à sa place. */
@@ -89,7 +91,7 @@ export default async function DashboardLayout({
             // Les entrées d'administration pour qui administre l'organisation (E08-S03 N9) : du confort,
             // chaque page `/admin/*` revérifie l'accès.
             administre={identity ? isOrgAdmin(identity) : false}
-            adresses={adressesDe(identity)}
+            adresses={adressesDe(identity ? isOrgAdmin(identity) : false)}
             organisations={organisations}
           />
           <Content>{children}</Content>

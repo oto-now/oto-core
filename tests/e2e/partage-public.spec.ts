@@ -195,7 +195,7 @@ test.describe("E05-S10 partie d : le partage public", () => {
         await seConnecterSurLEspace(page, { email, password })
         await page.goto(`${ESPACE.adresse}/n/${CHEMINS.procedure}`)
         const panneau = await ouvrirLePartage(page, EQUIPE.nom)
-        await attendre(panneau.getByRole("combobox", { name: "Qui a accès en général" })).toBeVisible()
+        await attendre(panneau.getByRole("combobox", { name: "Niveau de toute l'organisation" })).toBeVisible()
         await attendre(panneau.getByRole("switch", { name: /Partager sur le web/ })).toBeVisible()
         await capturer(page, testInfo, `acces-general-${mode}-${largeur}`)
       })

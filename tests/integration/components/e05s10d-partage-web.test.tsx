@@ -157,7 +157,8 @@ describe("Partager sur le web (AC-d1)", () => {
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, viewerLevel: 2 } } })
     expect(panneau().getByText("Seules les personnes qui ont l'accès complet changent le partage.")).toBeInTheDocument()
     expect(panneau().queryByRole("switch")).toBeNull()
-    expect(fetchMock).not.toHaveBeenCalled()
+    // Seule la lecture des niveaux de l'équipe part (1.4.13) : le lien public ne se lit pas.
+    expect(appels()).toEqual([])
   })
 
   it.each([
@@ -188,8 +189,10 @@ describe("Partager sur le web (AC-d1)", () => {
   })
 })
 
-describe("Partager, general access (AC-b13)", () => {
+// 1.4.13 : l'accès de toute l'organisation a sa ligne, à côté de celle de l'équipe ; « Aucun accès » le retire.
+describe("Partager, access of the whole organisation (AC-b13)", () => {
   const partage = (general: NodeRulesView["general"], owner: NodeRulesView["owner"] = REGLES.owner, reglages: Partial<NodeRulesView> = {}) => ({ regles: { data: { ...REGLES, owner, general, ...reglages } } })
+  const organisation = (panneau: () => ReturnType<typeof within>) => panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
 
   beforeEach(() => {
     api(({ methode }) => (methode === "GET" ? reponse(200, { data: { share: null } }) : reponse(200, { data: { changed: true } })))
@@ -197,25 +200,22 @@ describe("Partager, general access (AC-b13)", () => {
 
   const posts = () => appels().filter((appel) => appel.methode === "POST")
 
-  it("should open a team's content to the whole organisation, change its level, then restrict it again", async () => {
+  it("should open a team's content to the whole organisation, change its level, then close it again", async () => {
     const { panneau, relire } = ouvrir(partage(null))
-    const qui = panneau().getByRole("combobox", { name: "Qui a accès en général" })
-    expect(libellesDesChoix(qui)).toEqual(["L'équipe Ventes et les personnes ajoutées", "Toute l'organisation Démo"])
-    expect(panneau().queryByRole("combobox", { name: "Niveau de toute l'organisation" })).toBeNull()
+    expect(organisation(panneau)).toHaveValue("none")
+    expect(libellesDesChoix(organisation(panneau))).toEqual(["Peut modifier", "Peut lire", "Aucun accès"])
 
-    choisirDansLaListe(qui, "Toute l'organisation Démo")
+    choisirDansLaListe(organisation(panneau), "Peut lire")
     await waitFor(() => expect(panneau().getAllByRole("status").at(-1)).toHaveTextContent("Toute l'organisation : peut lire."))
     expect(posts()[0]).toEqual({ url: "/api/platform/nodes/access", methode: "POST", corps: { path: CHEMIN, access: "organisation", level: "read" } })
     expect(rafraichir).toHaveBeenCalledTimes(1)
 
     relire(partage({ id: "r1", level: "read" }))
-    const niveau = panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
-    expect(libellesDesChoix(niveau)).toEqual(["Peut modifier", "Peut lire"])
-    choisirDansLaListe(niveau, "Peut modifier")
+    choisirDansLaListe(organisation(panneau), "Peut modifier")
     await waitFor(() => expect(posts()).toHaveLength(2))
     expect(posts()[1].corps).toEqual({ path: CHEMIN, access: "organisation", level: "write" })
 
-    choisirDansLaListe(panneau().getByRole("combobox", { name: "Qui a accès en général" }), "L'équipe Ventes et les personnes ajoutées")
+    choisirDansLaListe(organisation(panneau), "Aucun accès")
     await waitFor(() => expect(posts()).toHaveLength(3))
     expect(posts()[2].corps).toEqual({ path: CHEMIN, access: "restricted" })
   })
@@ -223,49 +223,62 @@ describe("Partager, general access (AC-b13)", () => {
   // Un gestionnaire qui n'est pas administrateur ne pose pas l'accès complet, mais le lit quand il est servi.
   it("should show a served full access to a manager who is not an administrator, with its option", () => {
     const { panneau } = ouvrir({ ...partage({ id: "r1", level: "manage" }), gestionAccordable: false })
-    const niveau = panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
-    expect(niveau).toHaveValue("manage")
-    expect(libellesDesChoix(niveau)).toEqual(["Accès complet", "Peut modifier", "Peut lire"])
+    expect(organisation(panneau)).toHaveValue("manage")
+    expect(libellesDesChoix(organisation(panneau))).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
   })
 
   it("should offer full access to the whole organisation to an administrator only", () => {
     const { panneau } = ouvrir({ ...partage({ id: "r1", level: "write" }), gestionAccordable: true })
-    expect(libellesDesChoix(panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" }))).toEqual(["Accès complet", "Peut modifier", "Peut lire"])
+    expect(libellesDesChoix(organisation(panneau))).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
   })
 
   it("should give a level in Tout le monde, where each member already reads, « Peut lire » removing the rule", async () => {
     const { panneau } = ouvrir(partage({ id: "r1", level: "write" }, { kind: "org" }))
-    expect(panneau().queryByRole("combobox", { name: "Qui a accès en général" })).toBeNull()
+    expect(panneau().queryByRole("combobox", { name: /Niveau de l'équipe/ })).toBeNull()
     expect(panneau().getByText("Dans Tout le monde, chaque membre lit au moins ce contenu.")).toBeInTheDocument()
-    const niveau = panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
-    expect(niveau).toHaveValue("write")
-    choisirDansLaListe(niveau, "Peut lire")
+    expect(organisation(panneau)).toHaveValue("write")
+    expect(libellesDesChoix(organisation(panneau))).toEqual(["Peut modifier", "Peut lire"])
+    choisirDansLaListe(organisation(panneau), "Peut lire")
     await waitFor(() => expect(posts()[0]?.corps).toEqual({ path: CHEMIN, access: "restricted" }))
+  })
+
+  // 1.4.13 : un dossier au-dessus ouvre la page ; la ligne le dit (« hérité »), « Aucun accès » pose une règle qui la ferme.
+  it("should show the organisation's level inherited from a folder, and close the page with an explicit « Aucun accès »", async () => {
+    api(({ url, methode }) =>
+      url.startsWith("/api/platform/rules?")
+        ? reponse(200, { data: { ...REGLES, organisation: { level: "read", inherited: "read" } } })
+        : methode === "GET"
+          ? reponse(200, { data: { share: null } })
+          : reponse(200, { data: { changed: true } }),
+    )
+    const { panneau } = ouvrir(partage(null))
+    await waitFor(() => expect(organisation(panneau)).toHaveValue("read"))
+    expect(panneau().getByText("Toute l'organisation Démo").closest(".oto-pop-row")).toHaveTextContent("hérité")
+    choisirDansLaListe(organisation(panneau), "Aucun accès")
+    await waitFor(() => expect(posts()[0]?.corps).toEqual({ path: CHEMIN, access: "organisation", level: "none" }))
   })
 
   it("should keep a content of Privé closed to the organisation, saying why", () => {
     const { panneau } = ouvrir(partage(null, { kind: "user", userName: "Léa Martin" }))
-    expect(panneau().queryByRole("combobox", { name: /général|toute l'organisation/ })).toBeNull()
+    expect(panneau().queryByRole("combobox", { name: /toute l'organisation/ })).toBeNull()
     expect(panneau().getByText("Un contenu de Privé ne s'ouvre pas à toute l'organisation : ajoutez des personnes ou des équipes.")).toBeInTheDocument()
   })
 
-  it("should show the general access as text to someone without full access", () => {
+  it("should show the organisation's access as a pill to someone without full access", () => {
     const { panneau } = ouvrir(partage({ id: "r1", level: "write" }, REGLES.owner, { viewerLevel: 2 }))
     expect(panneau().queryByRole("combobox")).toBeNull()
-    expect(panneau().getByText("Tous les membres de Démo")).toBeInTheDocument()
-    expect(panneau().getByText("Peut modifier")).toBeInTheDocument()
+    expect(panneau().getByText("Toute l'organisation Démo").closest(".oto-pop-row")).toHaveTextContent("Toute l'organisation DémoPeut modifier")
   })
 
   it.each([
     [403, "forbidden", "Vous ne pouvez pas changer l'accès général de ce contenu : il faut l'accès complet, et seul un administrateur ouvre l'accès complet à toute l'organisation."],
     [409, "conflict", "L'accès général a changé pendant votre geste : fermez puis rouvrez « Partager »."],
-  ])("should say a refusal (%i %s) in the words of the general access, and bring the choice back to the served access", async (statut, code, phrase) => {
+  ])("should say a refusal (%i %s) in the words of the general access, and keep the served access", async (statut, code, phrase) => {
     api(({ methode }) => (methode === "GET" ? reponse(200, { data: { share: null } }) : reponse(statut, { error: { code, message: "refused" } })))
     const { panneau } = ouvrir(partage(null))
-    const qui = panneau().getByRole("combobox", { name: "Qui a accès en général" })
-    choisirDansLaListe(qui, "Toute l'organisation Démo")
+    choisirDansLaListe(organisation(panneau), "Peut lire")
     expect(await panneau().findByRole("alert")).toHaveTextContent(phrase)
-    expect(qui).toHaveValue("restricted")
+    expect(organisation(panneau)).toHaveValue("none")
     expect(rafraichir).not.toHaveBeenCalled()
   })
 })

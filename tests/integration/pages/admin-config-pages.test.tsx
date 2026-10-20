@@ -48,6 +48,8 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   loadNode: vi.fn(),
   // L'aperçu du Contexte servi de la même page (E05-S13, lot A), vide ici.
   previewContext: vi.fn(async () => ({ text: "", blocks: [], budget: 20_000, served: null, candidates: [] })),
+  // L'option « Retours visibles » de la même page (1.4.13), éteinte ici.
+  listFlags: vi.fn(async () => [{ name: "feedback_visible", description: "Retours visibles.", enabled: false }]),
 }))
 
 vi.mock("@otomata_tech/oto_platform/api", async (importOriginal) => ({

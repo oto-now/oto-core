@@ -59,13 +59,15 @@ test.describe("E05-S13 : les retours du soir", () => {
         const main = page.getByRole("main")
         await seConnecterSurLEspace(page, { email, password })
 
-        // AC-10 : Journal dans les réglages, sans Usage. 1.1.3 : Retours hors du menu, même pour le staff ; un seul
-        // groupe, sans sous-titre.
+        // AC-10 : dans les réglages, « Activité » (Statistiques et Journal, 1.4.13) à la place du Journal ; « Suivi de
+        // l'entreprise » revient avec Retours, toujours montré à qui administre (1.4.13, décision de JB : la page dit
+        // l'option « Retours visibles » éteinte) ; deux groupes, chacun son sous-titre.
         const menu = await menuDeLEntreprise(page, largeur)
-        await expect(menu.getByRole("menuitem")).toHaveText(["Organisation", "Équipes & accès", "Journal"])
-        await expect(menu.getByRole("menuitem", { name: "Usage" })).toHaveCount(0)
-        await expect(menu.getByText("Réglages de l’entreprise", { exact: true })).toHaveCount(0)
-        await expect(menu.getByText("Suivi de l’entreprise", { exact: true })).toHaveCount(0)
+        await expect(menu.getByRole("menuitem")).toHaveText(["Organisation", "Équipes & accès", "Activité", "Retours"])
+        await expect(menu.getByRole("menuitem", { name: "Journal" })).toHaveCount(0)
+        await expect(menu.getByRole("menuitem", { name: "Statistiques" })).toHaveCount(0)
+        await expect(menu.getByText("Réglages de l’entreprise", { exact: true })).toHaveCount(1)
+        await expect(menu.getByText("Suivi de l’entreprise", { exact: true })).toHaveCount(1)
         await capturer(page, testInfo, `menu-entreprise-${nom}`)
         await page.keyboard.press("Escape")
         if (largeur < 768) await page.keyboard.press("Escape")

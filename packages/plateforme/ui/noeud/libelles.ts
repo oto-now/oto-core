@@ -2,8 +2,10 @@
 // phrases propres aux gestes de l'écran (AC9 à AC18, AC21). Tout autre refus prend le texte de
 // `messageDErreur` (`ui/api/messages.ts`), jamais une seconde table.
 import type { NodeKind, NodeView } from "../../schemas"
-import type { AccessLevelName } from "../../schemas"
 import { nLignes } from "../tableau/libelles"
+
+// Les phrases du partage vivent à part (`libelles-du-partage.ts`) ; elles se lisent aussi d'ici.
+export { ACCES_GENERAL, DETAIL_DES_NIVEAUX, INTROUVABLE, NIVEAUX_D_ACCES, PARTAGE, PARTAGE_WEB, REFUS_DE_L_ACCES_GENERAL, REFUS_DU_PARTAGE_WEB } from "./libelles-du-partage"
 
 export const NATURES: Record<NodeKind, string> = {
   page: "Page",
@@ -12,7 +14,6 @@ export const NATURES: Record<NodeKind, string> = {
   table: "Tableau",
 }
 
-export const INTROUVABLE = "Cette page n'existe pas ou ne vous est pas partagée."
 export const PAGE_VIDE = "Cette page n'a pas encore de contenu."
 export const ARBRE_TRONQUE = "L'arbre n'affiche que les 5 000 premiers nœuds."
 
@@ -221,44 +222,6 @@ export function detailsDuNoeud(noeud: Pick<NodeView, "kind" | "status" | "revisi
   ]
 }
 
-/** Les niveaux d'accès dans « Partager » (E05-S10, AC-b5), les mots de Notion ; les niveaux eux-mêmes ne changent pas. */
-export const NIVEAUX_D_ACCES: Record<AccessLevelName, string> = {
-  none: "Aucun accès",
-  read: "Peut lire",
-  write: "Peut modifier",
-  manage: "Accès complet",
-}
-
-/** Les phrases du panneau « Partager » (AC-b5) : ni « règle » ni « niveau » à l'écran. */
-export const PARTAGE = {
-  ajouter: "Ajouter une personne ou une équipe",
-  suggestions: "Personnes et équipes",
-  rienTrouve: "Aucune personne ni équipe de ce nom.",
-  ontAcces: "Ont accès",
-  personneAjoutee: "Personne n'a été ajouté à ce contenu.",
-  accesGeneral: "Accès général",
-  equipe: (nom: string) => `Équipe ${nom}`,
-  vous: "vous",
-  accesDe: (nom: string) => `Accès de ${nom}`,
-  retirer: "Retirer",
-  ajoute: (nom: string) => `${nom} peut lire ce contenu.`,
-  change: (nom: string, niveau: string) => `${nom} : ${niveau.toLowerCase()}.`,
-  retire: (nom: string) => `${nom} n'a plus d'accès propre à ce contenu.`,
-  votreAcces: (niveau: string) => `Votre accès : ${niveau.toLowerCase()}.`,
-  reserve: "Seules les personnes qui ont l'accès complet changent le partage.",
-  toutLeMonde: (organisation: string) => `Tous les membres de ${organisation}`,
-  equipeEtAjoutes: (equipe: string) => `L'équipe ${equipe} et les personnes ajoutées`,
-  ajoutesSeulement: "Seulement les personnes ajoutées",
-  detailEquipe: "L'équipe peut modifier ; son responsable a l'accès complet.",
-  detailPerso: (qui: string) => `${qui} a l'accès complet.`,
-  /** Les membres de l'équipe propriétaire, leur niveau hérité et le menu qui le surcharge (1.4.12). */
-  membresDe: (equipe: string) => `Membres de l'équipe ${equipe}`,
-  responsable: "responsable",
-  niveauxIllisibles: (message: string) => `Les niveaux d'accès n'ont pas pu être lus : ${message}`,
-  reessayer: "Réessayer",
-  introuvable: INTROUVABLE,
-} as const
-
 /** Les trois encarts d'un nœud (E11-S05, AC-e1, AC-e4), qui remplacent le bandeau « Contenus liés » (E05-S10, AC-b6). */
 export const ENCARTS = {
   citeDans: "Cité dans",
@@ -343,56 +306,6 @@ export const LIEN_DU_BLOC = {
   change: "Ce lien a changé ; rouvrez-le.",
   /** Le lien construit ne se relit pas tel quel à sa place (un accent grave du libellé, une adresse collée au texte qui suit). */
   illisible: "Ce lien ne se relirait pas tel quel à sa place : changez son libellé ou son adresse.",
-} as const
-
-/**
- * L'accès général dans « Partager » (E05-S10, AC-b13 ; ADR-014) : la règle de toute l'organisation, à un niveau,
- * ou aucune ; ce que l'espace donne déjà se dit à côté (Tout le monde lit, l'équipe modifie).
- */
-export const ACCES_GENERAL = {
-  qui: "Qui a accès en général",
-  niveau: "Niveau de toute l'organisation",
-  toute: (organisation: string) => `Toute l'organisation ${organisation}`,
-  toutLeMondeLit: "Dans Tout le monde, chaque membre lit au moins ce contenu.",
-  prive: "Un contenu de Privé ne s'ouvre pas à toute l'organisation : ajoutez des personnes ou des équipes.",
-  ouvert: (niveau: string) => `Toute l'organisation : ${niveau.toLowerCase()}.`,
-  restreint: "Accès général : seules les personnes ajoutées et l'espace du contenu.",
-} as const
-
-/**
- * Les refus de `POST nodes/access` (ADR-014 § 2 ; `setGeneralAccess`), par code : la table commune ne dit ni
- * l'accès complet réservé, ni Privé, ni le changement venu d'ailleurs.
- */
-export const REFUS_DE_L_ACCES_GENERAL = {
-  forbidden: "Vous ne pouvez pas changer l'accès général de ce contenu : il faut l'accès complet, et seul un administrateur ouvre l'accès complet à toute l'organisation.",
-  invalid_arguments: ACCES_GENERAL.prive,
-  conflict: "L'accès général a changé pendant votre geste : fermez puis rouvrez « Partager ».",
-} as const
-
-/** « Partager sur le web » (E05-S10, partie d ; ADR-013) : le lien public d'un contenu, pour qui en a l'accès complet. */
-export const PARTAGE_WEB = {
-  titre: "Partager sur le web",
-  explication: "Toute personne qui a le lien lit la dernière version publiée, sans compte ; jamais indexé par un moteur de recherche.",
-  /** Ce que copie le bouton : « Copier le lien ». */
-  cible: "le lien",
-  sousContenus: "Inclure les sous-contenus",
-  sousContenusDetail: "Les contenus dessous que vous lisez s'ouvrent aussi depuis la page publique.",
-  desactiver: "Désactiver le lien",
-  question: "Désactiver ce lien ? Il ne mènera plus à rien ; un nouveau lien aura une autre adresse.",
-  chargement: "Lecture du lien public…",
-  reessayer: "Réessayer",
-  cree: "Lien public créé : copiez-le pour le partager.",
-  avecSousContenus: "Les sous-contenus s'ouvrent depuis la page publique.",
-  sansSousContenus: "Les sous-contenus ne s'ouvrent plus depuis la page publique.",
-  desactive: "Lien désactivé : il ne mène plus à rien.",
-} as const
-
-/** Les refus du service propres au partage sur le web (ADR-013 § 2, § 3 ; HN-E05S10e-19), par code. */
-export const REFUS_DU_PARTAGE_WEB = {
-  invalid_arguments:
-    "Ce contenu ne se partage pas sur le web : la racine, Privé, un espace personnel, un Contexte et le dossier d'une équipe restent dans l'organisation. Partagez une page qu'ils contiennent.",
-  forbidden: "Vous ne pouvez pas partager ce contenu sur le web : il faut l'accès complet, et un contenu du Privé d'une autre personne ne se partage que par elle.",
-  conflict: "Le lien a changé pendant votre geste : fermez puis rouvrez « Partager ».",
 } as const
 
 /** Un nombre de blocs, accordé : « 1 bloc supprimé », « 3 blocs supprimés ». */

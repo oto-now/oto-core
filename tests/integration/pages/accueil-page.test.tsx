@@ -6,10 +6,11 @@
 // E11-S10 (AC-e3) : l'accueil n'a plus d'onglets ni ne lit l'adresse ; la vue « Contexte » est éprouvée par
 // `contexte-page.test.tsx`.
 // E11-S09 (AC-11) : la fenêtre de « Brancher » reçoit l'adresse entière et les procédures déjà lues.
+// 1.4.13 : la page lit aussi la première page de « Reprendre » (contenus récents de ses équipes) et les nouveautés.
 import type { ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { lastConnections, listActivities, loadNode, PlatformError, previewContext, usefulProcedures, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { homeContents, homeNews, lastConnections, listActivities, loadNode, PlatformError, previewContext, usefulProcedures, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import AccueilPage, { metadata } from "@/app/(dashboard)/page"
 import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } from "@/lib/plateforme/session"
 import { simulerLesDialogues } from "../../helpers/dialogue"
@@ -29,6 +30,8 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   lastConnections: vi.fn(),
   listActivities: vi.fn(),
+  homeContents: vi.fn(),
+  homeNews: vi.fn(),
   usefulProcedures: vi.fn(),
   previewContext: vi.fn(),
   loadNode: vi.fn(),
@@ -38,7 +41,8 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
 const page = () => AccueilPage()
 
 const ECHEC = "Une erreur est survenue. Réessayez."
-const BRANCHER = "Brancher mon Claude, ChatGPT ou Mistral"
+const BRANCHER = "Brancher votre assistant"
+const GUIDE = "Brancher mon Claude, ChatGPT ou Mistral"
 const IDENTITE = identityOf("lea", { org: { id: ORG.id, slug: "demo", name: "Démo", prefix: "demo", brand: {}, domains: null } })
 const SESSION: PlatformSession = {
   user: { id: IDENTITE.user.id, email: IDENTITE.user.email },
@@ -56,6 +60,8 @@ async function montrer(page: ReactNode) {
 }
 
 const ilot = (nom: string) => within(screen.getByRole("region", { name: nom }))
+/** Ouvre l'onglet « Fil » de « Reprendre », fermé par défaut. */
+const ouvrirLeFil = () => fireEvent.click(ilot("Reprendre").getByRole("tab", { name: "Fil" }))
 
 beforeAll(simulerLesDialogues)
 
@@ -70,6 +76,11 @@ beforeEach(() => {
     ],
   })
   vi.mocked(usefulProcedures).mockResolvedValue([{ path: "ventes/relance", title: "Relancer les impayés" }])
+  vi.mocked(homeContents).mockResolvedValue({
+    items: [{ path: "ventes/grille", title: "Grille tarifaire", kind: "page", at: "2026-09-20T08:00:00Z", byName: "Ada Martin", byMe: false, via: "assistant" }],
+    hasMore: false,
+  })
+  vi.mocked(homeNews).mockResolvedValue({ since: "2026-09-19T00:00:00.000Z", items: [] })
   vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude Code", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
 })
 
@@ -104,19 +115,23 @@ describe("/ page session", () => {
 })
 
 describe("/ page reads (AC-b1)", () => {
-  it("should read the week of activities, the connections and six useful procedures with the session client, and show them with the address of the request origin, nothing of the Contexte on « Activités »", async () => {
+  it("should read the week of activities, the first page of « Reprendre », the news, the connections and five procedures with the session client, and show them with the address of the request origin", async () => {
     await montrer(await page())
 
     expect(listActivities).toHaveBeenCalledWith(SESSION.db, IDENTITE, { periodDays: 7 })
-    expect(usefulProcedures).toHaveBeenCalledWith(SESSION.db, IDENTITE, 6)
+    expect(homeContents).toHaveBeenCalledWith(SESSION.db, IDENTITE, { tab: "recent", scope: "teams" })
+    expect(homeNews).toHaveBeenCalledWith(SESSION.db, IDENTITE)
+    expect(usefulProcedures).toHaveBeenCalledWith(SESSION.db, IDENTITE, 5)
     expect(lastConnections).toHaveBeenCalledWith(SESSION.db, IDENTITE)
     expect(screen.getByRole("heading", { level: 1, name: `Bonjour ${IDENTITE.member.profile.name}` })).toBeInTheDocument()
-    expect(ilot("Activités").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/journal?conversation=K7M2-9QXR")
-    expect(ilot("Procédures les plus utilisées").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
-    expect(ilot(BRANCHER).getByRole("listitem")).toHaveTextContent("Claude Code · dernière connexion le 23 septembre 2026")
+    expect(ilot("Reprendre").getByRole("link", { name: /^Grille tarifaire/ })).toHaveAttribute("href", "/n/ventes/grille")
+    ouvrirLeFil()
+    expect(ilot("Reprendre").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/journal?conversation=K7M2-9QXR")
+    expect(ilot("Lancer").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
+    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code · dernière connexion le 23 septembre 2026")
     // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête, et les procédures déjà lues (AC-11).
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
-    const guide = within(screen.getByRole("dialog", { name: BRANCHER })).getByRole("tabpanel", { name: "Claude Code" })
+    const guide = within(screen.getByRole("dialog", { name: GUIDE })).getByRole("tabpanel", { name: "Claude Code" })
     expect(within(guide).getByText("claude mcp add --transport http demo https://demo.example.test/api/mcp")).toBeInTheDocument()
     expect(within(guide).getByRole("button", { name: "Copier la demande « Relancer les impayés »" })).toBeInTheDocument()
     expect(usefulProcedures).toHaveBeenCalledTimes(1)
@@ -129,10 +144,11 @@ describe("/ page reads (AC-b1)", () => {
     vi.mocked(listActivities).mockRejectedValue(new PlatformError("internal", "Internal error."))
 
     await montrer(await page())
+    ouvrirLeFil()
 
-    expect(screen.getAllByRole("alert")).toHaveLength(1)
-    expect(ilot("Activités").getByRole("alert")).toHaveTextContent(ECHEC)
-    expect(ilot(BRANCHER).getByRole("listitem")).toHaveTextContent("Claude Code")
+    expect(screen.getAllByRole("alert").filter((alerte) => alerte.textContent !== "")).toHaveLength(1)
+    expect(ilot("Reprendre").getByRole("alert")).toHaveTextContent(ECHEC)
+    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code")
   })
 
   it("should say once that the home could not be read when the identity cannot be resolved, reading nothing", async () => {
@@ -148,14 +164,14 @@ describe("/ page reads (AC-b1)", () => {
 })
 
 // E11-S10 (AC-e3) : l'ancien onglet « Contexte » de l'accueil ne se lit plus ; l'accueil se rend sans rien lire du Contexte.
-describe("/ page without tabs (E11-S10, AC-e3)", () => {
-  it("should read no parameter of its address, show « Activités » without tabs, and read nothing of the Contexte", async () => {
+describe("/ page without address parameters (E11-S10, AC-e3)", () => {
+  it("should read no parameter of its address, show « Reprendre » on « Récents », and read nothing of the Contexte", async () => {
     // La page ne prend plus `searchParams` : aucun paramètre de l'adresse ne l'atteint.
     expect(AccueilPage.length).toBe(0)
     await montrer(await page())
 
-    expect(ilot("Activités").getByRole("heading", { level: 2, name: "Activités" })).toBeInTheDocument()
-    expect(screen.queryByRole("tablist")).toBeNull()
+    expect(ilot("Reprendre").getByRole("heading", { level: 2, name: "Reprendre" })).toBeInTheDocument()
+    expect(ilot("Reprendre").getByRole("tab", { name: "Récents" })).toHaveAttribute("aria-selected", "true")
     expect(previewContext).not.toHaveBeenCalled()
     expect(loadNode).not.toHaveBeenCalled()
   })

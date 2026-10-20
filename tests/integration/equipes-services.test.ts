@@ -326,6 +326,37 @@ describe.skipIf(!sqlConfigured || privatePending)(
           select default_team_id from platform.members where org_id = ${o.org.id} and user_id = ${o.people.marc.id}`
         expect(marc.default_team_id).toBeNull()
       })
+
+      // 1.4.13 : des pages de l'équipe à la corbeille bloquaient sa suppression ; elles partent avec elle.
+      it("should delete a team whose remaining pages are all in the trash, erasing them with the team and its Contexte", async () => {
+        const team = await newTeam("Archives")
+        const folder = await fx.nodeId(o.org.id, team.slug)
+        const notes = await fx.createNode(o.org.id, { parentId: folder, path: `${team.slug}/notes`, title: "Notes" })
+        await fx.createNode(o.org.id, { parentId: notes, path: `${team.slug}/notes/detail`, title: "Détail" })
+        const outside = `hors_${hex(3)}`
+        await fx.createNode(o.org.id, { parentId: o.nodes.root, path: outside, title: "Hors", ownerKind: "team", ownerTeamId: team.id })
+        await fx.admin`update platform.nodes set deleted_at = now() - interval '1 day'
+                        where org_id = ${o.org.id} and (path = ${outside} or starts_with(path, ${`${team.slug}/notes`}))`
+
+        const deleted = await deleteTeam(as("ada").db, as("ada").identity, team.id)
+
+        expect(deleted.data).toEqual({ id: team.id, slug: team.slug })
+        expect(await teamRow(team.slug)).toEqual([])
+        expect([...(await paths(team.slug)), ...(await paths(outside))]).toEqual([])
+      })
+
+      it("should still refuse a team that keeps a live page next to trashed ones, naming only the live page", async () => {
+        const team = await newTeam("Achats bis")
+        const folder = await fx.nodeId(o.org.id, team.slug)
+        await fx.createNode(o.org.id, { parentId: folder, path: `${team.slug}/vivante`, title: "Vivante" })
+        await fx.createNode(o.org.id, { parentId: folder, path: `${team.slug}/jetee`, title: "Jetée" })
+        await fx.admin`update platform.nodes set deleted_at = now() where org_id = ${o.org.id} and path = ${`${team.slug}/jetee`}`
+
+        const error = await refusal(deleteTeam(as("ada").db, as("ada").identity, team.id))
+
+        expect(error.details).toMatchObject({ reason: "team_owns_objects", nodes: [`${team.slug}/vivante`], nodesTotal: 1 })
+        expect(await paths(`${team.slug}/jetee`)).toEqual([`${team.slug}/jetee`])
+      })
     })
   },
 )

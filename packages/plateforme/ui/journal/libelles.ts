@@ -9,6 +9,14 @@ import { JOURNAL_ROWS_SCANNED } from "../../schemas/journal"
 export const ABSENT = "—"
 
 export const TITRE = "Journal"
+
+/** La page « Activité » (1.4.13) : ses onglets Statistiques, pour qui administre, et Journal, pour tous. */
+export const ACTIVITE = {
+  titre: "Activité",
+  onglets: "Les vues de l'activité",
+  statistiques: "Statistiques",
+  journal: "Journal",
+} as const
 export const META = "Les conversations des assistants avec les pages de l'organisation"
 export const TITRE_DE_LA_LISTE = "Conversations, la plus récente d'abord"
 export const AUCUNE_CONVERSATION = "Aucune conversation sur cette période."

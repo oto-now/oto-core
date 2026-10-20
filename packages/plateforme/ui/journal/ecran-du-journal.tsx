@@ -11,7 +11,8 @@
 // l'adresse ; l'état porté par l'URL, les valeurs illisibles rattrapées et dites, un message constant par
 // état. Changé : l'écran est le journal seul (une lentille), les conversations groupées par code `ctx`, les
 // filtres par équipe, personne et erreurs. Retiré : TanStack Router et Query, les six onglets du suivi,
-// `run_id` et le vocabulaire de déroulé (architecture § 10).
+// `run_id` et le vocabulaire de déroulé (architecture § 10). 1.4.13 : ses morceaux (période, contenu, tiroir, méta) se
+// montent aussi dans l'onglet Journal d'« Activité » (`ecran-d-activite.tsx`).
 import { ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise"
 import { JOURNAL_PERIODS, type ConversationDetail, type JournalFilters, type JournalPage, type JournalParam, type MemberView, type TeamView } from "../../schemas"
 import { messageDErreur } from "../api/messages"
@@ -105,51 +106,68 @@ function conversationOuverte({ filtres, conversation }: EcranDuJournalProps): Re
 }
 
 /** « 12 conversations · 85 appels » : ce que la période compte, filtres compris ; la phrase de l'écran sinon. */
-function meta({ resultat }: EcranDuJournalProps): string {
+export function metaDuJournal({ resultat }: Pick<EcranDuJournalProps, "resultat">): string {
   if (!resultat.data) return META
   return `${pluriel(resultat.data.total, "conversation", "conversations")} · ${pluriel(resultat.data.calls, "appel", "appels")}`
 }
 
-export function EcranDuJournal(props: EcranDuJournalProps) {
+/** La période, action de l'en-tête : elle commande tout le journal. */
+export function PeriodeDeLEcranDuJournal(props: EcranDuJournalProps) {
+  const liens = liensDe(props)
+  const periodes = JOURNAL_PERIODS.map((jours) => ({ valeur: String(jours), libelle: `${jours} jours`, href: liens.periode(jours) }))
+  return <PeriodeDuJournal periodes={periodes} valeur={String(props.filtres.period)} />
+}
+
+/** Les filtres, ce que l'adresse demandait sans être compris, puis la liste : le contenu de l'îlot du journal. */
+export function ContenuDuJournal(props: EcranDuJournalProps) {
   const { filtres, Lien } = props
   const liens = liensDe(props)
+  return (
+    <div className="flex flex-col gap-4">
+      <FiltresDuJournal filtres={filtres} equipes={props.equipes} personnes={props.personnes} adresse={liens.sansFiltre} ici={liens.ici} filtrePose={filtrePose(filtres)} Lien={Lien} />
+      <Avertissements filtres={filtres} resultat={props.resultat} />
+      <ListeDesConversations
+        resultat={props.resultat}
+        Lien={Lien}
+        ici={liens.ici}
+        hrefDOuverture={liens.ouverture}
+        hrefDeLaSuite={liens.suite}
+        hrefDuNoeud={props.hrefDuNoeud}
+        filtrePose={filtrePose(filtres)}
+        sansFiltre={liens.sansFiltre}
+      />
+    </div>
+  )
+}
+
+/** Le tiroir de la conversation que l'adresse ouvre ; rien sans elle. */
+export function TiroirDuJournal(props: EcranDuJournalProps) {
+  const liens = liensDe(props)
   const conversation = conversationOuverte(props)
-  const periodes = JOURNAL_PERIODS.map((jours) => ({ valeur: String(jours), libelle: `${jours} jours`, href: liens.periode(jours) }))
+  if (!conversation) return null
+  // Une clé par conversation : un tiroir fermé ne reste pas fermé quand l'adresse en ouvre une autre.
+  return (
+    <PanneauDeConversation
+      key={props.filtres.conversation ?? "introuvable"}
+      resultat={conversation}
+      Lien={props.Lien}
+      ici={liens.ici}
+      fermer={liens.fermer}
+      hrefDesAppelsSuivants={liens.appelsSuivants}
+    />
+  )
+}
+
+export function EcranDuJournal(props: EcranDuJournalProps) {
   return (
     <>
-      <ScreenHeader
-        title={TITRE}
-        icon={<Icon as={ClockCounterClockwise} size="sm" />}
-        meta={meta(props)}
-        actions={<PeriodeDuJournal periodes={periodes} valeur={String(filtres.period)} />}
-      />
+      <ScreenHeader title={TITRE} icon={<Icon as={ClockCounterClockwise} size="sm" />} meta={metaDuJournal(props)} actions={<PeriodeDeLEcranDuJournal {...props} />} />
       <Island aria-label="Le journal des conversations">
-        <IslandBody className="flex flex-col gap-4">
-          <FiltresDuJournal filtres={filtres} equipes={props.equipes} personnes={props.personnes} adresse={liens.sansFiltre} ici={liens.ici} filtrePose={filtrePose(filtres)} Lien={Lien} />
-          <Avertissements filtres={filtres} resultat={props.resultat} />
-          <ListeDesConversations
-            resultat={props.resultat}
-            Lien={Lien}
-            ici={liens.ici}
-            hrefDOuverture={liens.ouverture}
-            hrefDeLaSuite={liens.suite}
-            hrefDuNoeud={props.hrefDuNoeud}
-            filtrePose={filtrePose(filtres)}
-            sansFiltre={liens.sansFiltre}
-          />
+        <IslandBody>
+          <ContenuDuJournal {...props} />
         </IslandBody>
       </Island>
-      {/* Une clé par conversation : un tiroir fermé ne reste pas fermé quand l'adresse en ouvre une autre. */}
-      {conversation && (
-        <PanneauDeConversation
-          key={filtres.conversation ?? "introuvable"}
-          resultat={conversation}
-          Lien={Lien}
-          ici={liens.ici}
-          fermer={liens.fermer}
-          hrefDesAppelsSuivants={liens.appelsSuivants}
-        />
-      )}
+      <TiroirDuJournal {...props} />
     </>
   )
 }

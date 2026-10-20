@@ -781,6 +781,10 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
 
     const preview = await previewContext(db, lea, { phrase })
     expect(await written()).toEqual(before)
+    // 2026-10-20 : le poids sans plafond (la jauge d'un Contexte) : un bloc servi entier y pèse ce qu'il pèse au rapport.
+    const entier = new Map(preview.whole.blocks.map((bloc) => [bloc.name, bloc.chars]))
+    for (const bloc of preview.blocks.filter((un) => un.status === "full")) expect(entier.get(bloc.name), bloc.name).toBe(bloc.chars)
+    expect(preview.whole.total).toBeGreaterThanOrEqual(preview.blocks.reduce((somme, bloc) => somme + bloc.chars, 0))
     const built = await buildContext(db, lea, { phrase }, { userAgent: null })
     expect(preview.text).toBe(built.text.replace(/^ctx: \S+/, "ctx: XXXX-XXXX"))
     expect({ budget: preview.budget, served: preview.served, candidates: preview.candidates }).toEqual({

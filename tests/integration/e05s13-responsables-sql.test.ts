@@ -98,7 +98,7 @@ describe.skipIf(!sqlConfigured || pending)(NAME, { timeout: 60_000 }, () => {
         expect(ventes?.leadName).toBe("Claire Morel, Léa Roux")
         // Le panneau des règles les compte : le libellé en tire son pluriel (AC-23).
         expect((await listNodeRules(db("ada"), await identity("ada"), "ventes/devis")).owner).toEqual({
-          kind: "team", teamName: "Ventes", leadName: "Claire Morel, Léa Roux", leadCount: 2,
+          kind: "team", teamId: o.teams.ventes, teamName: "Ventes", leadName: "Claire Morel, Léa Roux", leadCount: 2,
         })
         for (const who of ["marc", "claire"] as const) {
           const spied = spyDb(db(who))

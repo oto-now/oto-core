@@ -84,7 +84,7 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
         controls={idDeLArbre}
         addItems={itemsDeLaRacine}
         // Une équipe a son « ⋯ » : ses personnes, et sa suppression pour qui administre ; ni Tout le monde ni Perso.
-        end={section.cle !== "" && section.cle !== PERSO ? <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} /> : undefined}
+        end={section.cle !== "" && section.cle !== PERSO ? <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} /> : undefined}
       />
       {/* La liste porte le nom de sa section, comme le navigateur d'arbre qu'elle remplace. */}
       <RailTree as={LigneDuRail} id={idDeLArbre} hidden={replie} aria-label={section.titre} nodes={lignes} addItems={addItems} moreItems={moreItems} />

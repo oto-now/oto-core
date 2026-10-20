@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { after } from "next/server"
 import { cache, Suspense, use, type ReactNode } from "react"
 import {
   fileViewParamSchema,
@@ -19,6 +20,7 @@ import {
   loadNode,
   nodeLinks,
   previewContext,
+  recordNodeView,
   resolveReferencesForScreen,
   ROOT_PATH,
   tableGridRows,
@@ -30,6 +32,7 @@ import {
 import {
   adresseDesReglages,
   AnnexesDuContexte,
+  JaugeDuBudget,
   blocsAffiches,
   EcranDeNoeud,
   EcranDeTableauChargement,
@@ -150,6 +153,18 @@ function apercuDemande(db: PlatformDb, identity: Identity, chemin: string | null
   return chemin !== null && CHEMIN_DE_CONTEXTE.test(chemin) ? resultatDe(previewContext(db, identity, {})) : undefined
 }
 
+/**
+ * La vue de la page, comptée pour « Les plus consultés » et la dernière visite de l'accueil (1.4.13) : le service décide
+ * (un nœud que la personne lit) ; comptée après la réponse (`after`, comme le journal des portes), elle n'ajoute rien au
+ * temps d'affichage ; son échec se dit au log serveur et ne change rien à la page.
+ */
+async function compterLaVue(db: PlatformDb, identity: Identity, chemin: string | null): Promise<void> {
+  if (chemin === null) return
+  await recordNodeView(db, identity, { path: chemin }).catch((error: unknown) => {
+    if (!(isPlatformError(error) && error.code === "not_found")) console.error("[n/[...chemin]] recordNodeView", error)
+  })
+}
+
 async function lire(db: PlatformDb, identity: Identity, chemin: string | null) {
   const [noeud, arbre, equipes, membres, regles, apercu] = await Promise.all([
     chemin ? lireLeNoeud(chemin) : { data: null },
@@ -187,7 +202,9 @@ async function complementsDuNoeud({ db, identity, vue, lu, ici }: Complements) {
       Lien={Link}
     />
   )
-  return { annexes }
+  // La jauge du budget, tout en bas de la colonne (2026-10-20) ; un aperçu en échec est déjà dit par les annexes.
+  const piedDeColonne = apercu.error === undefined ? <JaugeDuBudget apercu={apercu.data} cheminCourant={vue.path} /> : undefined
+  return { annexes, piedDeColonne }
 }
 
 type LecturesDuTableau = Pick<TableauDuNoeudProps, "lignes" | "resume" | "revue" | "assistant">
@@ -288,6 +305,7 @@ export default async function NoeudPage({ params, searchParams }: Parametres) {
   // montre alors pas ces liens.
   const liensLus = chemin ? resultatDe(sauf404(nodeLinks(session.db, identity, { path: chemin })).then((lus) => lus ?? {})) : undefined
   const lu = await lire(session.db, identity, chemin)
+  after(() => compterLaVue(session.db, identity, chemin))
   const ici = `${hrefDuChemin(commun.chemin)}${versionPubliee ? "?version=published" : ""}`
   const partage = lu.regles && lu.noeud.data ? { regles: lu.regles, sujets: sujetsDe(lu), gestionAccordable: identity.member.role === "admin", moi: identity.user.id } : undefined
   const vue = lu.noeud.data ?? null

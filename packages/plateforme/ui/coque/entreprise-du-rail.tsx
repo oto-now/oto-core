@@ -9,7 +9,8 @@
 // groupes, « Réglages de l'entreprise » (Organisation, Équipes & accès) avant « Suivi de l'entreprise » ;
 // « Membres & équipes » disparaît. E05-S13 (AC-10) : Journal dans les réglages ; Usage caché et Retours au staff, par
 // les adresses que l'hôte donne. 1.1.3 : « Suivi de l'entreprise » disparaît, Usage et Retours hors du menu
-// (`ecrans.ts`), un seul groupe reste, sans sous-titre. La bascule d'entreprise revient (décision du 2026-10-01 : une
+// (`ecrans.ts`), un seul groupe reste, sans sous-titre ; 1.4.13 : « Suivi de l'entreprise » revient après les réglages,
+// « Activité » pour tous, Retours pour qui les traite. La bascule d'entreprise revient (décision du 2026-10-01 : une
 // personne peut avoir plusieurs organisations) : chaque organisation ayant sa propre adresse (ADR-004), choisir une
 // organisation mène à son adresse, où la session se reprend. Retiré : TanStack Query.
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus"
@@ -25,6 +26,7 @@ import type { AdressesDuRail } from "./types"
 
 const GROUPES: readonly { rangement: Rangement; titre: string }[] = [
   { rangement: "reglages", titre: ENTREPRISE.reglages },
+  { rangement: "suivi", titre: ENTREPRISE.suivi },
 ]
 
 /**

@@ -50,6 +50,18 @@ async function activeShare(sql: Tx, orgId: string, nodeId: string): Promise<Shar
   return row ?? null
 }
 
+/**
+ * Le lien actif d'un nœud par son chemin, dans la transaction `sql` d'un service qui a déjà décidé l'accès complet
+ * (`node.access`, `viewerLevel` 3 de `nodeRulesIn`) ; `null` sans lien. Sans jeton : la lecture ne le sert pas.
+ */
+export async function activeShareAt(sql: Tx, orgId: string, path: string): Promise<{ includeChildren: boolean; createdAt: string } | null> {
+  const [row] = await sql<{ include_children: boolean; created_at: string }[]>`
+    select s.include_children, to_json(s.created_at) #>> '{}' as created_at
+      from platform.node_shares s join platform.nodes n on n.id = s.node_id
+     where s.org_id = ${orgId} and n.org_id = ${orgId} and n.path = ${path} and n.deleted_at is null and s.revoked_at is null`
+  return row ? { includeChildren: row.include_children, createdAt: row.created_at } : null
+}
+
 async function shareView(db: PlatformDb, identity: Identity, node: NodeRow, row: ShareRow): Promise<ShareView> {
   const author = row.created_by ? (await memberDirectory(db, identity.org.id)).find((entry) => entry.userId === row.created_by) : undefined
   return { id: row.id, path: node.path, token: row.token, includeChildren: row.include_children, createdAt: row.created_at, createdByName: author?.name ?? null }

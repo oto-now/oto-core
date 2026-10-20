@@ -28,6 +28,8 @@ export const metadata: Metadata = {
 }
 
 const ECHEC = { error: "Une erreur est survenue. Réessayez." } as const
+/** Où s'ouvre une page de l'arbre (la route `/n/[...chemin]`) : une page qui bloque la suppression d'une équipe y mène. */
+const PREFIXE_DES_PAGES = "/n/"
 
 /** L'adresse d'un onglet ; un réglage à sa valeur par défaut n'y est pas écrit. */
 function hrefDOnglet(onglet: EquipesTab, reglages: Partial<ReglagesDesListes> = {}): string {
@@ -47,7 +49,7 @@ function optionsOuRien(db: PlatformDb, identity: Identity) {
   })
 }
 
-type Donnees = Omit<EcranEquipesProps, "onglet" | "reglages" | "Lien" | "hrefDOnglet">
+type Donnees = Omit<EcranEquipesProps, "onglet" | "reglages" | "Lien" | "hrefDOnglet" | "prefixeDesPages">
 
 async function lire(db: PlatformDb, identity: Identity): Promise<Donnees> {
   // Administrateur comme pour les services : le rôle, ou l'équipe plateforme avec un accès en cours
@@ -95,5 +97,5 @@ export default async function EquipesPage({
   const { tab: onglet } = equipesSearchSchema.parse(parametres)
   const reglages = equipesListesSchema.parse(parametres)
   const donnees = identite ? await lire(identite.data.session.db, identite.data.identity) : EN_PANNE
-  return <EcranEquipes {...donnees} onglet={onglet} reglages={reglages} Lien={Link} hrefDOnglet={hrefDOnglet} />
+  return <EcranEquipes {...donnees} onglet={onglet} reglages={reglages} Lien={Link} hrefDOnglet={hrefDOnglet} prefixeDesPages={PREFIXE_DES_PAGES} />
 }

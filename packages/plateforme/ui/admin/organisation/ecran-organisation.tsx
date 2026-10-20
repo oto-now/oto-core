@@ -9,7 +9,7 @@
 // l'échec dit avec « Réessayer ». Retiré : route TanStack, `useCompany`, départ de l'entreprise, description,
 // secteur, lieu, domaine de marque, mode lecture seule (la page est réservée aux administrateurs). E05-S11
 // (AC-23) retire les annexes « Adresses et outils », « Contact » et « Marque et guide » : le service, l'API et
-// `admin_org` les gardent.
+// `admin_org` les gardent. 1.4.13 : l'îlot « Retours des assistants » règle l'option « Retours visibles ».
 import { Buildings } from "@phosphor-icons/react/dist/ssr/Buildings"
 import type { OrgView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
@@ -24,6 +24,7 @@ import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { ContexteDeLEntreprise, type LectureDuContexte } from "./contexte-de-l-entreprise"
 import { FormulaireOrganisation } from "./formulaire-organisation"
 import { LiensPublics, type LiensPublicsDeLOrganisation } from "./liens-publics"
+import { RetoursVisibles } from "./retours-visibles"
 
 export type EcranOrganisationProps = {
   resultat: Resultat<OrgView>
@@ -45,11 +46,13 @@ export type EcranOrganisationProps = {
   liensPublics?: LiensPublicsDeLOrganisation
   /** La lecture du Contexte de Tout le monde (E05-S11, AC-24), en annexe ; sans elle, pas d'îlot. */
   contexte?: LectureDuContexte
+  /** L'option « Retours visibles » de l'organisation (1.4.13), sous les liens publics ; sans elle, pas d'îlot. */
+  retoursVisibles?: Resultat<boolean>
 }
 
 type OrganisationProps = Omit<EcranOrganisationProps, "resultat" | "fil"> & { organisation: OrgView }
 
-function Organisation({ organisation, marque, enregistre = false, liensPublics, contexte, Lien, ici, hrefGuide }: OrganisationProps) {
+function Organisation({ organisation, marque, enregistre = false, liensPublics, contexte, retoursVisibles, Lien, ici, hrefGuide }: OrganisationProps) {
   const annexe = contexte && (
     <ContexteDeLEntreprise lecture={contexte.lecture} apercu={contexte.apercu} prefixeDesPages={contexte.prefixeDesPages} Lien={Lien} ici={ici} hrefDuContexte={hrefGuide} />
   )
@@ -63,6 +66,7 @@ function Organisation({ organisation, marque, enregistre = false, liensPublics, 
       </Ilot>
       {marque && <FormulaireDeMarque marque={marque} nomOrganisation={organisation.name} enregistre={enregistre} />}
       {liensPublics && <LiensPublics liens={liensPublics} Lien={Lien} ici={ici} />}
+      {retoursVisibles !== undefined && <RetoursVisibles lecture={retoursVisibles} />}
     </TwoColumns>
   )
 }

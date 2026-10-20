@@ -5,7 +5,7 @@
 // service avant sa requête : la gestion du nœud (`share`), l'administrateur seul pour l'accès complet
 // (`manage`, fiche D4), et jamais dans un espace « Privé » (ADR-014 § 2). Sans lui, l'accès général ne se
 // change pas.
-import { generalAccessSchema, type AccessLevelName, type GeneralAccess } from "../schemas"
+import { ACCESS_LEVEL_NAMES, generalAccessSchema, type AccessLevelName, type GeneralAccess } from "../schemas"
 import { ACCESS_LEVELS, requireNodeLevel } from "./access"
 import type { PlatformDb } from "./db"
 import { changedMeanwhile, inTransaction, invalidInput, PlatformError } from "./errors"
@@ -48,6 +48,12 @@ export async function setGeneralAccess(
     if (level !== null) {
       if (current?.level === level) return done(false)
       await saveRule(sql, identity, { target: { column: "node_id", id: node.id }, subject: { kind: "org" }, level }, { context: "setGeneralAccess", message: meanwhile })
+      // L'équipe propriétaire suit (1.4.13) : sa règle sur ce nœud passerait devant celle de l'organisation, ses membres
+      // auraient moins que les autres ; elle monte au niveau de l'organisation.
+      if (teamId !== null && level !== "none") {
+        const below = ACCESS_LEVEL_NAMES.slice(0, ACCESS_LEVEL_NAMES.indexOf(level))
+        await sql`update platform.access_rules set level = ${level} where node_id = ${node.id} and subject_team_id = ${teamId} and level = any(${below})`
+      }
       return done(true)
     }
     if (!current) return done(false)
