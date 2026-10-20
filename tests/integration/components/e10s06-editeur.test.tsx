@@ -58,6 +58,19 @@ async function texteNeuf(): Promise<HTMLTextAreaElement> {
 
 const taper = (element: HTMLElement, texte: string) => fireEvent.change(element, { target: { value: texte } })
 
+/** La recherche de « @ » simulée, un seul contenu trouvé ; l'écriture laissée à la file (`simulerLAPI`). */
+function simulerLaRecherche() {
+  const ecriture = api.fetchMock.getMockImplementation()
+  const matches = [{ path: "ventes/grille_tarifaire", kind: "page", title: "Grille tarifaire", snippet: null }]
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(async (adresse, init) => {
+      if (!String(adresse).includes("/api/platform/search")) return ecriture ? ecriture(adresse, init) : new Response(null, { status: 500 })
+      return new Response(JSON.stringify({ data: { matches, more: 0 } }), { status: 200, headers: { "content-type": "application/json" } })
+    }),
+  )
+}
+
 beforeEach(() => {
   api = simulerLAPI()
   rafraichir.mockReset()
@@ -466,6 +479,59 @@ describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
     expect(champ("Montant, rangée 1")).toHaveValue("3")
     expect(document.querySelector("img")).toBeNull()
     expect(api.envoyes).toEqual([])
+  })
+})
+
+describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
+  it("should cite a content with « @ » in a cell, the list under the table, the link read at rest and sent with its bar escaped", async () => {
+    simulerLaRecherche()
+    const tableau = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom", "Lien"], rows: [["a", ""]] })
+    monter([tableau])
+    const cellule = zone(champ("Lien, rangée 1"))
+    act(() => cellule.focus())
+    taper(cellule, "Voir @gri")
+    const option = await screen.findByRole("option")
+    expect(cellule).toHaveAttribute("aria-activedescendant", option.id)
+    expect(cellule.closest("table")).not.toContainElement(option)
+    fireEvent.keyDown(cellule, { key: "Enter" })
+    await waitFor(() => expect(cellule).toHaveValue("Voir [[ventes/grille_tarifaire|Grille tarifaire]]"))
+    expect(screen.queryByRole("listbox")).toBeNull()
+    await focusSur(cellule)
+    expect(cellule).toHaveProperty("selectionStart", cellule.value.length)
+    ailleurs()
+    // Au repos, la cellule se lit comme en lecture : le lien par son titre.
+    expect(cellule).toHaveAttribute("data-rendu")
+    expect(within(cellule.closest<HTMLElement>(".oto-cellule-editee") ?? document.body).getByRole("link", { name: "Grille tarifaire" })).toHaveAttribute("href", "/n/ventes/grille_tarifaire")
+    await waitFor(() => expect(api.envoyes).toHaveLength(1))
+    expect(api.envoyes[0].ops?.[0]).toMatchObject({ input: { type: "simple_table", data: { rows: [["a", String.raw`Voir [[ventes/grille_tarifaire\|Grille tarifaire]]`]] } } })
+  })
+
+  it("should keep a cell on one line, a pasted line break becoming a blank", async () => {
+    const tableau = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom"], rows: [["a"]] })
+    monter([tableau])
+    const cellule = zone(champ("Nom, rangée 1"))
+    act(() => cellule.focus())
+    taper(cellule, "deux\nlignes")
+    expect(cellule).toHaveValue("deux lignes")
+  })
+
+  it("should cite a content with « @ » in the body of a toggle, the cursor after the link", async () => {
+    simulerLaRecherche()
+    const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Corps", { summary: "Détails" })
+    monter([repli])
+    fireEvent.click(bouton("Déplier le corps — Détails"))
+    const corps = zone(champ("Corps du menu dépliant — Détails"))
+    act(() => corps.focus())
+    taper(corps, "Voir @gri")
+    const option = await screen.findByRole("option")
+    expect(corps).toHaveAttribute("aria-activedescendant", option.id)
+    fireEvent.keyDown(corps, { key: "Enter" })
+    await waitFor(() => expect(corps).toHaveValue("Voir [[ventes/grille_tarifaire|Grille tarifaire]]"))
+    await focusSur(corps)
+    expect(corps).toHaveProperty("selectionStart", corps.value.length)
+    ailleurs()
+    await waitFor(() => expect(api.envoyes).toHaveLength(1))
+    expect(api.envoyes[0].ops?.[0]).toMatchObject({ input: { type: "toggle", text: "Voir [[ventes/grille_tarifaire|Grille tarifaire]]" } })
   })
 })
 

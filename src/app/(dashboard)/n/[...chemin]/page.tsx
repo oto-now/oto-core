@@ -251,6 +251,7 @@ function complementDuTableau(db: PlatformDb, identity: Identity, vue: NodeView, 
         Lien={Link}
         hrefDuTableau={hrefDuTableau}
         adresse={hrefDuChemin(vue.path)}
+        prefixeDesPages={PREFIXE}
       />
     </Suspense>
   )

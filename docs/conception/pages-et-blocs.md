@@ -1,7 +1,7 @@
 # Pages et blocs
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-10-14
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -55,6 +55,7 @@ Garder documents et tableaux dans deux modèles (sections markdown dans le nœud
 - HN-E10S04-2 : pas de cases à cocher imbriquées : un sous-élément de `checklist` reste du texte (rare dans ce qu'écrit Claude).
 - HN-E10S04-3 : trois niveaux d'imbrication, 20 colonnes et 200 rangées pour un tableau simple ; au-delà, c'est un tableau de données ([tableaux](tableaux.md)).
 - HN-E10S04-5 : un tableau ou un séparateur n'interrompt pas un paragraphe (précédé d'une ligne vide ou en tête) ; un tableau commence par `|` : un texte existant ne change pas de sens (`estUnTableau`, GFM restreint). HN-E10S04-9 : cela se lit « au début d'un bloc, jamais dans un paragraphe » : un tableau ou un séparateur qui suit un titre, une liste ou un encart sans ligne vide est reconnu ; une ligne `<details>` interrompt un paragraphe, comme une clôture ou un titre.
+- Lien à libellé dans un tableau simple (1.4.11) : la barre d'un `[[chemin|titre]]` écrit dans une rangée ne coupe pas la cellule ; la cellule la garde échappée (`[[chemin\|titre]]`, la forme qu'écrit aussi l'éditeur), et la syntaxe des liens lit `\|` comme `|` (`schemas/link-syntax.ts`), à la publication comme à l'écran. Un `[[` sans `]]` plus loin sur la ligne n'ouvre rien.
 - HN-E10S04-6 : la conversion au premier `write` d'une section relue est admise, sans migration des données : un paragraphe fait d'un tableau, un « --- » seul, un paragraphe `<details>` ou un élément qui porte une sous-liste deviennent des blocs neufs ; de même, un élément de liste dont une ligne suivante commence par une marque (`"c\n1. x"`, écrit seulement par l'API des blocs) est relu en sous-liste aux niveaux 1 et 2, et sa section refusée au niveau 3 (`line N: lists go three levels deep at most.`).
 - HN-E10S04-10 : la marque qui ouvre une sous-liste est admise de 0 à 3 espaces, ou jusqu'à la largeur de la marque de l'élément moins un quand elle est plus grande (un élément numéroté à partir de 1000 relit sa sous-liste). HN-E10S04-11 : dans une sous-liste, des lignes vides entre deux sous-éléments sont admises et se relisent en liste serrée ; au premier niveau, une ligne vide suivie d'une marque ouvre toujours une seconde liste.
 - HN-E10S04-8 : le corps d'un repli n'est pas relu en blocs ; un tableau ou une liste s'y lit en texte (le corps s'affiche comme un encart, D114). HN-E10S04-12 : le résumé d'un repli est lu sans ses blancs de bord et compté comme un titre (`btrim`, 1 à 200 caractères) ; un résumé vide reçoit le refus « a toggle starts with <summary>…</summary> on one line. ». HN-E10S04-15 : les clôtures d'un corps de repli (accents graves ou tildes, 0 à 3 espaces avant ; une clôture jamais fermée court jusqu'à la fin) se lisent par `fencedParts` (`schemas/link-syntax.ts`), que partagent la publication (`links`), l'écran (`cheminsCites`) et le rendu.
@@ -107,3 +108,4 @@ Aucune à ce jour.
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-011 § 2, les fiches D111, D114, D115, D122, D141 et les choix H56, H-M67, E01-S06, E10-S04, HN-M113 — décidé par Alexis, accord de JB.
 - 2026-10-14 : bloc `embed` (« Intégration »), toute adresse `https`, hauteur réglable, publié en 1.4.3 avec sa migration — décidé par JB (source : session du 14/10/2026).
 - 2026-10-14 : le bloc `embed` s'appelle « Iframe » à l'écran, et son dialogue prend aussi le code `<iframe>` d'un site, dont il ne garde que l'adresse — décidé par JB (source : session du 14/10/2026, 1.4.6).
+- 2026-10-20 : un lien à libellé tient dans une cellule de tableau simple, sa barre nue ou échappée — retour d'un assistant, corrigé avec l'accord de JB (source : session du 20/10/2026).

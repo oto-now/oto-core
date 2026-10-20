@@ -191,7 +191,7 @@ type BlocEcritProps = {
 function ChampsDuBloc({ rangee, forme, verrouille, liens, menuOuvert, ouvert, suivreLaCellule, decritPar, invite, joindre, integrer }: Omit<BlocEcritProps, "erreur"> & { decritPar?: string }) {
   const { cle, bloc } = rangee
   const mots = premiersMots(bloc)
-  if (forme === "tableau") return <TableauEdite cle={cle} bloc={bloc} decritPar={decritPar} lectureSeule={verrouille} suivre={suivreLaCellule} />
+  if (forme === "tableau") return <TableauEdite cle={cle} bloc={bloc} decritPar={decritPar} lectureSeule={verrouille} liens={liens} suivre={suivreLaCellule} />
   if (forme === "repli") return <RepliEdite cle={cle} bloc={bloc} mots={mots} decritPar={decritPar} lectureSeule={verrouille} liens={liens} />
   const texte = texteDe(bloc)
   return (

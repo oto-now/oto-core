@@ -121,14 +121,17 @@ function bracketed(text: string): { start: number; end: number }[] {
 }
 
 /**
- * Le lien d'un `[[…]]`, ou `null` s'il n'en a pas la forme. La découpe au premier `|`, puis au premier
+ * Le lien d'un `[[…]]`, ou `null` s'il n'en a pas la forme. La découpe au premier `|` (ou `\|`), puis au premier
  * `#`, se fait sur l'intérieur que lit la publication (`inner` : entre les crochets, spans de code
  * blanchis) ; le libellé est pris dans le même intérieur tel qu'il est écrit (`written`), et compté
  * comme la publication le compte, blanchi et avant d'être rogné.
  */
 function parseLink(inner: string, written: string): FoundLink["link"] {
   const bar = inner.indexOf("|")
-  const target = bar === -1 ? inner : inner.slice(0, bar)
+  // `\|` sépare aussi le libellé : dans une cellule de tableau, un `|` nu couperait la cellule, et l'éditeur l'y écrit
+  // échappé (92 : la barre oblique inverse).
+  const escapedBar = bar > 0 && inner.charCodeAt(bar - 1) === 92
+  const target = bar === -1 ? inner : inner.slice(0, escapedBar ? bar - 1 : bar)
   if (bar !== -1 && chars(inner.slice(bar + 1)) > LABEL_MAX) return null
   const hash = target.indexOf("#")
   const path = (hash === -1 ? target : target.slice(0, hash)).trim()

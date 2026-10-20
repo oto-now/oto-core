@@ -36,8 +36,12 @@ import { useAdresseCourante } from "./noeud-ouvert"
 
 type Genre = "page" | "table" | "procedure"
 
-/** Où le « + » cliqué range ce qu'il crée : le nom de l'endroit, et le chemin du parent (`""` : la racine de l'arbre). */
-export type CibleDeCreation = { nom: string; parent: string }
+/**
+ * Où le « + » cliqué range ce qu'il crée : le nom de l'endroit, et le chemin du parent (`""` : la racine de l'arbre).
+ * `sousUneProcedure` : le parent est une procédure, sous laquelle ne se rangent que des pages et des tableaux (ses
+ * sous-étapes, qu'elle cite) ; une procédure rangée là serait routée à sa place.
+ */
+export type CibleDeCreation = { nom: string; parent: string; sousUneProcedure?: boolean }
 
 type Demande = CibleDeCreation & { genre: Genre }
 
@@ -193,7 +197,7 @@ export function useMenuDeCreation(prefixe: string, pris: ReadonlySet<string>, mo
     itemsPour: (cible) => [
       item(CREATION.page, GLYPHES.page, { ...cible, genre: "page" }),
       item(CREATION.tableau, GLYPHES.tableau, { ...cible, genre: "table" }),
-      item(CREATION.procedure, GLYPHES.procedure, { ...cible, genre: "procedure" }),
+      ...(cible.sousUneProcedure ? [] : [item(CREATION.procedure, GLYPHES.procedure, { ...cible, genre: "procedure" })]),
       { separator: true },
       { label: IMPORT.entree, icon: <AnimatedIcon as={UploadSimple} size="xs" />, onSelect: () => importer(cible, null) },
     ],

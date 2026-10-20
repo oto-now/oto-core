@@ -13,8 +13,9 @@
 // et les lignes du menu du design system (`oto-pop`, `oto-menu-item`), posée dans le flux sous le champ.
 import { useEffect, useState, type KeyboardEvent } from "react"
 import type { SearchMatch } from "../../../schemas/search"
-import type { RechercheDeContenus } from "../../api/use-recherche-de-contenus"
+import { useRechercheDeContenus, type RechercheDeContenus } from "../../api/use-recherche-de-contenus"
 import { CITER } from "../libelles"
+import { useCheminDeLaFile } from "./file-d-operations"
 
 /** Une citation en cours : la place de son « @ » dans le texte, et ce qui est tapé après lui. */
 export type Citation = { debut: number; requete: string }
@@ -80,6 +81,50 @@ export function useOptionActive<T>(options: readonly T[]) {
       return true
     },
   }
+}
+
+/**
+ * « @ » dans un champ (AC-a9) : la citation en cours, sa recherche, l'option active, et le choix qui remplace « @… » par
+ * le lien ; `inserer` écrit le texte qui en résulte et pose le curseur après le lien. Un Texte, le corps d'un repli et
+ * une cellule de tableau s'en servent, chacun écrivant son texte à sa façon.
+ */
+export function useCitation(texte: string, inserer: (texte: string, curseur: number) => void) {
+  const [citation, setCitation] = useState<Citation | null>(null)
+  const recherche = useRechercheDeContenus()
+  const chemin = useCheminDeLaFile()
+  const trouves = "trouves" in recherche.resultat ? recherche.resultat.trouves : []
+  const option = useOptionActive(trouves)
+  const suivre = (valeur: string, curseur: number) => {
+    const lue = citationAuCurseur(valeur, curseur)
+    setCitation(lue)
+    option.remettre()
+    // Avant toute frappe après « @ », les contenus récents hors de la page qu'on édite (E11-S15, AC-b4) ; dès la
+    // première, la recherche.
+    if (lue?.requete === "") recherche.recents(chemin)
+    else recherche.chercher(lue?.requete ?? "")
+  }
+  const fermer = () => {
+    setCitation(null)
+    recherche.chercher("")
+  }
+  const choisir = (trouve: SearchMatch) => {
+    if (!citation) return
+    const lien = lienVers(trouve)
+    const fin = citation.debut + 1 + citation.requete.length
+    fermer()
+    inserer(`${texte.slice(0, citation.debut)}${lien}${texte.slice(fin)}`, citation.debut + lien.length)
+  }
+  /** Le clavier de la liste ouverte : `true` si la touche est prise. */
+  const toucher = (evenement: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!citation) return false
+    if (evenement.key === "Escape") {
+      evenement.preventDefault()
+      fermer()
+      return true
+    }
+    return option.toucher(evenement, ["Enter", "Tab"], choisir)
+  }
+  return { ouverte: citation !== null, resultat: recherche.resultat, actif: option.actif, aDesOptions: trouves.length > 0, suivre, fermer, choisir, toucher }
 }
 
 /** L'`id` d'une option de la liste, que le champ désigne par `aria-activedescendant`. */

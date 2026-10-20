@@ -1,7 +1,7 @@
 # Procédures
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-19
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -25,6 +25,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Elle se réduit à un titre, un résumé et des étapes ; le résumé porte les façons de la demander, et le routage cherche dans le titre et le résumé ; ni phrases déclencheuses, ni voisines, ni slots, ni entrées (P37).
 - Son contenu est celui d'une page ; le serveur n'en lit que les blocs `call`, contrôlés à la publication où qu'ils soient ; un refus nomme la section, le rang du bloc et, après une liste numérotée, son numéro (P38). Pages et blocs : [pages et blocs](pages-et-blocs.md).
 - Un espace réservé est une valeur chaîne entière `^<[^<>]+>$`, à tout niveau ; sa clé est contrôlée, sa valeur non ; `isPlaceholderValue` (`schemas/procedures.ts`) en est la seule définition (E03-S06 N10).
+- Jamais une procédure sous une procédure (1.4.11) : seule la procédure principale est routée et listée ; chacune de ses sous-étapes est une page (`kind: page`) rangée sous elle, que ses étapes citent par `[[chemin]]`. Une procédure imbriquée serait routée à la place de la principale. La règle se lit dans les règles servies par `context`, le contrat `write.procedure` et le guide de la plateforme ; le « + » d'une procédure, dans le rail, n'offre pas de procédure ; `node.check` signale une procédure sous une procédure (`nestedProcedures`, `server/transfer/inspect.ts`). Aucun refus à l'écriture : une arborescence importée ou ancienne se corrige, elle ne se bloque pas.
 - Les types des refus et de la liste des procédures, et `isPlaceholderValue`, vivent dans `schemas/procedures.ts`, sans schéma Zod, lisibles par `ui/` qui n'importe pas `server/` (E03-S06 N15).
 - `read` sert deux pseudo-fonctions non appelables, au rendu d'un contrat de fonction : `write.procedure` (écrire une procédure) et `write.table` (l'en-tête d'un tableau) (H62). Le contrat `write.procedure` ne porte pas de schéma d'en-tête : il décrit la forme d'une procédure, les deux façons d'écrire un bloc `call` et les refus ; seul `write.table` a un « Header (JSON Schema): » (E03-S06 N14).
 
@@ -65,6 +66,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - **Lire le markdown pour contrôler les appels** : écarté ; le contrôle lit les blocs (E03-S06 N1), et un bloc `code` en langage `call` est refusé parce qu'il serait rendu comme un appel jamais contrôlé (E03-S06 N3).
 - **Un éditeur d'appels structuré à l'écran dès la V1** : reporté ; tant que les connecteurs ne sont pas là, la procédure est une page en texte seul (D104, HN-M59-1).
 - **La page de liste `/procedures`** : plus en vigueur, elle a disparu (tout nœud s'ouvre à son adresse, ADR-008 § 7) ; un espace personnel se nomme « Privé », reconnu à son chemin `perso/…` (HN-E05S04-21).
+- **Refuser une procédure sous une procédure à l'écriture** : écarté ; l'arborescence existante et importée resterait bloquée à la moindre écriture, alors qu'une consigne, l'écran et `node.check` suffisent à l'éviter et à la retrouver.
 - **Une route `/contexte` et une route API d'aperçu** : écartées ; le Contexte s'édite sur son écran de nœud (HN-E05S04-6), l'aperçu est calculé par la page serveur (HN-E05S04-1).
 
 ## Sécurité et confidentialité

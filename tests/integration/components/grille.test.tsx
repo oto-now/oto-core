@@ -2,8 +2,8 @@
 // `TableauDuNoeud` et son chargement, rendus comme la page de l'hôte les monte, sur des lectures construites
 // en mémoire (forme de H93). L'hôte est simulé par ce qu'il prête : son lien (une ancre marquée) et sa
 // navigation, espionnée (`ContexteDeLHote`) ; les adresses du tableau par `adresseDesReglages`. Les nombres
-// attendus se calculent sur ces lignes. E11-S05 : le repère d'un repli de cellule (AC-a1, AC-a2), la ligne à revoir
-// (AC-a4), le vide nommé par l'assistant de la personne (AC-h1).
+// attendus se calculent sur ces lignes. E11-S05 : le détail d'une provenance (AC-a2), la ligne à revoir (AC-a4), le vide
+// nommé par l'assistant de la personne (AC-h1) ; 1.4.11 : l'icône de provenance, les liens d'une cellule de texte.
 import type { AnchorHTMLAttributes, ComponentProps } from "react"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -162,41 +162,61 @@ describe("TableauDuNoeud, columns and cells (AC2, AC18)", () => {
 })
 
 describe("TableauDuNoeud, provenance (AC3)", () => {
-  it("should put a cell with a provenance under a native disclosure: who, when, comment, proof, imported value", () => {
+  // 1.4.11 : une icône « info » après la valeur ouvre le détail dans un panneau posé par-dessus le tableau, au lieu du repli.
+  it("should open the provenance of a cell from its info button, over the table: who, when, comment, proof, imported value", () => {
     rendre()
     const montant = cellule("P-001", "montant_estime")
-    const resume = montant.querySelector("details > summary")
-    expect(resume).toHaveTextContent("12 000")
-    expect(resume).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ink")
-    const repli = within(montant.querySelector("details") ?? montant)
-    expect(repli.getByText("Décidé par Claire Morel")).toBeInTheDocument()
-    expect(repli.getByText("le 24 septembre 2026 à 14:05")).toBeInTheDocument()
-    expect(repli.getByText("Commentaire : Devis signé")).toBeInTheDocument()
-    expect(repli.getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveAttribute("rel", "noopener noreferrer")
-    expect(repli.getByText("Valeur importée à l'origine : 9 000 (le 1 août 2026)")).toBeInTheDocument()
-    const email = within(cellule("P-001", "email"))
+    expect(montant).toHaveTextContent(/^12 000$/)
+    const bouton = within(montant).getByRole("button", { name: "Provenance de « montant_estime »" })
+    expect(bouton).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(bouton)
+    const panneau = screen.getByRole("dialog", { name: "Provenance de « montant_estime »" })
+    expect(table()).not.toContainElement(panneau)
+    const detail = within(panneau)
+    expect(detail.getByText("Décidé par Claire Morel")).toBeInTheDocument()
+    expect(detail.getByText("le 24 septembre 2026 à 14:05")).toBeInTheDocument()
+    expect(detail.getByText("Commentaire : Devis signé")).toBeInTheDocument()
+    expect(detail.getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveAttribute("rel", "noopener noreferrer")
+    expect(detail.getByText("Valeur importée à l'origine : 9 000 (le 1 août 2026)")).toBeInTheDocument()
+    fireEvent.click(within(cellule("P-001", "email")).getByRole("button", { name: "Provenance de « email »" }))
+    const email = within(screen.getByRole("dialog", { name: "Provenance de « email »" }))
     expect(email.getByText("Rempli par l'assistant de un ancien membre")).toBeInTheDocument()
     // Une preuve hors http(s) se lit en texte, jamais en lien.
     expect(email.getByText(/annuaire interne/)).toBeInTheDocument()
     expect(email.queryByRole("link")).toBeNull()
-    expect(within(cellule("P-002", "email")).getByText("Vérifié vide par l'assistant de Léa Roux : Aucune adresse sur le site")).toBeInTheDocument()
-    expect(within(cellule("P-001", "ref")).getByText("Importé")).toBeInTheDocument()
-    expect(cellule("P-001", "entreprise").querySelector("details")).toBeNull()
+    expect(within(cellule("P-001", "entreprise")).queryByRole("button")).toBeNull()
   })
 
-  it("should mark the disclosure by a chevron after the value, hidden from assistive technologies, the value in ink and the detail in grey (E11-S05, AC-a1, AC-a2)", () => {
+  it("should keep the value in ink and the detail in grey, its link underlined (E11-S05, AC-a2)", () => {
     rendre()
-    const repli = cellule("P-001", "montant_estime").querySelector("details")
-    if (!repli) throw new Error("repli absent")
-    expect(repli).toHaveClass("oto-cell-detail")
-    const resume = repli.querySelector("summary")
-    expect(resume).toHaveClass("text-ink")
-    expect(resume?.lastElementChild).toHaveClass("oto-cell-chevron")
-    expect(resume?.lastElementChild).toHaveAttribute("aria-hidden", "true")
-    expect(resume).toHaveTextContent(/^12 000$/)
-    expect(within(repli).getByText("Décidé par Claire Morel").parentElement).toHaveClass("text-mute")
-    // Un lien du détail est gris comme lui, et reste souligné.
-    expect(within(repli).getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveClass("text-mute", "underline")
+    const montant = cellule("P-001", "montant_estime")
+    expect(montant.querySelector(".oto-cell-info > .text-ink")).toHaveTextContent(/^12 000$/)
+    fireEvent.click(within(montant).getByRole("button", { name: "Provenance de « montant_estime »" }))
+    const panneau = within(screen.getByRole("dialog", { name: "Provenance de « montant_estime »" }))
+    expect(panneau.getByText("Décidé par Claire Morel").parentElement).toHaveClass("text-mute")
+    expect(panneau.getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveClass("text-mute", "underline")
+  })
+})
+
+describe("TableauDuNoeud, text cells (1.4.11)", () => {
+  it("should follow the links written in a text cell to their node, and show a web address in a url column shortened", () => {
+    const longue = "https://valbrune.test/deliberations/2026/conseil-municipal/seance-du-12-septembre-compte-rendu.pdf"
+    const ligne: TableRowRead = { key: "P-009", revision: 1, set: { ref: "P-009", entreprise: String.raw`Voir [[ventes/devis\|Le devis]] et [[ventes/suivi]]`, site: longue }, provenance: {} }
+    rendre({ lignes: lignes([ligne]), prefixeDesPages: "/n/" })
+    const entreprise = within(cellule("P-009", "entreprise"))
+    expect(entreprise.getByRole("link", { name: "Le devis" })).toHaveAttribute("href", "/n/ventes/devis")
+    expect(entreprise.getByRole("link", { name: "suivi" })).toHaveAttribute("href", "/n/ventes/suivi")
+    const site = within(cellule("P-009", "site")).getByRole("link")
+    expect(site).toHaveAttribute("href", longue)
+    expect(site.textContent?.length).toBeLessThan(longue.length)
+    expect(site).toHaveAttribute("title", longue)
+  })
+
+  it("should read the links of a text cell as written when the host gives no page address", () => {
+    const ligne: TableRowRead = { key: "P-009", revision: 1, set: { ref: "P-009", entreprise: "[[ventes/devis]]" }, provenance: {} }
+    rendre({ lignes: lignes([ligne]) })
+    expect(within(cellule("P-009", "entreprise")).queryByRole("link")).toBeNull()
+    expect(cellule("P-009", "entreprise")).toHaveTextContent("[[ventes/devis]]")
   })
 })
 

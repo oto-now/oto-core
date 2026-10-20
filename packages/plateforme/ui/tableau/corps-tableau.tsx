@@ -43,6 +43,8 @@ export type CorpsTableauProps = Navigation & {
   adresse: string
   /** La famille de l'assistant le plus récent de la personne (E11-S05, AC-h1), qui nomme qui écrira les lignes. */
   assistant?: string
+  /** Le début de l'adresse d'un nœud : les liens `[[…]]` d'une cellule s'y suivent (1.4.11). */
+  prefixeDesPages?: string
 }
 
 /**
@@ -84,7 +86,7 @@ function Barre({ lu, avis, adresse, ...navigation }: Navigation & { lu: TableGri
 }
 
 export function CorpsTableau(props: CorpsTableauProps) {
-  const { entete, titre, lignes, resume, avis, adresse, assistant, ...navigation } = props
+  const { entete, titre, lignes, resume, avis, adresse, assistant, prefixeDesPages, ...navigation } = props
   const { reglages, Lien, hrefDuTableau } = navigation
   if (lignes.error !== undefined) {
     return (
@@ -108,7 +110,7 @@ export function CorpsTableau(props: CorpsTableauProps) {
       ) : (
         // Bord à bord : la table porte son cadre et son en-tête collant.
         <IslandBody flush>
-          <Grille entete={entete} reglages={reglages} adresse={adresse} lignes={lu.rows} legende={`${titre} — ${nLignes(lu.count)}${cherche ? ` · ${correspondent(lu.total)}` : ""}`} />
+          <Grille entete={entete} reglages={reglages} adresse={adresse} prefixeDesPages={prefixeDesPages} lignes={lu.rows} legende={`${titre} — ${nLignes(lu.count)}${cherche ? ` · ${correspondent(lu.total)}` : ""}`} />
         </IslandBody>
       )}
       <IslandFoot>

@@ -1,7 +1,7 @@
 # Écrans d'un contenu
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -40,7 +40,8 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 ### Grille d'un tableau
 
 - Dans une fenêtre étroite, la grille défile en largeur dans son îlot, jamais en cartes : tri et filtres par colonne restent (D97).
-- Le repère du repli d'une cellule est un chevron `CaretDown` dans le `summary`, ses règles dans `table.css` (HN-E11S05-1) ; le détail d'une cellule ouverte est en `text-mute`, sans token ajouté (HN-E11S05-2).
+- La provenance d'une cellule s'ouvre par une icône « info » (`Info`) après la valeur, dans un panneau posé par-dessus la grille (`Popover`, nommé « Provenance de « colonne » ») : le repli natif sous un chevron (HN-E11S05-1) déplaçait tout le tableau en s'ouvrant (1.4.11). L'icône se montre au survol de la cellule, au focus et panneau ouvert, toujours sans survol (`table.css`) ; le détail est en `text-mute`, sans token ajouté (HN-E11S05-2).
+- Une cellule de texte va à la ligne au-delà de `--table-cell-max` au lieu d'être coupée par « … » ; sa largeur suit son texte jusque-là sans descendre sous lui, et une grille de nombreuses colonnes défile en largeur (`.oto-cell-texte`, `table.css` ; la même règle vaut pour le tableau simple d'une page). Ses liens `[[…]]` se suivent vers leur nœud, nommés par leur libellé ou le dernier segment du chemin (sans lecture des titres), quand l'hôte passe le début de l'adresse d'un nœud (`prefixeDesPages`) ; sans lui (page publique), le texte se lit tel quel. Une adresse d'une colonne `url` se montre raccourcie comme dans une page (`libelleDUneAdresse`), l'adresse entière en infobulle (1.4.11).
 - Seul l'état de revue marque une ligne (`data-state="review"`) ; `running` et `failed` restent inutilisés (HN-E11S05-3). L'aide du cycle de revue est une phrase visible dans l'îlot « À revoir », composée des états déclarés (HN-E11S05-4).
 - Pour qui écrit un tableau, son écran porte « Importer un fichier… » au-dessus du tableau, vide compris, et reçoit un `.csv` lâché sur lui ; la grille elle-même n'est pas une zone de dépôt (D140). « Importer un fichier… » suit la condition de « Réglages » (niveau écriture, hors `?version=published`), après « Télécharger… », en `secondary` ; le dépôt d'un `.csv` garde la sienne, le niveau écriture (HN-E11S15-a7).
 
@@ -69,6 +70,8 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - **Exporter la vue filtrée d'un tableau** : écarté, l'export prend tout le tableau, comme le rail (HN-E11S05-8).
 - **La grille entière comme zone de dépôt d'un `.csv`** : écartée, le dépôt vise l'îlot au-dessus du tableau (D140).
 - **Des cartes au lieu de la grille en fenêtre étroite** : écartées, tri et filtres par colonne seraient perdus (D97).
+- **Une infobulle au survol pour la provenance** : écartée pour un panneau ouvert au clic ou au clavier ; une infobulle ne peut porter de lien cliquable (la preuve) et ne s'ouvre pas au toucher.
+- **Lire les titres des nœuds cités dans les cellules** : écarté pour l'instant, une lecture de plus par page de lignes ; un lien sans libellé se nomme par le dernier segment de son chemin.
 - **« Aucun ⋯ sur un Contexte »** (E05-S10 AC-b8) : remplacé par « Télécharger en .md » (D139, [écrans et coque](ecrans-et-coque.md)).
 - **Un menu déroulant (`DropdownMenu`) pour le niveau d'accès** : écarté, il refermait le panneau « Partager » (HN-E05S10b-4).
 
@@ -97,3 +100,4 @@ Aucune à ce jour.
 - 2026-09-29 : encarts repliables à droite, cellules, lignes à revoir, télécharger, résumé, page et tableau vides ; « Importer un fichier… » au-dessus d'un tableau — décidé par JB et le responsable d'Oto (source : fiches D136, D140, story E11-S05).
 - 2026-09-30 : retours sur la 1.1.1, livrés dans la 1.1.2 : encarts de la vue « Contexte », mise en page centrée, panneaux larges, liens au repos, contenus récents de « @ » — décidé par JB (source : story E11-S15).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend P18, les fiches D97, D140 et les choix des stories E05-S10, E11-S05, E11-S15 — décidé par Alexis, accord de JB.
+- 2026-10-20 : provenance par une icône « info » et un panneau, cellules de texte qui vont à la ligne, liens suivis dans les cellules, adresses raccourcies — décidé par JB (source : session du 20/10/2026).

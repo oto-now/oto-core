@@ -395,15 +395,16 @@ describe("RailApplication menus (AC-a4)", () => {
     expect(within(screen.getByRole("navigation", { hidden: true })).queryByRole("link", { name: "Qualifier un prospect" })).toBeNull()
   })
 
-  it("should give a procedure its « + », to create a page, a table or a procedure under it (AC-b1)", async () => {
+  // Jamais une procédure sous une procédure : ses sous-étapes sont des pages sous elle (1.4.11).
+  it("should give a procedure its « + », to create a page or a table under it, never a procedure (AC-b1)", async () => {
     const appels = simulerLAPI({ data: { path: "ventes/qualifier/sans_titre" } })
     const rail = monter()
     fireEvent.click(within(rail).getByRole("button", { name: "Ajouter dans Qualifier un prospect" }))
-    expect(itemsDuMenu()).toEqual(["Une page", "Un tableau", "Une procédure", "Importer un fichier…"])
-    fireEvent.click(menu().getByRole("menuitem", { name: "Une procédure" }))
+    expect(itemsDuMenu()).toEqual(["Une page", "Un tableau", "Importer un fichier…"])
+    fireEvent.click(menu().getByRole("menuitem", { name: "Une page" }))
 
     await waitFor(() => expect(hote.naviguer).toHaveBeenCalledWith("/n/ventes/qualifier/sans_titre"))
-    expect(appels).toEqual([{ url: "/api/platform/nodes", methode: "POST", corps: { path: "ventes/qualifier/sans_titre", ...NEUF, summary: RESUMES.procedure, kind: "procedure" } }])
+    expect(appels).toEqual([{ url: "/api/platform/nodes", methode: "POST", corps: { path: "ventes/qualifier/sans_titre", ...NEUF, summary: RESUMES.page, kind: "page" } }])
   })
 
   // E10-S01 (AC-a5) : « Télécharger en .md » s'ajoute, et c'est le seul geste du « ⋯ » d'un Contexte.

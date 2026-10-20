@@ -33,6 +33,7 @@ import { closestExisting, findNode, lookupAlias, lookupNode, movedNotice, notAva
 import { loadBlocks, loadDraft, openDraft, publishedMeanwhile, saveDraft, type DraftRow } from "./store"
 import { staleState } from "./read-format"
 import { ownerOf, teamOf } from "./view"
+import { withCurrentLinks } from "./current-links"
 import { insertNode, provenanceOf, savedResult, type Saved, type WriteOrigin } from "./write-result"
 import { attachFiles, refuseFilesOnCreate } from "./write-files"
 import { keepAuthorCtx, writeAtomically, writesAtomically } from "./write-atomic"
@@ -199,7 +200,8 @@ async function saveEdits(db: PlatformDb, identity: Identity, edit: Edit): Promis
   const tolerant = tolerantFor(body, edit.origin)
   // Un `.md` déposé par lien qui remplace le corps s'applique à une page vide (E10-S02, AC-f8).
   const file = uploadedFile(edit.origin)
-  const base = file?.replace ? [] : current
+  // Les liens vers un nœud déplacé, pris à son chemin courant : l'écriture les enregistre, comme `read` les a servis.
+  const base = file?.replace ? [] : await withCurrentLinks(db, identity, current)
   // Les fichiers cités, relus avant l'écriture (E10-S02, AC-d3).
   const applied = await attachFiles(db, identity, { node, current, created: edit.created, tolerant }, applyOps(base, body.ops ?? [], { path: node.path, revision: node.revision, tolerant, wholeFile: file !== undefined, opsMax: opsMaxFor(edit.origin) }))
   const next: WorkBlock[] = placeBlocks(applied.blocks)

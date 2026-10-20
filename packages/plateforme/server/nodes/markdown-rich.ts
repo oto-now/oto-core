@@ -40,27 +40,44 @@ export function refuseOrKeep(mode: ParseMode, message: string): void {
 /** Une ligne de tableau (E10-S04, AC-a1). */
 type Row = string[]
 
+/** La barre oblique inverse, composée : écrite en littéral, un outil d'édition peut la livrer déjà interprétée. */
+const BACKSLASH = String.fromCharCode(92)
+
 /**
  * Les cellules d'une ligne qui commence par `|`, blancs de bord retirés : coupée à chaque `|` que ne précède
- * pas un `\` (qui échappe le caractère suivant), le segment avant le premier `|` et celui qui suit un `|`
+ * pas un `\` (qui échappe le caractère suivant) et hors d'un lien `[[…]]`, le segment avant le premier `|` et celui qui suit un `|`
  * final retirés, chaque cellule sans blancs de bord et son `\|` gardé. `null` : pas une ligne de tableau.
  */
 function cellsOf(line: string): Row | null {
   const row = trimBlanks(line)
   if (!row.startsWith("|")) return null
   const cells: Row = []
-  let from = 1
+  let cell = ""
   let lastPipe = 0
+  // Un `|` dans un lien (`[[chemin|titre]]`) n'en coupe pas la cellule : il y est gardé échappé, la forme d'une cellule
+  // (`\|`, que le lien lit aussi) ; un `[[` après le dernier `]]` n'ouvre rien.
+  const lastClose = row.lastIndexOf("]]")
+  let inLink = false
   for (let at = 1; at < row.length; at++) {
     if (row[at] === "\\") {
+      cell += row.slice(at, at + 2)
       at++
-    } else if (row[at] === "|") {
-      cells.push(trimBlanks(row.slice(from, at)))
-      from = at + 1
+    } else if (!inLink && row[at] === "[" && row[at + 1] === "[" && at < lastClose) {
+      inLink = true
+      cell += "[["
+      at++
+    } else if (row[at] !== "|") {
+      inLink &&= row[at] !== "]"
+      cell += row[at]
+    } else if (inLink) {
+      cell += `${BACKSLASH}|`
+    } else {
+      cells.push(trimBlanks(cell))
+      cell = ""
       lastPipe = at
     }
   }
-  if (lastPipe !== row.length - 1) cells.push(trimBlanks(row.slice(from)))
+  if (lastPipe !== row.length - 1) cells.push(trimBlanks(cell))
   return cells.length > 0 ? cells : null
 }
 

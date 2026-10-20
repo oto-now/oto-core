@@ -123,6 +123,20 @@ async function nodeFindings(db: PlatformDb, identity: Identity, node: NodeRow, c
 }
 
 /**
+ * Les procédures rangées sous une procédure de l'arbre : elles sont routées et listées comme la procédure principale,
+ * qui doit l'être seule ; ses sous-étapes s'écrivent en pages sous elle, citées par ses étapes.
+ */
+function nestedProcedures(nodes: readonly NodeRow[]): Finding[] {
+  const procedures = new Set(nodes.filter((node) => node.kind === "procedure").map((node) => node.path))
+  return nodes
+    .filter((node) => node.kind === "procedure" && procedures.has(node.path.slice(0, node.path.lastIndexOf("/"))))
+    .map((node) => ({
+      path: node.path,
+      problem: `a procedure under the procedure ${node.path.slice(0, node.path.lastIndexOf("/"))}: write its steps in a page under it, linked from the main procedure, then trash this one`,
+    }))
+}
+
+/**
  * Les problèmes de l'arbre lisible sous chaque racine : une ligne par problème, `<chemin>: <problème>`. Relu par l'import
  * sur ce qu'il a importé. Les chemins cités sont vérifiés en une requête.
  */
@@ -130,7 +144,9 @@ export async function checkTree(db: PlatformDb, identity: Identity, roots: reado
   const findings: Finding[] = []
   const cited = new Map<string, Set<string>>()
   for (const root of roots) {
-    for (const node of await treeOf(db, identity, root)) findings.push(...(await nodeFindings(db, identity, node, cited)))
+    const nodes = await treeOf(db, identity, root)
+    for (const node of nodes) findings.push(...(await nodeFindings(db, identity, node, cited)))
+    findings.push(...nestedProcedures(nodes))
   }
   const existing = await existingPaths(db, identity, [...cited.keys()])
   for (const [path, from] of cited) {
@@ -168,7 +184,7 @@ export const nodeCheck = defineFunction({
   class: "read",
   origin: "paquet",
   description:
-    "Checks a root and everything under it that you can read: links [[…]] to a path that does not exist, call blocks of a procedure that publication would refuse now (unknown function or table), table cells naming a path that does not exist, tools named with another organisation's prefix. One line per problem, with its path. Use it after an import, a reorganisation or before relying on a folder. In French: vérifier, contrôler, liens cassés.",
+    "Checks a root and everything under it that you can read: links [[…]] to a path that does not exist, call blocks of a procedure that publication would refuse now (unknown function or table), table cells naming a path that does not exist, tools named with another organisation's prefix, a procedure under a procedure. One line per problem, with its path. Use it after an import, a reorganisation or before relying on a folder. In French: vérifier, contrôler, liens cassés.",
   schema: checkArgsSchema,
   examples: [{ path: "csm_sav/sav" }],
   refusals: ["An unknown root, or one you cannot read; more than 2,000 nodes (check the folders one by one)."],

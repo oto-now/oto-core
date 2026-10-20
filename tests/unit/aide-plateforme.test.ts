@@ -3,6 +3,7 @@
 // inconnue ; la section la plus proche d'une demande, et les propositions de `context` quand aucune procédure ne
 // convient (fonctions, puis section du guide).
 import { describe, expect, it } from "vitest"
+import { PROCEDURE_MAX_CHARS } from "../../packages/plateforme/schemas/procedures"
 import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
 import { hintLines, proposedFunctions } from "../../packages/plateforme/server/context/hints"
 import { closestHelpSection, helpGuide, HELP_PATH } from "../../packages/plateforme/server/help"
@@ -18,6 +19,10 @@ describe("helpGuide", () => {
     expect(tables).toContain("acme_call table.schema")
     expect(tables).not.toContain("<p>")
     expect(helpGuide("pages", "acme").text).toContain("```embed https://…```")
+    // La borne d'une procédure, lue dans `schemas` : le guide la disait encore à 8 000 après son passage à 12 000.
+    const procedures = helpGuide("procedures", "acme").text
+    expect(procedures).toContain(`a procedure holds ${PROCEDURE_MAX_CHARS.toLocaleString("en-US")} characters at most`)
+    expect(procedures).toContain("never a procedure under a procedure")
     expect(() => helpGuide("nowhere", "acme")).toThrow(/Unknown section nowhere of help\. Sections: pages, tables, procedures, paths, transfer, pitfalls\./)
   })
 })

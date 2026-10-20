@@ -33,11 +33,11 @@ export function VueDeTableau({ vue, Lien, hrefDuChemin }: VueDeTableauProps) {
                 {vue.columns.map((colonne) =>
                   colonne.name === vue.key ? (
                     <th key={colonne.name} scope="row">
-                      <Cellule colonne={colonne} valeur={valeurDe(ligne, colonne, vue.key)} />
+                      <Cellule colonne={colonne} valeur={valeurDe(ligne, colonne, vue.key)} liens={{ Lien, hrefDuChemin }} />
                     </th>
                   ) : (
                     <td key={colonne.name}>
-                      <Cellule colonne={colonne} valeur={valeurDe(ligne, colonne, vue.key)} />
+                      <Cellule colonne={colonne} valeur={valeurDe(ligne, colonne, vue.key)} liens={{ Lien, hrefDuChemin }} />
                     </td>
                   ),
                 )}

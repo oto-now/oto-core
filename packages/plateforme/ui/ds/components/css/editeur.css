@@ -315,18 +315,21 @@
   color: var(--ink);
 }
 
-/* Dans l'éditeur, le champ d'une cellule se fond dans sa cellule : sa bordure paraît au survol de la cellule, et au focus ; un champ en lecture seule garde son fond, qui dit qu'on n'y écrit pas. */
-.oto-table[data-simple] .oto-input:not([readonly]) {
-  border-color: transparent;
-  background: transparent;
+/* Dans l'éditeur, le champ d'une cellule (`oto-inline-field`, 1.4.11) se fond dans sa cellule, sa bordure au survol de la cellule ; sa largeur suit son texte, de 8 caractères à `--table-cell-max`, puis il va à la ligne, comme à la lecture (`.oto-cell-texte`, `table.css`). Son rendu au repos (`oto-block-rendu`) a la même géométrie. */
+.oto-table[data-simple] .oto-cellule-editee > .oto-inline-field {
+  /* `max-content` et non `auto` : sans lui, la table qui tient dans son cadre écrase ses cellules au lieu de défiler. */
+  inline-size: max-content;
+  min-inline-size: 8ch;
+  max-inline-size: var(--table-cell-max);
+  margin-inline: 0;
+  padding-block: var(--space-1);
+  /* La cellule du design system ne va pas à la ligne (`nowrap`, `table.css`) : le rendu au repos en hériterait. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
-.oto-table[data-simple] :is(th, td):hover .oto-input:not([readonly]) {
+.oto-table[data-simple] :is(th, td):hover .oto-cellule-editee > textarea:not([readonly]) {
   border-color: var(--island-bd);
-}
-
-.oto-table[data-simple] :is(th, td) .oto-input:not([readonly]):focus-visible {
-  border-color: var(--primary);
 }
 
 /* ── le menu dépliant écrit : le dessin de la lecture (`.oto-depliant`, `content.css`) ; le résumé, champ en place, prend le corps du texte lu ; le corps, décalé de la largeur du bouton du chevron (`.oto-pli-bouton`) ; seul le chevron replie. */

@@ -57,7 +57,7 @@ type BlocARendre = { type: string; text: string | null; data: Record<string, unk
  * Ce que lit le rendu d'un lien : le lien de l'hôte, l'adresse d'un chemin, les cibles connues (E05-S11, AC-26),
  * et les champs de `read` sur le nœud (ses liens sortants), lus par l'hôte après la page.
  */
-type Liens = { Lien: LienDUnBloc; hrefDuChemin: (chemin: string) => string; cibles?: CiblesDesLiens; lecture?: Promise<Resultat<Record<string, unknown>>> }
+export type Liens = { Lien: LienDUnBloc; hrefDuChemin: (chemin: string) => string; cibles?: CiblesDesLiens; lecture?: Promise<Resultat<Record<string, unknown>>> }
 
 /** `routeDesFichiers` : les routes des fichiers d'un lien public (`publicFilesRoute`, AC-c5) ; `FILES_ROUTE` sans elle. */
 type RenduProps = Liens & { bloc: BlocARendre; routeDesFichiers?: string }
@@ -202,7 +202,8 @@ const CADRE_DEFILANT = { tabIndex: 0, role: "region" } as const
 
 /**
  * Un tableau simple (E10-S04, AC-a1) : le balisage et les classes de `TableauFixe` (`ui/equipes/tableau-fixe.tsx`),
- * en-têtes `scope="col"`, alignement par colonne ; il défile dans son bloc (`oto-table-wrap`), jamais la page.
+ * en-têtes `scope="col"`, alignement par colonne ; il défile dans son bloc (`oto-table-wrap`), jamais la page. Une cellule
+ * va à la ligne au-delà de sa largeur maximale (`.oto-cell-texte`, `table.css`, 1.4.11).
  * Rendu aussi par le serveur : ni le `Table` client du design system, ni `TableauFixe`, dont les clés sont les
  * en-têtes (un en-tête markdown peut se répéter).
  */
@@ -219,7 +220,7 @@ function TableauSimple({ bloc, ...liens }: RenduProps) {
               <th key={rang} scope="col" data-align={alignements[rang]}>
                 <span className="oto-th-cell">
                   <span className="oto-th-in">
-                    <EnLigne texte={colonne} {...liens} />
+                    <span className="oto-cell-texte"><EnLigne texte={colonne} {...liens} /></span>
                   </span>
                 </span>
               </th>
@@ -231,7 +232,7 @@ function TableauSimple({ bloc, ...liens }: RenduProps) {
             <tr key={ligne}>
               {colonnes.map((_, rang) => (
                 <td key={rang} data-align={alignements[rang]}>
-                  <EnLigne texte={cellules[rang] ?? ""} {...liens} />
+                  <span className="oto-cell-texte"><EnLigne texte={cellules[rang] ?? ""} {...liens} /></span>
                 </td>
               ))}
             </tr>

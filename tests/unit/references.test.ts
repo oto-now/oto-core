@@ -136,8 +136,9 @@ describe.skipIf(!sqlConfigured)(portable("reference blocks on a real database"),
         { kind: "page", path: "conseil/x", status: "missing" },
         { kind: "view", path: "ventes/absente", status: "missing" },
         { kind: "page", path: "support/faq", status: "missing" },
-        { kind: "page", path: "ventes/a", title: "B", status: "moved", moved_to: "ventes/b" },
-        { kind: "view", path: "ventes/t", title: "T", status: "moved", moved_to: "ventes/t2" },
+        // `read` sert une référence vers un nœud déplacé à son chemin courant (`withCurrentLinks`).
+        { kind: "page", path: "ventes/b", title: "B", status: "ok" },
+        { kind: "view", path: "ventes/t2", title: "T", status: "ok" },
         { kind: "view", path: "conseil/tarifs", title: "Tarifs", status: "invalid" },
       ])
       const section = await readNode(db, lea, { path: "ventes/prepa", section: "Annexe" })

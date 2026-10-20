@@ -37,6 +37,7 @@ const writeProcedure: Contract = {
       `A procedure is a node of kind procedure, read and written like a page: a title, a summary of 1 to 200 characters that says what it does and how people ask for it (${p}_context matches requests on the title and the summary), then blocks: headings, paragraphs, lists, callouts, and call blocks that hold the exact calls to make.`,
       `Recommended: a heading « Étapes » followed by numbered steps, each step that calls a function followed by its call block; headings « Quand l'utiliser » and « Règles » when useful. No section is required: call blocks are checked wherever they are.`,
       `A procedure has no header (header is for tables only). Create it with kind "procedure", a title and a summary; each write publishes it. Publishing checks every block first and, if anything is wrong, lists every problem at once with where its block is: nothing is written, and a draft saved before with publish: false stays as it was. Writing it in several calls: pass publish: false until the last one.`,
+      "A procedure never goes under another procedure: only the main procedure is a procedure, routed and listed; each of its sub-steps is a page (kind page) under it, which its steps link to with [[path]].",
     ],
     parts: [
       {

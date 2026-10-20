@@ -50,7 +50,7 @@ export const GRILLE = {
 /** Les opérations d'un filtre de colonne (AC6), dans l'ordre du formulaire. */
 export const OPERATIONS_LUES = { contains: "Contient", eq: "Égal à", gte: "Au moins", lte: "Au plus", empty: "Vide", not_empty: "Rempli" } as const
 
-export const TEXTES_DE_CELLULE = { vide: "—", verifieVide: "vérifié vide", oui: "Oui", non: "Non", ouvrirLeLien: "Ouvrir le lien" } as const
+export const TEXTES_DE_CELLULE = { vide: "—", verifieVide: "vérifié vide", oui: "Oui", non: "Non", provenance: (colonne: string) => `Provenance de « ${colonne} »` } as const
 
 /** Le nom d'une provenance en français : « un ancien membre » pour une personne partie (`FORMER_MEMBER`, N9). */
 function nomServi(nom: string): string {
