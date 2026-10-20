@@ -18,8 +18,10 @@ export const RAIL = {
   arbreEnPanne: "L'arbre n'a pas pu être chargé",
   /** Sous les sections, après trois relectures de l'arbre en échec (E11-S20, AC-6) : l'arbre montré reste. */
   arbreNonActualise: "L'arbre n'a pas pu être actualisé.",
-  /** Le bouton qui ouvre le rail en tiroir sous 768 px (fiche D90 B). */
+  /** Le bouton qui ouvre le rail en tiroir sous 1 024 px (fiche D90 B). */
   menu: "Menu",
+  /** La poignée qui règle la largeur du rail, à la souris ou au clavier. */
+  largeur: "Largeur du menu",
   /** L'écran de la corbeille (E05-S10, AC-b11), au menu du compte (E05-S11, AC-e22). */
   corbeille: "Corbeille",
   /** L'écran des connecteurs, au pied du rail pour qui administre (E05-S11, AC-32). */

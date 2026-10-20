@@ -23,6 +23,8 @@ import { LigneDuRail } from "./arbre-du-rail"
 import { EntrepriseDuRail } from "./entreprise-du-rail"
 import { RAIL } from "./libelles"
 import { PiedDuRail } from "./pied-du-rail"
+import { useLigneCouranteEnVue } from "./ligne-courante-en-vue"
+import { PoigneeDuRail } from "./poignee-du-rail"
 import { RechercheDuRail } from "./recherche-du-rail"
 import { SectionsDuRail } from "./sections-du-rail"
 import type { AdressesDuRail, DonneesDuRail } from "./types"
@@ -82,10 +84,11 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
   const tiroir = useTiroirDuRail(chemin)
   const { arbre, enPanne } = useArbreDuRail(servi, chemin)
   const idDuRail = useId()
+  useLigneCouranteEnVue(idDuRail, chemin)
   const lu = arbre.error === undefined && equipes.error === undefined ? { tree: arbre.data.tree, equipes: equipes.data } : null
   return (
     <>
-      {/* Hors du rail, première rangée du bureau ; le design system ne l'affiche que sous 768 px. */}
+      {/* Hors du rail, première rangée du bureau ; le design system ne l'affiche que sous 1 024 px. */}
       <IconButton ref={tiroir.bouton} label={RAIL.menu} className="oto-rail-toggle" aria-expanded={tiroir.ouvert} aria-controls={idDuRail} onClick={tiroir.ouvrir}>
         <AnimatedIcon as={List} size="sm" />
       </IconButton>
@@ -99,6 +102,7 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
           <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} administre={administre} />
         </RailScroll>
         <PiedDuRail compte={compte} adresses={adresses} administre={administre} />
+        <PoigneeDuRail />
       </Rail>
     </>
   )

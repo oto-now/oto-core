@@ -1,7 +1,7 @@
 # Nœuds et arbre
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-10-15
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -55,6 +55,7 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
   - E03-S07 N10 : en-tête de `read` : 20 liens entrants et 20 sortants au plus, totaux donnés, entrants comptés par source visible du lecteur ; `references` bornées à 50 dans les données.
   - E03-S07 N11 : droits des liens et du déplacement dans le service : niveaux en un lot, niveau 0 = sans cible, entrants filtrés avant la borne de 20 ; `moveNode` décide gestion et écriture sur la destination avant la mise à jour.
   - E03-S07 N24 : `read` lit les liens sortants et entrants en une requête par étape, en parallèle de l'en-tête ; les blocs `reference` reprennent les cibles déjà relues ; les liens vers un ancien chemin ne se lisent que pour un nœud qui en a.
+  - Lien vers un ancien chemin (1.4.11) : `read` sert le texte d'un document avec chaque lien et chaque bloc `reference` vers un nœud déplacé ou renommé réécrits au chemin courant, alias suivis pour le lecteur (sa référence est alors servie `ok`, plus `moved`) ; l'écriture suivante de la page enregistre ces chemins. Le texte stocké d'une page qu'on n'écrit pas ne change pas : un déplacement n'écrit jamais dans les pages qui le citent (aucune révision ni conflit chez autrui) ; les blocs `code`, `call` et `mermaid` restent tels quels (`server/nodes/current-links.ts`).
 - L'historique d'un nœud, ce sont les instantanés de publication (`node_versions`) et la révision de chaque bloc (ADR-011 § 6).
 
 ### Déplacer
@@ -121,3 +122,4 @@ Aucune à ce jour.
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-011 § 1, § 3 et § 6, les fiches D19, D89, D110, D125, D135 et les choix H50 à H61, P12, P13, P22, P39, E03-S07, E11-S02 — décidé par Alexis, accord de JB.
 - 2026-10-14 : chemin réservé `help` (guide de la plateforme), `node.tree` et `node.check`, refus d'un chemin pris qui dit ses causes possibles — décidé par JB (source : cahier des charges « un agent autonome sur Oto dès le premier appel », session du 14/10/2026).
 - 2026-10-15 : dans le rail, le quart bas de la ligne d'un Contexte range juste après lui, en tête de sa section (D110) — décidé par JB (source : session du 15/10/2026).
+- 2026-10-20 : un lien vers un ancien chemin est lu au chemin courant et enregistré à l'écriture suivante de sa page, sans réécrire les pages qui citent un nœud déplacé — décidé par JB (source : session du 20/10/2026).

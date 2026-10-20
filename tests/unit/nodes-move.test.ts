@@ -141,8 +141,9 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
 
   describe("read and write by an old path (AC7)", () => {
     /** L'état laissé par le déplacement de l'AC6 : `ventes/a` et ses descendants sous `ventes/b`. */
-    function moved(): Tables {
+    function moved(extra: { path: string; title: string; summary: string }[] = []): Tables {
       const tables = contentTables([], [
+        ...extra,
         { path: "ventes", title: "Ventes" },
         { path: "ventes/b", title: "B" },
         { path: "ventes/b/x", title: "X", summary: "La page X." },
@@ -187,6 +188,22 @@ describe.skipIf(!sqlConfigured)(portable("moves and old paths on a real database
         message: "Cannot create ventes/a/x/neuf: ventes/a/x moved to ventes/b/x. Create ventes/b/x/neuf instead; to move an existing page there, call acme_call node.move.",
       })
       expect(nodeInserts(under.calls)).toEqual([])
+    })
+
+    // Un lien vers une page déplacée se lit à son chemin courant ; le texte stocké ne change qu'à l'écriture de la page.
+    it("should serve a link to a moved page at its current path, keep the stored text, and record it at the next write", async () => {
+      const tables = moved([{ path: "ventes/cite", title: "Cite", summary: "Cite X." }])
+      addBlocks(tables, "ventes/cite", "published", [heading("Liens"), paragraph("Voir [[ventes/a/x|la page X]] et [[ventes/b]].")])
+      await content(tables)
+      const db = await ref.db("lea")
+      const lea = who("lea")
+      const read = await readNode(db, lea, { path: "ventes/cite" })
+      expect(read.text).toContain("Voir [[ventes/b/x|la page X]] et [[ventes/b]].")
+      const stored = async (state: string) =>
+        (await seed.admin<{ text: string | null }[]>`select text from platform.blocks where node_id = ${ref.nodeId("ventes/cite")} and state = ${state} and type = 'paragraph'`)[0]?.text
+      expect(await stored("published")).toBe("Voir [[ventes/a/x|la page X]] et [[ventes/b]].")
+      await writeNode(db, lea, { path: "ventes/cite", base_revision: 1, ops: [{ op: "append", section: "Liens", text: "Ajout." }], publish: false }, AGENT)
+      expect(await draftTexts("ventes/cite")).toContain("Voir [[ventes/b/x|la page X]] et [[ventes/b]].")
     })
   })
 

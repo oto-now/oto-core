@@ -3,7 +3,9 @@
 // premier coup une page, un tableau ou une procédure, ranger des contenus et copier une arborescence ; il renvoie aux
 // contrats (`write.procedure`, `write.table`) au lieu de les recopier. Sans lui, ces règles ne se lisent que dispersées
 // dans les descriptions des outils, et un assistant les apprend par ses erreurs. Texte servi en anglais (ADR-020).
+import { PROCEDURE_MAX_CHARS } from "../schemas/procedures"
 import { PlatformError } from "./errors"
+import { formatCount } from "./nodes/document"
 import type { ToolOutput } from "./tool-output"
 
 /** Le chemin réservé de `read` qui sert le guide de la plateforme, comme `functions` (E11-S19) et `journal` (P22). */
@@ -57,7 +59,10 @@ const SECTIONS: readonly HelpSection[] = [
     stems: ["procédure", "procedure", "étape", "step", "appel"],
     lines: [
       "A procedure is a page of steps an assistant follows. Its title and summary route requests to it: the summary says what it does and how people ask for it.",
-      "Valid: read <p>_read path write.procedure before writing. Each step that runs a function has a call block right after it: ```call <function> {\"argument\": \"<value known when it runs>\"}```; confirm, team and account never go in the arguments; a step holds 8,000 characters at most; every call is checked at publication against the functions and the tables that exist.",
+      "Valid: read <p>_read path write.procedure before writing. Each step that runs a function has a call block right after it: ```call <function> {\"argument\": \"<value known when it runs>\"}```; confirm, team and account never go in the arguments; a procedure holds " +
+        formatCount(PROCEDURE_MAX_CHARS) +
+        " characters at most once rendered; every call is checked at publication against the functions and the tables that exist.",
+      "Sub-procedures: never a procedure under a procedure, which would be routed in place of the main one; each sub-step is a page under the main procedure, whose steps link to it with [[path]].",
       "Works well: a part « When to use it », with the cases where not to use it and where to go instead; numbered steps, one action each; each step says what to do with the result (a condition to stop, a branch, a value to report); the expected output, in its format; who to ask when the case is not covered.",
       "External tools: a procedure that needs a connector of the assistant (outside this platform) says so in a part « Prerequisites »; without it, the assistant tells the person instead of failing at that step.",
       "In a text, name the tools without the organisation prefix (read, write, find, call): the text stays right when it is copied to another organisation.",

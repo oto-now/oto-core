@@ -64,7 +64,7 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
   const lignes = versArbreDuRail(section.noeuds, { prefixe, chemin, section: section.titre, depliage })
 
   // Chaque ligne crée sous elle, Contexte compris (fiche D110 a) ; le titre de la section, à la racine de l'espace.
-  const addItems = (ligne: RailTreeNode) => creation.itemsPour({ nom: ligne.label, parent: ligne.id })
+  const addItems = (ligne: RailTreeNode) => creation.itemsPour({ nom: ligne.label, parent: ligne.id, sousUneProcedure: genres.get(ligne.id) === "procedure" })
   // Le « ⋯ » d'une ligne qui se déplace (AC-b8) : « Déplacer », « Monter », « Descendre » (AC-b7, AC-b9), puis
   // « Dupliquer », le téléchargement et « Supprimer » (AC-b10, AC-b11, E10-S01). Plus de « Renommer » : le titre
   // s'écrit dans la page (AC-a1). Un Contexte n'a que « Télécharger en .md » (HN-E10S01-24) ; une ligne sans genre

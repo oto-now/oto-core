@@ -137,6 +137,18 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - CLI: `oto-platform accounts secret` reads a JSON object of fields on standard input and takes `--setting name=value`; a raw token is refused.
 - Server: the vault writes format v2 (key id, account and column bound); v1 secrets stay readable.
 
+## 1.4.11 — 2026-10-20
+
+### Assistants
+- A link to a page that moved or was renamed reaches you at the page's current path; your next write of the page records that path.
+- Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps. `node.check` reports a procedure under a procedure.
+
+### Hosts
+- Install: upgrade to 1.4.11; no migration, no new variable, no import to change. Published from 1.4.10, without what main carries for 1.5.0.
+- UI: the rail's width is set by hand, by dragging its right edge or with the arrow keys on it (a double click restores 232 px), between 200 px and 40 % of the window, and kept in the browser; the tree scrolls horizontally instead of cutting long names; the line of the open page is scrolled into view at each navigation.
+- UI: the « + » of a procedure in the rail no longer offers a procedure.
+- MCP: the served rules, the `write.procedure` contract, the platform guide and the description of `node.check` change; refresh the tool list in your hosts.
+
 ## 1.4.10 — 2026-10-19
 
 ### Assistants

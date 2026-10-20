@@ -24,7 +24,7 @@ import { hintLines, type RoutingHints } from "../hints"
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Six tools: <p>_context (first, then again with since_ctx for each new request), <p>_find, <p>_read, <p>_call, <p>_write, <p>_feedback. Every tool but <p>_context needs the ctx above.
 - Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong.
-- Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut).
+- Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
 - Spaces: the organisation's contents sit at the root, a team's under its folder (<team>/...), yours under private/<handle>/, served to you only.
 - Access is set per content, for the organisation, a team or a person: read, write or manage. A refusal says who to ask: never work around it.
 - <p>_write publishes at once; publish: false keeps an unpublished draft. To edit, pass base_revision = the revision you read, or the one your last write returned.

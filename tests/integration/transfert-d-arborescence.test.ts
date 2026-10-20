@@ -374,9 +374,13 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     await write({ path: lieu, kind: "page", title: "Contrôle", summary: "À contrôler.", ops: [{ op: "set_markdown", text: `Voir [[${lieu}/absente]] et [[ventes]] ; lire avec zzz_read, écrire avec zzz_write.` }] })
     await write({ path: `${lieu}/index`, kind: "table", title: "Index", summary: "L'index.", header: { columns: [{ name: "titre", type: "text" }, { name: "chemin", type: "text" }], key: "titre" } })
     await tableWrite.run(context(), tableWriteArgsSchema.parse({ table: `${lieu}/index`, rows: [{ key: "A", set: { chemin: `${lieu}/perdue` } }, { key: "B", set: { chemin: `${lieu}/index` } }] }) as never)
+    // Une procédure sous une procédure : routée à la place de la principale, signalée.
+    await write({ path: `${lieu}/principale`, kind: "procedure", title: "Principale", summary: "La procédure principale.", ops: [{ op: "set_markdown", text: "## Étapes\n\n1. Fais la première étape." }] })
+    await write({ path: `${lieu}/principale/etape`, kind: "procedure", title: "Étape", summary: "Une sous-procédure.", ops: [{ op: "set_markdown", text: "## Étapes\n\n1. Fais l'étape." }] })
     const checked = await nodeCheck.run(context(), { path: lieu } as never)
     expect(checked.data?.problems).toEqual([
       `${lieu}: names tools of another organisation (zzz_…): write read, write, find, call without prefix`,
+      `${lieu}/principale/etape: a procedure under the procedure ${lieu}/principale: write its steps in a page under it, linked from the main procedure, then trash this one`,
       `${lieu}: links to ${lieu}/absente, which does not exist`,
       `${lieu}/index: links to ${lieu}/perdue, which does not exist`,
     ])

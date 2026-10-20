@@ -29,6 +29,7 @@ import { readNodeFile } from "./read-file"
 import { headerLines, outlineOf, type PendingDraft, type Version } from "./read-format"
 import { checkCursor, paginate } from "./read-pages"
 import { withPageView } from "./read-view"
+import { withCurrentLinks } from "./current-links"
 import { readReference, referenceLines, resolveReferences, type ResolvedReference } from "./references"
 import { draftSavedAt, loadBlocks, loadDraft, snapshotBlocks, type DraftRow } from "./store"
 import { familyOf, kindOf, memberNames, ownerOf, ownerTexts, ownerView, statusOf, teamOf, type Family } from "./view"
@@ -218,7 +219,8 @@ async function servedOf(db: PlatformDb, identity: Identity, request: { input: Re
     return { body: await tableReadBody(db, node, { prefix: request.prefix, functions: catalogNames(), draft }), footer: [], blocks: [], references: [] }
   }
   const state = draftMode ? "draft" : "published"
-  const blocks = await loadBlocks(db, node.id, state)
+  // Un lien vers un nœud déplacé se lit à son chemin courant (`withCurrentLinks`) : le texte stocké ne change pas.
+  const blocks = await withCurrentLinks(db, identity, await loadBlocks(db, node.id, state))
   const since = input.since_revision === undefined ? null : await sinceVersion(db, node, input.since_revision)
   // Les blocs supprimés d'un écart ont leur ligne aussi ; un bloc gardé prend celle de son état courant.
   const current = new Set(blocks.flatMap((block) => (block.id === null ? [] : [block.id])))

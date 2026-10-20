@@ -1,7 +1,7 @@
 # Écrans et coque
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-19
+- **Dernière révision** : 2026-10-20
 
 ## Résumé
 
@@ -46,6 +46,7 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 ### Rail et menus
 
 - Sous 1 024 px, un bouton « Menu » ouvre le rail en tiroir, sans piège du focus (D90) ; le tiroir garde les noms du rail complet. Le palier « icônes seules » d'oto-frontend (56 px entre 768 et 1 024 px) est retiré : un arbre de pages, chaque ligne un même glyphe, ne s'y lisait plus. Le bouton « Menu » se pose sur la première ligne de l'en-tête d'écran (le fil, sinon le titre), qui lui fait place : seul sur sa rangée, il coûtait environ 60 px en haut d'un téléphone (premier bloc d'une procédure à 380 px sur 844, 310 px depuis) ; sans en-tête d'écran, il garde sa rangée.
+- Largeur du rail posé (1.4.11) : une poignée sur son bord droit (`PoigneeDuRail`, séparateur au clavier : flèches par 16 px, Début, Fin) la règle entre 200 px et 40 % de la fenêtre ; un double-clic rend les 232 px d'origine. La largeur est gardée dans ce navigateur (`localStorage`, clé `oto-rail-largeur`), jamais envoyée, et posée en `--rail-w` sur le bureau ; un stockage refusé la garde pour la page seulement. Le tiroir n'a pas de poignée. L'arbre défile aussi en largeur : un nom long ou une branche profonde se lit entier, sans « … ». À chaque navigation, la ligne de la page ouverte est amenée dans le champ du rail, en hauteur et en largeur (`useLigneCouranteEnVue`), seul le rail défile.
 - L'arbre des écrans d'un admin est celui d'un membre, calculé par le service (`visibleTree` sur l'identité de membre) : il y voit ses équipes et une page partagée avec lui, son équipe ou toute l'organisation ; ses droits ne changent pas (HN-E11S10-5, validée par le responsable d'Oto). Un admin ne voit dans le rail que ses équipes ; le créateur d'une équipe en devient responsable (D136). `admin_team create` avec `email` : la personne nommée devient la seule responsable, le créateur reste membre, la description de l'outil ne change pas (HN-E11S10-9).
 - Le Contexte reste dans le rail : ligne « Contexte · <section> », son « + », glisser-déposer ; la fiche D110 ne change pas (HN-E11S10-13, tranchée par le responsable d'Oto). Son titre est composé à l'écran (`titreDeContexte(section)`), jamais un champ ; le titre enregistré ne change pas (HN-E05S11-13). Le « ⋯ » d'un Contexte offre « Télécharger en .md », son seul geste (D139).
 - L'espace Privé existe dès la première connexion : `ensure_private_space` n'écrit rien sous un `private/<handle>` tenu par une autre personne, ni Contexte, ni changement de propriétaire (HN-E11S10-A) ; la renumérotation `<handle>_<n>` est sautée quand l'espace est déjà à `private/<handle>`, un second appel n'écrit rien (HN-E11S10-B). Sa migration (`20260929160000`, après `20260929140000` d'E11-S04) est réunie dans la migration unique de 1.1.0 (HN-E11S10-C ; D131, D145, D124, [distribution du paquet](distribution-du-paquet.md)).
@@ -81,6 +82,7 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - **Imposer TanStack Router** : incompatible avec l'App Router de l'hôte. Rejetée.
 - **Les Contextes hors des lignes du rail, derrière un bouton info par section** (partie de D136) : abandonné, le Contexte reste une ligne du rail (HN-E11S10-13).
 - **La vue « Contexte » dans l'accueil** : remplacée par l'entrée `/context` du menu engrenage (D136).
+- **Garder la largeur du rail dans le compte de la personne** : écarté ; une largeur dépend de l'écran plus que de la personne, et un réglage par appareil ne demande ni route ni colonne.
 - **Relire le rail par une minuterie** : écarté, rien ne relit le rail sans geste ; une personne ajoutée à une équipe par un autre la voit au prochain chargement ou après son prochain geste (HN-E11S10-10) ; la relecture à la navigation, au retour sur l'onglet et après chaque geste (E11-S20) a complété ce choix.
 - **« Profil » ouvrant le Contexte Perso (`/n/perso/<handle>/contexte`) et « Apparence » au menu du compte** (HN-E05S09a-3) : remplacés par la page `/profil` (HN-E05S11-30) ; la couleur de la personne est dans Profil, celle de l'organisation dans Organisation.
 
@@ -115,4 +117,5 @@ Ce document répond à : d'où viennent les écrans du paquet, et comment l'hôt
 - 2026-10-02 : ADR-008 § 5 appliqué : le widget routeur dans la conversation rend les composants du design system — proposé par la session de la story widgets-dans-la-conversation, avec ADR-009 § 3 ([outils MCP](outils-mcp.md)).
 - 2026-10-03 : le menu du compte du rail offre la bascule jour ou nuit quand l'hôte la sert (`Hote.apparence` : le mode et le geste) ; le mode reste à l'hôte, le paquet ne l'écrit pas — demandé par JB (source : hôte SaaS, aucun moyen de changer de mode dans l'application).
 - 2026-10-19 : le rail passe en tiroir sous 1 024 px, le palier « icônes seules » est retiré — décidé par JB (source : session du 19/10/2026).
+- 2026-10-20 : la largeur du rail se règle à la main et se garde dans le navigateur ; l'arbre défile en largeur ; la ligne de la page ouverte est amenée en vue — demandé par JB (source : session du 20/10/2026).
 - 2026-10-15 : un « ⋯ » à chaque équipe du rail, qui ouvre sur place ses personnes et, pour qui administre, sa suppression — demandé par JB (source : session du 2026-10-15).
