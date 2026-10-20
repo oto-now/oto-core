@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Version 1.5.0 du paquet, re-datée du 21/10
+**À appliquer :** depuis 1.4.x, ce que dit la section 1.5.0 du `CHANGELOG.md` du paquet ; depuis le commit de version du 20/10 (jamais étiqueté), les migrations `20261020190000` à `20261021130000`, à appliquer avec le paquet de cette version, et les montées de `@modelcontextprotocol/sdk` (1.32.1), `hono` (4.13.11 ou plus) et `next` (15.5.27 ou plus) dans le verrou de l'hôte.
+**Quoi :** les 10 lignes `### Hosts` accumulées sous `## Unreleased` depuis le commit de version du 20/10 rejoignent la section 1.5.0, en tête de ses `### Hosts`, et la section est re-datée du 21/10 ; une section `## Unreleased` vide reste au-dessus.
+**Pourquoi :** 1.5.0 n'avait pas encore été étiquetée ; les lots de rôle en base, la coupure du JIT et les montées de sécurité partent avec elle, et un hôte (comme Renovate) doit les lire sous 1.5.0, pas sous Unreleased.
+**Fichiers :** `packages/plateforme/CHANGELOG.md`, `docs/changelog.md`.
+
 ## [2026-10-21] — Sécurité : next 15.5.28 dans le verrou, deux exécutions de code à distance de la 15.5.12
 **À appliquer :** montez next à 15.5.27 ou plus (deux exécutions de code à distance corrigées en 15.5.24) dans le verrou de l'hôte ; rien d'autre (ni migration, ni `db prepare`, ni variable, ni code). Le peer `next` du paquet reste `^15`.
 **Quoi :** `pnpm-lock.yaml` passe `next` de 15.5.12 à 15.5.28, avec ses `@next/env` et `@next/swc-*` (huit binaires de plateforme) et les deux entrées qui le portent en peer (`mcp-handler` 1.1.0 et la résolution de `@otomata_tech/oto_platform`) ; aucun autre paquet ne bouge. Les manifestes sont inchangés : `"next": "^15"` dans `package.json` (devDependencies) et dans `peerDependencies` de `packages/plateforme/package.json`.
