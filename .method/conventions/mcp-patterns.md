@@ -210,7 +210,7 @@ Règle : **aucun fichier hors `widget-meta.ts` ne manipule ces clés**. Quand Ch
   et un initialize invalide est rejeté silencieusement. Le SDK gère aussi : tool-result
   (CallToolResult complet → déballer `structuredContent`), host-context (thème), size-changed
   (`autoResize`), `ui/open-link`, `ui/message`, et les requêtes du host (ping). L'entrée
-  `app-with-deps` évite le conflit de peer avec le SDK serveur épinglé (mcp-handler).
+  `app-with-deps` embarque ses dépendances : le bundle ne dépend pas du SDK serveur installé.
 - Détection de `window.openai` → délégation aux équivalents Apps SDK quand présent. Les widgets n'importent QUE le bridge, jamais `window.openai` directement.
 - **Écouter TOUS les canaux de données (leçon vécue — loader infini sinon)**, cumulés et défensifs : (a) SDK officiel `ext-apps` (GA) ; (b) lecture synchrone `window.openai.toolOutput` **+ écoute du CustomEvent `openai:set_globals`** — sur ChatGPT les mises à jour post-mount arrivent par LÀ, pas par postMessage ; (c) postMessage legacy pré-GA ; (d) **polling de secours dans le hook de données** (`useToolOutput` : ~400 ms × 30). Jamais casser le rendu si un canal manque.
 - Données d'entrée du widget = le `structuredContent` du tool (contrat §4) — identique sur les deux hosts.

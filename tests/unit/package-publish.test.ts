@@ -67,14 +67,15 @@ describe("package manifest (AC1)", () => {
       "react-dom": "^19",
       "@phosphor-icons/react": "^2",
     })
-    // E03-S01 AC1 : le canal MCP à versions exactes ; le SDK suit le peer exact de mcp-handler 1.1.0,
+    // E03-S01 AC1 : le canal MCP à versions exactes ; le SDK 1.32.1 corrige trois failles de la 1.26 (le peer exact 1.26.0 de
+    // mcp-handler 1.1.0 reste non satisfait, sans effet sur ce qu'il emploie),
     // et `zod/v4` exige zod 3.25 chez l'hôte. E01-S09 : le pilote Postgres de `db prepare` (ADR-012 § 1).
     // E01-S11 a2 : nodemailer, l'email d'invitation hors Supabase (`server/mail.ts`).
     // 1.1.3 : mermaid, le dessin des blocs mermaid, chargé à la demande dans le navigateur (`ui/noeud/diagramme-mermaid.tsx`).
     // E10-S02 lot a : aws4fetch, la signature SigV4 du port de stockage S3 (`server/files/s3.ts`, ADR-016).
     // Moteur des connecteurs décrits : ajv, la validation du JSON Schema 2020-12 d'un connecteur décrit (`server/catalog/arguments.ts`).
     // fflate : les ZIP du transfert d'une arborescence (`server/transfer/formats.ts`).
-    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.26.0", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
+    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.32.1", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
     expect(pkg.peerDependencies.zod).toBe("^3.25")
   })
 })

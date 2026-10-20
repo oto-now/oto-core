@@ -15,7 +15,7 @@ Versions exactes et règles de montée : `.method/conventions/tech-stack.md`.
 | Zod | 3.25.x (`zod/v4` pour `toJSONSchema`) | Schémas partagés : écrans, API, outils MCP |
 | Postgres | 16, avec `pg_trgm`, `unaccent`, `ltree` (schéma `extensions`) | Seule base ; Supabase ou Postgres nu (ADR-012) |
 | `postgres` (postgres.js) | 3.4.9 exacte | Pilote du serveur, de la CLI, de l'outillage et des tests |
-| `@modelcontextprotocol/sdk`, `mcp-handler`, `jose` | 1.26.0, 1.1.0, 6.2.12 exactes | Serveur MCP sur route handler, vérification des jetons |
+| `@modelcontextprotocol/sdk`, `mcp-handler`, `jose` | 1.32.1, 1.1.0, 6.2.12 exactes | Serveur MCP sur route handler, vérification des jetons |
 | `nodemailer` | 10.0.10 exacte | Invitations envoyées par la plateforme en mode OIDC |
 | `@supabase/supabase-js`, `@supabase/ssr` | 2.x, 0.x | Hôte en mode Supabase : session web, lien magique, consentement OAuth |
 | `oauth4webapi` | 3.8.8 exacte | Hôte en mode OIDC : connexion web chez l'émetteur |

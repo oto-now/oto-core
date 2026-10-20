@@ -44,7 +44,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.26.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "ajv": "8.20.0",
     "aws4fetch": "1.0.20",
     "fflate": "0.8.3",

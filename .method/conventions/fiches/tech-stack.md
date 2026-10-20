@@ -10,5 +10,5 @@ Texte complet : `.method/conventions/tech-stack.md`. La fiche suffit pour écrir
 - mermaid en 11.17.2 exacte, chargé à la demande dans le navigateur seulement (`import()` dans un effet client), `securityLevel: "strict"`. § Stack Technique
 - La borne basse de chaque peer du paquet satisfait les `peerDependencies` des autres peers ; toute plage modifiée passe par `pnpm install`. § Stack Technique
 - Une dépendance du paquet que `tests/` importe est aussi en `devDependencies` de la racine, à la même version exacte. § Canal MCP (si le produit expose un serveur MCP)
-- SDK MCP 1.26.0 et `mcp-handler` 1.1.0 exacts, sans état ; la JWKS se lit au premier jeton, jamais à l'import. § Canal MCP (si le produit expose un serveur MCP)
+- SDK MCP 1.32.1 et `mcp-handler` 1.1.0 exacts, sans état ; la JWKS se lit au premier jeton, jamais à l'import. § Canal MCP (si le produit expose un serveur MCP)
 - Le widget routeur se construit par Vite et `vite-plugin-singlefile`, en `devDependencies` du paquet, dans `mcp/widgets/generated.ts`, jamais commité, avant `type-check` (s'il manque), `build` et `npm pack`, et chez l'hôte qui a des vues de l'ERP par `oto-platform widgets build`, ces outils y étant des dépendances paires facultatives ; le protocole MCP Apps passe par le SDK `ext-apps` (`app-with-deps`), jamais réimplémenté. § Canal MCP (si le produit expose un serveur MCP)
