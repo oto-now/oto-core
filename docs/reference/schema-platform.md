@@ -131,6 +131,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `erase_team_trash(org, team)` | L'effacement des pages d'une équipe à la corbeille, pour l'administrateur de l'organisation (`is_org_admin`, sinon `42501` ; équipe d'une autre organisation : `P0002`) : celles dont elle est propriétaire et celles rangées sous son dossier, sous-pages comprises, quelle que soit leur date, et leurs fichiers ; rend les identifiants des fichiers (`20261021140000`, lue par `eraseTrashedNodes` pour `deleteTeam`) |
 | `node_view_counts(org, days, limit)` | Les comptes de vues d'une organisation de l'appelant (`member_orgs`, sinon `42501` ; fenêtre de 1 à 90 jours, sinon `22023`) : sur la fenêtre, les `limit` pages vivantes les plus vues, puis celles que l'appelant lit (`node_level_for` ≥ 1), le niveau évalué une fois par page retenue ; rend nœud, nombre de vues et dernière vue, jamais qui a vu (`20261021150000`, lue par `homeContents`, « Les plus consultés ») |
 | `sweep_node_views(org)` | Le ménage des vues de plus de 90 jours d'une organisation de l'appelant (`member_orgs`, sinon `42501`), délai fixé en base ; ne rend rien (`20261021150000`, lancée par `recordNodeView`) |
+| `purge_pending_files(org)` | La purge des envois abandonnés d'une organisation de l'appelant (`member_orgs`, sinon `42501`) : les lignes `pending` de plus d'une heure, délai fixé en base, d'un fichier joint sur toute page, lue ou non par l'appelant, et ses propres envois en transit ; ne rend que leurs identifiants, dont le service retire les objets après le commit (`20261021170000`, lancée par `purgePendingFiles`) |
 | `purge_transit_files(org)` | Supprime les fichiers en transit échus d'une organisation de l'appelant (`42501` sinon), de toute personne, et ne rend que leurs identifiants : le service retire les objets après le commit (`platform_server` seul) |
 | `mark_files_ready(org, files)` | Passe à `ready` les lignes `pending` d'une organisation de l'appelant (`42501` sinon) que la RLS de `files` lui laisse modifier (jointes, ou en transit à lui), après la lecture de l'objet par le serveur ; rend celles qui l'ont été. Seule écriture de `files.status` (`platform_server` seul) |
 | `norm(text)`, `norm_words(text)`, configuration `platform.fr` | Normalisation sans accent, mots `[a-z0-9]`, plein texte français |
@@ -203,7 +204,9 @@ supprimer une ligne publiée d'un tableau ou un bloc du brouillon d'une page (`b
 nœud ; une ligne, parmi les tableaux lisibles de l'appelant), un bloc de brouillon et `node_drafts` (≥ 2), un fichier
 (son auteur ; joint, ≥ 1, à la corbeille aussi depuis `20261021140000`), un lien public (≥ 3, ou `is_org_admin`) ; et le dernier auteur
 d'un bloc (`blocks.updated_by`), nul ou `auth.uid()` à l'ajout et à la modification. Depuis `20261021150000`, les vues
-des pages : ses propres lignes, une vue écrite ou avancée sur une page que l'appelant lit (≥ 1). `nodes` et
+des pages : ses propres lignes, une vue écrite ou avancée sur une page que l'appelant lit (≥ 1). Depuis
+`20261021170000`, la suppression d'un fichier : joint, l'écriture de son nœud (≥ 2) ; en transit, son auteur ; les
+envois abandonnés de l'organisation partent par `purge_pending_files`. `nodes` et
 `node_aliases` restent lus à l'appartenance. Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées

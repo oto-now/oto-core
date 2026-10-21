@@ -36,9 +36,6 @@ import { decodeUtf8, NOT_UTF8 } from "./readers/text"
 import { insertPending, markReady, readyFiles } from "./rows"
 import { fileStore, objectKey, storageNotEnabled, type FileStore, type ObjectResponse } from "./store"
 
-/** Une ligne `pending` plus vieille est un envoi abandonné, purgé avec son objet (AC-a6). */
-const PENDING_HOURS = 1
-
 /** Délai de la lecture d'un fichier texte par le serveur (AC-a8). */
 const TEXT_READ_TIMEOUT_MS = 10_000
 
@@ -115,14 +112,13 @@ export async function removeObjects(orgId: string, fileIds: readonly string[]): 
 
 /**
  * Purge les envois abandonnés de l'organisation (AC-a6) : les lignes `pending` de plus d'une heure, puis leurs
- * objets après le commit. Une rétention de l'organisation, pas un geste de la personne : la RLS d'isolation
- * seule la borne, comme la purge de la corbeille.
+ * objets après le commit. Une rétention de l'organisation, pas un geste de la personne : la base la fait
+ * (`purge_pending_files`, `security definer`, délai fixé en base, membre de l'organisation), sur toute page, lue ou non
+ * par l'appelant, plus ses propres envois en transit, et ne rend que les identifiants, comme la purge de la corbeille.
  */
 export async function purgePendingFiles(db: PlatformDb, identity: Identity): Promise<void> {
   const purged = await inTransaction(db, "files: purge", (sql) => sql<{ id: string }[]>`
-    delete from platform.files
-     where org_id = ${identity.org.id} and status = 'pending' and created_at < now() - make_interval(hours => ${PENDING_HOURS})
-    returning id`)
+    select id from platform.purge_pending_files(${identity.org.id}) as id`)
   await removeObjects(identity.org.id, purged.map((row) => row.id))
 }
 

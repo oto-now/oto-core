@@ -5,11 +5,12 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000`, `20261021140000` et `20261021150000`, lectures comprises). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000`, `20261021140000`, `20261021150000` et `20261021170000`, lectures comprises). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
 // `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000` ;
-// la purge de la corbeille, `TRASH_FUNCTIONS`, migration `20261021140000`).
+// la purge de la corbeille, `TRASH_FUNCTIONS`, migration `20261021140000`), et celles qui suppriment des lignes de fichier
+// (`FILE_PURGE_FUNCTIONS`, migration `20261021170000`).
 import fs from "fs"
 import path from "path"
 import { describe, expect, it } from "vitest"
@@ -140,7 +141,8 @@ const PLATFORM_SCOPE = [
 /**
  * Les policies qui exigent le rôle que leur service exige (migrations `20261019150000` pour les suppressions,
  * `20261020190000` pour les ajouts et modifications, `20261021090000` pour les nœuds, `20261021120000` pour les blocs,
- * `20261021130000` pour la lecture du contenu, `20261021150000` pour les vues, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
+ * `20261021130000` pour la lecture du contenu, `20261021150000` pour les vues, `20261021170000` pour la suppression des
+ * fichiers, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
  * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service. `nodes_delete_manager` en est sortie
  * avec `20261021150000` : elle ne garde que le retrait d'une création jamais publiée par son auteur (`undoCreation`),
  * sans rôle ; la corbeille se purge par `purge_trash` et `erase_team_trash`.
@@ -187,6 +189,8 @@ const ROLE_REQUIRED: Record<string, string> = {
   links_select_level: "the outgoing links of a node read, the incoming links filtered by nodeLevels (server/nodes/link-lines.ts), the links of the Contextes read: node_level_for >= 1",
   files_select_member:
     "readableFile (server/files/service.ts): node_level_for >= 1, in the trash too (20261021140000: the purge goes through purge_trash and erase_team_trash); its author (pendingFile, a transit file)",
+  files_delete_member:
+    "confirmObject (server/files/service.ts), a pending row of the wrong size, and undoCreation (server/uploads-write.ts), the files of the page just created: node_level_for >= 2 on the node of an attached file; expireTransitFile (server/files/transit.ts): the author of a transit file (20261021170000: the abandoned uploads go through purge_pending_files)",
   node_shares_select_member:
     "managedNode (server/shares.ts), activeShareAt for node.access: node_level_for >= 3; listShares, revokeShare: isOrgAdmin",
   // Les vues des pages (migration `20261021150000`) ; les comptes de l'organisation passent par `node_view_counts`.
@@ -245,11 +249,24 @@ const TRASH_FUNCTIONS: Record<string, string> = {
   "erase_team_trash(p_org uuid, p_team uuid)": "eraseTrashedNodes for deleteTeam (server/team-trash.ts, server/teams.ts): requireAdmin, is_org_admin, trashed",
 }
 
+/**
+ * Les fonctions `security definer` qu'une session exécute et qui suppriment des lignes de `files` sans la policy de
+ * suppression (migration `20261021170000`) : chacune vérifie le rôle que son service exige (`member_orgs` ou
+ * `is_org_admin`) et ne rend que des identifiants. Une fonction nouvelle de cette sorte s'ajoute ici en nommant ce service.
+ */
+const FILE_PURGE_FUNCTIONS: Record<string, string> = {
+  "purge_trash(p_org uuid)": "purgeTrash (server/nodes/trash.ts): the files of the expired trashed nodes",
+  "erase_team_trash(p_org uuid, p_team uuid)": "eraseTrashedNodes for deleteTeam (server/team-trash.ts): the files of the trashed pages of a team",
+  "purge_transit_files(p_org uuid)": "purgeTransitFiles (server/files/transit.ts), under platform_server: the expired transit files of the organisation",
+  "purge_pending_files(p_org uuid)": "purgePendingFiles (server/files/service.ts), from requestFileUpload, listTrash and trashNode: any member (member_orgs), pending for more than an hour",
+}
+
 /** Les rôles d'une session. */
 const SESSION_ROLES = ["authenticated", "platform_server", "anon"]
 const CREATE_FUNCTION = /^create (?:or replace )?function platform\.(\w+)\s*\((.*?)\)\s*returns\b/i
 const GRANTED_FUNCTION = /^(grant|revoke) (?:execute|all(?: privileges)?) on function platform\.(\w+)\s*\((.*)\) (?:to|from) (.+)$/i
 const WRITES_NODES = /\b(?:insert into|update|delete from) platform\.(?:nodes|blocks|node_drafts)\b/i
+const DELETES_FILES = /\bdelete from platform\.files\b/i
 
 /** La signature d'une fonction : son nom et ses arguments, sans leurs valeurs par défaut. */
 const signatureOf = (name: string, args: string) =>
@@ -381,7 +398,8 @@ describe("final policies of platform", () => {
 })
 
 describe("security definer functions of platform", () => {
-  it("should make every security definer function a session runs that writes a node, its blocks or its draft require the level of its service (20261021100000)", () => {
+  /** La dernière définition de chaque fonction `security definer` qu'un rôle de session exécute, par signature. */
+  function sessionDefiners(): [string, string][] {
     const statements = readMigrations().flatMap((migration) => migration.statements)
     // La dernière définition de chaque signature, et les rôles de session qui exécutent chaque nom.
     const bodies = new Map<string, string>()
@@ -400,9 +418,11 @@ describe("security definer functions of platform", () => {
       }
       granted.set(signature, roles)
     }
-    const writers = [...bodies].filter(
-      ([signature, body]) => WRITES_NODES.test(body) && SESSION_ROLES.some((role) => granted.get(signature)?.has(role)),
-    )
+    return [...bodies].filter(([signature]) => SESSION_ROLES.some((role) => granted.get(signature)?.has(role)))
+  }
+
+  it("should make every security definer function a session runs that writes a node, its blocks or its draft require the level of its service (20261021100000)", () => {
+    const writers = sessionDefiners().filter(([, body]) => WRITES_NODES.test(body))
     const trash = writers.filter(([signature]) => signature in TRASH_FUNCTIONS)
     expect({
       writers: writers.map(([signature]) => signature).sort(),
@@ -411,5 +431,13 @@ describe("security definer functions of platform", () => {
         .filter(([, body]) => !/\bdeleted_at\b/i.test(body) || !/\b(member_orgs|is_org_admin)\s*\(/i.test(body))
         .map(([signature]) => signature),
     }).toEqual({ writers: Object.keys({ ...LEVEL_REQUIRED_FUNCTIONS, ...TRASH_FUNCTIONS }).sort(), withoutLevel: [], trashWithoutBound: [] })
+  })
+
+  it("should keep every security definer function a session runs that deletes file rows in a closed list, each checking the role of its service (20261021170000)", () => {
+    const purges = sessionDefiners().filter(([, body]) => DELETES_FILES.test(body))
+    expect({
+      purges: purges.map(([signature]) => signature).sort(),
+      withoutRole: purges.filter(([, body]) => !/\b(member_orgs|is_org_admin)\s*\(/i.test(body)).map(([signature]) => signature),
+    }).toEqual({ purges: Object.keys(FILE_PURGE_FUNCTIONS).sort(), withoutRole: [] })
   })
 })

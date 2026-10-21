@@ -363,6 +363,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   la migration s'appliquent ensemble : le paquet sans elle voit toute entrée en transit refusée (`42501`), elle sans
   le paquet refuse l'heure du paquet précédent. Un fichier déjà en transit garde son échéance. Un déclencheur ; aucune
   table, colonne ni fonction ; rien à relancer avant.
+- `20261021170000_platform_role_dans_la_suppression_des_fichiers.sql` (suite de `20261021140000`, issue #81) :
+  `files_delete_member`, recréée sous son nom, exige l'écriture du nœud (`node_level_for` ≥ 2) pour supprimer la ligne
+  d'un fichier joint ; un fichier en transit ne se supprime toujours que par son auteur. La purge des envois abandonnés,
+  qui comptait sur la policy large, passe par une fonction `security definer` que `server/files/service.ts` de la même
+  version appelle : `purge_pending_files(org)` (membre de l'organisation, sinon `42501` ; les lignes `pending` de plus
+  d'une heure, délai fixé en base, d'un fichier joint sur toute page, lue ou non, et les envois en transit de
+  l'appelant ; ne rend que les identifiants). Une policy et une fonction ; aucune table ni colonne ; rien à relancer
+  avant.
 
 ## Installer sur un hôte neuf
 
