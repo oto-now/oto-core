@@ -13,7 +13,9 @@ import { bucketObjects, STORAGE_VARIABLES } from "../../packages/plateforme/cli/
 const bin = path.resolve(__dirname, "../../packages/plateforme/cli/bin.mjs")
 
 function cli(args: string[]) {
-  const result = spawnSync(process.execPath, [bin, ...args], { encoding: "utf8" })
+  // Sans l'adresse que les suites portables posent dans leur environnement (`cli-db-url.test.ts`).
+  const env = { ...process.env, PLATFORM_ADMIN_DATABASE_URL: undefined }
+  const result = spawnSync(process.execPath, [bin, ...args], { encoding: "utf8", env })
   return { code: result.status, stderr: result.stderr }
 }
 
@@ -50,10 +52,11 @@ const storageEnv = (endpoint = "https://s3.example.invalid") => ({
 })
 
 describe("oto-platform org delete", () => {
-  it("should ask for --db-url and --org, and for --by with --yes (code 2)", () => {
-    expect([cli(["org", "delete"]), cli(["org", "delete", "--db-url", "postgresql://x", "--org", "acme", "--yes"])].map(({ code, stderr }) => [code, stderr.split("\n")[0]])).toEqual([
-      [2, "oto-platform : « org delete » attend --db-url <url> et --org <slug>"],
+  it("should ask for --org, for --by with --yes, and for the address of the database (code 2)", () => {
+    expect([cli(["org", "delete"]), cli(["org", "delete", "--db-url", "postgresql://x", "--org", "acme", "--yes"]), cli(["org", "delete", "--org", "acme"])].map(({ code, stderr }) => [code, stderr.split("\n")[0]])).toEqual([
+      [2, "oto-platform : « org delete » attend --org <slug>"],
       [2, "oto-platform : « org delete --yes » attend --by <email>"],
+      [2, "oto-platform : « org delete » : adresse de la base absente : PLATFORM_ADMIN_DATABASE_URL dans l'environnement, ou --db-url <url> sans mot de passe"],
     ])
   })
 

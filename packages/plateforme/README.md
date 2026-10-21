@@ -299,8 +299,15 @@ d'identité de l'hôte dans une version prochaine, qui en portera le guide compl
 2. Une fois, par un rôle d'administration de la base (`CREATEROLE`, droit de créer un schéma) :
 
    ```bash
-   PLATFORM_APP_PASSWORD='<mot de passe>' pnpm exec oto-platform db prepare --db-url '<url>?sslmode=require'
+   # PLATFORM_ADMIN_DATABASE_URL='<url>?sslmode=require' dans l'environnement, chargée d'un fichier non commité
+   PLATFORM_APP_PASSWORD='<mot de passe>' pnpm exec oto-platform db prepare
    ```
+
+   L'adresse de la base se lit dans `PLATFORM_ADMIN_DATABASE_URL`, mot de passe compris, ou par
+   `--db-url <url>` sans mot de passe, celui-ci dans `PGPASSWORD` (`.pgpass` n'est pas lu) : un
+   argument se lit dans `ps` et dans l'historique du shell. Une `--db-url` qui porte un mot de passe
+   (`admin:…@`, vide compris, ou `?password=`) est refusée, comme les deux adresses à la fois ou aucune
+   (code 2) ; de même pour `accounts secret`, `journal purge` et `org delete`.
 
    Elle crée les rôles `anon` et `authenticated`, le schéma `auth` réduit à `uid()`, `jwt()` et
    `role()` (lus dans `request.jwt.claims`), le schéma `extensions` et ses trois extensions, et le
@@ -499,10 +506,10 @@ registerConnectors([messagerie.connector], {
 - **Contenu des fichiers** : `registerDataPolicy({ fileContents: "metadata" })` (ou une fonction de l'organisation)
   fait refuser `read {file}` à l'assistant (`file_contents_withheld`) ; nom, taille et type restent servis.
 - **Rétention** : migration `20261019100000_platform_retention.sql`, puis, de votre tâche planifiée, sur la connexion
-  d'administration : `pnpm exec oto-platform journal purge --db-url "$ADMIN_DATABASE_URL" --journal-days 365
-  --feedback-days 730` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
-- **Suppression d'une organisation** : `pnpm exec oto-platform org delete --db-url "$ADMIN_DATABASE_URL" --org <slug>`
-  compte ce qui partirait ; `--yes --by <email>` (un membre de l'équipe plateforme) supprime ses objets du stockage
+  d'administration : `pnpm exec oto-platform journal purge --journal-days 365 --feedback-days 730`,
+  l'URL dans `PLATFORM_ADMIN_DATABASE_URL` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
+- **Suppression d'une organisation** : `pnpm exec oto-platform org delete --org <slug>` (URL dans
+  `PLATFORM_ADMIN_DATABASE_URL`) compte ce qui partirait ; `--yes --by <email>` (un membre de l'équipe plateforme) supprime ses objets du stockage
   (les cinq variables `PLATFORM_STORAGE_*`, ou `--without-storage`), puis toutes ses lignes ; ses lignes du journal de
   l'équipe plateforme restent, anonymisées. Relancez la même commande après un échec.
 
@@ -519,11 +526,12 @@ registerConnectors([messagerie.connector], {
   `POST /api/platform/admin/accounts/<id>/secret` (`{ secret?: { champ: valeur | null }, settings?: { réglage:
   valeur | null } }`), réservée à qui gère le compte ; un nom absent est gardé, `null` ou vide l'efface ; le secret
   n'est jamais relu (« posé le … »). Par le service `setAccountSecret(db, identity, { account_id, input })` de
-  `/server`, ou par l'outillage, les champs en objet JSON sur l'entrée standard, la clé et l'URL d'administration
-  dans l'environnement du shell (chargées d'un fichier non commité, jamais tapées dans la commande) :
+  `/server`, ou par l'outillage, les champs en objet JSON sur l'entrée standard, la clé (`PLATFORM_VAULT_KEY`) et l'URL
+  d'administration (`PLATFORM_ADMIN_DATABASE_URL`) dans l'environnement du shell (chargées d'un fichier non commité,
+  jamais tapées dans la commande ni passées en argument) :
 
   ```bash
-  pnpm exec oto-platform accounts secret --db-url "$ADMIN_DATABASE_URL" --account <id du compte> --setting region=eu < champs.json
+  pnpm exec oto-platform accounts secret --account <id du compte> --setting region=eu < champs.json
   ```
 - **Appel** : un compte réel sans secret, sans un champ qu'exige l'authentification ou dont un réglage manque est
   refusé (`not_enabled`, qui dit à qui demander), un compte simulé d'un connecteur réel aussi ; un 401 ou un 403 du tiers rend `upstream_error`, sauf une ligne qui marque le compte (état d'un compte, ci-dessous), un débit dépassé `rate_limited`.

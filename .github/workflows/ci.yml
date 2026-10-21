@@ -101,11 +101,13 @@ jobs:
         with:
           version: latest
 
+      # La première par PLATFORM_ADMIN_DATABASE_URL, la seconde par --db-url sans mot de passe : les deux
+      # adresses que la CLI admet (`cli/admin-url.mjs`).
       - name: db prepare, twice; the second changes nothing
         run: |
           set -o pipefail
           export PLATFORM_APP_PASSWORD="$(openssl rand -hex 16)"
-          node packages/plateforme/cli/bin.mjs db prepare --db-url "$DB_URL"
+          PLATFORM_ADMIN_DATABASE_URL="$DB_URL" node packages/plateforme/cli/bin.mjs db prepare
           node packages/plateforme/cli/bin.mjs db prepare --db-url "$DB_URL" | tee "$RUNNER_TEMP/second.txt"
           if grep -E ': (créée?|accordé)' "$RUNNER_TEMP/second.txt"; then exit 1; fi
 

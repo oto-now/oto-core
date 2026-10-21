@@ -12,6 +12,7 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { adminDbUrl } from './admin-url.mjs'
 import { checkMigrations } from './migrations-check.mjs'
 import { sqlFiles, syncMigrations } from './migrations-sync.mjs'
 
@@ -19,11 +20,18 @@ import { sqlFiles, syncMigrations } from './migrations-sync.mjs'
 const PACKAGE_MIGRATIONS = fileURLToPath(new URL('../migrations/', import.meta.url))
 
 const USAGE = `Usage : oto-platform migrations <sync|check> [options]
-        oto-platform db prepare --db-url <url>
+        oto-platform db prepare [--db-url <url>]
         oto-platform widgets build --views <dossier> --out <fichier>
-        oto-platform accounts secret --db-url <url> --account <id> [--setting nom=valeur …] < champs.json
-        oto-platform journal purge --db-url <url> [--journal-days <jours>] [--feedback-days <jours>]
-        oto-platform org delete --db-url <url> --org <slug> [--yes --by <email>] [--without-storage]
+        oto-platform accounts secret [--db-url <url>] --account <id> [--setting nom=valeur …] < champs.json
+        oto-platform journal purge [--db-url <url>] [--journal-days <jours>] [--feedback-days <jours>]
+        oto-platform org delete [--db-url <url>] --org <slug> [--yes --by <email>] [--without-storage]
+
+  Adresse de la base (db prepare, accounts secret, journal purge, org delete)
+    Celle d'un rôle d'administration, lue dans PLATFORM_ADMIN_DATABASE_URL, mot de passe compris ; ou
+    --db-url <url> SANS mot de passe, celui-ci dans PGPASSWORD (un argument se lit dans ps et l'historique
+    du shell). --db-url à mot de passe (admin:…@, vide compris, ou ?password=) : refusé. Les deux, ou
+    aucune : refusé. TLS exigé, sauf sslmode écrit dans l'URL (?sslmode=disable pour un Postgres local
+    sans TLS).
 
   migrations sync [--from <dossier>] [--to <dossier>]
     Copie les migrations du paquet dans celles de l'application hôte. Une copie qui diffère
@@ -39,13 +47,12 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     des trois fonctions propres à Supabase, aucune extension hors de pg_trgm, unaccent et ltree.
     --file  un fichier seul (défaut : les migrations du paquet)
 
-  db prepare --db-url <url>
+  db prepare [--db-url <url>]
     Prépare une base avant les migrations, une fois ; un second passage ne change rien. Sur un
     Postgres sans Supabase : rôles anon et authenticated, schéma auth (uid, jwt, role), schéma
     extensions avec pg_trgm, unaccent et ltree. Partout : le rôle platform_app (connexion du
     serveur, membre d'anon et d'authenticated), son mot de passe lu dans PLATFORM_APP_PASSWORD.
-    --db-url  URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
-              écrit dans l'URL (?sslmode=disable pour un Postgres local sans TLS)
+    --db-url  adresse de la base sans mot de passe (Adresse de la base, ci-dessus)
 
   widgets build --views <dossier> --out <fichier>
     Construit le bundle du widget de la conversation : les vues du paquet et les vues de l'ERP,
@@ -56,29 +63,27 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --views  dossier des vues de l'ERP
     --out    module TypeScript à écrire (ex. src/lib/widgets.generated.ts)
 
-  accounts secret --db-url <url> --account <id> [--setting nom=valeur …]
+  accounts secret [--db-url <url>] --account <id> [--setting nom=valeur …]
     Pose le secret et les réglages d'un compte réel de connecteur. Les champs du secret se lisent
     sur l'entrée standard, en objet JSON ({"api_key": "…"}), jamais en argument ; une saisie
     fusionne avec ce qui est posé (champ absent gardé, null ou vide effacé). Chiffré par la clé
     PLATFORM_VAULT_KEY de l'environnement (32 octets en base64, la même que celle du serveur de
     l'application), puis écrit dans la base ; rien du secret ni de la clé n'est affiché. Refusé
     pour un compte inconnu ou simulé. Noms et valeurs contrôlés contre la déclaration à l'appel.
-    --db-url   URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
-               écrit dans l'URL
+    --db-url   adresse de la base sans mot de passe (Adresse de la base, ci-dessus)
     --account  identifiant (uuid) du compte
     --setting  un réglage non secret, nom=valeur (nom= l'efface) ; répétable
 
-  journal purge --db-url <url> [--journal-days <jours>] [--feedback-days <jours>]
+  journal purge [--db-url <url>] [--journal-days <jours>] [--feedback-days <jours>]
     Retire, pour toutes les organisations, les lignes du journal des appels et du journal de l'équipe
     plateforme plus anciennes que --journal-days, et les retours (feedback) plus anciens que
     --feedback-days ; une table sans durée reste telle quelle. À lancer par la tâche planifiée de
     l'hôte. Rend le nombre de lignes retirées.
-    --db-url         URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
-                     écrit dans l'URL
+    --db-url         adresse de la base sans mot de passe (Adresse de la base, ci-dessus)
     --journal-days   rétention du journal, en jours (1 à 36 500)
     --feedback-days  rétention des retours, en jours (1 à 36 500)
 
-  org delete --db-url <url> --org <slug> [--yes --by <email>] [--without-storage]
+  org delete [--db-url <url>] --org <slug> [--yes --by <email>] [--without-storage]
     Supprime une organisation : toutes ses lignes de platform, et ses objets du stockage (sous <org_id>/).
     Sans --yes, compte ce qui serait supprimé, table par table, et n'écrit rien. Avec --yes : le stockage
     d'abord, puis la base en une transaction ; les lignes de l'organisation dans le journal de l'équipe
@@ -86,8 +91,7 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     supprimée » s'y ajoute au nom de --by. Relancée après un échec, elle reprend ; après une suppression
     complète, elle dit « déjà supprimée » et repasse sur le stockage. Le stockage se lit dans
     PLATFORM_STORAGE_ENDPOINT, _BUCKET, _REGION, _ACCESS_KEY_ID et _SECRET_ACCESS_KEY.
-    --db-url           URL de connexion d'un rôle d'administration de la base ; TLS exigé, sauf sslmode
-                       écrit dans l'URL
+    --db-url           adresse de la base sans mot de passe (Adresse de la base, ci-dessus)
     --org              slug de l'organisation
     --yes              supprime (sans lui, rien n'est écrit)
     --by               email d'un membre de l'équipe plateforme (platform_staff), au nom de qui supprimer ;
@@ -97,7 +101,8 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
 
   -h, --help  cette aide
 
-Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, purge ou suppression refusé, 2 usage incorrect.`
+Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, purge ou suppression refusé, 2 usage incorrect
+(adresse de la base refusée comprise).`
 
 const OPTIONS = {
   from: { type: 'string' },
@@ -144,7 +149,7 @@ function usageErrorOf(error) {
   return error
 }
 
-function parse(argv) {
+function parse(argv, env) {
   let parsed
   try {
     parsed = parseArgs({ args: argv, options: OPTIONS, strict: true, allowPositionals: true })
@@ -165,19 +170,21 @@ function parse(argv) {
     if (!subcommands[subcommand].includes(name)) throw new UsageError(`option « --${name} » inconnue de « ${command} ${subcommand} »`)
     if (value === '') throw new UsageError(`l'option « --${name} » attend une valeur`)
   }
-  if (command === 'db' && !values['db-url']) throw new UsageError("« db prepare » attend --db-url <url>")
-  if (command === 'accounts' && (!values['db-url'] || !values.account)) throw new UsageError('« accounts secret » attend --db-url <url> et --account <id>')
-  if (command === 'journal' && !values['db-url']) throw new UsageError('« journal purge » attend --db-url <url>')
-  if (command === 'org' && (!values['db-url'] || !values.org)) throw new UsageError('« org delete » attend --db-url <url> et --org <slug>')
+  if (command === 'accounts' && !values.account) throw new UsageError('« accounts secret » attend --account <id>')
+  if (command === 'org' && !values.org) throw new UsageError('« org delete » attend --org <slug>')
   if (command === 'org' && values.yes && !values.by) throw new UsageError('« org delete --yes » attend --by <email>')
   if (command === 'widgets' && (!values.views || !values.out)) throw new UsageError('« widgets build » attend --views <dossier> et --out <fichier>')
-  return { command, subcommand, ...values }
+  // Une commande à connexion d'administration : celle qui admet --db-url (`admin-url.mjs`).
+  if (!subcommands[subcommand].includes('db-url')) return { command, subcommand, ...values }
+  const address = adminDbUrl({ flag: values['db-url'], env })
+  if ('problem' in address) throw new UsageError(`« ${command} ${subcommand} » : ${address.problem}`)
+  return { command, subcommand, ...values, dbUrl: address.url }
 }
 
 export async function run(argv) {
   let options
   try {
-    options = parse(argv)
+    options = parse(argv, process.env)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error
     console.error(`oto-platform : ${error.message}\n\n${USAGE}`)
@@ -191,7 +198,7 @@ export async function run(argv) {
     // Chargé à la demande : le pilote Postgres ne sert qu'ici, pas à la copie ni au contrôle.
     const { prepareDatabase } = await import('./db-prepare.mjs')
     return prepareDatabase({
-      dbUrl: options['db-url'],
+      dbUrl: options.dbUrl,
       password: process.env.PLATFORM_APP_PASSWORD,
       print: (line) => console.log(line),
       printError: (line) => console.error(line),
@@ -201,7 +208,7 @@ export async function run(argv) {
     // Chargé à la demande, comme `db prepare` : le pilote Postgres ne sert qu'ici.
     const { readStdin, setAccountSecretCommand } = await import('./account-secret.mjs')
     return setAccountSecretCommand({
-      dbUrl: options['db-url'],
+      dbUrl: options.dbUrl,
       account: options.account,
       settings: options.setting ?? [],
       env: process.env,
@@ -214,7 +221,7 @@ export async function run(argv) {
     // Chargé à la demande, comme `db prepare` : le pilote Postgres ne sert qu'ici.
     const { purgeCommand } = await import('./purge.mjs')
     return purgeCommand({
-      dbUrl: options['db-url'],
+      dbUrl: options.dbUrl,
       journalDays: options['journal-days'],
       feedbackDays: options['feedback-days'],
       print: (line) => console.log(line),
@@ -225,7 +232,7 @@ export async function run(argv) {
     // Chargé à la demande, comme `db prepare` : le pilote Postgres et le client du stockage ne servent qu'ici.
     const { orgDeleteCommand } = await import('./org-delete.mjs')
     return orgDeleteCommand({
-      dbUrl: options['db-url'],
+      dbUrl: options.dbUrl,
       org: options.org,
       by: options.by,
       yes: options.yes === true,

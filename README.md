@@ -107,7 +107,9 @@ Le mode OIDC n'a besoin d'aucune variable Supabase : l'essai a joué tout le par
 Une fois par base, par le **compte d'administration** (un rôle qui a `CREATEROLE` et le droit de
 créer un schéma), jamais par l'application :
 
-1. `PLATFORM_APP_PASSWORD='<tiré au hasard>' pnpm exec oto-platform db prepare --db-url '<url d'administration>?sslmode=require'`
+1. `PLATFORM_APP_PASSWORD='<tiré au hasard>' pnpm exec oto-platform db prepare`, l'URL d'administration
+   (`…?sslmode=require`) dans `PLATFORM_ADMIN_DATABASE_URL`, chargée d'un fichier non commité, jamais tapée
+   dans la commande (`--db-url` n'admet qu'une URL sans mot de passe, celui-ci dans `PGPASSWORD`)
    : rôles `anon`, `authenticated`, schéma `auth` réduit (`uid()`, `jwt()`, `role()`), schéma
    `extensions` (`pg_trgm`, `unaccent`, `ltree`), rôle `platform_app`. Un second passage ne change
    rien (« déjà présent »).

@@ -364,8 +364,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
    d'administration (`CREATEROLE`, droit de créer un schéma dans la base) :
 
    ```bash
-   PLATFORM_APP_PASSWORD='<mot de passe du rôle platform_app>' pnpm exec oto-platform db prepare --db-url '<url>?sslmode=require'
+   # PLATFORM_ADMIN_DATABASE_URL='<url>?sslmode=require' dans l'environnement, chargée d'un fichier non commité
+   PLATFORM_APP_PASSWORD='<mot de passe du rôle platform_app>' pnpm exec oto-platform db prepare
    ```
+
+   L'URL se lit dans `PLATFORM_ADMIN_DATABASE_URL` ; `--db-url` n'admet qu'une URL sans mot de passe,
+   celui-ci dans `PGPASSWORD`. Une `--db-url` à mot de passe, les deux à la fois ou aucune : refusé (code 2).
 
    Elle pose ce que les migrations supposent sans le créer (elles ne touchent que `platform`) : les
    rôles `anon` et `authenticated`, le schéma `auth` avec `uid()`, `jwt()` et `role()` (ils lisent
@@ -577,7 +581,8 @@ d'administration, les retire.
 - Dans une application hôte, les mêmes commandes passent par la CLI du paquet :
   `pnpm exec oto-platform migrations sync --to supabase/migrations`, puis
   `pnpm exec oto-platform migrations check`. Les deux scripts ci-dessus l'appellent aussi.
-- `pnpm exec oto-platform db prepare --db-url <url>` : la préparation d'un hôte neuf (ci-dessus).
+- `pnpm exec oto-platform db prepare` (URL dans `PLATFORM_ADMIN_DATABASE_URL`, ou `--db-url <url>` sans mot de
+  passe) : la préparation d'un hôte neuf (ci-dessus).
 
 ## Règles
 

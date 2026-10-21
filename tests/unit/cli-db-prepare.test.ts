@@ -144,10 +144,12 @@ describe("oto-platform db prepare", () => {
     expect(printed).toContain("db prepare : extension unaccent refusée par l'hôte")
   })
 
-  it("should refuse db prepare without --db-url, with the usage and code 2", () => {
-    const run = spawnSync(process.execPath, [bin, "db", "prepare"], { encoding: "utf8", timeout: 20_000 })
+  it("should refuse db prepare without the address of the database, with the usage and code 2", () => {
+    // Sans l'adresse que les suites portables posent dans leur environnement (`cli-db-url.test.ts`).
+    const env = { ...process.env, PLATFORM_ADMIN_DATABASE_URL: undefined }
+    const run = spawnSync(process.execPath, [bin, "db", "prepare"], { encoding: "utf8", timeout: 20_000, env })
     expect(run.status).toBe(2)
-    expect(run.stderr.startsWith("oto-platform : « db prepare » attend --db-url <url>")).toBe(true)
-    expect(run.stderr).toContain("db prepare --db-url <url>")
+    expect(run.stderr.startsWith("oto-platform : « db prepare » : adresse de la base absente : PLATFORM_ADMIN_DATABASE_URL")).toBe(true)
+    expect(run.stderr).toContain("db prepare [--db-url <url>]")
   })
 })
