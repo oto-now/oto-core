@@ -3,7 +3,7 @@
 // unique et lecture d'un fichier en transit ; étape 2), par la porte MCP sous chaque personne : `file` seul désigne un
 // fichier quel que soit son état ; en transit, son auteur seul le lit, avec les mêmes lecteurs, bornes et curseur qu'un
 // fichier joint, sans que son nom entre au journal ; effacé, le refus le date ; un fichier joint lu par `file` seul se lit
-// comme avec son chemin. Citer son fichier en transit dans une page est refusé avec ce qu'il faut faire ; celui d'un
+// comme avec son chemin. Citer son fichier en transit dans une page est refusé avec l'appel de `file.keep` ; celui d'un
 // autre reste un fichier non joint. Le bucket est l'adaptateur en mémoire. Suite portable.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
@@ -180,8 +180,9 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
       const lea = await session("lea")
       const teammate = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Pièces", text: `[devis](/f/${id})` }] })
 
-      expect([edit.isError, edit.text]).toEqual([true, `File ${id} is in transit: upload it to ${path} first.`])
-      expect([creation.isError, creation.text]).toEqual([true, `File ${id} is in transit: upload it to ${created} first.`])
+      const keep = (at: string, revision: number) => `${as("claire").identity.org.prefix}_call {"function": "file.keep", "arguments": {"file": "${id}", "path": "${at}", "base_revision": ${revision}}}`
+      expect([edit.isError, edit.text]).toEqual([true, `File ${id} is in transit: keep it on ${path} with ${keep(path, 1)}; it adds the file at the end of the page, or where section or after_block says.`])
+      expect([creation.isError, creation.text]).toEqual([true, `File ${id} is in transit: create ${created} without it, then keep it there with ${keep(created, 1)}.`])
       expect([teammate.isError, teammate.text]).toEqual([true, `File ${id} is not attached to ${path}: upload it to this page first.`])
     })
   })

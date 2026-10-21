@@ -388,6 +388,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   membre. Clés vers `orgs` et `members` en cascade : une organisation supprimée ou une personne retirée, ou oubliée,
   emporte ses traces. `purge_transit_files`, recréée, retire aussi les traces passées. Une table, une fonction, un
   déclencheur, une policy ; rien à relancer avant.
+- `20261021230000_platform_garder_un_fichier_en_transit.sql` (fichiers et stockage, § Garder un fichier en transit sur
+  une page ; étape 3 du chantier « fichier », décidée par Alexis le 21/10) : `keep_transit_file(p_file, p_node)`,
+  `security definer`, joint un fichier en transit au nœud et lève son échéance, dans une seule instruction, pour son
+  seul auteur, `ready`, non échu, sur un nœud de son organisation hors corbeille, hors tableau, qu'il écrit ; sinon
+  `42501`. Aucun privilège de `files` ne s'ouvre. Une fonction ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

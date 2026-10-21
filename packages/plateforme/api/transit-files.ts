@@ -1,11 +1,14 @@
 // Ressource `transit-files` de l'API du paquet (fichiers et stockage, § Fichier en transit) : `POST transit-files` (la
 // demande d'envoi d'un fichier sans nœud, rendue avec son échéance) et `POST transit-files/<id>/complete` (la
-// confirmation) ; il se lit à son adresse, `/f/<id>`, comme un fichier joint (`files.ts`). Adaptateur
-// mince : l'auteur seul, l'échéance, le type, la taille et le quota sont décidés dans `server/files/transit.ts`. Aucun
-// nœud, donc aucune cible au journal ; aucun nom de fichier non plus, sa ligne n'en porte que l'identifiant, la taille et
-// le type. Sans elle, une personne ne dépose ni ne relit un fichier destiné à un connecteur.
-import { fileIdSchema, filePath } from "../schemas"
+// confirmation) ; il se lit à son adresse, `/f/<id>`, comme un fichier joint (`files.ts`) ; `POST transit-files/<id>/keep`
+// le garde sur une page (étape 3 du chantier « fichier », `server/files/keep.ts`). Adaptateur mince : l'auteur seul,
+// l'échéance, le type, la taille et le quota sont décidés dans `server/files/transit.ts`. Aucun nœud avant la garde, donc
+// aucune cible au journal, puis la page gardée ; aucun nom de fichier non plus, sa ligne n'en porte que l'identifiant, la
+// taille et le type, et la page. Sans elle, une personne ne dépose, ne relit ni ne garde un fichier destiné à un connecteur.
+import { FILE_ADDRESS, fileIdSchema, filePath, transitFileKeepSchema } from "../schemas"
 import type { Json } from "../server/database"
+import { invalidInput } from "../server/errors"
+import { keepTransitFile } from "../server/files/keep"
 import { clip } from "../server/journal"
 import { completeTransitUpload, requestTransitUpload } from "../server/files/transit"
 import type { ResourceRoutes } from "./handler"
@@ -31,6 +34,18 @@ function transitJournalArgs({ params, body, data }: { params: string[]; body: un
   return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined)) as Json
 }
 
+/** Le journal d'une garde : l'identifiant du fichier, la page et la place du bloc, jamais le nom. */
+function keepJournalArgs({ params, body }: { params: string[]; body: unknown }): Json {
+  const args = {
+    id: fileIdSchema.safeParse(params[0]).data,
+    node: field(body, "node", "string"),
+    base_revision: field(body, "base_revision", "number"),
+    section: field(body, "section", "string"),
+    after_block: field(body, "after_block", "string"),
+  }
+  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined)) as Json
+}
+
 export const transitFilesRoutes: ResourceRoutes = {
   POST: [
     {
@@ -49,6 +64,24 @@ export const transitFilesRoutes: ResourceRoutes = {
       async handle({ db, identity, params }) {
         const ready = await completeTransitUpload(db, identity, params[0])
         return { status: 200, data: { ...ready, url: filePath(ready.id) } }
+      },
+    },
+    {
+      params: 2,
+      fixed: { 1: "keep" },
+      journalArgs: keepJournalArgs,
+      target: ({ body }) => {
+        const node = field(body, "node", "string")
+        return typeof node === "string" ? node : null
+      },
+      // La page par son chemin (`node`, comme `POST files`) ; garder sous la provenance de l'écran, la réponse portant les
+      // liens absolus du fichier (`<origine>/f/<id>`).
+      async handle({ db, identity, params, body, origin }) {
+        const parsed = transitFileKeepSchema.safeParse(body)
+        if (!parsed.success) throw invalidInput(parsed.error)
+        const { node, ...place } = parsed.data
+        const kept = await keepTransitFile(db, identity, { file: params[0], path: node, ...place }, { origin: { kind: "human" }, route: `${origin}${FILE_ADDRESS}` })
+        return { status: 200, data: kept.data, journal: { target: typeof kept.data.path === "string" ? kept.data.path : node, teamId: kept.teamId } }
       },
     },
   ],

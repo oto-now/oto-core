@@ -16,7 +16,7 @@ import type { DocBlock } from "./document"
 type FileMeta = { name: string; size: number; mime: string }
 
 /** Le fichier qu'un bloc cite : l'identifiant d'un bloc `file` ou d'une image jointe, sinon `null`. */
-function citedFile(block: DocBlock): string | null {
+export function citedFile(block: DocBlock): string | null {
   if (block.type !== "file" && block.type !== "image") return null
   return typeof block.data.file_id === "string" ? block.data.file_id : null
 }
@@ -26,16 +26,27 @@ function notAttached(fileId: string, path: string): PlatformError {
   return new PlatformError("invalid_arguments", `File ${fileId} is not attached to ${path}: upload it to this page first.`)
 }
 
+/** La page qui cite : son chemin, et sa révision, absente à une création. */
+type Citing = { path: string; revision?: number }
+
 /**
- * Le refus d'un fichier cité que la page ne porte pas : en transit et à l'appelant, ce qu'il faut faire (étape 2 du
- * chantier « fichier ») ; sinon celui d'AC-d3. La RLS cache le fichier en transit d'un autre.
+ * Le refus d'un fichier cité que la page ne porte pas : en transit et à l'appelant, l'appel de `file.keep` qui le garde
+ * (étape 3 du chantier « fichier » : écrire son lien à la main ne le garde jamais) ; sinon celui d'AC-d3. La RLS cache le
+ * fichier en transit d'un autre.
  */
-async function refusalOf(db: PlatformDb, identity: Identity, fileId: string, path: string): Promise<PlatformError> {
+async function refusalOf(db: PlatformDb, identity: Identity, fileId: string, page: Citing): Promise<PlatformError> {
   const [transit] = await inTransaction(db, "files: cited in transit", (sql) => sql<{ id: string }[]>`
     select id from platform.files
      where org_id = ${identity.org.id} and id = ${fileId} and node_id is null and created_by = ${identity.user.id}
        and status = 'ready' and expires_at > now()`)
-  return transit ? new PlatformError("invalid_arguments", `File ${fileId} is in transit: upload it to ${path} first.`) : notAttached(fileId, path)
+  if (!transit) return notAttached(fileId, page.path)
+  const keep = (revision: number) =>
+    `${identity.org.prefix}_call {"function": "file.keep", "arguments": {"file": "${fileId}", "path": "${page.path}", "base_revision": ${revision}}}`
+  const text =
+    page.revision === undefined
+      ? `File ${fileId} is in transit: create ${page.path} without it, then keep it there with ${keep(1)}.`
+      : `File ${fileId} is in transit: keep it on ${page.path} with ${keep(page.revision)}; it adds the file at the end of the page, or where section or after_block says.`
+  return new PlatformError("invalid_arguments", text)
 }
 
 /**
@@ -45,7 +56,7 @@ async function refusalOf(db: PlatformDb, identity: Identity, fileId: string, pat
 export async function refuseFilesOnCreate(db: PlatformDb, identity: Identity, blocks: readonly DocBlock[], options: { path: string; tolerant: boolean }): Promise<void> {
   if (options.tolerant) return
   const fileId = blocks.map(citedFile).find((id) => id !== null)
-  if (fileId) throw await refusalOf(db, identity, fileId, options.path)
+  if (fileId) throw await refusalOf(db, identity, fileId, { path: options.path })
 }
 
 /** Les lignes `ready` jointes au nœud parmi `ids`, sous l'isolation de l'organisation. */
@@ -89,7 +100,7 @@ function withMeta<B extends DocBlock>(block: B, meta: FileMeta): B {
 export async function attachFiles<B extends DocBlock, A extends { blocks: B[]; keptAsText?: number }>(
   db: PlatformDb,
   identity: Identity,
-  request: { node: { id: string; path: string }; current: readonly DocBlock[]; created: boolean; tolerant: boolean },
+  request: { node: { id: string; path: string; revision: number }; current: readonly DocBlock[]; created: boolean; tolerant: boolean },
   applied: A,
 ): Promise<A> {
   const { node } = request
@@ -104,7 +115,7 @@ export async function attachFiles<B extends DocBlock, A extends { blocks: B[]; k
   // nom, la taille et le type du client : refusé comme un fichier non joint.
   const known = (block: B, fileId: string) => (block.type === "file" ? (rows.get(fileId) ?? before.meta.get(fileId)) !== undefined : rows.has(fileId) || before.ids.has(fileId))
   const unknown = applied.blocks.map((block) => citedFile(block)).find((fileId, index) => fileId !== null && !known(applied.blocks[index], fileId))
-  if (unknown && !request.tolerant) throw await refusalOf(db, identity, unknown, node.path)
+  if (unknown && !request.tolerant) throw await refusalOf(db, identity, unknown, node)
   let kept = 0
   const blocks = applied.blocks.map((block): B => {
     const fileId = citedFile(block)

@@ -100,6 +100,34 @@ export const fileRequestSchema = z.strictObject({
  */
 export const transitFileRequestSchema = fileRequestSchema.omit({ node: true })
 
+/**
+ * Où `file.keep` insère le bloc média (étape 3 du chantier « fichier ») : sous la révision lue, comme `write` ; à la fin
+ * d'une section, juste après un bloc, ou en bas de la page.
+ */
+const keepPlace = {
+  base_revision: z.number().int().min(0).optional().describe("Current revision of the page, from read (e.g. 7), as for write."),
+  section: z.string().trim().min(1).max(200).optional().describe('Title of the section to put the file at the end of, e.g. "Mardi" (default: the bottom of the page).'),
+  after_block: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe('Reference of the block to put the file right after, from read with refs: true, e.g. "3f9a2c1b"; not with section.'),
+}
+
+/** Les arguments de `file.keep` : le fichier par son identifiant, la page par son chemin, la place du bloc. */
+export const fileKeepSchema = z.strictObject({
+  file: z.string().trim().min(1).max(100).describe("Id of the file, as a function or an upload gave it, e.g. from its link /f/<id>."),
+  path: nodePathSchema.describe("Path of the page, procedure or context page to show the file in, e.g. ventes/appels_semaine."),
+  ...keepPlace,
+})
+
+export type FileKeep = z.infer<typeof fileKeepSchema>
+
+/** `POST transit-files/<id>/keep` : le nœud par son chemin, comme `POST files`, et la place du bloc. */
+export const transitFileKeepSchema = z.strictObject({ node: nodePathSchema, ...keepPlace })
+
 /** L'identifiant d'un fichier dans l'adresse (`files/<id>`). */
 export const fileIdSchema = z.uuid()
 

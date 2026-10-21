@@ -44,7 +44,7 @@ const MB = 1_048_576
 const TEXT_LIST = TEXT_TYPES.join(", ")
 
 /** Les images servies `inline` : les matricielles ; un `svg` se télécharge à la navigation (ADR-016 § 5). */
-const INLINE_IMAGES: readonly FileType[] = IMAGE_TYPES.filter((type) => type !== "svg")
+export const INLINE_IMAGES: readonly FileType[] = IMAGE_TYPES.filter((type) => type !== "svg")
 
 /** Un fichier lu : sa ligne `ready` et le chemin de son nœud. */
 export type FileRow = { id: string; node_id: string; name: string; mime: string; size: number; path: string }

@@ -118,6 +118,8 @@ describe("catalog (AC23)", () => {
       "node.public_link",
       // E10-S02 (lot f) : le dépôt par lien à usage unique.
       "upload.link",
+      // Étape 3 du chantier « fichier » : garder un fichier en transit sur une page.
+      "file.keep",
     ])
     expect(callExamples(catalogFunctions(), NONE)).toEqual(["table.rows"])
   })

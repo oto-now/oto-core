@@ -181,7 +181,10 @@ Pour une application Next 15 (App Router) sur Supabase.
      `…/markdown` et `…/html`, pour un fichier cité par un bloc publié du contenu partagé. Fichier en transit (sans
      nœud, entre une personne et un connecteur) : `POST transit-files` `{ name, mime, size }` (types d'un fichier joint,
      50 Mo pour tout type, texte compris, compté au quota ; rend `{ id, upload, expiresAt }`, 24 heures) et
-     `POST transit-files/<id>/complete` `{}` (rend le fichier, son échéance et `url`, `/f/<id>`) ; il se lit à son
+     `POST transit-files/<id>/complete` `{}` (rend le fichier, son échéance et `url`, `/f/<id>`) ;
+     `POST transit-files/<id>/keep` `{ node, base_revision, section?, after_block? }` le garde sur une page, comme
+     `file.keep` derrière `call` : un bloc média inséré à la place donnée, sous une révision, le fichier joint à la page
+     sans copie, son échéance levée (un fichier joint à une autre page est copié ; un texte de plus de 4 Mo refusé) ; il se lit à son
      adresse, `/f/<id>`, comme un fichier joint ; lisible par son seul auteur, `not_found` pour toute autre personne,
      administrateur et équipe plateforme compris ; au journal de l'organisation, l'identifiant, la taille et le type
      MIME seuls, jamais le nom, et un refus par son seul code. Effacé (échu, ou consommé par un envoi réussi), il

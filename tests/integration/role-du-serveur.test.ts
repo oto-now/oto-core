@@ -40,6 +40,7 @@ const CALLABLE: Record<string, string> = {
   "platform.invalidate_pseudonyms(uuid)": "advances a generation counter, no value affirmed",
   "platform.is_org_admin(uuid)": "read",
   "platform.is_staff()": "read",
+  "platform.keep_transit_file(uuid,uuid)": "the author keeps her transit file on a node she writes (keepTransitFile, 20261021230000): it sets the node and lifts the expiry, nothing else; nothing affirmed",
   "platform.leads_team(uuid)": "read: whether the caller leads the team, for the policy team_members_delete_admin",
   "platform.member_directory(uuid)": "read",
   "platform.member_orgs()": "read",

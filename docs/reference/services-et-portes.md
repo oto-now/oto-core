@@ -69,7 +69,8 @@ rejoue sur chaque lot, et les règles d'une valeur de tableau (`tables.ts` : `is
   `POST files/<id>/complete`, `GET files/<id>` en redirection permanente 308 vers `/f/<id>`, `…/markdown`, et
   `fileAddressRoute`, l'adresse d'un fichier, `GET /f/<id>` en redirection 302 ou `?check`, joint ou en transit,
   que `handlePlateforme` reconnaît hors de son préfixe ; le service : `server/files/address.ts`),
-  `api/transit-files.ts` (`POST transit-files`, `POST transit-files/<id>/complete`) et
+  `api/transit-files.ts` (`POST transit-files`, `POST transit-files/<id>/complete`, `POST transit-files/<id>/keep`,
+  la garde sur une page, servie aussi par `file.keep` : `server/files/keep.ts`) et
   `api/files-html.ts` (route isolée `files/<id>/html` et son pendant public, branche avant le
   dispatch, texte brut, ADR-017) ; `public/<jeton>/files/…` passe par la porte publique.
   **Porte sans session qui écrit** (ADR-018) : `api/uploads.ts`, `POST uploads/<jeton>`, avant le

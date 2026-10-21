@@ -1,6 +1,7 @@
 // @vitest-environment node
 // La ressource `transit-files` de la porte (fichiers et stockage, § Fichier en transit), sans base : identité et service
-// simulés. La demande (201) et la confirmation (200), chacune avec sa ligne de journal ; aucune lecture ici, un fichier en
+// simulés. La demande (201), la confirmation (200) et la garde sur une page (200, étape 3 du chantier « fichier »), chacune
+// avec sa ligne de journal ; aucune lecture ici, un fichier en
 // transit se lisant à son adresse, `/f/<id>` (`api-files.test.ts`) ; aucun
 // nom de fichier au journal de l'organisation, ni par le corps, ni par la réponse, ni par le message d'un refus (décision
 // du 19/10). Les décisions du service, sur une vraie base : `tests/integration/fichiers-en-transit.test.ts`.
@@ -8,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { PlatformError, type Identity } from "@otomata_tech/oto_platform/server"
 import type { VerifyToken } from "../../packages/plateforme/mcp/auth"
+import { keepTransitFile } from "../../packages/plateforme/server/files/keep"
 import { completeTransitUpload, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 import { writeJournal } from "../../packages/plateforme/server/journal"
@@ -28,6 +30,8 @@ vi.mock("../../packages/plateforme/server/files/transit", () => ({
   completeTransitUpload: vi.fn(),
   requestTransitUpload: vi.fn(),
 }))
+
+vi.mock("../../packages/plateforme/server/files/keep", () => ({ keepTransitFile: vi.fn() }))
 
 const HOST = "acme.test"
 const ORIGIN = `https://${HOST}`
@@ -112,5 +116,26 @@ describe("transit-files resource of the gate", () => {
       { tool: "POST transit-files/complete", target: null, args: { id: FILE_ID }, error: "conflict" },
     ])
     expect(lines.filter((line) => JSON.stringify(line).includes("bilan-confidentiel"))).toEqual([])
+  })
+
+  it("should keep a transit file on a page by POST transit-files/<id>/keep, the page as target, the id and the page in the journal, never the name", async () => {
+    const name = "appel-confidentiel.mp3"
+    const kept = { path: "ventes/appels", revision: 3, file: { id: FILE_ID, name, size: 1_000, url: `${ORIGIN}/f/${FILE_ID}` } }
+    vi.mocked(keepTransitFile)
+      .mockResolvedValueOnce({ text: `Kept ${name} on ventes/appels, revision 3.`, data: kept, teamId: null })
+      .mockRejectedValueOnce(new PlatformError("stale_revision", "stale revision: ventes/appels is at revision 3, not 2. Nothing was written."))
+    const body = { node: "ventes/appels", base_revision: 2, section: "Mardi" }
+    const served = await call(request("POST", `transit-files/${FILE_ID}/keep`, JSON.stringify(body)))
+    const refused = await call(request("POST", `transit-files/${FILE_ID}/keep`, JSON.stringify(body)))
+    for (const { tasks } of [served, refused]) await Promise.all(tasks.map((task) => task()))
+    const lines = vi.mocked(writeJournal).mock.calls.flatMap(([, entries]) => entries)
+
+    expect({ status: served.response.status, body: await served.response.json() }).toEqual({ status: 200, body: { data: kept } })
+    expect(keepTransitFile).toHaveBeenCalledWith(expect.anything(), IDENTITY, { file: FILE_ID, path: "ventes/appels", base_revision: 2, section: "Mardi" }, { origin: { kind: "human" }, route: `${ORIGIN}/f` })
+    expect(lines.map((line) => ({ tool: line.tool, target: line.target, args: line.args, error: line.error }))).toEqual([
+      { tool: "POST transit-files/keep", target: "ventes/appels", args: { id: FILE_ID, node: "ventes/appels", base_revision: 2, section: "Mardi" }, error: null },
+      { tool: "POST transit-files/keep", target: "ventes/appels", args: { id: FILE_ID, node: "ventes/appels", base_revision: 2, section: "Mardi" }, error: "stale_revision" },
+    ])
+    expect(lines.filter((line) => JSON.stringify(line).includes("confidentiel"))).toEqual([])
   })
 })
