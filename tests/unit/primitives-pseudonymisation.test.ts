@@ -161,11 +161,15 @@ describe("file contents withheld by the host", () => {
     registerDataPolicy({ fileContents: "metadata" })
     const node = { id: "node-1", path: "clients/dossier" } as unknown as NodeRow
     const error = await refusal(readNodeFile(noDb, identity, { input: { path: node.path, file: "file-1" }, file: "file-1", node, prefix: "acme" }))
-    expect(error instanceof PlatformError && [error.code, error.message, error.details]).toEqual([
-      "forbidden",
-      "The contents of files are not served to assistants at Acme: only their name, size and type, shown in clients/dossier. Ask the user to open the file.",
-      { reason: "file_contents_withheld" },
-    ])
+    // Une partie du fichier (`section`, lecteurs de fichiers) est retenue de même.
+    const part = await refusal(readNodeFile(noDb, identity, { input: { path: node.path, file: "file-1", section: "*" }, file: "file-1", node, prefix: "acme" }))
+    for (const refused of [error, part]) {
+      expect(refused instanceof PlatformError && [refused.code, refused.message, refused.details]).toEqual([
+        "forbidden",
+        "The contents of files are not served to assistants at Acme: only their name, size and type, shown in clients/dossier. Ask the user to open the file.",
+        { reason: "file_contents_withheld" },
+      ])
+    }
   })
 
   it("should read the policy per organisation, refuse a host function that fails, and refuse a malformed policy", async () => {

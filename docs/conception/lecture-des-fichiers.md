@@ -1,11 +1,11 @@
 # Lecture des fichiers par un assistant
 
 - **Statut** : validé avec Alexis le 15/10/2026
-- **Dernière révision** : 2026-10-15
+- **Dernière révision** : 2026-10-21
 
 ## Résumé
 
-Un assistant lit tout fichier joint, en entier ou par partie, au moindre coût en jetons : `read {path, file}` rend le **texte utile** du fichier quel qu'en soit le format (le texte d'un HTML sans balises ni scripts, les pages d'un PDF, les paragraphes d'un docx, les feuilles d'un xlsx en CSV), un grand fichier vient d'abord en **plan** dont chaque partie (titre, feuille, diapositive, page) se lit seule par `section`, et `read` de la page montre sous chaque fichier un **aperçu** d'une ligne, rangé au dépôt, qui évite souvent de l'ouvrir. Chaque format a son lecteur dans un registre (`defineReader`) : le paquet inscrit ceux des formats texte, des formats faits de XML dans un ZIP et du PDF ; l'hôte inscrit les autres (plans DWG/DXF, modèles 3D), comme il inscrit ses fonctions. L'original reste atteignable par `raw`. La vue d'une personne (icône œil) n'est pas le sujet de ce document.
+Un assistant lit tout fichier joint, en entier ou par partie, au moindre coût en jetons : `read {path, file}` rend le **texte utile** du fichier quel qu'en soit le format (le texte d'un HTML sans balises ni scripts, les pages d'un PDF, les paragraphes d'un docx, les feuilles d'un xlsx en CSV), un grand fichier vient d'abord en **plan** dont chaque partie (titre, feuille, diapositive, page) se lit seule par `section`, et `read` de la page montre sous chaque fichier un **aperçu** d'une ligne, rangé au dépôt, qui évite souvent de l'ouvrir. Chaque format a son lecteur dans un registre (`defineReader`) : le paquet inscrit ceux des formats texte, des formats faits de XML dans un ZIP et du PDF ; l'hôte inscrit les autres (plans DWG/DXF, modèles 3D) par `registerReaders`, comme il inscrit ses fonctions, et ouvre ainsi au dépôt le seul type que son lecteur lit. L'original reste atteignable par `raw`. La vue d'une personne (icône œil) n'est pas le sujet de ce document.
 
 ## Contexte
 
@@ -46,7 +46,10 @@ budget.xlsx (2.1 MB, xlsx) — 3 sheets, 310,000 characters
 Read one part with section: "<name>"; the whole text with section: "*".
 ```
 
-3. **Le texte, d'une partie ou du tout** (`read {file, section}`). `section` vaut le titre, le nom de la feuille, `slide 3` ou `page 4` (`pages 4-6` pour une suite) ; `*` rend tout le texte. Au-delà de 45 000 caractères, le curseur de `read` coupe comme pour une page. Un fichier de moins de 12 000 caractères vient en entier dès le premier appel, sans plan.
+3. **Le texte, d'une partie ou du tout** (`read {file, section}`). `section` vaut le titre, le nom de la feuille, `slide 3` ou `page 4` (`pages 4-6` pour une suite) ; `*` rend tout le texte, les parties jointes par un saut de ligne. Au-delà de 45 000 caractères, le curseur de `read` coupe comme pour une page. Un fichier de moins de 12 000 caractères, ou d'une seule partie, vient en entier dès le premier appel, sans plan.
+
+- Le nom d'une partie se lit à l'identique, sinon sans casse ni accents quand une seule partie s'y lit (deux : le refus les nomme) ; un nom inconnu est refusé (`not_found`) avec la liste des parties et `*`. La taille du plan est la somme de celle des parties.
+- **Parties des lecteurs texte** (lot 1) : un `md` se découpe à ses titres `#`, `##` et `###`, hors de son frontmatter et de ses blocs de code ; ce qui précède le premier titre est la partie `(start of file)` (des blancs seuls rejoignent la première section) ; deux titres homonymes deviennent `Étapes` et `Étapes (2)`. Un `md` sans titre, un `txt`, un `csv` et, jusqu'à son lecteur du texte utile, un `html` se découpent en suites de lignes d'au plus une page (12 000 caractères ; une ligne plus longue reste seule), nommées par leurs lignes (`lines 1-230`, `line 231`). Les parties ne retirent rien : jointes par un saut de ligne, elles redonnent le fichier.
 
 - `read {file}` garde ses autres règles (droit de lecture du nœud relu avant l'objet, exclusif d'`outline`, `since_revision` et `draft`, curseur ; [contenu HTML isolé](contenu-html-isole.md)). `file` avec `section` devient admis : la combinaison était refusée, l'admettre n'ôte rien (ADR-002).
 - Un argument facultatif `raw: true` (ajout admis par ADR-002) rend l'original : le source d'un format texte (`html`, `svg`, `md`, `txt`, `csv`), pour un assistant qui doit le modifier ; pour un format binaire, une URL signée de 5 minutes, pour un agent qui exécute du code (un xlsx relu par pandas), journalisée sans l'URL. Un assistant sans outil de lecture d'adresse ne la suit pas.
@@ -74,7 +77,7 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - **Le texte** se recalcule à chaque `read {file, section}`, depuis l'objet : rien d'autre à stocker, donc rien de plus à copier à la duplication, à purger avec la corbeille ni à transférer avec une organisation.
 - Un fichier déposé avant cette version reçoit son aperçu à sa première lecture par `read {file}` ; jusque-là, sa ligne dans la page reste « nom, taille, type ».
 - Une duplication copie l'aperçu avec la ligne ; un transfert d'organisation le porte comme les autres colonnes de `files`.
-- Un fichier rendu par une fonction de connecteur est un fichier en transit ([fichiers et stockage](fichiers-et-stockage.md)) : il se lit par `read {file}` comme un fichier joint tant qu'il existe, et son aperçu se calcule à sa première lecture ; rien n'est gardé après son effacement.
+- Un fichier rendu par une fonction de connecteur est un fichier en transit ([fichiers et stockage](fichiers-et-stockage.md)) : il se lira par `read {file}` comme un fichier joint tant qu'il existe, et son aperçu se calculera à sa première lecture ; rien n'est gardé après son effacement. Aujourd'hui, `read {file}` ne lit que les fichiers joints au nœud de `path` : un fichier en transit ne se lit pas (lot 6).
 - L'aperçu est borné à 300 caractères ; le plan rangé, à 200 parties (au-delà, les suivantes se disent par leur nombre) ; `read` d'une page montre l'aperçu des 20 premiers fichiers, les suivants par leur nom seul. Un fichier illisible porte un statut terminal (`unsupported`, `encrypted`, `empty`, `too_large`, `rejected_dtd`, `failed`, repris d'oto 1), dit dans son aperçu, et le dépôt lui-même n'échoue jamais pour une lecture ratée. Seul `failed` se retente, à la lecture suivante.
 - L'aperçu (titre, résumé, noms des parties) entre dans `find` ; le texte complet n'y entre pas.
 
@@ -83,7 +86,14 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - Un lecteur s'inscrit par `defineReader({ types, read })`, sur le modèle de `defineFunction` ; il rend `{ title, summary, parts: [{ name, chars }], text(part) }`, ou un statut terminal. Le registre vit dans le paquet, en TypeScript : l'hôte est toujours une application Next qui monte le paquet ; un ERP Python fournit son lecteur par un service qu'un lecteur TypeScript de l'hôte appelle.
 - **Le paquet inscrit** les lecteurs des formats texte, des formats faits de XML dans un ZIP et du PDF, dans `server/files/readers/`. `fflate` (déjà dépendance du paquet, pour l'import d'une arborescence) ouvre l'archive, un lecteur XML écrit pour le paquet en tire les éléments ; un xlsx ne décompresse que la feuille demandée et ses chaînes partagées. La couche de texte d'un PDF se lit par pdf.js, page par page, sans rendu.
 - **L'hôte inscrit** les formats qui demandent un programme tiers (plans DWG/DXF, modèles 3D, reconnaissance de caractères d'un scan). Son lecteur appelle le service qu'il veut, isolé s'il le faut (processus jetable, sans réseau sortant, temps et mémoire bornés) : l'isolation est sa responsabilité, le paquet ne porte aucun contrat de service. Un plan ou un modèle 3D rend la même forme `{ title, summary, parts, text }`. Sans lecteur inscrit, un format reste « nom, taille, type ».
+- **Contrat** : `read({ name, bytes, signal })` reçoit le nom d'origine, les octets de l'objet et le signal levé à l'échéance ; il rend `{ title, summary, parts: [{ name, chars }], text(part) }` (synchrone ou non), ou un statut `{ status, detail? }`, l'un des statuts terminaux (`READER_STATUSES` : `unsupported`, `encrypted`, `empty`, `too_large`, `rejected_dtd`, `failed`, `timeout`). Le paquet contrôle ce qu'il rend : un nom de partie de 1 à 200 caractères, unique, une taille entière, un titre de 200 caractères au plus, un résumé et un détail de 300. Une forme fausse, une erreur levée ou un statut inconnu valent `failed`, la cause au log serveur. Un statut se sert en refus, sa raison le statut : `invalid_arguments` pour un fichier illisible (`unsupported`, `encrypted`, `empty`, `rejected_dtd`), `too_large`, `conflict` pour une lecture à retenter (`failed`, `timeout`). Un texte du paquet qui n'est pas en UTF-8 rend `unsupported`.
 - **Paramétrer une lecture** : `section` choisit la partie ; filtrer ou croiser des lignes passe par l'import de la feuille en tableau puis `table.rows`, pas par des arguments du lecteur.
+
+### Types de l'hôte
+
+- `registerReaders([...])` ouvre au dépôt les types que ses lecteurs déclarent (`types: [{ extension, mime }]`), et rien d'autre : sans lecteur, aucun type ne s'ouvre, et un type ni dans `FILE_TYPES` ni inscrit reste refusé au dépôt (`admittedType` : demande d'envoi, dépôt par lien, envoi par le serveur, fichier en transit). Le type MIME déclaré est celui que l'URL d'envoi signe et que la ligne porte ; la borne d'un type d'hôte est celle d'un format binaire, 50 Mo, celle de 4 Mo ne valant que pour les fichiers texte du paquet.
+- L'inscription contrôle toute la liste d'abord et lève `TypeError` au premier problème, sans rien inscrire ; sinon la liste remplace celle de l'hôte (un rechargement à chaud ne double rien). Refusés : une extension du paquet (un lecteur de l'hôte ne redéfinit pas `md` ni `pdf`), une extension mal formée (1 à 16 minuscules ASCII ou chiffres, sans le point), celle d'une page, d'un script, d'un programme ou d'un document Office à macros (`html`, `svg`, `xml`, `js`, `exe`, `docm`…), une extension lue par deux lecteurs, un type MIME mal formé ou à paramètres, et un type qu'un navigateur rend en page ou exécute (`text/html`, `application/xhtml+xml`, `image/svg+xml`, `text/xml`, `application/xml`, XSLT, JavaScript, `application/wasm`).
+- Un type d'hôte se sert toujours en téléchargement : `readResponse` signe son type MIME déclaré et `attachment`, `disposition=inline` ignoré ; jamais rendu en place dans l'origine de l'application. Les deux listes de refus doublent cette garde.
 
 ### Contenu retenu par l'hôte
 
@@ -92,8 +102,9 @@ Read one part with section: "<name>"; the whole text with section: "*".
 ### Bornes
 
 - Un fichier texte reste borné à 4 Mo (HN-E10S02-9). Un format binaire se lit jusqu'à 50 Mo, la taille admise d'un fichier : le serveur lit l'objet, la réponse ne porte que le texte.
-- Décompression bornée à 64 Mo en tout, comptée à la taille que l'archive déclare puis vérifiée pendant la lecture (comme `TREE_UNZIPPED_BYTES_MAX`) ; lecture bornée à 10 secondes ; texte d'un fichier borné à 2 millions de caractères, au-delà coupé par une ligne qui le dit. Un texte au-delà des bornes rend `too_large`.
-- Le caractère NUL (U+0000) est retiré du texte et de l'aperçu avant toute écriture : Postgres le refuse dans `text` comme dans `jsonb`.
+- Décompression bornée à 64 Mo en tout (`READER_LIMITS.decompressedBytes`, exportée pour le lecteur d'un hôte qui ouvre une archive), comptée à la taille que l'archive déclare puis vérifiée pendant la lecture, comme l'import d'une arborescence le fait sous sa propre borne de 100 Mo (`TREE_UNZIPPED_BYTES_MAX`). Lecture bornée à 10 secondes ; texte d'un fichier borné à 2 millions de caractères : les parties au-delà quittent le plan, celle qui chevauche la borne est coupée, et une ligne le dit (« The text is cut at 2,000,000 characters of … »). Un objet au-delà de sa borne d'octets (4 Mo pour un texte, 50 Mo sinon) rend `too_large`.
+- **L'échéance de 10 secondes** (lot 1) couvre, depuis le début du téléchargement, la lecture de l'objet (son signal passé à `fetch`), `read` du lecteur et chaque `text(part)`. Elle n'est pas préemptive : un lecteur asynchrone est abandonné à l'échéance et son signal levé lui dit de s'arrêter ; une étape synchrone qui la dépasse n'est pas interrompue, elle rend `timeout` à son retour. L'isolation dans un worker, qui interrompt, vient avec les lecteurs du tableur et du PDF.
+- Le caractère NUL (U+0000) est retiré du texte, des noms de parties, du titre, du résumé et de l'aperçu, avant tout service ou écriture : Postgres le refuse dans `text` comme dans `jsonb`.
 
 ## Décisions et alternatives écartées
 
@@ -110,6 +121,11 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - **Stocker le texte complet au dépôt** : lecture instantanée, et prêt pour `find` ; écarté pour l'instant, un second objet à copier, purger et transférer avec chaque fichier.
 - **Tout calculer à la demande** : aucune colonne, mais la page reste « nom, taille, type » et l'assistant doit ouvrir chaque fichier pour savoir ce qu'il contient. Écarté par JB le 14/10/2026.
 - **L'aperçu après le lien, sur la même ligne** : la ligne ne se relirait plus en bloc `file` et deviendrait un paragraphe à la réécriture de la page.
+- **Un type d'hôte ouvert au dépôt sans lecteur** (une liste de types admis à part, `registerFileTypes`) : écarté au lot 1 (21/10) ; un fichier que personne ne lit n'a rien à faire dans oto au-delà du téléchargement, et deux registres diraient chacun une part du type.
+- **Un lecteur de l'hôte qui redéfinit un type du paquet** (un `md` lu autrement) : écarté, refusé à l'inscription ; deux lecteurs d'un même type rendraient deux textes selon l'hôte, et un assistant ne saurait lequel il lit.
+- **Une échéance préemptive dès le lot 1** (un worker par lecture) : reportée au lot du tableur et du PDF, les premiers lecteurs à calculer longtemps ; les lecteurs texte du lot 1 ne bouclent pas, et un lecteur de l'hôte qui appelle un service est asynchrone.
+- **Un statut servi en résultat** (`isError` faux) : écarté, un fichier illisible est un refus pour l'assistant, comme l'était un octet hors UTF-8 ; la raison porte le statut.
+- **Refuser un type MIME en `+xml`** (KML, X3D) qu'un hôte déclarerait : écarté le 21/10 ; un tel fichier n'est jamais rendu par le navigateur, toujours servi en téléchargement (`attachment`), comme tout type d'hôte.
 
 ## Sécurité et confidentialité
 
@@ -117,12 +133,17 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - L'URL de `raw` d'un format binaire donne le fichier à qui la détient pendant 5 minutes ; elle n'est jamais journalisée en clair.
 - Le lecteur XML refuse un document dont le `<!DOCTYPE>` déclare des entités (statut `rejected_dtd`) et n'interprète que les cinq entités prédéfinies et les références numériques : pas d'expansion d'entités, pas d'entité externe.
 - Bornes de décompression, de temps et de taille du texte contre les archives piégées ; un fichier Office chiffré n'est pas un ZIP et se dit illisible, un PDF chiffré aussi.
-- L'aperçu est écrit par le service sous la session de qui dépose ; la mise à jour de `files`, aujourd'hui limitée à `status` (HN-E10S02-29), s'étend à la seule colonne de l'aperçu.
+- L'aperçu sera écrit par le seul rôle serveur, jamais sous la session d'une personne (lot 4, garde à poser avec sa colonne) : la mise à jour de `files` sous une session reste limitée à `status` (HN-E10S02-29).
+- `raw` est refusé quand la pseudonymisation est active : des octets ne se pseudonymisent pas ([pseudonymisation](pseudonymisation.md), inventaire de la porte). Le texte, le plan et une partie passent la porte comme tout résultat de `read`.
+- Un type d'hôte se sert en téléchargement, jamais en place (§ Types de l'hôte) ; une extension de page, de script ou de programme et un type MIME qu'un navigateur rend sont refusés à l'inscription.
 - `read {file}` garde le droit de lecture du nœud, relu avant de lire l'objet ; l'aperçu se lit avec la page, au même droit.
 
 ## Écart avec le code
 
-- Rien n'est écrit : ni registre, ni lecteurs, ni colonne d'aperçu, ni plan, ni `section` avec `file`, ni `raw`, ni ligne d'aperçu dans `read` ; `read {file}` sert les seuls `html`, `md`, `txt` et `csv`, en texte brut depuis le début.
+- **Lot 1 fait (21/10)** : registre (`defineReader`, `registerReaders`, `server/files/readers/`), types de l'hôte ouverts au dépôt, lecteurs texte du paquet (`html`, `md`, `txt`, `csv`) passés par le registre, bornes et statuts (`READER_LIMITS`, `READER_STATUSES`), plan au-delà de 12 000 caractères, `section` et `*` avec `file`.
+- Reste : la colonne d'aperçu et sa ligne dans `read` d'une page (lot 4) ; le texte utile d'un `html` (sans balises, ses titres pour parties), servi aujourd'hui en source ; les lecteurs xlsx, docx, PDF, pptx, odt, ods, zip ; `raw` ; la lecture d'un fichier en transit (lot 6) ; l'échéance préemptive (worker).
+- L'éditeur refuse encore dans le navigateur un fichier d'un type d'hôte : sa liste vient de `FILE_TYPES` (`envoi-de-fichier.ts`) ; le dépôt par l'API, par lien et en transit l'admet. Décidé le 21/10 : l'éditeur apprend les types de l'hôte dans un petit lot 1b, au strict minimum et sans nouveau composant (les écrans quittent oto-core, décision du 20/10) ; la ligne de page d'un tel fichier y montre aussi son extension, pas son type MIME.
+- **Limite connue** (décision du 21/10) : une section dont le nom porte une personne déclarée se lit sous la pseudonymisation par son nom en clair, que l'assistant n'a pas : `section` ne résout pas les jetons (comme pour une page). Traitée si un cas réel apparaît.
 - `node.import_tree` n'importe pas encore une feuille de xlsx en tableau.
 
 ## Questions ouvertes
@@ -136,3 +157,4 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - 2026-10-08 : lecteurs de format sur les fichiers envoyés à oto, lus à l'envoi et rangés, par un port lecteur branché par l'hôte vers un service isolé ; activés par organisation — décidé par Alexis, à valider avec JB (source : conception de fichiers et stockage).
 - 2026-10-14 : lecture de tout format par `read {file}`, en entier ou par partie, au plus léger ; formats texte, XML en ZIP et PDF lus par le paquet, les formats qui demandent un programme tiers laissés à l'hôte ; aperçu au dépôt, texte à la demande ; la vue d'une personne hors sujet — décidé par JB (source : session du 14/10/2026). Registre de lecteurs complété par l'hôte, original atteignable — proposé par Alexis (source : issue des lecteurs de fichiers, 14/10/2026), à confirmer avec lui.
 - 2026-10-15 : proposition validée (aperçu, plan, partie ou tout, `defineReader`, `raw`) ; port lecteur du 08/10 abandonné ; aperçu après la réponse, à défaut à la première lecture ; statuts `too_large` et `rejected_dtd`, seul `failed` retenté ; NUL retiré ; un fichier rendu par un connecteur est en transit, pas rangé — décidé par Alexis et JB (source : issue des lecteurs de fichiers, 15/10/2026).
+- 2026-10-21 : lot 1 écrit (registre, bornes, plan et `section`) ; un lecteur de l'hôte ouvre au dépôt le seul type qu'il lit, refus de redéfinir un type du paquet (décision a) ; l'échéance de 10 secondes et son statut `timeout`, non préemptive au lot 1 (décision c) ; 64 Mo de décompression propres aux lecteurs ; un fichier en transit ne se lit pas encore par `read {file}` ; l'aperçu écrit par le seul rôle serveur — arrêté au lancement du lot 1 (source : issue des lecteurs de fichiers, 21/10/2026).

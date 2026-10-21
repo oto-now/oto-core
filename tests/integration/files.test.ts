@@ -3,15 +3,15 @@
 // texte cherchable, AC-a2), la demande d'envoi et l'ordre de ses refus, le quota lu sous le verrou de
 // l'organisation (AC-a3), la confirmation et le droit qu'elle relit (AC-a4), la lecture et sa même réponse
 // `not_found` (AC-a5), la disponibilité d'un fichier (AC-b8), la purge des envois abandonnés (AC-a6) et le texte
-// d'un fichier (AC-a8). La base est le sujet : table `files`, RLS
+// d'un fichier, lu par `read {file}` et son lecteur (AC-a8). La base est le sujet : table `files`, RLS
 // d'isolation, verrou consultatif. Le bucket est l'adaptateur en mémoire, à la place de `fileStore()` et de
 // `fetch` : aucun service extérieur. Chaque refus est décidé avant toute insertion (espion `spyDb`,
 // `security-patterns.md § Droits dans le service`). Organisation de référence jetable (H120). Suite portable.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { readNode, resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { FILE_MAX_BYTES, FILE_TYPES, fileTypeOf, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES } from "../../packages/plateforme/schemas"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
-import { completeFileUpload, fileAvailability, fileReadUrl, readFileText, requestFileUpload } from "../../packages/plateforme/server/files/service"
+import { completeFileUpload, fileAvailability, fileReadUrl, requestFileUpload } from "../../packages/plateforme/server/files/service"
 import { objectKey, STORAGE_VARIABLES } from "../../packages/plateforme/server/files/store"
 import { listTrash } from "../../packages/plateforme/server/nodes/trash"
 import { loggedText } from "../helpers/logs"
@@ -424,13 +424,13 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const absent = await readyFile(node, "perdu.csv", null)
       const huge = await readyFile(node, "gros.csv", new Uint8Array(TEXT_FILE_MAX_BYTES + 1).fill(0x61))
 
-      const read = await readFileText(claire.db, claire.identity, withBom)
-      const refusals = await Promise.all([latin1, pdf, absent, huge].map((id) => outcome(readFileText(claire.db, claire.identity, id))))
-      expect({ text: read.text, name: read.name, refusals: refusals.map((refusal) => ({ code: refusal.code, message: refusal.message })) }).toEqual({
-        text: "# Été\n",
-        name: "notes.md",
+      const readFile = (file: string) => readNode(claire.db, claire.identity, { path: "ventes/f_texte", file })
+      const read = await readFile(withBom)
+      const refusals = await Promise.all([latin1, pdf, absent, huge].map((id) => outcome(readFile(id))))
+      expect({ text: read.text, refusals: refusals.map((refusal) => ({ code: refusal.code, message: refusal.message })) }).toEqual({
+        text: "notes.md (11 bytes)\n\n```markdown\n# Été\n\n```",
         refusals: [
-          { code: "invalid_arguments", message: "the file is not UTF-8; download it instead" },
+          { code: "invalid_arguments", message: "ancien.txt cannot be read: the file is not UTF-8; download it instead (unsupported)." },
           { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt and csv files are read as text." },
           { code: "not_found", message: "Unknown file." },
           { code: "too_large", message: "gros.csv is over 4 MB: download it instead." },

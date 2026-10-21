@@ -6,7 +6,7 @@
 // plateforme). Le moteur court sous l'identité de la personne qui appelle, donc ne lit que les siens. Il compte au quota
 // de l'organisation jusqu'à son échéance (`rows.ts`). Sans lui, une pièce rendue par un connecteur ou envoyée à un
 // connecteur devrait être rangée sous une page, où toute l'équipe la lirait.
-import { FILE_MAX_BYTES, FILE_TYPES, fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
+import { FILE_MAX_BYTES, fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput } from "../errors"
 import type { Identity } from "../identity"
@@ -67,10 +67,9 @@ export async function requestTransitUpload(db: PlatformDb, identity: Identity, i
   const request = parsed.data
   await purgeTransitFiles(db, identity)
   const store = requireStore()
-  const type = admittedType(request.name)
+  const { mime } = admittedType(request.name)
   // 50 Mo pour tout type admis, texte compris (décision du 19/10) : la borne de 4 Mo d'un texte joint ne vaut pas ici.
   checkSize(request.name, null, request.size)
-  const mime = FILE_TYPES[type]
   const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: request.name, mime, size: request.size })
   if (expiresAt === null) throw new Error("[platform] files: a transit file was inserted without expiry")
   const upload = await onStorage("upload url", () => store.uploadUrl(objectKey(identity.org.id, id), { size: request.size, mime }))

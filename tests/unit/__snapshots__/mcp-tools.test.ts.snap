@@ -73,7 +73,7 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "type": "boolean",
         },
         "file": {
-          "description": "Id of one text file attached to the page (html, md, txt, csv), from a file link /api/platform/files/<id>, to read its text alone (default: the whole page).",
+          "description": "Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link /api/platform/files/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).",
           "maxLength": 100,
           "minLength": 1,
           "type": "string",
@@ -93,7 +93,7 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "type": "boolean",
         },
         "section": {
-          "description": "Title of one section to read, e.g. "Étapes" (default: the whole page, or its outline if long).",
+          "description": "Title of one section to read, e.g. "Étapes" (default: the whole page, or its outline if long). With file: one part of the file, or "*" for its whole text.",
           "maxLength": 200,
           "minLength": 1,
           "type": "string",

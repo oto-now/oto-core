@@ -169,7 +169,7 @@ export const readNodeSchema = z.object({
     .min(1)
     .max(200)
     .optional()
-    .describe(`Title of one section to read, e.g. "Étapes" (default: the whole page, or its outline if long).`),
+    .describe(`Title of one section to read, e.g. "Étapes" (default: the whole page, or its outline if long). With file: one part of the file, or "*" for its whole text.`),
   outline: z.boolean().optional().describe("true: only the section titles with their sizes (default false)."),
   since_revision: z
     .number()
@@ -188,7 +188,7 @@ export const readNodeSchema = z.object({
     .boolean()
     .optional()
     .describe("true: each block comes with its reference, e.g. <!-- ref: 3f9a2c1b -->, for the block operations of write (default false)."),
-  // E10-S02 (AC-d2, fiche D119) : le texte d'un fichier joint, champ facultatif ajouté (ADR-002).
+  // E10-S02 (AC-d2, fiche D119) : le texte d'un fichier joint, champ facultatif ajouté (ADR-002) ; avec `section`, une partie (`lecture-des-fichiers.md`).
   file: z
     .string()
     .trim()
@@ -196,7 +196,7 @@ export const readNodeSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      `Id of one text file attached to the page (html, md, txt, csv), from a file link ${PLATFORM_API_PREFIX}files/<id>, to read its text alone (default: the whole page).`,
+      `Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link ${PLATFORM_API_PREFIX}files/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
     ),
 })
 

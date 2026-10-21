@@ -197,7 +197,7 @@ async function writeFile(db: PlatformDb, identity: Identity, ticket: UploadTicke
   const name = ticket.name ?? ""
   // Le stockage retiré depuis le lien, le type et la taille : refusés avant la page d'une création.
   requireStore()
-  checkSize(name, admittedType(name), bytes.byteLength)
+  checkSize(name, admittedType(name).type, bytes.byteLength)
   const origin: WriteOrigin = { kind: "agent", ctx: ticket.ctx }
   let path = ticket.path
   if (ticket.mode === "create") {

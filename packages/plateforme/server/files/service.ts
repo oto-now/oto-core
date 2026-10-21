@@ -1,5 +1,5 @@
 // Le service des fichiers joints (E10-S02 lot a, ADR-016 § 3 à § 5) : la demande d'envoi, la confirmation, la
-// lecture par redirection, sa disponibilité, le texte d'un fichier texte, la purge des envois abandonnés et la copie des
+// lecture par redirection, sa disponibilité, les octets et le texte d'un fichier, la purge des envois abandonnés et la copie des
 // objets d'une page dupliquée (lot e), l'envoi par le serveur d'un fichier déposé par lien (lot f) ; le quota et la ligne
 // `pending` sont dans `rows.ts`. Chaque refus est décidé ici, avant la requête qu'il garde (`security-patterns.md § Droits
 // dans le service`) : l'écriture sur le nœud pour envoyer et confirmer, la lecture pour lire ; la RLS n'isole que
@@ -9,6 +9,7 @@
 import {
   FILE_MAX_BYTES,
   FILE_TYPES,
+  fileExtension,
   fileIdSchema,
   fileReadQuerySchema,
   fileRequestSchema,
@@ -30,6 +31,8 @@ import type { Identity } from "../identity"
 import type { Mutation } from "../members"
 import { findNode, unknownNode } from "../nodes/lookup"
 import { ownerOf, teamOf } from "../nodes/view"
+import { hostExtensions, hostFileType } from "./readers/registry"
+import { decodeUtf8, NOT_UTF8 } from "./readers/text"
 import { insertPending, markReady, readyFiles } from "./rows"
 import { fileStore, objectKey, storageNotEnabled, type FileStore, type ObjectResponse } from "./store"
 
@@ -43,9 +46,6 @@ const MB = 1_048_576
 
 /** Les fichiers texte, dits dans un refus : « html, md, txt, csv ». */
 const TEXT_LIST = TEXT_TYPES.join(", ")
-
-/** Les fichiers texte, dits dans une phrase : « html, md, txt and csv » (AC-d2). */
-const TEXT_SAID = `${TEXT_TYPES.slice(0, -1).join(", ")} and ${TEXT_TYPES.at(-1)}`
 
 /** Les images servies `inline` : les matricielles ; un `svg` se télécharge à la navigation (ADR-016 § 5). */
 const INLINE_IMAGES: readonly FileType[] = IMAGE_TYPES.filter((type) => type !== "svg")
@@ -156,22 +156,29 @@ export async function copyFileObjects(db: PlatformDb, identity: Identity, pairs:
   await readyFiles(db, identity, ready, "files: copied")
 }
 
+/** Un type admis au dépôt : son extension, et le type MIME signé à l'envoi et porté par la ligne. */
+export type AdmittedType = { type: string; mime: string }
+
 /**
- * Le type admis d'un nom, sinon `invalid_arguments` avec la liste des extensions admises (AC-a3, 3) ; relu par `upload.link`
- * (lot f, AC-f1, AC-f7), qui fixe le type d'un fichier déposé par l'extension de `name`, jamais par le corps.
+ * Le type admis d'un nom, sinon `invalid_arguments` avec la liste des extensions admises (AC-a3, 3) : un type du paquet
+ * (`FILE_TYPES`), ou un type qu'un lecteur de l'hôte ouvre (`registerReaders`, `lecture-des-fichiers.md` § Types de
+ * l'hôte). Relu par `upload.link` (lot f, AC-f1, AC-f7), qui fixe le type d'un fichier déposé par l'extension de `name`,
+ * jamais par le corps, et par le fichier en transit.
  */
-export function admittedType(name: string): FileType {
+export function admittedType(name: string): AdmittedType {
   const type = fileTypeOf(name)
-  if (type) return type
-  throw new PlatformError("invalid_arguments", `${name}: this type of file is not admitted. Admitted extensions: ${boundedList(Object.keys(FILE_TYPES))}.`)
+  if (type) return { type, mime: FILE_TYPES[type] }
+  const host = hostFileType(fileExtension(name))
+  if (host) return { type: host.extension, mime: host.mime }
+  throw new PlatformError("invalid_arguments", `${name}: this type of file is not admitted. Admitted extensions: ${boundedList([...Object.keys(FILE_TYPES), ...hostExtensions()])}.`)
 }
 
 /**
  * La taille : de 1 octet à 50 Mo, 4 Mo pour un fichier texte joint, sinon `too_large` (AC-a3, 4) ; relue par le dépôt par
  * lien (AC-f7). Un fichier en transit (`type` nul) passe 50 Mo quel que soit son type : un gros export CSV y passe.
  */
-export function checkSize(name: string, type: FileType | null, size: number): void {
-  const limit = type !== null && TEXT_TYPES.includes(type) ? TEXT_FILE_MAX_BYTES : FILE_MAX_BYTES
+export function checkSize(name: string, type: string | null, size: number): void {
+  const limit = type !== null && (TEXT_TYPES as readonly string[]).includes(type) ? TEXT_FILE_MAX_BYTES : FILE_MAX_BYTES
   if (size < 1) throw new PlatformError("too_large", `${name} is empty: a file holds 1 byte at least.`)
   if (size <= limit) return
   const rule = type === null ? `a file in transit holds ${megabytes(FILE_MAX_BYTES)} at most` : `a file holds ${megabytes(FILE_MAX_BYTES)} at most, a text file (${TEXT_LIST}) ${megabytes(TEXT_FILE_MAX_BYTES)}`
@@ -195,9 +202,8 @@ export async function requestFileUpload(db: PlatformDb, identity: Identity, inpu
   if (!found) throw unknownNode(request.node, identity.org.prefix)
   const { node } = found
   if (found.level < ACCESS_LEVELS.write) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, "write")
-  const type = admittedType(request.name)
+  const { type, mime } = admittedType(request.name)
   checkSize(request.name, type, request.size)
-  const mime = FILE_TYPES[type]
   const { id } = await insertPending(db, identity, { nodeId: node.id, name: request.name, mime, size: request.size })
   const upload = await onStorage("upload url", () => store.uploadUrl(objectKey(identity.org.id, id), { size: request.size, mime }))
   return { data: { id, upload }, target: node.path, teamId: teamOf(await ownerOf(db, node.id)) }
@@ -236,9 +242,8 @@ async function sendObject(store: FileStore, key: string, object: { bytes: Uint8A
 export async function storeFile(db: PlatformDb, identity: Identity, file: { nodeId: string; name: string; bytes: Uint8Array }): Promise<FileReady> {
   const store = requireStore()
   const size = file.bytes.byteLength
-  const type = admittedType(file.name)
+  const { type, mime } = admittedType(file.name)
   checkSize(file.name, type, size)
-  const mime = FILE_TYPES[type]
   const { id } = await insertPending(db, identity, { nodeId: file.nodeId, name: file.name, mime, size })
   const key = objectKey(identity.org.id, id)
   const failure = await sendObject(store, key, { bytes: file.bytes, mime }).catch((error: unknown) => {
@@ -320,7 +325,7 @@ export async function readableFile(db: PlatformDb, identity: Identity, fileId: u
 }
 
 /** Un fichier lisible joint à `node` (AC-d2) ; sinon « Unknown file <id> in <chemin> », la même phrase pour tout refus. */
-async function attachedFile(db: PlatformDb, identity: Identity, fileId: unknown, node: { id: string; path: string }): Promise<FileRow> {
+export async function attachedFile(db: PlatformDb, identity: Identity, fileId: unknown, node: { id: string; path: string }): Promise<FileRow> {
   const unknown = () => new PlatformError("not_found", `Unknown file ${String(fileId)} in ${node.path}: read the page to get its file links.`)
   const file = await readableFile(db, identity, fileId).catch((error: unknown) => {
     throw error instanceof PlatformError && error.code === "not_found" ? unknown() : error
@@ -336,13 +341,13 @@ function encodedFileName(name: string): string {
 
 /**
  * Le type et la disposition fixés dans l'URL de lecture (AC-a5, ADR-016 § 5), jamais lus de l'objet ni de la ligne :
- * le type de l'extension du nom (`FILE_TYPES`), `application/octet-stream` pour un nom sans type admis. `inline`
- * pour une image matricielle ; sur `inline` (« Voir »), `inline` pour un PDF, un `txt` ou un `csv` (en texte) ;
- * `attachment` pour tout le reste, `html`, `md` et `svg` compris.
+ * le type de l'extension du nom (`FILE_TYPES`, ou celui qu'un lecteur de l'hôte déclare), `application/octet-stream`
+ * pour un nom sans type admis. `inline` pour une image matricielle ; sur `inline` (« Voir »), `inline` pour un PDF, un
+ * `txt` ou un `csv` (en texte) ; `attachment` pour tout le reste, `html`, `md`, `svg` et tout type d'hôte compris.
  */
 export function readResponse(file: { name: string }, inline: boolean): ObjectResponse {
   const type = fileTypeOf(file.name)
-  const contentType = type ? FILE_TYPES[type] : "application/octet-stream"
+  const contentType = type ? FILE_TYPES[type] : (hostFileType(fileExtension(file.name))?.mime ?? "application/octet-stream")
   if (type && INLINE_IMAGES.includes(type)) return { contentType, disposition: "inline" }
   if (inline && type === "pdf") return { contentType, disposition: "inline" }
   if (inline && (type === "txt" || type === "csv")) return { contentType: "text/plain; charset=utf-8", disposition: "inline" }
@@ -370,9 +375,12 @@ export async function fileAvailability(db: PlatformDb, identity: Identity, fileI
   return { available: head !== null }
 }
 
-/** Les octets d'une URL de lecture : 10 s au plus, coupés au-delà de `max`, 4 Mo à défaut (`too_large`) ; objet absent : `not_found`. */
-export async function boundedBytes(url: string, name: string, max: number = TEXT_FILE_MAX_BYTES): Promise<Uint8Array> {
-  const answer = await onStorage("read", () => fetch(url, { signal: AbortSignal.timeout(TEXT_READ_TIMEOUT_MS), redirect: "error" }))
+/**
+ * Les octets d'une URL de lecture : 10 s au plus (ou jusqu'à `signal`, l'échéance d'une lecture), coupés au-delà de `max`,
+ * 4 Mo à défaut (`too_large`) ; objet absent : `not_found`.
+ */
+export async function boundedBytes(url: string, name: string, max: number = TEXT_FILE_MAX_BYTES, signal: AbortSignal = AbortSignal.timeout(TEXT_READ_TIMEOUT_MS)): Promise<Uint8Array> {
+  const answer = await onStorage("read", () => fetch(url, { signal, redirect: "error" }))
   // Un objet absent : 404, ou 403 quand les clés ne listent pas le bucket.
   if (answer.status === 404 || answer.status === 403) throw unknownFile()
   if (!answer.ok || !answer.body) {
@@ -385,39 +393,23 @@ export async function boundedBytes(url: string, name: string, max: number = TEXT
   return bytes
 }
 
-/** Le texte d'un fichier texte joint (AC-a8), et ce qui le présente. */
-export type FileText = { id: string; name: string; mime: string; size: number; text: string }
-
 /**
- * Le texte de l'objet d'un fichier, lu par le serveur sur une URL présignée (aucune opération de plus au port), en
- * UTF-8 strict, BOM retiré, pour une lecture déjà décidée (un lecteur du nœud, AC-a8 ; un lien public, AC-c5). Un
- * octet invalide : `invalid_arguments`, raison `not_utf8`, que la visionneuse dit (AC-c2) ; un objet absent :
- * `not_found` ; au-delà de 4 Mo lus : `too_large`.
+ * Les octets de l'objet d'un fichier, lus par le serveur sur une URL présignée (aucune opération de plus au port), pour
+ * une lecture déjà décidée : `max` octets au plus (`too_large` au-delà), jusqu'à `signal` (10 s à défaut). Un objet
+ * absent : `not_found`.
  */
-export async function objectText(store: FileStore, orgId: string, file: { id: string; name: string }): Promise<string> {
+export async function objectBytes(store: FileStore, orgId: string, file: { id: string; name: string }, bounds: { max?: number; signal?: AbortSignal } = {}): Promise<Uint8Array> {
   const url = await onStorage("read url", () => store.readUrl(objectKey(orgId, file.id), { contentType: "application/octet-stream", disposition: "attachment" }))
-  const bytes = await boundedBytes(url, file.name)
-  try {
-    // `fatal` : un octet invalide lève ; le BOM de tête est retiré (`ignoreBOM` faux par défaut).
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-  } catch {
-    throw new PlatformError("invalid_arguments", "the file is not UTF-8; download it instead", { reason: "not_utf8" })
-  }
+  return boundedBytes(url, file.name, bounds.max, bounds.signal)
 }
 
 /**
- * Le texte d'un fichier texte `ready` (`html`, `md`, `txt`, `csv`) pour un service du paquet (AC-a8) : la lecture
- * du nœud exigée, puis l'objet lu par `objectText`. Un autre type ou un octet invalide : `invalid_arguments` ; un
- * objet absent : `not_found`. `node` (`read {file}`, AC-d2) : le fichier doit être joint à ce nœud ; inconnu, `pending`
- * ou d'un autre nœud, le refus nomme le fichier et le nœud, décidé avant toute lecture de l'objet.
+ * Le texte de l'objet d'un fichier (`objectBytes`), en UTF-8 strict, BOM retiré, pour une lecture déjà décidée (un
+ * lecteur du nœud, AC-a8 ; un lien public, AC-c5). Un octet invalide : `invalid_arguments`, raison `not_utf8`, que la
+ * visionneuse dit (AC-c2) ; un objet absent : `not_found` ; au-delà de 4 Mo lus : `too_large`.
  */
-export async function readFileText(db: PlatformDb, identity: Identity, fileId: unknown, node?: { id: string; path: string }): Promise<FileText> {
-  const store = requireStore()
-  const file = node ? await attachedFile(db, identity, fileId, node) : await readableFile(db, identity, fileId)
-  const type = fileTypeOf(file.name)
-  if (!type || !TEXT_TYPES.includes(type)) {
-    throw new PlatformError("invalid_arguments", `${file.name} is a ${type ?? "binary"} file; only ${TEXT_SAID} files are read as text.`)
-  }
-  const text = await objectText(store, identity.org.id, file)
-  return { id: file.id, name: file.name, mime: file.mime, size: file.size, text }
+export async function objectText(store: FileStore, orgId: string, file: { id: string; name: string }): Promise<string> {
+  const text = decodeUtf8(await objectBytes(store, orgId, file))
+  if (text === null) throw new PlatformError("invalid_arguments", NOT_UTF8, { reason: "not_utf8" })
+  return text
 }

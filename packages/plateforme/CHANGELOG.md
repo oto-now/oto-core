@@ -17,6 +17,13 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- A long attached file comes as an outline of its parts; read one part with `section`, or all of it with `section: "*"`.
+
+### Hosts
+- Server: `registerReaders([...])` and `defineReader({ types, read })` add readers for formats the host reads (a plan, a 3D model); each type a reader declares, and it alone, is admitted at deposit, up to 50 MB, and always served as a download. A package type (`md`, `pdf`…), a page, script or program extension, a type read twice, or a MIME type a browser renders or runs is refused at registration (`TypeError`).
+- Server: `read {file}` reads through the readers under 10 seconds and 2 million characters, an outline over 12,000; a reader's status (`READER_STATUSES`) is served as a refusal; `READER_LIMITS` gives the bounds.
+
 ## 1.5.1 — 2026-10-21
 
 ### Hosts

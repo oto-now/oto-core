@@ -203,7 +203,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect([html.isError, html.text]).toEqual([false, "rapport.html (16 bytes)\n\n```html\n<h1>Rapport</h1>\n```"])
     })
 
-    it("should refuse file with section, outline, since_revision or draft, an unknown, pending or other-page file, and a file of another type, word for word", async () => {
+    it("should refuse file with outline, since_revision or draft, an unknown, pending or other-page file, and a file of another type, word for word", async () => {
       vi.stubGlobal("fetch", memory.fetch)
       const claire = await session("claire")
       const path = `ventes/d_refus_texte_${hex(3)}`
@@ -215,12 +215,12 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const elsewhere = await attached(other, "ailleurs.md", bytesOf("x"))
       const unknown = "0b6f3c1e-5a2d-4c8e-9f10-2b3c4d5e6f71"
 
-      const combined = await Promise.all([{ section: "Pièces" }, { outline: true }, { since_revision: 0 }, { draft: true }].map((mode) => claire.call("read", { path, file: notes, ...mode })))
+      const combined = await Promise.all([{ outline: true }, { since_revision: 0 }, { draft: true }].map((mode) => claire.call("read", { path, file: notes, ...mode })))
       const missing = await Promise.all([unknown, pending, elsewhere].map((id) => claire.call("read", { path, file: id })))
       const binary = await claire.call("read", { path, file: pdf })
 
       expect(combined.map((one) => [one.isError, one.text])).toEqual(
-        Array(4).fill([true, "Give only one of section, outline, since_revision or file; file reads the text of a file, without draft."]),
+        Array(3).fill([true, "Give only one of outline, since_revision or file; file reads the text of a file, or one part with section, without draft."]),
       )
       expect(missing.map((one) => [one.isError, one.text])).toEqual(
         [unknown, pending, elsewhere].map((id) => [true, `Unknown file ${id} in ${path}: read the page to get its file links.`]),
@@ -228,7 +228,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect([binary.isError, binary.text]).toEqual([true, "rapport.pdf is a pdf file; only html, md, txt and csv files are read as text."])
     })
 
-    it("should cut a long text at 45,000 characters and read the rest with the cursor, the file in the cursor's request", async () => {
+    it("should serve a long text as an outline, cut its whole text at 45,000 characters and read the rest with the cursor, the file and the section in the cursor's request", async () => {
       vi.stubGlobal("fetch", memory.fetch)
       const claire = await session("claire")
       const path = `ventes/d_long_${hex(3)}`
@@ -236,22 +236,26 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const lines = Array.from({ length: 1_500 }, (_, index) => `ligne ${String(index).padStart(4, "0")} ${"x".repeat(40)}`)
       const long = await attached(node, "journal.txt", bytesOf(lines.join("\n")))
 
-      const first = await claire.call("read", { path, file: long })
+      // Au-delà de 12 000 caractères, le plan ; le tout par `section: "*"`, coupé par le curseur.
+      const outline = await claire.call("read", { path, file: long })
+      const first = await claire.call("read", { path, file: long, section: "*" })
       const data = first.result.structuredContent as { next_cursor?: string; parts?: number }
-      const second = await claire.call("read", { path, file: long, cursor: data.next_cursor })
+      const second = await claire.call("read", { path, file: long, section: "*", cursor: data.next_cursor })
       const withoutFile = await claire.call("read", { path, cursor: data.next_cursor })
       // Un curseur d'une autre requête, avec `file` : refusé avant toute lecture de l'objet.
       const reads = vi.fn(memory.fetch)
       vi.stubGlobal("fetch", reads)
-      const staleWithFile = await claire.call("read", { path, file: long, cursor: data.next_cursor, refs: true })
+      const staleWithFile = await claire.call("read", { path, file: long, section: "*", cursor: data.next_cursor, refs: true })
 
       expect([staleWithFile.isError, staleWithFile.text, reads.mock.calls.length]).toEqual([
         true,
         `This cursor no longer matches ${path} (it changed, or the request differs): read again without cursor.`,
         0,
       ])
+      expect([outline.isError, outline.text.split("\n").slice(2, 4)]).toEqual([false, ["1,500 lines", "outline (7 parts, 77,993 characters, over the 12,000-character page limit):"]])
       expect([first.isError, data.parts]).toEqual([false, 2])
       expect(first.text).toContain(`"file": "${long}", "cursor": "${data.next_cursor}"`)
+      expect(first.text).toContain(`"section": "*"`)
       expect([second.isError, second.text.includes("ligne 1499"), first.text.includes("ligne 1499")]).toEqual([false, true, false])
       expect([withoutFile.isError, withoutFile.text]).toEqual([true, `This cursor no longer matches ${path} (it changed, or the request differs): read again without cursor.`])
     })

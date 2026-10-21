@@ -394,6 +394,58 @@ consentRequest({ auth, db, host: adresseServie }, authorizationId)   // page de 
 
 La fonction reçoit `{ host, request? }` : l'adresse appelée, normalisée, et la requête (absente au consentement, qui lit l'adresse de la ressource demandée). L'option ne choisit qu'une adresse : le jeton est vérifié avant, l'appartenance est relue à chaque appel, l'origine du 401 et de `resource` reste l'adresse appelée. Une exception de la fonction répond 503 ; aucune organisation n'est servie par défaut. Le MCP admin n'a pas cette option.
 
+### Lecteurs de fichiers
+
+Un assistant lit le texte d'un fichier joint par `read {path, file}` : le paquet lit `html`, `md`,
+`txt` et `csv` ; un hôte inscrit les lecteurs des formats que lui seul sait lire (un plan, un
+modèle 3D), comme ses fonctions métier.
+
+```ts
+import { defineReader, registerReaders } from "@otomata_tech/oto_platform/server"
+
+registerReaders([
+  defineReader({
+    types: [{ extension: "dxf", mime: "image/vnd.dxf" }],
+    read: async ({ name, bytes, signal }) => {
+      const plan = await lirePlan(bytes, { signal })           // le programme de l'hôte
+      if (!plan) return { status: "unsupported", detail: "this DXF version is not read" }
+      return {
+        title: plan.titre,                                       // 200 caractères au plus
+        summary: `${plan.niveaux.length} levels.`,               // 300 au plus
+        parts: plan.niveaux.map((n) => ({ name: n.nom, chars: n.texte.length })),
+        text: (part) => plan.niveaux.find((n) => n.nom === part)?.texte ?? "",
+      }
+    },
+  }),
+])
+```
+
+- **Où** : dans le même fichier importé pour son effet que `registerFunctions`, en tête de chaque
+  route qui monte une porte du paquet (`api/mcp`, `api/platform/[...route]`). Chaque appel remplace
+  toute la liste ; une liste fausse lève `TypeError` au chargement, et rien n'est inscrit.
+- **Ouverture au dépôt** : un type inscrit, et lui seul, s'ouvre au dépôt (demande d'envoi, lien
+  d'envoi, envoi par le serveur, fichier en transit), sous la borne de 50 Mo ; le type MIME déclaré
+  est celui que l'URL d'envoi signe. Sans lecteur, un type hors de la liste du paquet reste refusé.
+  Le fichier se sert toujours en téléchargement, jamais en place. L'éditeur de pages ne propose pas
+  encore ces types : ils se déposent par l'API.
+- **Refus à l'inscription** : un type du paquet (`md`, `pdf`…), une extension de page, de script ou
+  de programme (`html`, `svg`, `js`, `exe`, `docm`…), une extension lue par deux lecteurs, et un type
+  MIME qu'un navigateur rend en page ou exécute (`text/html`, `image/svg+xml`, `application/xml`,
+  JavaScript, `application/wasm`).
+- **Contrat** : `read` reçoit le nom d'origine, les octets (50 Mo au plus) et un signal levé à
+  l'échéance de 10 secondes, qui couvre aussi chaque `text(part)` ; un lecteur asynchrone est
+  abandonné à l'échéance, un calcul synchrone n'est pas interrompu mais rend `timeout`. Il rend le
+  document, ou un statut de `READER_STATUSES` (`unsupported`, `encrypted`, `empty`, `too_large`,
+  `rejected_dtd`, `failed`, `timeout`), servi à l'assistant en refus. Les noms de parties sont
+  uniques (1 à 200 caractères) : l'assistant les passe à `section`. Une erreur levée ou une forme
+  fausse vaut `failed`, la cause au log serveur. Le caractère NUL est retiré, le texte coupé à
+  2 millions de caractères ; un lecteur qui décompresse s'arrête à
+  `READER_LIMITS.decompressedBytes` (64 Mo).
+- **Ce que voit l'assistant** : au-delà de 12 000 caractères et d'une partie, le plan (les parties
+  et leur taille) ; `section` en sert une, `"*"` tout le texte, coupé par le curseur au-delà de
+  45 000 caractères. La pseudonymisation et `fileContents: "metadata"` s'appliquent comme au texte
+  d'un fichier du paquet.
+
 ## Connecteurs réels et coffre
 
 Le paquet porte un connecteur simulé, `mail` (rien ne sort du serveur), et le moteur qui exécute les connecteurs

@@ -1,7 +1,7 @@
 # Contenu HTML isolé et lecture des fichiers
 
 - **Statut** : validé avec JB le 30/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-10-21
 
 ## Résumé
 
@@ -58,7 +58,7 @@ JB veut déposer une page HTML (un rapport, une petite application générés pa
 - Une ligne seule `[<étiquette>](<origine facultative>/api/platform/files/<uuid>)` est un bloc `file`, en strict comme en tolérant, uuid en minuscules ; une étiquette hors forme donne nom = étiquette, taille 1, `application/octet-stream`, que la ligne relue remplace ; un lien public ou d'une sous-route reste un paragraphe (HN-E10S02-69).
 - `read` gagne un champ facultatif `file`, l'identifiant d'un fichier joint, qui sert le texte d'un `html`, `md`, `txt` ou `csv` de la page ; `read` d'une page n'en sert que le lien (D119, ajout admis par ADR-002). Il sert sous le droit de lecture du nœud de `path`, exclusif de `section`, `outline`, `since_revision` et `draft` (HN-E10S02-13) : avec l'un d'eux, « Give only one of section, outline, since_revision or file; file reads the text of a file, without draft. » ; `refs` ignoré ; en-tête `<nom> (<taille>)`, données `{ path, file: { id, name, size, type } }`, sans `next_actions` ; tout nœud visible, publié ou non ; `file` n'entre dans la clé du curseur que donné (HN-E10S02-75). Il contrôle le curseur avant de lire l'objet, dans sa seule branche (HN-E10S02-85).
 - **Contenu retenu par l'hôte** : `registerDataPolicy({ fileContents: "metadata" })` de `/server`, ou une fonction de l'organisation (`({ id, slug }) => "served" | "metadata"`, synchrone ou non), retient le contenu des fichiers joints : `read {path, file}` refuse avant toute lecture de l'objet (`forbidden`, raison `file_contents_withheld`, « The contents of files are not served to assistants at <organisation>: only their name, size and type, shown in <chemin>. Ask the user to open the file. ») ; nom, taille et type restent dans la page. Sans politique, `served`, comme avant. Une fonction de l'hôte qui lève ou rend autre chose fait refuser la lecture (`internal`, cause au log) : jamais servi par défaut ([pseudonymisation](pseudonymisation.md) § Les quatre primitives).
-- La description de `read` finit par « To read an attached html, md, txt or csv file, give file = the id from its link /api/platform/files/<id>. » (HN-E10S02-76). `readFileText` dit « only html, md, txt and csv files are read as text. » ; le refus de taille garde « a text file (html, md, txt, csv) » (HN-E10S02-77).
+- La description de `read` finit par « To read an attached html, md, txt or csv file, give file = the id from its link /api/platform/files/<id>. » (HN-E10S02-76). le refus d'un type sans lecteur dit « only html, md, txt and csv files are read as text. » (plus les types de l'hôte ; [lecture des fichiers](lecture-des-fichiers.md)) ; le refus de taille garde « a text file (html, md, txt, csv) » (HN-E10S02-77).
 
 ## Décisions et alternatives écartées
 

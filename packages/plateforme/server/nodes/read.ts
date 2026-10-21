@@ -53,9 +53,9 @@ async function readFunction(db: PlatformDb, identity: Identity, name: string): P
 function checkRequest(input: ReadNodeInput, path: string): void {
   checkNodePath(path)
   const modes = [input.section !== undefined, input.outline === true, input.since_revision !== undefined].filter(Boolean)
-  // `file` (E10-S02, AC-d2) : le texte d'un fichier seul, sans section, plan, écart ni brouillon.
-  if (input.file !== undefined && (modes.length > 0 || input.draft === true)) {
-    throw new PlatformError("invalid_arguments", "Give only one of section, outline, since_revision or file; file reads the text of a file, without draft.")
+  // `file` (E10-S02, AC-d2) : le texte d'un fichier seul, ou l'une de ses parties par `section` ; sans plan, écart ni brouillon.
+  if (input.file !== undefined && (input.outline === true || input.since_revision !== undefined || input.draft === true)) {
+    throw new PlatformError("invalid_arguments", "Give only one of outline, since_revision or file; file reads the text of a file, or one part with section, without draft.")
   }
   if (modes.length > 1) throw new PlatformError("invalid_arguments", "Give only one of section, outline or since_revision.")
 }
