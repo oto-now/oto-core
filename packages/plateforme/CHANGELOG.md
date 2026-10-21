@@ -29,6 +29,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Keep a file on a page with `file.keep`: a file or image block where you say, and the file lives with the page; a file on another page is copied; a text file over 4 MB is not kept.
 
 ### Hosts
+- CLI: `migrations check` follows who may execute each `platform` function from file to file, and refuses a file that redefines a function (`create or replace`, or `drop` then `create`) and leaves it executable by a role it did not have before (`function-execute-widened`); to widen a right on purpose, grant it alone in a migration that does not redefine the function.
 - UI: on a node page, the title and its in-place field span the whole header width, « modifiée … » under it.
 - Server: `registerReaders([...])` and `defineReader({ types, read })` add readers for formats the host reads (a plan, a 3D model); each type a reader declares, and it alone, is admitted at deposit, up to 50 MB, and always served as a download. A package type (`md`, `pdf`…), a page, script or program extension, a type read twice, or a MIME type a browser renders or runs is refused at registration (`TypeError`).
 - Server: `read {file}` reads through the readers under 10 seconds and 2 million characters, an outline over 12,000; a reader's status (`READER_STATUSES`) is served as a refusal; `READER_LIMITS` gives the bounds.

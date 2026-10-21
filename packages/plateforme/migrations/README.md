@@ -639,6 +639,12 @@ garde ; la ligne de base V1 les porte toutes.
   garderait le défaut de Postgres (`EXECUTE` à `public`) deviendrait appelable sans session.
   Appliquée par `pnpm check:migrations` (`function-execute-not-revoked`) ; une fonction de
   déclencheur, inappelable seule, en est exemptée.
+- **Une redéfinition n'élargit pas le droit d'exécuter** : `check:migrations` suit, de fichier en
+  fichier, qui a `EXECUTE` sur chaque fonction (par sa signature), comme Postgres l'applique
+  (`create or replace` garde le droit ; recréée après `drop`, elle s'exécute par `public`), et refuse
+  le fichier qui redéfinit une fonction existante et la laisse exécutable par un rôle de plus
+  (`function-execute-widened`). Un élargissement voulu : un `grant` seul, dans une migration qui ne
+  redéfinit pas la fonction.
 - **La garde de l'arbre ne contrôle que la structure** (`nodes_guard`, depuis `20260927200000` ;
   ADR-012 § 3) : chemin, cycle, dossier `private` (`perso` jusqu'à `20260928120000`) et nœud Contexte immobiles, espace personnel et son
   propriétaire, pour tout écrivain ; les droits sont décidés par le service avant sa requête. Une

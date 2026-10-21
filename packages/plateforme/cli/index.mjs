@@ -44,7 +44,8 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     fonction créée dans platform retire l'exécution à public dans le même fichier
     (revoke execute … from public ; fonctions de déclencheur exceptées), et qu'il reste portable :
     aucune clé vers auth.users, aucune lecture de auth.users (fonction, vue, requête, bloc) hors
-    des trois fonctions propres à Supabase, aucune extension hors de pg_trgm, unaccent et ltree.
+    des trois fonctions propres à Supabase, aucune extension hors de pg_trgm, unaccent et ltree ;
+    et qu'une fonction redéfinie ne donne l'exécution à aucun rôle de plus qu'avant le fichier.
     --file  un fichier seul (défaut : les migrations du paquet)
 
   db prepare [--db-url <url>]

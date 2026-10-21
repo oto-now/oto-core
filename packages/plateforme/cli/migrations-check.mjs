@@ -8,12 +8,14 @@
  * garde l'`EXECUTE` par défaut de `public`, donc d'`anon`, qui a l'usage du schéma (E02-S01) ; et
  * qu'une migration remette une dépendance à Supabase ou à une extension que l'hôte refuse (E01-S09) :
  * clé ou lecture vers `auth.users`, extension hors de `pg_trgm`, `unaccent` et `ltree` ; et qu'une
- * fonction pose un paramètre de `pg_trgm` avant que la session ait chargé sa bibliothèque.
+ * fonction pose un paramètre de `pg_trgm` avant que la session ait chargé sa bibliothèque ; et qu'une fonction
+ * redéfinie donne `EXECUTE` à un rôle qu'elle n'avait pas (`migrations-execute-grants.mjs`, suivi de fichier en fichier).
  *
- * Sortie : `fichier:ligne règle` par erreur, code 1 s'il y en a une.
+ * Sortie : `fichier:ligne règle` par erreur, suivie de son explication quand la règle en donne une ; code 1 s'il y en a une.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
+import { executeGrantTracker } from './migrations-execute-grants.mjs'
 
 const IDENT = String.raw`(?:"[^"]+"|[a-z_][a-z0-9_$]*)`
 const QUALIFIED = new RegExp(String.raw`^(${IDENT})(?:\s*\.\s*(${IDENT}))?`, 'i')
@@ -274,10 +276,10 @@ function pgTrgmErrors(statements, report) {
   }
 }
 
-function checkSql(sql, { pgTrgmLoadedBefore = false } = {}) {
+function checkSql(sql, { pgTrgmLoadedBefore = false, grants } = {}) {
   const { text, dollarRanges } = clean(sql)
   const errors = []
-  const report = (offset, rule) => errors.push({ line: text.slice(0, offset).split('\n').length, rule })
+  const report = (offset, rule, detail) => errors.push({ line: text.slice(0, offset).split('\n').length, rule, detail })
   const statements = splitStatements(text, dollarRanges)
   statements.forEach((stmt, k) => {
     // La position utile est celle du premier mot, pas des blancs qui le précèdent.
@@ -289,6 +291,7 @@ function checkSql(sql, { pgTrgmLoadedBefore = false } = {}) {
   })
   executeErrors(statements, report)
   if (!pgTrgmLoadedBefore) pgTrgmErrors(statements, report)
+  grants?.file(statements, report)
   return errors.sort((a, b) => a.line - b.line)
 }
 
@@ -307,10 +310,12 @@ export function checkMigrations({ files }) {
     return 1
   }
   let failures = 0
+  // Les fichiers dans l'ordre où ils s'appliquent (`sqlFiles` les trie) : le droit d'une fonction est celui d'avant.
+  const grants = executeGrantTracker()
   for (const file of files) {
     const pgTrgmLoadedBefore = PG_TRGM_LOADED_BEFORE.includes(basename(file))
-    for (const { line, rule } of checkSql(readFileSync(file, 'utf8'), { pgTrgmLoadedBefore })) {
-      console.log(`${shown(file)}:${line} ${rule}`)
+    for (const { line, rule, detail } of checkSql(readFileSync(file, 'utf8'), { pgTrgmLoadedBefore, grants })) {
+      console.log(`${shown(file)}:${line} ${rule}${detail ? ` — ${detail}` : ''}`)
       failures++
     }
   }
