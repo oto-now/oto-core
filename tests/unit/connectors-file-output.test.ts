@@ -61,7 +61,7 @@ const bytesOf = (text: string) => new TextEncoder().encode(text)
 
 function context(): FunctionContext {
   const credential = { fields: { api_key: "key_test" }, settings: {}, tokens: memoryTokens() }
-  return { db: {}, identity: {}, credential, account: { id: "account-1" } } as unknown as FunctionContext
+  return { db: {}, identity: {}, credential, account: { id: "account-1" }, origin: "https://acme.example.test" } as unknown as FunctionContext
 }
 
 async function run(name: string, args: Record<string, unknown>) {
@@ -123,7 +123,7 @@ afterEach(() => {
 })
 
 describe("a file returned by a third party", () => {
-  it("should download the signed address by the guarded transport, keep the file as a transit file of the caller and serve only its id", async () => {
+  it("should download the signed address by the guarded transport, keep the file as a transit file of the caller and serve its id and its link, never the address", async () => {
     const logged = logs()
     const calls = api(json({ call: { id: 987654321, recording: SIGNED } }))
     const downloads = download(audio(1_900_000))
@@ -131,12 +131,19 @@ describe("a file returned by a third party", () => {
 
     expect(output.text).toBe(
       [
-        "crm.get_call_recording: file ready: call-987654321-recording.mp3 (audio/mpeg, 1.8 MB), id 6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34, yours until 2026-10-22 09:12 UTC.",
-        "Pass this id as is to a function that takes a file; it is deleted once sent, or at that time.",
+        "crm.get_call_recording: file ready: [call-987654321-recording.mp3 (1,900,000 bytes, mp3)](https://acme.example.test/f/6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34), yours until 2026-10-22 09:12 UTC.",
+        "Pass its id 6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34 as is to a function that takes a file; it is deleted once sent, or at that time.",
       ].join("\n"),
     )
     expect(output.data).toEqual({
-      file: { id: "6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34", name: "call-987654321-recording.mp3", mime: "audio/mpeg", size: 1_900_000, expires_at: "2026-10-22T09:12:34.567Z" },
+      file: {
+        id: "6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34",
+        name: "call-987654321-recording.mp3",
+        mime: "audio/mpeg",
+        size: 1_900_000,
+        expires_at: "2026-10-22T09:12:34.567Z",
+        url: "https://acme.example.test/f/6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34",
+      },
     })
     expect(state.kept.map((file) => ({ name: file.name, size: file.bytes.byteLength }))).toEqual([{ name: "call-987654321-recording.mp3", size: 1_900_000 }])
     // L'appel à l'API, puis un seul téléchargement, par le transport gardé, sans redirection ni authentification.

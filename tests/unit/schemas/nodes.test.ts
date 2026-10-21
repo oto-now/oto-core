@@ -101,13 +101,19 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     })
     expect(properties.file).toEqual({
       description:
-        "Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link /f/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).",
+        "Id of a file (html, md, txt, csv, or a format the host reads), from its link /f/<id>, to read its text alone: attached to the page of path, or, without path, any file you can open, your transit files included; a long file comes as an outline of its parts, read one with section (default: the whole page).",
       type: "string",
       minLength: 1,
       maxLength: 100,
     })
     // Lecteurs de fichiers (lot 1) : `section` lit aussi une partie d'un fichier.
     strip(at(properties, "section"), ` With file: one part of the file, or "*" for its whole text.`)
+    // Étape 2 du chantier « fichier » : `file` seul lit un fichier par son identifiant, `path` n'est plus requis (un
+    // assistant qui le donne reste servi à l'identique).
+    strip(at(properties, "path"), "; leave it out with file to read a file by its id.")
+    at(properties, "path").description = `${String(at(properties, "path").description)}.`
+    expect(read.required).toEqual(["ctx"])
+    read.required = ["ctx", "path"]
     delete properties.refs
     delete properties.file
     expect(read).toEqual(E03_S01.read)

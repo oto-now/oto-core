@@ -34,6 +34,7 @@ export const ORG_TABLES = [
   deleted('links'),
   deleted('node_shares'),
   deleted('files'),
+  deleted('erased_files'),
   deleted('upload_tickets'),
   deleted('node_views'),
   deleted('lexicon'),

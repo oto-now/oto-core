@@ -16,8 +16,8 @@
 // sans casse, sans accent et sans espace de bord. Retiré : les sections `{title, body}` en markdown
 // (→ plages de blocs).
 import { blockInputSchema, chars, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
-import { fileBaseName, fileExtension } from "./csv"
-import { filePath, fileSizeText } from "./files"
+import { fileBaseName } from "./csv"
+import { fileLink, filePath } from "./files"
 import { frontmatterHead, splitFrontmatter } from "./frontmatter"
 import { closesFence, LINE_SEPARATORS, openingFence, type Fence } from "./link-syntax"
 import { NODE_HEAD_MAX, normalizeTitle, OP_TEXT_MAX } from "./nodes"
@@ -206,7 +206,7 @@ function renderBody<B extends BlockLike>(block: B, options: RenderOptions<B>): s
     // Un cadre intégré (1.4.3) : son adresse dans une clôture `embed`, sa hauteur ensuite quand elle est choisie.
     case "embed": return fenced("embed", valid.data.height === undefined ? valid.data.url : `${valid.data.url} ${JSON.stringify({ height: valid.data.height })}`)
     case "file":
-      return `[${valid.data.name} (${fileSizeText(valid.data.size)}, ${fileExtension(valid.data.name) || valid.data.mime})](${filePath(valid.data.file_id, options.fileRoute)})`
+      return fileLink({ id: valid.data.file_id, name: valid.data.name, size: valid.data.size, mime: valid.data.mime }, options.fileRoute)
   }
 }
 

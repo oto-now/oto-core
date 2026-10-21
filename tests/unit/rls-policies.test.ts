@@ -129,6 +129,9 @@ ADDED.push("account_share_events_select_member")
 // L'état de pseudonymisation d'une organisation (sel, témoin, génération ; aucune personne) : lu dans son organisation,
 // jamais écrit par une session (`pseudonym_org` et `invalidate_pseudonyms`, `security definer`).
 ADDED.push("pseudonym_orgs_select_member")
+// La trace d'un fichier en transit effacé (`20261021190000`) : lue par son seul auteur, jamais écrite par une session
+// (le déclencheur `files_erased_trace` et `purge_transit_files`, `security definer`).
+ADDED.push("erased_files_select_own")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

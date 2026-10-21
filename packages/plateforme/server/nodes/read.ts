@@ -25,7 +25,7 @@ import { OUTLINE_DATA_MAX, REFERENCES_DATA_MAX, REVISIONS_LISTED } from "./limit
 import { linkHeader } from "./link-lines"
 import { checkNodePath, findNode, movedNotice, unknownNode, type NodeRow } from "./lookup"
 import { serveBody, type Served } from "./read-body"
-import { readNodeFile } from "./read-file"
+import { checkFileModes, readFileAlone, readNodeFile } from "./read-file"
 import { headerLines, outlineOf, type PendingDraft, type Version } from "./read-format"
 import { checkCursor, paginate } from "./read-pages"
 import { withPageView } from "./read-view"
@@ -54,9 +54,7 @@ function checkRequest(input: ReadNodeInput, path: string): void {
   checkNodePath(path)
   const modes = [input.section !== undefined, input.outline === true, input.since_revision !== undefined].filter(Boolean)
   // `file` (E10-S02, AC-d2) : le texte d'un fichier seul, ou l'une de ses parties par `section` ; sans plan, écart ni brouillon.
-  if (input.file !== undefined && (input.outline === true || input.since_revision !== undefined || input.draft === true)) {
-    throw new PlatformError("invalid_arguments", "Give only one of outline, since_revision or file; file reads the text of a file, or one part with section, without draft.")
-  }
+  checkFileModes(input)
   if (modes.length > 1) throw new PlatformError("invalid_arguments", "Give only one of section, outline or since_revision.")
 }
 
@@ -153,6 +151,8 @@ function pendingOf(draft: Context["draft"]): PendingDraft | null {
  */
 export async function readNode(db: PlatformDb, identity: Identity, input: ReadNodeInput, options: { origin?: string; views?: boolean } = {}): Promise<ToolOutput> {
   const prefix = identity.org.prefix
+  // `file` seul : un fichier désigné par son identifiant, joint (lu sur son nœud) ou en transit.
+  if (input.path === undefined) return readFileAlone(db, identity, input, (path) => readNode(db, identity, { ...input, path }, options))
   const path = input.path.trim()
   if (looksLikeFunction(path)) return readFunction(db, identity, path)
   if (path === JOURNAL_PATH) return readJournal(db, identity, input)

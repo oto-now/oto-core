@@ -72,6 +72,11 @@ describe.skipIf(!sqlConfigured || privatePending)(name(SUITE), () => {
     await admin`
       insert into platform.files (org_id, node_id, name, mime, size, status, created_by, expires_at)
       values (${org.org.id}, null, 'transit.csv', 'text/csv', 3, 'ready', ${claire.id}, ${inMinutes(60)})`
+    // Un fichier en transit consommé : sa ligne supprimée laisse sa trace (`files_erased_trace`), que la suppression emporte.
+    const [consumed] = await admin<{ id: string }[]>`
+      insert into platform.files (org_id, node_id, name, mime, size, status, created_by, expires_at)
+      values (${org.org.id}, null, 'envoye.csv', 'text/csv', 3, 'ready', ${claire.id}, ${inMinutes(60)}) returning id`
+    await admin`delete from platform.files where id = ${consumed.id}`
     await admin`
       insert into platform.upload_tickets (org_id, user_id, token_hash, form_token_hash, kind, mode, target_path, expires_at)
       values (${org.org.id}, ${claire.id}, ${sha()}, ${sha()}, 'file', 'attach', 'ventes/offre', ${inMinutes(15)})`

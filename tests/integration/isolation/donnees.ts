@@ -314,6 +314,10 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`
     insert into platform.files (org_id, node_id, name, mime, size, status, created_by)
     values (${b.id}, ${table}, 'tournees.pdf', 'application/pdf', 3, 'ready', ${people.b.id})`
+  // La trace d'un fichier en transit effacé de B (`20261021190000`) : posée en base par un déclencheur, jamais sous une session.
+  await admin`
+    insert into platform.erased_files (id, org_id, created_by, erased_at, cause, keep_until)
+    values (gen_random_uuid(), ${b.id}, ${people.b.id}, now(), 'consumed', now() + interval '30 days')`
   // Un ticket de dépôt par lien de B (E10-S02 lot f, ADR-018) : son empreinte seule, jamais un jeton. Deux
   // empreintes tirées à chaque passage : elles sont uniques dans toute la table, et les suites d'isolation
   // sèment chacune leur B en parallèle.

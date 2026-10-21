@@ -6,7 +6,7 @@
 // l'appelant (`keep`, `storeTransitFile`) ; seul son identifiant revient. Sans ce module, l'assistant recevrait l'adresse
 // signée du tiers ou ses octets. Ni l'adresse, ni la réponse JSON qui la porte, ni les octets ne vont à un texte, une
 // erreur ou un log : un log nomme le connecteur, la fonction, le statut et le refus.
-import { FILE_MAX_BYTES, FILE_TYPES, fileExtension, type TransitFile } from "../../schemas"
+import { FILE_MAX_BYTES, FILE_TYPES, fileExtension, fileLink, filePath, type TransitFile } from "../../schemas"
 import type { FunctionOutput } from "../catalog/define"
 import { actName } from "../catalog/registry"
 import { PlatformError, type PlatformErrorCode } from "../errors"
@@ -331,18 +331,18 @@ async function readFile(prepared: PreparedFunction, file: ConnectorFileOutput, a
 const untilText = (at: Date) => at.toISOString().slice(0, 16).replace("T", " ")
 
 /**
- * Le résultat d'un fichier gardé : un texte, puis les mêmes données en champs, `{ file: { id, name, mime, size,
- * expires_at } }`, sans adresse ni lien. Le texte ne promet que ce qui est écrit : passer l'identifiant à une fonction
- * qui prend un fichier.
+ * Le résultat d'un fichier gardé : un texte, son lien sous la forme d'une page (`fileLink`, à son adresse `/f/<id>`, jamais
+ * celle du tiers), puis les mêmes données en champs, `{ file: { id, name, mime, size, expires_at, url } }`. Le texte ne
+ * promet que ce qui est écrit : passer l'identifiant à une fonction qui prend un fichier.
  */
-function keptOutput(fn: ConnectorFunctionDefinition, kept: TransitFile): FunctionOutput {
+function keptOutput(fn: ConnectorFunctionDefinition, kept: TransitFile, route: string): FunctionOutput {
   const expires = new Date(kept.expiresAt)
   return {
     text: [
-      `${fn.name}: file ready: ${kept.name} (${kept.mime}, ${sizeText(kept.size)}), id ${kept.id}, yours until ${untilText(expires)} UTC.`,
-      "Pass this id as is to a function that takes a file; it is deleted once sent, or at that time.",
+      `${fn.name}: file ready: ${fileLink(kept, route)}, yours until ${untilText(expires)} UTC.`,
+      `Pass its id ${kept.id} as is to a function that takes a file; it is deleted once sent, or at that time.`,
     ].join("\n"),
-    data: { file: { id: kept.id, name: kept.name, mime: kept.mime, size: kept.size, expires_at: expires.toISOString() } },
+    data: { file: { id: kept.id, name: kept.name, mime: kept.mime, size: kept.size, expires_at: expires.toISOString(), url: filePath(kept.id, route) } },
   }
 }
 
@@ -362,7 +362,7 @@ export async function runFileOutput(prepared: PreparedFunction, call: DescribedC
   requireStore()
   try {
     const { answers } = await executeDescribed(prepared, call, args, (exchange) => readFile(prepared, file, args, exchange))
-    return keptOutput(fn, await files.keep(answers[0] as ReadFile))
+    return keptOutput(fn, await files.keep(answers[0] as ReadFile), files.route)
   } catch (error) {
     const named = error instanceof PlatformError && typeof error.details?.refusal === "string" && error.details.refusal.startsWith("file_")
     if (!named) console.error(`[platform] connector ${connector.name}: ${fn.name}: file not kept (${error instanceof PlatformError ? error.code : error instanceof Error ? error.name : typeof error})`)

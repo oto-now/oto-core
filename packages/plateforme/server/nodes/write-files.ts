@@ -3,7 +3,9 @@
 // relu en base avant l'écriture ; le nom, la taille et le type d'un bloc `file` viennent de la ligne `files`, jamais du
 // client. Un fichier que le document citait déjà passe sans relecture : une copie de page encore `pending` ou un objet
 // perdu (AC-e3, AC-b8) ne bloque pas l'écriture du reste de la page. Sans lui, un assistant citerait le fichier d'une
-// autre page, qu'un lien public servirait alors avec elle (AC-e1). Fichier à part de `write.ts` (borne de 300 lignes).
+// autre page, qu'un lien public servirait alors avec elle (AC-e1). Citer l'un de ses fichiers en transit ne le garde pas
+// (garder reste un geste) : le refus dit qu'il est en transit et quoi faire ; celui d'un autre reste un fichier non
+// joint, sans rien dire de lui. Fichier à part de `write.ts` (borne de 300 lignes).
 import { renderBlock } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
@@ -25,15 +27,25 @@ function notAttached(fileId: string, path: string): PlatformError {
 }
 
 /**
+ * Le refus d'un fichier cité que la page ne porte pas : en transit et à l'appelant, ce qu'il faut faire (étape 2 du
+ * chantier « fichier ») ; sinon celui d'AC-d3. La RLS cache le fichier en transit d'un autre.
+ */
+async function refusalOf(db: PlatformDb, identity: Identity, fileId: string, path: string): Promise<PlatformError> {
+  const [transit] = await inTransaction(db, "files: cited in transit", (sql) => sql<{ id: string }[]>`
+    select id from platform.files
+     where org_id = ${identity.org.id} and id = ${fileId} and node_id is null and created_by = ${identity.user.id}
+       and status = 'ready' and expires_at > now()`)
+  return transit ? new PlatformError("invalid_arguments", `File ${fileId} is in transit: upload it to ${path} first.`) : notAttached(fileId, path)
+}
+
+/**
  * Une création (AC-d3) : aucun fichier n'est encore joint au nœud qu'elle crée. Le premier bloc qui cite un fichier est
  * refusé avant l'insertion du nœud, sauf en mode tolérant, où `attachFiles` le garde en texte.
  */
-export function refuseFilesOnCreate(blocks: readonly DocBlock[], options: { path: string; tolerant: boolean }): void {
+export async function refuseFilesOnCreate(db: PlatformDb, identity: Identity, blocks: readonly DocBlock[], options: { path: string; tolerant: boolean }): Promise<void> {
   if (options.tolerant) return
-  for (const block of blocks) {
-    const fileId = citedFile(block)
-    if (fileId) throw notAttached(fileId, options.path)
-  }
+  const fileId = blocks.map(citedFile).find((id) => id !== null)
+  if (fileId) throw await refusalOf(db, identity, fileId, options.path)
 }
 
 /** Les lignes `ready` jointes au nœud parmi `ids`, sous l'isolation de l'organisation. */
@@ -88,16 +100,17 @@ export async function attachFiles<B extends DocBlock, A extends { blocks: B[]; k
     if (fileId && (!before.ids.has(fileId) || (block.type === "file" && !before.meta.has(fileId)))) wanted.add(fileId)
   }
   const rows = request.created ? new Map<string, FileMeta>() : await attachedRows(db, identity, node.id, [...wanted])
+  // Un bloc `file` sans ligne relue ni bloc `file` antérieur (le fichier n'était cité que par une image) n'aurait que le
+  // nom, la taille et le type du client : refusé comme un fichier non joint.
+  const known = (block: B, fileId: string) => (block.type === "file" ? (rows.get(fileId) ?? before.meta.get(fileId)) !== undefined : rows.has(fileId) || before.ids.has(fileId))
+  const unknown = applied.blocks.map((block) => citedFile(block)).find((fileId, index) => fileId !== null && !known(applied.blocks[index], fileId))
+  if (unknown && !request.tolerant) throw await refusalOf(db, identity, unknown, node.path)
   let kept = 0
   const blocks = applied.blocks.map((block): B => {
     const fileId = citedFile(block)
     if (!fileId) return block
     const meta = rows.get(fileId) ?? before.meta.get(fileId)
-    // Un bloc `file` sans ligne relue ni bloc `file` antérieur (le fichier n'était cité que par une image) n'aurait que le
-    // nom, la taille et le type du client : refusé comme un fichier non joint.
-    const known = block.type === "file" ? meta !== undefined : rows.has(fileId) || before.ids.has(fileId)
-    if (!known) {
-      if (!request.tolerant) throw notAttached(fileId, node.path)
+    if (!known(block, fileId)) {
       kept++
       return { ...block, type: "code", text: renderBlock(block), data: {} }
     }

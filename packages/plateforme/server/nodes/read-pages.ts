@@ -1,8 +1,9 @@
 // Parties de `read` au-delà de 45 000 caractères (E03-S03, AC14, AC15, N2, N3) : le corps coupé à une
 // fin de ligne, chaque partie servie avec son curseur, le plafond mesuré sur `structuredContent`
 // sérialisé. Un curseur se lie au nœud, à la requête et à l'empreinte du texte complet : il ne sert
-// que le texte d'où il vient. Fichier à part de `read.ts` pour la borne de 300 lignes.
-import type { ReadNodeInput } from "../../schemas"
+// que le texte d'où il vient. Le sujet coupé est un nœud, ou un fichier en transit lu par `file` seul, sans chemin, auquel
+// le curseur se lie de même. Fichier à part de `read.ts` pour la borne de 300 lignes.
+import { filePath, type ReadNodeInput } from "../../schemas"
 import { PlatformError } from "../errors"
 import { MAX_DATA_CHARS, MAX_RESULT_CHARS, serializedLength, type ToolOutput } from "../tool-output"
 import type { NodeRow } from "./lookup"
@@ -12,9 +13,12 @@ import { cutPages, decodeCursor, encodeCursor, fingerprint } from "./read-format
 /** Marge sous le plafond : les nombres d'une partie (`part`, `parts`) ne sont connus qu'après la coupe. */
 const MARGIN = 200
 
+/** Ce que `read` coupe : un nœud, ou un fichier en transit (`path` nul, titre : son nom), désigné par `file`. */
+export type PageSubject = Pick<NodeRow, "id" | "title"> & { path: string | null }
+
 export type PageRequest = {
   input: ReadNodeInput
-  node: NodeRow
+  node: PageSubject
   prefix: string
   header: string
   served: Served
@@ -50,16 +54,16 @@ function fits(text: string, data: Record<string, unknown>, nextActions: string[]
  * celui du nœud, pas celui demandé : une lecture par un ancien chemin se poursuit par le nouveau, que
  * sert l'appel de la partie suivante (E03-S07, AC7).
  */
-function requestKey(input: ReadNodeInput, node: NodeRow): string {
+function requestKey(input: ReadNodeInput, node: PageSubject): string {
   // `file` (E10-S02, AC-d2) n'entre dans la clé que donné : les curseurs d'une lecture sans fichier ne changent pas.
   const file = input.file === undefined ? [] : [input.file]
   return fingerprint(JSON.stringify([node.path, input.section ?? null, input.outline ?? false, input.since_revision ?? null, input.draft ?? false, input.refs ?? false, ...file]))
 }
 
-function stale(node: NodeRow): PlatformError {
+function stale(node: PageSubject): PlatformError {
   return new PlatformError(
     "invalid_arguments",
-    `This cursor no longer matches ${node.path} (it changed, or the request differs): read again without cursor.`,
+    `This cursor no longer matches ${node.path ?? `file ${node.id}`} (it changed, or the request differs): read again without cursor.`,
   )
 }
 
@@ -67,7 +71,7 @@ function stale(node: NodeRow): PlatformError {
  * Un curseur illisible, d'un autre nœud ou d'une autre requête (mode, section, brouillon, références)
  * est refusé avant de servir quoi que ce soit (AC14) ; l'empreinte du texte se vérifie à la coupe.
  */
-export function checkCursor(input: ReadNodeInput, node: NodeRow): void {
+export function checkCursor(input: ReadNodeInput, node: PageSubject): void {
   if (input.cursor === undefined) return
   const cursor = decodeCursor(input.cursor)
   if (!cursor || cursor.node !== node.id || cursor.request !== requestKey(input, node)) throw stale(node)
@@ -82,7 +86,8 @@ export function paginate(request: PageRequest): ToolOutput {
   const { input, node, prefix, served } = request
   const footer = served.footer.join("\n")
   const data = fitted(request.data)
-  const base = { nextActions: request.nextActions, target: node.path, teamId: request.teamId }
+  // Un fichier en transit entre au journal par son adresse seule, jamais par son nom.
+  const base = { nextActions: request.nextActions, target: node.path ?? filePath(node.id), teamId: request.teamId }
   const whole = [request.header, served.body, footer].filter((part) => part !== "").join("\n\n")
   if (input.cursor === undefined && fits(whole, data, request.nextActions)) return { text: whole, data, ...base }
 
@@ -90,7 +95,7 @@ export function paginate(request: PageRequest): ToolOutput {
   const print = fingerprint(served.body)
   const tokenFor = (part: number) => encodeCursor({ node: node.id, request: key, text: print, part })
   const call = (part: number) =>
-    `${prefix}_read ${callArguments({ path: node.path, section: input.section, outline: input.outline, since_revision: input.since_revision, draft: input.draft, refs: input.refs, file: input.file, cursor: tokenFor(part) })}`
+    `${prefix}_read ${callArguments({ path: node.path ?? undefined, section: input.section, outline: input.outline, since_revision: input.since_revision, draft: input.draft, refs: input.refs, file: input.file, cursor: tokenFor(part) })}`
   const continued = (part: number, parts: number) => `Continued (part ${part} of ${parts}): read the rest with ${call(part + 1)}.`
   const shortHeader = (part: number, parts: number) => `# ${node.title} (continued, part ${part} of ${parts})`
 

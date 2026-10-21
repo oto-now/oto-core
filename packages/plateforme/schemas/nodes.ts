@@ -162,7 +162,8 @@ export const readNodeSchema = z.object({
     .trim()
     .min(1)
     .max(200)
-    .describe("Path of a page, procedure or table (e.g. ventes/relance_devis), journal, or a function name (e.g. table.rows)."),
+    .optional()
+    .describe("Path of a page, procedure or table (e.g. ventes/relance_devis), journal, or a function name (e.g. table.rows); leave it out with file to read a file by its id."),
   section: z
     .string()
     .trim()
@@ -189,6 +190,7 @@ export const readNodeSchema = z.object({
     .optional()
     .describe("true: each block comes with its reference, e.g. <!-- ref: 3f9a2c1b -->, for the block operations of write (default false)."),
   // E10-S02 (AC-d2, fiche D119) : le texte d'un fichier joint, champ facultatif ajouté (ADR-002) ; avec `section`, une partie (`lecture-des-fichiers.md`).
+  // Étape 2 du chantier « fichier » : seul, sans `path`, un fichier joint ou l'un de ses fichiers en transit.
   file: z
     .string()
     .trim()
@@ -196,7 +198,7 @@ export const readNodeSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      `Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link ${FILE_ADDRESS}/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
+      `Id of a file (html, md, txt, csv, or a format the host reads), from its link ${FILE_ADDRESS}/<id>, to read its text alone: attached to the page of path, or, without path, any file you can open, your transit files included; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
     ),
 })
 

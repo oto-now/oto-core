@@ -246,8 +246,9 @@ NEVER_EXPORTED.push('connector_consents')
 NEVER_EXPORTED.push('hosted_link_requests')
 // Le journal des partages d'un compte (partage des comptes) : un déclencheur sur `access_rules` l'écrit ; l'import, qui
 // repose les règles, y écrit leurs lignes « posée » hors session. Les lignes de la source citeraient des équipes et des
-// personnes par leurs anciens identifiants.
-NEVER_EXPORTED.push('account_share_events')
+// personnes par leurs anciens identifiants. Les traces des fichiers en transit effacés (`20261021190000`) : 30 jours, lues
+// par leur auteur ; un fichier en transit reste hors de l'export, sa trace aussi.
+NEVER_EXPORTED.push('account_share_events', 'erased_files')
 
 /** @param {string} name */
 function tableSpec(name) {

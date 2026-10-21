@@ -380,6 +380,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   ligne d'un tableau modifiée ou supprimée l'écriture du tableau sur cette seule ligne (zéro ligne pour qui le lit).
   Même garantie qu'avant ; une page de 1 000 blocs s'écrit en une instruction sous le délai d'une session. Une
   fonction, trois déclencheurs, trois policies ; aucune table ni colonne ; rien à relancer avant.
+- `20261021190000_platform_trace_des_fichiers_effaces.sql` (fichiers et stockage, § Adresse unique et lecture d'un
+  fichier en transit ; durée décidée par Alexis le 21/10) : la trace d'un fichier en transit effacé, échu ou consommé,
+  30 jours (`erased_files` : identifiant, organisation, auteur, date, cause, fin de la trace), lisible par son seul
+  auteur, hors quota, sans nom ni taille. Un déclencheur (`files_erased_trace`) la pose à la suppression d'une ligne
+  `ready` en transit, quel que soit le chemin ; aucune pour une ligne `pending`, ni pour une personne qui n'est plus
+  membre. Clés vers `orgs` et `members` en cascade : une organisation supprimée ou une personne retirée, ou oubliée,
+  emporte ses traces. `purge_transit_files`, recréée, retire aussi les traces passées. Une table, une fonction, un
+  déclencheur, une policy ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

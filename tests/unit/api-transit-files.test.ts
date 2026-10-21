@@ -77,7 +77,7 @@ describe("transit-files resource of the gate", () => {
       { status: completed.response.status, body: await completed.response.json(), journal: completed.tasks.length },
     ]).toEqual([
       { status: 201, body: { data: upload }, journal: 1 },
-      { status: 200, body: { data: ready }, journal: 1 },
+      { status: 200, body: { data: { ...ready, url: `/f/${FILE_ID}` } }, journal: 1 },
     ])
     expect(requestTransitUpload).toHaveBeenCalledWith(expect.anything(), IDENTITY, body)
     expect(completeTransitUpload).toHaveBeenCalledWith(expect.anything(), IDENTITY, FILE_ID)

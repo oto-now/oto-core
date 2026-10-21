@@ -152,7 +152,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     return () => spies.flatMap((spy) => spy.mock.calls.map((call) => call.map(String).join(" "))).join("\n")
   }
 
-  it("should keep the downloaded recording as a transit file of the caller for 24 hours, readable by the caller only, and serve its id without the address", async () => {
+  it("should keep the downloaded recording as a transit file of the caller for 24 hours, readable by the caller only, and serve its id and its link, without the third party's address", async () => {
     thirdParty()
     const logged = logs()
     const before = (await rows()).length
@@ -163,8 +163,9 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     expect({ name: file.name, mime: file.mime, size: file.size }).toEqual({ name: "call-987654321-recording.mp3", mime: "audio/mpeg", size: RECORDING.byteLength })
     expect(output.text).toBe(
       [
-        `crm.get_call_recording: file ready: call-987654321-recording.mp3 (audio/mpeg, 2.9 KB), id ${file.id}, yours until ${file.expires_at.slice(0, 16).replace("T", " ")} UTC.`,
-        "Pass this id as is to a function that takes a file; it is deleted once sent, or at that time.",
+        // Sans origine dans le contexte de l'appel, le lien est relatif à la page.
+        `crm.get_call_recording: file ready: [call-987654321-recording.mp3 (${RECORDING.byteLength.toLocaleString("en-US")} bytes, mp3)](/f/${file.id}), yours until ${file.expires_at.slice(0, 16).replace("T", " ")} UTC.`,
+        `Pass its id ${file.id} as is to a function that takes a file; it is deleted once sent, or at that time.`,
       ].join("\n"),
     )
     expect(`${output.text}${JSON.stringify(output.data)}${logged()}`).not.toContain(SIGNATURE)

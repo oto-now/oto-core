@@ -181,9 +181,14 @@ Pour une application Next 15 (App Router) sur Supabase.
      `…/markdown` et `…/html`, pour un fichier cité par un bloc publié du contenu partagé. Fichier en transit (sans
      nœud, entre une personne et un connecteur) : `POST transit-files` `{ name, mime, size }` (types d'un fichier joint,
      50 Mo pour tout type, texte compris, compté au quota ; rend `{ id, upload, expiresAt }`, 24 heures) et
-     `POST transit-files/<id>/complete` `{}` ; il se lit à son adresse, `/f/<id>`, comme un fichier joint ; lisible par son seul
-     auteur, `not_found` pour toute autre personne, administrateur et équipe plateforme compris ; au journal de
-     l'organisation, l'identifiant, la taille et le type MIME seuls, jamais le nom, et un refus par son seul code.
+     `POST transit-files/<id>/complete` `{}` (rend le fichier, son échéance et `url`, `/f/<id>`) ; il se lit à son
+     adresse, `/f/<id>`, comme un fichier joint ; lisible par son seul auteur, `not_found` pour toute autre personne,
+     administrateur et équipe plateforme compris ; au journal de l'organisation, l'identifiant, la taille et le type
+     MIME seuls, jamais le nom, et un refus par son seul code. Effacé (échu, ou consommé par un envoi réussi), il
+     laisse à son auteur, 30 jours, une trace qui fait dire à `/f/<id>`, à `read {file}` et au moteur « File <id> was
+     deleted on <date> (<cause>) … » (`not_found`, raison `file_erased`), sans nom (migration
+     `20261021190000_platform_trace_des_fichiers_effaces.sql`) ; cité dans une page par son auteur, l'écriture est
+     refusée avec ce qu'il faut faire.
    - « Voir » d'un fichier `html` ou `md` ouvre la visionneuse à l'adresse du contenu, `?view=<id>` : la page de
      l'hôte passe `fileView` (`/n/<chemin>`) ou `publicFileView` (`/p/<jeton>/<chemin>`, avec
      `routeDesFichiers={publicFilesRoute(<jeton>)}`) à l'écran. Un fichier HTML s'y exécute dans une iframe
@@ -402,7 +407,8 @@ La fonction reçoit `{ host, request? }` : l'adresse appelée, normalisée, et l
 
 ### Lecteurs de fichiers
 
-Un assistant lit le texte d'un fichier joint par `read {path, file}` : le paquet lit `html`, `md`,
+Un assistant lit le texte d'un fichier joint par `read {path, file}`, ou par `read {file}` seul, qui lit aussi
+l'un de ses fichiers en transit (mêmes lecteurs et bornes, son échéance dans les données) : le paquet lit `html`, `md`,
 `txt`, `csv` et `xlsx` ; un hôte inscrit les lecteurs des formats que lui seul sait lire (un plan, un
 modèle 3D), comme ses fonctions métier.
 

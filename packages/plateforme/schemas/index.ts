@@ -255,7 +255,7 @@ export { FILE_ADDRESS, PLATFORM_API_PREFIX } from "./api"
 export { FILE_MAX_BYTES, FILE_TYPES, fileIdSchema, fileReadQuerySchema, fileRequestSchema, fileTypeOf, IMAGE_TYPES, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES, TEXT_TYPES, transitFileRequestSchema } from "./files"
 export type { FileAvailability, FileReady, FileStorageState, FileType, FileUpload, TransitFile, TransitFileUpload } from "./files"
 // E10-S02 (lot c) : « Voir ». Les routes des fichiers d'un lien public, le paramètre `view` et le fichier vu.
-export { FILES_ROUTE, fileHtmlPath, filePath, fileViewParamSchema, publicFilesRoute } from "./files"
+export { FILES_ROUTE, fileHtmlPath, fileLink, filePath, fileViewParamSchema, publicFilesRoute } from "./files"
 export type { FileMarkdown, FileView, ViewedBlock } from "./files"
 // E12-S02 (ADR-022) : les capacités d'une organisation, fournies par l'hôte, et leur état pour les écrans.
 export { limitReached, orgLimitsSchema } from "./limits"

@@ -9,7 +9,7 @@
 // être rangée sous une page, où toute l'équipe la lirait.
 import { FILE_MAX_BYTES, fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
 import type { PlatformDb } from "../db"
-import { inTransaction, invalidInput } from "../errors"
+import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { insertPending, markReady } from "./rows"
 import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, removeObjects, requireStore, unknownFile } from "./service"
@@ -92,12 +92,43 @@ export async function completeTransitUpload(db: PlatformDb, identity: Identity, 
   return { id: row.id, name: row.name, size: row.size, mime: row.mime, expiresAt: row.expires_at }
 }
 
+/** Ce que dit le refus d'un fichier effacé, selon sa cause. */
+const ERASED_CAUSES: Readonly<Record<string, string>> = { expired: `its ${TRANSIT_HOURS} hours in transit ran out`, consumed: "sent to a third party" }
+
 /**
- * Un fichier en transit de l'appelant, prêt et non échu, pour sa lecture à son adresse (`/f/<id>`, `address.ts`) ; sinon
- * `not_found`, comme `ownTransitRow`.
+ * Le refus d'un fichier en transit de l'appelant effacé (`20261021190000`) : sa trace, 30 jours, ou sa ligne échue que la
+ * purge n'a pas encore emportée, datée de son échéance. `null` pour tout autre identifiant : la trace d'un autre auteur,
+ * que la RLS cache aussi, reste un fichier inconnu.
+ */
+async function erasedRefusal(db: PlatformDb, identity: Identity, id: string): Promise<PlatformError | null> {
+  const [erased] = await inTransaction(db, "files: transit erased", (sql) => sql<{ at: string; cause: string }[]>`
+    select to_json(erased_at) #>> '{}' as at, cause from platform.erased_files
+     where org_id = ${identity.org.id} and id = ${id} and created_by = ${identity.user.id} and keep_until > now()
+    union all
+    select to_json(expires_at) #>> '{}', 'expired' from platform.files
+     where org_id = ${identity.org.id} and id = ${id} and node_id is null and created_by = ${identity.user.id}
+       and status = 'ready' and expires_at <= now()`)
+  if (!erased) return null
+  const at = new Date(erased.at).toISOString()
+  return new PlatformError(
+    "not_found",
+    `File ${id} was deleted on ${at.slice(0, 16).replace("T", " ")} UTC (${ERASED_CAUSES[erased.cause]}): run the function that produced it again, or upload it again.`,
+    { reason: "file_erased", erased_at: at, cause: erased.cause },
+  )
+}
+
+/**
+ * Un fichier en transit de l'appelant, prêt et non échu, pour sa lecture (`/f/<id>`, `read {file}`, le moteur) ; effacé,
+ * le refus qui le date et dit quoi faire, à son seul auteur ; sinon `not_found`, comme `ownTransitRow`.
  */
 export async function readyTransitFile(db: PlatformDb, identity: Identity, fileId: unknown): Promise<TransitRow> {
-  return ownTransitRow(db, identity, transitIdOf(fileId), "ready")
+  const id = transitIdOf(fileId)
+  try {
+    return await ownTransitRow(db, identity, id, "ready")
+  } catch (error) {
+    if (!(error instanceof PlatformError) || error.code !== "not_found") throw error
+    throw (await erasedRefusal(db, identity, id)) ?? error
+  }
 }
 
 /**

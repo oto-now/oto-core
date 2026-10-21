@@ -328,7 +328,7 @@ async function create(db: PlatformDb, identity: Identity, body: WriteNodeBody, o
   }
   // Rien n'est écrit tant que les opérations ne sont pas passées (AC22) : elles s'appliquent d'abord à vide.
   const planned = applyOps([], body.ops ?? [], { path, tolerant: tolerantFor(body, origin), wholeFile: uploadedFile(origin) !== undefined, opsMax: opsMaxFor(origin) })
-  refuseFilesOnCreate(planned.blocks, { path, tolerant: tolerantFor(body, origin) })
+  await refuseFilesOnCreate(db, identity, planned.blocks, { path, tolerant: tolerantFor(body, origin) })
   const spec = { path, parent: parent.node, kind, title: body.title, summary: body.summary }
   // Le nœud, son brouillon et son contenu dans une seule transaction (E01-S10, AC-x4) : une création arrêtée
   // au milieu ne laisse ni nœud ni brouillon. Un nœud neuf hérite du propriétaire et des règles de son

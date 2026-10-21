@@ -6,7 +6,7 @@
 // dans une erreur ; un log ne nomme que la fonction.
 import type { FunctionContext } from "../catalog/define"
 import { PlatformError } from "../errors"
-import type { TransitFile } from "../../schemas"
+import { FILE_ADDRESS, type TransitFile } from "../../schemas"
 import { expireTransitFile, readTransitBytes, storeTransitFile, type TransitBytes } from "../files/transit"
 import { isJsonObject } from "../json"
 import type { ConnectorFunctionDefinition } from "./definition"
@@ -17,14 +17,17 @@ import type { RawBody } from "./http"
  * (`keep`, `connecteurs-et-comptes.md` § Fichiers rendus par un tiers).
  */
 export type TransitFiles = {
+  /** L'adresse des fichiers de l'appelant (`<origine>/f`, relative sans origine), où se lit celui qu'une fonction rend. */
+  route: string
   read(id: unknown): Promise<TransitBytes>
   consume(id: string): Promise<void>
   keep(file: { name: string; bytes: Uint8Array }): Promise<TransitFile>
 }
 
 /** Les fichiers en transit de la personne qui appelle, sous son identité : jamais ceux d'un autre. */
-export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identity">): TransitFiles {
+export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identity" | "origin">): TransitFiles {
   return {
+    route: `${context.origin ?? ""}${FILE_ADDRESS}`,
     read: (id) => readTransitBytes(context.db, context.identity, id),
     consume: (id) => expireTransitFile(context.db, context.identity, id),
     keep: (file) => storeTransitFile(context.db, context.identity, file),

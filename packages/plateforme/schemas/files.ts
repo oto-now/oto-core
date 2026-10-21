@@ -146,6 +146,15 @@ export function fileSizeText(bytes: number): string {
 }
 
 /**
+ * Le lien d'un fichier tel qu'une page le cite (AC-d1) : `[nom (taille, type)](<route>/<id>)`, le type étant l'extension du
+ * nom, ou le type de la ligne pour un nom sans extension. Le bloc `file` se rend ainsi, et un assistant reçoit sous cette
+ * forme le fichier en transit qu'une fonction lui rend. `route` : `<origine>/f` pour une adresse absolue.
+ */
+export function fileLink(file: { id: string; name: string; size: number; mime: string }, route: string = FILE_ADDRESS): string {
+  return `[${file.name} (${fileSizeText(file.size)}, ${fileExtension(file.name) || file.mime})](${filePath(file.id, route)})`
+}
+
+/**
  * `?view=<id>` sur l'adresse d'un contenu (AC-c1, AC-c2) : la visionneuse d'un fichier joint. Absent : l'écran du
  * nœud. Illisible (répété, pas une chaîne) : une chaîne vide, qu'un service dit introuvable comme un identifiant
  * inconnu, jamais l'écran du nœud à la place de la visionneuse demandée.
