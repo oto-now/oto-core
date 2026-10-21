@@ -349,10 +349,6 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
           <PartageSurLeWeb chemin={noeud.path} annoncer={setAnnonce} signaler={setErreur} />
         </SectionDuPartage>
       )}
-      <p className="oto-share-foot">
-        {PARTAGE.votreAccesLibelle}
-        <NiveauLu niveau={ACCESS_LEVEL_NAMES[noeud.viewerLevel]} />
-      </p>
       {!gere && <p className="oto-caption">{PARTAGE.reserve}</p>}
       <div role="status" className="oto-caption">
         {annonce}

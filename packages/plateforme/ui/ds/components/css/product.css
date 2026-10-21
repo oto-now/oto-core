@@ -632,6 +632,12 @@
 
 /* E05-S10 (partie b) — l'en-tête d'un nœud et son panneau « Partager ». */
 
+/* L'en-tête d'un nœud (`.oto-node-header`) : la ligne « modifiée … » passe sous le titre, alignée à droite, à l'écart d'un rang (`row-gap`, 4 px) ; posée à côté du titre, elle le serrait et partait à la ligne au gré de sa longueur. En une colonne, elle suit le titre dans l'ordre du DOM, toujours à droite. */
+.oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: 3 / 1 / 4 / -1; justify-self: end; align-self: start; }
+@media (max-width: 767px) {
+  .oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: auto; justify-self: end; }
+}
+
 /* La ligne sous le titre (« modifiée il y a 3 jours, par Claire ») porte une infobulle : le pointillé la signale, le focus l'ouvre au clavier. */
 .oto-node-modified { border-radius: var(--r-ctrl); text-decoration: underline dotted; text-underline-offset: 3px; cursor: default; }
 .oto-node-modified:focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -662,7 +668,7 @@
 .oto-share-level .oto-select-trigger::before,
 .oto-share-pill::before { content: ""; flex: none; inline-size: 6px; block-size: 6px; margin-inline-end: var(--space-1-5); border-radius: 50%; background: var(--niveau); }
 
-/* Le panneau « Partager » en sections (1.4.13) : un intertitre en étiquette du ton Oto (le primary de l'organisation, `--oto-bg` et `--oto-ink`, la paire du badge `oto`), l'icône et le compte dedans ; des lignes resserrées, le nom suivi de ses étiquettes (« vous », « responsable », « exception »). Le pied « Votre accès » en `--mute` sur l'îlot : 4,78:1 au pire des huit thèmes, jour et nuit (mesure de `button.css`). */
+/* Le panneau « Partager » en sections (1.4.13) : un intertitre en étiquette du ton Oto (le primary de l'organisation, `--oto-bg` et `--oto-ink`, la paire du badge `oto`), l'icône et le compte dedans ; des lignes resserrées, le nom suivi de ses étiquettes (« vous », « responsable », « exception »). */
 .oto-share-panel { display: flex; flex-direction: column; gap: var(--space-3); }
 .oto-share-section { display: flex; flex-direction: column; gap: var(--space-1); }
 .oto-share-heading {
@@ -678,8 +684,6 @@
 .oto-share-count { font-variant-numeric: tabular-nums; }
 .oto-share-section .oto-pop-row { padding-block: var(--space-1); }
 .oto-share-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1-5); min-inline-size: 0; }
-.oto-share-foot { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding-block-start: var(--space-2); border-block-start: 1px solid var(--hair); font-size: var(--fs-xs); color: var(--mute); }
-.oto-share-foot > .oto-share-level { margin-inline-start: 0; }
 
 /* Les suggestions du champ « Ajouter une personne ou une équipe » : dans le panneau, sous le champ, au pas d'un menu. */
 .oto-share-suggestions { display: flex; flex-direction: column; max-block-size: 240px; overflow: auto; padding: var(--space-1); border: 1px solid var(--island-bd); border-radius: var(--r-ctrl); }

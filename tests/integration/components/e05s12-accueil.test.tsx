@@ -4,9 +4,9 @@
 // qu'il prête ; l'écran reçoit les données déjà lues, comme de sa page. Les journées, le premier jour et les
 // lectures en échec restent éprouvés par `ecran-accueil.test.tsx`. 1.4.13 : le fil est l'onglet « Fil » de la carte
 // « Reprendre », le contenu cité d'une ligne qui l'ouvre se montre comme un lien ; à droite, « Brancher votre
-// assistant », « Lancer » et « Nouveautés depuis votre dernière visite ».
+// assistant », « Lancer » et « Nouveautés ».
 import type { AnchorHTMLAttributes } from "react"
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Activity, UsefulProcedure } from "@otomata_tech/oto_platform/schemas"
 import { ContexteDeLHote, ContexteDeRafraichissement, CoquilleOto, EcranDAccueil, type DonneesDeLAccueil } from "@otomata_tech/oto_platform/ui"
@@ -134,7 +134,8 @@ describe("home activities, one line each (E05-S12, AC-13, AC-15)", () => {
     expect(sansRevue).toHaveAccessibleName("Ada Martin a supprimé des lignes dans le tableau Salons 11:00")
   })
 
-  it("should open the conversation of a launched procedure, and nothing for a content the person does not read, keeping its path as the journal shows it", () => {
+  // Retours du 21/10 : une procédure lancée ouvre la procédure, le contenu que la ligne cite.
+  it("should open a launched procedure, and nothing for a content the person does not read, keeping its path as the journal shows it", () => {
     monter({
       activites: {
         data: {
@@ -150,7 +151,12 @@ describe("home activities, one line each (E05-S12, AC-13, AC-15)", () => {
     })
 
     const [lancee, corbeille, privee] = lignes()
-    expect(lancee).toHaveAttribute("href", "/journal?conversation=K7M2-9QXR")
+    expect(lancee).toHaveAttribute("href", "/n/ventes/relance_devis")
+    // Et, à côté de la ligne, sa conversation au journal : deux liens, jamais l'un dans l'autre.
+    const conversation = screen.getByRole("link", { name: "Voir la conversation dans le journal : Relancer les devis" })
+    expect(conversation).toHaveAttribute("href", "/journal?conversation=K7M2-9QXR")
+    expect(lancee.contains(conversation)).toBe(false)
+    expect(screen.getAllByRole("link", { name: /^Voir la conversation/ })).toHaveLength(1)
     expect(lancee).toHaveAccessibleName("Ada Martin a lancé la procédure Relancer les devis 11:00")
     expect(corbeille.tagName).toBe("DIV")
     expect(corbeille.querySelector(".oto-feed-cible")).toBeNull()
@@ -171,8 +177,8 @@ describe("home right column (E05-S12, AC-18)", () => {
 
     const principal = screen.getByRole("region", { name: "Reprendre" })
     const brancher = screen.getByRole("region", { name: "Brancher votre assistant" })
-    const lancer = screen.getByRole("region", { name: "Lancer" })
-    const nouveautes = screen.getByRole("region", { name: "Nouveautés depuis votre dernière visite" })
+    const lancer = screen.getByRole("region", { name: "Lancer avec Claude" })
+    const nouveautes = screen.getByRole("region", { name: "Nouveautés" })
     const colonnes = [...document.querySelectorAll(".oto-home-col")]
     expect(colonnes).toHaveLength(2)
     expect(colonnes[0]).toContainElement(principal)
@@ -186,10 +192,10 @@ describe("home right column (E05-S12, AC-18)", () => {
   it("should list the procedures to launch in the order served, each with its glyph and its title, opening the procedure", () => {
     monter({ procedures: { data: PROCEDURES } })
 
-    const liens = within(screen.getByRole("region", { name: "Lancer" })).getAllByRole("link")
-    expect(liens.map((lien) => [lien.textContent, lien.getAttribute("href"), lien.dataset.lien])).toEqual([
-      ["Relancer les devis", "/n/ventes/relance_devis", "hote"],
-      ["Passer une commande", "/n/achats/commande", "hote"],
+    const liens = within(screen.getByRole("region", { name: "Lancer avec Claude" })).getAllByRole("link").filter((lien) => lien.dataset.lien === "hote")
+    expect(liens.map((lien) => [lien.textContent, lien.getAttribute("href")])).toEqual([
+      ["Relancer les devis", "/n/ventes/relance_devis"],
+      ["Passer une commande", "/n/achats/commande"],
     ])
     expect(liens[0].querySelector("svg")).not.toBeNull()
   })
@@ -197,32 +203,24 @@ describe("home right column (E05-S12, AC-18)", () => {
   it("should say that no procedure is published when the list is empty, without any action", () => {
     monter({ procedures: { data: [] } })
 
-    const ilot = within(screen.getByRole("region", { name: "Lancer" }))
+    const ilot = within(screen.getByRole("region", { name: "Lancer avec Claude" }))
     expect(ilot.getByText("Aucune procédure publiée")).toBeInTheDocument()
     expect(ilot.queryByRole("link")).toBeNull()
     expect(ilot.queryByRole("button")).toBeNull()
   })
 })
 
-// 1.4.13 : « Lancer » copie la demande à coller dans l'assistant ; « Nouveautés » ouvre ce que d'autres ont publié.
-describe("home Lancer and news (1.4.13)", () => {
-  afterEach(() => {
-    Reflect.deleteProperty(navigator, "clipboard")
-  })
-
-  it("should copy the request of a procedure, say it in a status region, and say a refused copy", async () => {
-    const writeText = vi.fn(async () => undefined)
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true })
+// 1.4.13 : « Lancer avec Claude » ouvre Claude sur la demande ; « Nouveautés » ouvre ce que d'autres ont publié.
+describe("home Lancer avec Claude and news (1.4.13)", () => {
+  it("should open Claude in a new tab on the request of a procedure, by a link", () => {
     monter({ procedures: { data: [{ path: "ventes/relance_devis", title: "Relancer les devis" }] } })
-    const lancer = within(screen.getByRole("region", { name: "Lancer" }))
+    const lancer = within(screen.getByRole("region", { name: "Lancer avec Claude" }))
 
-    fireEvent.click(lancer.getByRole("button", { name: "Copier la demande : Relancer les devis" }))
-    await waitFor(() => expect(lancer.getByRole("status")).toHaveTextContent("Demande copiée"))
-    expect(writeText).toHaveBeenCalledWith("Suis la procédure « Relancer les devis » (ventes/relance_devis).")
-
-    writeText.mockRejectedValueOnce(new Error("denied"))
-    fireEvent.click(lancer.getByRole("button", { name: "Copier la demande : Relancer les devis" }))
-    await waitFor(() => expect(lancer.getByRole("status")).toHaveTextContent("Copie impossible"))
+    const lien = lancer.getByRole("link", { name: "Lancer dans Claude : Relancer les devis" })
+    const adresse = new URL(lien.getAttribute("href") ?? "")
+    expect([adresse.origin, adresse.pathname, adresse.searchParams.get("q")]).toEqual(["https://claude.ai", "/new", "Suis la procédure « Relancer les devis » (ventes/relance_devis)."])
+    expect([lien.getAttribute("target"), lien.getAttribute("rel")]).toEqual(["_blank", "noopener noreferrer"])
+    expect(lancer.queryByRole("button")).toBeNull()
   })
 
   it("should list the news since the last visit, each opening its content, and say when there is none", () => {
@@ -231,7 +229,7 @@ describe("home Lancer and news (1.4.13)", () => {
         data: { since: "2026-09-24T00:00:00.000Z", items: [{ path: "ventes/tarifs_2026", title: "Tarifs 2026", kind: "page", at: "2026-09-25T08:00:00.000Z", byName: "Ada Martin" }] },
       },
     })
-    const nouveautes = within(screen.getByRole("region", { name: "Nouveautés depuis votre dernière visite" }))
+    const nouveautes = within(screen.getByRole("region", { name: "Nouveautés" }))
     expect(nouveautes.getByText("Depuis le 24 septembre 2026")).toBeInTheDocument()
     const [lien] = nouveautes.getAllByRole("link")
     expect([lien.getAttribute("href"), lien.dataset.lien]).toEqual(["/n/ventes/tarifs_2026", "hote"])
@@ -239,6 +237,6 @@ describe("home Lancer and news (1.4.13)", () => {
     cleanup()
 
     monter({})
-    expect(within(screen.getByRole("region", { name: "Nouveautés depuis votre dernière visite" })).getByText("Rien de nouveau depuis votre dernière visite")).toBeInTheDocument()
+    expect(within(screen.getByRole("region", { name: "Nouveautés" })).getByText("Rien de nouveau depuis votre dernière visite")).toBeInTheDocument()
   })
 })

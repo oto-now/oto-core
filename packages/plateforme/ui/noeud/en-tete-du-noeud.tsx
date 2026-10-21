@@ -112,6 +112,7 @@ export function EnTeteDuNoeud({ vue, titre, arbre, equipes, handle, prefixeDesPa
       {/* Le chemin actuel, que le rail reconnaît sous un ancien chemin resté dans l'adresse (AC-b12). */}
       <NoeudOuvert chemin={vue.path} />
       <ScreenHeader
+        className="oto-node-header"
         breadcrumb={<FilDuNoeud maillons={filDuChemin({ chemin: vue.path, titre, arbre, equipes, handle, prefixe: prefixeDesPages })} />}
         icon={<GlypheDeNature nature={natureDuGenre(genreDuNoeud(vue))} taille="sm" />}
         title={modifiable ? <TitreModifiable titre={titre} revisionServie={vue.revision} tamponServi={vue.draft?.draftStamp ?? null} /> : titre}

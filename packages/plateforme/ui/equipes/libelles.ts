@@ -16,10 +16,12 @@ export function surLeNom(erreur: ErreurPlateforme): boolean {
 }
 
 /** Les refus d'un nom d'équipe qui nomment l'organisation, à la création comme au renommage (AC11, AC12). */
-export function refusDuNom(nomOrganisation: string): MessagesDuGeste {
+/** Les refus d'un nom d'équipe ; sans le nom de l'organisation (le rail ne l'a pas), la phrase s'en passe. */
+export function refusDuNom(nomOrganisation?: string): MessagesDuGeste {
+  const de = nomOrganisation ? ` de ${nomOrganisation}` : ""
   return {
-    name_taken: `Une équipe de ${nomOrganisation} porte déjà ce nom.`,
-    slug_taken: `Une autre équipe de ${nomOrganisation} utilise déjà le chemin de ce nom : choisissez-en un autre.`,
+    name_taken: `Une équipe${de} porte déjà ce nom.`,
+    slug_taken: `Une autre équipe${de} utilise déjà le chemin de ce nom : choisissez-en un autre.`,
   }
 }
 

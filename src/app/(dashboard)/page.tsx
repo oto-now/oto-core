@@ -54,7 +54,8 @@ function connexionsDe(connexions: LastConnection[]): DerniereConnexion[] {
 
 async function lire({ identity, session }: { identity: Identity; session: PlatformSession }, origine: string): Promise<DonneesDeLAccueil> {
   const [activites, reprendre, nouveautes, connexions, procedures] = await Promise.all([
-    resultatDe(listActivities(session.db, identity, { periodDays: PERIODE })),
+    // Le fil s'ouvre sur « Mes équipes », le filtre par défaut de la carte ; ses autres filtres passent par l'API.
+    resultatDe(listActivities(session.db, identity, { periodDays: PERIODE, scope: "teams" })),
     resultatDe(homeContents(session.db, identity, { tab: "recent", scope: "teams" })),
     resultatDe(homeNews(session.db, identity)),
     resultatDe(lastConnections(session.db, identity).then(connexionsDe)),

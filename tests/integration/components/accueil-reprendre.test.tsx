@@ -1,6 +1,8 @@
 // La carte « Reprendre » de l'accueil (1.4.13) : « Récents » ouvert par défaut sur « Mes équipes », la première page
 // venue de l'hôte ; un autre onglet ou un autre filtre lu par `GET /api/platform/home`, « Voir plus » qui ajoute la page
-// suivante ; les quatre états (lecture, échec et « Réessayer », vide, lignes). L'API simulée par `fetch`.
+// suivante ; les quatre états (lecture, échec et « Réessayer », vide, lignes). L'API simulée par `fetch`. Retours du 21/10 :
+// les filtres sur la ligne des onglets, aussi pour le fil (`GET /api/platform/home/activities`) ; une ligne dit l'espace du
+// contenu, jamais son chemin.
 import type { AnchorHTMLAttributes } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -14,10 +16,8 @@ const contenu = (rang: number, surcharge: Partial<HomeContent> = {}): HomeConten
   path: `ventes/page_${rang}`,
   title: `Page ${rang}`,
   kind: "page",
+  space: { kind: "team", name: "Ventes" },
   at: "2026-09-26T08:00:00Z",
-  byName: "Ada Martin",
-  byMe: false,
-  via: "screen",
   ...surcharge,
 })
 
@@ -38,7 +38,7 @@ function LienDeLHote({ href, children, ...reste }: AnchorHTMLAttributes<HTMLAnch
 function monter(premiere: { data: HomeContentsPage } | { error: string }) {
   render(
     <ContexteDeLHote.Provider value={{ Lien: LienDeLHote, chemin: "/", naviguer: vi.fn() }}>
-      <Reprendre premiere={premiere} prefixeDesPages="/n/" fil={<p>Le fil du journal</p>} />
+      <Reprendre premiere={premiere} premierFil={{ data: { activities: [], truncated: false } }} moi="u-moi" hrefDuJournal="/journal" modeleDeConversation="/journal?conversation=OTOCODEDECONVERSATION" prefixeDesPages="/n/" />
     </ContexteDeLHote.Provider>,
   )
 }
@@ -62,12 +62,14 @@ afterEach(() => {
 describe("Reprendre, the card of the home (1.4.13)", () => {
   it("should open « Récents » on « Mes équipes » with the host's first page, each line opening its content, and add the next page on « Voir plus »", async () => {
     fetchMock.mockResolvedValue(reponse(200, { data: { items: [contenu(3)], hasMore: false } }))
-    monter({ data: { items: [contenu(1, { byMe: true, via: "assistant" }), contenu(2)], hasMore: true } })
+    monter({ data: { items: [contenu(1), contenu(2, { space: { kind: "org" } })], hasMore: true } })
 
     expect(screen.getByRole("tab", { name: "Récents" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByRole("radio", { name: "Mes équipes" })).toBeChecked()
     expect(liens()).toEqual(["/n/ventes/page_1", "/n/ventes/page_2"])
-    expect(screen.getAllByRole("link")[0]).toHaveTextContent("Page 1ventes/page_1 · vous · via l'assistantil y a 2 heures")
+    // Le titre, puis l'espace et la date : ni chemin, ni porte.
+    expect(screen.getAllByRole("link")[0]).toHaveTextContent("Page 1Ventesil y a 2 heures")
+    expect(screen.getAllByRole("link")[0]).not.toHaveTextContent("ventes/page_1")
     expect(screen.getAllByRole("link")[0]).toHaveAttribute("data-lien", "hote")
     expect(fetchMock).not.toHaveBeenCalled()
 
@@ -90,7 +92,7 @@ describe("Reprendre, the card of the home (1.4.13)", () => {
   it("should read another filter and the most consulted contents from the start, counting their consultations", async () => {
     fetchMock.mockImplementation(async (adresse) =>
       String(adresse).includes("tab=viewed")
-        ? reponse(200, { data: { items: [contenu(9, { views: { screen: 4, assistant: 3 }, via: "screen" })], hasMore: false } })
+        ? reponse(200, { data: { items: [contenu(9, { views: { screen: 4, assistant: 3 }, space: { kind: "user" } })], hasMore: false } })
         : reponse(200, { data: { items: [], hasMore: false } }),
     )
     monter({ data: { items: [contenu(1)], hasMore: false } })
@@ -99,7 +101,7 @@ describe("Reprendre, the card of the home (1.4.13)", () => {
     expect(await screen.findByText("Aucun contenu modifié ici pour l'instant")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("tab", { name: "Les plus consultés" }))
     await waitFor(() => expect(liens()).toEqual(["/n/ventes/page_9"]))
-    expect(screen.getByRole("link")).toHaveTextContent("ventes/page_9 · 7 consultations · à l'écran")
+    expect(screen.getByRole("link")).toHaveTextContent("Privé · 7 consultations")
     expect(lectures()).toEqual([
       { tab: "recent", scope: "me", offset: "0" },
       { tab: "viewed", scope: "me", offset: "0" },
@@ -128,13 +130,35 @@ describe("Reprendre, the card of the home (1.4.13)", () => {
     expect(screen.getByRole("radio", { name: "Toute l'organisation" })).toBeChecked()
   })
 
-  it("should show the feed, rendered by the server, in « Fil », without filter nor reading", () => {
+  it("should show the host's feed of « Mes équipes » in « Fil », then read another filter of the feed by the API", async () => {
+    fetchMock.mockResolvedValue(
+      reponse(200, {
+        data: {
+          truncated: false,
+          activities: [{ id: 3, at: "2026-09-26T08:00:00Z", userId: "u-moi", userName: "Léa Roux", verb: "edited", kind: "page", path: "ventes/tarifs", title: "Tarifs", count: 1, ctx: null }],
+        },
+      }),
+    )
     monter({ data: { items: [contenu(1)], hasMore: false } })
 
     fireEvent.click(screen.getByRole("tab", { name: "Fil" }))
-    expect(screen.getByText("Le fil du journal")).toBeInTheDocument()
-    expect(screen.queryByRole("radiogroup")).toBeNull()
+    expect(screen.getByText("Aucune activité cette semaine")).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+    // Les filtres restent sur la ligne des onglets, et filtrent aussi le fil.
+    fireEvent.click(screen.getByRole("radio", { name: "Moi" }))
+    await waitFor(() => expect(screen.getByRole("link", { name: /Vous avez modifié la page Tarifs/ })).toHaveAttribute("href", "/n/ventes/tarifs"))
+    expect(fetchMock.mock.calls.map(([adresse]) => String(adresse))).toEqual(["/api/platform/home/activities?scope=me"])
+  })
+
+  it("should put the filters on the line of the tabs, after them and before the panel", () => {
+    monter({ data: { items: [contenu(1)], hasMore: false } })
+
+    const ligne = document.querySelector(".oto-tabs-row")
+    expect(ligne?.querySelector("[role=tablist]")).not.toBeNull()
+    expect(ligne?.querySelector("[role=radiogroup]")).not.toBeNull()
+    const [onglets, filtres, panneau] = [screen.getByRole("tablist"), screen.getByRole("radiogroup"), screen.getByRole("tabpanel")]
+    expect(onglets.compareDocumentPosition(filtres) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(filtres.compareDocumentPosition(panneau) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("should say a failed first page with « Réessayer », which reads it again by the API", async () => {

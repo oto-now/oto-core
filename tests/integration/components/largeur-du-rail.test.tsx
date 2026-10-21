@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { RAIL } from "../../../packages/plateforme/ui/coque/libelles"
-import { amenerEnVue } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
+import { amenerEnVue, defilementEnLargeur } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
 import { PoigneeDuRail } from "../../../packages/plateforme/ui/coque/poignee-du-rail"
 
 function monter() {
@@ -59,11 +59,15 @@ describe("amenerEnVue", () => {
     return { conteneur, element }
   }
 
-  it("should scroll down to a line below the view, and right to its start when it overflows", () => {
+  it("should scroll down to a line below the view, and not sideways for a first-level line that overflows", () => {
     const { conteneur, element } = cadre(boite(120, 600, 300, 28))
+    const arbre = document.createElement("ul")
+    arbre.className = "oto-rail-tree"
+    arbre.append(element)
+    conteneur.append(arbre)
     amenerEnVue(conteneur, element)
     expect(conteneur.scrollTop).toBe(236)
-    expect(conteneur.scrollLeft).toBe(112)
+    expect(conteneur.scrollLeft).toBe(0)
   })
 
   it("should not scroll for a line already in view", () => {
@@ -71,5 +75,19 @@ describe("amenerEnVue", () => {
     amenerEnVue(conteneur, element)
     expect(conteneur.scrollTop).toBe(0)
     expect(conteneur.scrollLeft).toBe(0)
+  })
+})
+
+// 1.5.1 : en largeur, un pas de retrait par niveau sous le premier, jamais plus, et seulement si la ligne dépasse.
+describe("defilementEnLargeur", () => {
+  it.each([
+    { profondeur: 1, pas: 16, deborde: true, actuel: 0, attendu: 0 },
+    { profondeur: 2, pas: 16, deborde: true, actuel: 0, attendu: 16 },
+    { profondeur: 3, pas: 16, deborde: true, actuel: 0, attendu: 32 },
+    { profondeur: 3, pas: 16, deborde: true, actuel: 200, attendu: 32 },
+    { profondeur: 3, pas: 16, deborde: false, actuel: 40, attendu: 40 },
+    { profondeur: 0, pas: 16, deborde: true, actuel: 0, attendu: 0 },
+  ])("should scroll a line at depth $profondeur (overflowing $deborde, from $actuel) to $attendu", ({ profondeur, pas, deborde, actuel, attendu }) => {
+    expect(defilementEnLargeur(profondeur, pas, deborde, actuel)).toBe(attendu)
   })
 })

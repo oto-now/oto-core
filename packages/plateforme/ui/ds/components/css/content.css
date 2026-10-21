@@ -11,6 +11,9 @@
   min-inline-size: 0;
 }
 
+/* Le panneau d'accès (« Partager ») : 500 px, la largeur que ses lignes demandent (nom, étiquettes, pastille de niveau), sans dépasser l'écran (1.5.1). */
+.oto-pop.oto-access-pop { inline-size: min(500px, calc(100vw - var(--space-4))); max-inline-size: min(500px, calc(100vw - var(--space-4))); }
+
 /* ── le périmètre et le « ⋯ », deux déclencheurs de popover posés sur le bureau : le filet et le fond `--island` les détachent du grain, un bouton fantôme y disparaîtrait ; `[data-icon-only]`, l'attribut que pose déjà `IconButton`. */
 .oto-scope {
   display: inline-flex;

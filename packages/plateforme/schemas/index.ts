@@ -89,12 +89,13 @@ export {
   HOME_PAGE_SIZE,
   HOME_SCOPES,
   HOME_VIEWED_DAYS,
+  homeActivitiesQuerySchema,
   homeContentsQuerySchema,
   LAUNCH_PROCEDURES_SHOWN,
   NODE_VIEWS_KEPT_DAYS,
   nodeViewSchema,
 } from "./accueil"
-export type { HomeContent, HomeContentsPage, HomeNews, HomeScope, HomeTab } from "./accueil"
+export type { HomeContent, HomeContentsPage, HomeNews, HomeScope, HomeSpace, HomeTab } from "./accueil"
 // Les bornes du nom, des domaines de travail, des seuils, du motif et du préfixe ne sortent que par les
 // schémas qui les composent : les schémas servis du MCP admin les en tirent (`orgSettingsSchema.shape`,
 // `platformAccessSchema.shape`). `hostSchema` sort seul : E09-S02 en passe chaque adresse d'une création

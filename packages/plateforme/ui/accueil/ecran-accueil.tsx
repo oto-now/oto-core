@@ -23,17 +23,16 @@ import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import type { ExempleDePrompt } from "../connexion/types"
 import { HomeLayout } from "../ds/react/home"
-import { Island, IslandBody, IslandHead } from "../ds/react/island"
+import { Island, IslandBody } from "../ds/react/island"
 import { ScreenHeader } from "../ds/react/screen-header"
 import { Skeleton } from "../ds/react/skeleton"
 import { BranchementIA } from "./branchement-ia"
-import { ActivitesDeLAccueil } from "./fil-activite"
 import { FirstDay } from "./first-day"
 import { ACCUEIL } from "./libelles"
 import { Lancer } from "./lancer"
 import { Nouveautes } from "./nouveautes"
 import { Reprendre } from "./reprendre"
-import type { DonneesDeLAccueil } from "./types"
+import { MARQUE_DE_CONVERSATION, type DonneesDeLAccueil } from "./types"
 
 /** Le salut, décoratif : le titre se lit sans lui. */
 const SALUT = <span aria-hidden="true">👋</span>
@@ -44,7 +43,7 @@ export type EcranDAccueilProps = {
   Lien: LienDeLHote
   /** L'adresse du journal : « Tout le journal ». */
   hrefDuJournal: string
-  /** L'adresse d'une conversation au journal, par son code `ctx` : une procédure lancée l'ouvre. */
+  /** L'adresse d'une conversation au journal, par son code `ctx` : le petit lien d'une procédure lancée l'ouvre. */
   hrefDeConversation: (code: string) => string
   /** Le préfixe des pages de l'arbre (« /n/ ») : l'adresse d'un contenu est ce préfixe suivi de son chemin. */
   prefixeDesPages: string
@@ -60,33 +59,28 @@ function estLePremierJour({ activites, connexions }: DonneesDeLAccueil): boolean
 
 type IlotDesActivitesProps = Omit<EcranDAccueilProps, "donnees"> & { lu: DonneesDeLAccueil; premierJour: boolean }
 
-/** L'îlot principal : « Reprendre » et ses onglets, ou, le premier jour, sa phrase (HN-E05S11-11). */
-function IlotDesActivites({ lu, premierJour, Lien, hrefDuJournal, hrefDeConversation, prefixeDesPages }: IlotDesActivitesProps) {
+/**
+ * L'îlot principal, sans titre (1.4.13, retours du 21/10) : ses onglets et ses filtres tiennent l'en-tête (`Reprendre`) ;
+ * le premier jour, sa phrase (HN-E05S11-11). La région se nomme toujours « Reprendre ».
+ */
+function IlotDesActivites({ lu, premierJour, hrefDuJournal, hrefDeConversation, prefixeDesPages }: IlotDesActivitesProps) {
   return (
     <Island aria-label={ACCUEIL.ilot}>
-      <IslandHead>
-        <h2>{ACCUEIL.ilot}</h2>
-      </IslandHead>
-      <IslandBody>
-        {premierJour ? (
+      {premierJour ? (
+        <IslandBody>
           <FirstDay />
-        ) : (
-          <Reprendre
-            premiere={lu.reprendre}
-            prefixeDesPages={prefixeDesPages}
-            fil={
-              <ActivitesDeLAccueil
-                activites={lu.activites}
-                moi={lu.moi}
-                Lien={Lien}
-                hrefDuJournal={hrefDuJournal}
-                hrefDeConversation={hrefDeConversation}
-                prefixeDesPages={prefixeDesPages}
-              />
-            }
-          />
-        )}
-      </IslandBody>
+        </IslandBody>
+      ) : (
+        <Reprendre
+          premiere={lu.reprendre}
+          premierFil={lu.activites}
+          moi={lu.moi}
+          hrefDuJournal={hrefDuJournal}
+          // La fonction de l'hôte ne traverse pas la frontière client : son adresse, la marque à la place du code.
+          modeleDeConversation={hrefDeConversation(MARQUE_DE_CONVERSATION)}
+          prefixeDesPages={prefixeDesPages}
+        />
+      )}
     </Island>
   )
 }
@@ -116,7 +110,7 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
           <>
             <BranchementIA adresse={lu.adresse} exemples={exemplesDe(lu.procedures)} connexions={lu.connexions} />
             {/* Le premier jour retire les procédures et les nouveautés : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
-            {!premierJour && <Lancer procedures={lu.procedures} prefixeDesPages={props.prefixeDesPages} />}
+            {!premierJour && <Lancer procedures={lu.procedures} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
             {!premierJour && <Nouveautes nouveautes={lu.nouveautes} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
           </>
         }

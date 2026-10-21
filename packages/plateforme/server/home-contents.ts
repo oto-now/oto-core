@@ -1,7 +1,8 @@
 // La carte « Reprendre » de l'accueil et ses nouveautés (1.4.13) : les contenus modifiés récemment et les plus
 // consultés (vues à l'écran, `node_views`, et lectures des assistants, au journal), filtrés par ce que la personne a
 // touché, ce que possèdent ses équipes ou tout ce qu'elle lit ; puis les contenus publiés par d'autres depuis sa
-// dernière visite. Une lecture par service, dans une transaction ; les candidats lus dans l'organisation, puis gardés
+// dernière visite. Une ligne dit l'espace du contenu (son équipe propriétaire, Tout le monde, Privé), jamais son chemin ni
+// son auteur. Une lecture par service, dans une transaction ; les candidats lus dans l'organisation, puis gardés
 // au seuil de la lecture par `nodeLevels` (`security-patterns.md § Droits dans le service` : un filtre de liste compare
 // au niveau 1). Le journal ne se lit que dans la portée de la personne (H74, `journalScope`) : un membre compte les
 // lectures de ses assistants et de ceux des équipes qu'il mène, un administrateur celles de toute l'organisation.
@@ -20,6 +21,7 @@ import {
   type HomeContentsPage,
   type HomeNews,
   type HomeScope,
+  type HomeSpace,
   type NodeKind,
 } from "../schemas"
 import { HOME_OFFSET_MAX } from "../schemas/accueil"
@@ -36,8 +38,19 @@ const DAY_MS = 86_400_000
 /** Candidats lus au plus par page demandée, avant le filtre de lecture. */
 const SCANNED = 300
 
-/** Un nœud candidat : de quoi le filtrer (auteurs, équipe propriétaire effective) et le montrer. */
-type Candidate = { id: string; path: string; title: string; kind: string; at: string; updated_by: string | null; created_by: string | null; owner_team_id: string | null }
+/** Un nœud candidat : de quoi le filtrer (auteurs, équipe propriétaire effective) et le montrer (son espace). */
+type Candidate = {
+  id: string
+  path: string
+  title: string
+  kind: string
+  at: string
+  updated_by: string | null
+  created_by: string | null
+  owner_kind: string | null
+  owner_team_id: string | null
+  owner_team_name: string | null
+}
 
 const kindOf = (value: string): NodeKind | null => NODE_KINDS.find((kind) => kind === value) ?? null
 
@@ -60,27 +73,16 @@ function inHomeScope(identity: Identity, scope: HomeScope, candidate: Pick<Candi
 async function recentCandidates(sql: Tx, identity: Identity, scope: HomeScope): Promise<Candidate[]> {
   const teams = identity.teams.map((team) => team.id)
   return sql<Candidate[]>`
-    select n.id, n.path, n.title, n.kind, to_json(n.updated_at) #>> '{}' as at, n.updated_by, n.created_by, o.owner_team_id
+    select n.id, n.path, n.title, n.kind, to_json(n.updated_at) #>> '{}' as at, n.updated_by, n.created_by, o.owner_kind, o.owner_team_id, t.name as owner_team_name
       from platform.nodes n
       left join lateral platform.node_owner(n.id) o on true
+      left join platform.teams t on t.id = o.owner_team_id
      where n.org_id = ${identity.org.id} and n.deleted_at is null and n.parent_id is not null
        and n.path <> 'private' and n.path !~ '^private/[^/]+$'
        and (${scope === "org"}::boolean or n.created_by = ${identity.user.id} or n.updated_by = ${identity.user.id}
             or (${scope === "teams"}::boolean and o.owner_team_id = any(${teams}::uuid[])))
      order by n.updated_at desc, n.id
      limit ${SCANNED}`
-}
-
-/** Par où le dernier changement de chaque chemin est passé, quand la portée du journal de la personne le dit. */
-async function lastWrites(sql: Tx, identity: Identity, paths: readonly string[]): Promise<Map<string, "screen" | "assistant">> {
-  if (paths.length === 0) return new Map()
-  const rows = await sql<{ target: string; method: string }[]>`
-    select distinct on (j.target) j.target, j.method from platform.journal j
-     where j.org_id = ${identity.org.id} ${inScope(sql, journalScope(identity))}
-       and j.target = any(${[...paths]}) and not j.is_error
-       and ((j.method = 'api' and j.tool = 'POST nodes') or (j.method = 'tools/call' and j.tool = any(${toolNames(identity, "write")})))
-     order by j.target, j.id desc`
-  return new Map(rows.map((row) => [row.target, row.method === "api" ? "screen" : "assistant"]))
 }
 
 type Viewed = Candidate & { screen: number; assistant: number }
@@ -109,9 +111,10 @@ async function viewedCandidates(sql: Tx, identity: Identity): Promise<Viewed[]> 
   const paths = reads.map((row) => row.target)
   if (ids.length === 0 && paths.length === 0) return []
   const nodes = await sql<Candidate[]>`
-    select n.id, n.path, n.title, n.kind, to_json(n.updated_at) #>> '{}' as at, n.updated_by, n.created_by, o.owner_team_id
+    select n.id, n.path, n.title, n.kind, to_json(n.updated_at) #>> '{}' as at, n.updated_by, n.created_by, o.owner_kind, o.owner_team_id, t.name as owner_team_name
       from platform.nodes n
       left join lateral platform.node_owner(n.id) o on true
+      left join platform.teams t on t.id = o.owner_team_id
      where n.org_id = ${org} and n.deleted_at is null and (n.id = any(${ids}::uuid[]) or n.path = any(${paths}))`
   const byId = new Map(views.map((row) => [row.node_id, row]))
   const byPath = new Map(reads.map((row) => [row.target, row]))
@@ -125,21 +128,16 @@ async function viewedCandidates(sql: Tx, identity: Identity): Promise<Viewed[]> 
     .sort((a, b) => b.screen + b.assistant - (a.screen + a.assistant) || Date.parse(b.at) - Date.parse(a.at) || a.path.localeCompare(b.path))
 }
 
-/** Une ligne de la carte, le nom de l'auteur du dernier changement lu dans l'annuaire. */
-type Line = { node: Candidate & Partial<Pick<Viewed, "screen" | "assistant">>; kind: NodeKind; via: HomeContent["via"] }
+/** L'espace d'un contenu : son équipe propriétaire effective, Tout le monde, ou un espace personnel ; sans propriétaire lu, Tout le monde. */
+function spaceOf(node: Pick<Candidate, "owner_kind" | "owner_team_name">): HomeSpace {
+  if (node.owner_kind === "team" && node.owner_team_name !== null) return { kind: "team", name: node.owner_team_name }
+  return node.owner_kind === "user" ? { kind: "user" } : { kind: "org" }
+}
 
-function contentOf(identity: Identity, { node, kind, via }: Line, names: ReadonlyMap<string, string>): HomeContent {
+/** Une ligne de la carte. */
+function contentOf(node: Candidate & Partial<Pick<Viewed, "screen" | "assistant">>, kind: NodeKind): HomeContent {
   const views = node.screen === undefined ? {} : { views: { screen: node.screen, assistant: node.assistant ?? 0 } }
-  return {
-    path: node.path,
-    title: node.title,
-    kind,
-    at: node.at,
-    byName: node.updated_by === null ? null : (names.get(node.updated_by) ?? null),
-    byMe: node.updated_by === identity.user.id,
-    via,
-    ...views,
-  }
+  return { path: node.path, title: node.title, kind, space: spaceOf(node), at: node.at, ...views }
 }
 
 /**
@@ -156,14 +154,9 @@ export async function homeContents(db: PlatformDb, identity: Identity, query: un
     const levels = await nodeLevels(db, identity, candidates.map((node) => node.id))
     const readable = candidates.filter((node) => (levels.get(node.id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read)
     const page = readable.slice(offset, offset + HOME_PAGE_SIZE)
-    if (page.length === 0) return { items: [], hasMore: false }
-    const [directory, writes] = await Promise.all([memberDirectory(db, identity.org.id), tab === "recent" ? lastWrites(sql, identity, page.map((node) => node.path)) : new Map()])
-    const names = new Map(directory.map((person) => [person.userId, person.name]))
     const items = page.flatMap((node) => {
       const kind = kindOf(node.kind)
-      if (kind === null) return []
-      const via: HomeContent["via"] = tab === "recent" ? (writes.get(node.path) ?? null) : (node.screen ?? 0) >= (node.assistant ?? 0) ? "screen" : "assistant"
-      return [contentOf(identity, { node, kind, via }, names)]
+      return kind === null ? [] : [contentOf(node, kind)]
     })
     // Au-delà du dernier décalage permis, « Voir plus » demanderait une page refusée : il n'y en a pas d'autre.
     return { items, hasMore: readable.length > offset + HOME_PAGE_SIZE && offset + HOME_PAGE_SIZE <= HOME_OFFSET_MAX }

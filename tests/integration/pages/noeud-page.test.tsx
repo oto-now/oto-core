@@ -346,7 +346,7 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     expect(encart.queryByRole("link", { name: "Règles Oto" })).toBeNull()
     expect(screen.queryByRole("region", { name: "Ma fiche" })).toBeNull()
     // 2026-10-20 : la jauge du budget, tout en bas de la colonne, après l'aperçu et les encarts.
-    const jauge = screen.getByRole("meter", { name: "Part du budget du contexte" })
+    const jauge = screen.getByText(/^Votre assistant reçoit/)
     expect(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }).compareDocumentPosition(jauge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(jauge.closest(".oto-budget")?.nextElementSibling).toBeNull()
   })

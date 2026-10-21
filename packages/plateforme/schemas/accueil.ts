@@ -19,10 +19,10 @@ export const HOME_SCOPES = ["me", "teams", "org"] as const
 export type HomeScope = (typeof HOME_SCOPES)[number]
 
 /** Lignes par page ; « Voir plus » en ajoute autant. */
-export const HOME_PAGE_SIZE = 10
+export const HOME_PAGE_SIZE = 20
 
-/** Le décalage le plus loin qu'une page demande : dix pages de dix. */
-export const HOME_OFFSET_MAX = 90
+/** Le décalage le plus loin qu'une page demande : dix pages de vingt. */
+export const HOME_OFFSET_MAX = 180
 
 /** La période des « plus consultés », en jours : vues à l'écran et lectures des assistants. */
 export const HOME_VIEWED_DAYS = 30
@@ -46,23 +46,29 @@ export const homeContentsQuerySchema = z.strictObject({
   offset: z.coerce.number().int().min(0).max(HOME_OFFSET_MAX).default(0),
 })
 
+/** `GET /api/platform/home/activities?scope=` : le fil de l'accueil, au filtre choisi (1.4.13). */
+export const homeActivitiesQuerySchema = z.strictObject({ scope: z.enum(HOME_SCOPES).default("teams") })
+
 /** La vue d'une page, enregistrée par la page de l'hôte qui l'affiche. */
 export const nodeViewSchema = z.strictObject({ path: nodePathSchema })
 
 /**
- * Une ligne de la carte : le contenu (chemin courant, titre, genre), la date de sa dernière modification (`recent`) ou
- * de sa dernière consultation (`viewed`), qui l'a modifié en dernier (`byName`, `null` sans nom ; `byMe`), et par où :
- * `screen` ou `assistant` (`null` quand le journal ne le dit pas à cette personne). `views` : sur l'onglet `viewed`, les
- * consultations à l'écran et les lectures par un assistant sur `HOME_VIEWED_DAYS` jours.
+ * L'espace d'un contenu, que dit sa ligne : l'équipe propriétaire effective et son nom, Tout le monde (`org`) ou un
+ * espace personnel (`user`, « Privé »).
+ */
+export type HomeSpace = { kind: "team"; name: string } | { kind: "org" } | { kind: "user" }
+
+/**
+ * Une ligne de la carte : le contenu (chemin courant, qui l'ouvre ; titre, genre), son espace, la date de sa dernière
+ * modification (`recent`) ou de sa dernière consultation (`viewed`). `views` : sur l'onglet `viewed`, les consultations
+ * à l'écran et les lectures par un assistant sur `HOME_VIEWED_DAYS` jours.
  */
 export type HomeContent = {
   path: string
   title: string
   kind: NodeKind
+  space: HomeSpace
   at: string
-  byName: string | null
-  byMe: boolean
-  via: "screen" | "assistant" | null
   views?: { screen: number; assistant: number }
 }
 

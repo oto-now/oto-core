@@ -154,7 +154,8 @@ describe("Partager, who has access (AC-b5)", () => {
     fireEvent.click(equipe)
     expect(screen.getByRole("option", { name: "Peut modifier" })).toHaveAccessibleDescription("Lit, écrit et publie.")
     fireEvent.click(equipe)
-    expect(panneau().getByText("Votre accès").closest("p")).toHaveTextContent("Votre accèsAccès complet")
+    // 1.5.1 : le pied « Votre accès » est retiré.
+    expect(panneau().queryByText("Votre accès")).toBeNull()
     expect(screen.getByRole("dialog", { name: "Partager — Ventes" }).textContent).not.toMatch(/règle/i)
   })
 
@@ -174,7 +175,6 @@ describe("Partager, who has access (AC-b5)", () => {
     // La ligne de l'équipe se lit aussi pour qui ne gère pas : son niveau vient de la même lecture.
     await waitFor(() => expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).toHaveTextContent("Équipe VentesPeut modifier"))
     expect(panneau().queryByRole("combobox")).toBeNull()
-    expect(panneau().getByText("Votre accès").closest("p")).toHaveTextContent("Votre accèsPeut modifier")
     expect(panneau().getByText("Seules les personnes qui ont l'accès complet changent le partage.")).toBeInTheDocument()
   })
 

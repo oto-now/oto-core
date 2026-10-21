@@ -1,3 +1,5 @@
+"use client"
+
 // Le fil d'activité de l'accueil (E05-S09, partie b ; E05-S12, lot B, AC-12 à AC-16) : ce qui est arrivé aux
 // contenus sur la semaine, dans la portée du journal (H74, décidée par le service), par journée, de la plus
 // récente à la plus ancienne ; une activité par ligne. Server Component. Porté d'oto-frontend
@@ -10,20 +12,25 @@
 // marqueur « vous en étiez ici » (aucun service ne sait quand la personne est passée) et les filtres par type.
 //
 // 1.4.13 : l'onglet « Fil » de la carte « Reprendre » ; dans une ligne qui ouvre un contenu, le contenu cité se montre
-// comme un lien (`oto-feed-cible`) : la ligne entière restait le lien, sans que rien ne dise qu'on pouvait y aller.
+// comme un lien (`oto-feed-cible`) : la ligne entière restait le lien, sans que rien ne dise qu'on pouvait y aller. Le fil
+// se filtre (Moi, Mes équipes, Toute l'organisation) : il se rend dans le navigateur, le lien de l'hôte lu dans son
+// contexte (`useHote`) ; une procédure lancée ouvre la procédure, le contenu que la ligne cite, et un petit lien à l'icône
+// de journal, en fin de rangée, sa conversation (deux liens côte à côte, jamais l'un dans l'autre).
 import { Fragment } from "react"
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight"
+import { Notebook } from "@phosphor-icons/react/dist/ssr/Notebook"
 import type { Activity, ActivityPage } from "../../schemas"
 import type { Resultat } from "../api/resultat"
-import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { EmptyState } from "../ds/react/empty-state"
 import { FeedItem } from "../ds/react/home"
 import { AnimatedIcon } from "../ds/react/icon"
 import { Avatar } from "../ds/react/primitives"
 import { dateCourte, dateLisible, heureCourte } from "../format/dates"
+import { useHote } from "../hote/navigation"
 import { PERSONNE_RETIREE } from "../journal/libelles"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { ACTIVITES, NATURES_DES_ACTIVITES, VERBES_DES_ACTIVITES } from "./libelles"
+import { MARQUE_DE_CONVERSATION } from "./types"
 
 const HEURE_MS = 3_600_000
 
@@ -31,11 +38,13 @@ export type ActivitesDeLAccueilProps = {
   activites: Resultat<ActivityPage>
   /** L'identifiant de la personne : ses activités se disent « Vous ». */
   moi: string
-  Lien: LienDeLHote
   /** L'adresse du journal. */
   hrefDuJournal: string
-  /** L'adresse d'une conversation au journal, par son code `ctx` : une procédure lancée l'ouvre. */
-  hrefDeConversation: (code: string) => string
+  /**
+   * L'adresse d'une conversation au journal, la marque `MARQUE_DE_CONVERSATION` à la place de son code : l'écran serveur la
+   * tire de la fonction de l'hôte (`hrefDeConversation`), qui ne traverse pas la frontière client.
+   */
+  modeleDeConversation: string
   /** Le préfixe des pages de l'arbre (« /n/ ») : un contenu s'ouvre à ce préfixe suivi de son chemin. */
   prefixeDesPages: string
 }
@@ -86,9 +95,8 @@ function phraseDe({ verb, kind, title, path, inReview }: Activity, vous: boolean
   return { debut: `${VERBES_DES_ACTIVITES[verb][vous ? "vous" : "il"]} ${nature}`, cible: title ?? path, fin }
 }
 
-/** Où mène la ligne (AC-15) : la conversation d'une procédure lancée, le contenu que la personne lit, sinon nulle part. */
-function adresseDe(activite: Activity, { hrefDeConversation, prefixeDesPages }: Pick<FilProps, "hrefDeConversation" | "prefixeDesPages">): string | null {
-  if (activite.verb === "ran") return activite.ctx === null ? null : hrefDeConversation(activite.ctx)
+/** Où mène la ligne : le contenu cité, une procédure lancée comprise, quand la personne le lit ; sinon nulle part. */
+function adresseDe(activite: Activity, prefixeDesPages: string): string | null {
   return activite.title === null ? null : `${prefixeDesPages}${activite.path}`
 }
 
@@ -107,14 +115,15 @@ function Quand({ activite }: { activite: Activity }) {
   )
 }
 
-function LigneDuFil({ activite, moi, Lien, ...adresses }: Omit<FilProps, "activites"> & { activite: Activity }) {
+function LigneDuFil({ activite, moi, prefixeDesPages, modeleDeConversation }: Omit<FilProps, "activites"> & { activite: Activity }) {
+  const { Lien } = useHote()
   const vous = activite.userId !== null && activite.userId === moi
   const auteur = vous ? ACTIVITES.vous : (activite.userName ?? PERSONNE_RETIREE)
-  const href = adresseDe(activite, adresses)
+  const href = adresseDe(activite, prefixeDesPages)
   const lien = href === null ? {} : { as: Lien, href }
   const { debut, cible, fin } = phraseDe(activite, vous)
   const phrase = `${debut}${cible}${fin}`
-  return (
+  const ligne = (
     <FeedItem
       {...lien}
       // L'avatar se tait : le nom est écrit à côté, un lecteur d'écran le dirait deux fois.
@@ -134,6 +143,24 @@ function LigneDuFil({ activite, moi, Lien, ...adresses }: Omit<FilProps, "activi
       }
       when={<Quand activite={activite} />}
     />
+  )
+  // Une procédure lancée : sa conversation au journal, par un second lien, à côté de la ligne.
+  if (activite.verb !== "ran" || activite.ctx === null) return ligne
+  return (
+    <div className="oto-fil-rangee">
+      {ligne}
+      <Lien
+        href={modeleDeConversation.replace(MARQUE_DE_CONVERSATION, encodeURIComponent(activite.ctx))}
+        className="oto-icon-btn anim-host"
+        data-variant="ghost"
+        data-size="sm"
+        data-icon-only=""
+        aria-label={ACTIVITES.voirLaConversation(activite.title ?? activite.path)}
+        title={ACTIVITES.conversation}
+      >
+        <AnimatedIcon as={Notebook} size="xs" />
+      </Lien>
+    </div>
   )
 }
 
@@ -158,7 +185,7 @@ function FilDActivite({ activites, ...ligne }: FilProps) {
  * « tout voir » d'oto-frontend dans son onglet, puis le fil ; la barre d'onglets tient lieu d'en-tête.
  */
 export function ActivitesDeLAccueil({ hrefDuJournal, ...fil }: ActivitesDeLAccueilProps) {
-  const { Lien } = fil
+  const { Lien } = useHote()
   return (
     <>
       <div className="flex">

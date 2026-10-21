@@ -8,7 +8,8 @@
 // Changé : les identifiants se bâtissent sur le rang de l'onglet, non sur sa valeur, qui peut contenir une
 // espace ; `aria-controls` n'est posé que sur l'onglet choisi.
 // Voisins : `Onglets` (`equipes/onglets.tsx`) quand l'onglet est dans l'adresse, `SegmentedControl` pour
-// un filtre.
+// un filtre. 1.4.13 : `aside`, ce qui partage la ligne des onglets (les filtres de l'accueil), après eux dans l'ordre de
+// tabulation et avant le panneau ; la ligne passe à la ligne quand la place manque.
 import { useId, useRef, type ComponentProps, type KeyboardEvent, type ReactNode } from "react"
 import { useControllable } from "./hooks"
 
@@ -21,6 +22,8 @@ type TabsProps = Omit<ComponentProps<"div">, "onChange" | "defaultValue" | "chil
   onChange?: (valeur: string) => void
   /** Nomme la barre : un `tablist` anonyme n'apporte rien. */
   label: string
+  /** Ce qui se pose sur la ligne des onglets, à droite (des filtres) ; sans lui, la barre seule. */
+  aside?: ReactNode
   /** Le contenu de l'onglet choisi. */
   children: ReactNode
 }
@@ -57,7 +60,16 @@ function BoutonsDOnglets({ tabs, active, base, boutons, choisir }: BoutonsProps)
   })
 }
 
-export function Tabs({ tabs, value, defaultValue, onChange, label, className, children, ...rest }: TabsProps) {
+/** La barre des onglets, seule ou sur sa ligne partagée. */
+function BarreDOnglets({ label, surTouche, children }: { label: string; surTouche: (evenement: KeyboardEvent<HTMLDivElement>) => void; children: ReactNode }) {
+  return (
+    <div className="oto-tabs" role="tablist" aria-label={label} onKeyDown={surTouche}>
+      {children}
+    </div>
+  )
+}
+
+export function Tabs({ tabs, value, defaultValue, onChange, label, aside, className, children, ...rest }: TabsProps) {
   const [active, setActive] = useControllable(value, defaultValue ?? tabs[0]?.value ?? "", onChange)
   const boutons = useRef<(HTMLButtonElement | null)[]>([])
   const base = useId()
@@ -83,9 +95,18 @@ export function Tabs({ tabs, value, defaultValue, onChange, label, className, ch
 
   return (
     <div {...rest} className={className}>
-      <div className="oto-tabs" role="tablist" aria-label={label} onKeyDown={surTouche}>
-        <BoutonsDOnglets tabs={tabs} active={active} base={base} boutons={boutons} choisir={setActive} />
-      </div>
+      {aside === undefined ? (
+        <BarreDOnglets label={label} surTouche={surTouche}>
+          <BoutonsDOnglets tabs={tabs} active={active} base={base} boutons={boutons} choisir={setActive} />
+        </BarreDOnglets>
+      ) : (
+        <div className="oto-tabs-row">
+          <BarreDOnglets label={label} surTouche={surTouche}>
+            <BoutonsDOnglets tabs={tabs} active={active} base={base} boutons={boutons} choisir={setActive} />
+          </BarreDOnglets>
+          <div className="oto-tabs-aside">{aside}</div>
+        </div>
+      )}
       {/* `tabIndex={0}` : le panneau s'ouvre sur du texte, il doit être atteignable au clavier (motif APG). */}
       <div role="tabpanel" id={`${base}-panel`} aria-labelledby={`${base}-tab-${rangActif}`} className="oto-tabpanel" tabIndex={0}>
         {children}

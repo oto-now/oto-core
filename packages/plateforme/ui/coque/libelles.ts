@@ -6,6 +6,8 @@
 export const MENU_DE_L_EQUIPE = {
   actions: (nom: string) => `Actions sur l'équipe ${nom}`,
   personnes: (nom: string) => `Les personnes de ${nom}`,
+  renommer: "Renommer l'équipe…",
+  renommee: (nom: string) => `L'équipe s'appelle maintenant ${nom}.`,
   supprimer: "Supprimer l'équipe…",
   chargement: "Chargement de l'équipe…",
   echec: "L'équipe n'a pas pu être lue",

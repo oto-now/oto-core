@@ -34,7 +34,6 @@ export const PARTAGE = {
   ajoute: (nom: string) => `${nom} peut lire ce contenu.`,
   change: (nom: string, niveau: string) => `${nom} : ${niveau.toLowerCase()}.`,
   retire: (nom: string) => `${nom} n'a plus d'accès propre à ce contenu.`,
-  votreAccesLibelle: "Votre accès",
   reserve: "Seules les personnes qui ont l'accès complet changent le partage.",
   ajoutesSeulement: "Seulement les personnes ajoutées",
   detailPerso: (qui: string) => `${qui} a l'accès complet.`,

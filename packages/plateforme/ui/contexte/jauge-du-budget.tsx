@@ -1,10 +1,10 @@
 // La jauge du budget de `context` sur la page d'un Contexte (2026-10-20, décidé par JB) : tout en bas de sa colonne de droite,
-// une barre fine marquée au plafond, puis une ligne en petit : tout ce que `context` servirait à la personne qui regarde sans
-// plafond (`whole` de l'aperçu, sans phrase : chaque partie entière) sur le budget, et le poids de ce Contexte. L'état (tout
-// tient, ou dépasse) se réduit à une icône, son texte gardé pour un lecteur d'écran ; la barre change aussi de ton, jamais la
-// couleur seule. Server Component : l'aperçu (`previewContext`) compte tout, le plafond vient de lui, l'écran ne recompte
-// rien. Sans elle, l'auteur d'un Contexte ne savait pas qu'il faisait couper les parties lues après la sienne.
-import type { CSSProperties } from "react"
+// une seule phrase : ce que `context` sert à la personne qui regarde (`whole` de l'aperçu, sans phrase : chaque partie
+// entière) sur le budget, au-delà ce qui arrive, et le poids de ce Contexte. L'état (tout tient, ou dépasse) se montre par une
+// icône, dit aussi en texte au lecteur d'écran ; jamais la couleur seule. 2026-10-21 (JB) : la barre et le trait du plafond
+// partent, « 13 971 / 35 000 caractères · ce contexte 64 » ne se comprenait pas. Server Component : l'aperçu
+// (`previewContext`) compte tout, le plafond vient de lui, l'écran ne recompte rien. Sans elle, l'auteur d'un Contexte ne
+// savait pas qu'il faisait couper les parties lues après la sienne.
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle"
 import { Warning } from "@phosphor-icons/react/dist/ssr/Warning"
 import { AnimatedIcon } from "../ds/react/icon"
@@ -21,33 +21,12 @@ export function JaugeDuBudget({ apercu, cheminCourant }: JaugeDuBudgetProps) {
   if (!whole || budget <= 0) return null
   const poids = whole.blocks.find((bloc) => bloc.name === cheminCourant)?.chars ?? 0
   const depasse = whole.total > budget
-  // La barre couvre le plus grand des deux, le plafond marqué à sa place : au-delà, ce qui dépasse se voit à droite du trait.
-  const echelle = Math.max(whole.total, budget)
-  // Deux propriétés personnalisées (`--progress`, `--seuil`) que `CSSProperties` ne connaît pas : le type ne peut pas les inférer.
-  const style = { "--progress": `${(whole.total / echelle) * 100}%`, "--seuil": `${(budget / echelle) * 100}%` } as CSSProperties
-  const ligne = JAUGE_DU_BUDGET.ligne(nombre.format(whole.total), nombre.format(budget), poids > 0 ? nombre.format(poids) : null)
-  const etat = depasse ? JAUGE_DU_BUDGET.depasse : JAUGE_DU_BUDGET.tient
+  const phrase = JAUGE_DU_BUDGET.phrase({ total: nombre.format(whole.total), budget: nombre.format(budget), poids: poids > 0 ? nombre.format(poids) : null, depasse })
   return (
-    <div className="oto-budget" data-depasse={depasse ? "" : undefined}>
-      <div
-        className="oto-progress"
-        role="meter"
-        aria-label={JAUGE_DU_BUDGET.nom}
-        aria-valuemin={0}
-        aria-valuemax={budget}
-        aria-valuenow={Math.min(whole.total, budget)}
-        aria-valuetext={`${ligne}. ${etat}`}
-        data-tone={depasse ? "fail" : "ok"}
-        style={style}
-      >
-        <div className="oto-progress-bar" />
-        <span className="oto-budget-seuil" aria-hidden="true" />
-      </div>
-      <p className="oto-budget-ligne">
-        <AnimatedIcon as={depasse ? Warning : CheckCircle} size="xs" />
-        <span>{ligne}</span>
-        <span className="oto-sr-only">{etat}</span>
-      </p>
-    </div>
+    <p className="oto-budget" data-depasse={depasse ? "" : undefined}>
+      <AnimatedIcon as={depasse ? Warning : CheckCircle} size="xs" />
+      <span className="oto-sr-only">{depasse ? JAUGE_DU_BUDGET.depasse : JAUGE_DU_BUDGET.tient}</span>
+      <span>{phrase}</span>
+    </p>
   )
 }

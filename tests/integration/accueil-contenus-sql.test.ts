@@ -108,14 +108,12 @@ describe.skipIf(!sqlConfigured)(portable("the home contents and the views of pag
       expect(paths(await recent("org"))).toEqual(["private/lea/notes", "ventes/tarifs", "ventes/salons", "annonces"])
     })
 
-    it("should say who changed each content last and by which door, when her journal scope tells it", async () => {
-      const { db, identity } = await session("claire")
-      const page = await homeContents(db, identity, { tab: "recent", scope: "teams" })
-      const tarifs = page.items.find((item) => item.path === "ventes/tarifs")
-      const salons = page.items.find((item) => item.path === "ventes/salons")
-      expect(tarifs).toMatchObject({ title: "Tarifs", kind: "page", byName: "Claire Morel", byMe: true, via: "assistant" })
-      // Claire mène Ventes : la ligne de Léa est dans sa portée.
-      expect(salons).toMatchObject({ kind: "table", byName: "Léa Roux", byMe: false, via: "screen" })
+    it("should say the space of each content: its owner team, Tout le monde, or a personal space", async () => {
+      const { db, identity } = await session("lea")
+      const page = await homeContents(db, identity, { tab: "recent", scope: "org" })
+      const espace = (path: string) => page.items.find((item) => item.path === path)?.space
+      expect([espace("ventes/tarifs"), espace("annonces"), espace("private/lea/notes")]).toEqual([{ kind: "team", name: "Ventes" }, { kind: "org" }, { kind: "user" }])
+      expect(page.items.find((item) => item.path === "ventes/salons")).toMatchObject({ title: "Salons", kind: "table" })
     })
 
     it("should give a page of ten from its offset, and say whether more follow", async () => {

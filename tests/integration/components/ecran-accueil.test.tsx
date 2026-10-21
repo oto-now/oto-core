@@ -127,8 +127,8 @@ describe("home screen (AC-b1)", () => {
     expect(ilot(BRANCHER).getAllByRole("listitem").map((pastille) => pastille.textContent).slice(0, 3)).toEqual(["Claude", "ChatGPT", "Mistral"])
     ouvrirLeFil()
     expect(activites().getByRole("link", { name: "Tout le journal" })).toHaveAttribute("href", "/journal")
-    expect(ilot("Lancer").getByRole("heading", { level: 2, name: "Lancer" })).toBeInTheDocument()
-    expect(ilot("Nouveautés depuis votre dernière visite").getByRole("heading", { level: 2 })).toBeInTheDocument()
+    expect(ilot("Lancer avec Claude").getByRole("heading", { level: 2, name: "Lancer avec Claude" })).toBeInTheDocument()
+    expect(ilot("Nouveautés").getByRole("heading", { level: 2 })).toBeInTheDocument()
     // E05-S12 (AC-18) : « Contenus récents » quitte l'accueil.
     expect(screen.queryByRole("region", { name: "Contenus récents" })).toBeNull()
   })
@@ -145,11 +145,11 @@ describe("home screen (AC-b1)", () => {
     ouvrirLeFil()
 
     // Les journées et leurs lignes, dans l'ordre du document : chaque ligne sous le titre de sa journée, un
-    // niveau sous le titre « Reprendre » de l'îlot.
+    // niveau sous les onglets de l'îlot.
     const ordre = [...screen.getByRole("region", { name: "Reprendre" }).querySelectorAll("h2, h3, a[href^='/n/']")].map((element) =>
       element.tagName === "A" ? element.getAttribute("href") : `${element.tagName} ${element.textContent}`,
     )
-    expect(ordre).toEqual(["H2 Reprendre", "H3 Aujourd'hui", "/n/ventes/page_4", "/n/ventes/page_3", "H3 Hier", "/n/ventes/page_2", "H3 22 septembre 2026", "/n/ventes/page_1"])
+    expect(ordre).toEqual(["H3 Aujourd'hui", "/n/ventes/page_4", "/n/ventes/page_3", "H3 Hier", "/n/ventes/page_2", "H3 22 septembre 2026", "/n/ventes/page_1"])
   })
 })
 
@@ -171,8 +171,8 @@ describe("home screen first day (AC-b1 ; E05-S12, AC-16)", () => {
     expect(activites().queryByRole("tab", { name: "Fil" }) !== null).toBe(!premierJour)
     if (!premierJour) ouvrirLeFil()
     expect(activites().queryByRole("link", { name: "Tout le journal" }) !== null).toBe(!premierJour)
-    expect(screen.queryByRole("region", { name: "Lancer" }) !== null).toBe(!premierJour)
-    expect(screen.queryByRole("region", { name: "Nouveautés depuis votre dernière visite" }) !== null).toBe(!premierJour)
+    expect(screen.queryByRole("region", { name: "Lancer avec Claude" }) !== null).toBe(!premierJour)
+    expect(screen.queryByRole("region", { name: "Nouveautés" }) !== null).toBe(!premierJour)
     expect(screen.getByRole("region", { name: BRANCHER })).toBeInTheDocument()
   })
 
@@ -186,10 +186,10 @@ describe("home screen first day (AC-b1 ; E05-S12, AC-16)", () => {
 })
 
 describe("home screen main island (E11-S10, AC-e3 ; 1.4.13)", () => {
-  it("should title the main island « Reprendre », open « Récents », keep « Fil » closed, and read no Contexte", () => {
+  it("should head the main island with its tabs, no title, open « Récents », keep « Fil » closed, and read no Contexte", () => {
     monter({ data: DONNEES })
 
-    expect(activites().getByRole("heading", { level: 2, name: "Reprendre" })).toBeInTheDocument()
+    expect(activites().queryByRole("heading", { level: 2 })).toBeNull()
     expect(activites().getAllByRole("tab").map((onglet) => [onglet.textContent, onglet.getAttribute("aria-selected")])).toEqual([
       ["Récents", "true"],
       ["Les plus consultés", "false"],
@@ -247,15 +247,16 @@ describe("home screen failed reads (portage-ecrans.md § 4 ; E05-S12, AC-16, AC-
   it.each<[string, Partial<DonneesDeLAccueil>]>([
     ["Reprendre", { activites: { error: ECHEC } }],
     [BRANCHER, { connexions: { error: ECHEC } }],
-    ["Lancer", { procedures: { error: ECHEC } }],
-    ["Nouveautés depuis votre dernière visite", { nouveautes: { error: ECHEC } }],
+    ["Lancer avec Claude", { procedures: { error: ECHEC } }],
+    ["Nouveautés", { nouveautes: { error: ECHEC } }],
   ])("should say a failed read in « %s » with « Réessayer », which reads the page again", (nom, surcharge) => {
     monter({ data: { ...DONNEES, ...surcharge } })
     if (nom === "Reprendre") ouvrirLeFil()
 
     const zone = within(screen.getByRole("region", { name: nom }))
     expect(screen.getAllByRole("alert").filter((alerte) => alerte.textContent !== "")).toHaveLength(1)
-    expect(zone.getByRole("alert")).toHaveTextContent(`Chargement impossible${ECHEC}`)
+    // La région d'alerte de « Reprendre », montée vide, ne compte pas.
+    expect(zone.getAllByRole("alert").find((alerte) => alerte.textContent !== "")).toHaveTextContent(`Chargement impossible${ECHEC}`)
     fireEvent.click(zone.getByRole("button", { name: "Réessayer" }))
     expect(hote.rafraichir).toHaveBeenCalledTimes(1)
   })

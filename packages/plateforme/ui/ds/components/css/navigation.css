@@ -70,6 +70,11 @@
 }
 
 .oto-tabpanel { padding-block-start: var(--space-3); }
+
+/* Une ligne d'onglets partagée (`aside` de `Tabs`, 1.4.13) : la barre à gauche, ce qui l'accompagne poussé à droite ; sans place, il passe dessous. */
+.oto-tabs-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; column-gap: var(--space-3); }
+.oto-tabs-row > .oto-tabs { min-inline-size: 0; }
+.oto-tabs-aside { margin-inline-start: auto; }
 .oto-tabpanel:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-card); }
 
 /* La barre d'onglets en-tête de l'îlot (`[data-island-head]`), une variante d'`oto-tabs` : quand l'îlot n'a pas de titre, la barre nomme le contenu et prend la bande d'un en-tête, pleine largeur, onglets à parts égales, l'actif à la couleur de l'îlot ; `oto-card-tabs` dessine le même objet sans clavier, un écran qui a besoin des deux prend celle-ci. */

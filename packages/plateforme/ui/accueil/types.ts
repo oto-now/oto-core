@@ -4,6 +4,13 @@ import type { ActivityPage, HomeContentsPage, HomeNews, UsefulProcedure } from "
 import type { Resultat } from "../api/resultat"
 import type { AdresseDeConnexion, DerniereConnexion } from "../connexion/types"
 
+/**
+ * La marque du code d'une conversation dans le modèle de son adresse (1.4.13) : l'écran serveur appelle la fonction de
+ * l'hôte avec elle, le fil (dans le navigateur) la remplace par le code. Des lettres seules, qu'aucun encodage ne change ;
+ * ici, et non dans un module client, que le serveur ne lit pas.
+ */
+export const MARQUE_DE_CONVERSATION = "OTOCODEDECONVERSATION"
+
 /** Ce que la page de l'hôte a lu pour l'accueil, une fois l'identité résolue. */
 export type DonneesDeLAccueil = {
   /** Le nom de la personne, salué en tête ; `null` sans nom. */

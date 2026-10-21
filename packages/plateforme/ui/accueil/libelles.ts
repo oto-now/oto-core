@@ -26,9 +26,6 @@ export const REPRENDRE = {
   rienRecent: "Aucun contenu modifié ici pour l'instant",
   rienConsulte: `Aucun contenu consulté ces ${HOME_VIEWED_DAYS} derniers jours`,
   rienTexte: "Changez de filtre pour voir plus large.",
-  vous: "vous",
-  aLEcran: "à l'écran",
-  parLAssistant: "via l'assistant",
   /** Les consultations d'un contenu sur la période des plus consultés, à l'écran et par un assistant. */
   consultations: (total: number) => `${total} consultation${total > 1 ? "s" : ""}`,
 } as const
@@ -44,6 +41,9 @@ export const ACTIVITES = {
   /** Plusieurs gestes regroupés (AC-14) : lu « 3 fois », montré « ×3 ». */
   fois: (nombre: number) => `×${nombre}`,
   foisLu: (nombre: number) => `${nombre} fois`,
+  /** Le lien d'une procédure lancée vers sa conversation au journal (1.4.13). */
+  conversation: "Voir la conversation dans le journal",
+  voirLaConversation: (titre: string) => `Voir la conversation dans le journal : ${titre}`,
   /** Des lignes à revoir parmi les lignes supprimées (E11-S02, AC-h3). */
   dontARevoir: (nombre: number) => `, dont ${nombre} à revoir`,
 } as const
@@ -72,22 +72,21 @@ export const NATURES_DES_ACTIVITES: Record<NodeKind, string> = {
 }
 
 /**
- * L'îlot « Lancer » (1.4.13) : les procédures les plus utilisées de la personne, celles du bloc servi par
- * `context`, chacune avec la demande à coller dans son assistant.
+ * L'îlot « Lancer avec Claude » (1.4.13) : les procédures les plus utilisées de la personne, celles du bloc servi par
+ * `context`, chacune ouverte dans Claude sur sa demande.
  */
 export const LANCER = {
-  titre: "Lancer",
+  titre: "Lancer avec Claude",
   rien: "Aucune procédure publiée",
-  copier: "Copier la demande",
-  copierPour: (titre: string) => `Copier la demande : ${titre}`,
-  copiee: "Demande copiée",
-  /** La demande prête à coller : le titre et le chemin, par lesquels l'assistant retrouve la procédure. */
+  lancer: "Lancer dans Claude",
+  lancerDans: (titre: string) => `Lancer dans Claude : ${titre}`,
+  /** La demande que reçoit Claude : le titre et le chemin, par lesquels l'assistant retrouve la procédure. */
   demande: (titre: string, chemin: string) => `Suis la procédure « ${titre} » (${chemin}).`,
 } as const
 
-/** L'îlot « Nouveautés depuis votre dernière visite » (1.4.13) : ce que d'autres ont publié depuis. */
+/** L'îlot « Nouveautés » (1.4.13) : ce que d'autres ont publié depuis la dernière visite de la personne. */
 export const NOUVEAUTES = {
-  titre: "Nouveautés depuis votre dernière visite",
+  titre: "Nouveautés",
   depuis: (date: string) => `Depuis le ${date}`,
   rien: "Rien de nouveau depuis votre dernière visite",
   publiePar: (qui: string | null) => (qui ? `publié par ${qui}` : "publié"),

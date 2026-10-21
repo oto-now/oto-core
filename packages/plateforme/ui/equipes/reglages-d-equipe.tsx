@@ -6,7 +6,8 @@
 // du menu d'une équipe, et ses refus : nom déjà pris, refus) ; changé : un dialogue à un champ plutôt que
 // `TitleField` en place, qui ne laissait pas de fente sous le champ pour le refus. Le formulaire suit l'équipe
 // servie (`values`), et garde la saisie refusée, à corriger sous le champ (portage-ecrans.md § 2). E05-S13
-// (AC-24) : le responsable ne se règle plus ici ; les responsables se nomment dans « Les personnes de … ».
+// (AC-24) : le responsable ne se règle plus ici ; les responsables se nomment dans « Les personnes de … ». Le rail
+// l'ouvre aussi depuis le « ⋯ » d'une équipe (1.4.13), sans le nom de l'organisation, et en annonce le succès.
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { updateTeamSchema, type TeamView, type UpdateTeam } from "../../schemas"
@@ -20,11 +21,14 @@ import { NOM_D_EQUIPE_INVALIDE, refusDuNom, surLeNom } from "./libelles"
 
 type ReglagesDEquipeProps = {
   equipe: Pick<TeamView, "id" | "name">
-  nomOrganisation: string
+  /** Le nom de l'organisation, dans le refus d'un nom pris ; absent (le rail), la phrase s'en passe. */
+  nomOrganisation?: string
   onFermer: () => void
+  /** Après un renommage réussi, le nouveau nom : le rail l'annonce. */
+  apresLeRenommage?: (nom: string) => void
 }
 
-export function ReglagesDEquipe({ equipe, nomOrganisation, onFermer }: ReglagesDEquipeProps) {
+export function ReglagesDEquipe({ equipe, nomOrganisation, onFermer, apresLeRenommage }: ReglagesDEquipeProps) {
   const rafraichir = useRafraichir()
   const form = useForm<UpdateTeam>({ resolver: zodResolver(updateTeamSchema), mode: "onBlur", values: { name: equipe.name } })
   const { errors, isSubmitting } = form.formState
@@ -44,6 +48,7 @@ export function ReglagesDEquipe({ equipe, nomOrganisation, onFermer }: ReglagesD
       return
     }
     onFermer()
+    apresLeRenommage?.(name)
     rafraichir()
   }
 

@@ -77,7 +77,7 @@ beforeEach(() => {
   })
   vi.mocked(usefulProcedures).mockResolvedValue([{ path: "ventes/relance", title: "Relancer les impayés" }])
   vi.mocked(homeContents).mockResolvedValue({
-    items: [{ path: "ventes/grille", title: "Grille tarifaire", kind: "page", at: "2026-09-20T08:00:00Z", byName: "Ada Martin", byMe: false, via: "assistant" }],
+    items: [{ path: "ventes/grille", title: "Grille tarifaire", kind: "page", space: { kind: "team", name: "Ventes" }, at: "2026-09-20T08:00:00Z" }],
     hasMore: false,
   })
   vi.mocked(homeNews).mockResolvedValue({ since: "2026-09-19T00:00:00.000Z", items: [] })
@@ -118,7 +118,7 @@ describe("/ page reads (AC-b1)", () => {
   it("should read the week of activities, the first page of « Reprendre », the news, the connections and five procedures with the session client, and show them with the address of the request origin", async () => {
     await montrer(await page())
 
-    expect(listActivities).toHaveBeenCalledWith(SESSION.db, IDENTITE, { periodDays: 7 })
+    expect(listActivities).toHaveBeenCalledWith(SESSION.db, IDENTITE, { periodDays: 7, scope: "teams" })
     expect(homeContents).toHaveBeenCalledWith(SESSION.db, IDENTITE, { tab: "recent", scope: "teams" })
     expect(homeNews).toHaveBeenCalledWith(SESSION.db, IDENTITE)
     expect(usefulProcedures).toHaveBeenCalledWith(SESSION.db, IDENTITE, 5)
@@ -126,8 +126,8 @@ describe("/ page reads (AC-b1)", () => {
     expect(screen.getByRole("heading", { level: 1, name: `Bonjour ${IDENTITE.member.profile.name}` })).toBeInTheDocument()
     expect(ilot("Reprendre").getByRole("link", { name: /^Grille tarifaire/ })).toHaveAttribute("href", "/n/ventes/grille")
     ouvrirLeFil()
-    expect(ilot("Reprendre").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/journal?conversation=K7M2-9QXR")
-    expect(ilot("Lancer").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
+    expect(ilot("Reprendre").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/n/ventes/relance")
+    expect(ilot("Lancer avec Claude").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
     expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code · dernière connexion le 23 septembre 2026")
     // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête, et les procédures déjà lues (AC-11).
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
@@ -147,7 +147,7 @@ describe("/ page reads (AC-b1)", () => {
     ouvrirLeFil()
 
     expect(screen.getAllByRole("alert").filter((alerte) => alerte.textContent !== "")).toHaveLength(1)
-    expect(ilot("Reprendre").getByRole("alert")).toHaveTextContent(ECHEC)
+    expect(ilot("Reprendre").getAllByRole("alert").find((alerte) => alerte.textContent !== "")).toHaveTextContent(ECHEC)
     expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code")
   })
 
@@ -170,7 +170,7 @@ describe("/ page without address parameters (E11-S10, AC-e3)", () => {
     expect(AccueilPage.length).toBe(0)
     await montrer(await page())
 
-    expect(ilot("Reprendre").getByRole("heading", { level: 2, name: "Reprendre" })).toBeInTheDocument()
+    expect(ilot("Reprendre").queryByRole("heading", { level: 2 })).toBeNull()
     expect(ilot("Reprendre").getByRole("tab", { name: "Récents" })).toHaveAttribute("aria-selected", "true")
     expect(previewContext).not.toHaveBeenCalled()
     expect(loadNode).not.toHaveBeenCalled()

@@ -271,10 +271,28 @@
   border-block-start: 1px solid var(--hair);
 }
 
-/* La carte « Reprendre » (1.4.13) : le filtre en pastilles au-dessus des lignes, « Voir plus » au bout ; les lignes sont celles du fil (`FeedItem`), une par contenu, le chemin et l'auteur à la suite du titre. */
-.oto-reprendre { display: grid; gap: var(--space-2); }
+/* La carte « Reprendre » (1.4.13, retours du 21/10) : sans titre, sa bande d'en-tête (celle des îlots de l'accueil) porte les onglets, soulignés et l'actif en gras (ils changent la vue), et à droite le filtre en contrôle segmenté (des pastilles : il filtre) ; quand la place manque, le filtre passe sous les onglets, rien ne déborde. « Voir plus » au bout des lignes. */
+.oto-reprendre .oto-tabs-row {
+  padding: var(--space-1-5) var(--island-pad) 0;
+  border-block-end: 1px solid var(--hair);
+  background: color-mix(in oklab, var(--primary) 5%, var(--island));
+}
+.oto-reprendre .oto-tabs-row > .oto-tabs { border-block-end: 0; }
+.oto-reprendre .oto-tabs-aside { padding-block: var(--space-1-5); }
+.oto-reprendre .oto-tabpanel { padding: var(--space-3) var(--island-pad); }
 .oto-reprendre-liste { display: grid; gap: var(--space-px); }
 .oto-reprendre-liste > .flex { padding-block-start: var(--space-2); }
+.oto-reprendre-annonce { margin: 0; padding-inline: var(--island-pad); }
+
+/* Une ligne de « Reprendre » : le titre prend la place et se coupe par des points de suspension (son texte entier au survol), l'espace du contenu (en --mute, 5,4:1 au moins sur l'îlot dans les huit teintes, jour et nuit : mesure d'editeur.css) puis la date restent à droite ; un nom d'équipe long se coupe à son tour. */
+.oto-home-main .oto-reprendre-ligne .oto-feed-name { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.oto-home-main .oto-reprendre-ligne .oto-feed-what { flex: 0 1 auto; max-inline-size: 40%; color: var(--mute); font-size: var(--fs-xs); }
+.oto-home-main .oto-reprendre-ligne .oto-feed-when { margin-inline-start: 0; }
+
+/* Une procédure lancée du fil : sa ligne, puis le petit lien de sa conversation au journal, côte à côte (deux liens, jamais l'un dans l'autre). */
+.oto-fil-rangee { display: flex; align-items: center; gap: var(--space-1); }
+.oto-fil-rangee > .oto-feed-item { flex: 1; min-inline-size: 0; }
+.oto-fil-rangee > .oto-icon-btn { flex: none; }
 
 /* Dans une ligne du fil qui ouvre un contenu, le contenu cité se lit comme un lien : `--link`, 4,9:1 au moins sur l'îlot dans les huit teintes, jour et nuit (mesure d'`editeur.css`, même paire), souligné au survol de la ligne. */
 .oto-feed-cible { color: var(--link); }

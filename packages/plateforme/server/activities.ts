@@ -11,6 +11,7 @@
 // et lien seulement pour un contenu que la personne lit (`resolveTargets`, niveau ≥ lecture). Aucune migration.
 // Repris d'oto-frontend (`accueil/fil-activite.tsx`) : un fil par journée ; retiré : la prose d'action écrite
 // par le serveur (→ un verbe classé, écrit par l'écran).
+import type { HomeScope } from "../schemas/accueil"
 import { ACTIVITIES_MAX, ACTIVITY_GROUP_MS, type Activity, type ActivityPage, type ActivityVerb } from "../schemas/activity"
 import { JOURNAL_ROWS_SCANNED } from "../schemas/journal"
 import { NODE_KINDS, NODE_PATH_PATTERN, type NodeKind } from "../schemas/nodes"
@@ -184,12 +185,15 @@ export function groupGestures(gestures: readonly Gesture[], resolutions: Readonl
 
 /**
  * Les lignes de la période dans la portée (AC-17) : les gestes d'écran et les outils des assistants, sans
- * erreur, à cible ; les `JOURNAL_ROWS_SCANNED` plus récentes, une de plus pour dire `truncated`. Aucun `args`
+ * erreur, à cible ; le filtre de l'accueil (1.4.13) la resserre, par des paramètres : « Moi », ses lignes ; « Mes équipes », les
+ * siennes et celles de ses équipes ; « Toute l'organisation », toute la portée ; les `JOURNAL_ROWS_SCANNED` plus récentes, une de plus pour dire `truncated`. Aucun `args`
  * entier : les champs qui classent, bornés.
  */
-async function scanRows(db: PlatformDb, identity: Identity, since: Date): Promise<{ rows: ActivityRow[]; truncated: boolean }> {
+async function scanRows(db: PlatformDb, identity: Identity, since: Date, scope: HomeScope): Promise<{ rows: ActivityRow[]; truncated: boolean }> {
   const prefix = identity.org.prefix
   const tools = ASSISTANT_TOOLS.flatMap((tool) => [`${prefix}_${tool}`, tool])
+  const me = identity.user.id
+  const teams = identity.teams.map((team) => team.id)
   const read = await inTransaction(db, "activities: rows", (sql) => sql<{ row: ActivityRow }[]>`
     select (select to_json(r) from (
       select j.id, j.ts, j.user_id, j.ctx, j.method, j.tool, j.target,
@@ -204,6 +208,8 @@ async function scanRows(db: PlatformDb, identity: Identity, since: Date): Promis
                   then (j.args -> '_outcome' ->> 'review')::int end as review) r) as row
     from platform.journal j
     where j.org_id = ${identity.org.id} ${inScope(sql, journalScope(identity))}
+      and (${scope !== "me"}::boolean or j.user_id = ${me})
+      and (${scope !== "teams"}::boolean or j.user_id = ${me} or j.team_id = any(${teams}::uuid[]))
       and j.ts >= ${since} and not j.is_error and j.target is not null
       and ((j.method = 'api' and j.tool = any(${Object.keys(SCREEN_GESTURES)})) or (j.method = 'tools/call' and j.tool = any(${tools})))
     order by j.id desc
@@ -244,10 +250,10 @@ async function resolvePaths(db: PlatformDb, identity: Identity, gestures: readon
  * classés pour le lecteur (D44), chemins relus en un lot, noms par `member_directory`, puis regroupés ;
  * `ACTIVITIES_MAX` au plus, la plus récente d'abord.
  */
-export async function listActivities(db: PlatformDb, identity: Identity, options: { periodDays: number }): Promise<ActivityPage> {
+export async function listActivities(db: PlatformDb, identity: Identity, options: { periodDays: number; scope?: HomeScope }): Promise<ActivityPage> {
   // Le journal, les chemins relus, les niveaux et l'annuaire dans une transaction (`supabase-patterns.md § Couplage à Supabase (ADR-012)`).
   return inTransaction(db, "activities", async () => {
-    const scan = await scanRows(db, identity, new Date(Date.now() - options.periodDays * DAY_MS))
+    const scan = await scanRows(db, identity, new Date(Date.now() - options.periodDays * DAY_MS), options.scope ?? "org")
     const reader = journalReader(identity)
     const gestures = scan.rows.flatMap((row) => classifyRow(row, reader, identity.org.prefix) ?? [])
     if (gestures.length === 0) return { activities: [], truncated: scan.truncated }

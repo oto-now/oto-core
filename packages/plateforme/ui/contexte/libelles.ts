@@ -91,12 +91,11 @@ export const APERCU_DU_CONTEXTE = {
  * sans plafond, et ce qui se passe au-delà. Les nombres viennent de l'aperçu, jamais écrits ici.
  */
 export const JAUGE_DU_BUDGET = {
-  nom: "Part du budget du contexte",
-  ligne: (total: string, budget: string, poids: string | null) =>
-    `${total} / ${budget} caractères · ${poids === null ? "ce contexte pas encore servi" : `ce contexte ${poids}`}`,
-  tient: "Tout tient : votre assistant reçoit chaque partie en entier.",
-  depasse:
-    "Au-delà du budget, les dernières parties sont coupées. Avec une demande, les contextes d'équipe les plus éloignés d'elle sont résumés en une ligne.",
+  /** « Votre assistant reçoit 13 971 caractères de contexte sur 35 000 possibles ; celui-ci en pèse 64. » */
+  phrase: ({ total, budget, poids, depasse }: { total: string; budget: string; poids: string | null; depasse: boolean }) =>
+    `Votre assistant reçoit ${total} caractères de contexte sur ${budget} possibles${depasse ? " : la suite est coupée ou résumée." : " ;"} ${depasse ? "Celui-ci" : "celui-ci"} ${poids === null ? "n'est pas encore servi." : `en pèse ${poids}.`}`,
+  tient: "Tout tient.",
+  depasse: "Le plafond est dépassé.",
 } as const
 
 /**

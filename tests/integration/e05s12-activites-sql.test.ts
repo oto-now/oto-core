@@ -150,6 +150,20 @@ describe.skipIf(!sqlConfigured)(portable("listActivities on a real base: scope, 
     ])
   })
 
+  // 1.4.13 : le filtre de l'accueil resserre la portée du journal, jamais ne l'élargit.
+  it("should narrow the feed to her own gestures (Moi), to those of her teams (Mes équipes), never beyond her journal scope", async () => {
+    const person = o.people.claire
+    const db = fx.as(person)
+    const identity = await resolveIdentity(db, o.host, { userId: person.id, email: person.email })
+    const auteurs = async (scope: "me" | "teams" | "org") =>
+      [...new Set((await listActivities(db, identity, { periodDays: 7, scope })).activities.map((activity) => activity.userName))].sort()
+
+    expect(await auteurs("me")).toEqual(["Claire Morel"])
+    expect(await auteurs("teams")).toEqual(["Claire Morel", "Léa Roux"])
+    // Toute l'organisation reste bornée par sa portée : ni Paul (Support), ni l'espace personnel de Léa.
+    expect(await auteurs("org")).toEqual(await auteurs("teams"))
+  })
+
   it("should give an administrator the whole organisation, another person's personal space cut to private/<handle>, without title nor nature", async () => {
     expect(shown(await activitiesOf("ada"))).toEqual([
       ["trashed", "ventes/tarifs", "Tarifs 2026", "page", 1, "Léa Roux"],

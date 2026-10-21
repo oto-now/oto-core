@@ -349,7 +349,7 @@ describe("RailApplication menus (AC-a4)", () => {
     const rail = monter()
     expect(within(rail).queryByRole("button", { name: "Actions sur l'équipe Tout le monde" })).toBeNull()
     fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
-    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Supprimer l'équipe…"])
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Renommer l'équipe…", "Supprimer l'équipe…"])
     fireEvent.click(menu().getByRole("menuitem", { name: "Les personnes de Ventes" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Les personnes de Ventes" })).toHaveTextContent("Claire Morel"))
     // Le dialogue lit ensuite le niveau de chaque membre sur les pages de l'équipe (1.4.12).
@@ -361,6 +361,23 @@ describe("RailApplication menus (AC-a4)", () => {
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
     expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
+  })
+
+  // 1.4.13 : renommer une équipe depuis son « ⋯ » du rail, par le dialogue de l'écran Équipes ; le rail se relit et l'annonce.
+  it("should rename a team from the « ⋯ » of its section, re-read the page and announce the new name", async () => {
+    const equipe = { id: "t-ventes", slug: "ventes", name: "Ventes", leadName: null, members: [] }
+    const appels = simulerLAPI({ data: { team: equipe, people: [], compose: true, admin: true } }, { data: { team: { id: "t-ventes", slug: "ventes", name: "Ventes Europe" } } })
+    const rail = monter()
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Renommer l'équipe…" }))
+    const renommage = within(await screen.findByRole("dialog", { name: "Renommer Ventes" }))
+    fireEvent.change(renommage.getByLabelText("Nom de l'équipe"), { target: { value: "Ventes Europe" } })
+    fireEvent.click(renommage.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(hote.rafraichir).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole("dialog", { name: "Renommer Ventes" })).toBeNull()
+    expect(within(rail).getByText("L'équipe s'appelle maintenant Ventes Europe.")).toHaveAttribute("role", "status")
+    expect(appels.filter((appel) => appel.methode !== "GET")).toEqual([{ url: "/api/platform/teams/t-ventes", methode: "PATCH", corps: { name: "Ventes Europe" } }])
   })
 
   // 1.4.13 : une page qui bloque la suppression mène à son adresse, bâtie sur le préfixe des pages que le rail reçoit.

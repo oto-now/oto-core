@@ -10,6 +10,21 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Accueil : onglets et filtre en tête, fil filtré, lignes sans chemin, « Lancer avec Claude » (1.5.1)
+**À appliquer :** l'hôte lit le fil par `listActivities(db, identity, { periodDays, scope: "teams" })`.
+**Quoi :** l'îlot de gauche sans titre, ses onglets et le filtre Moi / Mes équipes / Toute l'organisation sur la ligne d'en-tête, le filtre aussi pour le fil (`GET /api/platform/home/activities`) ; une ligne dit l'espace du contenu (équipe, Tout le monde, Privé), sans chemin ni auteur ; vingt lignes, puis vingt de plus ; « Nouveautés » ; « Lancer avec Claude » ouvre claude.ai sur la demande de la procédure ; une procédure lancée du fil ouvre la procédure, et une icône de journal en bout de ligne ouvre la conversation.
+**Pourquoi :** retours de JB du 21/10 : filtres qui débordaient, lignes trop longues, lancer une procédure sans copier-coller.
+**Fichiers :** `packages/plateforme/{schemas/accueil.ts,server/{home-contents,activities}.ts,api/home.ts,ui/accueil/{reprendre,lancer,fil-activite,ecran-accueil,libelles}.tsx,ui/ds/react/tabs.tsx,ui/ds/components/css/{home,navigation}.css}`, `src/app/(dashboard)/page.tsx`, tests, `docs/conception/ecrans-et-coque.md`.
+
+## [2026-10-21] — Rail : défilement horizontal au pas du retrait ; en-tête d'une page : « modifiée … » sous le titre (1.5.1)
+**Quoi :** le rail n'amène plus la ligne courante jusqu'au début de son libellé : il défile d'un pas de retrait par niveau sous le premier (`defilementEnLargeur`, pas mesuré sur un arbre imbriqué), seulement si la ligne dépasse ; une page de premier niveau sous une équipe ne défile jamais. Sur la page d'un nœud, « modifiée il y a …, par … » passe sous le titre, alignée à droite, à 4 px (`.oto-node-header`).
+**Pourquoi :** retours de JB du 21/10 : le rail défilait trop à droite, et la ligne de modification serrait le titre.
+**Fichiers :** `packages/plateforme/ui/coque/ligne-courante-en-vue.ts`, `ui/noeud/en-tete-du-noeud.tsx`, `ui/ds/components/css/product.css`, `tests/integration/components/largeur-du-rail.test.tsx`.
+
+## [2026-10-21] — Renommer une équipe depuis le rail ; jauge du contexte en une phrase ; « Partager » à 500 px (1.5.1)
+**Quoi :** le « ⋯ » d'une équipe du rail propose « Renommer l'équipe… » à qui administre (le dialogue de l'écran Équipes, chargé à l'ouverture ; le rail se relit et annonce le nouveau nom). Sous un Contexte, la jauge devient une phrase (« Votre assistant reçoit … caractères de contexte sur 35 000 possibles ; celui-ci en pèse … »), sans barre ni trait. Le panneau « Partager » fait 500 px de large et perd son pied « Votre accès ».
+**Pourquoi :** retours de JB du 21/10.
+**Fichiers :** `packages/plateforme/ui/coque/{menu-de-l-equipe.tsx,libelles.ts}`, `ui/equipes/{reglages-d-equipe.tsx,libelles.ts}`, `ui/contexte/{jauge-du-budget.tsx,libelles.ts}`, `ui/ds/components/css/{context,content,product}.css`, `ui/ds/react/access-panel.tsx`, `ui/noeud/{partage-du-noeud.tsx,libelles-du-partage.ts}`, tests (`rail-application`, `jauge-du-budget`, `noeud-page`, `e05s10b-partage`), `docs/conception/{ecrans-et-coque,contexte-servi}.md`.
 ## [2026-10-21] — Version 1.5.1 du paquet
 **À appliquer :** depuis 1.5.0, ce que dit la section 1.5.1 du `CHANGELOG.md` du paquet : les migrations `20261021140000_platform_role_dans_la_corbeille.sql` et `20261021150000_platform_role_dans_les_vues.sql`, avec le paquet de cette version ; la CLI ne prend plus le mot de passe de la base en argument (`PLATFORM_ADMIN_DATABASE_URL`, ou `--db-url` sans mot de passe et `PGPASSWORD`).
 **Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.5.1 — 2026-10-21` ; `packages/plateforme/package.json` passe à 1.5.1 ; une section `## Unreleased` vide reste au-dessus.
