@@ -44,7 +44,8 @@ function depotEtExport() {
   git("add", "--all")
   git("-c", "user.email=test@test", "-c", "user.name=test", "commit", "--quiet", "--no-verify", "-m", "init")
   fs.mkdirSync(exporte)
-  execFileSync("sh", ["-c", `git -C "${depot}" archive HEAD | tar -x -C "${exporte}"`])
+  // `tar` extrait dans son dossier courant : sous Windows, il lit `C:\…` passé en `-C` comme une archive distante.
+  execFileSync("sh", ["-c", 'git -C "$DEPOT" archive HEAD | tar -x'], { cwd: exporte, env: { ...process.env, DEPOT: depot } })
   return { depot, exporte }
 }
 
@@ -68,7 +69,8 @@ describe("arbre de code", { timeout: 30_000 }, () => {
     const global = path.join(dir, "gitconfig-global")
     const exclusions = path.join(dir, "exclusions-globales")
     fs.writeFileSync(exclusions, "a.ts\n")
-    fs.writeFileSync(global, `[core]\n\texcludesFile = ${exclusions}\n`)
+    // En barres obliques : une barre inverse d'un chemin Windows est un échappement invalide dans un fichier de config git.
+    fs.writeFileSync(global, `[core]\n\texcludesFile = ${exclusions.split(path.sep).join("/")}\n`)
     const avant = process.env.GIT_CONFIG_GLOBAL
     process.env.GIT_CONFIG_GLOBAL = global
     try {

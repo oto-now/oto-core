@@ -96,6 +96,11 @@ exclut. Source en lecture seule : `src/components/` et `src/design-system/` du d
   reçu et y pose sa ref, `onClick` et `onKeyDown`, qu'un composant qui ne les transmet pas avale, et le
   bouton n'ouvre rien. **Vérifiable :** le test de composant ouvre chaque menu par son déclencheur
   (`getByRole("button", { name })`, puis `getByRole("menu")`).
+- **Une infobulle est l'élément le plus devant : elle entre dans la couche du dessus** (`popover="manual"`,
+  `showPopover()` à son montage, `tooltip.tsx`), jamais par un `z-index` : un `<dialog>` modal vit dans cette couche,
+  au-dessus de tout `z-index`, et l'infobulle d'un de ses boutons, montée dans la racine `.oto`, passait derrière lui.
+  **Vérifiable :** `gestes-equipes.test.tsx` lit l'infobulle d'un bouton du dialogue « Les personnes de … » après ce
+  dialogue dans la couche du dessus (`coucheDuDessus` de `tests/helpers/dialogue.ts`).
 - **Un `<Suspense>` n'entoure que ce qui attend sa promesse ; son repli ne recopie jamais un contenu déjà
   prêt.** Pendant le flux, le repli et le segment résolu (dans le `div hidden` de React) sont servis tous
   deux : un repli qui recopiait le document servait chaque bloc deux fois, ancres comprises, et une

@@ -10,6 +10,16 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Test de l'arbre de code sous Windows
+**Quoi :** `arbre-de-code.test.ts` extrait l'export par `tar` dans son dossier courant (un `C:\…` passé en `-C` se lisait comme une archive distante) et écrit l'exclusion globale en barres obliques (une barre inverse est un échappement invalide d'un fichier de config git).
+**Pourquoi :** `pnpm verify` échouait sur un poste Windows depuis le reçu lié à l'arbre du commit.
+**Fichiers :** `tests/unit/arbre-de-code.test.ts`.
+
+## [2026-10-21] — Infobulle devant un dialogue modal
+**Quoi :** `Tooltip` entre dans la couche du dessus (`popover="manual"`, `showPopover()` au montage) : l'infobulle des gestes « Nommer responsable » s'affichait derrière le dialogue « Les personnes de … », un `<dialog>` modal étant au-dessus de tout `z-index`. Garde écrite dans `portage-ecrans.md` § 2 et sa fiche ; le test lit l'infobulle après le dialogue dans la couche du dessus simulée (`coucheDuDessus`).
+**Pourquoi :** retour de JB du 21/10 : une infobulle est l'élément le plus devant possible.
+**Fichiers :** `packages/plateforme/ui/ds/react/tooltip.tsx`, `packages/plateforme/ui/ds/components/css/overlay.css`, `tests/helpers/dialogue.ts`, `tests/integration/components/gestes-equipes.test.tsx`, `.method/conventions/portage-ecrans.md` et sa fiche, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-21] — Une fonction décrite rend un fichier (`output.file`), rangé en transit ; types audio admis
 **À appliquer :** dans un hôte, monter ensemble les épingles de `@otomata_tech/connectors` et du paquet : une description qui déclare `output.file` demande ce paquet, et ce paquet refuse une clé d'`output` qu'il ne connaît pas. Un lecteur de l'hôte qui déclarait `mp3`, `wav`, `m4a` ou `ogg` est désormais refusé : ce sont des types du paquet.
 **Quoi :** `FILE_TYPES` admet `mp3`, `wav`, `m4a`, `ogg`, servis en téléchargement, sans lecteur ; le refus d'un type non admis liste tous les types du paquet, puis ceux de l'hôte, bornés. `ConnectorOutput.file` (`definition.ts`) et `fileOutputProblem` (`server/connectors/file-output.ts`) à `registerConnectors`, qui refuse aussi toute clé inconnue d'`output`. Le moteur lit le fichier (`requestFile`, `requestDownload` de `http.ts` ; `from: url` par le transport gardé, sans redirection, signé seulement vers l'origine de l'API sous `auth: account` ; base64 décodé strictement), le nomme (RFC 6266, champ, gabarit), contrôle le type annoncé, puis le range par `storeTransitFile` (`transit.ts`, via `DescribedCall.files.keep`) et ne rend que son identifiant, texte et données ; six refus nommés dans `details.refusal`, l'adresse du tiers jamais servie, journalisée ni loguée. Les 43 cas communs de `connectors` (`connectors/_cases/file.yaml`) se jouent sur une copie de leur sortie TypeScript, en attendant leur paquet.

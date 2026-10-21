@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemberView, NodeRulesView, TeamView } from "@otomata_tech/oto_platform/schemas"
 import { AccesPlateforme, ContexteDeLHote, ContexteDeRafraichissement, CoquilleOto, EcranEquipes, type EcranEquipesProps } from "@otomata_tech/oto_platform/ui"
-import { simulerLesDialogues } from "../../helpers/dialogue"
+import { coucheDuDessus, simulerLesDialogues } from "../../helpers/dialogue"
 import { choisirDansLaListe } from "../../helpers/liste-de-choix"
 
 // Les gestes de l'écran « Équipes et droits », portés sur les menus et les dialogues d'oto-frontend
@@ -328,6 +328,10 @@ describe("team gestures (AC11 to AC14)", () => {
     fireEvent.focus(nommer)
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Un responsable a l'accès complet aux pages de l'équipe")
     expect(nommer).toHaveAttribute("aria-describedby", screen.getByRole("tooltip").id)
+    // Devant le dialogue modal : dans la couche du dessus, après lui ; un `z-index` ne passe jamais devant un `<dialog>`.
+    expect(screen.getByRole("tooltip")).toHaveAttribute("popover", "manual")
+    expect(coucheDuDessus.at(-1)).toBe(screen.getByRole("tooltip"))
+    expect(coucheDuDessus).toContain(nommer.closest("dialog"))
     fireEvent.click(nommer)
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
     expect(envoi(1)).toEqual({ url: `/api/platform/teams/${SUPPORT}/members/${CLAIRE}`, methode: "PATCH", corps: { role: "lead" } })

@@ -6,7 +6,7 @@
 // gestionnaires vont sur le déclencheur lui-même, qu'on survole, focalise et mesure. Tel quel, en
 // TypeScript. Changé : montée dans la racine `.oto` du déclencheur (`Portail`, comme les menus de la
 // partie a), qui porte les jetons. Partie c2 : l'ancre est celle d'`anchor.tsx`, partagée avec `Popover`.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { Anchor } from "./anchor"
 import { useAnchor } from "./hooks"
 import { cx } from "./outils"
@@ -42,6 +42,12 @@ export function Tooltip({ content, side = "top", delay = 400, children, classNam
     setOpen(false)
   }
   useEffect(() => () => clearTimeout(timer.current), [])
+  // La couche du dessus : un `<dialog>` modal y vit, au-dessus de tout `z-index` ; l'infobulle s'y pose après lui, donc
+  // devant. Au montage, avant la mesure de `useAnchor`, qui lit sa taille.
+  const poser = useCallback((element: HTMLDivElement | null) => {
+    floatRef.current = element
+    if (element && "showPopover" in element) element.showPopover()
+  }, [])
 
   return (
     <>
@@ -60,7 +66,7 @@ export function Tooltip({ content, side = "top", delay = 400, children, classNam
       </Anchor>
       {open && content && (
         <Portail conteneur={conteneur}>
-          <div ref={floatRef} id={id} role="tooltip" className={cx("oto-tooltip", className)} data-side={placed.side} style={{ top: placed.top, left: placed.left }}>
+          <div ref={poser} id={id} role="tooltip" popover="manual" className={cx("oto-tooltip", className)} data-side={placed.side} style={{ top: placed.top, left: placed.left }}>
             {content}
           </div>
         </Portail>

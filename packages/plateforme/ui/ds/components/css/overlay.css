@@ -183,6 +183,8 @@
   pointer-events: none;
   animation: oto-fade var(--dur-fast) var(--ease-out) both;
 }
+/* Posée dans la couche du dessus (`popover="manual"`, au-dessus d'un `<dialog>` modal) : le style du navigateur pour `[popover]` (marge auto, `inset: 0`, bordure, défilement) retiré, la place vient de `useAnchor`. */
+.oto-tooltip[popover] { margin: 0; inset: auto; border: 0; overflow: visible; }
 .oto-tooltip[data-side="top"]    { animation-name: oto-rise-sm; }
 .oto-tooltip[data-side="bottom"] { animation-name: oto-drop; }
 
