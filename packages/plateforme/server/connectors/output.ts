@@ -33,15 +33,16 @@ export function shaped(record: unknown, fn: ConnectorFunctionDefinition): unknow
 
 /**
  * Le problème de `output.strip`, comme la règle 18 de la fabrique (`connectors : docs/conception/fabrique.md`), avec
- * son code, celui des cas communs : chaque chemin, des clés non vides séparées par des points
- * (`strip_path_malformed`), déclaré une fois (`strip_path_twice`), jamais sous un autre chemin de la liste, qui le
- * retire déjà en entier (`strip_path_overlaps`) ; `null` : aucun. Qu'un chemin désigne une clé de la réponse n'est pas
- * jugé : rien ne déclare la forme de la réponse avant `strip`.
+ * son code, celui des cas communs : une liste d'au moins un chemin, comme le schéma ; chaque chemin, des clés non vides
+ * séparées par des points (`strip_path_malformed`), déclaré une fois (`strip_path_twice`), jamais sous un autre chemin de
+ * la liste, qui le retire déjà en entier (`strip_path_overlaps`) ; `null` : aucun. Qu'un chemin désigne une clé de la
+ * réponse n'est pas jugé : rien ne déclare la forme de la réponse avant `strip`.
  */
 export function stripProblem(fn: ConnectorFunctionDefinition): string | null {
   const strip: unknown = fn.output?.strip
   if (strip === undefined) return null
   if (!Array.isArray(strip)) return `${fn.name}: output.strip must be a list of paths.`
+  if (strip.length === 0) return `${fn.name}: output.strip must list at least one path (absent, nothing is removed).`
   const at = (path: unknown) => `${fn.name}: output.strip ${JSON.stringify(path)}`
   const seen = new Set<string>()
   for (const path of strip as unknown[]) {

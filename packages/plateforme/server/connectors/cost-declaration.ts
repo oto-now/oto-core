@@ -6,7 +6,7 @@ import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "./definition"
 import { DOTTED_PATH } from "./probe-declaration"
 
-const COST_KEYS = ["per", "items", "times", "weights", "unit", "settle"]
+const COST_KEYS = ["per", "quantity", "items", "times", "weights", "unit", "settle"]
 const ASYNC_KEYS = ["collect", "jobId", "withinMs", "noDeadline"]
 /** Le délai de relève : des secondes entières dans la description (`within_s`), d'une seconde à un jour. */
 const COLLECT_MIN_MS = 1_000
@@ -53,22 +53,26 @@ function weightsProblem(fn: ConnectorFunctionDefinition, items: string, weights:
 
 /**
  * Le problème du coût d'une fonction (`cost`), comme la règle 12 de la fabrique et son schéma : `per` `request`, `page`
- * ou `item` ; `items` (exigé) et `times` ou `weights` sur `item` seulement, `times` une liste distincte, les deux listes
- * requises et non vides, `weights` exclusif de `times` ; `unit` non vide, exigée par `item` et `settle` ; `settle` un
- * chemin pointé ; ni `item` ni `settle` sur une fonction paginée.
+ * ou `item` ; `quantity`, un entier de deux ou plus, sur `request` et `page` seulement ; `items` (exigé) et `times` ou
+ * `weights` sur `item` seulement, `times` une liste distincte, les deux listes requises et non vides, `weights` exclusif
+ * de `times` ; `unit` non vide, exigée par `item`, `settle` et `quantity` ; `settle` un chemin pointé ; ni `item` ni
+ * `settle` sur une fonction paginée.
  */
 export function costProblem(fn: ConnectorFunctionDefinition): string | null {
   const cost: unknown = fn.cost
   if (cost === undefined) return null
   if (!onlyKeys(cost, COST_KEYS) || !["request", "page", "item"].includes(String(cost.per))) {
-    return `${fn.name}: cost must be {per: request, page or item, items?, times? or weights?, unit?, settle?}.`
+    return `${fn.name}: cost must be {per: request, page or item, quantity?, items?, times? or weights?, unit?, settle?}.`
   }
+  const quantity = cost.quantity
+  if (quantity !== undefined && cost.per === "item") return `${fn.name}: cost.quantity goes with per request or page only: per item counts its items.`
+  if (quantity !== undefined && !(Number.isInteger(quantity) && Number(quantity) >= 2)) return `${fn.name}: cost.quantity must be an integer of 2 or more (absent, a request costs one).`
   const settle = cost.settle
   if (settle !== undefined && !(onlyKeys(settle, ["path"]) && typeof settle.path === "string" && DOTTED_PATH.test(settle.path))) {
     return `${fn.name}: cost.settle must be {path}, a dotted path.`
   }
-  const needsUnit = cost.per === "item" || settle !== undefined
-  if (cost.unit !== undefined ? typeof cost.unit !== "string" || cost.unit === "" : needsUnit) return `${fn.name}: cost.unit must be non-empty, and is required per item or with settle.`
+  const needsUnit = cost.per === "item" || settle !== undefined || quantity !== undefined
+  if (cost.unit !== undefined ? typeof cost.unit !== "string" || cost.unit === "" : needsUnit) return `${fn.name}: cost.unit must be non-empty, and is required per item, with settle or with quantity.`
   if (cost.per !== "item") {
     return cost.items === undefined && cost.times === undefined && cost.weights === undefined ? paginationProblem(fn, settle !== undefined) : `${fn.name}: cost.items, cost.times and cost.weights go with per item only.`
   }

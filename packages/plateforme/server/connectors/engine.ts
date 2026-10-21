@@ -3,8 +3,9 @@
 // requête composée (en-têtes du connecteur, puis constantes et arguments de la fonction, authentification en dernier ;
 // chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode ; `encode:
 // json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
-// (`output`, chemins de `strip` compris, `output.ts`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
-// tiers (`linkedId`, compte rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
+// (`output`, chemins de `strip` compris, `output.ts`) et texte du résultat composé ici ; table d'erreurs de la fonction
+// (`error-table.ts`) ; adresse résolue sur les réglages du compte et sur son identité chez le tiers (`linkedId`, compte
+// rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
 // (`multipart.ts`), consommé après un appel réussi ; fichier rendu par la fonction (`output.file`, `file-output.ts`), rangé
 // en transit de l'appelant. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
 // l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
@@ -15,9 +16,9 @@ import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
-import type { ConnectorBodyCondition, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
+import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { runFileOutput } from "./file-output"
-import { requestJson, type ApiError, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
+import { requestJson, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { consumeSent, uploadOf, type TransitFiles, type Upload } from "./multipart"
 import { shaped } from "./output"
 import { resolveAddress, type AddressSpec } from "./settings"
@@ -43,42 +44,6 @@ export type PreparedFunction = {
  * fonction qui en envoie (`request.files`) ou qui en rend un (`output.file`, `keep`).
  */
 export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true; files?: TransitFiles }
-
-/** Le code du paquet d'un statut du tiers (H04, liste fermée) ; le refus nommé par la description reste dans le message. */
-export function platformCode(status: number): PlatformErrorCode {
-  if (status === 400 || status === 422) return "invalid_arguments"
-  if (status === 404) return "not_found"
-  if (status === 409) return "conflict"
-  if (status === 429) return "rate_limited"
-  return "upstream_error"
-}
-
-/** Vrai si la valeur au chemin `path` du corps est égale (stricte) à l'une de `equals`. */
-function bodyMatches(condition: ConnectorBodyCondition): (answer: unknown) => boolean {
-  return (answer) => {
-    const value = valueAt(answer, condition.path)
-    return condition.equals.some((expected) => expected === value)
-  }
-}
-
-/**
- * La table d'erreurs d'une fonction : ses refus dont `when` est un statut passent avant la table du connecteur. Une
- * ligne qui marque le compte rend le code de sa marque (`credential_rejected`, `quota_exhausted`), les autres le code
- * de leur statut ; une condition sur le corps devient le prédicat que lit le client HTTP.
- */
-export function errorTable(connector: ConnectorDefinition, fn: ConnectorFunctionDefinition): ApiError[] {
-  const own = fn.refusals.flatMap((refusal) => (typeof refusal.when === "number" ? [{ ...refusal, status: refusal.when }] : []))
-  return [...own, ...connector.errors].map((error) => {
-    const statuses = typeof error.status === "number" ? [error.status] : error.status
-    return {
-      status: error.status,
-      code: error.marksAccount ?? platformCode(statuses[0]),
-      message: `${error.message} (${error.code})`,
-      refusal: error.code,
-      ...(error.body ? { body: bodyMatches(error.body) } : {}),
-    }
-  })
-}
 
 /** La valeur au chemin pointé (`items`, `data.next_cursor`, `lines.0.id`), `undefined` s'il manque. */
 export function valueAt(value: unknown, path: string): unknown {

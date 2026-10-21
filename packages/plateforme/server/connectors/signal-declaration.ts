@@ -8,16 +8,21 @@ import type { ConnectorAccountMark, ConnectorApiError, ConnectorRefusal } from "
 /** Les marques qu'une ligne d'erreur ou un refus pose sur le compte (`marksAccount`), liste fermée. */
 const ACCOUNT_MARKS: readonly ConnectorAccountMark[] = ["credential_rejected", "quota_exhausted"]
 
-/** Le problème d'une condition sur le corps (`body`) : un chemin, et une liste non vide de valeurs distinctes, texte, nombre ou booléen. */
+/**
+ * Le problème d'une condition sur le corps (`body`) : un chemin et un seul opérateur, `equals`, une liste non vide de
+ * valeurs distinctes, texte, nombre ou booléen, ou `contains`, une liste non vide de textes distincts non vides.
+ */
 function bodyProblem(body: unknown): string | null {
   const scalar = (value: unknown) => typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  if (!isJsonObject(body) || Object.keys(body).some((key) => key !== "path" && key !== "equals")) return "body must be {path, equals}"
+  const keys = isJsonObject(body) ? Object.keys(body).filter((key) => key !== "path") : []
+  if (!isJsonObject(body) || keys.length !== 1 || (keys[0] !== "equals" && keys[0] !== "contains")) return "body must be {path, equals} or {path, contains}"
   if (typeof body.path !== "string" || !body.path) return "body needs a path"
-  const equals = body.equals
-  if (!Array.isArray(equals) || equals.length === 0 || !equals.every(scalar) || new Set(equals).size !== equals.length) {
-    return "body equals must list distinct text, number or boolean values"
+  const listed = body[keys[0]]
+  const distinct = Array.isArray(listed) && listed.length > 0 && new Set(listed).size === listed.length
+  if (keys[0] === "contains") {
+    return distinct && listed.every((text) => typeof text === "string" && text !== "") ? null : "body contains must list distinct non-empty texts"
   }
-  return null
+  return distinct && listed.every(scalar) ? null : "body equals must list distinct text, number or boolean values"
 }
 
 /**

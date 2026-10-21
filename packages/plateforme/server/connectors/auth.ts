@@ -24,7 +24,7 @@ export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", 
 export type PreparedAuth =
   | { kind: "header"; header: string; prefix: string; field: string }
   | { kind: "query"; param: string; field: string }
-  | { kind: "basic"; username: string; password: string }
+  | { kind: "basic"; username: string | null; password: string }
   | {
       kind: "client_credentials"
       token: AddressSpec
@@ -117,15 +117,17 @@ function clientCredentials(definition: ConnectorDefinition, auth: Record<string,
 
 /**
  * L'authentification déclarée prête pour l'appel, ou le problème qui la refuse : chaque valeur qui désigne un secret
- * nomme un champ de `credential` ; `oauth2_user` (consentement d'une personne) n'en nomme aucun. Toute autre sorte
- * (`none`) est refusée.
+ * nomme un champ de `credential` ; `basic` sans `username` signe d'un identifiant vide ; `oauth2_user` (consentement
+ * d'une personne) n'en nomme aucun. Toute autre sorte (`none`) est refusée.
  */
 export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | string {
   const auth: Record<string, unknown> = { ...definition.auth }
   const head = `${definition.name}: auth ${String(auth.kind)}`
   if (auth.kind === "bearer") return isField(definition, auth.token) ? { kind: "header", header: "authorization", prefix: "Bearer ", field: auth.token } : `${head} must name a credential field (token).`
   if (auth.kind === "basic") {
-    return isField(definition, auth.username) && isField(definition, auth.password) ? { kind: "basic", username: auth.username, password: auth.password } : `${head} must name two credential fields (username, password).`
+    const username = auth.username === undefined ? null : isField(definition, auth.username) ? auth.username : undefined
+    if (!isField(definition, auth.password) || username === undefined) return `${head} must name credential fields: password, and username when it declares one.`
+    return { kind: "basic", username, password: auth.password }
   }
   if (auth.kind === "api_key") {
     if (!isField(definition, auth.key)) return `${head} must name a credential field (key).`
@@ -144,7 +146,7 @@ export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | str
 
 /** Les champs du compte que l'authentification lit : chacun est exigé à l'appel. */
 export function requiredFields(auth: PreparedAuth): string[] {
-  if (auth.kind === "basic") return [auth.username, auth.password]
+  if (auth.kind === "basic") return auth.username === null ? [auth.password] : [auth.username, auth.password]
   if (auth.kind === "client_credentials") return [auth.clientId, auth.clientSecret]
   if (auth.kind === "user_consent") return []
   return [auth.field]
@@ -198,7 +200,7 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   const field = (name: string) => credential.fields[name]
   if (auth.kind === "header") return { headers: { [auth.header]: `${auth.prefix}${field(auth.field)}` }, query: [] }
   if (auth.kind === "query") return { headers: {}, query: [[auth.param, field(auth.field)]] }
-  if (auth.kind === "basic") return { headers: { authorization: basicOf(field(auth.username), field(auth.password)) }, query: [] }
+  if (auth.kind === "basic") return { headers: { authorization: basicOf(auth.username === null ? "" : field(auth.username), field(auth.password)) }, query: [] }
   if (auth.kind === "user_consent") return { headers: { authorization: `Bearer ${await consentAccessToken({ ...signer, auth }, fresh)}` }, query: [] }
   const kept = fresh ? null : await credential.tokens.read()
   const usable = kept !== null && (kept.expiresAt === null || kept.expiresAt.getTime() - EXPIRY_MARGIN_MS > Date.now())

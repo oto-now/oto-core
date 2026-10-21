@@ -139,13 +139,15 @@ export type ConnectorOAuthUser = {
 /**
  * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials` et
  * `oauth2_user` (le consentement d'une personne) s'exécutent ; toute autre sorte (`none`) se déclare mais est refusée
- * nommément par `registerConnectors`. Chaque valeur qui désigne un secret nomme un champ de `credential`.
+ * nommément par `registerConnectors`. Chaque valeur qui désigne un secret nomme un champ de `credential`. `basic` :
+ * `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans `username`, l'identifiant est vide (une clé
+ * seule passée en mot de passe).
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
   | { readonly kind: "api_key"; readonly in: "query"; readonly name: string; readonly prefix?: never; readonly key: string }
   | { readonly kind: "bearer"; readonly token: string }
-  | { readonly kind: "basic"; readonly username: string; readonly password: string }
+  | { readonly kind: "basic"; readonly username?: string; readonly password: string }
   | ({
       readonly kind: "oauth2_client_credentials"
       readonly tokenRequest: "json" | "form"
@@ -165,11 +167,15 @@ export type ConnectorAuth =
 export type ConnectorAccountMark = "credential_rejected" | "quota_exhausted"
 
 /**
- * Une condition sur le corps JSON de la réponse : la valeur au chemin pointé `path` est égale (stricte) à l'une de
- * `equals`. Le refus se lit ainsi sous un statut qui ne le dit pas seul (une erreur GraphQL sous un 200, un code d'erreur
- * sous un 400).
+ * Une condition sur le corps JSON de la réponse, sur la valeur au chemin pointé `path`, par un seul opérateur : `equals`,
+ * la valeur est égale (stricte) à l'une des valeurs listées ; `contains`, la valeur est un texte qui contient l'un des
+ * textes listés, les deux mis en minuscules (`toLowerCase()`, sans locale) ; une valeur absente, nulle ou qui n'est pas
+ * un texte, ou un corps qui n'est pas du JSON, ne contient rien. Le refus se lit ainsi sous un statut qui ne le dit pas
+ * seul (une erreur GraphQL sous un 200, un code d'erreur sous un 400, un message de crédits épuisés sous un 422).
  */
-export type ConnectorBodyCondition = { readonly path: string; readonly equals: readonly (string | number | boolean)[] }
+export type ConnectorBodyCondition =
+  | { readonly path: string; readonly equals: readonly (string | number | boolean)[]; readonly contains?: undefined }
+  | { readonly path: string; readonly contains: readonly string[]; readonly equals?: undefined }
 
 /**
  * Une ligne de la table d'erreurs : statut du tiers, refus nommé, message en anglais ; `body`, la condition sur le corps
@@ -286,14 +292,17 @@ export type ConnectorCostWeights = { readonly field: string; readonly values: Re
 
 /**
  * Ce que coûte un appel (`connectors : docs/conception/format-de-description.md` § Coût d'un appel). Avant lui, son pire
- * cas, calculé sur les arguments : `request` et `page`, une unité par requête envoyée (chaque page avec `all_pages`) ;
+ * cas, calculé sur les arguments : `request` et `page`, `quantity` unités (une sans elle) par requête envoyée (chaque
+ * page avec `all_pages`) ;
  * `item`, la taille de la liste `items` fois celle de `times` (une si absente), deux arguments requis d'au moins un
  * élément, ou la somme des poids des valeurs que liste chaque élément (`weights`), jamais sur une fonction paginée. Après lui, `settle` : la quantité réelle, lue dans sa réponse (celle de sa
- * relève pour une fonction asynchrone). `unit`, ce que comptent les deux, telle que l'éditeur la nomme : exigée par
- * `item` et `settle`, sinon `requests` ou `pages`.
+ * relève pour une fonction asynchrone) ; sans `settle`, `request` et `page` règlent les requêtes envoyées fois
+ * `quantity`. `unit`, ce que comptent les deux, telle que l'éditeur la nomme : exigée par `item`, `settle` et `quantity`,
+ * sinon `requests` ou `pages`. `quantity`, un entier de deux ou plus, ne vaut qu'avec `request` et `page`.
  */
 export type ConnectorFunctionCost =
-  | { readonly per: "request" | "page"; readonly unit?: string; readonly settle?: ConnectorCostSettle }
+  | { readonly per: "request" | "page"; readonly quantity?: undefined; readonly unit?: string; readonly settle?: ConnectorCostSettle }
+  | { readonly per: "request" | "page"; readonly quantity: number; readonly unit: string; readonly settle?: ConnectorCostSettle }
   | { readonly per: "item"; readonly items: string; readonly times?: string; readonly unit: string; readonly settle?: ConnectorCostSettle; readonly weights?: undefined }
   | { readonly per: "item"; readonly items: string; readonly weights: ConnectorCostWeights; readonly unit: string; readonly settle?: ConnectorCostSettle; readonly times?: undefined }
 

@@ -2,8 +2,10 @@
 // Les cas communs du coût, partagés avec la lib Python du dépôt `connectors` (`connectors/_cases/cost.yaml`, sortis par
 // sa fabrique dans `@otomata_tech/connectors/cost-cases`, dépendance de développement épinglée à un commit) : le même
 // fichier, joué ici contre `costOf`, `settledQuantity` et `collectionOf`, l'est là-bas contre `oto.connectors.cost`.
-// Des cas synthétiques : le connecteur des cas n'est déclaré que le temps du test. Un écart est un désalignement à
-// corriger du côté qui s'écarte du format, jamais un cas à retirer.
+// Des cas synthétiques : le connecteur des cas n'est déclaré que le temps du test. Les cas `quantity_*` (le coût d'une
+// requête, `cost.quantity`) se jouent sur une copie de la sortie de la fabrique (`tests/factories/cost-cases.ts`), en
+// attendant l'épingle qui les apporte. Un écart est un désalignement à corriger du côté qui s'écarte du format, jamais
+// un cas à retirer.
 import { connector, costCases } from "@otomata_tech/connectors/cost-cases"
 import type { CostCaseOutcome } from "@otomata_tech/connectors/cost-cases"
 import { afterEach, describe, expect, it } from "vitest"
@@ -11,6 +13,7 @@ import { registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { collectionOf, ConnectorCostError, costOf, settledQuantity } from "../../packages/plateforme/server/connectors/cost"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
+import { connector as copiedConnector, costCases as copiedCases } from "../factories/cost-cases"
 
 afterEach(() => {
   registerConnectors([])
@@ -35,4 +38,25 @@ describe("common cost cases", () => {
     expectOutcome(c.settled, () => settledQuantity(fn, args, c.answers))
     expectOutcome(c.collection, () => collectionOf(fn, c.submission))
   })
+})
+
+describe("common cost cases of the quantity of a request (copied)", () => {
+  const quantityCases = copiedCases.filter((c) => c.name.startsWith("quantity_"))
+
+  it("should copy the quantity cases", () => {
+    expect(quantityCases.length).toBeGreaterThan(0)
+  })
+
+  it("should declare the copied case connector: cost.quantity passes the declaration as it passes the fabrique", () => {
+    expect(() => registerConnectors([copiedConnector])).not.toThrow()
+  })
+
+  it.each(quantityCases.map((c) => [c.name, c] as const))("%s", (_name, c) => {
+    const args = c.args as Record<string, unknown>
+    expectOutcome(c.worstCase, () => costOf(c.function, args))
+    expectOutcome(c.settled, () => settledQuantity(c.function, args, c.answers))
+    expectOutcome(c.collection, () => collectionOf(c.function, c.submission))
+  })
+
+  it.todo("should play the quantity cases of @otomata_tech/connectors/cost-cases once the connectors pin brings them")
 })

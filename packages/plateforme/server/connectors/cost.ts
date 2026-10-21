@@ -74,16 +74,19 @@ function weighted(fn: ConnectorFunctionDefinition, args: Record<string, unknown>
   return total
 }
 
+/** Ce que coûte une requête d'un coût `request` ou `page` : `quantity`, une sans elle. */
+const perRequest = (cost: Extract<ConnectorFunctionCost, { per: "request" | "page" }>): number => cost.quantity ?? 1
+
 /**
  * Le pire cas d'un appel, sur ses arguments validés : `request` et `page`, les requêtes qu'il peut envoyer (une, ou les
- * pages d'une lecture avec `all_pages`) ; `item`, la taille de `items` fois celle de `times` (une sans `times`), ou la
+ * pages d'une lecture avec `all_pages`), fois `quantity` ; `item`, la taille de `items` fois celle de `times` (une sans `times`), ou la
  * somme des poids des valeurs que liste chaque élément (`weights`). `null` pour une fonction sans coût ;
  * `ConnectorCostError` si une liste comptée manque ou est vide, ou si une valeur n'a pas de poids.
  */
 export function costOf(fn: ConnectorFunctionDefinition, args: Record<string, unknown>): ConnectorCostQuantity | null {
   const cost = fn.cost
   if (cost === undefined) return null
-  if (cost.per !== "item") return { quantity: pageCount(fn, args), unit: unitOf(cost) }
+  if (cost.per !== "item") return { quantity: pageCount(fn, args) * perRequest(cost), unit: unitOf(cost) }
   if (cost.weights !== undefined) return { quantity: weighted(fn, args, cost.items, cost.weights), unit: unitOf(cost) }
   const times = cost.times === undefined ? 1 : listLength(fn, args, cost.times)
   return { quantity: listLength(fn, args, cost.items) * times, unit: unitOf(cost) }
@@ -93,8 +96,8 @@ export function costOf(fn: ConnectorFunctionDefinition, args: Record<string, unk
  * La quantité à régler après un appel réussi, sur ses arguments et `answers`, les réponses JSON du tiers telles qu'il
  * les a envoyées : celles de l'appel, une par page ; pour un travail asynchrone qui se règle, celles de sa relève reçues
  * jusqu'ici. Avec `settle`, la première valeur lisible au chemin (un nombre JSON fini, positif ou nul), sinon le pire
- * cas (`unreadable`) ; sans `settle`, les requêtes envoyées (`request`, `page`) ou le pire cas (`item`). `exceeded`, une
- * valeur lue au-dessus du pire cas. `null` pour une fonction sans coût.
+ * cas (`unreadable`) ; sans `settle`, les requêtes envoyées fois `quantity` (`request`, `page`) ou le pire cas (`item`).
+ * `exceeded`, une valeur lue au-dessus du pire cas. `null` pour une fonction sans coût.
  */
 export function settledQuantity(fn: ConnectorFunctionDefinition, args: Record<string, unknown>, answers: readonly unknown[]): ConnectorSettlement | null {
   const worst = costOf(fn, args)
@@ -107,7 +110,7 @@ export function settledQuantity(fn: ConnectorFunctionDefinition, args: Record<st
   }
   if (cost.per === "item") return { ...worst, from: "worst_case", exceeded: false }
   if (answers.length === 0) throw new ConnectorCostError(`${fn.name}: a settled call has at least one response.`)
-  return { quantity: answers.length, unit: worst.unit, from: "requests", exceeded: false }
+  return { quantity: answers.length * perRequest(cost), unit: worst.unit, from: "requests", exceeded: false }
 }
 
 /**

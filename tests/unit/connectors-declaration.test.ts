@@ -9,7 +9,7 @@ import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "
 import { catalogFunctions, describeFunction, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
-import { errorTable } from "../../packages/plateforme/server/connectors/engine"
+import { errorTable } from "../../packages/plateforme/server/connectors/error-table"
 import { describedConnector, markingConnector, timedConnector } from "../factories/described-connector"
 
 afterEach(() => {
@@ -99,7 +99,12 @@ describe("registerConnectors", () => {
     [
       "basic authentication on a field the credential does not declare",
       () => [{ ...describedConnector(), auth: { kind: "basic", username: "api_id", password: "api_key" } }],
-      "crm: auth basic must name two credential fields (username, password).",
+      "crm: auth basic must name credential fields: password, and username when it declares one.",
+    ],
+    [
+      "basic authentication without password",
+      () => [{ ...describedConnector(), auth: { kind: "basic", username: "api_key" } as unknown as ConnectorDefinition["auth"] }],
+      "crm: auth basic must name credential fields: password, and username when it declares one.",
     ],
     [
       "a key in the query with a prefix",
@@ -192,6 +197,36 @@ describe("registerConnectors", () => {
       "a body condition of another shape",
       () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "error.code", equals: [] } })],
       "crm: error payment: body equals must list distinct text, number or boolean values.",
+    ],
+    [
+      "a body condition with both operators",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message", equals: ["spent"], contains: ["spent"] } as never })],
+      "crm: error payment: body must be {path, equals} or {path, contains}.",
+    ],
+    [
+      "a body condition without operator",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message" } as never })],
+      "crm: error payment: body must be {path, equals} or {path, contains}.",
+    ],
+    [
+      "a body condition that contains nothing",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message", contains: [] } })],
+      "crm: error payment: body contains must list distinct non-empty texts.",
+    ],
+    [
+      "a body condition that contains an empty text",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message", contains: ["spent", ""] } })],
+      "crm: error payment: body contains must list distinct non-empty texts.",
+    ],
+    [
+      "a body condition that contains a number",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message", contains: [402] as never } })],
+      "crm: error payment: body contains must list distinct non-empty texts.",
+    ],
+    [
+      "a body condition that contains a text twice",
+      () => [withError({ status: 402, code: "payment", message: "Pay.", body: { path: "message", contains: ["spent", "spent"] } })],
+      "crm: error payment: body contains must list distinct non-empty texts.",
     ],
     [
       "a 2xx status without a body condition",

@@ -93,8 +93,9 @@ describe("the shared refused strip outputs (registerConnectors)", () => {
     expect(message.endsWith(`(${one.refusal}).`)).toBe(true)
   })
 
-  it("should refuse a strip that is not a list of paths", () => {
+  it("should refuse a strip that is not a list of paths, or lists none", () => {
     expect(refusedWith(withOutput({ strip: "call.recording" }))).toBe(`${getCall.name}: output.strip must be a list of paths.`)
+    expect(refusedWith(withOutput({ strip: [] }))).toBe(`${getCall.name}: output.strip must list at least one path (absent, nothing is removed).`)
     expect(refusedWith(withOutput({ strip: ["call", 7] }))).toBe(`${getCall.name}: output.strip 7 is malformed: keys separated by dots, each non-empty (strip_path_malformed).`)
   })
 })
