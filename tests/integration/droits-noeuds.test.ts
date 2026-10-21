@@ -349,15 +349,16 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect(await as("claire").tx((sql) => sql`delete from platform.nodes where id = ${claireContexte} returning id`)).toEqual([])
     })
 
-    // Depuis 20261021090000, une session ne supprime qu'un nœud à la corbeille (l'administratrice, `deleteTeam`), dormant
-    // depuis plus de 30 jours (la purge) ou jamais publié par son auteur : la clé du parent se prouve sur un dossier mis
-    // à la corbeille sans ses sous-pages.
+    // Depuis 20261021150000, une session ne supprime qu'un nœud jamais publié par son auteur (`undoCreation`) ; la
+    // corbeille se purge par `purge_trash` et `erase_team_trash` : la clé du parent se prouve sur un dossier rendu
+    // jamais publié et attribué à Ada, ses sous-pages en place.
     it("should refuse deleting a node that has children (23503)", async () => {
-      await fx.admin`update platform.nodes set deleted_at = now() where id = ${o.nodes.devis}`
+      const [before] = await fx.admin<{ revision: number; created_by: string | null }[]>`select revision, created_by from platform.nodes where id = ${o.nodes.devis}`
+      await fx.admin`update platform.nodes set revision = 0, created_by = ${o.people.ada.id} where id = ${o.nodes.devis}`
       try {
         expect(await codeOf(as("ada").tx((sql) => sql`delete from platform.nodes where id = ${o.nodes.devis} returning id`))).toBe("23503")
       } finally {
-        await fx.admin`update platform.nodes set deleted_at = null where id = ${o.nodes.devis}`
+        await fx.admin`update platform.nodes set revision = ${before.revision}, created_by = ${before.created_by} where id = ${o.nodes.devis}`
       }
     })
 

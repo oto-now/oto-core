@@ -5,7 +5,7 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000` et `20261021140000`, lectures comprises). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000`, `20261021140000` et `20261021150000`, lectures comprises). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
 // `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000` ;
@@ -107,7 +107,8 @@ ADDED.push("node_shares_select_member", "node_shares_insert_member", "node_share
 ADDED.push("files_select_member", "files_insert_member", "files_update_member", "files_delete_member")
 // Les tickets de dépôt par lien (E10-S02 lot f, ADR-018) : isolation par organisation, attribution à l'appelant, ménage des expirés.
 ADDED.push("upload_tickets_select_member", "upload_tickets_insert_own", "upload_tickets_delete_expired")
-// Les vues des pages (1.4.13) : lues dans l'organisation, écrites par la personne pour elle-même, ménage au-delà de 90 jours.
+// Les vues des pages (1.4.13) : depuis `20261021150000`, ses propres lignes lues, écrites par la personne pour elle-même
+// sur une page qu'elle lit (`ROLE_REQUIRED`), aucune suppression sous une session (`false` ; le ménage par `sweep_node_views`).
 ADDED.push("node_views_select_member", "node_views_insert_own", "node_views_update_own", "node_views_delete_expired")
 // Les exclusions de l'entrée sans invitation : lues dans son organisation, inscrites par l'administrateur (`ROLE_REQUIRED`), jamais
 // modifiées ni retirées par une session.
@@ -139,8 +140,10 @@ const PLATFORM_SCOPE = [
 /**
  * Les policies qui exigent le rôle que leur service exige (migrations `20261019150000` pour les suppressions,
  * `20261020190000` pour les ajouts et modifications, `20261021090000` pour les nœuds, `20261021120000` pour les blocs,
- * `20261021130000` pour la lecture du contenu, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
- * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service.
+ * `20261021130000` pour la lecture du contenu, `20261021150000` pour les vues, décisions d'Alexis du 19/10 et du 20/10) : avec son seul jeton, un membre simple y aurait fait ce que le service réserve. Chacune reprend la règle de son service, ni plus dure ni plus
+ * large ; une policy nouvelle qui porte un rôle s'ajoute ici en nommant ce service. `nodes_delete_manager` en est sortie
+ * avec `20261021150000` : elle ne garde que le retrait d'une création jamais publiée par son auteur (`undoCreation`),
+ * sans rôle ; la corbeille se purge par `purge_trash` et `erase_team_trash`.
  */
 const ROLE_REQUIRED: Record<string, string> = {
   members_delete_admin: "removeMember (server/members.ts): requireAdmin, isOrgAdmin",
@@ -166,8 +169,6 @@ const ROLE_REQUIRED: Record<string, string> = {
   connector_activations_insert_admin: "activateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
   connector_activations_update_admin: "activateConnector, deactivateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
   feedback_update_admin: "setFeedbackState (server/feedback.ts): handlesFeedback, isOrgAdmin, and isStaff or the feedback_visible flag",
-  nodes_delete_manager:
-    "undoCreation (server/uploads-write.ts): its author, never published; the two trash branches (any member, trashed for more than 30 days; isOrgAdmin on a trashed node) were purgeTrash and eraseTrashedNodes, which delete through purge_trash and erase_team_trash since 20261021140000",
   node_drafts_update_writer: "writeNode, saveDraft (server/nodes/write.ts, store.ts): requireNodeLevel write, node_level_for >= 2",
   node_shares_insert_member: "shareNode (server/shares.ts): managedNode, the share level of the node (node_level_for >= 3)",
   node_shares_update_member: "shareNode, revokeShare (server/shares.ts): the share level of the node (node_level_for >= 3), or isOrgAdmin to revoke",
@@ -188,6 +189,9 @@ const ROLE_REQUIRED: Record<string, string> = {
     "readableFile (server/files/service.ts): node_level_for >= 1, in the trash too (20261021140000: the purge goes through purge_trash and erase_team_trash); its author (pendingFile, a transit file)",
   node_shares_select_member:
     "managedNode (server/shares.ts), activeShareAt for node.access: node_level_for >= 3; listShares, revokeShare: isOrgAdmin",
+  // Les vues des pages (migration `20261021150000`) ; les comptes de l'organisation passent par `node_view_counts`.
+  node_views_insert_own: "recordNodeView (server/node-views.ts): findNode, node_level_for >= 1, for the caller herself",
+  node_views_update_own: "recordNodeView (server/node-views.ts), on conflict do update: her own row, node_level_for >= 1",
 }
 
 /** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */

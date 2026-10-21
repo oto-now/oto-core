@@ -51,13 +51,14 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
       columns: [],
       functions: ["is_org_admin", "level_rank", "node_level_for", "node_level_of"],
       triggers: [],
-      // La lecture fermée du lexique (E01-S13) : sa table n'en a pas d'autre. Les trois suppressions retirées
-      // (`20261019140000_platform_suppressions.sql`) restent sous leur nom à `false`, `check:migrations` refusant
-      // un `drop` sans recréation ; la prochaine ligne de base les omettra.
+      // La lecture fermée du lexique (E01-S13) : sa table n'en a pas d'autre. Les quatre suppressions retirées
+      // (`20261019140000_platform_suppressions.sql`, et les vues des pages depuis `20261021150000`) restent sous leur
+      // nom à `false`, `check:migrations` refusant un `drop` sans recréation ; la prochaine ligne de base les omettra.
       policies: [
         { name: "accounts_delete_admin" },
         { name: "connector_activations_delete_admin" },
         { name: "lexicon_select_none" },
+        { name: "node_views_delete_expired" },
         { name: "orgs_delete_admin" },
       ],
     })

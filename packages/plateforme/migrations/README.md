@@ -347,6 +347,16 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   les pages de l'équipe à la corbeille, quelle que soit leur date) ; chacune supprime nœuds et fichiers, lus ou non,
   hors racine, `private` et Contextes, et rend les identifiants des fichiers. Une policy et deux fonctions ; aucune
   table ni colonne ; rien à relancer avant.
+- `20261021150000_platform_role_dans_les_vues.sql` (suite de `20261021140000`) : `node_views_select_member`, recréée
+  sous son nom, ne montre que ses propres lignes ; `node_views_insert_own` et `node_views_update_own` exigent en plus
+  la lecture de la page (`node_level_for` ≥ 1) ; le droit DELETE d'`authenticated` sur `node_views` est retiré et
+  `node_views_delete_expired` neutralisée (`false`). Deux fonctions `security definer`, que `server/home-contents.ts`
+  et `server/node-views.ts` de la même version appellent : `node_view_counts(org, jours, limite)` (membre, sinon
+  `42501` ; fenêtre de 1 à 90 jours, sinon `22023` ; les pages vivantes les plus vues, puis celles que l'appelant lit)
+  et `sweep_node_views(org)` (membre, sinon `42501` ; les lignes de plus de 90 jours, délai fixé en base).
+  `nodes_delete_manager`, recréée sous son nom, perd ses deux branches de la corbeille : sous une session, un nœud ne
+  se supprime plus que par son auteur, jamais publié (`undoCreation`). Cinq policies et deux fonctions ; aucune table
+  ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

@@ -3,7 +3,7 @@
 // `role-dans-les-ajouts-et-modifications.test.ts`) : avec son seul jeton, en SQL direct, un membre simple n'écrit pas
 // une page qu'il ne fait que lire, ne la met pas à la corbeille, ne la restaure pas, ne la déplace ni ne la renomme, ne
 // change pas son propriétaire, n'écrit pas son brouillon, n'en crée ni n'en change le lien public, ne supprime pas une
-// page vivante ou entrée depuis peu à la corbeille, n'exclut pas un autre membre, et un brouillon de courriel envoyé ne
+// page vivante ou à la corbeille (`20261021150000`), n'exclut pas un autre membre, et un brouillon de courriel envoyé ne
 // redevient pas brouillon ; personne ne date la corbeille autrement que par l'horloge de la base. Sous sa session comme
 // sous celle du serveur, qui juge la même personne. L'ayant droit du service passe, et la donnée est relue par la
 // connexion d'administration. Une policy dont le `using` écarte la ligne la cache : zéro ligne touchée ; un `with check`
@@ -284,7 +284,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(await seed.admin`select status, sent_by from platform.sim_outbox where id = ${open}`).toEqual([{ status: "sent", sent_by: lea.id }])
   })
 
-  it.each(SESSIONS)("should refuse deleting a live page or one trashed lately, and let the purge, the administrator and the undoing of a creation (session %s)", async (session) => {
+  // Depuis `20261021150000`, la corbeille ne se purge plus sous une session (`purge_trash`, `erase_team_trash`,
+  // `role-dans-la-corbeille.test.ts`) : ni un membre sur une page expirée, ni l'administrateur (`role-dans-les-vues.test.ts`).
+  it.each(SESSIONS)("should refuse deleting a live page or one in the trash, to an administrator too, and let the undoing of a creation (session %s)", async (session) => {
     const remove = (id: string) => (sql: Tx) => sql`delete from platform.nodes where id = ${id} returning id`
     const [live, lately, teamLately] = [await orgPage(), await node(root, { trashedDaysAgo: 1 }), await node(root, { owner: { kind: "team", id: led }, trashedDaysAgo: 1 })]
     expect(await attempt(lea, remove(live.id), session)).toBe(0)
@@ -298,10 +300,12 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
       await node(root, { createdBy: lea.id, revision: 1 }),
     ]
     expect(await attempt(lea, remove(published.id), session)).toBe(0)
-    expect(await attempt(lea, remove(expired.id), session)).toBe(1)
+    expect(await attempt(lea, remove(expired.id), session)).toBe(0)
+    expect(await attempt(ada, remove(lately.id), session)).toBe(0)
+    expect(await attempt(ada, remove(expired.id), session)).toBe(0)
     expect(await attempt(lea, remove(created.id), session)).toBe(1)
-    expect(await attempt(ada, remove(lately.id), session)).toBe(1)
-    expect(await seed.admin`select id from platform.nodes where id in ${seed.admin([expired.id, created.id, lately.id, published.id])}`).toEqual([{ id: published.id }])
+    const left = await seed.admin<{ id: string }[]>`select id from platform.nodes where id in ${seed.admin([expired.id, created.id, lately.id, published.id])}`
+    expect(left.map((row) => row.id).sort()).toEqual([expired.id, lately.id, published.id].sort())
   })
 
   it.each(SESSIONS)("should refuse a plain member excluding another member from the open entry, and let an administrator (session %s)", async (session) => {

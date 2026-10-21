@@ -65,7 +65,7 @@ erDiagram
 | `node_versions` | Historique publié | `node_id`, `revision`, `title`, `summary`, `kind`, `meta`, `blocks` (instantané des blocs publiés ; sans lignes pour un tableau), `author`, `created_at` |
 | `node_aliases` | Anciens chemins | `old_path`, `node_id` ; clé (`org_id`, `old_path`) |
 | `links` | Liens `[[…]]` et blocs `reference` | `source_node_id`, `source_block_id`, `target_path`, `target_key` (`[[chemin#clé]]`), `target_node_id` (null si sans cible) |
-| `node_views` | Vues des pages à l'écran (1.4.13), jamais exportées | `node_id`, `user_id` (clé vers `members` avec `org_id`, en cascade), `day` (jour de l'horloge de la base, jamais inséré), `views` (1 à 1 000 000, augmenté par une ouverture de plus le même jour : une vue à moins d'une minute de la précédente ne compte pas), `last_at` (la dernière vue, comptée ou non) ; clé (`org_id`, `node_id`, `user_id`, `day`), index (`org_id`, `day`), (`org_id`, `user_id`, `day`) et (`node_id`) ; lues dans l'organisation, écrites par la personne pour elle-même sur une page de son organisation (`insert … on conflict do update`, `update` accordé sur `views` et `last_at` seuls) ; les lignes de plus de 90 jours retirées par le service à chaque vue (policy `node_views_delete_expired`) |
+| `node_views` | Vues des pages à l'écran (1.4.13), jamais exportées | `node_id`, `user_id` (clé vers `members` avec `org_id`, en cascade), `day` (jour de l'horloge de la base, jamais inséré), `views` (1 à 1 000 000, augmenté par une ouverture de plus le même jour : une vue à moins d'une minute de la précédente ne compte pas), `last_at` (la dernière vue, comptée ou non) ; clé (`org_id`, `node_id`, `user_id`, `day`), index (`org_id`, `day`), (`org_id`, `user_id`, `day`) et (`node_id`) ; ses propres lignes lues, écrites par la personne pour elle-même sur une page qu'elle lit (`node_level_for` ≥ 1, `insert … on conflict do update`, `update` accordé sur `views` et `last_at` seuls ; `20261021150000`) ; les comptes de l'organisation par `node_view_counts`, les lignes de plus de 90 jours retirées à chaque vue par `sweep_node_views` (aucune suppression sous une session) |
 | `node_shares` | Lien public d'un nœud (ADR-013) | `node_id`, `token` (43 caractères base64url, unique), `include_children`, `created_by`, `created_at`, `revoked_at` ; un seul lien actif par nœud |
 | `files` | Fichier joint à un nœud (ADR-016), ou en transit (sans nœud, à échéance) : métadonnées seules, les octets dans le stockage sous la clé `<org_id>/<id>` | `node_id` (cascade ; nul pour un fichier en transit), `name` (1 à 255, jamais dans la clé), `mime`, `size` (1 octet à 50 Mo), `status` (`pending` · `ready` ; insertion `pending` seule ; passage à `ready` par `mark_files_ready` seule), `created_by`, `created_at`, `expires_at` (posée pour un fichier en transit, et pour lui seul : `files_transit_check` ; une heure, à l'horloge de la base : `expires_at_clock`) ; un fichier en transit ne se lit, ne se modifie et ne se supprime que par son auteur (RLS) ; quota de 10 Go par organisation sous le verrou 7501, lu par `org_files_bytes` ; un fichier appartient à un seul nœud |
 | `upload_tickets` | Ticket d'envoi d'`upload.link` (ADR-018), jamais exporté | `user_id`, `ctx`, `token_hash` et `form_token_hash` (empreintes SHA-256 des jetons de `curl` et du formulaire, uniques, jamais un jeton), `kind` (`file` · `md` · `csv`), `mode`, `target_path`, `name`, `title`, `summary`, `key`, `base_revision`, `publish`, `expires_at` (15 minutes, à l'horloge de la base : `expires_at_clock`), `used_at` ; lu par sa personne et, expiré, par tout membre ; aucune mise à jour hors `consume_upload_ticket` |
@@ -129,6 +129,8 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `usage_authorship(org, since, users, limit)`, `usage_written(org, since, users)`, `usage_published_weeks(org, since, users)` | Les agrégats du contenu des statistiques d'usage, pour l'administrateur de l'organisation (`is_org_admin`, sinon `42501`) : auteur, origine et nœud des blocs publiés écrits depuis une date, nombre de blocs écrits par origine, versions publiées par semaine, espaces personnels compris ; jamais un texte (`20261021130000`, lus par `server/usage-statistics.ts`) |
 | `purge_trash(org)` | La purge de la corbeille d'une organisation de l'appelant (`member_orgs`, sinon `42501`) : les nœuds à la corbeille depuis plus de 30 jours dont tout le sous-arbre l'est aussi (hors racine, `private` et Contextes), et leurs fichiers, lus ou non par l'appelant, en une instruction ; rend le nombre de nœuds et les identifiants des fichiers (`20261021140000`, lue par `purgeTrash`) |
 | `erase_team_trash(org, team)` | L'effacement des pages d'une équipe à la corbeille, pour l'administrateur de l'organisation (`is_org_admin`, sinon `42501` ; équipe d'une autre organisation : `P0002`) : celles dont elle est propriétaire et celles rangées sous son dossier, sous-pages comprises, quelle que soit leur date, et leurs fichiers ; rend les identifiants des fichiers (`20261021140000`, lue par `eraseTrashedNodes` pour `deleteTeam`) |
+| `node_view_counts(org, days, limit)` | Les comptes de vues d'une organisation de l'appelant (`member_orgs`, sinon `42501` ; fenêtre de 1 à 90 jours, sinon `22023`) : sur la fenêtre, les `limit` pages vivantes les plus vues, puis celles que l'appelant lit (`node_level_for` ≥ 1), le niveau évalué une fois par page retenue ; rend nœud, nombre de vues et dernière vue, jamais qui a vu (`20261021150000`, lue par `homeContents`, « Les plus consultés ») |
+| `sweep_node_views(org)` | Le ménage des vues de plus de 90 jours d'une organisation de l'appelant (`member_orgs`, sinon `42501`), délai fixé en base ; ne rend rien (`20261021150000`, lancée par `recordNodeView`) |
 | `purge_transit_files(org)` | Supprime les fichiers en transit échus d'une organisation de l'appelant (`42501` sinon), de toute personne, et ne rend que leurs identifiants : le service retire les objets après le commit (`platform_server` seul) |
 | `mark_files_ready(org, files)` | Passe à `ready` les lignes `pending` d'une organisation de l'appelant (`42501` sinon) que la RLS de `files` lui laisse modifier (jointes, ou en transit à lui), après la lecture de l'objet par le serveur ; rend celles qui l'ont été. Seule écriture de `files.status` (`platform_server` seul) |
 | `norm(text)`, `norm_words(text)`, configuration `platform.fr` | Normalisation sans accent, mots `[a-z0-9]`, plein texte français |
@@ -187,8 +189,8 @@ visibles ») ; révoquer un accès plateforme
 `leads_team`) ; ajouter, modifier ou supprimer une règle d'un nœud (`node_level_for` ≥ 3), au niveau `manage` par
 `is_org_admin`, la règle d'un compte restant à l'appartenance (`accountLevelOf`). Depuis `20261021090000`, les nœuds :
 écrire l'en-tête d'un brouillon (`node_level_for` ≥ 2), créer ou changer un lien public (≥ 3), le désactiver (≥ 3 ou
-`is_org_admin`), supprimer un nœud (à la corbeille depuis plus de 30 jours ; `is_org_admin` sur un nœud à la corbeille ;
-son auteur, jamais publié), envoyer un courriel simulé (au nom de l'appelant, jamais remis en brouillon), exclure un
+`is_org_admin`), supprimer un nœud (son auteur, jamais publié ; depuis `20261021150000`, plus aucune branche de la
+corbeille, purgée par `purge_trash` et `erase_team_trash`), envoyer un courriel simulé (au nom de l'appelant, jamais remis en brouillon), exclure un
 membre de l'entrée sans invitation (`is_org_admin`) ; la mise à jour d'un nœud reste à l'appartenance et son geste est
 jugé par `nodes_gesture_guard`. Depuis `20261021100000`, les fonctions `security definer` qui écrivent un nœud :
 ouvrir, publier ou abandonner un brouillon (`node_level_for` ≥ 2 ; une page jamais publiée ne s'abandonne pas), dupliquer
@@ -200,8 +202,9 @@ supprimer une ligne publiée d'un tableau ou un bloc du brouillon d'une page (`b
 `20261021130000`, les lectures du contenu : un bloc publié, une version, un lien sortant (`node_level_for` ≥ 1 sur le
 nœud ; une ligne, parmi les tableaux lisibles de l'appelant), un bloc de brouillon et `node_drafts` (≥ 2), un fichier
 (son auteur ; joint, ≥ 1, à la corbeille aussi depuis `20261021140000`), un lien public (≥ 3, ou `is_org_admin`) ; et le dernier auteur
-d'un bloc (`blocks.updated_by`), nul ou `auth.uid()` à l'ajout et à la modification. `nodes`, `node_aliases` et
-`node_views` restent lus à l'appartenance. Les écritures sans porte de l'API passent
+d'un bloc (`blocks.updated_by`), nul ou `auth.uid()` à l'ajout et à la modification. Depuis `20261021150000`, les vues
+des pages : ses propres lignes, une vue écrite ou avancée sur une page que l'appelant lit (≥ 1). `nodes` et
+`node_aliases` restent lus à l'appartenance. Les écritures sans porte de l'API passent
 par les fonctions du paquet : racine et `private` jamais supprimés, versions, liens et alias écrits
 par `publish_node` et les déclencheurs, `identities` par `identity_for_caller()`, `orgs` créées
 par `create_org`, `members` hors invitation, import, inscription et administrateur nommé par l'équipe plateforme (`claim_org_admin`) par `join_org` seule. Rien pour `anon`, sauf `org_by_host`, `public_node_by_token`, `public_file_by_token`,
@@ -210,9 +213,10 @@ par `create_org`, `members` hors invitation, import, inscription et administrate
 **Suppressions.** `authenticated` ne supprime que dans les tables où un service supprime sous la session
 d'une personne ou du serveur : `access_rules`, `blocks`, `connector_consents`, `files`,
 `hosted_link_requests`, `members`, `nodes`, `org_domains`, `team_members`, `teams` et `upload_tickets`.
-`orgs`, `accounts` et `connector_activations` ne se suppriment sous aucune session (droit retiré, policy
+`orgs`, `accounts`, `connector_activations` et `node_views` ne se suppriment sous aucune session (droit retiré, policy
 de suppression neutralisée, `false`) : une organisation et ses comptes par `oto-platform org delete`, les
-comptes d'une personne oubliée par `forget_user`, un connecteur se désactive par son état. `anon` ne
+comptes d'une personne oubliée par `forget_user`, un connecteur se désactive par son état, les vues de plus de
+90 jours par `sweep_node_views` (`20261021150000`). `anon` ne
 supprime nulle part, `platform_server` rien de plus qu'`authenticated`. Ces tables sont la liste fermée
 de `tests/integration/role-du-serveur.test.ts`, chacune avec le service qui s'en sert.
 

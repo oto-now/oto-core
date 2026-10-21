@@ -86,18 +86,19 @@ async function lastWrites(sql: Tx, identity: Identity, paths: readonly string[])
 type Viewed = Candidate & { screen: number; assistant: number }
 
 /**
- * Les contenus consultés sur `HOME_VIEWED_DAYS` jours : les vues à l'écran (toute l'organisation, des comptes
- * seulement) et les lectures des assistants dans la portée du journal de la personne, réunies par nœud, la plus
- * consultée d'abord.
+ * Les contenus consultés sur `HOME_VIEWED_DAYS` jours : les vues à l'écran (toute l'organisation, des comptes par page
+ * que la personne lit, `node_view_counts`) et les lectures des assistants dans la portée du journal de la personne,
+ * réunies par nœud, la plus consultée d'abord.
  */
 async function viewedCandidates(sql: Tx, identity: Identity): Promise<Viewed[]> {
   const org = identity.org.id
   const since = new Date(Date.now() - HOME_VIEWED_DAYS * DAY_MS)
   const [views, reads] = await Promise.all([
+    // Les vues de toute l'organisation, que la personne ne lit pas ligne à ligne (`20261021150000`) : des comptes par page
+    // vivante qu'elle lit, par `node_view_counts`.
     sql<{ node_id: string; screen: number; at: string }[]>`
-      select node_id, sum(views)::int as screen, to_json(max(last_at)) #>> '{}' as at from platform.node_views
-       where org_id = ${org} and day >= current_date - ${HOME_VIEWED_DAYS}::int
-       group by node_id order by screen desc limit ${SCANNED}`,
+      select c.node_id, c.views as screen, to_json(c.last_at) #>> '{}' as at
+        from platform.node_view_counts(${org}, ${HOME_VIEWED_DAYS}::int, ${SCANNED}::int) c`,
     sql<{ target: string; assistant: number; at: string }[]>`
       select j.target, count(*)::int as assistant, to_json(max(j.ts)) #>> '{}' as at from platform.journal j
        where j.org_id = ${org} ${inScope(sql, journalScope(identity))}

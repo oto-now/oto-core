@@ -2,8 +2,9 @@
 // affiche un nœud l'enregistre ici, une ligne par page, par personne et par jour. L'accueil en tire « Les plus
 // consultés » et la date de la dernière visite (`server/home-contents.ts`). Décidé par le service avant l'écriture : le
 // nœud lu par `findNode`, que la personne lit (niveau 0 : introuvable, H68). Sans lui, une page lue à l'écran ne se
-// compte nulle part.
-import { NODE_VIEWS_KEPT_DAYS, nodeViewSchema } from "../schemas"
+// compte nulle part. La base n'accepte la ligne que de la personne elle-même, sur une page qu'elle lit
+// (`20261021150000`) ; le ménage de l'organisation passe par `sweep_node_views`, la personne ne lisant que ses lignes.
+import { nodeViewSchema } from "../schemas"
 import type { PlatformDb } from "./db"
 import { inTransaction, invalidInput } from "./errors"
 import type { Identity } from "./identity"
@@ -14,7 +15,7 @@ import { findNode, unknownNode } from "./nodes/lookup"
  * l'horloge de la base : une vue par ouverture, et non par relecture après un geste. Une vue de la même page qui suit la
  * précédente de moins d'une minute ne compte pas, mais avance `last_at` : une séance de travail ponctuée de relectures
  * reste une ouverture, et la suivante compte une minute après la dernière. Retire au passage les lignes de l'organisation
- * de plus de `NODE_VIEWS_KEPT_DAYS` jours, la même borne que la policy de suppression. Lève comme `findNode` ; l'hôte
+ * de plus de `NODE_VIEWS_KEPT_DAYS` jours, par `sweep_node_views` (le délai fixé en base). Lève comme `findNode` ; l'hôte
  * l'appelle sans que son échec ne casse la page.
  */
 export async function recordNodeView(db: PlatformDb, identity: Identity, input: unknown): Promise<void> {
@@ -29,6 +30,6 @@ export async function recordNodeView(db: PlatformDb, identity: Identity, input: 
       on conflict (org_id, node_id, user_id, day) do update
         set views = case when node_views.last_at < now() - interval '1 minute' then least(node_views.views + 1, 1000000) else node_views.views end,
             last_at = now()`
-    await sql`delete from platform.node_views where org_id = ${org} and day < current_date - ${NODE_VIEWS_KEPT_DAYS}::int`
+    await sql`select platform.sweep_node_views(${org})`
   })
 }
