@@ -193,9 +193,26 @@ export const fileViewParamSchema = z.string().optional().catch("")
  * Un fichier vu (AC-c2) : son nom, sa taille, le chemin de son nœud ; un `.md`, ses blocs lus en mode tolérant
  * (E10-S01). Servi par le service à la page de l'hôte, qui le passe à la visionneuse.
  */
-export type FileView =
+/**
+ * L'origine d'un fichier (fichiers et stockage, § Origine d'un fichier) : déposé par une personne (`upload`), par un lien
+ * de dépôt (`link`) ou rendu par une fonction (`function`), sinon inconnu (`null`, la copie d'un fichier d'avant) ; la
+ * fonction, l'auteur (nul s'il a quitté l'organisation) et la date ; la conversation à son seul auteur ; pour une copie,
+ * le fichier d'où elle vient et la date de la copie.
+ */
+export type FileOriginView = {
+  kind: "upload" | "link" | "function" | null
+  function?: string
+  by: { id: string; name: string | null } | null
+  at: string
+  ctx?: string
+  copied_from?: string
+  copied_at?: string
+}
+
+export type FileView = (
   | { id: string; name: string; size: number; path: string; type: "html" }
   | { id: string; name: string; size: number; path: string; type: "md"; blocks: ViewedBlock[] }
+) & { origin?: FileOriginView | null }
 
 /** Un bloc d'un `.md` vu, rendu en lecture seule comme un bloc de page (`rendu-des-blocs.tsx`). */
 export type ViewedBlock = { type: string; text: string | null; data: Record<string, unknown> }
@@ -221,5 +238,8 @@ export type TransitFile = FileReady & { expiresAt: string }
  */
 export type FileStorageState = { enabled: boolean; hostTypes: string[] }
 
-/** Le stockage sert-il encore l'objet d'un fichier lisible (`GET files/<id>?check`, AC-b8, HN-E10S02-43) ? */
-export type FileAvailability = { available: boolean }
+/**
+ * Le stockage sert-il encore l'objet d'un fichier lisible (`GET files/<id>?check`, AC-b8, HN-E10S02-43) ? Et son origine,
+ * que la carte du fichier dit à côté de sa taille (§ Origine d'un fichier).
+ */
+export type FileAvailability = { available: boolean; origin: FileOriginView | null }

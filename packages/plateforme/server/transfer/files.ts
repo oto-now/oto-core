@@ -96,7 +96,7 @@ function reasonOf(error: unknown): string {
  * la place de sa ligne, et se rend dans `failed`.
  */
 export async function carryFiles(
-  context: { db: PlatformDb; identity: Identity },
+  context: { db: PlatformDb; identity: Identity; ctx?: string | null },
   nodeId: string,
   markdown: string,
   files: readonly PivotFile[],
@@ -108,7 +108,7 @@ export async function carryFiles(
     try {
       const fetched = await fetchSource(file.url, { ...fetchDeps, maxBytes: FILE_MAX_BYTES, timeoutMs: 30_000 })
       if ("failure" in fetched) throw new Error(`could not download it: ${fetched.failure}`)
-      const stored = await storeFile(context.db, context.identity, { nodeId, name: file.name, bytes: fetched.bytes })
+      const stored = await storeFile(context.db, context.identity, { nodeId, name: file.name, bytes: fetched.bytes, origin: { kind: "function", function: "node.import_tree", ctx: context.ctx ?? null } })
       text = cited.reduce((current, form) => current.replaceAll(form, filePath(stored.id)), text)
     } catch (error) {
       failed.push({ name: file.name, reason: reasonOf(error) })

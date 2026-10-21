@@ -11,7 +11,7 @@ import { FILE_MAX_BYTES, fileIdSchema, transitFileRequestSchema, type TransitFil
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
-import { insertPending, markReady } from "./rows"
+import { insertPending, markReady, type FileOrigin } from "./rows"
 import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, removeObjects, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
@@ -75,7 +75,7 @@ export async function requestTransitUpload(db: PlatformDb, identity: Identity, i
   const { mime } = admittedType(request.name)
   // 50 Mo pour tout type admis, texte compris (décision du 19/10) : la borne de 4 Mo d'un texte joint ne vaut pas ici.
   checkSize(request.name, null, request.size)
-  const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: request.name, mime, size: request.size })
+  const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: request.name, mime, size: request.size, origin: { kind: "upload" } })
   if (expiresAt === null) throw new Error("[platform] files: a transit file was inserted without expiry")
   const upload = await onStorage("upload url", () => store.uploadUrl(objectKey(identity.org.id, id), { size: request.size, mime }))
   return { id, upload, expiresAt }
@@ -151,13 +151,13 @@ export async function readTransitBytes(db: PlatformDb, identity: Identity, fileI
  * à l'échéance de `TRANSIT_HOURS` sous le quota et le verrou de l'organisation, objet écrit (`put`), puis `ready`. Un
  * objet qui ne s'écrit pas efface la ligne et rend `internal` : aucun fichier partiel. Rend le fichier et son échéance.
  */
-export async function storeTransitFile(db: PlatformDb, identity: Identity, file: { name: string; bytes: Uint8Array }): Promise<TransitFile> {
+export async function storeTransitFile(db: PlatformDb, identity: Identity, file: { name: string; bytes: Uint8Array; origin: FileOrigin }): Promise<TransitFile> {
   await purgeTransitFiles(db, identity)
   const store = requireStore()
   const size = file.bytes.byteLength
   const { mime } = admittedType(file.name)
   checkSize(file.name, null, size)
-  const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: file.name, mime, size })
+  const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: file.name, mime, size, origin: file.origin })
   if (expiresAt === null) throw new Error("[platform] files: a transit file was inserted without expiry")
   try {
     await onStorage("put", () => store.put(objectKey(identity.org.id, id), file.bytes, mime))

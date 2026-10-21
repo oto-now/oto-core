@@ -27,11 +27,12 @@ import { FileZip } from "@phosphor-icons/react/dist/csr/FileZip"
 import type { ImageWidth } from "../../schemas/blocks"
 import { FILE_ADDRESS } from "../../schemas/api"
 import { filePath, fileTypeOf, IMAGE_TYPES, type FileType } from "../../schemas/files"
-import { fichierDisponible } from "../api/client"
+import { etatDuFichier, type EtatDuFichier } from "../api/client"
 import { Dialog } from "../ds/react/dialog"
 import { Icon, type Glyphe } from "../ds/react/icon"
 import { tailleLisible } from "../format/nombres"
 import { FICHIERS } from "./libelles-des-fichiers"
+import { ligneDOrigine } from "./origine-du-fichier"
 
 /** Ce qui se lit sans télécharger (AC-b2) : « Voir » (lot c). */
 const VUS: readonly FileType[] = ["html", "md", "pdf", "txt", "csv"]
@@ -111,21 +112,22 @@ export function ImageAgrandissable({ source, alt, largeur, jointe }: ImageProps)
 
 /**
  * La carte demande à sa route, une fois montée, si le stockage sert encore le fichier (`?check`, AC-b8) : un fichier
- * perdu se dit, sans casser la page. Un `useEffect` admis (`state-management.md § Règle d'or`, HN-E10S02-43).
+ * perdu se dit, sans casser la page. La même réponse porte son origine (§ Origine d'un fichier). Un `useEffect` admis
+ * (`state-management.md § Règle d'or`, HN-E10S02-43).
  */
-function useDisponible(id: string, verifier: boolean): boolean {
-  const [disponible, setDisponible] = useState(true)
+function useEtat(id: string, verifier: boolean): EtatDuFichier {
+  const [etat, setEtat] = useState<EtatDuFichier>({ disponible: true, origine: null })
   useEffect(() => {
     if (!verifier) return
     let courant = true
-    void fichierDisponible(id).then((oui) => {
-      if (courant) setDisponible(oui)
+    void etatDuFichier(id).then((lu) => {
+      if (courant) setEtat(lu)
     })
     return () => {
       courant = false
     }
   }, [id, verifier])
-  return disponible
+  return etat
 }
 
 /** Un lien au dessin d'un bouton fantôme du design system. */
@@ -143,14 +145,15 @@ function LienBouton({ href, nom, glyphe, children, nouvelOnglet }: { href: strin
 type CarteProps = { id: string; nom: string; taille: number; routeDesFichiers?: string }
 
 /**
- * La carte d'un fichier joint (AC-b2) : l'icône de son type, son nom, sa taille lisible, « Voir » pour un `html`, un
- * `md`, un PDF, un `txt` ou un `csv`, et « Télécharger ». Indisponible, elle garde son nom et le dit (AC-b8).
+ * La carte d'un fichier joint (AC-b2) : l'icône de son type, son nom, sa taille lisible et son origine, « Voir » pour un
+ * `html`, un `md`, un PDF, un `txt` ou un `csv`, et « Télécharger ». Indisponible, elle garde son nom et le dit (AC-b8).
+ * Sur la page publique, ni vérification ni origine.
  */
 export function CarteDeFichier({ id, nom, taille, routeDesFichiers = FILE_ADDRESS }: CarteProps) {
   const adresse = filePath(id, routeDesFichiers)
   const type = fileTypeOf(nom)
   const vue = adresseDeVue(id, type, routeDesFichiers)
-  const servi = useDisponible(id, routeDesFichiers === FILE_ADDRESS)
+  const { disponible: servi, origine } = useEtat(id, routeDesFichiers === FILE_ADDRESS)
   const glyphe = type === null ? FichierQuelconque : (GLYPHES[type] ?? (IMAGE_TYPES.includes(type) ? FileImage : FichierQuelconque))
   return (
     // La ligne d'un fichier du design system (`oto-file`, E11-S15, AC-b2) : filet, rayon et surface de carte ; elle se replie sous ses boutons.
@@ -158,7 +161,7 @@ export function CarteDeFichier({ id, nom, taille, routeDesFichiers = FILE_ADDRES
       <Icon as={glyphe} size="md" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-ink">{nom}</p>
-        <p className="text-xs text-mute">{servi ? tailleLisible(taille) : FICHIERS.indisponible}</p>
+        <p className="text-xs text-mute">{servi ? [tailleLisible(taille), ligneDOrigine(origine)].filter(Boolean).join(" · ") : FICHIERS.indisponible}</p>
       </div>
       {servi && vue !== null && (
         <LienBouton href={vue} nom={FICHIERS.voirNom(nom)} glyphe={Eye} nouvelOnglet>

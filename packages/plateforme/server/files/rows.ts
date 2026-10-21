@@ -36,8 +36,22 @@ export async function requireQuota(sql: Tx, identity: Identity, request: { addin
   }
 }
 
-/** Une ligne à insérer : jointe à `nodeId`, ou en transit (`nodeId` nul) pour `transitHours` heures. */
-export type PendingFile = { nodeId: string; name: string; mime: string; size: number } | { nodeId: null; transitHours: number; name: string; mime: string; size: number }
+/**
+ * L'origine d'une ligne neuve (fichiers et stockage, § Origine d'un fichier ; étape 4) : déposée par une personne, par
+ * un lien de dépôt ou rendue par une fonction, avec la fonction et la conversation de l'appel ; ou la copie d'un
+ * fichier, dont la base reprend l'origine. L'auteur et la date, la base les pose (`files_origin`).
+ */
+export type FileOrigin = { kind: "upload" } | { kind: "link" | "function"; function: string; ctx: string | null } | { copiedFrom: string }
+
+/** Une ligne à insérer : jointe à `nodeId`, ou en transit (`nodeId` nul) pour `transitHours` heures ; et son origine. */
+export type PendingFile = ({ nodeId: string } | { nodeId: null; transitHours: number }) & { name: string; mime: string; size: number; origin: FileOrigin }
+
+/** Les colonnes d'origine écrites par le service ; le reste vient de la base. */
+function originColumns(origin: FileOrigin) {
+  if ("copiedFrom" in origin) return { kind: null, fn: null, ctx: null, copiedFrom: origin.copiedFrom }
+  if (origin.kind === "upload") return { kind: origin.kind, fn: null, ctx: null, copiedFrom: null }
+  return { kind: origin.kind, fn: origin.function, ctx: origin.ctx, copiedFrom: null }
+}
 
 /**
  * La ligne `pending` d'un envoi (AC-a3, 5), sous le quota lu dans la même transaction, sous le verrou de l'organisation :
@@ -49,9 +63,11 @@ export async function insertPending(db: PlatformDb, identity: Identity, file: Pe
   return inTransaction(db, "files: request", async (sql) => {
     await requireQuota(sql, identity, { adding: file.size, what: file.name, quota })
     const expiry = file.nodeId === null ? sql`now() + make_interval(hours => ${file.transitHours})` : sql`null`
+    const origin = originColumns(file.origin)
     const [row] = await sql<{ id: string; expires_at: string | null }[]>`
-      insert into platform.files (org_id, node_id, name, mime, size, status, created_by, expires_at)
-      values (${identity.org.id}, ${file.nodeId}, ${file.name}, ${file.mime}, ${file.size}, 'pending', ${identity.user.id}, ${expiry})
+      insert into platform.files (org_id, node_id, name, mime, size, status, created_by, expires_at, origin_kind, origin_function, origin_ctx, copied_from)
+      values (${identity.org.id}, ${file.nodeId}, ${file.name}, ${file.mime}, ${file.size}, 'pending', ${identity.user.id}, ${expiry},
+              ${origin.kind}, ${origin.fn}, ${origin.ctx}, ${origin.copiedFrom})
       returning id, to_json(expires_at) #>> '{}' as expires_at`
     return { id: row.id, expiresAt: row.expires_at }
   })

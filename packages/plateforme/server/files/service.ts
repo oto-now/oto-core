@@ -32,7 +32,7 @@ import { findNode, unknownNode } from "../nodes/lookup"
 import { ownerOf, teamOf } from "../nodes/view"
 import { hostExtensions, hostFileType } from "./readers/registry"
 import { decodeUtf8, NOT_UTF8 } from "./readers/text"
-import { insertPending, markReady, readyFiles } from "./rows"
+import { insertPending, markReady, readyFiles, type FileOrigin } from "./rows"
 import { fileStore, objectKey, storageNotEnabled, type FileStore, type ObjectResponse } from "./store"
 
 /** Délai de la lecture d'un fichier texte par le serveur (AC-a8). */
@@ -201,7 +201,7 @@ export async function requestFileUpload(db: PlatformDb, identity: Identity, inpu
   if (found.level < ACCESS_LEVELS.write) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, "write")
   const { type, mime } = admittedType(request.name)
   checkSize(request.name, type, request.size)
-  const { id } = await insertPending(db, identity, { nodeId: node.id, name: request.name, mime, size: request.size })
+  const { id } = await insertPending(db, identity, { nodeId: node.id, name: request.name, mime, size: request.size, origin: { kind: "upload" } })
   const upload = await onStorage("upload url", () => store.uploadUrl(objectKey(identity.org.id, id), { size: request.size, mime }))
   return { data: { id, upload }, target: node.path, teamId: teamOf(await ownerOf(db, node.id)) }
 }
@@ -236,12 +236,12 @@ async function sendObject(store: FileStore, key: string, object: { bytes: Uint8A
  * `conflict` qui dit ce qui a manqué (« … could not be stored: <cause>. Nothing was attached. »), sans consigne : son
  * appelant la pose. Sans lui, un fichier déposé par lien n'arriverait pas au stockage d'ADR-016.
  */
-export async function storeFile(db: PlatformDb, identity: Identity, file: { nodeId: string; name: string; bytes: Uint8Array }): Promise<FileReady> {
+export async function storeFile(db: PlatformDb, identity: Identity, file: { nodeId: string; name: string; bytes: Uint8Array; origin: FileOrigin }): Promise<FileReady> {
   const store = requireStore()
   const size = file.bytes.byteLength
   const { type, mime } = admittedType(file.name)
   checkSize(file.name, type, size)
-  const { id } = await insertPending(db, identity, { nodeId: file.nodeId, name: file.name, mime, size })
+  const { id } = await insertPending(db, identity, { nodeId: file.nodeId, name: file.name, mime, size, origin: file.origin })
   const key = objectKey(identity.org.id, id)
   const failure = await sendObject(store, key, { bytes: file.bytes, mime }).catch((error: unknown) => {
     console.error(`[platform] files: upload left pending ${key}`, error instanceof Error ? error.message : error)

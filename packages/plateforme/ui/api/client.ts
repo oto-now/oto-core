@@ -2,7 +2,7 @@
 // H03). Sans lui, chaque écran à mutation recoderait l'appel et la lecture de l'enveloppe
 // `{ data }` / `{ error }` (E05-S03 le réutilise).
 import { PLATFORM_API_PREFIX } from "../../schemas/api"
-import { filePath, type FileAvailability } from "../../schemas/files"
+import { filePath, type FileAvailability, type FileOriginView } from "../../schemas/files"
 
 type MethodeHttp = "GET" | "POST" | "PATCH" | "DELETE"
 
@@ -115,20 +115,24 @@ export async function adresseRepond(adresse: string): Promise<boolean> {
 /** Les refus qui disent un fichier indisponible : illisible ou absent (`not_found`), stockage retiré (`not_enabled`). */
 const INDISPONIBLE = ["not_found", "not_enabled"]
 
+/** Ce que la carte d'un fichier joint sait de lui : s'il est servi, et son origine (nulle si elle ne la sait pas). */
+export type EtatDuFichier = { disponible: boolean; origine: FileOriginView | null }
+
 /**
- * Un fichier joint est-il servi (E10-S02, AC-b8, HN-E10S02-43) ? Son adresse le dit en JSON (`GET /f/<id>?check`),
- * sans redirection : aucun octet ne sort du stockage, aucun CORS n'est en jeu. `false` : l'objet manque, ou le
- * fichier n'est pas lisible ; une panne (réseau, stockage, session) n'en dit rien (`true`), la carte reste telle quelle.
+ * Un fichier joint est-il servi (E10-S02, AC-b8, HN-E10S02-43), et d'où vient-il ? Son adresse le dit en JSON
+ * (`GET /f/<id>?check`), sans redirection : aucun octet ne sort du stockage, aucun CORS n'est en jeu. Indisponible :
+ * l'objet manque, ou le fichier n'est pas lisible ; une panne (réseau, stockage, session) n'en dit rien (disponible,
+ * origine nulle), la carte reste telle quelle.
  */
-export async function fichierDisponible(id: string): Promise<boolean> {
+export async function etatDuFichier(id: string): Promise<EtatDuFichier> {
   let reponse: Response
   try {
     reponse = await fetch(`${filePath(encodeURIComponent(id))}?check`, { credentials: "same-origin" })
   } catch {
-    return true
+    return { disponible: true, origine: null }
   }
   const lu = await lireLaReponse<FileAvailability>(reponse)
-  return lu.erreur ? !INDISPONIBLE.includes(lu.erreur.code) : lu.data.available
+  return lu.erreur ? { disponible: !INDISPONIBLE.includes(lu.erreur.code), origine: null } : { disponible: lu.data.available, origine: lu.data.origin }
 }
 
 /**

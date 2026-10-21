@@ -373,8 +373,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         await outcome(fileAvailability(paul.db, paul.identity, served)),
       ]
       expect(answers.map(({ value, code, message }) => ({ value, code, message }))).toEqual([
-        { value: { available: true }, code: undefined, message: undefined },
-        { value: { available: false }, code: undefined, message: undefined },
+        { value: { available: true, origin: expect.objectContaining({ kind: null }) }, code: undefined, message: undefined },
+        { value: { available: false, origin: expect.objectContaining({ kind: null }) }, code: undefined, message: undefined },
         { value: undefined, code: "not_found", message: "Unknown file." },
       ])
     })

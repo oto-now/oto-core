@@ -93,8 +93,8 @@ describe("files resource of the gate (E10-S02, lot a)", () => {
 
   it("should answer the availability on ?check as JSON, never a redirection, and the same not_found for what is not readable (AC-b8)", async () => {
     vi.mocked(fileAvailability)
-      .mockResolvedValueOnce({ available: true })
-      .mockResolvedValueOnce({ available: false })
+      .mockResolvedValueOnce({ available: true, origin: null })
+      .mockResolvedValueOnce({ available: false, origin: null })
       .mockRejectedValueOnce(new PlatformError("not_found", "Unknown file."))
     const answers: unknown[] = []
     for (let rank = 0; rank < 3; rank += 1) {
@@ -102,8 +102,8 @@ describe("files resource of the gate (E10-S02, lot a)", () => {
       answers.push({ status: response.status, location: response.headers.get("location"), body: await response.json(), journal: tasks.length })
     }
     expect(answers).toEqual([
-      { status: 200, location: null, body: { data: { available: true } }, journal: 0 },
-      { status: 200, location: null, body: { data: { available: false } }, journal: 0 },
+      { status: 200, location: null, body: { data: { available: true, origin: null } }, journal: 0 },
+      { status: 200, location: null, body: { data: { available: false, origin: null } }, journal: 0 },
       { status: 404, location: null, body: { error: { code: "not_found", message: "Unknown file." } }, journal: 0 },
     ])
     expect(fileAvailability).toHaveBeenCalledWith(expect.anything(), IDENTITY, FILE_ID)

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
-import { FILE_TYPES, fileTypeOf, ORG_QUOTA_BYTES, type BlockView } from "../../../packages/plateforme/schemas"
+import { FILE_TYPES, fileTypeOf, ORG_QUOTA_BYTES, type BlockView, type FileOriginView } from "../../../packages/plateforme/schemas"
 import { IMPORT } from "../../../packages/plateforme/ui/coque/libelles"
 import { tailleLisible } from "../../../packages/plateforme/ui/format/nombres"
 import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
@@ -27,8 +27,9 @@ type Stockage = {
   hote?: string[]
   /** Un refus de `POST files`. */
   refus?: { statut: number; code: string; details?: Record<string, unknown> }
-  /** `GET /f/<id>?check` : le stockage sert-il le fichier, ou le refus de la route (`not_found`) ? */
+  /** `GET /f/<id>?check` : le stockage sert-il le fichier, ou le refus de la route (`not_found`) ? Et son origine. */
   disponible?: boolean | "not_found"
+  origine?: FileOriginView | null
   /** Ce que sert la route de lecture. */
   octets?: string
 }
@@ -39,7 +40,7 @@ const IMAGE = bloc("f5000000-0000-4000-8000-000000000005", "image", null, { file
 const reponse = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
 /** `fetch` simulé : l'état du stockage, la demande et la confirmation d'un envoi, la route de lecture, les écritures d'une page et d'un tableau. */
-function simulerLeStockage({ actif = true, hote = [], refus, disponible = true, octets = "" }: Stockage = {}) {
+function simulerLeStockage({ actif = true, hote = [], refus, disponible = true, origine = null, octets = "" }: Stockage = {}) {
   const appels: Appel[] = []
   let insertions = 0
   vi.stubGlobal(
@@ -63,7 +64,7 @@ function simulerLeStockage({ actif = true, hote = [], refus, disponible = true, 
       }
       if (url.startsWith("/f/") && url.endsWith("?check")) {
         if (disponible === "not_found") return reponse(404, { error: { code: "not_found", message: "Unknown file." } })
-        return reponse(200, { data: { available: disponible } })
+        return reponse(200, { data: { available: disponible, origin: origine } })
       }
       if (url.startsWith("/f/")) return new Response(octets, { status: 200 })
       if (url.endsWith("/tables/import")) return reponse(200, { data: { path: corps?.table, created: 2, updated: 0, unchanged: 0, ignored: [] } })
@@ -508,5 +509,16 @@ describe("RenduDUnBloc — an unavailable file (AC-b8)", () => {
     render(lu({ type: "file", text: null, data: { file_id: ID_FICHIER, name: "rapport.pdf", size: 1200, mime: "application/pdf" } }))
     expect(await screen.findByText(FICHIERS.indisponible)).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: FICHIERS.telechargerNom("rapport.pdf") })).toBeNull()
+  })
+})
+
+// L'origine d'un fichier à côté de sa taille (fichiers et stockage, § Origine d'un fichier ; étape 4), lue par la même
+// vérification que sa disponibilité.
+describe("RenduDUnBloc — the origin of a file", () => {
+  it("should say on the card, after the size, the function, the date and the author the check returns", async () => {
+    simulerLeStockage({ origine: { kind: "function", function: "3cx.recording", by: { id: "u1", name: "Claire Martin" }, at: "2026-10-21T12:02:00.000Z" } })
+    render(lu({ type: "file", text: null, data: { file_id: ID_FICHIER, name: "appel.mp3", size: 1200, mime: "audio/mpeg" } }))
+
+    expect(await screen.findByText(`${tailleLisible(1200)} · Rendu par 3cx.recording le 21 octobre 2026 · Claire Martin`)).toBeInTheDocument()
   })
 })

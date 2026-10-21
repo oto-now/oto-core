@@ -256,7 +256,7 @@ export { FILE_MAX_BYTES, FILE_TYPES, fileIdSchema, fileKeepSchema, fileReadQuery
 export type { FileAvailability, FileKeep, FileReady, FileStorageState, FileType, FileUpload, TransitFile, TransitFileUpload } from "./files"
 // E10-S02 (lot c) : « Voir ». Les routes des fichiers d'un lien public, le paramètre `view` et le fichier vu.
 export { FILES_ROUTE, fileHtmlPath, fileLink, filePath, fileViewParamSchema, publicFilesRoute } from "./files"
-export type { FileMarkdown, FileView, ViewedBlock } from "./files"
+export type { FileMarkdown, FileOriginView, FileView, ViewedBlock } from "./files"
 // E12-S02 (ADR-022) : les capacités d'une organisation, fournies par l'hôte, et leur état pour les écrans.
 export { limitReached, orgLimitsSchema } from "./limits"
 export type { LimitState, OrgLimits, OrgLimitsView } from "./limits"

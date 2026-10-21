@@ -208,7 +208,7 @@ async function writeFile(db: PlatformDb, identity: Identity, ticket: UploadTicke
   if (!found) throw unknownNode(path, identity.org.prefix)
   const sent: SentFile = { mode: ticket.mode, node: { id: found.node.id, path: found.node.path }, storedId: null }
   try {
-    const stored = await storeFile(db, identity, { nodeId: sent.node.id, name, bytes })
+    const stored = await storeFile(db, identity, { nodeId: sent.node.id, name, bytes, origin: { kind: "link", function: "upload.link", ctx: ticket.ctx } })
     sent.storedId = stored.id
     const after = await lastBlock(db, sent.node.id)
     const input = { type: "file" as const, data: { file_id: stored.id, name: stored.name, size: stored.size, mime: stored.mime } }

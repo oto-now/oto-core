@@ -24,13 +24,16 @@ export type TransitFiles = {
   keep(file: { name: string; bytes: Uint8Array }): Promise<TransitFile>
 }
 
-/** Les fichiers en transit de la personne qui appelle, sous son identité : jamais ceux d'un autre. */
-export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identity" | "origin">): TransitFiles {
+/**
+ * Les fichiers en transit de la personne qui appelle, sous son identité : jamais ceux d'un autre. Celui que la fonction
+ * `fn` rend porte son origine : la fonction et la conversation de l'appel.
+ */
+export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identity" | "origin" | "ctx">, fn: string): TransitFiles {
   return {
     route: `${context.origin ?? ""}${FILE_ADDRESS}`,
     read: (id) => readTransitBytes(context.db, context.identity, id),
     consume: (id) => expireTransitFile(context.db, context.identity, id),
-    keep: (file) => storeTransitFile(context.db, context.identity, file),
+    keep: (file) => storeTransitFile(context.db, context.identity, { ...file, origin: { kind: "function", function: fn, ctx: context.ctx ?? null } }),
   }
 }
 

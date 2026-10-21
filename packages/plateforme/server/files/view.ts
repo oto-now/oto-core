@@ -11,6 +11,7 @@ import { invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { parseMarkdown } from "../nodes/markdown-parse"
 import { readPublicFile, type PublicFile } from "../shares"
+import { fileOrigin } from "./origin"
 import { objectText, onStorage, readableFile, readResponse, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
@@ -41,7 +42,7 @@ export async function fileView(db: PlatformDb, identity: Identity, input: { node
   const file = await readableFile(db, identity, input.file)
   const type = viewedType(file.name)
   if (file.node_id !== input.node || type === null) throw unknownFile()
-  const shown = { id: file.id, name: file.name, size: file.size, path: file.path }
+  const shown = { id: file.id, name: file.name, size: file.size, path: file.path, origin: await fileOrigin(db, identity, file.id) }
   if (type === "html") return { ...shown, type }
   return { ...shown, type, blocks: markdownBlocks(await objectText(store, identity.org.id, file)) }
 }

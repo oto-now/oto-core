@@ -242,7 +242,7 @@ function describedCall(prepared: PreparedFunction, context: FunctionContext): De
     throw new PlatformError("internal", "Internal error.")
   }
   const files = prepared.fn.request.files !== undefined || prepared.fn.output?.file !== undefined
-  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context) } : {}) }
+  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}) }
 }
 
 /** Une fonction décrite au contrat du catalogue : origine `connecteur`, exemples sans titre, exécution par le moteur. */

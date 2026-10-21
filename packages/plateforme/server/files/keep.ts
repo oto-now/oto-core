@@ -145,7 +145,7 @@ async function keepAgain(db: PlatformDb, identity: Identity, keeping: Keeping): 
 async function keepCopy(db: PlatformDb, identity: Identity, keeping: Keeping): Promise<Kept> {
   const { source, node, options } = keeping
   const store = requireStore()
-  const { id } = await insertPending(db, identity, { nodeId: node.id, name: source.name, mime: source.mime, size: source.size })
+  const { id } = await insertPending(db, identity, { nodeId: node.id, name: source.name, mime: source.mime, size: source.size, origin: { copiedFrom: source.id } })
   await onStorage("copy", () => store.copy(objectKey(identity.org.id, source.id), objectKey(identity.org.id, id)))
   await markReady(db, identity, { id, name: source.name }, { label: "files: kept copy", advice: "nothing was written" })
   const copy = { ...source, id }

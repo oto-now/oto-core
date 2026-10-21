@@ -27,6 +27,7 @@ import { LienBouton } from "../tableau/lien-bouton"
 import { CadreDuFichier } from "./cadre-du-fichier"
 import { PAGE_VIDE } from "./libelles"
 import { FICHIERS } from "./libelles-des-fichiers"
+import { ligneDOrigine } from "./origine-du-fichier"
 import { RenduDUnBloc } from "./rendu-des-blocs"
 
 export type VisionneuseProps = {
@@ -47,13 +48,13 @@ export type VisionneuseProps = {
 
 type VueProps = Omit<VisionneuseProps, "fichier" | "ici"> & { vue: FileView; route: string }
 
-/** L'en-tête, hors du contenu (AC-c2) : nom, taille, « Télécharger », « Ouvrir la page <titre> ». */
+/** L'en-tête, hors du contenu (AC-c2) : nom, taille et origine, « Télécharger », « Ouvrir la page <titre> ». */
 function EnTete({ vue, page, route, Lien }: Pick<VueProps, "vue" | "page" | "route" | "Lien">) {
   return (
     <ScreenHeader
       icon={<Icon as={FichierQuelconque} size="sm" />}
       title={vue.name}
-      meta={tailleLisible(vue.size)}
+      meta={[tailleLisible(vue.size), ligneDOrigine(vue.origin)].filter(Boolean).join(" · ")}
       actions={
         <>
           <a href={filePath(vue.id, route)} download="" aria-label={FICHIERS.telechargerNom(vue.name)} className="oto-btn" data-variant="ghost" data-size="sm">

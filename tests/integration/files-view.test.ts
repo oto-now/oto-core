@@ -187,8 +187,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       }).toEqual({
         route: [200, { data: { name: "notes.md", blocks } }],
         refused: [404, { error: { code: "not_found", message: "Unknown file." } }],
-        viewMd: { id: markdown, name: "notes.md", size: bytesOf(text).byteLength, path: "ventes/v_md", type: "md", blocks },
-        viewHtml: { id: html, name: "page.html", size: 1, path: "ventes/v_md", type: "html" },
+        // L'origine d'une ligne écrite par la connexion d'administration, sans origine dite : inconnue, datée par la base.
+        viewMd: { id: markdown, name: "notes.md", size: bytesOf(text).byteLength, path: "ventes/v_md", type: "md", blocks, origin: expect.objectContaining({ kind: null }) },
+        viewHtml: { id: html, name: "page.html", size: 1, path: "ventes/v_md", type: "html", origin: expect.objectContaining({ kind: null }) },
       })
     })
 

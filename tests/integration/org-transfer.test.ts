@@ -198,10 +198,11 @@ describe.skipIf(!configured || accountFieldsPending)(
       await fx.addMember(source.id, q.id, { profile: { handle: qHandle, name: "Quentin Test" } })
       await fx.addTeamMember(ventes, q.id)
       const offre = await fx.createNode(source.id, { parentId: conseil, path: "conseil/offre", title: "Offre", summary: "Offre de conseil." })
-      // Un fichier joint (E10-S02, ADR-016) cité par un bloc publié, et un envoi en cours, que l'export laisse (AC-e4).
+      // Un fichier joint (E10-S02, ADR-016) cité par un bloc publié, rendu par une fonction (son origine), et un envoi en
+      // cours, que l'export laisse (AC-e4).
       const file = await one(admin<{ id: string }[]>`
-        insert into platform.files (org_id, node_id, name, mime, size, status, created_by)
-        values (${source.id}, ${offre}, 'offre.pdf', 'application/pdf', 3, 'ready', ${e2e.id}) returning id`, "files")
+        insert into platform.files (org_id, node_id, name, mime, size, status, created_by, origin_kind, origin_function)
+        values (${source.id}, ${offre}, 'offre.pdf', 'application/pdf', 3, 'ready', ${e2e.id}, 'function', 'devis.render') returning id`, "files")
       sourceFileId = file.id
       s3.objects.set(`/${BUCKET}/${source.id}/${file.id}`, "pdf")
       await admin`
@@ -485,12 +486,15 @@ describe.skipIf(!configured || accountFieldsPending)(
         const entries = (Array.isArray(version?.blocks) ? version.blocks : []) as { type?: string; data?: { file_id?: string } }[]
         return { block: (block?.data as { file_id?: string } | undefined)?.file_id, snapshot: entries.find((entry) => entry.type === "file")?.data?.file_id }
       }
-      const files = (doc: ExportFile) => rows(doc, "files").map((row) => ({ id: String(row.id), name: row.name, status: row.status, node: row.node_id }))
+      const files = (doc: ExportFile) => rows(doc, "files").map((row) => ({ id: String(row.id), name: row.name, status: row.status, node: row.node_id, origin: [row.origin_kind, row.origin_function, row.origin_by, row.origin_at] }))
       const [copied] = files(copyDoc)
       const written = (file: string, id: string) => fs.readFileSync(path.join(filesDir(file), id), "utf8")
       expect({
         source: files(sourceDoc).map(({ id, name, status }) => [id, name, status]),
         copy: files(copyDoc).map(({ name, status }) => [name, status]),
+        // L'origine (fichiers et stockage, § Origine d'un fichier) : la sorte, la fonction, l'auteur et la date de la source.
+        origin: copied?.origin,
+        sameOriginDate: copied?.origin[3] === files(sourceDoc)[0]?.origin[3],
         newId: copied?.id !== sourceFileId,
         node: copied?.node === node(copyDoc, "conseil/offre")?.id,
         sourceCited: cited(sourceDoc),
@@ -503,6 +507,8 @@ describe.skipIf(!configured || accountFieldsPending)(
       }).toEqual({
         source: [[sourceFileId, "offre.pdf", "ready"]],
         copy: [["offre.pdf", "ready"]],
+        origin: ["function", "devis.render", e2e.id, expect.any(String)],
+        sameOriginDate: true,
         newId: true,
         node: true,
         sourceCited: { block: sourceFileId, snapshot: sourceFileId },

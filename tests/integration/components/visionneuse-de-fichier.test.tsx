@@ -150,6 +150,32 @@ describe("VisionneuseDeFichier — a .md file, not found, failed (AC-c2)", () =>
   })
 })
 
+// L'origine d'un fichier en une ligne discrète de l'en-tête (fichiers et stockage, § Origine d'un fichier ; étape 4).
+describe("VisionneuseDeFichier — the origin of the file", () => {
+  it("should say the function, the date and the author, a copy and its date, an unknown origin, and nothing for a file written before it", () => {
+    const at = "2026-10-21T12:02:00.000Z"
+    const by = { id: "u1", name: "Claire Martin" }
+    const ligne = (origin: FileView["origin"]) => {
+      monter({ fichier: { data: { ...HTML, origin } } })
+      const texte = document.querySelector(".oto-screen-header-meta")?.textContent ?? ""
+      cleanup()
+      return texte
+    }
+
+    expect([
+      ligne({ kind: "function", function: "3cx.recording", by, at }),
+      ligne({ kind: "upload", by, at, copied_from: ID, copied_at: "2026-10-22T08:00:00.000Z" }),
+      ligne({ kind: null, by: null, at }),
+      ligne(null),
+    ]).toEqual([
+      "12,5 Ko · Rendu par 3cx.recording le 21 octobre 2026 · Claire Martin",
+      "12,5 Ko · Déposé le 21 octobre 2026 · Claire Martin · copié le 22 octobre 2026",
+      "12,5 Ko · Origine inconnue",
+      "12,5 Ko",
+    ])
+  })
+})
+
 describe("CarteDeFichier on a public page (AC-c1, AC-c5)", () => {
   it("should open « Voir » in a new tab through the link's routes, and read no availability, whose route needs a session", () => {
     const fetch = vi.fn<typeof globalThis.fetch>()

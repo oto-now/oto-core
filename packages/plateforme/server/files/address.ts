@@ -6,6 +6,7 @@ import { fileReadQuerySchema, type FileAvailability } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { fileOrigin } from "./origin"
 import { onStorage, readableFile, readResponse, requireStore } from "./service"
 import { objectKey } from "./store"
 import { readyTransitFile } from "./transit"
@@ -42,11 +43,11 @@ export async function fileReadUrl(db: PlatformDb, identity: Identity, fileId: un
 /**
  * La disponibilité d'un fichier (AC-b8, HN-E10S02-43) : le même droit que la lecture, et la même réponse `not_found` pour
  * ce qui n'est pas lisible ; puis l'objet lu par `HEAD`. Aucun octet ne sort du bucket, aucune redirection : la carte d'un
- * fichier lit la réponse sans suivre le stockage.
+ * fichier lit la réponse sans suivre le stockage. Avec l'origine du fichier, que la carte dit à côté de sa taille.
  */
 export async function fileAvailability(db: PlatformDb, identity: Identity, fileId: unknown): Promise<FileAvailability> {
   const store = requireStore()
   const file = await addressedFile(db, identity, fileId)
   const head = await onStorage("head", () => store.head(objectKey(identity.org.id, file.id)))
-  return { available: head !== null }
+  return { available: head !== null, origin: await fileOrigin(db, identity, file.id) }
 }

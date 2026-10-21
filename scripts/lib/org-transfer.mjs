@@ -95,12 +95,15 @@ export const TABLES = [
   // Fichiers joints (E10-S02, ADR-016 § 8, AC-e4) : les lignes `ready` seules (un envoi en cours ne se transfère
   // pas) ; leurs octets vont dans `<fichier>.files/` (`org-transfer-files.mjs`). L'import leur donne un nouvel
   // identifiant, que `deepReplace` reporte dans le `file_id` des blocs et des instantanés. Un fichier en transit (sans
-  // nœud, `expires_at` posé) ne s'exporte jamais : `expires_at`, nul sur toute ligne exportée, n'est pas lue.
+  // nœud, `expires_at` posé) ne s'exporte jamais : `expires_at`, nul sur toute ligne exportée, n'est pas lue. L'origine
+  // part avec sa sorte, sa fonction, son auteur et sa date, que `files_origin` garde (une origine datée) ; ni sa
+  // conversation, que `files_origin` vérifie avant l'import de `ctx`, ni la source d'une copie, qu'il relit sous les droits
+  // d'un appelant que l'import n'a pas (et qui peut être un fichier en transit, jamais exporté).
   table('files', {
-    columns: cols('id org_id node_id name mime size status created_by created_at'),
-    excluded: ['expires_at'],
+    columns: cols('id org_id node_id name mime size status created_by created_at origin_kind origin_function origin_by origin_at'),
+    excluded: ['expires_at', 'origin_ctx', 'copied_from'],
     refs: { org_id: 'orgs', node_id: 'nodes' },
-    people: { created_by: 'null' },
+    people: { created_by: 'null', origin_by: 'null' },
     only: { column: 'status', value: 'ready' },
     present: 'node_id',
   }),

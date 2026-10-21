@@ -393,6 +393,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `security definer`, joint un fichier en transit au nœud et lève son échéance, dans une seule instruction, pour son
   seul auteur, `ready`, non échu, sur un nœud de son organisation hors corbeille, hors tableau, qu'il écrit ; sinon
   `42501`. Aucun privilège de `files` ne s'ouvre. Une fonction ; rien à relancer avant.
+- `20261021233000_platform_origine_des_fichiers.sql` (fichiers et stockage, § Origine d'un fichier ; étape 4 du
+  chantier « fichier », décidée par Alexis le 21/10) : six colonnes facultatives de `files`, `origin_kind` (`upload`,
+  `link`, `function`), `origin_function`, `origin_ctx`, `origin_by`, `origin_at`, `copied_from`. Le service écrit les
+  trois premières et `copied_from` (`INSERT` accordé sur elles seules) ; le déclencheur `files_origin` (`security
+  definer`) pose l'auteur et la date, vérifie que la conversation est celle de l'auteur (`42501` sinon) et, pour une
+  copie, reprend l'origine d'une source de la même organisation que l'appelant lit (`42501` sinon). `origin_by` mis à
+  nul quand la personne quitte l'organisation ou est oubliée (clé vers `members`). `duplicate_subtree` recréée : ses
+  copies portent `copied_from`. Les lignes d'avant restent sans origine ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

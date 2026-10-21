@@ -10,6 +10,8 @@
 // (étape 2 du chantier « fichier ») désigne un fichier quel que soit son état : joint, il se lit sur son nœud ; en
 // transit, à son seul auteur, avec les mêmes lecteurs, bornes et curseur, sans nœud ni équipe, son nom hors du journal.
 // Fichier à part de `read.ts` (borne de 300 lignes).
+import type { FileOriginView } from "../../schemas"
+import { fileOrigin } from "../files/origin"
 import { normalizeTitle, type ReadNodeInput } from "../../schemas"
 import { fenceFor } from "../../schemas/blocks-render"
 import { fileExtension } from "../../schemas/csv"
@@ -41,8 +43,14 @@ const WHOLE = "*"
 
 type Request = { input: ReadNodeInput; file: string; subject: PageSubject; prefix: string }
 
-/** Un fichier dont la lecture est décidée : sa ligne, ce que ses données portent avant lui, l'équipe de l'appel. */
-type Decided = { request: Request; store: FileStore; file: { id: string; name: string; size: number }; data: Record<string, unknown>; teamId: string | null }
+/** Un fichier dont la lecture est décidée : sa ligne et son origine, ce que ses données portent avant lui, l'équipe de l'appel. */
+type Decided = {
+  request: Request
+  store: FileStore
+  file: { id: string; name: string; size: number; origin: FileOriginView | null }
+  data: Record<string, unknown>
+  teamId: string | null
+}
 
 /** « html, md, txt and csv » : les formats lisibles, dits dans un refus. */
 function said(items: readonly string[]): string {
@@ -147,7 +155,7 @@ async function fileText({ request, store, file, data, teamId }: Decided, orgId: 
       prefix: request.prefix,
       header: `${file.name} (${fileSizeText(file.size)})${label}`,
       served,
-      data: { ...data, file: { id: file.id, name: file.name, size: file.size, type: found.extension }, ...fields },
+      data: { ...data, file: { id: file.id, name: file.name, size: file.size, type: found.extension, origin: file.origin }, ...fields },
       nextActions: [],
       teamId,
     })
@@ -163,7 +171,8 @@ export async function readNodeFile(db: PlatformDb, identity: Identity, request: 
   const store = requireStore()
   const file = await attachedFile(db, identity, request.file, { id: node.id, path: node.path })
   const teamId = teamOf(await ownerOf(db, node.id))
-  return fileText({ request: { ...request, subject: node }, store, file, data: { path: node.path }, teamId }, identity.org.id)
+  const origin = await fileOrigin(db, identity, file.id)
+  return fileText({ request: { ...request, subject: node }, store, file: { ...file, origin }, data: { path: node.path }, teamId }, identity.org.id)
 }
 
 /**
@@ -179,7 +188,8 @@ async function readTransitFile(db: PlatformDb, identity: Identity, request: Omit
   })
   const subject = { id: file.id, path: null, title: file.name }
   checkCursor(request.input, subject)
-  return fileText({ request: { ...request, subject }, store, file, data: { expires_at: new Date(file.expires_at).toISOString() }, teamId: null }, identity.org.id)
+  const origin = await fileOrigin(db, identity, file.id)
+  return fileText({ request: { ...request, subject }, store, file: { ...file, origin }, data: { expires_at: new Date(file.expires_at).toISOString() }, teamId: null }, identity.org.id)
 }
 
 /**
