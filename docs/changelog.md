@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Version 1.5.1 du paquet
+**À appliquer :** depuis 1.5.0, ce que dit la section 1.5.1 du `CHANGELOG.md` du paquet : les migrations `20261021140000_platform_role_dans_la_corbeille.sql` et `20261021150000_platform_role_dans_les_vues.sql`, avec le paquet de cette version ; la CLI ne prend plus le mot de passe de la base en argument (`PLATFORM_ADMIN_DATABASE_URL`, ou `--db-url` sans mot de passe et `PGPASSWORD`).
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.5.1 — 2026-10-21` ; `packages/plateforme/package.json` passe à 1.5.1 ; une section `## Unreleased` vide reste au-dessus.
+**Pourquoi :** publier les trois correctifs de sécurité arrivés depuis 1.5.0 (fichiers d'une page à la corbeille, vues des pages, mot de passe de la base en argument de la CLI).
+**Fichiers :** `packages/plateforme/package.json`, `packages/plateforme/CHANGELOG.md`, `docs/changelog.md`.
+
 ## [2026-10-21] — Sécurité : la CLI ne prend plus le mot de passe de la base en argv
 **À appliquer :** l'hôte qui passait le mot de passe dans `--db-url` pose l'URL dans `PLATFORM_ADMIN_DATABASE_URL` (chargée d'un fichier non commité) et retire `--db-url`, ou garde `--db-url` sans mot de passe avec `PGPASSWORD` ; ni migration, ni `db prepare` à relancer.
 **Quoi :** `db prepare`, `accounts secret`, `journal purge` et `org delete` lisent l'adresse de la base par une seule règle (`cli/admin-url.mjs`, `adminDbUrl`) : `PLATFORM_ADMIN_DATABASE_URL`, mot de passe compris, ou `--db-url` sans mot de passe, celui-ci lu par postgres.js dans `PGPASSWORD`. Refusés en code 2, sans réécrire l'adresse : une `--db-url` qui porte un mot de passe (`admin:…@`, vide compris, un « : » avant le dernier « @ », ou un paramètre `password`), les deux adresses à la fois (« deux adresses de base : PLATFORM_ADMIN_DATABASE_URL et --db-url, gardez-en une »), aucune. Aide de la CLI, README racine et du paquet, `migrations/README.md`, guide d'installation d'un hôte et documents de conception mis à jour ; le job `bare-postgres` prépare la base une fois par la variable, une fois par `--db-url` sans mot de passe.
