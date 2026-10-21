@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Test de `commit:export` sans identité git (CI rouge)
+**Quoi :** `tests/unit/commit-depuis-export.test.ts` donne au script l'identité git de son commit (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) ; l'outil garde celle de la personne.
+**Pourquoi :** la machine de CI n'a pas d'identité git : `commit-tree` y échouait et le job Bare Postgres était rouge depuis 2d79e6b. Rejoué sans configuration git globale (`HOME` vide, `GIT_CONFIG_GLOBAL=/dev/null`), comme la CI.
+**Fichiers :** `tests/unit/commit-depuis-export.test.ts`.
+
 ## [2026-10-21] — Reçu lié à l'arbre du commit : `pnpm commit:export` et les trailers `Verified-tree:`, `Verified:`
 **À appliquer :** rien dans un hôte. Une session qui travaille dans un export lance `pnpm verify` dans l'export, puis `pnpm commit:export --depot <checkout> --base <sha> --message <fichier>`, et pousse le SHA rendu.
 **Quoi :** `scripts/lib/arbre-de-code.mjs` calcule l'arbre de code d'un dossier ou d'un commit (l'arbre git sans `EXCLUS`, fichiers en 100644), dans un dépôt jetable ; `verify-receipt.mjs` en reprend `EXCLUS` et écrit dans le reçu l'arbre de code, la durée, le plafond et le résumé des tests (verts, sautés, en échec, fichiers sautés en entier), repris du passage que `verify.mjs` vient d'écrire (`.claude/.verify-run.json`, consommé) ; l'empreinte du gate n'y est écrite que dans un dépôt git. `verify.mjs` lance `test` avec `VITEST_MAX_FORKS=4` et le rapport JSON de Vitest. `scripts/commit-depuis-export.mjs` (`pnpm commit:export`) construit le commit de l'export sur sa base, vérifie son arbre de code contre le reçu et pose les trailers ; `scripts/sauts-toleres.txt` liste les six fichiers propres au projet Supabase qu'il tolère sautés. `CLAUDE.md` et `vagues.md` le disent (`VITEST_MAX_FORKS=4`, et non 2, que rien ne posait).

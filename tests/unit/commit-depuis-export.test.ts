@@ -78,8 +78,14 @@ function recuVert(exporte: string, surcharge: Record<string, unknown> = {}) {
   return recu
 }
 
+// Le commit s'écrit sous l'identité git de la personne ; la machine de CI n'en a pas : le test la donne.
+const IDENTITE = { GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@test", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@test" }
+
 function lancer(cas: ReturnType<typeof monter>, args = ["--depot", cas.depot, "--base", cas.base, "--message", cas.message]) {
-  const result = spawnSync("node", [path.join(cas.exporte, "scripts/commit-depuis-export.mjs"), ...args], { encoding: "utf8" })
+  const result = spawnSync("node", [path.join(cas.exporte, "scripts/commit-depuis-export.mjs"), ...args], {
+    encoding: "utf8",
+    env: { ...process.env, ...IDENTITE },
+  })
   return { status: result.status, output: result.stdout + result.stderr, sha: /^Commit ([0-9a-f]{40})/m.exec(result.stdout)?.[1] }
 }
 
