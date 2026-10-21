@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { arbreDeCodeDuDossier, estExclu } from './lib/arbre-de-code.mjs'
 
 // La racine est celle du SCRIPT, pas le cwd : le reçu doit couvrir le projet entier même quand
 // la commande est lancée depuis un sous-dossier. `VERIFY_RECEIPT_ROOT` la redirige — réservé aux
@@ -35,20 +36,6 @@ const ROOT = process.env.VERIFY_RECEIPT_ROOT ?? join(dirname(fileURLToPath(impor
 const RECEIPT = process.env.VERIFY_RECEIPT_PATH ?? join(ROOT, '.claude/.verify-receipt.json')
 const MAX_AGE_MS = 60 * 60 * 1000 // 1 h : au-delà, l'environnement a pu bouger (deps, node)
 
-// Documents de méthode écrits APRÈS les checks, par la finalisation puis par `commit-push` :
-// changelog, sprint status, stories, documents de conception, registry. Aucun n'influence le type-check, le lint ni
-// les tests. Sans ces exclusions, le reçu serait systématiquement invalidé par les étapes qui le
-// suivent — il ne servirait alors qu'aux changements Micro, c'est-à-dire là où il ne fait rien
-// gagner. Le registry en fait partie : `dev` l'écrit à l'étape 8, après `pnpm verify` (étape 6).
-// Contrepartie assumée : la cohérence registry ↔ `src/components/` glisse d'un commit.
-const EXCLUS = [
-  /^docs\/changelog\.md$/,
-  /^\.method\/sprint\//,
-  /^docs\/produit\/stories\//,
-  /^docs\/conception\//,
-  /^\.method\/conventions\/component-registry\.md$/,
-]
-const estExclu = (path) => EXCLUS.some((r) => r.test(path))
 
 const git = (args, options = {}, root = ROOT) =>
   execFileSync(
@@ -218,16 +205,45 @@ if (!executeDirectement) {
   // rien : les fonctions exportées suffisent
 } else runCli()
 
+/**
+ * Le résumé du passage de `scripts/verify.mjs` (`.claude/.verify-run.json`), s'il vient de finir : écrit moins
+ * de deux minutes avant `maintenant`, il est consommé (supprimé) ; plus vieux, il est ignoré et supprimé. Un
+ * `write` lancé seul ne reprend donc jamais les tests d'un autre passage.
+ */
+function passageRecent(maintenant) {
+  const chemin = join(ROOT, '.claude/.verify-run.json')
+  if (!existsSync(chemin)) return null
+  try {
+    const passage = JSON.parse(readFileSync(chemin, 'utf8'))
+    const age = new Date(maintenant).getTime() - new Date(passage.fin).getTime()
+    return age >= 0 && age <= 2 * 60 * 1000 ? passage : null
+  } catch {
+    return null
+  } finally {
+    unlinkSync(chemin)
+  }
+}
+
 function runCli() {
 const [, , command, checksArg] = process.argv
 
 if (command === 'write') {
   const checks = (checksArg ?? 'check:framework,type-check,lint,test').split(',').map((c) => c.trim())
   try {
-    writeFileSync(
-      RECEIPT,
-      JSON.stringify({ hash: worktreeHash(), checks, at: new Date().toISOString() }, null, 2) + '\n'
-    )
+    const at = new Date().toISOString()
+    // L'arbre de code (`scripts/lib/arbre-de-code.mjs`) : ce que `commit-depuis-export.mjs` compare à l'arbre
+    // du commit qu'il construit, et qu'il écrit en trailer `Verified-tree:`. Il se calcule hors de tout dépôt,
+    // dans un export de `git archive` comme dans le checkout.
+    const recu = { checks, at, tree: arbreDeCodeDuDossier(ROOT) }
+    // L'empreinte du gate de commit n'a de sens que dans un dépôt git (le checkout) ; un export n'en a pas.
+    try {
+      recu.hash = worktreeHash()
+    } catch {
+      /* hors d'un dépôt git : le gate refusera ce reçu, l'outil d'export n'en lit que l'arbre */
+    }
+    const passage = passageRecent(at)
+    if (passage) Object.assign(recu, { duree: passage.duree, forks: passage.forks, tests: passage.tests })
+    writeFileSync(RECEIPT, JSON.stringify(recu, null, 2) + '\n')
   } catch (error) {
     // Échouer proprement plutôt que sur une stack Node : ce point du script est atteint APRÈS
     // que les 4 checks sont passés, et l'utilisateur doit comprendre pourquoi le gate le

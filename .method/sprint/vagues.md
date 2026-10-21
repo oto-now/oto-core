@@ -60,7 +60,7 @@ puis fusionne. Ces règles s'ajoutent à `CLAUDE.md` ; le sémaphore des command
   avant la fusion : les `git diff --name-only` des lots, hors fichiers d'ajout, n'ont aucune ligne commune.
 - **Mémoire** : `type-check` (2 à 3 Go au pic) passe par le sémaphore du pilote, N créneaux =
   (RAM libre − 3 Go) / 3 Go, au moins 1 ; sous 3 Go libres, plus de nouvelle commande lourde. Le
-  `verify` du commit lance Vitest avec `VITEST_MAX_FORKS=2`.
+  `verify` lance Vitest avec `VITEST_MAX_FORKS=4` (`scripts/verify.mjs`).
 - **Aucune commande longue avant le commit** : pendant l'implémentation, la correction et la revue,
   un agent ne lance que `type-check`, `lint` et `check:framework` ; il écrit ses tests sans les
   exécuter, et la revue les lit. Vitest, `verify`, Playwright et `build` tournent une seule fois, au

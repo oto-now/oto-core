@@ -16,6 +16,7 @@
     "widgets:build": "node packages/plateforme/widgets/build.mjs",
     "verify": "node scripts/verify.mjs check:framework,type-check,lint test && node scripts/verify-receipt.mjs write",
     "verify:cached": "node scripts/verify-receipt.mjs check || pnpm verify",
+    "commit:export": "node scripts/commit-depuis-export.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

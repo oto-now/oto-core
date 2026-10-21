@@ -1,0 +1,10 @@
+# Fichiers de test que `pnpm verify` peut sauter en entier sur une base Postgres locale : ils ne tournent que sur
+# le projet Supabase (Auth, serveur OAuth, Data API, données de démonstration, nettoyage du projet de test).
+# `commit-depuis-export.mjs` refuse un reçu dont un autre fichier a sauté en entier (un test sauté faute de base
+# ne prouve rien). La liste lue est celle du commit de base : l'étendre passe par une PR qui ne fait que ça.
+tests/integration/data-api-platform.test.ts
+tests/integration/demo-seed.test.ts
+tests/integration/oauth-clients.test.ts
+tests/integration/oauth-consent.test.ts
+tests/integration/oauth-lectures.test.ts
+tests/integration/test-cleanup.test.ts

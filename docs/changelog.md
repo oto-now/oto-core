@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Reçu lié à l'arbre du commit : `pnpm commit:export` et les trailers `Verified-tree:`, `Verified:`
+**À appliquer :** rien dans un hôte. Une session qui travaille dans un export lance `pnpm verify` dans l'export, puis `pnpm commit:export --depot <checkout> --base <sha> --message <fichier>`, et pousse le SHA rendu.
+**Quoi :** `scripts/lib/arbre-de-code.mjs` calcule l'arbre de code d'un dossier ou d'un commit (l'arbre git sans `EXCLUS`, fichiers en 100644), dans un dépôt jetable ; `verify-receipt.mjs` en reprend `EXCLUS` et écrit dans le reçu l'arbre de code, la durée, le plafond et le résumé des tests (verts, sautés, en échec, fichiers sautés en entier), repris du passage que `verify.mjs` vient d'écrire (`.claude/.verify-run.json`, consommé) ; l'empreinte du gate n'y est écrite que dans un dépôt git. `verify.mjs` lance `test` avec `VITEST_MAX_FORKS=4` et le rapport JSON de Vitest. `scripts/commit-depuis-export.mjs` (`pnpm commit:export`) construit le commit de l'export sur sa base, vérifie son arbre de code contre le reçu et pose les trailers ; `scripts/sauts-toleres.txt` liste les six fichiers propres au projet Supabase qu'il tolère sautés. `CLAUDE.md` et `vagues.md` le disent (`VITEST_MAX_FORKS=4`, et non 2, que rien ne posait).
+**Pourquoi :** décision du 21/10 (cto, sur la mesure d'un `pnpm verify` complet) : un commit construit par `git commit-tree` depuis un export échappait au gate et ne prouvait pas que ses checks avaient tourné. Le job de CI qui lira ces trailers suit (d'abord en avertissement).
+**Fichiers :** `scripts/lib/arbre-de-code.mjs`, `scripts/commit-depuis-export.mjs`, `scripts/sauts-toleres.txt` (nouveaux), `scripts/{verify,verify-receipt}.mjs`, `package.json`, `CLAUDE.md`, `.method/sprint/vagues.md`, `tests/unit/{arbre-de-code,commit-depuis-export}.test.ts` (nouveaux), `tests/unit/verify.test.ts`.
+
 ## [2026-10-21] — Worker des lecteurs construit sous Windows
 **Quoi :** `widgets/build.mjs` compare les identifiants de Vite et la racine du paquet en barres obliques : sous Windows, il listait 0 source du worker et le test qui compare le script à ses sources échouait.
 **Pourquoi :** `pnpm verify` ne passait plus sur un poste Windows depuis le lot 2 des lecteurs de fichiers.
