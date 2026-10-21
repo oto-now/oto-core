@@ -49,6 +49,8 @@ const eslintConfig = [
       "next-env.d.ts",
       // Bundle minifié du widget, généré par packages/plateforme/widgets/build.mjs.
       "packages/plateforme/mcp/widgets/generated.ts",
+      // Script du worker des lecteurs, assemblé par le même script.
+      "packages/plateforme/server/files/readers/worker/generated.ts",
       // Worktrees des vagues d'exécution autonome (copies du dépôt, avec leurs builds) : chacun
       // passe son propre `pnpm verify` ; le lint du checkout principal ne les relit pas.
       ".claude/worktrees/**",

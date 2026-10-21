@@ -1,12 +1,13 @@
 // Le registre des lecteurs de fichiers (`lecture-des-fichiers.md` § Le registre des lecteurs), sur le modèle de
-// `registerFunctions` : le paquet inscrit d'office ses lecteurs texte (`text.ts`) ; l'hôte inscrit les siens par
-// `registerReaders([...])`, en tête de chaque route qui monte une porte du paquet, et chaque appel remplace toute sa
-// liste. Un lecteur de l'hôte ouvre au dépôt les types qu'il lit, et eux seuls (§ Types de l'hôte) : un type ni dans
-// `FILE_TYPES` ni inscrit reste refusé. Sans lui, un format qu'un programme tiers lit (plan, modèle 3D) n'aurait aucune
-// place, ni au dépôt ni à la lecture.
+// `registerFunctions` : le paquet inscrit d'office ses lecteurs texte (`text.ts`) et celui du tableur (`xlsx.ts`) ;
+// l'hôte inscrit les siens par `registerReaders([...])`, en tête de chaque route qui monte une porte du paquet, et
+// chaque appel remplace toute sa liste. Un lecteur de l'hôte ouvre au dépôt les types qu'il lit, et eux seuls (§ Types
+// de l'hôte) : un type ni dans `FILE_TYPES` ni inscrit reste refusé. Sans lui, un format qu'un programme tiers lit
+// (plan, modèle 3D) n'aurait aucune place, ni au dépôt ni à la lecture.
 import { FILE_TYPES } from "../../../schemas/files"
 import { TEXT_READERS } from "./text"
 import { READER_LIMITS, type Reader, type ReaderType } from "./types"
+import { XLSX_READER } from "./xlsx"
 
 /** Un lecteur trouvé pour un type, et les octets qu'il lit au plus. */
 export type FoundReader = { reader: Reader; extension: string; maxBytes: number }
@@ -38,8 +39,13 @@ const REFUSED_MIMES: ReadonlySet<string> = new Set([
   "text/javascript", "application/javascript", "application/x-javascript", "text/ecmascript", "application/ecmascript", "application/wasm",
 ])
 
-/** Les lecteurs du paquet par extension : un fichier texte, au plus 4 Mo lus. */
-const PACKAGE_BY_EXTENSION: ReadonlyMap<string, Reader> = new Map(TEXT_READERS.flatMap((reader) => reader.types.map((type) => [type.extension, reader] as const)))
+/** Les lecteurs du paquet par extension, et les octets qu'ils lisent : 4 Mo d'un fichier texte, 50 Mo d'un tableur. */
+const PACKAGE_BY_EXTENSION: ReadonlyMap<string, { reader: Reader; maxBytes: number }> = new Map(
+  [
+    ...TEXT_READERS.map((reader) => ({ reader, maxBytes: READER_LIMITS.textBytes })),
+    { reader: XLSX_READER, maxBytes: READER_LIMITS.binaryBytes },
+  ].flatMap((found) => found.reader.types.map((type) => [type.extension, found] as const)),
+)
 
 /** Les types inscrits par l'hôte, par extension. */
 let hostByExtension: ReadonlyMap<string, { reader: Reader; type: ReaderType }> = new Map()
@@ -91,7 +97,7 @@ export function registerReaders(readers: readonly Reader[]): void {
 /** Le lecteur d'une extension : celui du paquet, sinon celui de l'hôte ; `null` sans lecteur. */
 export function readerFor(extension: string): FoundReader | null {
   const own = PACKAGE_BY_EXTENSION.get(extension)
-  if (own) return { reader: own, extension, maxBytes: READER_LIMITS.textBytes }
+  if (own) return { ...own, extension }
   const host = hostByExtension.get(extension)
   return host ? { reader: host.reader, extension, maxBytes: READER_LIMITS.binaryBytes } : null
 }

@@ -431,7 +431,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         text: "notes.md (11 bytes)\n\n```markdown\n# Été\n\n```",
         refusals: [
           { code: "invalid_arguments", message: "ancien.txt cannot be read: the file is not UTF-8; download it instead (unsupported)." },
-          { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt and csv files are read as text." },
+          { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt, csv and xlsx files are read as text." },
           { code: "not_found", message: "Unknown file." },
           { code: "too_large", message: "gros.csv is over 4 MB: download it instead." },
         ],

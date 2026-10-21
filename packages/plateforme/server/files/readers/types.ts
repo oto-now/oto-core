@@ -1,8 +1,10 @@
 // Le contrat d'un lecteur de fichiers (`lecture-des-fichiers.md` § Le registre des lecteurs) : ce qu'il reçoit, ce qu'il
-// rend (un document en parties, ou un statut terminal) et les bornes communes à tous les lecteurs. Module de types et de
-// constantes, qui n'importe que les bornes des fichiers (`schemas/files.ts`) : le registre, les lecteurs du paquet et le
-// service des fichiers le lisent sans cycle. Hors du barrel `schemas` : rien ici n'entre dans un bundle du navigateur.
+// rend (un document en parties, ou un statut terminal, rendu ou levé) et les bornes communes à tous les lecteurs. Module
+// de types et de constantes, qui n'importe que les bornes des fichiers (`schemas/files.ts`) et les statuts (`status.ts`) :
+// le registre, les lecteurs du paquet et le service des fichiers le lisent sans cycle. Hors du barrel `schemas` : rien
+// ici n'entre dans un bundle du navigateur.
 import { FILE_MAX_BYTES, TEXT_FILE_MAX_BYTES } from "../../../schemas/files"
+import type { ReaderStatus } from "./status"
 
 /** Les bornes d'une lecture (`lecture-des-fichiers.md` § Bornes), exportées pour le lecteur d'un hôte. */
 export const READER_LIMITS = {
@@ -18,15 +20,14 @@ export const READER_LIMITS = {
   textChars: 2_000_000,
   /** Parties listées par le plan ; au-delà, leur nombre. */
   partsShown: 200,
+  /**
+   * Workers de lecteur qui tournent à la fois dans un processus (le tableur) ; une lecture de plus attend son tour dans
+   * son échéance, puis rend `timeout`.
+   */
+  workers: 2,
 } as const
 
-/** Les statuts terminaux d'une lecture (`lecture-des-fichiers.md` § L'aperçu au dépôt), et `timeout`. */
-export const READER_STATUSES = ["unsupported", "encrypted", "empty", "too_large", "rejected_dtd", "failed", "timeout"] as const
-
-export type ReaderStatusCode = (typeof READER_STATUSES)[number]
-
-/** Un fichier illisible : son statut, et ce qui le dit à l'assistant (300 caractères au plus). */
-export type ReaderStatus = { status: ReaderStatusCode; detail?: string }
+export { READER_STATUSES, ReaderStatusError, type ReaderStatus, type ReaderStatusCode } from "./status"
 
 /** Une partie du texte : titre, feuille, diapositive, page ; son nom se passe à `section`. */
 export type ReaderPart = { name: string; chars: number }

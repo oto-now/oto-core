@@ -1,11 +1,12 @@
 // Un lecteur couru sous les bornes communes (`lecture-des-fichiers.md` § Bornes) : l'échéance de 10 secondes, le
 // document contrôlé (un lecteur de l'hôte qui rend une forme fausse est un échec, pas un texte servi), le caractère NUL
-// retiré, le texte coupé à 2 millions de caractères. L'échéance n'est pas préemptive : un lecteur asynchrone est
+// retiré, le texte coupé à 2 millions de caractères. L'échéance n'est pas préemptive ici : un lecteur asynchrone est
 // abandonné à l'échéance, et le signal qu'il reçoit lui dit de s'arrêter ; une étape synchrone qui la dépasse rend
-// `timeout` à son retour, sans être interrompue (un worker viendra avec les lecteurs du tableur et du PDF). Sans lui,
-// un lecteur lent, bavard ou mal écrit tiendrait la requête ou servirait ce que la base refuse.
+// `timeout` à son retour, sans être interrompue. Le lecteur qui court dans un worker (le tableur, `worker/run.ts`) le
+// termine sur ce signal : pour lui, l'échéance interrompt. Un statut levé (`ReaderStatusError`) se sert comme un statut
+// rendu. Sans lui, un lecteur lent, bavard ou mal écrit tiendrait la requête ou servirait ce que la base refuse.
 import { PlatformError, type PlatformErrorCode } from "../../errors"
-import { READER_LIMITS, READER_STATUSES, type Reader, type ReaderDocument, type ReaderPart, type ReaderStatus, type ReaderStatusCode } from "./types"
+import { READER_LIMITS, READER_STATUSES, ReaderStatusError, type Reader, type ReaderDocument, type ReaderPart, type ReaderStatus, type ReaderStatusCode } from "./types"
 
 /** Le caractère NUL, que Postgres refuse dans `text` et `jsonb` : retiré de tout ce qu'un lecteur rend. */
 const NUL = String.fromCharCode(0)
@@ -58,7 +59,7 @@ function failed(name: string, why: string): PlatformError {
   return statusError(name, { status: "failed" })
 }
 
-/** `run` sous l'échéance : abandonné à l'échéance, `timeout` s'il la dépasse, `failed` s'il lève. */
+/** `run` sous l'échéance : abandonné à l'échéance, `timeout` s'il la dépasse, son statut s'il en lève un, `failed` s'il lève autre chose. */
 async function bounded<T>(deadline: Deadline, name: string, run: () => T | Promise<T>): Promise<T> {
   const timedOut = () => statusError(name, { status: "timeout" })
   if (deadline.expired()) throw timedOut()
@@ -72,6 +73,7 @@ async function bounded<T>(deadline: Deadline, name: string, run: () => T | Promi
       Promise.resolve()
         .then(run)
         .catch((error: unknown) => {
+          if (error instanceof ReaderStatusError) throw statusError(name, statusOf({ ...error.reader }, name) ?? { status: "failed" })
           throw failed(name, error instanceof Error ? error.message : String(error))
         }),
       aborted,

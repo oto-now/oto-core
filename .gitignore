@@ -65,3 +65,4 @@ tsconfig.tsbuildinfo
 # Bundle du widget routeur, construit par packages/plateforme/widgets/build.mjs (type-check s'il manque,
 # build, CI et npm pack), livré dans le paquet publié, jamais commité
 packages/plateforme/mcp/widgets/generated.ts
+packages/plateforme/server/files/readers/worker/generated.ts

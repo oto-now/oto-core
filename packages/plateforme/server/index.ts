@@ -38,7 +38,7 @@ export type { DataPolicy, FileContentsPolicy } from "./data-policy"
 // Les lecteurs de fichiers (`lecture-des-fichiers.md` § Le registre des lecteurs) : l'hôte inscrit les siens, qui ouvrent
 // au dépôt les types qu'ils lisent ; les bornes communes, que son lecteur tient (décompression).
 export { defineReader, registerReaders } from "./files/readers/registry"
-export { READER_LIMITS } from "./files/readers/types"
+export { READER_LIMITS, ReaderStatusError } from "./files/readers/types"
 export type { Reader, ReaderDocument, ReaderInput, ReaderPart, ReaderStatus, ReaderStatusCode, ReaderType } from "./files/readers/types"
 export type { OrgLimitsSource, OrgUsage } from "./limits"
 export {

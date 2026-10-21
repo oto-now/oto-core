@@ -397,7 +397,7 @@ La fonction reçoit `{ host, request? }` : l'adresse appelée, normalisée, et l
 ### Lecteurs de fichiers
 
 Un assistant lit le texte d'un fichier joint par `read {path, file}` : le paquet lit `html`, `md`,
-`txt` et `csv` ; un hôte inscrit les lecteurs des formats que lui seul sait lire (un plan, un
+`txt`, `csv` et `xlsx` ; un hôte inscrit les lecteurs des formats que lui seul sait lire (un plan, un
 modèle 3D), comme ses fonctions métier.
 
 ```ts
@@ -436,7 +436,8 @@ registerReaders([
   l'échéance de 10 secondes, qui couvre aussi chaque `text(part)` ; un lecteur asynchrone est
   abandonné à l'échéance, un calcul synchrone n'est pas interrompu mais rend `timeout`. Il rend le
   document, ou un statut de `READER_STATUSES` (`unsupported`, `encrypted`, `empty`, `too_large`,
-  `rejected_dtd`, `failed`, `timeout`), servi à l'assistant en refus. Les noms de parties sont
+  `rejected_dtd`, `failed`, `timeout`), servi à l'assistant en refus ; `text(part)`, qui rend une
+  chaîne, dit un statut en levant `ReaderStatusError`. Les noms de parties sont
   uniques (1 à 200 caractères) : l'assistant les passe à `section`. Une erreur levée ou une forme
   fausse vaut `failed`, la cause au log serveur. Le caractère NUL est retiré, le texte coupé à
   2 millions de caractères ; un lecteur qui décompresse s'arrête à
@@ -445,6 +446,16 @@ registerReaders([
   et leur taille) ; `section` en sert une, `"*"` tout le texte, coupé par le curseur au-delà de
   45 000 caractères. La pseudonymisation et `fileContents: "metadata"` s'appliquent comme au texte
   d'un fichier du paquet.
+- **Tableur (`xlsx`)** : une partie par feuille, nommée par la feuille (« (hidden) » pour une
+  feuille cachée), en CSV : la valeur gardée des formules, les dates en ISO, une cellule fusionnée à
+  son coin. Le lecteur court dans un `worker_threads` (256 Mo de tas, environnement vide) que
+  l'échéance termine ; son script est livré en texte dans le paquet et lancé par `eval` : rien à
+  configurer chez l'hôte, ni en développement, ni dans un build `output: "standalone"`. Un classeur
+  protégé par mot de passe rend `encrypted`, une archive qui dépasse 64 Mo décompressés `too_large`,
+  un `<!DOCTYPE>` `rejected_dtd`. Chaque lecture lance un worker, terminé une seconde après sa
+  dernière réponse ; deux au plus tournent par processus (`READER_LIMITS.workers`), une lecture de
+  plus attend son tour dans son échéance, puis rend `timeout`. Le script évalué est celui du
+  paquet, assemblé au build : le contenu du fichier lui passe en données, jamais en code.
 
 ## Connecteurs réels et coffre
 

@@ -10,15 +10,27 @@
  *   (`prepack` du paquet), qui le livre ; `--if-missing` ne reconstruit pas un module déjà présent ;
  * - le bundle d'un hôte, vues du paquet et vues de l'ERP, par `buildHostBundle` (`oto-platform widgets build`).
  *
+ * Lancé seul, il construit aussi le script du worker des lecteurs de fichiers (`server/files/readers/worker/`) : son
+ * point d'entrée et ce qu'il importe, `fflate` compris, en un script CommonJS rangé en texte dans `generated.ts` (non
+ * suivi par git), que le serveur lance par `eval` : un worker chargé d'un fichier ne se résout pas dans le bundle d'un
+ * hôte Next (webpack réécrit son chemin vers `/_next/…`, et un build `standalone` ne le trace pas). Le module porte
+ * l'empreinte de ses sources, qu'un test compare : un script périmé ne passe pas. `--if-missing` le reconstruit aussi
+ * quand une source est plus récente que lui.
+ *
  * Vite, ses plugins, Tailwind et `ext-apps` se chargent à la demande : un hôte sans vue de l'ERP ne les installe pas.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_TARGET = join(ROOT, '..', 'mcp', 'widgets', 'generated.ts')
+const PACKAGE_ROOT = join(ROOT, '..')
+const READERS = join(PACKAGE_ROOT, 'server', 'files', 'readers')
+const WORKER_ENTRY = join(READERS, 'worker', 'entry.ts')
+const WORKER_TARGET = join(READERS, 'worker', 'generated.ts')
 const STYLES = join(ROOT, 'styles.css')
 const VIEWS_MODULE = 'virtual:oto-erp-views'
 // La barre oblique inverse, composée : le module généré n'écrit que de l'ASCII (CLAUDE.md, modifications documentaires).
@@ -128,10 +140,65 @@ async function buildPackageBundle() {
   console.log(`widgets : ${sizes(html)} dans mcp/widgets/generated.ts`)
 }
 
-// Lancé seul (`node widgets/build.mjs`) : le bundle du paquet ; importé par la CLI, rien ne court.
+/**
+ * L'empreinte des sources du worker : chemin relatif au paquet et contenu de chaque fichier, dans l'ordre des chemins.
+ * Exportée pour le test qui compare le module généré à ses sources.
+ */
+export function workerDigest(files) {
+  const hash = createHash('sha256')
+  for (const file of [...files].sort()) hash.update(`${file}\0${readFileSync(join(PACKAGE_ROOT, file), 'utf8')}\0`)
+  return hash.digest('hex')
+}
+
+/** Les sources TypeScript des lecteurs : une plus récente que le module généré le rend périmé. */
+function readerSources(dir = READERS) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return readerSources(path)
+    return entry.name.endsWith('.ts') && path !== WORKER_TARGET ? [path] : []
+  })
+}
+
+async function buildReaderWorker() {
+  if (process.argv.includes('--if-missing') && existsSync(WORKER_TARGET)) {
+    const built = statSync(WORKER_TARGET).mtimeMs
+    if (readerSources().every((file) => statSync(file).mtimeMs <= built)) return
+  }
+  const { build } = await import('vite')
+  const output = await build({
+    root: PACKAGE_ROOT,
+    configFile: false,
+    logLevel: 'warn',
+    // Tout dans le script, `fflate` compris : le worker n'a pas de `node_modules` à lui chez l'hôte.
+    ssr: { noExternal: true, target: 'node' },
+    build: {
+      ssr: WORKER_ENTRY,
+      write: false,
+      minify: false,
+      target: 'node20',
+      reportCompressedSize: false,
+      rollupOptions: { output: { format: 'cjs', inlineDynamicImports: true } },
+    },
+  })
+  const chunks = (Array.isArray(output) ? output : [output]).flatMap((one) => one.output ?? []).filter((one) => one.type === 'chunk')
+  if (chunks.length !== 1) throw new Error(`worker des lecteurs : ${chunks.length} morceaux au lieu d'un`)
+  const [chunk] = chunks
+  // Les sources du paquet assemblées dans le script, par leur chemin dans le paquet, barres obliques sur tout système.
+  const files = chunk.moduleIds
+    .filter((id) => id.startsWith(PACKAGE_ROOT) && !id.includes(`${sep}node_modules${sep}`))
+    .map((id) => relative(PACKAGE_ROOT, id).split(sep).join('/'))
+  const header = '// Généré par packages/plateforme/widgets/build.mjs : ne pas modifier, ne pas commiter.\n'
+  const inputs = `export const READER_WORKER_INPUTS = { files: ${JSON.stringify(files.sort())}, digest: ${JSON.stringify(workerDigest(files))} }\n`
+  writeFileSync(WORKER_TARGET, `${header}${inputs}export const READER_WORKER_SOURCE = ${asciiLiteral(chunk.code)}\n`)
+  console.log(`worker des lecteurs : ${kb(Buffer.byteLength(chunk.code))}, ${files.length} sources, dans server/files/readers/worker/generated.ts`)
+}
+
+// Lancé seul (`node widgets/build.mjs`) : le bundle du paquet et le worker des lecteurs ; importé par la CLI, rien ne
+// court.
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     await buildPackageBundle()
+    await buildReaderWorker()
   } catch (error) {
     console.error(`widgets : build en échec : ${error?.message ?? error}`)
     process.exitCode = 1
