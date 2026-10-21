@@ -31,7 +31,7 @@ import { token } from "../pseudonym/token"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
 import { newsBlock, newsItems } from "./blocks/news"
-import { orgFacts } from "./blocks/org"
+import { orgAddress, orgFacts } from "./blocks/org"
 import { personFacts } from "./blocks/person"
 import { procedureBlock } from "./blocks/procedure"
 import { proceduresBlock } from "./blocks/procedures"
@@ -276,8 +276,11 @@ async function sinceOf(db: PlatformDb, identity: Identity, raw: string | undefin
 export const PSEUDONYM_NOTICE =
   `People's names, emails and phone numbers appear as tokens such as ${token("client", "…")}. To refer to a person (in a path, a search or a function argument), copy the token exactly as written; never guess a token or try to recover the value behind it.`
 
-/** La requête d'un `context` : son agent, et `pseudonymized` quand la porte pseudonymise ce qui part (l'avis des jetons). */
-export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean }
+/**
+ * La requête d'un `context` : son agent, `pseudonymized` quand la porte pseudonymise ce qui part (l'avis des jetons), et
+ * l'origine de la requête MCP, qui donne l'adresse d'Oto (`orgAddress`).
+ */
+export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean; origin?: string }
 
 export async function buildContext(
   db: PlatformDb,
@@ -306,8 +309,9 @@ async function fullContext(
     budget: CONTEXT_BUDGET,
   })
   const { host } = await issued
+  const tail = [orgAddress(request.origin), request.pseudonymized ? PSEUDONYM_NOTICE : null].filter((line) => line !== null)
   return {
-    text: request.pseudonymized ? `${text}\n\n${PSEUDONYM_NOTICE}` : text,
+    text: [text, ...tail].join("\n\n"),
     data: { ctx: code, ...routingData(routing) },
     // La procédure servie, sinon la phrase : ce que relisent l'usage (E08-S09) et le bonus d'usage.
     target: routing.served?.path ?? (phrase === undefined ? null : clip(phrase, MAX_TARGET_CHARS)),

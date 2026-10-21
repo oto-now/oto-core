@@ -1,7 +1,7 @@
 # Contexte servi
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-10-21
 
 ## Résumé
 
@@ -66,6 +66,7 @@ Notice des procédures (1.4.12) : les règles « How this workspace works » dis
 - H34 : « What's new » liste, depuis le dernier `ctx` de la personne sinon 14 jours, les versions publiées qu'elle lit et les connecteurs activés : 10 lignes et 600 caractères au plus ; sans nouveauté depuis une borne du jour même, le bloc est omis. E03-S08 N1 : la borne est le dernier `ctx` de la personne dans cette organisation, sinon maintenant − 14 jours. E03-S08 N2 : une activation compte à sa date de dernière mise à jour à l'état actif (`updated_at`, sinon `created_at`).
 - H35 : « Procedures you can run » liste 60 procédures lisibles au plus, triées par l'usage sur 90 jours que la personne lit au journal, puis par chemin ; les 15 premières par chemin et résumé, les suivantes par chemin et titre (amendée par E11-S16 : sur le jeu à l'échelle, les 40 premières tiennent en 3 932 caractères au lieu de 6 836, toutes visibles). E03-S08 N3 : l'usage compte les lignes de journal de la personne et des équipes qu'elle mène (toutes ses équipes si elle administre l'organisation), choisies par la requête du service ; un simple membre ne compte que les siennes.
 - H36 : « Recent content » (anciennement « Recent documents ») liste 20 pages et tableaux au plus, lus ou écrits par la personne sur 90 jours (journal, blocs qu'elle a écrits, nœuds qu'elle a publiés), sans procédure ni Contexte. E03-S08 N4 : visibles, hors racine, que la personne a lus ou écrits au journal, dont elle a écrit des blocs ou qu'elle a publiés ; procédures et Contextes exclus (ils ont leurs parties).
+- `context` se termine par l'adresse d'Oto, l'origine de la requête MCP lue par `webUrl` (`orgAddress`) : « This Oto is at <origine>. A page opens at <origine>/n/<path>: give the user that link when you point to a page. » Sans elle, l'assistant ne pouvait donner à la personne le lien d'une page ; une origine illisible omet la ligne. Le `context` léger ne la répète pas.
 - Quand l'hôte déclare des personnes, `context` finit par un paragraphe : noms, courriels et téléphones arrivent en jetons (`client#…`), qui se recopient tels quels pour désigner une personne et ne se devinent pas ([pseudonymisation](pseudonymisation.md) § Les jetons dans les arguments). Le `context` léger (`since_ctx`) ne le répète pas.
 
 ### Plafond et coupe (ADR-002 § 7)
@@ -131,3 +132,4 @@ Relevées par la story E05-S12, à trancher par JB ; le code suit l'option A :
 - 2026-10-20 : notice des procédures servie à chaque contexte en deux lignes, et entière quand la demande est d'en écrire une — décidé par JB (source : session du 20/10/2026).
 - 2026-10-20 : avec une demande, au-delà de trois équipes, trois Contextes d'équipe au plus servis en entier, les plus proches de la demande, les autres en une ligne (résumé, comment les lire) ; sans demande, tous entiers ; Tout le monde et Privé toujours entiers — décidé par JB (source : session du 20/10/2026).
 - 2026-10-20 : jauge du budget sur la page d'un Contexte (son poids, tout ce que l'assistant recevrait sans plafond, le plafond marqué) — décidé par JB (source : session du 20/10/2026).
+- 2026-10-21 : l'adresse d'Oto en fin de `context`, pour que l'assistant donne le lien d'une page — décidé par JB (source : un assistant disait ne pas connaître l'adresse de l'Oto où il était).

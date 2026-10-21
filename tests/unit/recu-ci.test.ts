@@ -63,8 +63,15 @@ const lancer = (depot: string, ...args: string[]) => {
 }
 
 describe("receipt of pushed commits", { timeout: 30_000 }, () => {
+  // Un seul dépôt pour le bloc : aucun test n'y écrit (le verdict se calcule dans un dépôt jetable, objets lus
+  // chez lui), et le monter coûtait environ 5 s par test, une quarantaine de lancements de git (fichier de 29 à
+  // 11 s, lancé seul le 2026-10-21).
+  let cas: ReturnType<typeof monter>
+  beforeAll(() => {
+    cas = monter()
+  }, 30_000)
+
   it("should accept an attested commit and a commit that leaves the code tree unchanged, and flag the others", () => {
-    const cas = monter()
     expect(verdict(cas.depot, cas.atteste).etat).toBe("atteste")
     expect(verdict(cas.depot, cas.documents).etat).toBe("inchange")
     expect(verdict(cas.depot, cas.absent).etat).toBe("absent")
@@ -72,7 +79,6 @@ describe("receipt of pushed commits", { timeout: 30_000 }, () => {
   })
 
   it("should read the pushed range, or only the head after a new branch or a rewritten history", () => {
-    const cas = monter()
     expect(commitsAVerifier(cas.depot, cas.base, cas.faux)).toEqual([cas.atteste, cas.documents, cas.absent, cas.faux])
     expect(commitsAVerifier(cas.depot, ZERO, cas.faux)).toEqual([cas.faux])
     expect(commitsAVerifier(cas.depot, "", cas.faux)).toEqual([cas.faux])
@@ -81,7 +87,6 @@ describe("receipt of pushed commits", { timeout: 30_000 }, () => {
   })
 
   it("should fail on a commit without a valid receipt, and only warn with --avertir", () => {
-    const cas = monter()
     const bloquant = lancer(cas.depot, "--depuis", cas.base, "--jusqua", cas.faux)
     expect(bloquant.status, bloquant.output).toBe(1)
     expect(bloquant.output).toMatch(/^::error title=Reçu du commit::.* a vaut 3 : sans `Verified-tree:`/m)
@@ -95,7 +100,6 @@ describe("receipt of pushed commits", { timeout: 30_000 }, () => {
   })
 
   it("should pass a range whose commits are all covered, and say its usage without --jusqua", () => {
-    const cas = monter()
     const vert = lancer(cas.depot, "--depuis", cas.base, "--jusqua", cas.documents)
     expect(vert.status, vert.output).toBe(0)
     expect(vert.output).toContain("2 commit(s) lus, 0 sans reçu valable.")

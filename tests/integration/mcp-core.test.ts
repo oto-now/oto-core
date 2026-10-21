@@ -164,7 +164,10 @@ describe.skipIf(!sqlConfigured)(
         ].join("\n")
         // E03-S08 : puis le contexte dynamique ; l'organisation du test n'a ni Contexte publié, ni procédure, ni document.
         expect(opened.text.startsWith(`${opening}\n\n## What's new since `)).toBe(true)
-        expect(opened.text.slice(opening.length)).toMatch(/^\n\n## What's new since \d{4}-\d{2}-\d{2}\nNothing new\.\n\n## Procedures you can run, most used first \(0\)\nNone published yet\.$/)
+        // Puis l'adresse d'Oto, l'origine de la requête : l'assistant y compose le lien d'une page (21/10).
+        expect(opened.text.slice(opening.length)).toMatch(
+          /^\n\n## What's new since \d{4}-\d{2}-\d{2}\nNothing new\.\n\n## Procedures you can run, most used first \(0\)\nNone published yet\.\n\nThis Oto is at (https?:\/\/t[0-9a-f]+\.example\.invalid)\. A page opens at \1\/n\/<path>: give the user that link when you point to a page\.$/,
+        )
         expect(opened.text.length).toBeLessThanOrEqual(20_000)
         expect(opened.result.structuredContent).toEqual({
           ctx: opened.code,

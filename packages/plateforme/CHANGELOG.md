@@ -25,6 +25,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A file link is now `/f/<id>`, for a file attached to a page or one of your transit files; an older link still opens and still writes.
 - Read a file by its id alone with `read {file}`: a file attached to a page you read, or one of your transit files; an erased one is refused with its date for 30 days.
 - A file a function returns comes as its link `[name (size, type)](…/f/<id>)` with its id; citing a transit file of yours in a page is refused: upload it there first.
+- `context` ends with this Oto's address: link the user to a page at `<address>/n/<path>`.
 
 ### Hosts
 - UI: on a node page, the title and its in-place field span the whole header width, « modifiée … » under it.

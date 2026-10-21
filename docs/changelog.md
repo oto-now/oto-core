@@ -10,6 +10,21 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — `purge_transit_files` reste réservée au rôle serveur
+**Quoi :** `20261021190000` recréait la fonction en la rendant exécutable par `authenticated` ; elle reprend le droit de `20261019130000` (révoquée de `PUBLIC`, `anon` et `authenticated`, accordée à `platform_server`), que `role-du-serveur.test.ts` exige. Migration non publiée : corrigée sur place, avec sa copie `supabase/migrations/`.
+**Pourquoi :** le job `bare-postgres` du commit qui l'a apportée était rouge sur ce test.
+**Fichiers :** `packages/plateforme/migrations/20261021190000_platform_trace_des_fichiers_effaces.sql` et sa copie `supabase/migrations/`.
+
+## [2026-10-21] — Tests de l'outillage plus rapides
+**Quoi :** `hooks.test.ts` passe de 241 à 40 s : les blocs du gate hachent un dépôt jetable d'un fichier, au reçu écrit une fois par bloc, et les hooks tournent dans un thread (`worker_threads`, JSON sur stdin, code de sortie remonté) ; un lancement node réel est gardé par hook, et le refus d'un commit sans reçu reste sur le checkout réel. `recu-ci.test.ts` passe de 29 à 11 s (dépôt monté une fois). Mêmes cas, mêmes attentes ; aucun hook ni script modifié.
+**Pourquoi :** demande de JB du 21/10 : `pnpm verify` durait 7 à 11 min, dont un tiers pour `hooks.test.ts`.
+**Fichiers :** `tests/unit/hooks.test.ts`, `tests/unit/recu-ci.test.ts`.
+
+## [2026-10-21] — L'adresse d'Oto en fin de `context`
+**À appliquer :** rien (le texte de `context` change, pas la liste des outils).
+**Quoi :** `context` se termine par « This Oto is at <origine>. A page opens at <origine>/n/<path>: give the user that link when you point to a page. », l'origine de la requête MCP lue par `webUrl` (`orgAddress`, `server/context/blocks/org.ts`) ; une origine illisible omet la ligne ; le `context` léger ne la répète pas.
+**Pourquoi :** choix de JB du 21/10 : un assistant disait ne pas connaître l'adresse de l'Oto où il était, et ne pouvait donner le lien d'une page.
+**Fichiers :** `packages/plateforme/server/context/{index.ts,blocks/org.ts}`, `packages/plateforme/mcp/server.ts`, `tests/unit/context-blocks.test.ts`, `tests/integration/mcp-core.test.ts`, `docs/conception/contexte-servi.md`, `packages/plateforme/CHANGELOG.md`.
 ## [2026-10-21] — Lire un fichier en transit, la trace de 30 jours d'un fichier effacé, le refus de le citer
 **À appliquer :** dans un hôte, copier `20261021190000_platform_trace_des_fichiers_effaces.sql` dans `supabase/migrations/` (`pnpm migrations:sync`) et l'appliquer avec le paquet.
 **Quoi :** `read {file}` sans `path` (`path` facultatif dans le schéma de `read`) : `readFileAlone` (`server/nodes/read-file.ts`) lit un fichier joint sur son nœud, sinon un fichier en transit de l'appelant (`readTransitFile`), mêmes lecteurs, bornes, politique de l'hôte et curseur, le curseur lié au fichier (`PageSubject`, `read-pages.ts`), son échéance dans les données, au journal par son adresse. La trace : table `erased_files`, posée par le déclencheur `files_erased_trace` à la suppression d'une ligne `ready` en transit (échue : datée de l'échéance ; sinon consommée), lue par son seul auteur, retirée par `purge_transit_files` passé `keep_until` (30 jours), clés vers `orgs` et `members` en cascade ; `readyTransitFile` (`transit.ts`) refuse alors « File <id> was deleted on <date> UTC (<cause>) … », raison `file_erased`, à `/f/<id>`, à `read` et au moteur. `attachFiles` et `refuseFilesOnCreate` (`write-files.ts`) refusent « File <id> is in transit: upload it to <path> first » à son auteur. `fileLink` (`schemas/files.ts`) : le lien d'une page, rendu par un bloc `file` et servi par la sortie d'une fonction de connecteur (`keptOutput`, avec `url` ; `TransitFiles.route`, `<origine>/f`) ; `POST transit-files/<id>/complete` rend `url`. Table rangée dans la carte de suppression d'une organisation (`org-tables.mjs`), hors de l'export (`org-transfer.mjs`), dans les policies (`rls-policies.test.ts`) et les données d'isolation.

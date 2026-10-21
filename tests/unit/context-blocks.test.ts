@@ -14,7 +14,7 @@ import { buildContext, previewContext } from "../../packages/plateforme/server/c
 import { codeBlock, workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextBodies } from "../../packages/plateforme/server/context/blocks/contexts"
 import { newsBlock, newsItems } from "../../packages/plateforme/server/context/blocks/news"
-import { orgFacts } from "../../packages/plateforme/server/context/blocks/org"
+import { orgAddress, orgFacts } from "../../packages/plateforme/server/context/blocks/org"
 import { personFacts } from "../../packages/plateforme/server/context/blocks/person"
 import { proceduresBlock } from "../../packages/plateforme/server/context/blocks/procedures"
 import { recentBlock } from "../../packages/plateforme/server/context/blocks/recent"
@@ -304,6 +304,16 @@ describe("orgFacts", () => {
   })
 })
 
+// 21/10 : l'assistant ne pouvait donner le lien d'une page ; l'origine de la requête MCP, jamais une adresse illisible.
+describe("orgAddress", () => {
+  it("should give the address of Oto and of its pages from the request origin, and nothing for an unreadable one", () => {
+    expect(orgAddress("https://demo.example.test/api/mcp")).toBe(
+      "This Oto is at https://demo.example.test. A page opens at https://demo.example.test/n/<path>: give the user that link when you point to a page.",
+    )
+    for (const origin of [undefined, "", "javascript:alert(1)", "https://user@demo.example.test"]) expect(orgAddress(origin)).toBeNull()
+  })
+})
+
 describe.skipIf(!sqlConfigured)(portable("teamFacts (AC22)"), { timeout: REAL_BASE_TIMEOUT }, () => {
   /** Claire : Ventes, qu'elle mène (son équipe par défaut), puis Support, que mène Paul. */
   const claireOf = (ref: ReferenceOrgSql) => ref.identityOf("claire", { teams: [ref.teamOf("ventes", "claire"), ref.teamOf("support", "claire")] })
@@ -480,7 +490,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("C
   it("should serve everyone's, the personal, the default team's then the other team's published blocks, whole (AC1 ; E11-S03, AC-b1)", async () => {
     const ref = await seedO(contextTables())
     const lea = leaOf(ref)
-    const { text } = await buildContext(await ref.db("lea"), lea, {}, { userAgent: null })
+    const { text } = await buildContext(await ref.db("lea"), lea, {}, { userAgent: null, origin: "https://demo.example.test" })
+    expect(text.endsWith(`\n\n${orgAddress("https://demo.example.test")}`)).toBe(true)
     const start = text.indexOf("## Context: ")
     // E05-S12 (AC-1) : chaque partie s'ouvre par sa ligne de faits ; plus aucun bloc personne, organisation ni équipe.
     expect(text.slice(0, start).endsWith(`${routingLineOf(text)}\n\n`)).toBe(true)

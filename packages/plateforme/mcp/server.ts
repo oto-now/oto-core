@@ -115,7 +115,7 @@ class JsonRpcError extends Error {
 
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
-  context: ({ db, identity, userAgent, gate }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate) }),
+  context: ({ db, identity, userAgent, gate, origin }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin }),
   find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: assistantFunctions(), activeConnectors: await activeConnectors() }),
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
   read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),

@@ -93,9 +93,9 @@ begin
 end
 $$;
 
-REVOKE ALL ON FUNCTION platform.purge_transit_files(p_org uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION platform.purge_transit_files(p_org uuid) FROM anon;
-GRANT EXECUTE ON FUNCTION platform.purge_transit_files(p_org uuid) TO authenticated;
+-- Réservée au rôle serveur, comme depuis `20261019130000` : `purgeTransitFiles` l'appelle sous `platform_server`.
+REVOKE ALL ON FUNCTION platform.purge_transit_files(p_org uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION platform.purge_transit_files(p_org uuid) TO platform_server;
 
 -- ROLLBACK: (jamais exécuté depuis le paquet ; avec le paquet de la version précédente)
 --   purge_transit_files : la définition de 20261019090000 ;
