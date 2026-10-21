@@ -11,7 +11,7 @@
 // `erase_team_trash`. Sous sa session comme sous celle du serveur, qui juge la même personne. Une lecture écartée par la
 // policy rend zéro ligne ; un `with check` refusé lève 42501 ; une fonction refusée aussi.
 import { afterAll, describe, expect, it } from "vitest"
-import { homeContents, homeNews, recordNodeView, resolveIdentity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { homeContents, recordNodeView, resolveIdentity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import type { Tx } from "../../packages/plateforme/server/sql"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { asCaller, failureOf, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededOrg, type SeededPerson } from "../helpers/sql"
@@ -270,7 +270,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(await viewRows(w)).toHaveLength(1)
   })
 
-  it.each(SESSIONS)("should keep what the services return: a view recorded and the expired views of the organisation swept, the most viewed and the last visit (session %s)", async (session) => {
+  it.each(SESSIONS)("should keep what the services return: a view recorded and the expired views of the organisation swept, and the most viewed (session %s)", async (session) => {
     const w = await world()
     await view(w, w.closed, w.paul, { views: 3 })
     await view(w, w.open, w.paul, { views: 1, daysAgo: 1 })
@@ -288,7 +288,5 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(rows).toHaveLength(4)
     const page = await homeContents(db, identity, { tab: "viewed", scope: "org" })
     expect(page.items.map((item) => ({ path: item.path, views: item.views }))).toEqual([{ path: w.open.path, views: { screen: 3, assistant: 0 } }])
-    const [{ day }] = await seed.admin<{ day: string }[]>`select (current_date - 3)::text as day`
-    expect((await homeNews(db, identity)).since).toBe(`${day}T00:00:00.000Z`)
   })
 })

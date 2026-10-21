@@ -103,7 +103,7 @@ Le markdown et le CSV sont des gestes d'import et d'export vers la page et le ta
 
 ## Sécurité et confidentialité
 
-- Lire un tableau exige la lecture, écrire l'écriture, décidées par le service ([droits d'accès](droits-d-acces.md)) et, pour l'écriture, reprises en base depuis `20261021120000` (`blocks_*_writer` : ajouter, modifier ou supprimer une ligne exige l'écriture du tableau, sous la session de l'appelant comme sous celle du serveur) ; la lecture aussi depuis `20261021130000` (`blocks_select_level` : lire une ligne exige la lecture du tableau, calculée une fois par instruction pour les tableaux lisibles de l'appelant) ; l'export est décidé par la lecture et borné à 5 000 lignes.
+- Lire un tableau exige la lecture, écrire l'écriture, décidées par le service ([droits d'accès](droits-d-acces.md)) et, pour l'écriture, reprises en base depuis `20261021120000` (`blocks_*_writer` : ajouter, modifier ou supprimer une ligne exige l'écriture du tableau, sous la session de l'appelant comme sous celle du serveur ; jugée une fois par tableau et par instruction depuis `20261021180000`, `blocks_write_guard`) ; la lecture aussi depuis `20261021130000` (`blocks_select_level` : lire une ligne exige la lecture du tableau, calculée une fois par instruction pour les tableaux lisibles de l'appelant) ; l'export est décidé par la lecture et borné à 5 000 lignes.
 - La provenance nomme qui a écrit (nom du membre, « former member » ensuite) et par quel client ; un commentaire ou un lien de preuve ne survit pas à une valeur changée (H94).
 - Un CSV est contrôlé deux fois : à l'écran avant l'envoi, puis dans le service sur chaque lot.
 

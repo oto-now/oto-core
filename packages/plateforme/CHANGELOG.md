@@ -23,6 +23,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - An attached xlsx is read one sheet per part, in CSV: the saved values of formulas, dates in ISO, hidden sheets said.
 
 ### Hosts
+- UI: on a node page, the title and its in-place field span the whole header width, « modifiée … » under it.
 - Server: `registerReaders([...])` and `defineReader({ types, read })` add readers for formats the host reads (a plan, a 3D model); each type a reader declares, and it alone, is admitted at deposit, up to 50 MB, and always served as a download. A package type (`md`, `pdf`…), a page, script or program extension, a type read twice, or a MIME type a browser renders or runs is refused at registration (`TypeError`).
 - Server: `read {file}` reads through the readers under 10 seconds and 2 million characters, an outline over 12,000; a reader's status (`READER_STATUSES`) is served as a refusal; `READER_LIMITS` gives the bounds.
 - UI: the page editor admits a file of a type your readers register (drop, « Fichier », the types listed before the choice), learnt from `GET files`, which now returns `{ enabled, hostTypes }`; a page line shows the file's extension (`dxf`), not its MIME type.
@@ -31,6 +32,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: a transit file never consumed now lives 24 hours instead of one hour (`TRANSIT_HOURS`): until then it counts toward the organisation's 10 GB file quota and stays readable by its author, and a failed send to a third party can be retried within the day; consumption after a successful send is unchanged.
 - Server: the package reads `xlsx` itself, in a `worker_threads` worker (256 MB heap, empty environment) that the 10-second deadline terminates; its script ships as text inside the package and starts by `eval`, so `next dev`, `next build` and `output: "standalone"` need nothing from you; the evaluated script is the package's own, built at build time, and the file's content reaches it as data, never as code. At most two such workers run per process (`READER_LIMITS.workers`); a further read waits its turn within its 10-second deadline, then returns `timeout`.
 - Server: `ReaderStatusError` (exported) lets a reader's `text(part)`, which returns a string, say a status (`too_large`, `failed`…); any other error thrown is still `failed`.
+- Migrations: apply this version's migration together with the package: block writes are judged once per node and per statement (`blocks_write_guard`) instead of once per row, with the same guarantee; a page of 1,000 blocks is written within a session's statement timeout, and an unfiltered update or delete that touches a draft the caller does not write is refused whole (`42501`).
+- UI: the rail no longer shows a horizontal scrollbar when every title fits; it appears only when a line really overflows (long title or deep branch).
+- UI: home: the « Nouveautés » island is removed (the Fil already says it); « Lancer avec Claude » lists the 10 most used procedures (`LAUNCH_PROCEDURES_SHOWN`), a long title cut with an ellipsis, the agent icon always visible.
+- Server: `homeNews`, `HomeNews`, `HOME_NEWS_MAX` and `HOME_NEWS_DEFAULT_DAYS` are removed and the data of `EcranDAccueil` no longer has `nouveautes`: drop that read from your home page.
 
 ## 1.5.1 — 2026-10-21
 

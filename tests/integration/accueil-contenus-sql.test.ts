@@ -1,21 +1,19 @@
 // @vitest-environment node
-// La carte « Reprendre », les nouveautés et les vues des pages sur une vraie base (1.4.13) : `recordNodeView` compte une
+// La carte « Reprendre » et les vues des pages sur une vraie base (1.4.13) : `recordNodeView` compte une
 // vue par page, personne et jour, refuse une page que la personne ne lit pas et retire ce qui passe 90 jours ;
 // `homeContents` filtre (Moi, Mes équipes, Toute l'organisation), ne rend que ce que la personne lit, pagine, dit par où
-// le dernier changement est passé, et réunit vues à l'écran et lectures des assistants ; `homeNews` rend ce que d'autres
-// ont publié dans ses équipes et dans Tout le monde depuis sa dernière visite. Portable : l'organisation O d'E01-S04 par
+// le dernier changement est passé, et réunit vues à l'écran et lectures des assistants. Portable : l'organisation O d'E01-S04 par
 // `buildReferenceOrg`, chaque personne par `fx.as`.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { HOME_PAGE_SIZE } from "../../packages/plateforme/schemas"
 import { HOME_OFFSET_MAX } from "../../packages/plateforme/schemas/accueil"
-import { homeContents, homeNews } from "../../packages/plateforme/server/home-contents"
+import { homeContents } from "../../packages/plateforme/server/home-contents"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 import { recordNodeView } from "../../packages/plateforme/server/node-views"
 import { createSqlFixtures, portable, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
 
 const SETUP_TIMEOUT = 240_000
 const NETWORK_TIMEOUT = 60_000
-const DAY_MS = 86_400_000
 
 type Who = "ada" | "claire" | "lea" | "paul"
 
@@ -166,33 +164,6 @@ describe.skipIf(!sqlConfigured)(portable("the home contents and the views of pag
 
       const lea = await session("lea")
       expect(paths(await homeContents(lea.db, lea.identity, { tab: "viewed", scope: "org" }))).not.toContain("ventes/cachee")
-    })
-  })
-
-  describe("homeNews", () => {
-    it("should list what others published in her teams and in Tout le monde since her last visit, never her own nor what she cannot read", async () => {
-      const id = (path: string) => ids.get(path) ?? ""
-      const { lea, claire, paul } = o.people
-      // Sa dernière visite : il y a trois jours.
-      await fx.admin`insert into platform.node_views (org_id, node_id, user_id, day) values (${o.org.id}, ${id("ventes/salons")}, ${lea.id}, current_date - 3) on conflict do nothing`
-      // Les pages semées par d'autres cas ont des versions de l'instant : celles-ci les suivent de quelques minutes.
-      const at = (minutes: number) => new Date(Date.now() + minutes * 60_000)
-      await fx.admin`
-        insert into platform.node_versions (node_id, revision, title, summary, kind, author, created_at) values
-          (${id("ventes/tarifs")}, 90, 'Tarifs', 'La grille.', 'page', ${claire.id}, ${at(5)}),
-          (${id("annonces")}, 90, 'Annonces', 'Pour tous.', 'page', ${paul.id}, ${at(4)}),
-          (${id("ventes/salons")}, 90, 'Salons', 'Les salons.', 'table', ${lea.id}, ${at(6)}),
-          (${id("ventes/cachee")}, 90, 'Cachée', 'Pas pour Léa.', 'page', ${claire.id}, ${at(6)}),
-          (${id("support/faq")}, 90, 'FAQ', 'Les questions.', 'page', ${paul.id}, ${at(6)}),
-          (${id("ventes/tarifs")}, 89, 'Tarifs', 'La grille.', 'page', ${claire.id}, ${at(-14_400)})`
-
-      const { db, identity } = await session("lea")
-      const news = await homeNews(db, identity)
-      expect(Date.parse(news.since)).toBeLessThan(Date.now() - 2 * DAY_MS)
-      expect(news.items.filter((item) => SEMES.has(item.path)).map((item) => [item.path, item.byName])).toEqual([
-        ["ventes/tarifs", "Claire Morel"],
-        ["annonces", "Paul Girard"],
-      ])
     })
   })
 })

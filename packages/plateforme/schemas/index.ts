@@ -82,10 +82,8 @@ export type {
 // E05-S12 (lot B) : les activités et les procédures utiles de l'accueil.
 export { USEFUL_PROCEDURES_SHOWN } from "./activity"
 export type { Activity, ActivityPage, ActivityVerb, UsefulProcedure } from "./activity"
-// 1.4.13 : la carte « Reprendre », les nouveautés et les vues des pages de l'accueil.
+// 1.4.13 : la carte « Reprendre » et les vues des pages de l'accueil.
 export {
-  HOME_NEWS_DEFAULT_DAYS,
-  HOME_NEWS_MAX,
   HOME_PAGE_SIZE,
   HOME_SCOPES,
   HOME_VIEWED_DAYS,
@@ -95,7 +93,7 @@ export {
   NODE_VIEWS_KEPT_DAYS,
   nodeViewSchema,
 } from "./accueil"
-export type { HomeContent, HomeContentsPage, HomeNews, HomeScope, HomeSpace, HomeTab } from "./accueil"
+export type { HomeContent, HomeContentsPage, HomeScope, HomeSpace, HomeTab } from "./accueil"
 // Les bornes du nom, des domaines de travail, des seuils, du motif et du préfixe ne sortent que par les
 // schémas qui les composent : les schémas servis du MCP admin les en tirent (`orgSettingsSchema.shape`,
 // `platformAccessSchema.shape`). `hostSchema` sort seul : E09-S02 en passe chaque adresse d'une création

@@ -1,4 +1,4 @@
-// La carte « Reprendre » de l'accueil, ses nouveautés et les vues des pages (1.4.13) : les formes que rendent
+// La carte « Reprendre » de l'accueil et les vues des pages (1.4.13) : les formes que rendent
 // `server/home-contents.ts` et `server/node-views.ts`, que lisent la page de l'hôte, l'API (« Voir plus ») et l'écran
 // (`ui/` ne lit pas `server/`). Sans ce module, le service, l'API et l'écran décriraient chacun une ligne, et
 // l'écran écrirait en chiffres les bornes du service.
@@ -27,14 +27,8 @@ export const HOME_OFFSET_MAX = 180
 /** La période des « plus consultés », en jours : vues à l'écran et lectures des assistants. */
 export const HOME_VIEWED_DAYS = 30
 
-/** Procédures de « Lancer » : les plus utilisées de la personne. */
-export const LAUNCH_PROCEDURES_SHOWN = 5
-
-/** Nouveautés listées au plus. */
-export const HOME_NEWS_MAX = 10
-
-/** Sans visite connue, les nouveautés remontent à 14 jours, comme le bloc « What's new » de `context`. */
-export const HOME_NEWS_DEFAULT_DAYS = 14
+/** Procédures de « Lancer avec Claude » : les plus utilisées de la personne. */
+export const LAUNCH_PROCEDURES_SHOWN = 10
 
 /** Les vues d'une page se gardent 90 jours : assez pour la période des plus consultés, et rien au-delà. */
 export const NODE_VIEWS_KEPT_DAYS = 90
@@ -75,8 +69,3 @@ export type HomeContent = {
 /** Une page de la carte ; `hasMore` : « Voir plus » en trouvera d'autres. */
 export type HomeContentsPage = { items: HomeContent[]; hasMore: boolean }
 
-/** Une nouveauté : un contenu publié depuis la dernière visite de la personne, par quelqu'un d'autre. */
-export type HomeNewsItem = { path: string; title: string; kind: NodeKind; at: string; byName: string | null }
-
-/** Les nouveautés et la date depuis laquelle elles se comptent (la dernière visite, sinon 14 jours). */
-export type HomeNews = { since: string; items: HomeNewsItem[] }

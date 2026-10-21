@@ -634,8 +634,11 @@
 
 /* L'en-tête d'un nœud (`.oto-node-header`) : la ligne « modifiée … » passe sous le titre, alignée à droite, à l'écart d'un rang (`row-gap`, 4 px) ; posée à côté du titre, elle le serrait et partait à la ligne au gré de sa longueur. En une colonne, elle suit le titre dans l'ordre du DOM, toujours à droite. */
 .oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: 3 / 1 / 4 / -1; justify-self: end; align-self: start; }
+/* Le titre, et son champ en place, prennent alors toute la largeur de l'en-tête : la ligne ne partage plus son rang. */
+.oto-screen-header.oto-node-header > .oto-page-title { grid-area: 2 / 1 / 3 / -1; display: flex; min-inline-size: 0; }
 @media (max-width: 767px) {
   .oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: auto; justify-self: end; }
+  .oto-screen-header.oto-node-header > .oto-page-title { grid-area: auto; }
 }
 
 /* La ligne sous le titre (« modifiée il y a 3 jours, par Claire ») porte une infobulle : le pointillé la signale, le focus l'ouvre au clavier. */

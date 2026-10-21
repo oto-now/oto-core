@@ -7,7 +7,7 @@
 // E05-S12 (lot B) : le fil est fait d'activités et « Procédures les plus utilisées » remplace « Contenus récents » ; la
 // ligne d'une activité, ses liens et la mise en page sont éprouvés par `e05s12-accueil.test.tsx`.
 // 1.4.13 : l'îlot principal est « Reprendre », le fil son onglet « Fil » ; la recherche de l'accueil part (celle du rail
-// suffit) ; « Brancher votre assistant », « Lancer » et « Nouveautés » à droite. La carte elle-même :
+// suffit) ; « Brancher votre assistant » et « Lancer avec Claude » à droite. La carte elle-même :
 // `accueil-reprendre.test.tsx`.
 import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
@@ -54,7 +54,6 @@ const DONNEES: DonneesDeLAccueil = {
   moi: MOI,
   activites: { data: pageDe([activite(1, "2026-09-26T08:10:00Z")]) },
   reprendre: { data: { items: [], hasMore: false } },
-  nouveautes: { data: { since: "2026-09-20T00:00:00.000Z", items: [] } },
   adresse: ADRESSE,
   connexions: { data: [] },
   procedures: { data: [] },
@@ -128,7 +127,6 @@ describe("home screen (AC-b1)", () => {
     ouvrirLeFil()
     expect(activites().getByRole("link", { name: "Tout le journal" })).toHaveAttribute("href", "/journal")
     expect(ilot("Lancer avec Claude").getByRole("heading", { level: 2, name: "Lancer avec Claude" })).toBeInTheDocument()
-    expect(ilot("Nouveautés").getByRole("heading", { level: 2 })).toBeInTheDocument()
     // E05-S12 (AC-18) : « Contenus récents » quitte l'accueil.
     expect(screen.queryByRole("region", { name: "Contenus récents" })).toBeNull()
   })
@@ -172,7 +170,6 @@ describe("home screen first day (AC-b1 ; E05-S12, AC-16)", () => {
     if (!premierJour) ouvrirLeFil()
     expect(activites().queryByRole("link", { name: "Tout le journal" }) !== null).toBe(!premierJour)
     expect(screen.queryByRole("region", { name: "Lancer avec Claude" }) !== null).toBe(!premierJour)
-    expect(screen.queryByRole("region", { name: "Nouveautés" }) !== null).toBe(!premierJour)
     expect(screen.getByRole("region", { name: BRANCHER })).toBeInTheDocument()
   })
 
@@ -248,7 +245,6 @@ describe("home screen failed reads (portage-ecrans.md § 4 ; E05-S12, AC-16, AC-
     ["Reprendre", { activites: { error: ECHEC } }],
     [BRANCHER, { connexions: { error: ECHEC } }],
     ["Lancer avec Claude", { procedures: { error: ECHEC } }],
-    ["Nouveautés", { nouveautes: { error: ECHEC } }],
   ])("should say a failed read in « %s » with « Réessayer », which reads the page again", (nom, surcharge) => {
     monter({ data: { ...DONNEES, ...surcharge } })
     if (nom === "Reprendre") ouvrirLeFil()

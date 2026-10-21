@@ -1,25 +1,20 @@
-// La carte « Reprendre » de l'accueil et ses nouveautés (1.4.13) : les contenus modifiés récemment et les plus
-// consultés (vues à l'écran, `node_views`, et lectures des assistants, au journal), filtrés par ce que la personne a
-// touché, ce que possèdent ses équipes ou tout ce qu'elle lit ; puis les contenus publiés par d'autres depuis sa
-// dernière visite. Une ligne dit l'espace du contenu (son équipe propriétaire, Tout le monde, Privé), jamais son chemin ni
+// La carte « Reprendre » de l'accueil (1.4.13) : les contenus modifiés récemment et les plus consultés (vues à l'écran,
+// `node_views`, et lectures des assistants, au journal), filtrés par ce que la personne a touché, ce que possèdent ses
+// équipes ou tout ce qu'elle lit. Une ligne dit l'espace du contenu (son équipe propriétaire, Tout le monde, Privé), jamais son chemin ni
 // son auteur. Une lecture par service, dans une transaction ; les candidats lus dans l'organisation, puis gardés
 // au seuil de la lecture par `nodeLevels` (`security-patterns.md § Droits dans le service` : un filtre de liste compare
 // au niveau 1). Le journal ne se lit que dans la portée de la personne (H74, `journalScope`) : un membre compte les
 // lectures de ses assistants et de ceux des équipes qu'il mène, un administrateur celles de toute l'organisation.
 //
 // Repris : `recentDocuments` (bloc « Recent content » de `context`) lit les contenus de la personne seule, lectures
-// comprises, sans page ni filtre, 20 au plus ; le bloc « What's new » (`newsItems`) rend des lignes écrites pour
-// l'assistant, sans titre ni genre séparés. Ni l'un ni l'autre ne sert la carte telle quelle.
+// comprises, sans page ni filtre, 20 au plus : il ne sert pas la carte telle quelle.
 import {
-  HOME_NEWS_DEFAULT_DAYS,
-  HOME_NEWS_MAX,
   HOME_PAGE_SIZE,
   HOME_VIEWED_DAYS,
   homeContentsQuerySchema,
   NODE_KINDS,
   type HomeContent,
   type HomeContentsPage,
-  type HomeNews,
   type HomeScope,
   type HomeSpace,
   type NodeKind,
@@ -27,8 +22,7 @@ import {
 import { HOME_OFFSET_MAX } from "../schemas/accueil"
 import { ACCESS_LEVELS, nodeLevels } from "./access"
 import type { PlatformDb } from "./db"
-import { memberDirectory } from "./directory"
-import { inTransaction, invalidInput, READ_PAGE_ROWS } from "./errors"
+import { inTransaction, invalidInput } from "./errors"
 import type { Identity } from "./identity"
 import { inScope, journalScope } from "./journal-read"
 import type { Tx } from "./sql"
@@ -163,44 +157,3 @@ export async function homeContents(db: PlatformDb, identity: Identity, query: un
   })
 }
 
-/** La dernière visite de la personne : le début du dernier jour, avant aujourd'hui, où elle a ouvert une page ; sinon 14 jours. */
-async function lastVisit(sql: Tx, identity: Identity): Promise<string> {
-  const [row] = await sql<{ day: string | null }[]>`
-    select max(day)::text as day from platform.node_views
-     where org_id = ${identity.org.id} and user_id = ${identity.user.id} and day < current_date`
-  return row?.day ? `${row.day}T00:00:00.000Z` : new Date(Date.now() - HOME_NEWS_DEFAULT_DAYS * DAY_MS).toISOString()
-}
-
-type Published = { node_id: string; path: string; title: string; kind: string; at: string; author: string | null }
-
-/**
- * Les nouveautés de l'accueil (1.4.13) : les contenus vivants de Tout le monde et des équipes de la personne publiés par
- * quelqu'un d'autre depuis sa dernière visite, leur dernière version, la plus récente d'abord, `HOME_NEWS_MAX` au plus,
- * gardés au seuil de la lecture.
- */
-export async function homeNews(db: PlatformDb, identity: Identity): Promise<HomeNews> {
-  return inTransaction(db, "home: news", async (sql) => {
-    const since = await lastVisit(sql, identity)
-    const rows = await sql<Published[]>`
-      select latest.node_id, latest.path, latest.title, latest.kind, to_json(latest.created_at) #>> '{}' as at, latest.author from (
-        select distinct on (v.node_id) v.node_id, n.path, n.title, n.kind, v.created_at, v.author
-          from platform.node_versions v
-          join platform.nodes n on n.id = v.node_id
-          left join lateral platform.node_owner(n.id) o on true
-         where n.org_id = ${identity.org.id} and n.deleted_at is null and v.created_at > ${since}::text::timestamptz
-           and v.author is distinct from ${identity.user.id}
-           and (o.owner_kind = 'org' or o.owner_team_id = any(${identity.teams.map((team) => team.id)}::uuid[]))
-         order by v.node_id, v.created_at desc) latest
-       order by latest.created_at desc, latest.path
-       limit ${READ_PAGE_ROWS}`
-    const levels = await nodeLevels(db, identity, rows.map((row) => row.node_id))
-    const readable = rows.filter((row) => (levels.get(row.node_id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read).slice(0, HOME_NEWS_MAX)
-    if (readable.length === 0) return { since, items: [] }
-    const names = new Map((await memberDirectory(db, identity.org.id)).map((person) => [person.userId, person.name]))
-    const items = readable.flatMap((row) => {
-      const kind = kindOf(row.kind)
-      return kind === null ? [] : [{ path: row.path, title: row.title, kind, at: row.at, byName: row.author === null ? null : (names.get(row.author) ?? null) }]
-    })
-    return { since, items }
-  })
-}

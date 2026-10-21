@@ -371,6 +371,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   d'une heure, délai fixé en base, d'un fichier joint sur toute page, lue ou non, et les envois en transit de
   l'appelant ; ne rend que les identifiants). Une policy et une fonction ; aucune table ni colonne ; rien à relancer
   avant.
+- `20261021180000_platform_ecriture_des_blocs_par_instruction.sql` (suite de `20261021120000` et `20261021130000`) :
+  l'écriture d'un nœud (`node_level_for` ≥ 2) qu'exige l'écriture de ses blocs se juge une fois par nœud et par
+  instruction, par un déclencheur de fin d'instruction sur les lignes écrites (`blocks_write_guard`, trois
+  déclencheurs : ajout, modification, suppression), sous `authenticated` et `platform_server` : une instruction qui
+  touche un nœud qu'on n'écrit pas est refusée en entier (`42501`). `blocks_insert_writer`, `blocks_update_writer` et
+  `blocks_delete_writer`, recréées sous leur nom, ne gardent que la forme, l'auteur et le dernier auteur, et pour une
+  ligne d'un tableau modifiée ou supprimée l'écriture du tableau sur cette seule ligne (zéro ligne pour qui le lit).
+  Même garantie qu'avant ; une page de 1 000 blocs s'écrit en une instruction sous le délai d'une session. Une
+  fonction, trois déclencheurs, trois policies ; aucune table ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

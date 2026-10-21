@@ -343,7 +343,8 @@
 }
 /* Dans l'arbre, une ligne prend la largeur de son nom entier, au moins celle du rail : le conteneur défile en largeur. */
 .oto-rail-tree .oto-rail-row { inline-size: max-content; min-inline-size: 100%; }
-.oto-rail-tree .oto-rail-row > .oto-rail-item { flex: 1 0 auto; }
+/* `inline-size: auto` : la base à 100 % de `.oto-rail-item`, posée à côté de la bascule d'une branche, débordait la ligne de sa largeur, nom court compris ; la ligne se remplit par la croissance. */
+.oto-rail-tree .oto-rail-row > .oto-rail-item { flex: 1 0 auto; inline-size: auto; }
 .oto-rail-tree .oto-rail-item > .oto-rail-label { overflow: visible; text-overflow: clip; }
 
 /* La poignée de largeur (`PoigneeDuRail`) : une bande fine sur le bord droit du rail, qui se voit au survol et au focus. */

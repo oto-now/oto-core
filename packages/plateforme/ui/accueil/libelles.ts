@@ -84,13 +84,6 @@ export const LANCER = {
   demande: (titre: string, chemin: string) => `Suis la procédure « ${titre} » (${chemin}).`,
 } as const
 
-/** L'îlot « Nouveautés » (1.4.13) : ce que d'autres ont publié depuis la dernière visite de la personne. */
-export const NOUVEAUTES = {
-  titre: "Nouveautés",
-  depuis: (date: string) => `Depuis le ${date}`,
-  rien: "Rien de nouveau depuis votre dernière visite",
-  publiePar: (qui: string | null) => (qui ? `publié par ${qui}` : "publié"),
-} as const
 
 /** L'aparté « Brancher votre assistant » (E02-S04, E11-S09 ; 1.4.13) : l'état et la fenêtre du guide. */
 export const BRANCHEMENT = {

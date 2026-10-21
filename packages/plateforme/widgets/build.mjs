@@ -21,7 +21,7 @@
  */
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
@@ -183,10 +183,13 @@ async function buildReaderWorker() {
   const chunks = (Array.isArray(output) ? output : [output]).flatMap((one) => one.output ?? []).filter((one) => one.type === 'chunk')
   if (chunks.length !== 1) throw new Error(`worker des lecteurs : ${chunks.length} morceaux au lieu d'un`)
   const [chunk] = chunks
-  // Les sources du paquet assemblées dans le script, par leur chemin dans le paquet, barres obliques sur tout système.
+  // Les sources du paquet assemblées dans le script, par leur chemin dans le paquet, barres obliques sur tout système :
+  // sous Windows, Vite rend ses identifiants en barres obliques, la racine du paquet en barres inverses.
+  const root = `${PACKAGE_ROOT.split(sep).join('/')}/`
   const files = chunk.moduleIds
-    .filter((id) => id.startsWith(PACKAGE_ROOT) && !id.includes(`${sep}node_modules${sep}`))
-    .map((id) => relative(PACKAGE_ROOT, id).split(sep).join('/'))
+    .map((id) => id.split(sep).join('/'))
+    .filter((id) => id.startsWith(root) && !id.includes('/node_modules/'))
+    .map((id) => id.slice(root.length))
   const header = '// Généré par packages/plateforme/widgets/build.mjs : ne pas modifier, ne pas commiter.\n'
   const inputs = `export const READER_WORKER_INPUTS = { files: ${JSON.stringify(files.sort())}, digest: ${JSON.stringify(workerDigest(files))} }\n`
   writeFileSync(WORKER_TARGET, `${header}${inputs}export const READER_WORKER_SOURCE = ${asciiLiteral(chunk.code)}\n`)

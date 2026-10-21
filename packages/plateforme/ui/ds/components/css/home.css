@@ -299,14 +299,17 @@
 .oto-feed-item:hover .oto-feed-cible { text-decoration: underline; text-underline-offset: 2px; }
 
 /* L'îlot « Lancer » (1.4.13) : une ligne d'action par procédure, le titre (le lien) qui prend la place, le bouton de copie au bout. */
-.oto-lancer { display: grid; gap: var(--space-px); }
-.oto-lancer-ligne { display: flex; align-items: center; gap: var(--space-2); }
+/* Retours du 21/10 : une colonne qui ne s'élargit jamais au titre (`minmax(0, 1fr)`, `min-inline-size: 0` à chaque étage de la rangée) ; le titre se coupe par des points de suspension, l'icône d'agent reste à droite, aucune barre de défilement. */
+.oto-lancer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-px); }
+.oto-lancer-ligne { display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; }
+.oto-lancer-ligne > .oto-icon-btn { flex: none; }
 .oto-lancer-titre {
   display: flex; flex: 1; align-items: center; gap: var(--space-2); min-inline-size: 0;
   padding: var(--space-1-5) var(--space-1); border-radius: var(--r-ctrl);
   color: inherit; text-decoration: none; font-size: var(--fs-sm);
 }
-.oto-lancer-titre > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oto-lancer-titre > span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oto-lancer-titre > .oto-icon { flex: none; }
 .oto-lancer-titre:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
 .oto-lancer-titre:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 

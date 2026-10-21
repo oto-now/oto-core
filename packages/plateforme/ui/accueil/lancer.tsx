@@ -37,7 +37,8 @@ function Lignes({ procedures, Lien, prefixeDesPages }: Omit<LancerProps, "proced
         <li key={procedure.path} className="oto-lancer-ligne">
           <Lien href={`${prefixeDesPages}${procedure.path}`} className="oto-lancer-titre">
             <AnimatedIcon as={Play} size="xs" />
-            <span>{procedure.title}</span>
+            {/* Coupé par des points de suspension : le titre entier au survol, et dans le nom du lien. */}
+            <span title={procedure.title}>{procedure.title}</span>
           </Lien>
           <a
             href={adresseDeLancement(procedure)}

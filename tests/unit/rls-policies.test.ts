@@ -175,12 +175,12 @@ const ROLE_REQUIRED: Record<string, string> = {
   node_shares_insert_member: "shareNode (server/shares.ts): managedNode, the share level of the node (node_level_for >= 3)",
   node_shares_update_member: "shareNode, revokeShare (server/shares.ts): the share level of the node (node_level_for >= 3), or isOrgAdmin to revoke",
   member_exclusions_insert_member: "removeMember (server/members.ts): requireAdmin, isOrgAdmin",
-  blocks_insert_writer:
-    "insertRow (server/tables/row-store.ts) after requireWrite (server/tables/output.ts) for table.write and the import; insertBlocks of saveDraft (server/nodes/store.ts) after requireNodeLevel write (server/nodes/write.ts), or the write level of the parent of a creation: node_level_for >= 2",
+  // L'ajout d'un bloc n'y est plus (`20261021180000`) : l'écriture de son nœud se juge une fois par instruction, par le
+  // déclencheur `blocks_write_guard` (`tests/integration/ecriture-des-blocs-par-instruction.test.ts`).
   blocks_update_writer:
-    "updateRow (server/tables/row-store.ts), writeDecision (server/tables/review.ts) after requireWrite for table.write, table.claim, table.release, the review and the import; writePurge (server/tables/evolution-publish.ts) after requireNodeLevel publish; writeUpdate of saveDraft (server/nodes/store.ts): node_level_for >= 2",
+    "updateRow (server/tables/row-store.ts), writeDecision (server/tables/review.ts) after requireWrite for table.write, table.claim, table.release, the review and the import; writePurge (server/tables/evolution-publish.ts) after requireNodeLevel publish: a row, node_level_for >= 2 on that row alone; writeUpdate of saveDraft (server/nodes/store.ts): a draft block, its draft (blocks_select_level) and blocks_write_guard",
   blocks_delete_writer:
-    "deleteJudged (server/tables/delete-rows.ts) after requireWrite; deleteBlocks of saveDraft (server/nodes/store.ts) after requireNodeLevel write: node_level_for >= 2",
+    "deleteJudged (server/tables/delete-rows.ts) after requireWrite: a row, node_level_for >= 2 on that row alone; deleteBlocks of saveDraft (server/nodes/store.ts) after requireNodeLevel write: a draft block, its draft (blocks_select_level) and blocks_write_guard",
   // Les lectures du contenu (migration `20261021130000`) ; `nodes_select_level` reste à l'appartenance, en attente d'une décision.
   blocks_select_level:
     "a published block: findNode, lookupNode (server/nodes/lookup.ts), the lists filtered by nodeLevels (server/access.ts), requireRead of the tables: node_level_for >= 1, a row only through a table; a draft block: its draft (node_drafts_select_writer, node_level_for >= 2)",

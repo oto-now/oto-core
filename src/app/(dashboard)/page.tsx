@@ -3,7 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Suspense, use } from "react"
 import { journalFiltersSchema, LAUNCH_PROCEDURES_SHOWN } from "@otomata_tech/oto_platform/schemas"
-import { connectAddress, homeContents, homeNews, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
+import { connectAddress, homeContents, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
 import {
   EcranDAccueil,
   EcranDAccueilChargement,
@@ -27,8 +27,8 @@ import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } fro
 // E05-S12 (lot B) : les activités de la semaine (`listActivities`, le journal par gestes) au lieu des
 // conversations, qui restent à `/journal`, et les procédures utiles de l'îlot de droite (`usefulProcedures`).
 //
-// 1.4.13 : la première page de « Reprendre » (contenus récents de ses équipes, `homeContents`), les nouveautés depuis la
-// dernière visite (`homeNews`) et les cinq procédures de « Lancer » ; les autres pages de « Reprendre » passent par l'API.
+// 1.4.13 : la première page de « Reprendre » (contenus récents de ses équipes, `homeContents`) et les dix procédures de
+// « Lancer avec Claude » ; les autres pages de « Reprendre » passent par l'API.
 export const metadata: Metadata = {
   title: "Accueil",
   robots: { index: false },
@@ -53,11 +53,10 @@ function connexionsDe(connexions: LastConnection[]): DerniereConnexion[] {
 }
 
 async function lire({ identity, session }: { identity: Identity; session: PlatformSession }, origine: string): Promise<DonneesDeLAccueil> {
-  const [activites, reprendre, nouveautes, connexions, procedures] = await Promise.all([
+  const [activites, reprendre, connexions, procedures] = await Promise.all([
     // Le fil s'ouvre sur « Mes équipes », le filtre par défaut de la carte ; ses autres filtres passent par l'API.
     resultatDe(listActivities(session.db, identity, { periodDays: PERIODE, scope: "teams" })),
     resultatDe(homeContents(session.db, identity, { tab: "recent", scope: "teams" })),
-    resultatDe(homeNews(session.db, identity)),
     resultatDe(lastConnections(session.db, identity).then(connexionsDe)),
     resultatDe(usefulProcedures(session.db, identity, LAUNCH_PROCEDURES_SHOWN)),
   ])
@@ -66,7 +65,6 @@ async function lire({ identity, session }: { identity: Identity; session: Platfo
     moi: identity.user.id,
     activites,
     reprendre,
-    nouveautes,
     adresse: adresseDe(connectAddress(identity, origine)),
     connexions,
     procedures,

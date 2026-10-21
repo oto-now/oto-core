@@ -30,7 +30,6 @@ import { BranchementIA } from "./branchement-ia"
 import { FirstDay } from "./first-day"
 import { ACCUEIL } from "./libelles"
 import { Lancer } from "./lancer"
-import { Nouveautes } from "./nouveautes"
 import { Reprendre } from "./reprendre"
 import { MARQUE_DE_CONVERSATION, type DonneesDeLAccueil } from "./types"
 
@@ -109,9 +108,8 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
         cards={
           <>
             <BranchementIA adresse={lu.adresse} exemples={exemplesDe(lu.procedures)} connexions={lu.connexions} />
-            {/* Le premier jour retire les procédures et les nouveautés : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
+            {/* Le premier jour retire les procédures : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
             {!premierJour && <Lancer procedures={lu.procedures} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
-            {!premierJour && <Nouveautes nouveautes={lu.nouveautes} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
           </>
         }
       />

@@ -4,7 +4,7 @@
 // qu'il prête ; l'écran reçoit les données déjà lues, comme de sa page. Les journées, le premier jour et les
 // lectures en échec restent éprouvés par `ecran-accueil.test.tsx`. 1.4.13 : le fil est l'onglet « Fil » de la carte
 // « Reprendre », le contenu cité d'une ligne qui l'ouvre se montre comme un lien ; à droite, « Brancher votre
-// assistant », « Lancer » et « Nouveautés ».
+// assistant » et « Lancer avec Claude ».
 import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -35,7 +35,6 @@ const DONNEES: DonneesDeLAccueil = {
   moi: MOI,
   activites: { data: { activities: [], truncated: false } },
   reprendre: { data: { items: [], hasMore: false } },
-  nouveautes: { data: { since: "2026-09-20T00:00:00.000Z", items: [] } },
   adresse: { url: "https://demo.example.test/api/mcp", nom: "Démo", nomCli: "demo", phrase: "Commence par le contexte de « Démo »." },
   connexions: { data: [{ famille: "claude.ai", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }] },
   procedures: { data: [] },
@@ -178,14 +177,15 @@ describe("home right column (E05-S12, AC-18)", () => {
     const principal = screen.getByRole("region", { name: "Reprendre" })
     const brancher = screen.getByRole("region", { name: "Brancher votre assistant" })
     const lancer = screen.getByRole("region", { name: "Lancer avec Claude" })
-    const nouveautes = screen.getByRole("region", { name: "Nouveautés" })
     const colonnes = [...document.querySelectorAll(".oto-home-col")]
     expect(colonnes).toHaveLength(2)
     expect(colonnes[0]).toContainElement(principal)
-    for (const element of [brancher, lancer, nouveautes]) expect(colonnes[1]).toContainElement(element)
+    for (const element of [brancher, lancer]) expect(colonnes[1]).toContainElement(element)
+    // « Nouveautés » est parti (21/10) : le fil le dit déjà.
+    expect(screen.queryByRole("region", { name: "Nouveautés" })).toBeNull()
     // 1.4.13 : la recherche de l'accueil part, celle du rail suffit.
     expect(screen.queryByRole("search")).toBeNull()
-    const ordre = [principal, brancher, lancer, nouveautes]
+    const ordre = [principal, brancher, lancer]
     for (let rang = 1; rang < ordre.length; rang += 1) expect(ordre[rang - 1].compareDocumentPosition(ordre[rang]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -210,8 +210,8 @@ describe("home right column (E05-S12, AC-18)", () => {
   })
 })
 
-// 1.4.13 : « Lancer avec Claude » ouvre Claude sur la demande ; « Nouveautés » ouvre ce que d'autres ont publié.
-describe("home Lancer avec Claude and news (1.4.13)", () => {
+// 1.4.13 : « Lancer avec Claude » ouvre Claude sur la demande.
+describe("home Lancer avec Claude (1.4.13)", () => {
   it("should open Claude in a new tab on the request of a procedure, by a link", () => {
     monter({ procedures: { data: [{ path: "ventes/relance_devis", title: "Relancer les devis" }] } })
     const lancer = within(screen.getByRole("region", { name: "Lancer avec Claude" }))
@@ -223,20 +223,4 @@ describe("home Lancer avec Claude and news (1.4.13)", () => {
     expect(lancer.queryByRole("button")).toBeNull()
   })
 
-  it("should list the news since the last visit, each opening its content, and say when there is none", () => {
-    monter({
-      nouveautes: {
-        data: { since: "2026-09-24T00:00:00.000Z", items: [{ path: "ventes/tarifs_2026", title: "Tarifs 2026", kind: "page", at: "2026-09-25T08:00:00.000Z", byName: "Ada Martin" }] },
-      },
-    })
-    const nouveautes = within(screen.getByRole("region", { name: "Nouveautés" }))
-    expect(nouveautes.getByText("Depuis le 24 septembre 2026")).toBeInTheDocument()
-    const [lien] = nouveautes.getAllByRole("link")
-    expect([lien.getAttribute("href"), lien.dataset.lien]).toEqual(["/n/ventes/tarifs_2026", "hote"])
-    expect(lien).toHaveTextContent("Tarifs 2026publié par Ada Martin25/09/2026")
-    cleanup()
-
-    monter({})
-    expect(within(screen.getByRole("region", { name: "Nouveautés" })).getByText("Rien de nouveau depuis votre dernière visite")).toBeInTheDocument()
-  })
 })

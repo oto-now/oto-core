@@ -1,6 +1,6 @@
 // Les formes de l'accueil (E05-S09, partie b), redéfinies ici : `ui/` ne lit pas `server/`, la page de
 // l'hôte adapte les noms anglais des services et lit chaque donnée sous le jeton de la session.
-import type { ActivityPage, HomeContentsPage, HomeNews, UsefulProcedure } from "../../schemas"
+import type { ActivityPage, HomeContentsPage, UsefulProcedure } from "../../schemas"
 import type { Resultat } from "../api/resultat"
 import type { AdresseDeConnexion, DerniereConnexion } from "../connexion/types"
 
@@ -21,8 +21,6 @@ export type DonneesDeLAccueil = {
   activites: Resultat<ActivityPage>
   /** La première page de « Reprendre » (1.4.13) : les contenus récents de ses équipes ; les autres pages et filtres se lisent par l'API. */
   reprendre: Resultat<HomeContentsPage>
-  /** Ce qui a été publié par d'autres depuis sa dernière visite (1.4.13). */
-  nouveautes: Resultat<HomeNews>
   /** Ce que le guide de « Brancher » fait copier, pour l'organisation de l'adresse (E11-S09, AC-11). */
   adresse: AdresseDeConnexion
   /** La dernière connexion de chaque assistant de la personne, la plus récente d'abord (E02-S04). */
