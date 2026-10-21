@@ -78,6 +78,7 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - Un fichier déposé avant cette version reçoit son aperçu à sa première lecture par `read {file}` ; jusque-là, sa ligne dans la page reste « nom, taille, type ».
 - Une duplication copie l'aperçu avec la ligne ; un transfert d'organisation le porte comme les autres colonnes de `files`.
 - Un fichier rendu par une fonction de connecteur est un fichier en transit ([fichiers et stockage](fichiers-et-stockage.md)) : il se lira par `read {file}` comme un fichier joint tant qu'il existe, et son aperçu se calculera à sa première lecture ; rien n'est gardé après son effacement. Aujourd'hui, `read {file}` ne lit que les fichiers joints au nœud de `path` : un fichier en transit ne se lit pas (lot 6).
+- Joint ou en transit, un fichier se désigne par une seule référence, son identifiant : [fichiers et stockage](fichiers-et-stockage.md) § Référence d'un fichier.
 - L'aperçu est borné à 300 caractères ; le plan rangé, à 200 parties (au-delà, les suivantes se disent par leur nombre) ; `read` d'une page montre l'aperçu des 20 premiers fichiers, les suivants par leur nom seul. Un fichier illisible porte un statut terminal (`unsupported`, `encrypted`, `empty`, `too_large`, `rejected_dtd`, `failed`, repris d'oto 1), dit dans son aperçu, et le dépôt lui-même n'échoue jamais pour une lecture ratée. Seul `failed` se retente, à la lecture suivante.
 - L'aperçu (titre, résumé, noms des parties) entre dans `find` ; le texte complet n'y entre pas.
 

@@ -357,6 +357,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `nodes_delete_manager`, recréée sous son nom, perd ses deux branches de la corbeille : sous une session, un nœud ne
   se supprime plus que par son auteur, jamais publié (`undoCreation`). Cinq policies et deux fonctions ; aucune table
   ni colonne ; rien à relancer avant.
+- `20261021160000_platform_transit_de_24_heures.sql` (fichier en transit de 24 h, décision du 21/10) : la garde
+  `files_expires_at_clock`, recréée sous son nom, exige pour un fichier en transit l'échéance `now()` + 24 heures au
+  lieu d'une heure, celle que pose `TRANSIT_HOURS` du paquet de la même version ; les deux concordent, et le paquet et
+  la migration s'appliquent ensemble : le paquet sans elle voit toute entrée en transit refusée (`42501`), elle sans
+  le paquet refuse l'heure du paquet précédent. Un fichier déjà en transit garde son échéance. Un déclencheur ; aucune
+  table, colonne ni fonction ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

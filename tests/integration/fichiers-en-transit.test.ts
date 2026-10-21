@@ -1,8 +1,9 @@
 // @vitest-environment node
 // Le fichier en transit sur une vraie base (fichiers et stockage, § Fichier en transit ; décision d'Alexis du 19/10) : la
 // garde « son auteur seul, et le moteur sous son identité » décidée par le service et doublée par la RLS, contre une
-// autre personne de son équipe, un administrateur et l'équipe plateforme ; l'échéance (illisible, hors quota, purgée à
-// l'entrée suivante, objet compris) ; le quota de l'organisation, qui compte un fichier en transit que la RLS cache aux
+// autre personne de son équipe, un administrateur et l'équipe plateforme ; l'échéance, à 24 h de la création par
+// l'horloge de la base, la garde refusant l'ancienne heure (décision du 21/10), puis échue (illisible, hors quota,
+// purgée à l'entrée suivante, objet compris) ; le quota de l'organisation, qui compte un fichier en transit que la RLS cache aux
 // autres, puis le libère ; 50 Mo pour tout type, un export CSV de plus de 4 Mo compris, qu'un fichier joint refuse. La
 // base est le sujet : RLS, `org_files_bytes`, `purge_transit_files`. Le bucket est
 // l'adaptateur en mémoire. Organisation de référence jetable (H120). Suite portable.
@@ -106,8 +107,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
 
   it("should let its author and the engine read a transit file, and refuse a teammate, an administrator and the platform team, by the service and by the row level security", async () => {
     vi.stubGlobal("fetch", memory.fetch)
-    const before = Date.now()
-    const { id, expiresAt } = await deposit("lea", "facture.pdf", "%PDF-transit")
+    const { id } = await deposit("lea", "facture.pdf", "%PDF-transit")
     const lea = as("lea")
 
     const author = await transitReadUrl(lea.db, lea.identity, id)
@@ -122,14 +122,12 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
         rows: (await seen(person, id)).length,
       }
     }
-    const lifetime = Date.parse(expiresAt) - before
     expect({
       author: new URL(author).searchParams.get("response-content-disposition"),
       engine: { name: engine.name, mime: engine.mime, text: new TextDecoder().decode(engine.bytes) },
       authorRows: (await seen("lea", id)).length,
       // Ni un fichier joint, ni lisible par la route d'un fichier joint, même pour son auteur.
       asAttached: await codeOf(fileReadUrl(lea.db, lea.identity, id, {})),
-      lifetime: lifetime > (TRANSIT_HOURS * 3600 - 60) * 1000 && lifetime <= (TRANSIT_HOURS * 3600 + 60) * 1000,
       teammate: await refusedTo("claire"),
       administrator: await refusedTo("ada"),
       platformTeam: await refusedTo("s"),
@@ -138,13 +136,39 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       engine: { name: "facture.pdf", mime: "application/pdf", text: "%PDF-transit" },
       authorRows: 1,
       asAttached: "not_found",
-      lifetime: true,
       teammate: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
       administrator: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
       platformTeam: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
     })
     // Les refus n'ont rien effacé : l'auteur le lit encore.
     expect(await codeOf(readTransitBytes(lea.db, lea.identity, id))).toBe("ok")
+  })
+
+  it("should set the expiry of a transit file 24 hours after its creation by the database clock, and refuse the former hour (42501)", async () => {
+    vi.stubGlobal("fetch", memory.fetch)
+    const { id, expiresAt } = await deposit("lea", "duree.pdf", "%PDF-duree")
+    const [{ stored, ...row }] = await fx.admin<{ day: boolean; seconds: number; stored: string }[]>`
+      select expires_at - created_at = interval '24 hours' as day, extract(epoch from expires_at - created_at)::int as seconds,
+             to_json(expires_at) #>> '{}' as stored
+        from platform.files where id = ${id}`
+    // La garde de la base (`files_expires_at_clock`), sous la session de l'auteur : l'échéance d'une heure d'avant le
+    // 21/10 est refusée, comme toute autre que celle de `TRANSIT_HOURS`.
+    const lea = as("lea")
+    const formerHour = await lea.db
+      .tx((sql) => sql`
+        insert into platform.files (org_id, node_id, name, mime, size, status, created_by, expires_at)
+        values (${o.org.id}, null, 'ancienne.pdf', 'application/pdf', 3, 'pending', ${o.people.lea.id}, now() + interval '1 hour')`)
+      .then(
+        () => null,
+        (error: { code?: string; message: string }) => ({ code: error.code, message: error.message }),
+      )
+    expect({ hours: TRANSIT_HOURS, ...row, served: Date.parse(expiresAt) === Date.parse(stored), formerHour }).toEqual({
+      hours: 24,
+      day: true,
+      seconds: 86_400,
+      served: true,
+      formerHour: { code: "42501", message: "platform.files.expires_at is set by the database clock: now() + 24 hours" },
+    })
   })
 
   it("should make an expired transit file unreadable and out of the quota at once, then purge its row and object at the next entry in transit", async () => {

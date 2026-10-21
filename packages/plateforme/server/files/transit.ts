@@ -14,8 +14,12 @@ import { insertPending } from "./rows"
 import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, readResponse, removeObjects, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
-/** La vie d'un fichier en transit jamais consommé, en heures (décidé le 16/10). */
-export const TRANSIT_HOURS = 1
+/**
+ * La vie d'un fichier en transit jamais consommé, en heures (décidé le 21/10 ; une heure auparavant). La base garde la
+ * même durée (`files_expires_at_clock`) et refuse toute autre échéance (42501) : les deux concordent, et changer l'une
+ * demande une migration pour l'autre.
+ */
+export const TRANSIT_HOURS = 24
 
 /** Une ligne en transit de l'appelant, non échue, avec son échéance. */
 type TransitRow = { id: string; name: string; mime: string; size: number; expires_at: string }

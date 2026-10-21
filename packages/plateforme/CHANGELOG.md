@@ -25,6 +25,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerReaders([...])` and `defineReader({ types, read })` add readers for formats the host reads (a plan, a 3D model); each type a reader declares, and it alone, is admitted at deposit, up to 50 MB, and always served as a download. A package type (`md`, `pdf`…), a page, script or program extension, a type read twice, or a MIME type a browser renders or runs is refused at registration (`TypeError`).
 - Server: `read {file}` reads through the readers under 10 seconds and 2 million characters, an outline over 12,000; a reader's status (`READER_STATUSES`) is served as a refusal; `READER_LIMITS` gives the bounds.
 - UI: the page editor admits a file of a type your readers register (drop, « Fichier », the types listed before the choice), learnt from `GET files`, which now returns `{ enabled, hostTypes }`; a page line shows the file's extension (`dxf`), not its MIME type.
+- Migrations: apply this version's migration together with the package: a transit file is now inserted with an expiry 24 hours after its creation instead of one hour, and the database guard (`files_expires_at_clock`) requires exactly the expiry the package sets; the package without the migration has every transit upload refused (`42501`), the migration without the package refuses the one hour of the previous package. A file already in transit keeps its expiry.
+- Server: a transit file never consumed now lives 24 hours instead of one hour (`TRANSIT_HOURS`): until then it counts toward the organisation's 10 GB file quota and stays readable by its author, and a failed send to a third party can be retried within the day; consumption after a successful send is unchanged.
 
 ## 1.5.1 — 2026-10-21
 

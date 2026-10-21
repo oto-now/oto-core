@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Le concept « fichier » dans fichiers-et-stockage, transit de 24 h
+**À appliquer :** la migration `20261021160000_platform_transit_de_24_heures.sql` part avec le paquet de la même version (la garde de la base exige l'échéance que pose `TRANSIT_HOURS`) ; le pilote la fusionne avec les autres avant le tag.
+**Quoi :** un fichier en transit jamais consommé vit 24 h au lieu d'une heure (`TRANSIT_HOURS = 24`, garde `files_expires_at_clock` recréée à `24 hours`) ; `fichiers-et-stockage.md` gagne « Référence d'un fichier » (une adresse pour un fichier joint ou en transit, garder = lever l'échéance sans copie) et « Propriétaire et partage » (droits du nœud, auteur seul, lien public sur le nœud), réécrit la durée de vie du transit et nomme les lots suivants ; renvois dans `lecture-des-fichiers.md`, `droits-d-acces.md` et `connecteurs-et-comptes.md` ; le test de durée lit l'échéance en base (24 h exactement) et prouve le refus de l'ancienne heure (`42501`).
+**Pourquoi :** décisions d'Alexis du 21/10 : oto-core, référence du concept « fichier » ; transit lisible par son seul auteur (le « projet de l'appel » écarté) ; 24 h de transit, l'effacement à la consommation inchangé.
+**Fichiers :** `packages/plateforme/server/files/transit.ts`, `packages/plateforme/migrations/20261021160000_platform_transit_de_24_heures.sql` et sa copie `supabase/migrations/`, `packages/plateforme/migrations/README.md`, `packages/plateforme/CHANGELOG.md`, `docs/conception/fichiers-et-stockage.md`, `docs/conception/lecture-des-fichiers.md`, `docs/conception/droits-d-acces.md`, `docs/conception/connecteurs-et-comptes.md`, `docs/conception/base-et-portabilite.md`, `docs/reference/schema-platform.md`, `tests/integration/fichiers-en-transit.test.ts`.
+
 ## [2026-10-21] — Lecteurs de fichiers, lot 1b : l'éditeur admet les types de l'hôte
 **À appliquer :** rien (ni migration, ni dépendance, ni variable, ni route).
 **Quoi :** `GET files` rend aussi `hostTypes`, les extensions qu'ouvrent les lecteurs de l'hôte (`registerReaders`) ; l'éditeur les apprend avec l'état du stockage, au premier geste, et admet un tel fichier au dépôt et dans « Fichier » du « + », qui les cite avant le choix ; le refus d'un type traduit les cite aussi. Le service reste juge (`admittedType`). La ligne de page d'un fichier joint (`renderBlock`) donne l'extension de son nom (`dxf`), plus le type MIME d'un type d'hôte.
