@@ -19,11 +19,17 @@
  * 21/10/2026) et écrit son rapport JSON. Une fois tout passé, le script écrit le résumé du passage
  * (`.claude/.verify-run.json`) : durée, plafond, tests verts et sautés, fichiers sautés en entier. Le reçu le
  * reprend (`verify-receipt.mjs write`), puis le trailer `Verified:` d'un commit (`commit-depuis-export.mjs`).
+ *
+ * Avant les étapes, si `test` en est, le script construit la base du passage (`scripts/lib/base-de-verify.mjs`) :
+ * une base neuve sur le serveur Postgres du poste, migrée depuis les fichiers de l'arbre, où `test` tourne, puis
+ * supprimée. Le passage porte l'empreinte de ces migrations (`base.empreinte`) ; sans serveur du poste, aucune base
+ * n'est construite, `base` est nul et `commit-depuis-export.mjs` refuse le reçu.
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { construireLaBase, serveurDeTest, supprimerLaBase, variablesDesTests } from './lib/base-de-verify.mjs'
 
 // La racine du SCRIPT, comme `verify-receipt.mjs` : les checks portent sur ce dépôt quel que soit le cwd.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -66,7 +72,7 @@ export function resumerLesTests(rapport, racine = ROOT) {
  * sortie (stdout et stderr, dans l'ordre d'arrivée) et l'affiche d'un bloc à sa fin : les lignes
  * de trois checks simultanés ne se mêlent pas.
  */
-function lancer(check, direct) {
+function lancer(check, direct, variables) {
   return new Promise((resolve) => {
     const debut = Date.now()
     const morceaux = []
@@ -77,7 +83,7 @@ function lancer(check, direct) {
     const options = OPTIONS[check]
     const enfant = spawn(`pnpm run ${check}${options ? ` ${options.arguments}` : ''}`, {
       cwd: ROOT,
-      env: { ...process.env, ...options?.env },
+      env: { ...process.env, ...options?.env, ...variables?.[check] },
       shell: true,
       stdio: direct ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     })
@@ -94,13 +100,13 @@ function lancer(check, direct) {
   })
 }
 
-/** Lance une étape et rend les checks en échec, dans l'ordre où l'étape les nomme. */
-async function etape(checks) {
+/** Lance une étape (`variables` : celles de chaque check en plus) et rend les checks en échec, dans l'ordre où l'étape les nomme. */
+async function etape(checks, variables) {
   const direct = checks.length === 1
   console.log(direct ? `\n── ${checks[0]}` : `\n→  ${checks.join(', ')} : en même temps, chaque sortie à la fin de son check`)
   const resultats = await Promise.all(
     checks.map((check) =>
-      lancer(check, direct).then((r) => {
+      lancer(check, direct, variables).then((r) => {
         const statut = `── ${r.check} : ${r.ok ? 'OK' : 'ÉCHEC'} (${secondes(r.duree)})`
         const sortie = r.sortie && !r.sortie.endsWith('\n') ? `${r.sortie}\n` : r.sortie
         // Un seul `write` par check : son bloc ne peut pas être coupé par celui d'un autre.
@@ -131,18 +137,31 @@ if (!etapes.length) {
 rmSync(PASSAGE, { force: true })
 rmSync(RAPPORT_DES_TESTS, { force: true })
 const debut = Date.now()
-for (const [i, checks] of etapes.entries()) {
-  const echecs = await etape(checks)
-  if (echecs.length) {
-    const nonLances = etapes.slice(i + 1).flat()
-    console.log(`\n✖  verify : échec de ${echecs.join(', ')}${nonLances.length ? ` ; non lancé : ${nonLances.join(', ')}` : ''}.`)
-    // `exitCode` plutôt que `exit()` : la sortie déjà écrite dans un pipe part en entier.
-    process.exitCode = 1
-    break
+const serveur = etapes.flat().includes('test') ? await serveurDeTest(ROOT) : null
+let base = null
+if (serveur) {
+  console.log('\n── base du passage : construite depuis les migrations de l\'arbre')
+  base = await construireLaBase(ROOT, serveur, (ligne) => console.log(ligne))
+  console.log(`── base ${base.nom} : migrations ${base.empreinte.slice(0, 12)}`)
+} else if (etapes.flat().includes('test')) {
+  console.log("\n── aucune base du passage : ni `PLATFORM_TEST_DB=local` ni `PLATFORM_ADMIN_DATABASE_URL` sur le poste ; le reçu n'attestera aucune base")
+}
+try {
+  for (const [i, checks] of etapes.entries()) {
+    const echecs = await etape(checks, base ? { test: variablesDesTests(base) } : {})
+    if (echecs.length) {
+      const nonLances = etapes.slice(i + 1).flat()
+      console.log(`\n✖  verify : échec de ${echecs.join(', ')}${nonLances.length ? ` ; non lancé : ${nonLances.join(', ')}` : ''}.`)
+      // `exitCode` plutôt que `exit()` : la sortie déjà écrite dans un pipe part en entier.
+      process.exitCode = 1
+      break
+    }
   }
+} finally {
+  if (base) await supprimerLaBase(serveur, base.nom)
 }
 if (!process.exitCode) {
-  const passage = { fin: new Date().toISOString(), duree: Math.round((Date.now() - debut) / 1000), checks: etapes.flat() }
+  const passage = { fin: new Date().toISOString(), duree: Math.round((Date.now() - debut) / 1000), checks: etapes.flat(), base: base && { empreinte: base.empreinte } }
   if (existsSync(RAPPORT_DES_TESTS)) {
     passage.forks = Number(VITEST_MAX_FORKS)
     passage.tests = resumerLesTests(JSON.parse(readFileSync(RAPPORT_DES_TESTS, 'utf8')))

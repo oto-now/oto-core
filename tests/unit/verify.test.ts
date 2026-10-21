@@ -34,7 +34,7 @@ afterAll(() => {
 function repo() {
   const at = fs.mkdtempSync(path.join(dir, "repo-"))
   fs.mkdirSync(path.join(at, "scripts/lib"), { recursive: true })
-  for (const script of ["verify.mjs", "verify-receipt.mjs", "lib/arbre-de-code.mjs"]) {
+  for (const script of ["verify.mjs", "verify-receipt.mjs", "lib/arbre-de-code.mjs", "lib/base-de-verify.mjs", "lib/empreinte-des-migrations.mjs"]) {
     fs.copyFileSync(path.join(root, "scripts", script), path.join(at, "scripts", script))
   }
   fs.writeFileSync(path.join(at, ".gitignore"), ".claude/*\n")
@@ -67,7 +67,8 @@ function repo() {
 /** `pnpm run verify` dans le dépôt jetable ; le reçu, hors du dépôt (seams de `verify-receipt.mjs`). */
 function pnpmVerify(at: string, echec = "") {
   const receipt = `${at}-receipt.json`
-  const env = { ...process.env, VERIFY_RECEIPT_ROOT: at, VERIFY_RECEIPT_PATH: receipt, VERIFY_ECHEC: echec }
+  // Sans serveur du poste : sous `pnpm verify`, les tests reçoivent la base du passage, qu'un dépôt jetable ne doit pas viser.
+  const env = { ...process.env, VERIFY_RECEIPT_ROOT: at, VERIFY_RECEIPT_PATH: receipt, VERIFY_ECHEC: echec, PLATFORM_TEST_DB: "", PLATFORM_ADMIN_DATABASE_URL: "" }
   // `shell` : sous Windows, pnpm est un script `.cmd`, que Node ne lance pas sans shell.
   const result = spawnSync("pnpm run verify", { cwd: at, env, shell: true, encoding: "utf8" })
   return { status: result.status, stdout: result.stdout, output: result.stdout + result.stderr, receipt }
@@ -97,6 +98,9 @@ describe("pnpm verify on a throwaway repository", { timeout: 30_000 }, () => {
     expect(recu.tests).toEqual({ verts: 3, sautes: 1, echecs: 0, fichiersSautes: ["tests/b.test.ts"] })
     expect(Number.isInteger(recu.duree)).toBe(true)
     expect(recu.tree).toBe(arbreDeCodeDuDossier(at))
+    // Aucun Postgres du poste : aucune base construite, et le reçu le dit (`commit-depuis-export.mjs` le refusera).
+    expect(recu.base).toBeNull()
+    expect(result.stdout).toContain("aucune base du passage")
     // Le résumé du passage est consommé : un `write` lancé seul ensuite n'en reprendrait pas les tests.
     expect(fs.existsSync(path.join(at, ".claude/.verify-run.json"))).toBe(false)
   })

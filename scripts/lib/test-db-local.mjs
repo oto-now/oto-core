@@ -89,7 +89,7 @@ export function ensureServer(print) {
 }
 
 /** Les versions de `supabase/migrations/` (préfixe `AAAAMMJJHHMMSS`), dans l'ordre. */
-function repositoryVersions(root) {
+export function repositoryVersions(root) {
   return readdirSync(join(root, 'supabase', 'migrations'))
     .flatMap((file) => /^(\d{14})_.*\.sql$/.exec(file)?.[1] ?? [])
     .sort()
@@ -102,7 +102,7 @@ async function pendingVersions(root, sql) {
   return repositoryVersions(root).filter((version) => !applied.has(version))
 }
 
-const connect = (url) => postgres(url, { max: 1, onnotice: () => {}, connection: { application_name: 'oto-platform db:local' } })
+export const connect = (url) => postgres(url, { max: 1, onnotice: () => {}, connection: { application_name: 'oto-platform db:local' } })
 
 /**
  * Crée la base du checkout si elle manque (`reset` : la recrée), la prépare (`db prepare`) et lui applique
@@ -127,7 +127,16 @@ export async function prepareLocalDatabase(root, { reset = false, print }) {
     await server.end({ timeout: 5 })
   }
 
-  const { admin } = localUrls(root)
+  await migrateDatabase(root, localUrls(root).admin, print)
+  print(`base ${database} : migrations à jour`)
+}
+
+/**
+ * Prépare une base (`db prepare`) et lui applique les migrations de `supabase/migrations/` de `root` par la CLI
+ * Supabase, comme le job `bare-postgres` : la base du checkout (`prepareLocalDatabase`), et celle que `pnpm verify`
+ * construit pour son passage (`base-de-verify.mjs`).
+ */
+export async function migrateDatabase(root, admin, print) {
   // Le mot de passe ne sert qu'à créer `platform_app` au premier passage ; `trust` ne le demande jamais.
   const code = await prepareDatabase({ dbUrl: admin, password: randomBytes(16).toString('hex'), print: () => {}, printError: print })
   if (code !== 0) throw new Error('db prepare : échec (message ci-dessus)')
@@ -137,7 +146,6 @@ export async function prepareLocalDatabase(root, { reset = false, print }) {
   // aussi la migration datée avant la ligne de base (`20260928090000`), que la CLI refuse sans lui.
   const push = run('supabase', ['db', 'push', '--db-url', admin, '--yes', '--include-all'], { cwd: root, env: { ...process.env, PGSSLMODE: 'disable' } })
   if (push.status !== 0) throw new Error(`supabase db push : ${push.stderr || push.stdout}`)
-  print(`base ${database} : migrations à jour`)
 }
 
 /**

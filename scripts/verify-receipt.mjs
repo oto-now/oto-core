@@ -242,7 +242,7 @@ if (command === 'write') {
       /* hors d'un dépôt git : le gate refusera ce reçu, l'outil d'export n'en lit que l'arbre */
     }
     const passage = passageRecent(at)
-    if (passage) Object.assign(recu, { duree: passage.duree, forks: passage.forks, tests: passage.tests })
+    if (passage) Object.assign(recu, { duree: passage.duree, forks: passage.forks, tests: passage.tests, base: passage.base })
     writeFileSync(RECEIPT, JSON.stringify(recu, null, 2) + '\n')
   } catch (error) {
     // Échouer proprement plutôt que sur une stack Node : ce point du script est atteint APRÈS

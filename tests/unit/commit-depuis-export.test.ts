@@ -6,6 +6,7 @@ import path from "path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { lireLaListe, lireLeRecu, ligneVerified } from "../../scripts/commit-depuis-export.mjs"
 import { arbreDeCodeDuCommit, arbreDeCodeDuDossier } from "../../scripts/lib/arbre-de-code.mjs"
+import { empreinteDesMigrations } from "../../scripts/lib/empreinte-des-migrations.mjs"
 
 /**
  * `scripts/commit-depuis-export.mjs` : le commit d'un export vérifié porte son reçu en trailers
@@ -15,7 +16,8 @@ import { arbreDeCodeDuCommit, arbreDeCodeDuDossier } from "../../scripts/lib/arb
  */
 
 const root = path.resolve(__dirname, "../..")
-const SCRIPTS = ["scripts/commit-depuis-export.mjs", "scripts/lib/arbre-de-code.mjs", "scripts/sauts-toleres.txt"]
+const SCRIPTS = ["scripts/commit-depuis-export.mjs", "scripts/lib/arbre-de-code.mjs", "scripts/lib/empreinte-des-migrations.mjs", "scripts/sauts-toleres.txt"]
+const MIGRATION = "supabase/migrations/20261021190000_purge.sql"
 const TOLERE = lireLaListe(fs.readFileSync(path.join(root, "scripts/sauts-toleres.txt"), "utf8"))[0]
 
 let dir: string
@@ -43,6 +45,7 @@ function monter() {
     "a.ts": "export const a = 1\n",
     "cli/bin.mjs": "console.log('bin')\n",
     "docs/changelog.md": "# Changelog\n",
+    [MIGRATION]: "grant execute on function platform.purge_transit_files() to platform_server;\n",
     ".gitignore": "node_modules/\n.claude/*\n",
   }
   for (const chemin of SCRIPTS) fichiers[chemin] = fs.readFileSync(path.join(root, chemin), "utf8")
@@ -62,7 +65,7 @@ function monter() {
   return { racine, origin, depot, exporte, base, message }
 }
 
-/** Le reçu d'un `pnpm verify` vert sur l'export tel qu'il est maintenant. */
+/** Le reçu d'un `pnpm verify` vert sur l'export tel qu'il est maintenant, sa base construite depuis ses migrations. */
 function recuVert(exporte: string, surcharge: Record<string, unknown> = {}) {
   fs.mkdirSync(path.join(exporte, ".claude"), { recursive: true })
   const recu = {
@@ -72,6 +75,7 @@ function recuVert(exporte: string, surcharge: Record<string, unknown> = {}) {
     duree: 350,
     forks: 4,
     tests: { verts: 12, sautes: 1, echecs: 0, fichiersSautes: [TOLERE] },
+    base: { empreinte: empreinteDesMigrations(exporte) },
     ...surcharge,
   }
   fs.writeFileSync(path.join(exporte, ".claude/.verify-receipt.json"), JSON.stringify(recu))
@@ -135,6 +139,29 @@ describe("commit-depuis-export on a throwaway repository", { timeout: 30_000 }, 
     expect(parasite.output).toContain("n'est pas celui du reçu")
   })
 
+  // Le cas du 21/10/2026 : la migration réécrite après que la base de test a reçu sa première version ; les tests
+  // passaient sur l'ancienne. Un reçu dont la base vient d'autres migrations que celles du commit est refusé.
+  it("should refuse a receipt whose test base was built from other migrations than the committed tree", () => {
+    const cas = monter()
+    const premiere = empreinteDesMigrations(cas.exporte)
+    fs.writeFileSync(path.join(cas.exporte, MIGRATION), "grant execute on function platform.purge_transit_files() to authenticated;\n")
+    recuVert(cas.exporte, { base: { empreinte: premiere } })
+
+    const result = lancer(cas)
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`construite depuis d'autres migrations (${premiere.slice(0, 12)})`)
+  })
+
+  it("should refuse a receipt that attests no test base built by pnpm verify", () => {
+    const cas = monter()
+    fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 2\n")
+    recuVert(cas.exporte, { base: null })
+
+    const result = lancer(cas)
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain("n'atteste aucune base de test")
+  })
+
   it("should refuse a base that is no longer origin/main", () => {
     const cas = monter()
     fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 2\n")
@@ -178,6 +205,7 @@ describe("lireLeRecu", () => {
     duree: 300,
     forks: 4,
     tests: { verts: 10, sautes: 2, echecs: 0, fichiersSautes: [TOLERE] },
+    base: { empreinte: "e".repeat(64) },
   }
 
   it("should accept a green receipt whose wholly skipped files are all tolerated", () => {
@@ -191,6 +219,8 @@ describe("lireLeRecu", () => {
     ["without the code tree", { tree: undefined }, "arbre de code"],
     ["without the test summary", { tests: undefined }, "résume pas les tests"],
     ["with a failed test", { tests: { ...VERT.tests, echecs: 1 } }, "en échec"],
+    ["without a test base", { base: null }, "n'atteste aucune base de test"],
+    ["with a test base without fingerprint", { base: {} }, "n'atteste aucune base de test"],
     ["with a wholly skipped file out of the list", { tests: { ...VERT.tests, fichiersSautes: ["tests/integration/files.test.ts"] } }, "tests/integration/files.test.ts"],
   ])("should refuse a receipt %s", (_cas, surcharge, raison) => {
     expect(() => lireLeRecu(ecrire({ ...VERT, ...surcharge }), [TOLERE])).toThrow(raison)

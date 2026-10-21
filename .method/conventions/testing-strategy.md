@@ -121,6 +121,13 @@ que les suites propres à Supabase, lancées sans la variable.
   retire les variables de Supabase : les suites Auth, `auth.users`, hook d'inscription et Data API se
   sautent (`supabaseConfigured`, `adminSqlConfigured`), les suites portables (`sqlConfigured`) passent.
   Sans la variable, rien ne change : le projet reste la base, la CI aussi.
+- **La base d'un `pnpm verify`** : `pnpm verify` ne réutilise aucune base. Sur le Postgres du poste (mode
+  local, ou `PLATFORM_ADMIN_DATABASE_URL` vers `localhost`), il crée une base neuve, la migre depuis les
+  fichiers de `supabase/migrations/` de l'arbre vérifié, y fait tourner `test`, puis la supprime
+  (`scripts/lib/base-de-verify.mjs`). Le reçu porte l'empreinte de ces migrations ; `pnpm commit:export`
+  refuse un reçu qui n'en porte pas, ou dont l'empreinte n'est pas celle de l'arbre commité. Ce que ça
+  empêche (cas du 21/10/2026) : une migration réécrite après son application à une base qui ne la rejoue
+  pas, des tests verts sur l'ancienne version, la CI rouge sur la nouvelle.
 - **Les tests ne visent jamais la production** : `PLATFORM_TEST_PROJECT_ID` déclare le projet de test,
   et la mise en place de Vitest (`vitest.config.ts`) et de Playwright (`playwright.config.ts`) arrête
   la campagne avant toute suite si elle vise le projet distant (`SUPABASE_PROJECT_ID`, l'URL de l'API
