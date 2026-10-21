@@ -36,8 +36,10 @@ const TRASH_ROWS = 1_000
  * Purge de la corbeille de l'organisation (AC-b11, HN-E05S10e-2) : les nœuds entrés il y a plus de 30
  * jours dont tout le sous-arbre y est aussi depuis plus de 30 jours, en une suppression (la clé du parent
  * est contrôlée à la fin de l'instruction ; blocs, versions, liens, alias, règles et liens publics partent
- * en cascade). Une rétention de l'organisation, pas un geste de la personne : sous son jeton, la RLS
- * d'isolation seule la borne. Rend le nombre de nœuds purgés.
+ * en cascade). Une rétention de l'organisation, pas un geste de la personne : tout membre la lance, et elle
+ * vise aussi les pages qu'il ne lit pas, dont la base lui cache les fichiers (`20261021140000`) ; d'où la
+ * fonction `security definer` `purge_trash`, bornée à l'organisation de l'appelant et au délai, fixé en
+ * base (30 jours, `TRASH_DAYS`). Rend le nombre de nœuds purgés.
  * E10-S02 (AC-e2, ADR-016 § 6) : dans la même instruction, les lignes `files` des nœuds purgés, et eux seuls,
  * sont supprimées et leurs identifiants rendus (la cascade de `files.node_id` les perdrait) ; leurs objets
  * partent après le commit, un échec du bucket nommé au log serveur (`removeObjects`).
@@ -48,19 +50,7 @@ export async function purgeTrash(db: PlatformDb, identity: Identity): Promise<nu
   // Les exports d'arborescence dont l'URL a expiré partent aussi au passage de la corbeille (le paquet n'a pas de tâche planifiée).
   await purgeExpiredExports(fileStore(), identity.org.id)
   const [purged] = await inTransaction(db, "trash: purge", (sql) => sql<{ nodes: number; files: string[] }[]>`
-    with gone as (
-      delete from platform.nodes n
-       where n.org_id = ${identity.org.id} and n.deleted_at < now() - make_interval(days => ${TRASH_DAYS})
-         and not exists (select 1 from platform.nodes d
-                          where d.org_id = n.org_id and starts_with(d.path, n.path || '/')
-                            and (d.deleted_at is null or d.deleted_at >= now() - make_interval(days => ${TRASH_DAYS})))
-      returning n.id
-    ), gone_files as (
-      delete from platform.files f where f.org_id = ${identity.org.id} and f.node_id in (select gone.id from gone)
-      returning f.id
-    )
-    select (select count(*)::int from gone) as nodes,
-           coalesce((select array_agg(gone_files.id::text) from gone_files), '{}') as files`)
+    select nodes, files::text[] as files from platform.purge_trash(${identity.org.id})`)
   await removeObjects(identity.org.id, purged.files)
   return purged.nodes
 }

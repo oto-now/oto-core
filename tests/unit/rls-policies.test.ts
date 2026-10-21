@@ -5,10 +5,11 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000` et `20261021130000`, lectures comprises). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000` et `20261021140000`, lectures comprises). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
-// `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000`).
+// `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000` ;
+// la purge de la corbeille, `TRASH_FUNCTIONS`, migration `20261021140000`).
 import fs from "fs"
 import path from "path"
 import { describe, expect, it } from "vitest"
@@ -166,7 +167,7 @@ const ROLE_REQUIRED: Record<string, string> = {
   connector_activations_update_admin: "activateConnector, deactivateConnector (server/connectors/activations.ts): checkedConnector, isOrgAdmin",
   feedback_update_admin: "setFeedbackState (server/feedback.ts): handlesFeedback, isOrgAdmin, and isStaff or the feedback_visible flag",
   nodes_delete_manager:
-    "purgeTrash (server/nodes/trash.ts): any member, trashed for more than 30 days; eraseTrashedNodes for deleteTeam (server/team-trash.ts): requireAdmin, isOrgAdmin on a trashed node; undoCreation (server/uploads-write.ts): its author, never published",
+    "undoCreation (server/uploads-write.ts): its author, never published; the two trash branches (any member, trashed for more than 30 days; isOrgAdmin on a trashed node) were purgeTrash and eraseTrashedNodes, which delete through purge_trash and erase_team_trash since 20261021140000",
   node_drafts_update_writer: "writeNode, saveDraft (server/nodes/write.ts, store.ts): requireNodeLevel write, node_level_for >= 2",
   node_shares_insert_member: "shareNode (server/shares.ts): managedNode, the share level of the node (node_level_for >= 3)",
   node_shares_update_member: "shareNode, revokeShare (server/shares.ts): the share level of the node (node_level_for >= 3), or isOrgAdmin to revoke",
@@ -184,7 +185,7 @@ const ROLE_REQUIRED: Record<string, string> = {
   node_versions_select_level: "the revisions of read (server/nodes/read.ts), the news (server/context/blocks/news.ts, server/home-contents.ts), the ctx (server/ctx.ts): node_level_for >= 1",
   links_select_level: "the outgoing links of a node read, the incoming links filtered by nodeLevels (server/nodes/link-lines.ts), the links of the Contextes read: node_level_for >= 1",
   files_select_member:
-    "readableFile (server/files/service.ts): node_level_for >= 1; its author (pendingFile, a transit file); the files of a node in the trash, which purgeTrash (server/nodes/trash.ts) and eraseTrashedNodes (server/team-trash.ts) remove",
+    "readableFile (server/files/service.ts): node_level_for >= 1, in the trash too (20261021140000: the purge goes through purge_trash and erase_team_trash); its author (pendingFile, a transit file)",
   node_shares_select_member:
     "managedNode (server/shares.ts), activeShareAt for node.access: node_level_for >= 3; listShares, revokeShare: isOrgAdmin",
 }
@@ -227,6 +228,17 @@ const LEVEL_REQUIRED_FUNCTIONS: Record<string, string> = {
   "discard_draft(p_node uuid, p_draft_stamp timestamp with time zone)": "discardPlan (server/nodes/discard.ts): requireNodeLevel write, node_level_for >= 2; a page never published refused",
   "duplicate_subtree(p_source uuid, p_nodes uuid[], p_segment text, p_title text, p_position double precision)":
     "duplicateNode (server/nodes/duplicate.ts): findNode and copiedDescendants, node_level_for >= 1; its parent, node_level_for >= 2",
+}
+
+/**
+ * Les fonctions `security definer` de la purge de la corbeille (migration `20261021140000`) : elles suppriment des nœuds
+ * sans niveau, une rétention de l'organisation ou l'effacement d'une équipe, bornées aux nœuds à la corbeille
+ * (`deleted_at`) et au rôle que leur service exige (`member_orgs` ou `is_org_admin`). Une fonction nouvelle de cette sorte
+ * s'ajoute ici en nommant ce service.
+ */
+const TRASH_FUNCTIONS: Record<string, string> = {
+  "purge_trash(p_org uuid)": "purgeTrash (server/nodes/trash.ts), from listTrash and trashNode: any member (member_orgs), trashed for more than 30 days",
+  "erase_team_trash(p_org uuid, p_team uuid)": "eraseTrashedNodes for deleteTeam (server/team-trash.ts, server/teams.ts): requireAdmin, is_org_admin, trashed",
 }
 
 /** Les rôles d'une session. */
@@ -387,9 +399,13 @@ describe("security definer functions of platform", () => {
     const writers = [...bodies].filter(
       ([signature, body]) => WRITES_NODES.test(body) && SESSION_ROLES.some((role) => granted.get(signature)?.has(role)),
     )
+    const trash = writers.filter(([signature]) => signature in TRASH_FUNCTIONS)
     expect({
       writers: writers.map(([signature]) => signature).sort(),
-      withoutLevel: writers.filter(([, body]) => !/\bnode_level_for\s*\(/i.test(body)).map(([signature]) => signature),
-    }).toEqual({ writers: Object.keys(LEVEL_REQUIRED_FUNCTIONS).sort(), withoutLevel: [] })
+      withoutLevel: writers.filter(([signature, body]) => !(signature in TRASH_FUNCTIONS) && !/\bnode_level_for\s*\(/i.test(body)).map(([signature]) => signature),
+      trashWithoutBound: trash
+        .filter(([, body]) => !/\bdeleted_at\b/i.test(body) || !/\b(member_orgs|is_org_admin)\s*\(/i.test(body))
+        .map(([signature]) => signature),
+    }).toEqual({ writers: Object.keys({ ...LEVEL_REQUIRED_FUNCTIONS, ...TRASH_FUNCTIONS }).sort(), withoutLevel: [], trashWithoutBound: [] })
   })
 })

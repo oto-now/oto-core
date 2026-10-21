@@ -24,22 +24,14 @@ export async function trashedNodesCount(sql: Tx, identity: Identity, team: TeamR
   return row?.count ?? 0
 }
 
-/** Efface les pages de l'équipe à la corbeille, sous-pages comprises ; rend les identifiants de leurs fichiers. */
+/**
+ * Efface les pages de l'équipe à la corbeille, sous-pages comprises ; rend les identifiants de leurs fichiers. Par la
+ * fonction `security definer` `erase_team_trash` (`20261021140000`), comme la purge de la corbeille : ce qu'elle efface ne
+ * dépend pas de ce que l'appelant lit (la base cache un fichier à qui ne lit pas son nœud). Elle exige l'administrateur,
+ * comme `deleteTeam`, et lit le dossier de l'équipe dans l'organisation.
+ */
 export async function eraseTrashedNodes(sql: Tx, identity: Identity, team: TeamRef): Promise<string[]> {
   const [erased] = await sql<{ files: string[] }[]>`
-    with roots as (
-      select path from platform.nodes
-       where org_id = ${identity.org.id} and deleted_at is not null
-         and (owner_team_id = ${team.id} or starts_with(path, ${`${team.slug}/`}))
-    ), gone as (
-      delete from platform.nodes n
-       where n.org_id = ${identity.org.id} and n.deleted_at is not null
-         and exists (select 1 from roots r where n.path = r.path or starts_with(n.path, r.path || '/'))
-      returning n.id
-    ), gone_files as (
-      delete from platform.files f where f.org_id = ${identity.org.id} and f.node_id in (select gone.id from gone)
-      returning f.id
-    )
-    select coalesce((select array_agg(gone_files.id::text) from gone_files), '{}') as files`
-  return erased?.files ?? []
+    select platform.erase_team_trash(${identity.org.id}, ${team.id})::text[] as files`
+  return erased.files
 }

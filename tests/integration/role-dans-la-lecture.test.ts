@@ -7,9 +7,9 @@
 // dernier auteur d'un bloc (`updated_by`). Sous sa session comme sous celle du serveur, qui juge la même personne.
 // L'ayant droit du service lit : `findNode` et les listes filtrées par `nodeLevels` (niveau 1) pour le contenu publié,
 // `loadDraft` derrière le niveau 2 pour le brouillon, `managedNode` (niveau 3) ou l'administrateur pour le lien public.
-// Les fichiers d'une page à la corbeille restent lus par toute l'organisation : la purge de la corbeille (`purgeTrash`,
-// une rétention de l'organisation) en retire les objets. Les statistiques d'usage gardent leurs comptes de toute
-// l'organisation par trois fonctions `security definer`, réservées à l'administrateur. Le titre et le résumé d'un nœud
+// Les fichiers d'une page à la corbeille suivent la même règle depuis `20261021140000` (`role-dans-la-corbeille.test.ts`).
+// Les statistiques d'usage gardent leurs comptes de toute l'organisation par trois fonctions `security definer`,
+// réservées à l'administrateur. Le titre et le résumé d'un nœud
 // (`nodes_select_level`) restent
 // lus par toute l'organisation, en attente d'une décision. Une lecture écartée par la policy rend zéro ligne ; un
 // `with check` refusé lève 42501.
@@ -66,13 +66,13 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
   }
 
   /** Un nœud publié sous `parent` (la racine par défaut), posé par la connexion d'administration ; de l'équipe `led` avec `team`. */
-  async function node(options: { team?: string; parent?: Page; trashed?: boolean } = {}): Promise<Page> {
+  async function node(options: { team?: string; parent?: Page } = {}): Promise<Page> {
     const parent = options.parent ?? root
     const path = parent === root ? `p${tag()}` : `${parent.path}/p${tag()}`
     const [row] = await seed.admin<Page[]>`
-      insert into platform.nodes (org_id, parent_id, path, kind, title, summary, status, revision, owner_kind, owner_team_id, created_by, deleted_at)
+      insert into platform.nodes (org_id, parent_id, path, kind, title, summary, status, revision, owner_kind, owner_team_id, created_by)
       values (${org.id}, ${parent.id}, ${path}, 'page', 'Page', 'Une page.', 'published', 1, ${options.team ? "team" : null}, ${options.team ?? null},
-              ${ada.id}, ${options.trashed ? new Date(Date.now() - 40 * 86_400_000) : null})
+              ${ada.id})
       returning id, path`
     return row
   }
@@ -192,13 +192,6 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     // Marc, à qui une règle donne la gestion, le lit.
     await grant(page, marc, "manage")
     expect(await attempt(marc, token, session)).toBe(1)
-  })
-
-  it.each(SESSIONS)("should let any member see the files of a page in the trash, which the purge of the trash removes (session %s)", async (session) => {
-    const page = await node({ team: led, trashed: true })
-    await published(page)
-    expect(await attempt(lea, (sql) => sql`select name from platform.files where node_id = ${page.id}`, session)).toBe(1)
-    expect(await attempt(lea, (sql) => sql`select text from platform.blocks where node_id = ${page.id}`, session)).toBe(0)
   })
 
   // Les statistiques d'usage (`server/usage-statistics.ts`) comptent le contenu de toute l'organisation sans le nommer

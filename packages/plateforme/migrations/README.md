@@ -338,6 +338,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   comptes des statistiques d'usage, que `server/usage-statistics.ts` de la même version appelle. `nodes_select_level`,
   `node_aliases` et `node_views` inchangées. Huit policies et trois fonctions ; aucune table ni colonne ; rien à
   relancer avant.
+- `20261021140000_platform_role_dans_la_corbeille.sql` (suite de `20261021130000`) : `files_select_member`, recréée
+  sous son nom, perd la branche de la corbeille : le fichier d'une page à la corbeille ne se lit plus que par son
+  auteur ou qui lit la page (`node_level_for` ≥ 1). La purge, qui comptait sur elle, passe par deux fonctions
+  `security definer`, que `server/nodes/trash.ts` et `server/team-trash.ts` de la même version appellent :
+  `purge_trash(org)` (membre de l'organisation, sinon `42501` ; les nœuds à la corbeille depuis plus de 30 jours dont
+  tout le sous-arbre l'est aussi, délai fixé en base) et `erase_team_trash(org, team)` (`is_org_admin`, sinon `42501` ;
+  les pages de l'équipe à la corbeille, quelle que soit leur date) ; chacune supprime nœuds et fichiers, lus ou non,
+  hors racine, `private` et Contextes, et rend les identifiants des fichiers. Une policy et deux fonctions ; aucune
+  table ni colonne ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
