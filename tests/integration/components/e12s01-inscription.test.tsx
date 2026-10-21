@@ -104,7 +104,8 @@ describe("FormulaireDInscription (AC-12)", () => {
     nomme("Atelier")
     fireEvent.click(creer())
     expect(await screen.findByText("Votre organisation est créée.")).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: "Votre espace se prépare" })).toHaveFocus()
+    // Le focus est posé par un effet, après le rendu du texte : on l'attend, comme le lecteur d'écran le reçoit.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Votre espace se prépare" })).toHaveFocus())
     expect(screen.getAllByRole("listitem").map((etape) => etape.textContent)).toEqual([
       "Organisation créée (fait)",
       "Adresse réservée (fait)atelier.oto.test",
