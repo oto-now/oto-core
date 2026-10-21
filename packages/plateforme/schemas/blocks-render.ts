@@ -16,8 +16,8 @@
 // sans casse, sans accent et sans espace de bord. Retiré : les sections `{title, body}` en markdown
 // (→ plages de blocs).
 import { blockInputSchema, chars, isBlankLine, trimBlanks, type BlockInput } from "./blocks"
-import { fileBaseName } from "./csv"
-import { filePath, fileSizeText, fileTypeOf } from "./files"
+import { fileBaseName, fileExtension } from "./csv"
+import { filePath, fileSizeText } from "./files"
 import { frontmatterHead, splitFrontmatter } from "./frontmatter"
 import { closesFence, LINE_SEPARATORS, openingFence, type Fence } from "./link-syntax"
 import { NODE_HEAD_MAX, normalizeTitle, OP_TEXT_MAX } from "./nodes"
@@ -202,11 +202,11 @@ function renderBody<B extends BlockLike>(block: B, options: RenderOptions<B>): s
       return toggleLines(valid.data.summary, valid.text)
     // Un fichier joint (E10-S02, AC-d1) : « [<nom> (<taille>, <type>)](<route>/<id>) », le nom tel quel, comme le texte
     // alternatif d'une image ; `parseMarkdown` le relit de droite à gauche (`markdown-files.ts`). Le type est
-    // l'extension du nom (`pdf`), le type de la ligne pour un nom sans extension admise.
+    // l'extension du nom (`pdf`, `dxf` d'un type de l'hôte), le type de la ligne pour un nom sans extension.
     // Un cadre intégré (1.4.3) : son adresse dans une clôture `embed`, sa hauteur ensuite quand elle est choisie.
     case "embed": return fenced("embed", valid.data.height === undefined ? valid.data.url : `${valid.data.url} ${JSON.stringify({ height: valid.data.height })}`)
     case "file":
-      return `[${valid.data.name} (${fileSizeText(valid.data.size)}, ${fileTypeOf(valid.data.name) ?? valid.data.mime})](${filePath(valid.data.file_id, options.fileRoute)})`
+      return `[${valid.data.name} (${fileSizeText(valid.data.size)}, ${fileExtension(valid.data.name) || valid.data.mime})](${filePath(valid.data.file_id, options.fileRoute)})`
   }
 }
 

@@ -64,6 +64,8 @@ export type Gestes = {
   oublierLAnnonce: () => void
   /** Le « + » approché ou un geste de fichier : l'état du stockage se lit, une fois (E10-S02, HN-E10S02-6). */
   connaitreLesFichiers: () => void
+  /** Les types qu'ouvrent les lecteurs de l'hôte, appris avec l'état du stockage (lecteurs de fichiers, lot 1b). */
+  typesDeLHote: () => readonly string[]
   /** « Image » ou « Fichier » du « + » (E10-S02, AC-b1, AC-b2) : le dialogue du choix, types et limites dits (AC-b4). */
   choisirUnFichier: (cle: string, quoi: Genre) => void
   /** Le fichier choisi dans ce dialogue : joint après le bloc, sans choix au dépôt (AC-b5). */

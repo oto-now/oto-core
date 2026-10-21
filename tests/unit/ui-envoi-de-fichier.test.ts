@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { FILE_MAX_BYTES, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES } from "../../packages/plateforme/schemas"
 import { tailleLisible } from "../../packages/plateforme/ui/format/nombres"
-import { blocDuFichier, LIMITES, messageDEnvoi, nommer } from "../../packages/plateforme/ui/noeud/editeur/envoi-de-fichier"
+import { accepteDe, admis, blocDuFichier, limitesDe, messageDEnvoi, nommer } from "../../packages/plateforme/ui/noeud/editeur/envoi-de-fichier"
 import { FICHIERS } from "../../packages/plateforme/ui/noeud/libelles-des-fichiers"
 
 // L'envoi d'un fichier depuis l'éditeur (E10-S02, lot b) : chaque refus du service dit en français par son code, le
@@ -23,19 +23,31 @@ describe("messageDEnvoi (AC-b4)", () => {
     ["conflict", undefined, rapport, FICHIERS.different],
     ["internal", undefined, rapport, FICHIERS.stockage],
   ])("should translate %s (%s) for %o", (code, raison, fichier, attendu) => {
-    expect(messageDEnvoi({ code, raison, statut: 400 }, fichier)).toBe(attendu)
+    expect(messageDEnvoi({ code, raison, statut: 400 }, fichier, [])).toBe(attendu)
+  })
+
+  it("should name the host types in a refused type, and take a refused host type for a refused name (lot 1b)", () => {
+    const refus = { code: "invalid_arguments", statut: 400 }
+    expect(messageDEnvoi(refus, { name: "setup.exe", size: 3 }, ["dxf"])).toBe(FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, dxf"))
+    expect(messageDEnvoi(refus, { name: "plan.dxf", size: 3 }, ["dxf"])).toBe(FICHIERS.nomRefuse)
   })
 
   it("should say the quota the host posed, carried in bytes by the refusal (E12-S02, AC-6)", () => {
-    expect(messageDEnvoi({ code: "too_large", raison: "quota", statut: 413, details: { reason: "quota", max: 1_073_741_824 } }, rapport)).toBe(FICHIERS.quota("1 Go"))
+    expect(messageDEnvoi({ code: "too_large", raison: "quota", statut: 413, details: { reason: "quota", max: 1_073_741_824 } }, rapport, [])).toBe(FICHIERS.quota("1 Go"))
   })
 })
 
-describe("LIMITES (AC-b4)", () => {
+describe("limitesDe (AC-b4)", () => {
   it("should say the admitted types and the limits of schemas/files.ts, never written in figures", () => {
     expect([tailleLisible(FILE_MAX_BYTES), tailleLisible(TEXT_FILE_MAX_BYTES), tailleLisible(ORG_QUOTA_BYTES)]).toEqual(["50 Mo", "4 Mo", "10 Go"])
-    expect(LIMITES.image).toBe(FICHIERS.limitesImage(".png, .jpeg, .jpg, .gif, .webp, .svg", "50 Mo"))
-    expect(LIMITES.fichier).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip", "50 Mo", "4 Mo"))
+    expect(limitesDe("image", ["dxf"])).toBe(FICHIERS.limitesImage(".png, .jpeg, .jpg, .gif, .webp, .svg", "50 Mo"))
+    expect(limitesDe("fichier", [])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip", "50 Mo", "4 Mo"))
+  })
+
+  it("should admit and offer the types the host readers open, after those of the package, and only them (lot 1b)", () => {
+    expect([admis("Plan RDC.DXF", ["dxf"]), admis("plan.dxf", []), admis("plan.dwg", ["dxf"]), admis("rapport.pdf", [])]).toEqual([true, false, false, true])
+    expect(limitesDe("fichier", ["dxf", "stl"])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip, .dxf, .stl", "50 Mo", "4 Mo"))
+    expect([accepteDe("fichier", ["dxf"]).endsWith(".zip,.dxf"), accepteDe("image", ["dxf"])]).toEqual([true, ".png,.jpeg,.jpg,.gif,.webp,.svg"])
   })
 })
 

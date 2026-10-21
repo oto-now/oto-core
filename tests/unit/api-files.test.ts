@@ -61,9 +61,9 @@ beforeEach(() => {
 
 describe("files resource of the gate (E10-S02, lot a)", () => {
   it("should give the storage state (AC-a7)", async () => {
-    vi.mocked(fileStorageState).mockReturnValue({ enabled: false })
+    vi.mocked(fileStorageState).mockReturnValue({ enabled: false, hostTypes: [] })
     const { response, tasks } = await call(request("GET", "files"))
-    expect({ status: response.status, body: await response.json(), journal: tasks.length }).toEqual({ status: 200, body: { data: { enabled: false } }, journal: 0 })
+    expect({ status: response.status, body: await response.json(), journal: tasks.length }).toEqual({ status: 200, body: { data: { enabled: false, hostTypes: [] } }, journal: 0 })
   })
 
   it("should redirect a read with 302 to the presigned URL, without body nor cache, and pass the disposition (AC-a5)", async () => {

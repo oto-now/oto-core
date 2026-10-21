@@ -2,12 +2,12 @@
 
 // L'envoi d'un fichier joint depuis l'éditeur (E10-S02, lot b : AC-b1, AC-b2, AC-b4, AC-b7 ; ADR-016 § 4) : la demande
 // (`POST files`), l'envoi direct au stockage par l'URL présignée (`XMLHttpRequest`, pour sa progression), la
-// confirmation (`POST files/<id>/complete`), l'annulation (`AbortController`) ; l'état du stockage, appris par
-// `GET files` au premier geste qui en a besoin (HN-E10S02-6) ; l'état des envois et des dialogues de l'éditeur. Les
-// octets ne passent jamais par le paquet ; le bloc n'est écrit qu'après la confirmation (HN-E10S02-8). Sans lui, un
-// fichier ne se joint pas à une page.
+// confirmation (`POST files/<id>/complete`), l'annulation (`AbortController`) ; l'état du stockage et les types
+// qu'ouvrent les lecteurs de l'hôte, appris par `GET files` au premier geste qui en a besoin (HN-E10S02-6) ; l'état des
+// envois et des dialogues de l'éditeur. Les octets ne passent jamais par le paquet ; le bloc n'est écrit qu'après la
+// confirmation (HN-E10S02-8). Sans lui, un fichier ne se joint pas à une page.
 import { useEffect, useRef, useState } from "react"
-import { FILE_MAX_BYTES, FILE_TYPES, fileTypeOf, IMAGE_TYPES, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES, type FileReady, type FileStorageState, type FileUpload } from "../../../schemas"
+import { FILE_MAX_BYTES, FILE_TYPES, fileExtension, fileTypeOf, IMAGE_TYPES, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES, type FileReady, type FileStorageState, type FileUpload } from "../../../schemas"
 import { appelerPlateforme, type ErreurPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
 import { tailleLisible } from "../../format/nombres"
@@ -30,20 +30,30 @@ export function genreDe(nom: string): Genre {
 
 const extensions = (types: readonly string[]) => types.map((type) => `.${type}`)
 
-/** Ce que propose le sélecteur du système, par genre. */
-export const ACCEPTES: Record<Genre, string> = { image: extensions(IMAGE_TYPES).join(","), fichier: extensions(Object.keys(FILE_TYPES)).join(",") }
+/**
+ * Les types qu'un fichier joint peut avoir : ceux du paquet (`FILE_TYPES`), puis ceux qu'ouvrent les lecteurs de l'hôte,
+ * appris par `GET files` (`lecture-des-fichiers.md` § Types de l'hôte). Un confort : le service juge le dépôt.
+ */
+export const typesAdmis = (hote: readonly string[]): string[] => [...Object.keys(FILE_TYPES), ...hote]
 
-/** Les types et les limites, dits avant la sélection (AC-b4), depuis `schemas/files.ts`. */
-export const LIMITES: Record<Genre, string> = {
-  image: FICHIERS.limitesImage(extensions(IMAGE_TYPES).join(", "), tailleLisible(FILE_MAX_BYTES)),
-  fichier: FICHIERS.limitesFichier(extensions(Object.keys(FILE_TYPES)).join(", "), tailleLisible(FILE_MAX_BYTES), tailleLisible(TEXT_FILE_MAX_BYTES)),
+/** Un fichier qu'admet le service, par son extension. */
+export const admis = (nom: string, hote: readonly string[]): boolean => fileTypeOf(nom) !== null || hote.includes(fileExtension(nom))
+
+/** Ce que propose le sélecteur du système, par genre. */
+export function accepteDe(genre: Genre, hote: readonly string[]): string {
+  return extensions(genre === "image" ? IMAGE_TYPES : typesAdmis(hote)).join(",")
 }
 
-/** Les refus du service, traduits par leur code ; le quota par sa raison (AC-b4). */
+/** Les types et les limites, dits avant la sélection (AC-b4), depuis `schemas/files.ts`. */
+export function limitesDe(genre: Genre, hote: readonly string[]): string {
+  if (genre === "image") return FICHIERS.limitesImage(extensions(IMAGE_TYPES).join(", "), tailleLisible(FILE_MAX_BYTES))
+  return FICHIERS.limitesFichier(extensions(typesAdmis(hote)).join(", "), tailleLisible(FILE_MAX_BYTES), tailleLisible(TEXT_FILE_MAX_BYTES))
+}
+
+/** Les refus du service, traduits par leur code ; le quota par sa raison (AC-b4) ; le type refusé, par `messageDEnvoi`. */
 const REFUS = {
   quota: FICHIERS.quota(tailleLisible(ORG_QUOTA_BYTES)),
   too_large: FICHIERS.tropLourd(tailleLisible(FILE_MAX_BYTES), tailleLisible(TEXT_FILE_MAX_BYTES)),
-  invalid_arguments: FICHIERS.typeRefuse(Object.keys(FILE_TYPES).join(", ")),
   forbidden: FICHIERS.interdit,
   not_enabled: FICHIERS.desactives,
   conflict: FICHIERS.different,
@@ -55,13 +65,13 @@ const REFUS = {
  * retrouve par le fichier qu'il envoie. `invalid_arguments` sur une extension admise : le nom est refusé, pas le type ;
  * `too_large` d'un fichier de 0 octet : il est vide, il ne dépasse rien.
  */
-export function messageDEnvoi(erreur: ErreurPlateforme, fichier: Pick<File, "name" | "size">): string {
-  if (erreur.code === "invalid_arguments" && fileTypeOf(fichier.name) !== null) return FICHIERS.nomRefuse
+export function messageDEnvoi(erreur: ErreurPlateforme, fichier: Pick<File, "name" | "size">, hote: readonly string[]): string {
+  if (erreur.code === "invalid_arguments" && admis(fichier.name, hote)) return FICHIERS.nomRefuse
   if (erreur.code === "too_large" && erreur.raison === undefined && fichier.size < 1) return FICHIERS.vide
   // Le quota de l'organisation, posé par l'hôte (E12-S02), que le refus porte en octets ; 10 Go sinon.
   const quota = erreur.details?.max
   if (erreur.raison === "quota" && typeof quota === "number") return FICHIERS.quota(tailleLisible(quota))
-  return messageDErreur(erreur, REFUS)
+  return messageDErreur(erreur, { ...REFUS, invalid_arguments: FICHIERS.typeRefuse(typesAdmis(hote).join(", ")) })
 }
 
 /**
@@ -117,11 +127,13 @@ export async function envoyerUnFichier(chemin: string, fichier: File, progresser
 }
 
 /**
- * L'état du stockage (AC-a7, HN-E10S02-6), appris une fois, au premier geste qui en a besoin : l'approche du « + », un
- * collage, un dépôt. Une lecture en échec n'est pas retenue : le geste suivant relit.
+ * L'état du stockage (AC-a7, HN-E10S02-6) et les types de l'hôte, appris une fois, au premier geste qui en a besoin :
+ * l'approche du « + », un collage, un dépôt. Une lecture en échec n'est pas retenue : le geste suivant relit.
  */
 function useStockage() {
   const [actif, setActif] = useState(false)
+  // Une référence : un dépôt lit les types juste après `connaitre()`, avant tout nouveau rendu.
+  const hote = useRef<readonly string[]>([])
   const lecture = useRef<Promise<boolean> | null>(null)
   const connaitre = (): Promise<boolean> => {
     lecture.current ??= appelerPlateforme<FileStorageState>({ methode: "GET", ressource: "files" }).then((lu) => {
@@ -129,12 +141,13 @@ function useStockage() {
         lecture.current = null
         return false
       }
+      hote.current = lu.data.hostTypes
       setActif(lu.data.enabled)
       return lu.data.enabled
     })
     return lecture.current
   }
-  return { actif, connaitre }
+  return { actif, connaitre, typesDeLHote: () => hote.current }
 }
 
 /** Un envoi en cours, montré dans son bloc local : le fichier, sa progression (0 à 1), le refus traduit. */

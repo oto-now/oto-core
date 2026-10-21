@@ -4,12 +4,12 @@
 // ou d'un `.csv` ; importer un CSV, déposé ou joint, en tableau sous la page, puis citer ce tableau après le bloc.
 // Chacun applique une opération pure du modèle, confie à la file ce qui doit partir, et signale la frappe à la
 // publication seule. Sans lui, `actions.ts` et `gestes-du-menu.ts` dépasseraient les 300 lignes d'ESLint.
-import { fileExtension, fileTypeOf, FILE_TYPES } from "../../../schemas"
+import { fileExtension } from "../../../schemas"
 import { filePath } from "../../../schemas/files"
 import { lireUnFichier } from "../../api/client"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { verrouille, type EtatDeLEditeur } from "./actions"
-import { blocDuFichier, EN_DEPOT, envoyerUnFichier, genreDe, messageDEnvoi, nommer, type Depot, type Genre } from "./envoi-de-fichier"
+import { admis, blocDuFichier, EN_DEPOT, envoyerUnFichier, genreDe, messageDEnvoi, nommer, typesAdmis, type Depot, type Genre } from "./envoi-de-fichier"
 import * as modeleDEdition from "./modele"
 import type { BlocEdite, Rangee } from "./modele"
 
@@ -60,7 +60,7 @@ export function gestesDesFichiers(etat: EtatDeLEditeur, deposerDuMarkdown: (cle:
     void envoyerUnFichier(envois.chemin, fichier, (part) => changerLeDepot(cle, { progression: part }), controleur.signal).then((issue) => {
       fichiers.controleurs.current.delete(cle)
       if ("annule" in issue) return
-      if ("erreur" in issue) return changerLeDepot(cle, { erreur: messageDEnvoi(issue.erreur, fichier) })
+      if ("erreur" in issue) return changerLeDepot(cle, { erreur: messageDEnvoi(issue.erreur, fichier, fichiers.stockage.typesDeLHote()) })
       oublierLeDepot(cle)
       // Le bloc local retiré entre-temps : rien ne s'écrit ; le fichier reste lié à la page (ADR-016 § 6).
       if (existe(cle)) ecrireApres(cle, blocDuFichier(issue.pret), true)
@@ -79,15 +79,16 @@ export function gestesDesFichiers(etat: EtatDeLEditeur, deposerDuMarkdown: (cle:
 
   /**
    * Un fichier lâché sur un bloc (AC-b1, AC-b2, AC-b5) : stockage désactivé, le dépôt d'E10-S01 seul ; un `.md` ou un
-   * `.csv`, le choix ; tout autre type admis, joint ; un type refusé, dit sous le bloc.
+   * `.csv`, le choix ; tout autre type admis, du paquet ou de l'hôte, joint ; un type refusé, dit sous le bloc.
    */
   async function deposer(cle: string, fichier: File) {
     if (!(await fichiers.stockage.connaitre())) return deposerDuMarkdown(cle, fichier)
     const extension = fileExtension(fichier.name)
     if (extension === "md" || extension === "csv") return fichiers.setDialogue({ genre: "depot", cle, fichier, extension })
-    if (fileTypeOf(fichier.name) !== null) return joindre(cle, fichier)
+    const hote = fichiers.stockage.typesDeLHote()
+    if (admis(fichier.name, hote)) return joindre(cle, fichier)
     if (extension === "markdown") return deposerDuMarkdown(cle, fichier)
-    setErreur(cle, FICHIERS.typeRefuse(Object.keys(FILE_TYPES).join(", ")))
+    setErreur(cle, FICHIERS.typeRefuse(typesAdmis(hote).join(", ")))
   }
 
   /** Une image collée (AC-b1) : jointe après le bloc ; stockage désactivé, la phrase d'AC-b7. */
@@ -111,6 +112,8 @@ export function gestesDesFichiers(etat: EtatDeLEditeur, deposerDuMarkdown: (cle:
   const fermer = () => fichiers.setDialogue(null)
   return {
     connaitreLesFichiers: () => void fichiers.stockage.connaitre(),
+    /** Les types qu'ouvrent les lecteurs de l'hôte, appris avec l'état du stockage. */
+    typesDeLHote: fichiers.stockage.typesDeLHote,
     /** « Image » ou « Fichier » du « + » (AC-b1, AC-b2) : le dialogue qui dit types et limites avant la sélection (AC-b4). */
     choisirUnFichier: (cle: string, quoi: Genre) => (verrouille(etat) ? undefined : fichiers.setDialogue({ genre: "choisir", cle, quoi })),
     /** Le fichier choisi par « Image » ou « Fichier » : joint, sans choix au dépôt (AC-b5). */

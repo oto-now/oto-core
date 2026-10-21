@@ -87,9 +87,9 @@ function megabytes(bytes: number): string {
   return `${Math.round((bytes / MB) * 10) / 10} MB`
 }
 
-/** L'état du stockage, pour l'écran (AC-a7, HN-E10S02-6). */
+/** L'état du stockage et les types de l'hôte, pour l'écran (AC-a7, HN-E10S02-6) ; le dépôt reste jugé par `admittedType`. */
 export function fileStorageState(): FileStorageState {
-  return { enabled: fileStore() !== null }
+  return { enabled: fileStore() !== null, hostTypes: hostExtensions() }
 }
 
 /**

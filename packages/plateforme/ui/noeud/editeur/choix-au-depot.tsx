@@ -12,7 +12,7 @@ import { ImportDeFichier, ZoneDeDepot } from "../../coque/import-de-fichier"
 import { Dialog } from "../../ds/react/dialog"
 import { Button } from "../../ds/react/primitives"
 import { FICHIERS } from "../libelles-des-fichiers"
-import { ACCEPTES, LIMITES, type DialogueDeFichier, type Genre } from "./envoi-de-fichier"
+import { accepteDe, limitesDe, type DialogueDeFichier, type Genre } from "./envoi-de-fichier"
 import { useGestes } from "./gestes"
 import { ChoixDeLIntegration } from "./integration-editee"
 import type { OptionDuDepot } from "./gestes-des-fichiers"
@@ -32,9 +32,10 @@ const OPTIONS: Record<"md" | "csv", readonly (readonly [OptionDuDepot, string])[
 /** « Image » ou « Fichier » du « + » (AC-b1, AC-b2, AC-b4) : les types et les limites, puis la zone de dépôt. */
 function ChoixDuFichier({ quoi }: { quoi: Genre }) {
   const gestes = useGestes()
+  const hote = gestes.typesDeLHote()
   return (
     <Dialog open onClose={gestes.fermerLeDialogue} title={quoi === "image" ? FICHIERS.titreImage : FICHIERS.titreFichier} size="md">
-      <ZoneDeDepot limites={LIMITES[quoi]} accepte={ACCEPTES[quoi]} choisir={gestes.fichierChoisi} />
+      <ZoneDeDepot limites={limitesDe(quoi, hote)} accepte={accepteDe(quoi, hote)} choisir={gestes.fichierChoisi} />
     </Dialog>
   )
 }

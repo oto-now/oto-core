@@ -32,6 +32,12 @@ describe("markdown of attached files (AC-d1)", () => {
     expect([fileSizeText(1), fileSizeText(2)]).toEqual(["1 byte", "2 bytes"])
   })
 
+  it("should give the extension of a host type as the type of its line, never its mime; the mime of a name without extension (lot 1b)", () => {
+    const dxf: BlockInput = { type: "file", text: null, data: { file_id: FILE, name: "Plan RDC.DXF", size: 1200, mime: "image/vnd.dxf" } }
+    const bare: BlockInput = { type: "file", text: null, data: { file_id: FILE, name: "plan", size: 1200, mime: "image/vnd.dxf" } }
+    expect([renderBlock(dxf), renderBlock(bare)]).toEqual([`[Plan RDC.DXF (1,200 bytes, dxf)](/api/platform/files/${FILE})`, `[plan (1,200 bytes, image/vnd.dxf)](/api/platform/files/${FILE})`])
+  })
+
   it.each([
     ["the origin of read", ORIGIN],
     ["another origin", "http://localhost:3000/api/platform/files"],

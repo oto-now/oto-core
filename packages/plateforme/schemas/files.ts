@@ -162,8 +162,11 @@ export type TransitFileUpload = FileUpload & { expiresAt: string }
 /** Un fichier en transit confirmé (`ready`), et son échéance. */
 export type TransitFile = FileReady & { expiresAt: string }
 
-/** L'état du stockage (`GET files`, AC-a7, HN-E10S02-6). */
-export type FileStorageState = { enabled: boolean }
+/**
+ * L'état du stockage (`GET files`, AC-a7, HN-E10S02-6) et les extensions qu'ouvrent au dépôt les lecteurs de l'hôte
+ * (`registerReaders`, `lecture-des-fichiers.md` § Types de l'hôte), sans le point : l'éditeur les admet avec `FILE_TYPES`.
+ */
+export type FileStorageState = { enabled: boolean; hostTypes: string[] }
 
 /** Le stockage sert-il encore l'objet d'un fichier lisible (`GET files/<id>?check`, AC-b8, HN-E10S02-43) ? */
 export type FileAvailability = { available: boolean }

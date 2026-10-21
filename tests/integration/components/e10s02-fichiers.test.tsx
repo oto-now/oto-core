@@ -5,7 +5,7 @@ import { FILE_TYPES, fileTypeOf, ORG_QUOTA_BYTES, type BlockView } from "../../.
 import { IMPORT } from "../../../packages/plateforme/ui/coque/libelles"
 import { tailleLisible } from "../../../packages/plateforme/ui/format/nombres"
 import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { ACCEPTES, LIMITES } from "../../../packages/plateforme/ui/noeud/editeur/envoi-de-fichier"
+import { accepteDe, limitesDe } from "../../../packages/plateforme/ui/noeud/editeur/envoi-de-fichier"
 import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
 import { FICHIERS } from "../../../packages/plateforme/ui/noeud/libelles-des-fichiers"
 import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
@@ -23,6 +23,8 @@ type Appel = { methode: string; adresse: string; corps: Record<string, unknown> 
 type Stockage = {
   /** `GET files` : le stockage est-il activé ? */
   actif?: boolean
+  /** `GET files` : les types qu'ouvrent les lecteurs de l'hôte. */
+  hote?: string[]
   /** Un refus de `POST files`. */
   refus?: { statut: number; code: string; details?: Record<string, unknown> }
   /** `GET files/<id>?check` : le stockage sert-il le fichier, ou le refus de la route (`not_found`) ? */
@@ -37,7 +39,7 @@ const IMAGE = bloc("f5000000-0000-4000-8000-000000000005", "image", null, { file
 const reponse = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
 /** `fetch` simulé : l'état du stockage, la demande et la confirmation d'un envoi, la route de lecture, les écritures d'une page et d'un tableau. */
-function simulerLeStockage({ actif = true, refus, disponible = true, octets = "" }: Stockage = {}) {
+function simulerLeStockage({ actif = true, hote = [], refus, disponible = true, octets = "" }: Stockage = {}) {
   const appels: Appel[] = []
   let insertions = 0
   vi.stubGlobal(
@@ -47,7 +49,7 @@ function simulerLeStockage({ actif = true, refus, disponible = true, octets = ""
       const url = String(adresse)
       const corps = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null
       appels.push({ methode, adresse: url, corps })
-      if (url === "/api/platform/files" && methode === "GET") return reponse(200, { data: { enabled: actif } })
+      if (url === "/api/platform/files" && methode === "GET") return reponse(200, { data: { enabled: actif, hostTypes: hote } })
       if (url === "/api/platform/files") {
         if (refus) return reponse(refus.statut, { error: { code: refus.code, message: "refused", ...(refus.details ? { details: refus.details } : {}) } })
         return reponse(201, { data: { id: ID_FICHIER, upload: { url: "https://stockage.test/objet-signe", headers: { "content-type": String(corps?.mime) } } } })
@@ -238,9 +240,9 @@ describe("EditeurDeBlocs — an image (AC-b1)", () => {
     expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((ligne) => ligne.textContent).slice(-5)).toEqual(["Tableau simple", "Séparateur", FICHIERS.image, FICHIERS.fichier, "Iframe"])
     fireEvent.click(screen.getByRole("menuitem", { name: FICHIERS.image }))
     const dialogue = screen.getByRole("dialog", { name: FICHIERS.titreImage })
-    expect(dialogue).toHaveTextContent(LIMITES.image)
+    expect(dialogue).toHaveTextContent(limitesDe("image", []))
     const champ = within(dialogue).getByLabelText(new RegExp(IMPORT.zone))
-    expect([champ.getAttribute("type"), champ.getAttribute("accept")]).toEqual(["file", ACCEPTES.image])
+    expect([champ.getAttribute("type"), champ.getAttribute("accept")]).toEqual(["file", accepteDe("image", [])])
     await act(async () => {
       fireEvent.change(champ, { target: { files: [png()] } })
     })
@@ -327,6 +329,37 @@ describe("EditeurDeBlocs — width and enlargement (AC-b3)", () => {
     fireEvent(dialogue, new Event("cancel"))
     expect(screen.queryByRole("dialog")).toBeNull()
     expect(document.activeElement).toBe(image)
+  })
+})
+
+describe("EditeurDeBlocs — a type of the host (lecteurs de fichiers, lot 1b)", () => {
+  const dxf = () => new File([new Uint8Array(64)], "plan.dxf", { type: "" })
+
+  it("should join a dropped .dxf when a host reader registers it, and offer it in « Fichier »", async () => {
+    const { appels } = simulerLeStockage({ hote: ["dxf"] })
+    render(<Editeur />)
+    await act(async () => {
+      deposer(rangeeDe(champDuTexte()), dxf())
+    })
+    await waitFor(() => expect(EnvoiSimule.envois).toHaveLength(1))
+    expect(appels.find((un) => un.adresse === "/api/platform/files" && un.methode === "POST")?.corps).toEqual({ node: "ventes/modele_relance", name: "plan.dxf", mime: "", size: 64 })
+    const plus = screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" })
+    act(() => plus.focus())
+    fireEvent.click(plus)
+    fireEvent.click(await screen.findByRole("menuitem", { name: FICHIERS.fichier }))
+    const dialogue = screen.getByRole("dialog", { name: FICHIERS.titreFichier })
+    expect(dialogue).toHaveTextContent(limitesDe("fichier", ["dxf"]))
+    expect(within(dialogue).getByLabelText(new RegExp(IMPORT.zone)).getAttribute("accept")).toBe(accepteDe("fichier", ["dxf"]))
+  })
+
+  it("should refuse a dropped .dxf under the block when no host reader registers it, without asking the service", async () => {
+    const { appels } = simulerLeStockage()
+    render(<Editeur />)
+    await act(async () => {
+      deposer(rangeeDe(champDuTexte()), dxf())
+    })
+    expect(await screen.findByText(FICHIERS.typeRefuse(Object.keys(FILE_TYPES).join(", ")))).toBeInTheDocument()
+    expect([EnvoiSimule.envois, appels.filter((un) => un.methode === "POST")]).toEqual([[], []])
   })
 })
 

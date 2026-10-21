@@ -9,7 +9,7 @@ import { readText, startDeadline } from "../../packages/plateforme/server/files/
 import { defineReader, registerReaders } from "../../packages/plateforme/server/files/readers/registry"
 import { TEXT_READERS } from "../../packages/plateforme/server/files/readers/text"
 import { READER_LIMITS, type Reader, type ReaderDocument } from "../../packages/plateforme/server/files/readers/types"
-import { admittedType, checkSize, readResponse } from "../../packages/plateforme/server/files/service"
+import { admittedType, checkSize, fileStorageState, readResponse } from "../../packages/plateforme/server/files/service"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 
 const NUL = String.fromCharCode(0)
@@ -70,6 +70,17 @@ describe("registerReaders", () => {
     expect(() => admittedType("plan.dwg")).toThrow(/plan\.dwg: this type of file is not admitted\. Admitted extensions: .*, dxf\./u)
     // 50 Mo pour un type d'hôte, comme un format binaire : la borne de 4 Mo ne vaut que pour un texte du paquet.
     expect(() => checkSize("plan.dxf", "dxf", READER_LIMITS.textBytes + 1)).not.toThrow()
+  })
+
+  it("should tell the editor the host types by GET files, and still refuse at deposit a type no reader registered, whatever the client sends (lot 1b)", () => {
+    expect(fileStorageState().hostTypes).toEqual([])
+    registerReaders([planReader({})])
+    expect(fileStorageState().hostTypes).toEqual(["dxf"])
+    // Un client qui se croit autorisé (liste périmée, appel direct) : le service juge seul, par l'extension.
+    expect(() => admittedType("plan.dwg")).toThrow("plan.dwg: this type of file is not admitted.")
+    registerReaders([])
+    expect(fileStorageState().hostTypes).toEqual([])
+    expect(() => admittedType("plan.dxf")).toThrow("plan.dxf: this type of file is not admitted.")
   })
 
   it("should serve a host type as a download at its declared mime, disposition=inline ignored", () => {

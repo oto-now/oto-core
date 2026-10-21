@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Lecteurs de fichiers, lot 1b : l'éditeur admet les types de l'hôte
+**À appliquer :** rien (ni migration, ni dépendance, ni variable, ni route).
+**Quoi :** `GET files` rend aussi `hostTypes`, les extensions qu'ouvrent les lecteurs de l'hôte (`registerReaders`) ; l'éditeur les apprend avec l'état du stockage, au premier geste, et admet un tel fichier au dépôt et dans « Fichier » du « + », qui les cite avant le choix ; le refus d'un type traduit les cite aussi. Le service reste juge (`admittedType`). La ligne de page d'un fichier joint (`renderBlock`) donne l'extension de son nom (`dxf`), plus le type MIME d'un type d'hôte.
+**Pourquoi :** issue des lecteurs de fichiers (#63), lot 1b décidé le 21/10 : l'éditeur refusait dans le navigateur un type que l'API, le lien et le transit admettaient ; au strict minimum, sans nouveau composant (les écrans quittent oto-core).
+**Fichiers :** `packages/plateforme/schemas/{files,blocks-render}.ts`, `packages/plateforme/server/files/service.ts`, `packages/plateforme/ui/noeud/editeur/{envoi-de-fichier,gestes-des-fichiers}.ts`, `packages/plateforme/ui/noeud/editeur/choix-au-depot.tsx`, `packages/plateforme/CHANGELOG.md`, `tests/unit/{ui-envoi-de-fichier,lecteurs-de-fichiers,e10s02-markdown-fichiers,api-files}.test.ts`, `tests/integration/components/e10s02-fichiers.test.tsx`, `docs/conception/lecture-des-fichiers.md`.
+
 ## [2026-10-21] — Une seule migration par version publiée, à chaque tag
 **À appliquer :** avant de poser un tag, le pilote fusionne les migrations ajoutées depuis le tag précédent en un seul `<horodatage>_vX_Y_Z.sql` (procédure de `database-patterns.md § Règles`) ; sinon `publish.yml` refuse la publication.
 **Quoi :** la règle « un seul fichier de migration par version », qui ne visait que les versions mineures, vaut pour chaque tag, corrective comprise ; un pas de `publish.yml` compte les fichiers `.sql` ajoutés à `packages/plateforme/migrations` depuis le tag précédent et refuse au-delà d'un ; la fiche et `CLAUDE.md` (§ Vérifier, commiter, pousser) le disent.

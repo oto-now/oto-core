@@ -24,6 +24,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ### Hosts
 - Server: `registerReaders([...])` and `defineReader({ types, read })` add readers for formats the host reads (a plan, a 3D model); each type a reader declares, and it alone, is admitted at deposit, up to 50 MB, and always served as a download. A package type (`md`, `pdf`…), a page, script or program extension, a type read twice, or a MIME type a browser renders or runs is refused at registration (`TypeError`).
 - Server: `read {file}` reads through the readers under 10 seconds and 2 million characters, an outline over 12,000; a reader's status (`READER_STATUSES`) is served as a refusal; `READER_LIMITS` gives the bounds.
+- UI: the page editor admits a file of a type your readers register (drop, « Fichier », the types listed before the choice), learnt from `GET files`, which now returns `{ enabled, hostTypes }`; a page line shows the file's extension (`dxf`), not its MIME type.
 
 ## 1.5.1 — 2026-10-21
 
