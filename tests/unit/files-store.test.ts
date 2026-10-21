@@ -184,7 +184,16 @@ describe("admitted types and limits", () => {
       null,
       null,
     ])
-    expect(Object.keys(FILE_TYPES)).toEqual(["png", "jpeg", "jpg", "gif", "webp", "svg", "pdf", "csv", "txt", "md", "html", "docx", "xlsx", "pptx", "odt", "ods", "zip"])
+    expect(Object.keys(FILE_TYPES)).toEqual(["png", "jpeg", "jpg", "gif", "webp", "svg", "pdf", "csv", "txt", "md", "html", "docx", "xlsx", "pptx", "odt", "ods", "zip", "mp3", "wav", "m4a", "ogg"])
+  })
+
+  it("should admit the audio types, by extension, at their media type (decided on 21/10)", () => {
+    expect([fileTypeOf("appel.MP3"), fileTypeOf("appel.wav"), fileTypeOf("note.m4a"), fileTypeOf("note.ogg")].map((type) => type && FILE_TYPES[type])).toEqual([
+      "audio/mpeg",
+      "audio/wav",
+      "audio/mp4",
+      "audio/ogg",
+    ])
   })
 
   it("should hold 50 MB per file, 4 MB per text file, 10 GB per organisation", () => {
@@ -225,6 +234,15 @@ describe("readResponse (AC-a5)", () => {
       attachment("notes.md"),
       attachment("archive.zip"),
       attachment("note.docx"),
+    ])
+  })
+
+  it("should serve the audio types as an attachment, never inline, disposition=inline ignored", () => {
+    expect([read("appel.mp3", true), read("appel.wav"), read("note.m4a", true), read("note.ogg")]).toEqual([
+      { contentType: "audio/mpeg", disposition: "attachment; filename*=UTF-8''appel.mp3" },
+      attachment("appel.wav"),
+      attachment("note.m4a"),
+      attachment("note.ogg"),
     ])
   })
 

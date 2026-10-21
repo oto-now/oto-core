@@ -17,6 +17,7 @@ import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./au
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, errorTable, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { asyncProblem, costProblem } from "./cost-declaration"
+import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { callerTransitFiles, filesProblem } from "./multipart"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
@@ -239,7 +240,8 @@ function describedCall(prepared: PreparedFunction, context: FunctionContext): De
     console.error(`[platform] call: ${prepared.fn.name} without a resolved account`)
     throw new PlatformError("internal", "Internal error.")
   }
-  return { credential: context.credential, accountId: context.account.id, ...(prepared.fn.request.files ? { files: callerTransitFiles(context) } : {}) }
+  const files = prepared.fn.request.files !== undefined || prepared.fn.output?.file !== undefined
+  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context) } : {}) }
 }
 
 /** Une fonction décrite au contrat du catalogue : origine `connecteur`, exemples sans titre, exécution par le moteur. */
@@ -311,7 +313,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -363,7 +365,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
  * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre, coût (`cost`) et travail
- * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`) ; enfin la sonde et
+ * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
+ * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts`) ; enfin la sonde et
  * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au

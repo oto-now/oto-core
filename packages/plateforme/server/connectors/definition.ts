@@ -235,12 +235,32 @@ export type ConnectorPagination = {
   readonly maxPages: number
 }
 
+/**
+ * Le fichier que rend une fonction (`connecteurs-et-comptes.md` § Fichiers rendus par un tiers), rangé en fichier en
+ * transit de l'appelant, dont seul l'identifiant revient à l'assistant. `from` : où sont les octets, le corps de la
+ * réponse (`body`), une adresse que porte la réponse JSON au chemin `path`, téléchargée aussitôt (`url`), ou un champ
+ * encodé (`base64`, `base64url`). `auth` (`url` seulement) : `account`, l'authentification du compte, vers l'origine de
+ * l'adresse de base seulement ; `none` par défaut. `types` : extension → types MIME que le tiers peut annoncer, le
+ * premier celui du paquet (`FILE_TYPES`). `name` : un en-tête (`Content-Disposition` selon la RFC 6266), un champ, puis
+ * le gabarit sur les arguments requis, toujours là. `maxBytes` : 50 Mo au plus, et par défaut.
+ */
+export type ConnectorFileOutput = {
+  readonly from: "body" | "url" | "base64" | "base64url"
+  readonly path?: string
+  readonly auth?: "none" | "account"
+  readonly types: { readonly [extension: string]: readonly string[] }
+  readonly name: { readonly header?: string; readonly path?: string; readonly template: string }
+  readonly maxBytes?: number
+}
+
 export type ConnectorOutput = {
   readonly items?: string
   readonly strip?: readonly string[]
   readonly projection?: readonly string[]
   /** La forme d'un enregistrement, que la fabrique écrit ; ignorée par le moteur. */
   readonly schema?: ConnectorJsonSchema
+  /** Le fichier que rend la fonction, exclusif des quatre autres clés ; toute autre clé est refusée à la déclaration. */
+  readonly file?: ConnectorFileOutput
 }
 
 /** Contrôle des arguments avant l'appel : rien n'est envoyé s'il échoue. */

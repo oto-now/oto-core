@@ -145,7 +145,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect({ code: disabled.code, named: STORAGE_VARIABLES.every((name) => disabled.message?.includes(name)) }).toEqual({ code: "not_enabled", named: true })
       expect(unreadable).toMatchObject({ code: "not_found", message: expect.stringContaining("Unknown path ventes/f_ordre") })
       expect(readOnly).toMatchObject({ code: "forbidden", message: "Writing ventes/f_ordre is reserved to team Ventes (lead: Claire Morel). Ask them for access." })
-      expect(badType).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("Admitted extensions: png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip") })
+      expect(badType).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("Admitted extensions: png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg.") })
       expect([tooBig.code, tooBigText.code, empty.code]).toEqual(["too_large", "too_large", "too_large"])
       expect(spies.flatMap((spy) => fileInserts(spy.sent))).toEqual([])
     })
@@ -421,17 +421,19 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const withBom = await readyFile(node, "notes.md", new Uint8Array([0xef, 0xbb, 0xbf, ...bytesOf("# Été\n")]))
       const latin1 = await readyFile(node, "ancien.txt", new Uint8Array([0x45, 0x74, 0xe9]))
       const pdf = await readyFile(node, "rapport.pdf", bytesOf("%PDF"))
+      const audio = await readyFile(node, "appel.mp3", bytesOf("ID3"))
       const absent = await readyFile(node, "perdu.csv", null)
       const huge = await readyFile(node, "gros.csv", new Uint8Array(TEXT_FILE_MAX_BYTES + 1).fill(0x61))
 
       const readFile = (file: string) => readNode(claire.db, claire.identity, { path: "ventes/f_texte", file })
       const read = await readFile(withBom)
-      const refusals = await Promise.all([latin1, pdf, absent, huge].map((id) => outcome(readFile(id))))
+      const refusals = await Promise.all([latin1, pdf, audio, absent, huge].map((id) => outcome(readFile(id))))
       expect({ text: read.text, refusals: refusals.map((refusal) => ({ code: refusal.code, message: refusal.message })) }).toEqual({
         text: "notes.md (11 bytes)\n\n```markdown\n# Été\n\n```",
         refusals: [
           { code: "invalid_arguments", message: "ancien.txt cannot be read: the file is not UTF-8; download it instead (unsupported)." },
           { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt, csv and xlsx files are read as text." },
+          { code: "invalid_arguments", message: "appel.mp3 is a mp3 file; only html, md, txt, csv and xlsx files are read as text." },
           { code: "not_found", message: "Unknown file." },
           { code: "too_large", message: "gros.csv is over 4 MB: download it instead." },
         ],

@@ -12,7 +12,7 @@ import { FICHIERS } from "../../packages/plateforme/ui/noeud/libelles-des-fichie
 describe("messageDEnvoi (AC-b4)", () => {
   const rapport = { name: "rapport.pdf", size: 1200 }
   it.each([
-    ["invalid_arguments", undefined, { name: "setup.exe", size: 3 }, FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip")],
+    ["invalid_arguments", undefined, { name: "setup.exe", size: 3 }, FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg")],
     // Une extension admise : le service a refusé le nom, pas le type.
     ["invalid_arguments", undefined, { name: `rapport${String.fromCodePoint(1)}.pdf`, size: 3 }, FICHIERS.nomRefuse],
     ["too_large", undefined, { name: "gros.pdf", size: 60_000_000 }, FICHIERS.tropLourd("50 Mo", "4 Mo")],
@@ -28,7 +28,7 @@ describe("messageDEnvoi (AC-b4)", () => {
 
   it("should name the host types in a refused type, and take a refused host type for a refused name (lot 1b)", () => {
     const refus = { code: "invalid_arguments", statut: 400 }
-    expect(messageDEnvoi(refus, { name: "setup.exe", size: 3 }, ["dxf"])).toBe(FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, dxf"))
+    expect(messageDEnvoi(refus, { name: "setup.exe", size: 3 }, ["dxf"])).toBe(FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg, dxf"))
     expect(messageDEnvoi(refus, { name: "plan.dxf", size: 3 }, ["dxf"])).toBe(FICHIERS.nomRefuse)
   })
 
@@ -41,13 +41,13 @@ describe("limitesDe (AC-b4)", () => {
   it("should say the admitted types and the limits of schemas/files.ts, never written in figures", () => {
     expect([tailleLisible(FILE_MAX_BYTES), tailleLisible(TEXT_FILE_MAX_BYTES), tailleLisible(ORG_QUOTA_BYTES)]).toEqual(["50 Mo", "4 Mo", "10 Go"])
     expect(limitesDe("image", ["dxf"])).toBe(FICHIERS.limitesImage(".png, .jpeg, .jpg, .gif, .webp, .svg", "50 Mo"))
-    expect(limitesDe("fichier", [])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip", "50 Mo", "4 Mo"))
+    expect(limitesDe("fichier", [])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip, .mp3, .wav, .m4a, .ogg", "50 Mo", "4 Mo"))
   })
 
   it("should admit and offer the types the host readers open, after those of the package, and only them (lot 1b)", () => {
     expect([admis("Plan RDC.DXF", ["dxf"]), admis("plan.dxf", []), admis("plan.dwg", ["dxf"]), admis("rapport.pdf", [])]).toEqual([true, false, false, true])
-    expect(limitesDe("fichier", ["dxf", "stl"])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip, .dxf, .stl", "50 Mo", "4 Mo"))
-    expect([accepteDe("fichier", ["dxf"]).endsWith(".zip,.dxf"), accepteDe("image", ["dxf"])]).toEqual([true, ".png,.jpeg,.jpg,.gif,.webp,.svg"])
+    expect(limitesDe("fichier", ["dxf", "stl"])).toBe(FICHIERS.limitesFichier(".png, .jpeg, .jpg, .gif, .webp, .svg, .pdf, .csv, .txt, .md, .html, .docx, .xlsx, .pptx, .odt, .ods, .zip, .mp3, .wav, .m4a, .ogg, .dxf, .stl", "50 Mo", "4 Mo"))
+    expect([accepteDe("fichier", ["dxf"]).endsWith(".zip,.mp3,.wav,.m4a,.ogg,.dxf"), accepteDe("image", ["dxf"])]).toEqual([true, ".png,.jpeg,.jpg,.gif,.webp,.svg"])
   })
 })
 

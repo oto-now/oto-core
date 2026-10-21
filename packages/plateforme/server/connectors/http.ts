@@ -2,12 +2,14 @@
 // vers l'API d'un tiers, au rythme que le tiers admet par compte, un délai, un nouvel essai borné après un 429, et la
 // table d'erreurs du connecteur traduite en `PlatformError`. Sans lui, le moteur recopierait l'appel, le délai et la
 // traduction des statuts. Le secret arrive dans les en-têtes que le moteur pose et ne sort jamais d'ici : ni dans un
-// message, ni dans un log, ni comme cause d'une erreur ; aucun en-tête ni aucune adresse n'est journalisé.
+// message, ni dans un log, ni comme cause d'une erreur ; aucun en-tête ni aucune adresse n'est journalisé. Un fichier
+// rendu par un tiers (`file-output.ts`) s'y lit en octets, corps de la réponse (`requestFile`) ou adresse téléchargée
+// (`requestDownload`), sous le même délai, lecture du corps comprise, et sous sa borne.
 import { readBounded } from "../bounded-read"
 import { PlatformError, type PlatformErrorCode } from "../errors"
 
 /** Une réponse plus grosse ne se lit pas : le résultat d'un outil tient de toute façon en 45 000 caractères. */
-const MAX_ANSWER_BYTES = 4 * 1024 * 1024
+export const MAX_ANSWER_BYTES = 4 * 1024 * 1024
 
 /** Après un 429 : deux nouveaux essais au plus, chacun après le `Retry-After` du tiers s'il ne dépasse pas 10 s. */
 const MAX_RETRIES = 2
@@ -123,6 +125,39 @@ function retryWait(answer: Response): number | null {
   return ms <= MAX_RETRY_WAIT_MS ? Math.max(ms, 0) : null
 }
 
+/**
+ * Le délai de chaque réponse reçue : il court jusqu'à la fin de la lecture de son corps, et une lecture coupée par lui se
+ * dit comme le délai, quel que soit le transport (le transport gardé ne lève pas `TimeoutError` sur un corps coupé).
+ */
+const deadlines = new WeakMap<Response, AbortSignal>()
+
+/** L'erreur d'une lecture de corps : la raison du délai s'il est échu, sinon l'erreur telle quelle. */
+function readFailure(answer: Response, error: unknown): unknown {
+  const deadline = deadlines.get(answer)
+  return deadline?.aborted ? deadline.reason : error
+}
+
+/** Le transport d'une requête, et le refus d'un transfert coupé hors délai (un téléchargement), au lieu de la panne. */
+type Transport = { fetcher: Fetch; interrupted?: () => PlatformError }
+
+/**
+ * Une requête sous le délai du tiers, sans redirection ; une panne de `fetch` se dit sans la requête, ou par
+ * `interrupted` si le transport en donne un et que le délai n'est pas échu (une redirection refusée, une coupure).
+ */
+async function deliver(api: ConnectorApi, url: string, init: Pick<RequestInit, "method" | "headers" | "body">, transport: Transport): Promise<Response> {
+  const signal = AbortSignal.timeout(api.timeoutMs)
+  try {
+    const answer = await transport.fetcher(url, { ...init, redirect: "error", signal })
+    deadlines.set(answer, signal)
+    return answer
+  } catch (error) {
+    // Un refus du transport (adresse saisie gardée, `address-guard.ts`) se dit tel quel.
+    if (error instanceof PlatformError) throw error
+    if (transport.interrupted && !signal.aborted) throw transport.interrupted()
+    throw unreachable(api, error)
+  }
+}
+
 async function send(api: ConnectorApi, request: ApiRequest, fetcher: Fetch): Promise<Response> {
   const query = request.query?.length ? `?${new URLSearchParams(request.query.map(([key, value]) => [key, value])).toString()}` : ""
   const headers: Record<string, string> = { accept: "application/json", ...request.headers }
@@ -132,19 +167,7 @@ async function send(api: ConnectorApi, request: ApiRequest, fetcher: Fetch): Pro
   const body = request.form !== undefined ? new URLSearchParams(request.form.map(([key, value]) => [key, value])).toString() : request.body
   const sent = request.raw !== undefined ? request.raw.bytes : body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body)
   await pace(request.pacingKey, api.rateLimit)
-  try {
-    return await fetcher(`${api.baseUrl}${request.path}${query}`, {
-      method: request.method,
-      headers,
-      body: sent,
-      redirect: "error",
-      signal: AbortSignal.timeout(api.timeoutMs),
-    })
-  } catch (error) {
-    // Un refus du transport (adresse saisie gardée, `address-guard.ts`) se dit tel quel.
-    if (error instanceof PlatformError) throw error
-    throw unreachable(api, error)
-  }
+  return deliver(api, `${api.baseUrl}${request.path}${query}`, { method: request.method, headers, body: sent }, { fetcher })
 }
 
 /**
@@ -164,14 +187,10 @@ async function errorBody(api: ConnectorApi, answer: Response): Promise<unknown> 
 }
 
 /**
- * Envoie la requête au tiers et rend le JSON de sa réponse, `null` pour une réponse vide. Un 429 se rejoue deux fois au
- * plus, après le `Retry-After` du tiers s'il tient en 10 s. Refus : statut hors 2xx, la première ligne de la table
- * d'erreurs du connecteur qui s'applique (une ligne à condition, si son corps la satisfait), sinon `rate_limited` (429)
- * ou `upstream_error` ; un 2xx dont le corps satisfait une ligne à condition de son statut (un refus sous un 200) ;
- * panne, délai dépassé, réponse trop grosse ou illisible : `upstream_error`. `resign` : après un 401, la requête signée
- * de neuf (un jeton renouvelé), envoyée une fois de plus.
+ * La réponse 2xx du tiers à la requête : un 401 rejoué une fois sur une requête signée de neuf (`resign`), un 429 deux
+ * fois au plus ; hors 2xx, le refus de la table d'erreurs (`errorOf`).
  */
-export async function requestJson(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, resign?: () => Promise<ApiRequest>): Promise<unknown> {
+async function answered(api: ConnectorApi, request: ApiRequest, fetcher: Fetch, resign?: () => Promise<ApiRequest>): Promise<Response> {
   let answer = await send(api, request, fetcher)
   if (answer.status === 401 && resign) {
     await answer.body?.cancel()
@@ -189,7 +208,26 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
     console.error(`[platform] connector ${api.label}: status ${answer.status}`)
     throw errorOf(api, answer.status, body)
   }
-  const value = await readAnswer(api, answer)
+  return answer
+}
+
+/** La borne d'une réponse JSON, et le refus au-delà ; les 4 Mo d'une réponse ordinaire à défaut. */
+export type AnswerBound = { maxBytes: number; tooLarge: () => PlatformError }
+
+/** Ce qui s'ajoute à une requête : sa signature de neuf après un 401 (`resign`), et une autre borne que 4 Mo (`bound`). */
+export type RequestOptions = { resign?: () => Promise<ApiRequest>; bound?: AnswerBound }
+
+/**
+ * Envoie la requête au tiers et rend le JSON de sa réponse, `null` pour une réponse vide. Un 429 se rejoue deux fois au
+ * plus, après le `Retry-After` du tiers s'il tient en 10 s. Refus : statut hors 2xx, la première ligne de la table
+ * d'erreurs du connecteur qui s'applique (une ligne à condition, si son corps la satisfait), sinon `rate_limited` (429)
+ * ou `upstream_error` ; un 2xx dont le corps satisfait une ligne à condition de son statut (un refus sous un 200) ;
+ * panne, délai dépassé, réponse trop grosse ou illisible : `upstream_error`. `resign` : après un 401, la requête signée
+ * de neuf (un jeton renouvelé), envoyée une fois de plus. `bound` : une autre borne que 4 Mo (un fichier en base64).
+ */
+export async function requestJson(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, options: RequestOptions = {}): Promise<unknown> {
+  const answer = await answered(api, request, fetcher, options.resign)
+  const value = await readAnswer(api, answer, options.bound)
   const refused = rowOf(api, answer.status, value)
   if (refused) {
     console.error(`[platform] connector ${api.label}: status ${answer.status} refused by its body`)
@@ -198,16 +236,19 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
   return value
 }
 
-/** Le JSON d'une réponse, borné à 4 Mo, `null` pour une réponse vide ; trop grosse ou illisible : `upstream_error`. */
-async function readAnswer(api: ConnectorApi, answer: Response): Promise<unknown> {
+/**
+ * Le JSON d'une réponse, borné à 4 Mo (ou à `bound`), `null` pour une réponse vide ; trop grosse (le refus de `bound`) ou
+ * illisible : `upstream_error`.
+ */
+async function readAnswer(api: ConnectorApi, answer: Response, bound?: AnswerBound): Promise<unknown> {
   let bytes: Uint8Array | null
   try {
-    bytes = answer.body ? await readBounded(answer.body, MAX_ANSWER_BYTES, () => null) : new Uint8Array()
+    bytes = answer.body ? await readBounded(answer.body, bound?.maxBytes ?? MAX_ANSWER_BYTES, () => null) : new Uint8Array()
   } catch (error) {
     // Le délai court jusqu'à la fin de la lecture du corps.
-    throw unreachable(api, error)
+    throw unreachable(api, readFailure(answer, error))
   }
-  if (bytes === null) throw new PlatformError("upstream_error", `${api.label} sent an answer too large to read. Narrow the request.`)
+  if (bytes === null) throw bound ? bound.tooLarge() : new PlatformError("upstream_error", `${api.label} sent an answer too large to read. Narrow the request.`)
   if (bytes.length === 0) return null
   try {
     return JSON.parse(new TextDecoder().decode(bytes))
@@ -215,6 +256,72 @@ async function readAnswer(api: ConnectorApi, answer: Response): Promise<unknown>
     console.error(`[platform] connector ${api.label}: answer is not JSON`)
     throw new PlatformError("upstream_error", `${api.label} sent an unreadable answer. Retry later.`)
   }
+}
+
+/**
+ * Un fichier lu dans une réponse : ses octets (`null` au-delà de la borne, annoncée par `content-length` ou comptée à la
+ * lecture), le type annoncé (`content-type`, tel quel) et les en-têtes, où se lit son nom.
+ */
+export type FileAnswer = { bytes: Uint8Array | null; type: string | null; headers: Headers }
+
+/**
+ * La lecture d'un fichier : sa borne ; `before`, le contrôle de la tête de la réponse (son type annoncé, son nom) avant
+ * toute lecture du corps ; `interrupted`, le refus d'un transfert coupé hors délai, au lieu de la panne.
+ */
+export type FileReading = { maxBytes: number; before: (head: Omit<FileAnswer, "bytes">) => void; interrupted?: () => PlatformError }
+
+/**
+ * Les octets d'une réponse 2xx, `maxBytes` au plus, après `before` : un `content-length` au-delà refuse sans rien lire,
+ * sinon la lecture s'arrête au premier octet de trop. Sous le délai de la requête, lecture comprise ; une panne :
+ * `upstream_error`, ou `interrupted`.
+ */
+async function readFileAnswer(api: ConnectorApi, answer: Response, reading: FileReading): Promise<FileAnswer> {
+  const found = { type: answer.headers.get("content-type"), headers: answer.headers }
+  const announced = Number(answer.headers.get("content-length") ?? Number.NaN)
+  const cancel = async () => answer.body?.cancel().catch(() => undefined)
+  try {
+    reading.before(found)
+  } catch (refused) {
+    await cancel()
+    throw refused
+  }
+  if (Number.isFinite(announced) && announced > reading.maxBytes) {
+    await cancel()
+    return { ...found, bytes: null }
+  }
+  try {
+    return { ...found, bytes: answer.body ? await readBounded(answer.body, reading.maxBytes, () => null) : new Uint8Array() }
+  } catch (error) {
+    if (reading.interrupted && !deadlines.get(answer)?.aborted) throw reading.interrupted()
+    throw unreachable(api, readFailure(answer, error))
+  }
+}
+
+/**
+ * Un fichier pour corps de la réponse du tiers (`output.file`, `from: body`) : la requête de `requestJson` (rythme, 429,
+ * 401 renouvelé, table d'erreurs), et sur un 2xx ses octets bornés à `maxBytes`, son type annoncé et ses en-têtes.
+ */
+export async function requestFile(api: ConnectorApi, request: ApiRequest, fetcher: Fetch, reading: FileReading & { resign?: () => Promise<ApiRequest> }): Promise<FileAnswer> {
+  return readFileAnswer(api, await answered(api, request, fetcher, reading.resign), reading)
+}
+
+/**
+ * Le téléchargement d'une adresse rendue par le tiers (`output.file`, `from: url`), par `fetcher` (le transport gardé),
+ * en `GET`, sous le délai du tiers, sans redirection ni rythme : hors 2xx, son statut seul, le corps jamais lu ; sinon le
+ * fichier borné à `maxBytes`. Ni l'adresse ni les en-têtes ne sont journalisés.
+ */
+export async function requestDownload(
+  api: ConnectorApi,
+  target: { url: string; headers: Readonly<Record<string, string>> },
+  fetcher: Fetch,
+  reading: FileReading,
+): Promise<{ status: number; file: FileAnswer | null }> {
+  const answer = await deliver(api, target.url, { method: "GET", headers: target.headers }, { fetcher, interrupted: reading.interrupted })
+  if (!answer.ok) {
+    await answer.body?.cancel().catch(() => undefined)
+    return { status: answer.status, file: null }
+  }
+  return { status: answer.status, file: await readFileAnswer(api, answer, reading) }
 }
 
 /** La réponse d'un point de jeton : son JSON, ou son statut et le code d'erreur OAuth qu'elle porte (`invalid_grant`). */

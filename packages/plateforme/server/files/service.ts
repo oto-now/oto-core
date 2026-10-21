@@ -166,7 +166,9 @@ export function admittedType(name: string): AdmittedType {
   if (type) return { type, mime: FILE_TYPES[type] }
   const host = hostFileType(fileExtension(name))
   if (host) return { type: host.extension, mime: host.mime }
-  throw new PlatformError("invalid_arguments", `${name}: this type of file is not admitted. Admitted extensions: ${boundedList([...Object.keys(FILE_TYPES), ...hostExtensions()])}.`)
+  // Les types du paquet, une liste fixe, tous nommés ; ceux de l'hôte, bornés comme toute liste qu'il allonge.
+  const admitted = [...Object.keys(FILE_TYPES), ...(hostExtensions().length > 0 ? [boundedList(hostExtensions())] : [])]
+  throw new PlatformError("invalid_arguments", `${name}: this type of file is not admitted. Admitted extensions: ${admitted.join(", ")}.`)
 }
 
 /**

@@ -5,7 +5,8 @@
 // json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
 // (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
 // tiers (`linkedId`, compte rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
-// (`multipart.ts`), consommé après un appel réussi. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
+// (`multipart.ts`), consommé après un appel réussi ; fichier rendu par la fonction (`output.file`, `file-output.ts`), rangé
+// en transit de l'appelant. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
 // l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
 import type { AccountMarkReason } from "../../schemas"
 import type { FunctionOutput, FunctionSummary } from "../catalog/define"
@@ -15,6 +16,7 @@ import { isJsonObject } from "../json"
 import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
 import type { ConnectorBodyCondition, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
+import { runFileOutput } from "./file-output"
 import { requestJson, type ApiError, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { consumeSent, uploadOf, type TransitFiles, type Upload } from "./multipart"
 import { resolveAddress, type AddressSpec } from "./settings"
@@ -37,7 +39,7 @@ export type PreparedFunction = {
  * Ce qu'il faut pour un appel : le compte résolu (champs, réglages, jeton), son identifiant (clé du rythme), et `fetch`.
  * `settlesMark` : l'appelant lève ou pose la marque du compte lui-même après un succès (la sonde à solde, qui juge le
  * solde lu) ; un refus qui marque la pose toujours ici. `files` : les fichiers en transit de l'appelant, pour une
- * fonction qui en envoie (`request.files`).
+ * fonction qui en envoie (`request.files`) ou qui en rend un (`output.file`, `keep`).
  */
 export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true; files?: TransitFiles }
 
@@ -137,6 +139,31 @@ function runChecks(fn: ConnectorFunctionDefinition, args: Record<string, unknown
       left.units * BigInt(10) ** BigInt(scale - left.scale) === right.units * BigInt(10) ** BigInt(scale - right.scale)
     if (!balanced) throw namedRefusal(fn, check.refusal, "invalid_arguments", " Nothing was sent.")
   }
+}
+
+/**
+ * Une requête de l'appel, telle que le moteur la passe à la lecture de sa réponse : le tiers, la requête signée, son
+ * transport, sa signature de neuf après un 401 ; `signature`, celle de la dernière requête signée ; `download`, le
+ * transport gardé d'une adresse rendue par le tiers ; `expect`, les contrôles de la réponse JSON.
+ */
+export type Exchange = {
+  api: ConnectorApi
+  request: ApiRequest
+  fetcher: Fetch
+  resign?: () => Promise<ApiRequest>
+  signature: () => Signature
+  download: Fetch
+  expect: (answer: unknown) => void
+}
+
+/** La lecture de la réponse d'une page : le JSON contrôlé (`readJson`), ou le fichier d'une sortie `output.file`. */
+export type AnswerReader = (exchange: Exchange) => Promise<unknown>
+
+/** La lecture d'une réponse JSON : `requestJson`, puis les contrôles de la réponse. */
+const readJson: AnswerReader = async (exchange) => {
+  const answer = await requestJson(exchange.api, exchange.request, exchange.fetcher, { resign: exchange.resign })
+  exchange.expect(answer)
+  return answer
 }
 
 /** Les contrôles de la réponse (`expect`) : le premier qui échoue rend son refus nommé au lieu de la réponse. */
@@ -249,12 +276,14 @@ export function pageCount(fn: ConnectorFunctionDefinition, args: Record<string, 
  * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf. État du
  * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`), sauf
  * quand l'appelant la décide (`settlesMark`). Fichiers (`request.files`) : lus avant tout envoi, consommés après un
- * appel réussi seulement, jamais après un refus ni un envoi ambigu (délai, panne, 5xx).
+ * appel réussi seulement, jamais après un refus ni un envoi ambigu (délai, panne, 5xx). `read` : la lecture de chaque
+ * réponse, JSON à défaut (le fichier d'une sortie `output.file`, `file-output.ts`, lu dans le même appel).
  */
 export async function executeDescribed(
   prepared: PreparedFunction,
   call: DescribedCall,
   args: Record<string, unknown>,
+  read: AnswerReader = readJson,
 ): Promise<{ answers: unknown[]; next: string | null }> {
   const { connector, fn } = prepared
   const { credential } = call
@@ -278,10 +307,15 @@ export async function executeDescribed(
   try {
     for (let page = 0; page < pages; page++) {
       const pageArgs = current
-      const signed = async (fresh: boolean) => buildRequest(prepared, pageArgs, await sign(signer, fresh), { accountId: call.accountId, upload })
+      let signature: Signature = { headers: {}, query: [] }
+      const signed = async (fresh: boolean) => {
+        signature = await sign(signer, fresh)
+        return buildRequest(prepared, pageArgs, signature, { accountId: call.accountId, upload })
+      }
       const resign = renewsOnUnauthorized(prepared.auth) ? () => signed(true) : undefined
-      const answer = await requestJson(api, await signed(false), fetcherFor(address.guarded), resign)
-      runExpectations(fn, answer)
+      const request = await signed(false)
+      const expect = (json: unknown) => runExpectations(fn, json)
+      const answer = await read({ api, request, fetcher: fetcherFor(address.guarded), resign, signature: () => signature, download: fetcherFor(true), expect })
       answers.push(answer)
       next = nextCursor(answer, pagination)
       if (next === null || prepared.cursorArgument === null) break
@@ -359,6 +393,8 @@ function itemsOf(prepared: PreparedFunction, answers: readonly unknown[], path: 
  */
 export async function runDescribed(prepared: PreparedFunction, call: DescribedCall, args: Record<string, unknown>): Promise<FunctionOutput> {
   const { fn, connector } = prepared
+  const file = fn.output?.file
+  if (file) return runFileOutput(prepared, call, args, file)
   const { answers, next } = await executeDescribed(prepared, call, args)
   const more =
     next !== null && prepared.cursorArgument !== null

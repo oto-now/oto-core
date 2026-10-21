@@ -6,7 +6,8 @@
 // consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
 // table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; à fonctions qui ont
 // leur délai propre (`timedConnector`) ; enfin à lot payant soumis puis relevé (`billedConnector`), coût à l'élément,
-// quantité relue et travail asynchrone ; et à dépôt d'un fichier en transit en corps multipart (`uploadConnector`).
+// quantité relue et travail asynchrone ; à dépôt d'un fichier en transit en corps multipart (`uploadConnector`) ; et à
+// fonctions qui rendent un fichier (`fileConnector`), par adresse, par corps et en base64.
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
@@ -438,4 +439,77 @@ export function uploadConnector(name = "crm"): ConnectorDefinition {
     output: { strip: ["url"] },
   }
   return { ...base, functions: [...base.functions, upload] }
+}
+
+/** Une fonction de lecture du connecteur de test qui rend un fichier, à un seul argument requis, entier. */
+function fileFunction(name: string, at: { short: string; argument: string; path: string }, file: NonNullable<ConnectorFunctionDefinition["output"]>["file"], extra: Partial<ConnectorFunctionDefinition> = {}): ConnectorFunctionDefinition {
+  const { short, argument, path } = at
+  return {
+    name: `${name}.${short}`,
+    connector: name,
+    class: "read",
+    act: false,
+    description: "Get a file of yours, kept 24 hours: the answer gives its file id, to pass as is to a function that takes a file. Never a link.",
+    schema: { type: "object", additionalProperties: false, required: [argument], properties: { [argument]: { type: "integer", minimum: 0 } } },
+    examples: [{ title: "One file", input: { [argument]: 42 } }],
+    refusals: [],
+    request: { method: "GET", path: `${path}/{${argument}}`, pathParams: [argument], query: {}, body: {}, headers: {} },
+    output: { file },
+    ...extra,
+  }
+}
+
+/**
+ * Le connecteur de test dont des fonctions rendent un fichier (`output.file`) : `get_call_recording`, l'adresse signée
+ * d'un enregistrement dans la fiche d'un appel, téléchargée sans authentification ; `download_recording`, l'audio pour
+ * corps, nommé par `Content-Disposition`, borné à 1 Ko ; `get_export`, un export en base64 nommé par un champ ;
+ * `get_attachment`, une pièce en base64url bornée à 64 octets ; `get_archive`, une adresse téléchargée avec
+ * l'authentification du compte, à l'origine de l'API seulement ; `get_slow_recording`, le corps sous un délai d'une seconde.
+ */
+export function fileConnector(name = "crm"): ConnectorDefinition {
+  const base = describedConnector(name)
+  return {
+    ...base,
+    functions: [
+      ...base.functions,
+      fileFunction(name, { short: "get_call_recording", argument: "call_id", path: "/calls" }, {
+        from: "url",
+        path: "call.recording",
+        types: { mp3: ["audio/mpeg", "audio/mp3"] },
+        name: { template: "call-{call_id}-recording.mp3" },
+      }),
+      fileFunction(name, { short: "download_recording", argument: "recording_id", path: "/recordings" }, {
+        from: "body",
+        types: { wav: ["audio/wav", "audio/x-wav", "audio/wave"], mp3: ["audio/mpeg"] },
+        name: { header: "Content-Disposition", template: "recording-{recording_id}.wav" },
+        maxBytes: 1024,
+      }),
+      fileFunction(name, { short: "get_export", argument: "export_id", path: "/exports" }, {
+        from: "base64",
+        path: "export.data",
+        types: { csv: ["text/csv"], pdf: ["application/pdf"] },
+        name: { path: "export.filename", template: "export-{export_id}.csv" },
+      }),
+      fileFunction(name, { short: "get_attachment", argument: "attachment_id", path: "/attachments" }, {
+        from: "base64url",
+        path: "data",
+        types: { pdf: ["application/pdf"] },
+        name: { template: "attachment-{attachment_id}.pdf" },
+        maxBytes: 64,
+      }),
+      fileFunction(name, { short: "get_archive", argument: "archive_id", path: "/archives" }, {
+        from: "url",
+        path: "archive.url",
+        auth: "account",
+        types: { zip: ["application/zip"] },
+        name: { header: "Content-Disposition", path: "archive.name", template: "archive-{archive_id}.zip" },
+      }),
+      fileFunction(
+        name,
+        { short: "get_slow_recording", argument: "recording_id", path: "/slow-recordings" },
+        { from: "body", types: { mp3: ["audio/mpeg"] }, name: { template: "slow-{recording_id}.mp3" } },
+        { timeoutMs: 1_000 },
+      ),
+    ],
+  }
 }

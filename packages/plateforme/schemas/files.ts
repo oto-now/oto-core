@@ -27,6 +27,11 @@ export const FILE_TYPES = {
   odt: "application/vnd.oasis.opendocument.text",
   ods: "application/vnd.oasis.opendocument.spreadsheet",
   zip: "application/zip",
+  // L'audio (décidé le 21/10) : admis pour tout fichier, joint ou en transit, servi en téléchargement, sans lecteur.
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
 } as const
 
 export type FileType = keyof typeof FILE_TYPES

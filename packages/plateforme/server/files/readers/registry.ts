@@ -19,7 +19,7 @@ const EXTENSION = /^[a-z0-9]{1,16}$/
  * Un type MIME bien formé (RFC 6838), en minuscules, sous un type de premier niveau qu'un fichier porte ; ni paramètre,
  * ni joker.
  */
-const MIME = /^(?:application|audio|font|image|model|text|video)\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/
+export const MEDIA_TYPE = /^(?:application|audio|font|image|model|text|video)\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/
 
 /**
  * Les extensions qu'un hôte n'ouvre jamais : une page ou un script qu'un navigateur rend ou exécute, un programme qu'un
@@ -33,8 +33,11 @@ const REFUSED_EXTENSIONS: ReadonlySet<string> = new Set([
   "docm", "dotm", "xlsm", "xltm", "xlam", "pptm", "potm", "ppam",
 ])
 
-/** Les types MIME qu'un navigateur rend en page ou exécute : jamais signés pour un type d'hôte. */
-const REFUSED_MIMES: ReadonlySet<string> = new Set([
+/**
+ * Les types MIME qu'un navigateur rend en page ou exécute : jamais signés pour un type d'hôte, ni déclarés par un fichier
+ * rendu par un tiers (`connectors/file-output.ts`).
+ */
+export const REFUSED_MIMES: ReadonlySet<string> = new Set([
   "text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml", "text/xsl", "application/xslt+xml",
   "text/javascript", "application/javascript", "application/x-javascript", "text/ecmascript", "application/ecmascript", "application/wasm",
 ])
@@ -65,7 +68,7 @@ function typeProblem(type: unknown, seen: ReadonlySet<string>): string | null {
   if (Object.hasOwn(FILE_TYPES, extension)) return `.${extension} is a type of the package: a host reader cannot redefine it.`
   if (REFUSED_EXTENSIONS.has(extension)) return `.${extension} is a page, a script or a program: it is never admitted.`
   if (seen.has(extension)) return `.${extension} is read by two readers.`
-  if (typeof mime !== "string" || !MIME.test(mime)) return `.${extension}: mime ${JSON.stringify(mime)} must be a lowercase media type such as model/stl, without parameters.`
+  if (typeof mime !== "string" || !MEDIA_TYPE.test(mime)) return `.${extension}: mime ${JSON.stringify(mime)} must be a lowercase media type such as model/stl, without parameters.`
   if (REFUSED_MIMES.has(mime)) return `.${extension}: ${mime} is rendered or run by a browser: declare the type of the format itself.`
   return null
 }

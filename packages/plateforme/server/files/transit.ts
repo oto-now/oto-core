@@ -4,13 +4,14 @@
 // et s'efface à son échéance ou à sa consommation. Seule la personne qui l'a fait entrer le lit : le service le décide en
 // filtrant sur elle avant toute URL, et la RLS le cache à tout autre (organisation, équipe, administrateur, équipe
 // plateforme). Le moteur court sous l'identité de la personne qui appelle, donc ne lit que les siens. Il compte au quota
-// de l'organisation jusqu'à son échéance (`rows.ts`). Sans lui, une pièce rendue par un connecteur ou envoyée à un
-// connecteur devrait être rangée sous une page, où toute l'équipe la lirait.
+// de l'organisation jusqu'à son échéance (`rows.ts`). Un fichier rendu par un tiers s'y range par le serveur
+// (`storeTransitFile`), sans URL d'envoi. Sans lui, une pièce rendue par un connecteur ou envoyée à un connecteur devrait
+// être rangée sous une page, où toute l'équipe la lirait.
 import { FILE_MAX_BYTES, fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput } from "../errors"
 import type { Identity } from "../identity"
-import { insertPending } from "./rows"
+import { insertPending, markReady } from "./rows"
 import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, readResponse, removeObjects, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
@@ -112,6 +113,32 @@ export async function readTransitBytes(db: PlatformDb, identity: Identity, fileI
   const url = await onStorage("read url", () => store.readUrl(objectKey(identity.org.id, row.id), { contentType: "application/octet-stream", disposition: "attachment" }))
   const bytes = await boundedBytes(url, row.name, FILE_MAX_BYTES)
   return { id: row.id, name: row.name, mime: row.mime, size: row.size, bytes }
+}
+
+/**
+ * Range en fichier en transit de l'appelant un fichier que le serveur a déjà lu en entier (la sortie d'une fonction de
+ * connecteur, `connecteurs-et-comptes.md` § Fichiers rendus par un tiers), pendant de `storeFile` sans nœud : purge des
+ * échus de l'organisation, stockage, type de l'extension (`admittedType`), taille (50 Mo pour tout type), ligne `pending`
+ * à l'échéance de `TRANSIT_HOURS` sous le quota et le verrou de l'organisation, objet écrit (`put`), puis `ready`. Un
+ * objet qui ne s'écrit pas efface la ligne et rend `internal` : aucun fichier partiel. Rend le fichier et son échéance.
+ */
+export async function storeTransitFile(db: PlatformDb, identity: Identity, file: { name: string; bytes: Uint8Array }): Promise<TransitFile> {
+  await purgeTransitFiles(db, identity)
+  const store = requireStore()
+  const size = file.bytes.byteLength
+  const { mime } = admittedType(file.name)
+  checkSize(file.name, null, size)
+  const { id, expiresAt } = await insertPending(db, identity, { nodeId: null, transitHours: TRANSIT_HOURS, name: file.name, mime, size })
+  if (expiresAt === null) throw new Error("[platform] files: a transit file was inserted without expiry")
+  try {
+    await onStorage("put", () => store.put(objectKey(identity.org.id, id), file.bytes, mime))
+  } catch (error) {
+    // La ligne part ; si même cela échoue, elle reste `pending`, illisible, et part avec les envois abandonnés.
+    await expireTransitFile(db, identity, id).catch(() => console.error(`[platform] files: transit row left pending ${objectKey(identity.org.id, id)}`))
+    throw error
+  }
+  await markReady(db, identity, { id, name: file.name }, { label: "files: transit kept", advice: "call the function again" })
+  return { id, name: file.name, size, mime, expiresAt }
 }
 
 /**

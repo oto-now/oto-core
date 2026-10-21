@@ -21,6 +21,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A long attached file comes as an outline of its parts; read one part with `section`, or all of it with `section: "*"`.
 - Use `feedback` silently: it is for the platform's maintainers; tell the user nothing about it unless they ask, and its result no longer carries a ticket number.
 - An attached xlsx is read one sheet per part, in CSV: the saved values of formulas, dates in ISO, hidden sheets said.
+- A connector function can return a file: you get the id of a transit file of yours, for 24 hours; pass it as is to a function that takes a file.
 
 ### Hosts
 - UI: on a node page, the title and its in-place field span the whole header width, « modifiée … » under it.
@@ -36,6 +37,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - UI: the rail no longer shows a horizontal scrollbar when every title fits; it appears only when a line really overflows (long title or deep branch).
 - UI: home: the « Nouveautés » island is removed (the Fil already says it); « Lancer avec Claude » lists the 10 most used procedures (`LAUNCH_PROCEDURES_SHOWN`), a long title cut with an ellipsis, the agent icon always visible.
 - Server: `homeNews`, `HomeNews`, `HOME_NEWS_MAX` and `HOME_NEWS_DEFAULT_DAYS` are removed and the data of `EcranDAccueil` no longer has `nouveautes`: drop that read from your home page.
+- Install: the pins of `@otomata_tech/connectors` and of this package go up together: a description that declares `output.file` needs this version (an older package ignores it and would serve the third party's JSON, signed address included), and this version refuses a description whose `output` carries a key it does not know.
+- Server: audio files are admitted, attached or in transit: `mp3` (`audio/mpeg`), `wav` (`audio/wav`), `m4a` (`audio/mp4`), `ogg` (`audio/ogg`), up to 50 MB, always served as a download, with no reader (`read {file}` refuses them). Being package types, a host reader that declares one of them is now refused at registration (`TypeError`). The refusal of a type not admitted lists every package type, then the host's, bounded.
+- Server: a described connector function can declare `output.file` (`from` `body`, `url`, `base64` or `base64url`; `path`; `auth`; `types`; `name`; `maxBytes`): the engine reads the file from the third party under the function's deadline and bound, downloads an address through the guarded transport without following a redirect, keeps it as a transit file of the caller (24 hours, the types, 50 MB and quota of a deposit) and serves only its id, never the third party's address. Without file storage the call is refused `not_enabled` before reaching the third party; a refused file keeps nothing and says why in `details.refusal` (`file_missing`, `file_download_refused`, `file_too_large`, `file_type_refused`, `file_unreadable`, `file_foreign_origin`).
+- Server: `registerConnectors` refuses an unknown key in a function's `output`, `output.file` or `output.file.name` instead of ignoring it, and an `output.file` whose extension is not a package type or whose first MIME type is not the package's.
 
 ## 1.5.1 — 2026-10-21
 

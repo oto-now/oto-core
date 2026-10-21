@@ -6,15 +6,20 @@
 // dans une erreur ; un log ne nomme que la fonction.
 import type { FunctionContext } from "../catalog/define"
 import { PlatformError } from "../errors"
-import { expireTransitFile, readTransitBytes, type TransitBytes } from "../files/transit"
+import type { TransitFile } from "../../schemas"
+import { expireTransitFile, readTransitBytes, storeTransitFile, type TransitBytes } from "../files/transit"
 import { isJsonObject } from "../json"
 import type { ConnectorFunctionDefinition } from "./definition"
 import type { RawBody } from "./http"
 
-/** Les fichiers en transit de l'appelant, tels que le moteur les lit et les consomme. */
+/**
+ * Les fichiers en transit de l'appelant, tels que le moteur les lit, les consomme, et range celui qu'une fonction rend
+ * (`keep`, `connecteurs-et-comptes.md` § Fichiers rendus par un tiers).
+ */
 export type TransitFiles = {
   read(id: unknown): Promise<TransitBytes>
   consume(id: string): Promise<void>
+  keep(file: { name: string; bytes: Uint8Array }): Promise<TransitFile>
 }
 
 /** Les fichiers en transit de la personne qui appelle, sous son identité : jamais ceux d'un autre. */
@@ -22,6 +27,7 @@ export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identi
   return {
     read: (id) => readTransitBytes(context.db, context.identity, id),
     consume: (id) => expireTransitFile(context.db, context.identity, id),
+    keep: (file) => storeTransitFile(context.db, context.identity, file),
   }
 }
 
