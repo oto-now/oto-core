@@ -21,6 +21,7 @@ import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { callerTransitFiles, filesProblem } from "./multipart"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
+import { stripProblem } from "./output"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
 import { signalProblem } from "./signal-declaration"
@@ -313,7 +314,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn)
+    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -366,7 +367,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
  * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre, coût (`cost`) et travail
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
- * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts`) ; enfin la sonde et
+ * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,
+ * comme la règle 18 de la fabrique) ; enfin la sonde et
  * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au

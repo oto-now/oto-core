@@ -3,7 +3,7 @@
 // requête composée (en-têtes du connecteur, puis constantes et arguments de la fonction, authentification en dernier ;
 // chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode ; `encode:
 // json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
-// (`output`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
+// (`output`, chemins de `strip` compris, `output.ts`) et texte du résultat composé ici ; adresse résolue sur les réglages du compte et sur son identité chez le
 // tiers (`linkedId`, compte rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
 // (`multipart.ts`), consommé après un appel réussi ; fichier rendu par la fonction (`output.file`, `file-output.ts`), rangé
 // en transit de l'appelant. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
@@ -19,6 +19,7 @@ import type { ConnectorBodyCondition, ConnectorDefinition, ConnectorFunctionDefi
 import { runFileOutput } from "./file-output"
 import { requestJson, type ApiError, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { consumeSent, uploadOf, type TransitFiles, type Upload } from "./multipart"
+import { shaped } from "./output"
 import { resolveAddress, type AddressSpec } from "./settings"
 
 /** Une fonction décrite prête à courir, préparée une fois à la déclaration (`declaration.ts`). */
@@ -367,13 +368,6 @@ function markWriteFailed(mark: AccountMarker, effect: "mark_failed" | "lift_fail
   const name = failure instanceof PlatformError ? failure.code : failure instanceof Error ? failure.name : typeof failure
   console.error(`[platform] ${where}: mark ${effect === "lift_failed" ? "not lifted" : "not set"} (${name})`)
   mark.effect = effect
-}
-
-/** Un enregistrement taillé par `output` : clés de `strip` retirées, puis seules celles de `projection` gardées. */
-function shaped(record: unknown, fn: ConnectorFunctionDefinition): unknown {
-  const { strip, projection } = fn.output ?? {}
-  if (!isJsonObject(record) || (!strip && !projection)) return record
-  return Object.fromEntries(Object.entries(record).filter(([key]) => !strip?.includes(key) && (!projection || projection.includes(key))))
 }
 
 /** Les éléments de la liste de chaque page (`output.items`) ; une page sans liste est une réponse inattendue. */
