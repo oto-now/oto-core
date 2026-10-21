@@ -32,19 +32,7 @@ const ROOT = process.env.VERIFY_RECEIPT_ROOT ?? join(dirname(fileURLToPath(impor
 // écrivait dans le vrai reçu un document déclarant les 4 checks passés alors que seul vitest
 // avait tourné : un `pnpm test` interrompu laissait derrière lui un reçu valide, et le gate
 // autorisait un commit sans que type-check ni lint n'aient jamais été lancés.
-//
-// Une autre racine que celle du script — un worktree visé par `cd <dir> &&` ou `git -C <dir>`,
-// passé par le hook — a toujours SON reçu : l'override n'y vaut pas, sinon le reçu de test ou
-// celui du checkout principal validerait un arbre qu'il n'a jamais vu (E05-S01).
-const memeRacine = (a, b) => {
-  const norm = (p) => (process.platform === 'win32' ? resolve(p).toLowerCase() : resolve(p))
-  return norm(a) === norm(b)
-}
-const receiptPath = (root = ROOT) =>
-  memeRacine(root, ROOT) && process.env.VERIFY_RECEIPT_PATH
-    ? process.env.VERIFY_RECEIPT_PATH
-    : join(root, '.claude/.verify-receipt.json')
-const RECEIPT = receiptPath()
+const RECEIPT = process.env.VERIFY_RECEIPT_PATH ?? join(ROOT, '.claude/.verify-receipt.json')
 const MAX_AGE_MS = 60 * 60 * 1000 // 1 h : au-delà, l'environnement a pu bouger (deps, node)
 
 // Documents de méthode écrits APRÈS les checks, par la finalisation puis par `commit-push` :
@@ -190,8 +178,8 @@ function readReceipt(path = RECEIPT) {
 }
 
 /** @returns {{valid: boolean, reason: string, receipt: object|null}} */
-export function checkReceipt(root = ROOT) {
-  const receipt = readReceipt(receiptPath(root))
+export function checkReceipt() {
+  const receipt = readReceipt(RECEIPT)
   if (!receipt) return { valid: false, reason: "aucun reçu — les checks n'ont pas été lancés", receipt: null }
 
   // Un reçu tronqué, vide ou daté n'importe comment affichait « reçu périmé (NaN min) » :
@@ -211,7 +199,7 @@ export function checkReceipt(root = ROOT) {
 
   let current
   try {
-    current = worktreeHash(root)
+    current = worktreeHash()
   } catch (error) {
     return { valid: false, reason: `empreinte de l'arbre illisible : ${error.message}`, receipt }
   }

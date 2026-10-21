@@ -51,9 +51,6 @@ const eslintConfig = [
       "packages/plateforme/mcp/widgets/generated.ts",
       // Script du worker des lecteurs, assemblé par le même script.
       "packages/plateforme/server/files/readers/worker/generated.ts",
-      // Worktrees des vagues d'exécution autonome (copies du dépôt, avec leurs builds) : chacun
-      // passe son propre `pnpm verify` ; le lint du checkout principal ne les relit pas.
-      ".claude/worktrees/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),

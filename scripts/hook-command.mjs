@@ -46,6 +46,3 @@ function parcourir(commande, outil, traiterChaine) {
 /** Commande dont chaque chaîne est vidée : ce qui reste est ce que le shell exécute. */
 export const neutraliser = (commande, outil) =>
   parcourir(commande, outil, (texte) => texte[texte[0] === '@' ? 1 : 0].repeat(2))
-
-/** Commande dont les chaînes sont gardées (les chemins cités) et chaque `&` suivi du nom du programme. */
-export const nommerLesAppels = (commande, outil) => parcourir(commande, outil, (texte) => texte)

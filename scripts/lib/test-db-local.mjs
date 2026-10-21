@@ -2,7 +2,7 @@
  * La base de test locale (M62) : un Postgres 16 natif du poste, à la place du projet Supabase, pour les
  * suites portables de Vitest (`PLATFORM_TEST_DB=local`, `vitest.config.ts`). Ce que ça empêche : un
  * `pnpm verify` de ~20 min, fait surtout d'allers-retours vers le projet distant ; et, une base par
- * checkout, qu'une migration d'un worktree change la base des autres.
+ * dossier (le checkout, chaque export), qu'une migration d'un export change la base des autres.
  *
  * Le cluster appartient à l'utilisateur, sans service ni mot de passe : `%LOCALAPPDATA%\oto-pg16\data`,
  * port 55432, écoute sur 127.0.0.1 seul, authentification `trust` (le job `bare-postgres` de la CI fait
@@ -22,7 +22,7 @@ const HOST = '127.0.0.1'
 const HOME = join(process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '.', '.local'), 'oto-pg16')
 const DATA = join(HOME, 'data')
 
-/** Le nom de la base d'un checkout : `test_` puis le nom de son dossier (`test_oto_platform`, `test_agent_…`). */
+/** Le nom de la base d'un dossier : `test_` puis son nom (`test_oto_platform`, `test_oto_core_export_…`). */
 export function localDatabaseName(root) {
   return `test_${basename(root).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.slice(0, 63)
 }

@@ -20,10 +20,6 @@ const CONV = join(ROOT, '.method/conventions')
 const SKILLS = join(ROOT, '.claude/skills')
 const CHECKLISTS = join(ROOT, '.method/checklists')
 const INDEX = join(CONV, '_index.md')
-// Worktrees des agents en cours (copies du dépôt ; chacune passe son propre `pnpm verify`), exclus
-// comme dans eslint.config.mjs. Lancé depuis le checkout principal, le parcours y lisait le travail
-// en cours des autres agents, et échouait en ENOENT sur un worktree supprimé pendant son passage (M07).
-const WORKTREES = join(ROOT, '.claude/worktrees')
 
 const errors = []
 const warnings = []
@@ -37,7 +33,6 @@ const walk = (dir, out = []) => {
   for (const e of readdirSync(dir)) {
     if (['node_modules', '.git', '.next', 'dist', 'coverage'].includes(e)) continue
     const p = join(dir, e)
-    if (p === WORKTREES) continue
     if (statSync(p).isDirectory()) walk(p, out)
     // Séparateurs POSIX : toutes les comparaisons du checker (exclusions, registry ↔ src/,
     // dédup de routes) sont écrites en `/` — en `\` elles échouaient toutes sous Windows.

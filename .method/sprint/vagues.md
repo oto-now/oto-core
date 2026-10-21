@@ -1,8 +1,8 @@
 # Vagues de stories menées sans JB
 
 Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Ready de
-[`status.md`](status.md), chacun dans son worktree, puis fusionne. Ces règles s'ajoutent à
-`CLAUDE.md` ; le sémaphore des commandes lourdes et le script de workflow vivent hors du dépôt.
+[`status.md`](status.md), chacun dans son export de `main` (`CLAUDE.md § Vérifier, commiter, pousser`),
+puis fusionne. Ces règles s'ajoutent à `CLAUDE.md` ; le sémaphore des commandes lourdes et le script de workflow vivent hors du dépôt.
 
 ## Pilote et agents
 
@@ -13,7 +13,7 @@ Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Rea
   jamais `max`, qui épuise les limites de session.
 - **Un agent neuf par étape** (implémentation, correction, revue, recalage), avec un résumé court de
   l'étape d'avant. Des tâches Micro ou S sans migration, prêtes ensemble, partent dans un seul agent
-  et un seul worktree, l'une après l'autre, avec une seule vérification et une seule fusion.
+  et un seul export, l'une après l'autre, avec une seule vérification et une seule fusion.
 - **Hypothèses, jamais bloquantes.** Face à une ambiguïté, l'agent prend l'option la plus proche des
   documents de `docs/conception/`, sinon la plus simple, et l'écrit sourcée dans la section
   « Hypothèses » de la story ; le pilote la reporte dans le document de conception du sujet. Ce qui
@@ -41,9 +41,10 @@ Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Rea
 
 ## Parallélisme
 
-- Une story démarre dès que ses dépendances sont **approuvées** par la revue : son worktree part de
-  `main` plus leur diff approuvé, et se recale sur `main` après leur fusion ; la fusion suit l'ordre
-  des dépendances.
+- Une story démarre dès que ses dépendances sont **approuvées** par la revue : son export part de
+  `main` plus leur diff approuvé, et se recale après leur fusion (un nouvel export de `main`, où son
+  diff se réapplique) ; la fusion suit l'ordre des dépendances. Le pilote crée l'export de chaque
+  agent et lui en donne le chemin ; aucun agent n'est lancé en `isolation: "worktree"`.
 - Deux stories en cours ne touchent jamais la même migration, la même table ni le même fichier
   source, sauf les **fichiers d'ajout**, réconciliés à trois voies à la fusion : `schemas/index.ts`,
   `server/index.ts`, `ui/index.ts`, la table de dispatch d'`api/handler.ts`, la base simulée et les
@@ -69,8 +70,8 @@ Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Rea
 
 ## Base de test et migrations
 
-- Chaque worktree reçoit une copie de `.env.local`. Les tests tournent sur la base locale du poste
-  (`testing-strategy.md § Base de test locale`), le `verify` de la fusion aussi ; les fichiers qu'il
+- Chaque export reçoit une copie de `.env.local`. Les tests tournent sur la base locale du poste, une
+  base par export (`testing-strategy.md § Base de test locale`), le `verify` de la fusion aussi ; les fichiers qu'il
   saute tournent sur le projet Supabase partagé, avec des données jetables (`CLAUDE.md § Vérifier,
   commiter, pousser`, `testing-strategy.md § Base de test`).
 - **Une seule migration non fusionnée appliquée à la fois au projet partagé** (Ⓜ dans `status.md`),
@@ -98,8 +99,8 @@ Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Rea
   ni d'AC devient une tâche de suite en issue GitHub, et la story fusionne ; une HAUTE, ou une
   MOYENNE de sécurité, de droits ou d'AC, la bloque. Une tâche sans story reçoit en revue les
   hypothèses et les écarts de son rapport : un reste qu'il ne source pas est un critère non livré.
-- **Fusion** : le diff de la branche s'applique sur `main` (le gate bloque `git merge` et
-  `git rebase`), sans commit ni `verify`. Quand JB veut commiter, toutes les stories fusionnées
+- **Fusion** : le diff de l'export, pris contre sa base, s'applique au checkout principal (le gate
+  bloque `git merge` et `git rebase`), sans commit ni `verify`. Quand JB veut commiter, toutes les stories fusionnées
   passent ensemble : un `pnpm verify` sur `main`, puis un commit qui les nomme toutes ; les
   migrations Ⓜ sont appliquées avant le `verify`, dans l'ordre de leurs horodatages.
 - **Signature changée** : une story qui change une signature exportée ou un type partagé casse les
@@ -112,9 +113,8 @@ Quand JB demande d'avancer sans lui, un pilote lance un agent par story 🟢 Rea
 ## Reprise d'un workflow interrompu
 
 - `resumeFromRunId` ne rend en cache que le plus long préfixe inchangé d'appels `agent()` : un appel
-  modifié relance tous les suivants, et un appel `isolation: "worktree"` relancé échoue sur le nom du
-  worktree existant. Un run se reprend donc avec le script et les arguments inchangés ; sinon, un
-  nouveau workflow reçoit en première étape le worktree et la branche de chaque story déjà
+  modifié relance tous les suivants. Un run se reprend donc avec le script et les arguments inchangés ;
+  sinon, un nouveau workflow reçoit en première étape le chemin de l'export de chaque story déjà
   implémentée.
 - Un agent perdu (limite de session) arrête sa story, statut `interrupted` ; un statut
   `blocked-review` se vérifie sur les verdicts rendus avant d'être cru. Un agent repris relit d'abord

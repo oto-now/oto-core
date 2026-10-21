@@ -38,7 +38,7 @@ Texte complet : `.method/conventions/testing-strategy.md`. La fiche suffit pour 
 - Un filtre à plusieurs conditions a un cas écarté par chaque condition seule et un cas sur chaque borne. § Anti-patterns
 - Une lecture qui dépend du mode de l'hôte (Supabase ou OIDC) se teste pendant que l'autre source répond autrement. § Anti-patterns
 - `page.getByRole("alert")` se filtre par `hasText` (l'annonceur de route de Next est aussi une alerte). § Anti-patterns
-- Avant une campagne Playwright, le serveur du port 3000 est celui du worktree ; avant `pnpm verify`, aucun `.next/` (serveur arrêté, `test-results/` et `playwright-report/` supprimés), y compris après le retrait d'une page. § Anti-patterns
+- Avant une campagne Playwright, le serveur du port 3000 est celui du dossier testé ; avant `pnpm verify`, aucun `.next/` (serveur arrêté, `test-results/` et `playwright-report/` supprimés), y compris après le retrait d'une page. § Anti-patterns
 - Un caractère invisible ne s'écrit jamais en littéral : échappement (`"\u202e"`), `\p{Zl}` ou `\p{Zp}` dans une expression, `String.fromCodePoint` dans une chaîne. § Anti-patterns
 - Une doublure de base sans `order()` rend un autre ordre que celui de la clé ; le test compare la liste entière lue. § Anti-patterns
 - Quand un module chargé par la fabrique importe `m`, `vi.mock(m)` simule `m` entier, sans `importOriginal`. § Anti-patterns

@@ -7,5 +7,5 @@
 # copies restent en LF sur tout checkout, sinon Windows (autocrlf) les fait diverger.
 LICENSE text eol=lf
 # Instantanés de Vitest : il les réécrit en LF, et un checkout CRLF (autocrlf) les montrait
-# modifiés dans chaque worktree après un `pnpm test` (M09).
+# modifiés après un `pnpm test` (M09).
 *.snap text eol=lf

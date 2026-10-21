@@ -12,7 +12,7 @@ const localMode = process.env.PLATFORM_ADMIN_DATABASE_URL === localUrls(root).ad
 describe("local test database", () => {
   it("should name one database per checkout, from its folder", () => {
     expect(localDatabaseName("/apps/oto-platform")).toBe("test_oto_platform")
-    expect(localDatabaseName("/apps/oto-platform/.claude/worktrees/agent-a5d1")).toBe("test_agent_a5d1")
+    expect(localDatabaseName("/tmp/oto-core-export-a5d1")).toBe("test_oto_core_export_a5d1")
   })
 
   it("should reach the server as platform_app and the tests as postgres, without any password", () => {

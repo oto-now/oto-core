@@ -26,9 +26,6 @@
  * sécurité — quelqu'un de déterminé écrira le reçu à la main.
  */
 
-import { execFileSync } from 'node:child_process'
-import { resolve } from 'node:path'
-
 const MARKER = /#\s*checks-ok\s*$/
 
 // Le programme git, quelle que soit sa graphie : `Git` (le nom d'un programme ne distingue pas la
@@ -50,8 +47,8 @@ const GIT = '(?<![\\w.`-])[gG][iI][tT](?:\\.[eE][xX][eE])?'
 async function chargerLaLecture() {
   try {
     const lecture = await import('../../scripts/hook-command.mjs')
-    if (typeof lecture.neutraliser === 'function' && typeof lecture.nommerLesAppels === 'function') return { lecture }
-    return { raison: "il n'exporte plus `neutraliser` et `nommerLesAppels`" }
+    if (typeof lecture.neutraliser === 'function') return { lecture }
+    return { raison: "il n'exporte plus `neutraliser`" }
   } catch (erreur) {
     return { raison: erreur instanceof Error ? erreur.message : String(erreur) }
   }
@@ -62,36 +59,6 @@ const LECTURE_ILLISIBLE = (raison) => `BLOQUÉ: scripts/hook-command.mjs ne se c
 Sans lui, le gate ne lit plus les commandes : il refuse toute commande qui cite git, au lieu de la
 laisser passer sans contrôle. Réparer scripts/hook-command.mjs avec l'outil Edit ou Write, ou dans un
 terminal hors de Claude Code (git checkout -- scripts/hook-command.mjs), puis relancer la commande.`
-
-/**
- * Le dépôt que la commande VISE : `cd <dir> &&` en tête, puis `git -C <dir>`, depuis le cwd de
- * la session. Le hook tourne depuis le dossier de la session ; sans ce calcul, un commit lancé
- * dans un worktree était jugé sur le reçu du checkout principal — refusé même après un `pnpm
- * verify` vert, ou accepté sur un arbre jamais vérifié (E05-S01). `undefined` : racine du script.
- * PowerShell 5.1 n'a pas `&&` : `cd <dir>;` et `Set-Location [-Path] <dir>;` y visent le dossier (M09).
- */
-function racineVisee(command, cwd) {
-  const chemin = (m) => (m ? (m[1] ?? m[2] ?? m[3]) : undefined)
-  // Git Bash écrit `/c/apps/…` ; git.exe lancé par Node attend `c:/apps/…`.
-  const natif = (p) => (process.platform === 'win32' ? p.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : p)
-  const ARG = `(?:"([^"]+)"|'([^']+)'|([^\\s;&|]+))`
-  let dir = cwd
-  const cd = chemin(
-    new RegExp(`^\\s*(?:cd|Set-Location)(?:\\s+-(?:Literal)?Path)?\\s+${ARG}\\s*(?:&&|;|\\r?\\n)`, 'i').exec(command)
-  )
-  if (cd) dir = resolve(dir, natif(cd))
-  const c = chemin(new RegExp(`${GIT}\\s+(?:-{1,2}[^\\s]+(?:\\s+[^-\\s][^\\s]*)?\\s+)*?-C\\s+${ARG}`).exec(command))
-  if (c) dir = resolve(dir, natif(c))
-  if (!cd && !c) return undefined
-  try {
-    return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-  } catch {
-    return undefined
-  }
-}
 
 /** Les 4 checks que `pnpm verify` enchaîne. Un reçu qui n'en déclare pas la totalité est refusé. */
 const CHECKS_REQUIS = ['check:framework', 'type-check', 'lint', 'test']
@@ -116,12 +83,10 @@ process.stdin.on('data', (c) => (raw += c))
 process.stdin.on('end', async () => {
   let command = ''
   let outil
-  let cwd = process.cwd()
   try {
     const payload = JSON.parse(raw)
     command = payload?.tool_input?.command ?? ''
     outil = payload?.tool_name
-    if (typeof payload?.cwd === 'string') cwd = payload.cwd
   } catch {
     process.exit(0) // payload illisible : ne pas bloquer un appel qu'on ne comprend pas
   }
@@ -134,7 +99,7 @@ process.stdin.on('end', async () => {
     if (/\bgit\b/i.test(command)) deny(LECTURE_ILLISIBLE(raison))
     process.exit(0)
   }
-  const { neutraliser, nommerLesAppels } = lecture
+  const { neutraliser } = lecture
 
   const marked = MARKER.test(command)
 
@@ -210,7 +175,7 @@ process.stdin.on('end', async () => {
   let receipt
   try {
     receipt = await import('../../scripts/verify-receipt.mjs').then((m) =>
-      m.checkReceipt(racineVisee(nommerLesAppels(command, outil), cwd))
+      m.checkReceipt()
     )
   } catch {
     process.exit(0) // outillage absent ou illisible : ne pas bloquer sur le framework lui-même

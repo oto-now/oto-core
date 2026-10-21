@@ -6,11 +6,8 @@ import path from "path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 /**
- * `pnpm check:framework` fait partie de `pnpm verify`, donc du gate des fusions sur main. Lancé
- * depuis le checkout principal, il parcourait aussi `.claude/worktrees/`, où vivent les worktrees
- * des agents en cours : 1 444 des 1 589 fichiers .md qu'il lisait en venaient le 2026-09-24. Il a
- * échoué en ENOENT quand un worktree a été supprimé pendant son parcours, et pouvait remonter une
- * erreur d'un travail en cours ailleurs (M07).
+ * `pnpm check:framework` fait partie de `pnpm verify`, donc du gate des fusions sur main : il se lance
+ * ici sur un dépôt jetable.
  */
 
 const root = path.resolve(__dirname, "../..")
@@ -89,15 +86,10 @@ describe("check-framework on a throwaway repository", { timeout: 30_000 }, () =>
     expect(result.stdout).toContain(erreurDe("docs/brouillon.md"))
   })
 
-  it("should still read the markdown files under .claude/ outside the worktrees", () => {
+  it("should read the markdown files under .claude/", () => {
     const result = checkFramework(repo({ ".claude/skills/dev/notes.md": citationMorte }))
     expect(result.status).toBe(1)
     expect(result.stdout).toContain(erreurDe(".claude/skills/dev/notes.md"))
-  })
-
-  it("should not read a markdown file under .claude/worktrees/", () => {
-    const result = checkFramework(repo({ ".claude/worktrees/autre-agent/docs/brouillon.md": citationMorte }))
-    expect(result.status, result.output).toBe(0)
   })
 
   it.each<[string, Record<string, string>, string]>([
@@ -214,16 +206,6 @@ describe("check-framework on a throwaway repository", { timeout: 30_000 }, () =>
     ["a Map keyed by a variable", "etats.set(etat, 1)\n"],
   ])("should let %s through", (_cas, contenu) => {
     const result = checkFramework(repo({ "src/lib/texte.ts": contenu }))
-    expect(result.status, result.output).toBe(0)
-  })
-
-  it("should not stat the entries of .claude/worktrees/, which vanish when a worktree is removed", () => {
-    const at = repo()
-    // Un lien vers un dossier absent (junction sous Windows) : readdirSync le liste, statSync lève
-    // ENOENT — l'état d'un worktree supprimé entre ces deux appels.
-    fs.mkdirSync(path.join(at, ".claude/worktrees"))
-    fs.symlinkSync(path.join(at, "absent"), path.join(at, ".claude/worktrees/supprime"), "junction")
-    const result = checkFramework(at)
     expect(result.status, result.output).toBe(0)
   })
 })

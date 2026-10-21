@@ -321,46 +321,6 @@ describe("verify-receipt", { timeout: RECEIPT_TIMEOUT }, () => {
     }
   })
 
-  it("juge un commit sur le reçu du dépôt qu'il vise (`cd <dir> &&`, `git -C <dir>`)", () => {
-    // Un worktree a son propre arbre et son propre reçu. Le gate lisait toujours celui du
-    // checkout de la session : un commit dans le worktree était refusé après un `pnpm verify`
-    // vert, et aurait été accepté sur un arbre jamais vérifié si l'autre reçu était frais (E05-S01).
-    const repo = join(tmpdir(), `worktree-repo-${process.pid}`)
-    rmSync(repo, { recursive: true, force: true })
-    const g = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" })
-    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
-    try {
-      g("config", "user.email", "test@test")
-      g("config", "user.name", "test")
-      // Le reçu vit DANS le dépôt, comme dans un vrai worktree : ignoré, sinon il compterait
-      // dans sa propre empreinte.
-      writeFileSync(join(repo, ".gitignore"), ".claude/.verify-receipt.json\n")
-      writeFileSync(join(repo, "a.ts"), "export const a = 1\n")
-      g("add", ".")
-      g("commit", "--quiet", "--no-verify", "-m", "init")
-      mkdirSync(join(repo, ".claude"))
-      execFileSync("node", [RECEIPT_SCRIPT, "write"], {
-        stdio: "pipe",
-        env: { ...process.env, VERIFY_RECEIPT_ROOT: repo, VERIFY_RECEIPT_PATH: join(repo, ".claude/.verify-receipt.json") },
-      })
-
-      expect(run(["clear"])).toBe(0) // le reçu du template ne couvre plus rien
-      expect(gate(`git commit -m "feat: x" ${MARKER}`)).toBe(BLOCKED)
-      expect(gate(`cd ${repo} && git commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-      expect(gate(`git -C "${repo}" commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-      if (process.platform === "win32") {
-        // La forme Git Bash (`/c/…`) que produisent les sessions sous Windows.
-        const posix = repo.replace(/\\/g, "/").replace(/^([a-zA-Z]):/, (_, d: string) => `/${d.toLowerCase()}`)
-        expect(gate(`cd ${posix} && git commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-      }
-
-      writeFileSync(join(repo, "a.ts"), "export const a = 2\n")
-      expect(gate(`cd ${repo} && git commit -m "feat: x" ${MARKER}`)).toBe(BLOCKED)
-    } finally {
-      rmSync(repo, { recursive: true, force: true })
-    }
-  })
-
   it("le gate refuse un commit marqué si aucun reçu ne couvre le code", () => {
     expect(run(["clear"])).toBe(0)
     expect(gate(`git commit -m "feat: x" ${MARKER}`)).toBe(BLOCKED)
@@ -490,31 +450,6 @@ describe("enforce-git-gate, PowerShell and quoted text", { timeout: SPAWN_TIMEOU
     expect(gate(`git commit -m "l'agent" --no-verify -m 'x' ${MARKER}`)).toBe(BLOCKED)
   })
 
-  it("should judge a PowerShell commit on the receipt of the repo it targets", () => {
-    // PowerShell 5.1 n'a pas `&&` : `Set-Location <dir>;` et `cd <dir>;` y visent le dossier, et
-    // `& "…\git.exe" -C <dir>` comme `git -C <dir>`. Le reçu du template est effacé : un commit
-    // jugé sur lui serait refusé.
-    const repo = join(tmpdir(), `ps-worktree-repo-${process.pid}`)
-    rmSync(repo, { recursive: true, force: true })
-    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
-    try {
-      // Le reçu vit DANS le dépôt, comme dans un vrai worktree : ignoré, sinon il compterait dans
-      // sa propre empreinte.
-      mkdirSync(join(repo, ".claude"))
-      writeFileSync(join(repo, ".gitignore"), ".claude/.verify-receipt.json\n")
-      execFileSync("node", [RECEIPT_SCRIPT, "write"], {
-        stdio: "pipe",
-        env: { ...process.env, VERIFY_RECEIPT_ROOT: repo, VERIFY_RECEIPT_PATH: join(repo, ".claude/.verify-receipt.json") },
-      })
-
-      expect(receipt("clear")).toBe(0)
-      expect(psGate(`Set-Location -Path "${repo}"; git commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-      expect(psGate(`cd "${repo}"; git commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-      expect(psGate(`& "C:\\Program Files\\Git\\cmd\\git.exe" -C "${repo}" commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
-    } finally {
-      rmSync(repo, { recursive: true, force: true })
-    }
-  })
 })
 
 // M11b : un cmdlet par mécanisme (tronquer, écrire dans un fichier) ; `Measure-Object`, `Tee-Object`,
@@ -582,7 +517,7 @@ describe("hooks, commit-push and reading commands", { timeout: SPAWN_TIMEOUT }, 
     ["pnpm verify:cached", "pnpm verify:cached"],
     ['git commit -m "…" -m "…" # checks-ok', `git commit -m "feat: x" -m "Co-Authored-By: Claude <noreply@anthropic.com>" ${MARKER}`],
     ["git push -q origin main # checks-ok", `git push -q origin main ${MARKER}`],
-    ["git -C <worktree> commit … # checks-ok", `git -C "${process.cwd()}" commit -m "feat: x" ${MARKER}`],
+    ["git -C <checkout> commit … # checks-ok", `git -C "${process.cwd()}" commit -m "feat: x" ${MARKER}`],
     ["git status --short", "git status --short"],
     ["git log --oneline -5", "git log --oneline -5"],
     ["git diff --stat", "git diff --stat"],
