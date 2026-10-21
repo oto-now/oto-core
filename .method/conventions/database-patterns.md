@@ -91,13 +91,15 @@ CREATE TRIGGER set_updated_at
 - **Une table ajoutée à `platform` reçoit aussi, dans la story qui porte la migration, une ligne de B dans `seedRows` de `tests/integration/isolation/donnees.ts`**, et son rattachement dans `PARENTS` si elle n'a pas d'`org_id`. Si sa policy d'insertion compare à `auth.uid()` une colonne hors de `AUTHORS`, ou fixe un état de création, cette colonne ou cet état s'ajoute à `AUTHORS` ou à `CREATION` de `tests/integration/isolation/tables.test.ts`. **Vérifiable :** la suite d'isolation échoue en nommant la table (« B n'a aucune ligne dans <t> », « table sans rattachement connu : <t> »).
 - **Une colonne générée s'évalue avant les `CHECK`.** Postgres calcule les colonnes générées après les déclencheurs `BEFORE`, puis contrôle les policies (`WITH CHECK`) et les contraintes `CHECK` : une expression générée qui peut échouer (`text2ltree`, cast) sort sa propre erreur avant le `CHECK` qui devait refuser la valeur. **Vérifiable :** l'entrée d'une colonne générée qui peut échouer est contrôlée par un déclencheur `BEFORE` (ou par l'expression elle-même), et le test essaie une valeur qui la ferait échouer.
 - **Un objet qui empêche de supprimer son propriétaire se garde en base.** Une suppression refusée tant qu'un objet dépend de la ligne (une équipe qui possède des nœuds ou des comptes) tient par une clé étrangère `on delete no action deferrable initially deferred` (`nodes.owner_team_id`), jamais par la seule lecture du service avant son `delete` : avec `on delete cascade`, un objet créé entre la lecture et la suppression, ou invisible sous RLS de qui supprime, part avec la ligne. Dans une fonction SQL non plus : la suppression épargne elle-même, dans la même instruction, ce que la lecture refusait, et la clé sans action refuse ce qui s'est rangé dessous après la lecture ; la condition sur la ligne supprimée porte sur ses propres colonnes, que Postgres relit sur leur dernière version quand une autre transaction l'a changée, jamais sur une sous-requête seule, qui lit l'instantané de l'instruction. **Vérifiable :** `rg -in "owner_team_id\) references platform\.teams" packages/plateforme/migrations` ne trouve que les clés d'`accounts` et de `nodes`, toutes deux `deferrable initially deferred` sans `on delete` ; dans une fonction SQL, tout `raise` qui refuse une suppression d'après une lecture est doublé par le `delete` qui suit, dont la condition exclut les mêmes lignes.
-- **Un seul fichier de migration par version publiée du paquet** (fiche D124) : pendant le développement, chaque
-  story Ⓜ garde son fichier (projet de test, CI et « migration appliquée figée » inchangés) ; avant le tag `vX.Y.0`,
-  le pilote remplace les fichiers ajoutés depuis le tag précédent par un seul, `<horodatage>_vX_Y_0.sql`, concaténé
-  dans l'ordre des horodatages sans une ligne changée, puis répare l'historique du projet de test (`migration repair`,
-  anciennes versions `reverted`, la nouvelle `applied`), geste jamais fait par un agent ; aucune pré-version n'est
-  publiée avant. **Vérifiable :** `git diff --name-status v<précédente> v<nouvelle> -- packages/plateforme/migrations`
-  ne montre qu'une ligne `A` ; `pnpm check:migrations` et le job `bare-postgres` passent sur le fichier fusionné ;
+- **Un seul fichier de migration par version publiée du paquet, à chaque tag, corrective comprise** (fiche D124 ;
+  décidé par JB le 21/10/2026) : un hôte applique une migration par montée de version, jamais une pile. Pendant le
+  développement, chaque story Ⓜ garde son fichier (projet de test, CI et « migration appliquée figée » inchangés) ;
+  avant le tag `vX.Y.Z`, le pilote remplace les fichiers ajoutés depuis le tag précédent par un seul,
+  `<horodatage>_vX_Y_Z.sql`, concaténé dans l'ordre des horodatages sans une ligne changée, puis répare l'historique du
+  projet de test (`migration repair`, anciennes versions `reverted`, la nouvelle `applied`), geste jamais fait par
+  un agent ; aucune pré-version n'est publiée avant. **Vérifiable :** `publish.yml` refuse le tag quand
+  `git diff --name-status --diff-filter=A <tag précédent> <tag> -- packages/plateforme/migrations` liste plus d'un
+  fichier `.sql` ; `pnpm check:migrations` et le job `bare-postgres` passent sur le fichier fusionné ;
   `supabase migration list` du projet de test est égal aux fichiers de `main`.
 - **Une table dérivée avec organisation se range dans `NEVER_EXPORTED`** (`scripts/lib/org-transfer.mjs`) : elle se
   recalcule depuis les tables qu'elle résume, et un import ne l'écrit jamais (`lexicon`). **Vérifiable :** le

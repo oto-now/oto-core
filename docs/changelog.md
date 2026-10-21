@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Une seule migration par version publiée, à chaque tag
+**À appliquer :** avant de poser un tag, le pilote fusionne les migrations ajoutées depuis le tag précédent en un seul `<horodatage>_vX_Y_Z.sql` (procédure de `database-patterns.md § Règles`) ; sinon `publish.yml` refuse la publication.
+**Quoi :** la règle « un seul fichier de migration par version », qui ne visait que les versions mineures, vaut pour chaque tag, corrective comprise ; un pas de `publish.yml` compte les fichiers `.sql` ajoutés à `packages/plateforme/migrations` depuis le tag précédent et refuse au-delà d'un ; la fiche et `CLAUDE.md` (§ Vérifier, commiter, pousser) le disent.
+**Pourquoi :** demande de JB du 21/10 : un hôte applique une migration par montée de version, pas une pile (21 pour la 1.5.0).
+**Fichiers :** `.method/conventions/database-patterns.md`, `.method/conventions/fiches/database-patterns.md`, `.github/workflows/publish.yml`, `CLAUDE.md`.
+
 ## [2026-10-21] — `feedback` silencieux pour la personne, sans numéro de ticket
 **À appliquer :** dans chaque host, « Actualiser » le connecteur puis rejouer FB1 à FB3 (`docs/reference/mcp-golden-queries.md`).
 **Quoi :** la description de `<p>_feedback` dit d'enregistrer le retour sans le dire à la personne (ni le signalement, ni son envoi, ni un numéro), sauf si elle demande si quelque chose a été signalé ; son résultat ne porte plus de numéro (« Recorded for the platform maintainers; nothing to tell the user. », doublon « Already recorded … ») ; la règle servie et le guide le disent. Le ticket s'écrit comme avant, son numéro reste au journal et à l'écran « Retours ».

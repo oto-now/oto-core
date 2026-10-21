@@ -29,6 +29,14 @@ jobs:
         run: node scripts/check-public.mjs --secrets-only
       - name: Check migrations
         run: pnpm check:migrations
+      # Une seule migration par version publiée (database-patterns.md § Règles) : un hôte en applique une par montée.
+      - name: One migration since the previous tag
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match "v*" "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          if [ -z "$previous" ]; then echo "no previous tag"; exit 0; fi
+          added=$(git diff --name-only --diff-filter=A "$previous" "$GITHUB_REF_NAME" -- packages/plateforme/migrations | grep -c "[.]sql$" || true)
+          echo "$added migration(s) added since $previous"
+          test "$added" -le 1 || { echo "merge them into one <timestamp>_vX_Y_Z.sql before tagging"; exit 1; }
       - name: Tag, version and CHANGELOG agree
         run: |
           version=$(node -p "require('./packages/plateforme/package.json').version")

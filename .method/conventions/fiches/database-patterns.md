@@ -13,6 +13,7 @@ Texte complet : `.method/conventions/database-patterns.md`. La fiche suffit pour
 - `CREATE POLICY` et `CREATE TRIGGER` sont précédés d'un `DROP … IF EXISTS` (la ligne de base exceptée). § Règles
 - La RLS s'active et les policies se créent dans la migration de la table ; toute policy `FOR UPDATE` déclare `WITH CHECK`. § Règles
 - Une migration destructive (`DROP`, `ALTER … TYPE`, `SET NOT NULL`, `RENAME`) a son rollback dans `supabase/migrations/rollback/<timestamp>.sql` et se découpe en expand/contract sur deux déploiements. § Règles
+- Une version publiée du paquet apporte au plus un fichier de migration, à chaque tag : avant le tag, le pilote fusionne les fichiers ajoutés depuis le tag précédent en un seul `<horodatage>_vX_Y_Z.sql` ; `publish.yml` refuse sinon. § Règles
 - Une migration n'arrive jamais seule dans un diff : une entrée de `supabase/seed.sql` ou un test qui lit ou écrit la table l'accompagne. § Règles
 - NULL passe un `CHECK` et saute un `if` : une comparaison à une valeur nullable s'écrit `is not distinct from` ou `coalesce(…, false)`, ou le cas NULL à part ; le test essaie NULL, SQL donné « tel quel » par une story compris. § Règles
 - Dans un déclencheur `security invoker`, l'appel d'une fonction accordée au seul `authenticated` vit dans un `if` imbriqué sous `current_user = 'authenticated'`, jamais dans la même condition. § Règles
