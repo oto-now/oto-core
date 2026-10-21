@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-21] — Job de CI `recu` : la CI relit le `Verified-tree:` de chaque commit poussé
+**À appliquer :** rien dans un hôte. Jusqu'au 29/10/2026, un commit sans reçu valable ne donne qu'un avertissement ; ensuite, il rend la CI rouge (#85).
+**Quoi :** `scripts/ci/recu.mjs` lit les commits poussés (`before..sha` d'un push, base..tête d'une PR ; la tête seule pour une branche neuve ou un historique réécrit) et juge chacun : reçu conforme (`Verified-tree:` égal à son arbre de code, `scripts/lib/arbre-de-code.mjs`), arbre de code inchangé depuis son premier parent (documents de méthode seuls), sinon sans trailer ou trailer faux, dit en annotation. Nouveau job `recu` de `ci.yml`, sans installation (git et node), `--avertir` pour la première semaine. `CLAUDE.md` le dit.
+**Pourquoi :** suite du reçu lié à l'arbre du commit (#84, J2) : le trailer posé par `pnpm commit:export` n'était relu par personne.
+**Fichiers :** `scripts/ci/recu.mjs`, `tests/unit/recu-ci.test.ts` (nouveaux), `.github/workflows/ci.yml`, `CLAUDE.md`.
+
 ## [2026-10-21] — Test de `commit:export` sans identité git (CI rouge)
 **Quoi :** `tests/unit/commit-depuis-export.test.ts` donne au script l'identité git de son commit (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) ; l'outil garde celle de la personne.
 **Pourquoi :** la machine de CI n'a pas d'identité git : `commit-tree` y échouait et le job Bare Postgres était rouge depuis 2d79e6b. Rejoué sans configuration git globale (`HOME` vide, `GIT_CONFIG_GLOBAL=/dev/null`), comme la CI.

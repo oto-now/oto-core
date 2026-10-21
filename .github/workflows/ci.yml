@@ -1,5 +1,5 @@
 # CI — contrôle des migrations et build
-# Type-check, lint et tests restent en local via commit-push ; la CI lance `check:migrations`
+# Type-check, lint et tests restent en local via commit-push ; la CI relit le reçu de chaque commit (`recu`), lance `check:migrations`
 # (FR-INST-04) puis `build`, le build d'un hôte qui installe le paquet empaqueté (`packed-host-build`), et
 # prouve la portabilité du schéma (E01-S09) : la ligne de base s'installe
 # sur un Postgres sans Supabase (`bare-postgres`). La ligne de base V1 égale l'ancienne chaîne : comparaison
@@ -59,6 +59,29 @@ jobs:
 
       - name: Pack, install in a copy of the reference host, next build
         run: node scripts/ci/packed-host-build.mjs
+
+  # Le reçu de chaque commit poussé (`scripts/ci/recu.mjs`, #84) : son `Verified-tree:`, posé par `pnpm commit:export`
+  # après un `pnpm verify` complet, égale son arbre de code ; ou son arbre de code est celui de son parent (documents
+  # de méthode seuls). Sans installation : git et node suffisent. Le SHA de départ et d'arrivée passe par `env`.
+  recu:
+    name: Receipt (Verified-tree of each pushed commit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # `--avertir` jusqu'au 29/10/2026 (#85) : le retirer rend le job bloquant.
+      - name: Receipt of each commit
+        env:
+          DEPUIS: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          JUSQUA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/recu.mjs --depuis "$DEPUIS" --jusqua "$JUSQUA" --avertir
 
   # AC10, AC12, AC13 : sur un postgres:16 vierge (sa distribution porte moddatetime, que le Postgres
   # managé de Scaleway refuse), `db prepare` deux fois, la ligne de base par la CLI Supabase, puis la
