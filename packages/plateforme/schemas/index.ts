@@ -250,12 +250,12 @@ export { CONTEXT_INDEX } from "./context-index"
 // E05-S13 (AC-16) : les formats des blocs servis que la vue « Contexte » relit pour les dire en français.
 export { SERVED_BUDGET, SERVED_NEWS, SERVED_PROCEDURES, SERVED_RECENT, SERVED_RELATED, SERVED_RULES } from "./context-index"
 // E11-S07 : le préfixe de l'API des écrans, contrat de montage entre l'hôte et le paquet.
-export { PLATFORM_API_PREFIX } from "./api"
+export { FILE_ADDRESS, PLATFORM_API_PREFIX } from "./api"
 // E10-S02 (lot a) : les fichiers joints à un nœud. Types admis, limites et corps des routes `files`.
 export { FILE_MAX_BYTES, FILE_TYPES, fileIdSchema, fileReadQuerySchema, fileRequestSchema, fileTypeOf, IMAGE_TYPES, ORG_QUOTA_BYTES, TEXT_FILE_MAX_BYTES, TEXT_TYPES, transitFileRequestSchema } from "./files"
 export type { FileAvailability, FileReady, FileStorageState, FileType, FileUpload, TransitFile, TransitFileUpload } from "./files"
 // E10-S02 (lot c) : « Voir ». Les routes des fichiers d'un lien public, le paramètre `view` et le fichier vu.
-export { FILES_ROUTE, filePath, fileViewParamSchema, publicFilesRoute } from "./files"
+export { FILES_ROUTE, fileHtmlPath, filePath, fileViewParamSchema, publicFilesRoute } from "./files"
 export type { FileMarkdown, FileView, ViewedBlock } from "./files"
 // E12-S02 (ADR-022) : les capacités d'une organisation, fournies par l'hôte, et leur état pour les écrans.
 export { limitReached, orgLimitsSchema } from "./limits"

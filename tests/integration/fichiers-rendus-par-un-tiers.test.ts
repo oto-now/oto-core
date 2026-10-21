@@ -17,7 +17,8 @@ import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
 import { objectKey } from "../../packages/plateforme/server/files/store"
-import { readTransitBytes, TRANSIT_HOURS, transitReadUrl } from "../../packages/plateforme/server/files/transit"
+import { fileReadUrl } from "../../packages/plateforme/server/files/address"
+import { readTransitBytes, TRANSIT_HOURS } from "../../packages/plateforme/server/files/transit"
 import { fileConnector, memoryTokens } from "../factories/described-connector"
 import { pendingMigrations } from "../helpers/pending-migrations"
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
@@ -178,10 +179,10 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     const lea = as("lea")
     const read = await readTransitBytes(lea.db, lea.identity, file.id)
     expect(Buffer.from(read.bytes).equals(Buffer.from(RECORDING))).toBe(true)
-    expect(await codeOf(transitReadUrl(lea.db, lea.identity, file.id))).toBe("ok")
+    expect(await codeOf(fileReadUrl(lea.db, lea.identity, file.id, {}))).toBe("ok")
     for (const person of ["claire", "ada"] as const) {
       const { db, identity } = as(person)
-      expect({ person, read: await codeOf(readTransitBytes(db, identity, file.id)), url: await codeOf(transitReadUrl(db, identity, file.id)) }).toEqual({ person, read: "not_found", url: "not_found" })
+      expect({ person, read: await codeOf(readTransitBytes(db, identity, file.id)), url: await codeOf(fileReadUrl(db, identity, file.id, {})) }).toEqual({ person, read: "not_found", url: "not_found" })
     }
   })
 

@@ -113,6 +113,8 @@ const SEGMENTS_ADMIS = [
   'connectors',
   'consent',
   'context',
+  // L'adresse d'un fichier, `/f/<id>` (fichiers et stockage, § Adresse unique) : un segment court, écrit dans les pages.
+  'f',
   'feedback',
   'forgot-password',
   'journal',

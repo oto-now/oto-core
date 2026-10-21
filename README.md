@@ -49,6 +49,7 @@ Documents qui font foi : la carte [`docs/README.md`](docs/README.md) mène au pr
 | `/api/mcp` | `src/app/api/mcp/route.ts` | MCP des organisations (`handleMcpPost`, `makeVerifyToken()`) | les deux |
 | `/api/mcp-admin` | `src/app/api/mcp-admin/route.ts` | MCP de l'équipe plateforme (`handleAdminMcp`) | les deux |
 | `/api/platform/*` | `src/app/api/platform/[...route]/route.ts` | API des écrans (`handlePlateforme`), jeton lu dans la session de l'hôte | les deux |
+| `/f/<id>` | `src/app/f/[id]/route.ts` | L'adresse d'un fichier, joint ou en transit (`handlePlateforme`) : réexporte le `GET` de `/api/platform/[...route]` ; `/f` est public dans le middleware, comme `/api` | les deux |
 | `/.well-known/oauth-protected-resource/*` | `src/app/.well-known/oauth-protected-resource/[[...chemin]]/route.ts` | Métadonnées de ressource protégée (racine et forme suffixée) | les deux |
 | `/auth/oidc/login`, `/callback`, `/logout` | `src/app/auth/oidc/*/route.ts` | Connexion chez l'émetteur, rappel, déconnexion (`POST`) | OIDC (404 sinon) |
 | `/login`, `/forgot-password`, `/reset-password`, `/auth/callback`, `/auth/confirm`, `/oauth/consent` | `src/app/(auth)/…`, `src/app/auth/…`, `src/app/oauth/consent/` | Écrans de Supabase Auth ; `/login` renvoie à `/auth/oidc/login` en mode OIDC | Supabase (404 en OIDC, § 4.3) |

@@ -165,18 +165,23 @@ Pour une application Next 15 (App Router) sur Supabase.
    - CORS du bucket : `PUT` et `GET` depuis l'origine de chaque adresse de l'application, en-tête
      `content-type` admis.
    - CSP de l'application, si elle en pose une : `img-src` et `connect-src` admettent l'origine du bucket.
+   - L'adresse d'un fichier, joint ou en transit, hors du préfixe de la porte : `GET /f/<id>[?disposition=inline]`
+     (redirection 302 ; `inline` pour une image matricielle, et sur demande pour un PDF, un `txt` ou un `csv` joints,
+     `attachment` pour tout le reste, et pour tout fichier en transit hors images matricielles) ; `GET /f/<id>?check`
+     (`{ data: { available } }`, sans redirection : le stockage sert-il encore l'objet ?). L'hôte la monte par
+     `src/app/f/[id]/route.ts`, qui réexporte le `GET` de sa route `/api/platform/[...route]`, et laisse passer `/f`
+     dans son middleware, comme `/api` : la porte vérifie la session.
    - Routes de `/api/platform/*` : `GET files` (l'état du stockage) ; `POST files`
      `{ node, name, mime, size }` (la demande d'envoi : droit d'écrire le nœud, type par l'extension du nom,
      50 Mo, 4 Mo pour `html`, `md`, `txt` et `csv`, 10 Go par organisation) ; `POST files/<id>/complete`
-     `{}` (la confirmation, après l'envoi) ; `GET files/<id>[?disposition=inline]` (redirection 302 ;
-     `inline` pour une image matricielle, et sur demande pour un PDF, un `txt` ou un `csv`, `attachment`
-     pour tout le reste) ; `GET files/<id>?check` (`{ data: { available } }`, sans redirection : le stockage
-     sert-il encore l'objet ?) ; `GET files/<id>/markdown` (les blocs d'un `.md`) ; `GET files/<id>/html` (la route
+     `{}` (la confirmation, après l'envoi) ; `GET files/<id>` (l'ancienne adresse d'un fichier : redirection
+     permanente 308 vers `/f/<id>`, requête comprise, comptée au log du serveur, `[platform] files: old address`) ;
+     `GET files/<id>/markdown` (les blocs d'un `.md`) ; `GET files/<id>/html` (la route
      isolée d'un fichier HTML, ADR-017). Par un lien public, sans session : `GET public/<jeton>/files/<id>`,
      `…/markdown` et `…/html`, pour un fichier cité par un bloc publié du contenu partagé. Fichier en transit (sans
      nœud, entre une personne et un connecteur) : `POST transit-files` `{ name, mime, size }` (types d'un fichier joint,
-     50 Mo pour tout type, texte compris, compté au quota ; rend `{ id, upload, expiresAt }`, une heure),
-     `POST transit-files/<id>/complete` `{}` et `GET transit-files/<id>` (redirection 302) ; lisible par son seul
+     50 Mo pour tout type, texte compris, compté au quota ; rend `{ id, upload, expiresAt }`, 24 heures) et
+     `POST transit-files/<id>/complete` `{}` ; il se lit à son adresse, `/f/<id>`, comme un fichier joint ; lisible par son seul
      auteur, `not_found` pour toute autre personne, administrateur et équipe plateforme compris ; au journal de
      l'organisation, l'identifiant, la taille et le type MIME seuls, jamais le nom, et un refus par son seul code.
    - « Voir » d'un fichier `html` ou `md` ouvre la visionneuse à l'adresse du contenu, `?view=<id>` : la page de
@@ -337,7 +342,8 @@ les fonctions natives, sans outil de plus. Un besoin nouveau devient une fonctio
   `registerFunctions([...])` de `@otomata_tech/oto_platform/server`. Chaque appel remplace toute la
   liste. Ce fichier est importé pour son effet, en tête de chaque route qui monte une porte du
   paquet : `src/app/api/mcp/route.ts`, `src/app/api/platform/[...route]/route.ts` et
-  `src/app/api/mcp-admin/route.ts` (`import "@/lib/fonctions-metier"`). Chaque route est un bundle
+  `src/app/api/mcp-admin/route.ts` (`import "@/lib/fonctions-metier"`) ; `src/app/f/[id]/route.ts`, qui réexporte
+  le `GET` de la route de la porte, hérite de son import. Chaque route est un bundle
   à part : une route qui l'oublie sert un catalogue sans ces fonctions. Une page de l'application
   qui appelle elle-même un service qui lit le catalogue (`checkProcedure` ou `checkProcedureBlocks`
   pour contrôler une procédure, `readNode` sur une fonction) l'importe aussi.

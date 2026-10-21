@@ -18,6 +18,8 @@ const PUBLIC_ROUTES = [
   "/auth/oidc",
   "/design-system",
   "/api",
+  // L'adresse d'un fichier (`/f/<id>`) : la porte du paquet la sert et vérifie la session elle-même, comme `/api`.
+  "/f",
   "/.well-known",
   // L'image de partage de l'organisation (E11-S21) : un robot d'aperçu n'a pas de session ; elle ne porte aucune page.
   "/opengraph-image",

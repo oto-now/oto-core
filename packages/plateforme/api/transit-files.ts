@@ -1,13 +1,13 @@
 // Ressource `transit-files` de l'API du paquet (fichiers et stockage, § Fichier en transit) : `POST transit-files` (la
-// demande d'envoi d'un fichier sans nœud, rendue avec son échéance), `POST transit-files/<id>/complete` (la confirmation)
-// et `GET transit-files/<id>` (la lecture par son auteur, redirection 302 vers une URL présignée de 60 s). Adaptateur
+// demande d'envoi d'un fichier sans nœud, rendue avec son échéance) et `POST transit-files/<id>/complete` (la
+// confirmation) ; il se lit à son adresse, `/f/<id>`, comme un fichier joint (`files.ts`). Adaptateur
 // mince : l'auteur seul, l'échéance, le type, la taille et le quota sont décidés dans `server/files/transit.ts`. Aucun
 // nœud, donc aucune cible au journal ; aucun nom de fichier non plus, sa ligne n'en porte que l'identifiant, la taille et
 // le type. Sans elle, une personne ne dépose ni ne relit un fichier destiné à un connecteur.
 import { fileIdSchema } from "../schemas"
 import type { Json } from "../server/database"
 import { clip } from "../server/journal"
-import { completeTransitUpload, requestTransitUpload, transitReadUrl } from "../server/files/transit"
+import { completeTransitUpload, requestTransitUpload } from "../server/files/transit"
 import type { ResourceRoutes } from "./handler"
 
 /** Un champ de l'objet `value`, s'il est du type `kind`, une chaîne bornée à 255 caractères ; rien sinon. */
@@ -32,12 +32,6 @@ function transitJournalArgs({ params, body, data }: { params: string[]; body: un
 }
 
 export const transitFilesRoutes: ResourceRoutes = {
-  GET: {
-    params: 1,
-    async handle({ db, identity, params }) {
-      return { status: 302, data: null, redirect: await transitReadUrl(db, identity, params[0]) }
-    },
-  },
   POST: [
     {
       params: 0,

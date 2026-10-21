@@ -2,7 +2,7 @@
 // H03). Sans lui, chaque écran à mutation recoderait l'appel et la lecture de l'enveloppe
 // `{ data }` / `{ error }` (E05-S03 le réutilise).
 import { PLATFORM_API_PREFIX } from "../../schemas/api"
-import type { FileAvailability } from "../../schemas/files"
+import { filePath, type FileAvailability } from "../../schemas/files"
 
 type MethodeHttp = "GET" | "POST" | "PATCH" | "DELETE"
 
@@ -86,7 +86,7 @@ async function lireLaReponse<T>(reponse: Response): Promise<ReponsePlateforme<T>
 }
 
 /**
- * Les octets d'un fichier joint, lus à son adresse de lecture (`GET files/<id>`), qui redirige vers le stockage
+ * Les octets d'un fichier joint, lus à son adresse (`GET /f/<id>`), qui redirige vers le stockage
  * (E10-S02, AC-b6 : « Convertir en tableau » d'un CSV joint). `null` : refusé, absent, ou le réseau a manqué.
  */
 export async function lireUnFichier(adresse: string): Promise<ArrayBuffer | null> {
@@ -116,12 +116,18 @@ export async function adresseRepond(adresse: string): Promise<boolean> {
 const INDISPONIBLE = ["not_found", "not_enabled"]
 
 /**
- * Un fichier joint est-il servi (E10-S02, AC-b8, HN-E10S02-43) ? Sa route le dit en JSON (`GET files/<id>?check`),
+ * Un fichier joint est-il servi (E10-S02, AC-b8, HN-E10S02-43) ? Son adresse le dit en JSON (`GET /f/<id>?check`),
  * sans redirection : aucun octet ne sort du stockage, aucun CORS n'est en jeu. `false` : l'objet manque, ou le
  * fichier n'est pas lisible ; une panne (réseau, stockage, session) n'en dit rien (`true`), la carte reste telle quelle.
  */
 export async function fichierDisponible(id: string): Promise<boolean> {
-  const lu = await appelerPlateforme<FileAvailability>({ methode: "GET", ressource: `files/${encodeURIComponent(id)}?check` })
+  let reponse: Response
+  try {
+    reponse = await fetch(`${filePath(encodeURIComponent(id))}?check`, { credentials: "same-origin" })
+  } catch {
+    return true
+  }
+  const lu = await lireLaReponse<FileAvailability>(reponse)
   return lu.erreur ? !INDISPONIBLE.includes(lu.erreur.code) : lu.data.available
 }
 

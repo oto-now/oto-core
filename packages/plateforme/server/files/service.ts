@@ -1,5 +1,6 @@
-// Le service des fichiers joints (E10-S02 lot a, ADR-016 § 3 à § 5) : la demande d'envoi, la confirmation, la
-// lecture par redirection, sa disponibilité, les octets et le texte d'un fichier, la purge des envois abandonnés et la copie des
+// Le service des fichiers joints (E10-S02 lot a, ADR-016 § 3 à § 5) : la demande d'envoi, la confirmation, le type et
+// la disposition d'une lecture (la lecture elle-même, selon l'état du fichier : `address.ts`), les octets et le texte
+// d'un fichier, la purge des envois abandonnés et la copie des
 // objets d'une page dupliquée (lot e), l'envoi par le serveur d'un fichier déposé par lien (lot f) ; le quota et la ligne
 // `pending` sont dans `rows.ts`. Chaque refus est décidé ici, avant la requête qu'il garde (`security-patterns.md § Droits
 // dans le service`) : l'écriture sur le nœud pour envoyer et confirmer, la lecture pour lire ; la RLS n'isole que
@@ -11,13 +12,11 @@ import {
   FILE_TYPES,
   fileExtension,
   fileIdSchema,
-  fileReadQuerySchema,
   fileRequestSchema,
   fileTypeOf,
   IMAGE_TYPES,
   TEXT_FILE_MAX_BYTES,
   TEXT_TYPES,
-  type FileAvailability,
   type FileReady,
   type FileStorageState,
   type FileType,
@@ -350,27 +349,6 @@ export function readResponse(file: { name: string }, inline: boolean): ObjectRes
   if (inline && type === "pdf") return { contentType, disposition: "inline" }
   if (inline && (type === "txt" || type === "csv")) return { contentType: "text/plain; charset=utf-8", disposition: "inline" }
   return { contentType, disposition: `attachment; filename*=UTF-8''${encodedFileName(file.name)}` }
-}
-
-/** La lecture d'un fichier (AC-a5) : l'URL présignée de 60 s où la route redirige. */
-export async function fileReadUrl(db: PlatformDb, identity: Identity, fileId: unknown, query: Record<string, string>): Promise<string> {
-  const parsed = fileReadQuerySchema.safeParse(query)
-  if (!parsed.success) throw invalidInput(parsed.error)
-  const store = requireStore()
-  const file = await readableFile(db, identity, fileId)
-  return onStorage("read url", () => store.readUrl(objectKey(identity.org.id, file.id), readResponse(file, parsed.data.disposition === "inline")))
-}
-
-/**
- * La disponibilité d'un fichier (AC-b8, HN-E10S02-43) : la même ligne `ready` sous le droit de lecture du nœud que la
- * lecture, et la même réponse `not_found` pour ce qui n'est pas lisible ; puis l'objet lu par `HEAD`. Aucun octet ne
- * sort du bucket, aucune redirection : la carte d'un fichier lit la réponse sans suivre le stockage.
- */
-export async function fileAvailability(db: PlatformDb, identity: Identity, fileId: unknown): Promise<FileAvailability> {
-  const store = requireStore()
-  const file = await readableFile(db, identity, fileId)
-  const head = await onStorage("head", () => store.head(objectKey(identity.org.id, file.id)))
-  return { available: head !== null }
 }
 
 /**

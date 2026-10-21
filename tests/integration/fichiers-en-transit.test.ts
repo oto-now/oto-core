@@ -10,7 +10,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { registerOrgLimits, resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
-import { fileReadUrl, requestFileUpload } from "../../packages/plateforme/server/files/service"
+import { fileReadUrl } from "../../packages/plateforme/server/files/address"
+import { requestFileUpload } from "../../packages/plateforme/server/files/service"
 import { objectKey } from "../../packages/plateforme/server/files/store"
 import {
   completeTransitUpload,
@@ -18,7 +19,6 @@ import {
   readTransitBytes,
   requestTransitUpload,
   TRANSIT_HOURS,
-  transitReadUrl,
 } from "../../packages/plateforme/server/files/transit"
 import { orgRowsSql, TABLES } from "../../scripts/lib/org-transfer.mjs"
 import { pendingMigrations } from "../helpers/pending-migrations"
@@ -110,12 +110,13 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     const { id } = await deposit("lea", "facture.pdf", "%PDF-transit")
     const lea = as("lea")
 
-    const author = await transitReadUrl(lea.db, lea.identity, id)
+    // À son adresse, `/f/<id>`, comme un fichier joint ; téléchargé même sur « Voir » (décision du 19/10).
+    const author = await fileReadUrl(lea.db, lea.identity, id, { disposition: "inline" })
     const engine = await readTransitBytes(lea.db, lea.identity, id)
     const refusedTo = async (person: Exclude<Person, "lea">) => {
       const { db, identity } = as(person)
       return {
-        read: await codeOf(transitReadUrl(db, identity, id)),
+        read: await codeOf(fileReadUrl(db, identity, id, {})),
         engine: await codeOf(readTransitBytes(db, identity, id)),
         complete: await codeOf(completeTransitUpload(db, identity, id)),
         expire: await codeOf(expireTransitFile(db, identity, id)),
@@ -126,8 +127,6 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       author: new URL(author).searchParams.get("response-content-disposition"),
       engine: { name: engine.name, mime: engine.mime, text: new TextDecoder().decode(engine.bytes) },
       authorRows: (await seen("lea", id)).length,
-      // Ni un fichier joint, ni lisible par la route d'un fichier joint, même pour son auteur.
-      asAttached: await codeOf(fileReadUrl(lea.db, lea.identity, id, {})),
       teammate: await refusedTo("claire"),
       administrator: await refusedTo("ada"),
       platformTeam: await refusedTo("s"),
@@ -135,7 +134,6 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       author: "attachment; filename*=UTF-8''facture.pdf",
       engine: { name: "facture.pdf", mime: "application/pdf", text: "%PDF-transit" },
       authorRows: 1,
-      asAttached: "not_found",
       teammate: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
       administrator: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
       platformTeam: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
@@ -179,7 +177,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     await fx.admin`update platform.files set expires_at = now() - interval '1 second' where id = ${id}`
 
     const expired = {
-      read: await codeOf(transitReadUrl(lea.db, lea.identity, id)),
+      read: await codeOf(fileReadUrl(lea.db, lea.identity, id, {})),
       engine: await codeOf(readTransitBytes(lea.db, lea.identity, id)),
       freed: counted - (await used("claire")),
       rowKept: (await fx.admin`select id from platform.files where id = ${id}`).length,

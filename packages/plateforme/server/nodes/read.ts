@@ -3,7 +3,7 @@
 // contrat d'une fonction, curseur au-delà de 45 000 caractères. Le niveau vient de `findNode`
 // (`access.ts`) ; le brouillon ne se lit qu'à partir du niveau 2, décidé avant sa lecture (H123, N35).
 // Sans lui, rien ne se lit.
-import { FILES_ROUTE, type BlockView, type NodeView, type ReadNodeInput } from "../../schemas"
+import { FILE_ADDRESS, type BlockView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
 import { contractNames, getContract, renderContract } from "../catalog/contracts"
 import { assistantFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
@@ -131,12 +131,12 @@ async function contextOf(db: PlatformDb, identity: Identity, found: NonNullable<
 }
 
 /**
- * La route des fichiers joints servie à un assistant (E10-S02, AC-d1, HN-E10S02-3) : sur l'origine de la requête, lue
+ * L'adresse des fichiers joints servie à un assistant (`/f`, E10-S02, AC-d1, HN-E10S02-3) : sur l'origine de la requête, lue
  * par `webUrl` (`http:` ou `https:`, sans identifiants : `security-patterns.md § XSS Prevention`) ; relative sinon.
  */
 function fileRouteOf(origin: string | undefined): string {
   const url = webUrl(origin)
-  return url ? `${new URL(url).origin}${FILES_ROUTE}` : FILES_ROUTE
+  return url ? `${new URL(url).origin}${FILE_ADDRESS}` : FILE_ADDRESS
 }
 
 function pendingOf(draft: Context["draft"]): PendingDraft | null {

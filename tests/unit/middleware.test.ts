@@ -96,6 +96,8 @@ describe("middleware without a session (AC7)", () => {
     "/.well-known/oauth-protected-resource",
     // E11-S21 (AC-9) : l'image de partage de l'organisation, demandée par un robot d'aperçu sans session.
     "/opengraph-image?4b1a1d3c2e5f6a7b",
+    // L'adresse d'un fichier (fichiers et stockage, § Adresse unique) : la porte du paquet la sert et vérifie la session.
+    "/f/0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f?disposition=inline",
   ])("should let the public route %s through", async (path) => {
     const response = await middleware(requete(path))
 

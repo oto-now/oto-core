@@ -1,14 +1,14 @@
 // @vitest-environment node
 // La ressource `transit-files` de la porte (fichiers et stockage, § Fichier en transit), sans base : identité et service
-// simulés. La demande (201) et la confirmation (200), chacune avec sa ligne de journal ; la lecture par son auteur en
-// redirection 302 sans corps ni cache ; un refus du service rendu en JSON ; le 401 sans session, avant le service ; aucun
+// simulés. La demande (201) et la confirmation (200), chacune avec sa ligne de journal ; aucune lecture ici, un fichier en
+// transit se lisant à son adresse, `/f/<id>` (`api-files.test.ts`) ; aucun
 // nom de fichier au journal de l'organisation, ni par le corps, ni par la réponse, ni par le message d'un refus (décision
 // du 19/10). Les décisions du service, sur une vraie base : `tests/integration/fichiers-en-transit.test.ts`.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { PlatformError, type Identity } from "@otomata_tech/oto_platform/server"
 import type { VerifyToken } from "../../packages/plateforme/mcp/auth"
-import { completeTransitUpload, requestTransitUpload, transitReadUrl } from "../../packages/plateforme/server/files/transit"
+import { completeTransitUpload, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 import { writeJournal } from "../../packages/plateforme/server/journal"
 
@@ -27,7 +27,6 @@ vi.mock("../../packages/plateforme/server/journal", async (importOriginal) => ({
 vi.mock("../../packages/plateforme/server/files/transit", () => ({
   completeTransitUpload: vi.fn(),
   requestTransitUpload: vi.fn(),
-  transitReadUrl: vi.fn(),
 }))
 
 const HOST = "acme.test"
@@ -84,24 +83,9 @@ describe("transit-files resource of the gate", () => {
     expect(completeTransitUpload).toHaveBeenCalledWith(expect.anything(), IDENTITY, FILE_ID)
   })
 
-  it("should redirect its author with 302 to the presigned URL, without body nor cache, and render a refusal as JSON", async () => {
-    const signed = "https://s3.fr-par.scw.cloud/b/org-1/f?X-Amz-Expires=60&X-Amz-Signature=abc"
-    vi.mocked(transitReadUrl).mockResolvedValueOnce(signed).mockRejectedValueOnce(new PlatformError("not_found", "Unknown file."))
-    const read = await call(request("GET", `transit-files/${FILE_ID}`))
-    const refused = await call(request("GET", `transit-files/${FILE_ID}`))
-    expect([
-      { status: read.response.status, location: read.response.headers.get("location"), cache: read.response.headers.get("cache-control"), body: await read.response.text(), journal: read.tasks.length },
-      { status: refused.response.status, location: refused.response.headers.get("location"), body: await refused.response.json() },
-    ]).toEqual([
-      { status: 302, location: signed, cache: "private, no-store", body: "", journal: 0 },
-      { status: 404, location: null, body: { error: { code: "not_found", message: "Unknown file." } } },
-    ])
-  })
-
-  it("should answer 401 to a read without session, before the service", async () => {
-    const { response } = await call(request("GET", `transit-files/${FILE_ID}`), null)
-    expect({ status: response.status, body: await response.json() }).toEqual({ status: 401, body: { error: { code: "forbidden", message: "Authentication required." } } })
-    expect(transitReadUrl).not.toHaveBeenCalled()
+  it("should not serve GET transit-files/<id>: a file in transit is read at its address, /f/<id>", async () => {
+    const { response } = await call(request("GET", `transit-files/${FILE_ID}`))
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 404, body: { error: { code: "not_found", message: "Unknown route." } } })
   })
 
   it("should journal only the id, the size and the MIME type, never the file name, served or refused", async () => {

@@ -4,7 +4,7 @@
 // (H04). Une ligne de journal par mutation, écrite après la réponse (H07).
 import type { VerifyToken } from "../mcp/auth"
 import type { SignupOptions } from "../server/admin/signup"
-import { PLATFORM_API_PREFIX } from "../schemas/api"
+import { FILE_ADDRESS, PLATFORM_API_PREFIX } from "../schemas/api"
 import { ensureZodMessages } from "../schemas/zod-messages"
 import type { Json } from "../server/database"
 import type { PlatformDb } from "../server/db"
@@ -15,7 +15,7 @@ import { brandRoutes } from "./brand"
 import { cellRoutes } from "./cell"
 import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
-import { filesRoutes } from "./files"
+import { fileAddressRoute, filesRoutes } from "./files"
 import { hostedLinkRoutes } from "./hosted-link"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
 import { homeRoutes } from "./home"
@@ -72,8 +72,9 @@ type RouteResult = {
    */
   journal?: { target?: string | null; teamId?: string | null; error?: PlatformError }
   /**
-   * Une redirection (`status` 302) vers cette adresse, sans corps et jamais gardée en cache (`private, no-store`) :
-   * la lecture d'un fichier, vers son URL présignée (E10-S02, AC-a5). `data` n'est alors pas servi.
+   * Une redirection (`status` 302 ou 308) vers cette adresse, sans corps et jamais gardée en cache (`private, no-store`) :
+   * la lecture d'un fichier, vers son URL présignée (E10-S02, AC-a5), ou son ancienne adresse, vers `/f/<id>`. `data`
+   * n'est alors pas servi.
    */
   redirect?: string
 }
@@ -187,6 +188,23 @@ function routeSegments(request: Request): string[] {
   return at === -1 ? [] : pathname.slice(at + PREFIX.length).split("/").filter(Boolean)
 }
 
+/**
+ * L'adresse d'un fichier, `GET /f/<id>`, hors du préfixe de la porte : sa route de lecture, l'identifiant décodé ; `null`
+ * pour toute autre adresse ou méthode. Un `%` mal formé ne désigne aucun fichier.
+ */
+function fileAddressMatch(request: Request, method: string): MatchedRoute | null {
+  const { pathname } = new URL(request.url)
+  const prefix = `${FILE_ADDRESS}/`
+  if (method !== "GET" || !pathname.startsWith(prefix)) return null
+  const rest = pathname.slice(prefix.length).split("/").filter(Boolean)
+  if (rest.length !== 1) return null
+  try {
+    return { route: fileAddressRoute, params: [decodeURIComponent(rest[0])], tool: "GET f" }
+  } catch {
+    return null
+  }
+}
+
 /** `GET /api/platform/cell`, sans paramètre : servie hors de `RESOURCES` (NH11). */
 function isCellRoute(segments: readonly string[], method: string): boolean {
   return method === "GET" && segments.length === 1 && segments[0] === "cell"
@@ -232,7 +250,7 @@ type JournalLine = {
   host: null
 }
 
-/** Une redirection sans corps, jamais gardée par un cache (E10-S02, AC-a5) : son adresse est signée pour 60 s. */
+/** Une redirection sans corps, jamais gardée par un cache (E10-S02, AC-a5) : une adresse signée pour 60 s, ou `/f/<id>`. */
 function redirection(location: string, status: number): Response {
   return new Response(null, { status, headers: { Location: location, "Cache-Control": "private, no-store" } })
 }
@@ -342,7 +360,7 @@ export async function handlePlateforme(request: Request, options: PlatformReques
     }
     // L'inscription (E12-S01) : sans organisation par l'adresse, sur l'option de l'hôte seule ; sans elle, route inconnue.
     if (options.signup && isSignupRoute(segments, method)) return await signupResponse(request, session, { signup: options.signup, defer: options.defer }, started)
-    const match = matchRoute(segments, method)
+    const match = fileAddressMatch(request, method) ?? matchRoute(segments, method)
     if (!match) return errorResponse(new PlatformError("not_found", "Unknown route."))
 
     let identity: Identity

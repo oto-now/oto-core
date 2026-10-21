@@ -1,6 +1,6 @@
 // Le fichier en transit (fichiers et stockage, § Fichier en transit ; décision d'Alexis du 19/10) : un fichier qui passe
 // entre une personne et un connecteur, une ligne `files` sans nœud, avec une échéance. Il se dépose en trois temps comme
-// un fichier joint (demande, envoi au bucket, confirmation), se relit par une redirection, se lit en octets par le moteur
+// un fichier joint (demande, envoi au bucket, confirmation), se relit à son adresse (`address.ts`), se lit en octets par le moteur
 // et s'efface à son échéance ou à sa consommation. Seule la personne qui l'a fait entrer le lit : le service le décide en
 // filtrant sur elle avant toute URL, et la RLS le cache à tout autre (organisation, équipe, administrateur, équipe
 // plateforme). Le moteur court sous l'identité de la personne qui appelle, donc ne lit que les siens. Il compte au quota
@@ -12,7 +12,7 @@ import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput } from "../errors"
 import type { Identity } from "../identity"
 import { insertPending, markReady } from "./rows"
-import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, readResponse, removeObjects, requireStore, unknownFile } from "./service"
+import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, removeObjects, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
 /**
@@ -93,13 +93,11 @@ export async function completeTransitUpload(db: PlatformDb, identity: Identity, 
 }
 
 /**
- * La lecture d'un fichier en transit par son auteur (`GET transit-files/<id>`) : l'URL présignée de 60 s où la route
- * redirige, au type et à la disposition de son extension, comme un fichier joint téléchargé.
+ * Un fichier en transit de l'appelant, prêt et non échu, pour sa lecture à son adresse (`/f/<id>`, `address.ts`) ; sinon
+ * `not_found`, comme `ownTransitRow`.
  */
-export async function transitReadUrl(db: PlatformDb, identity: Identity, fileId: unknown): Promise<string> {
-  const store = requireStore()
-  const row = await ownTransitRow(db, identity, transitIdOf(fileId), "ready")
-  return onStorage("read url", () => store.readUrl(objectKey(identity.org.id, row.id), readResponse(row, false)))
+export async function readyTransitFile(db: PlatformDb, identity: Identity, fileId: unknown): Promise<TransitRow> {
+  return ownTransitRow(db, identity, transitIdOf(fileId), "ready")
 }
 
 /**
@@ -109,7 +107,7 @@ export async function transitReadUrl(db: PlatformDb, identity: Identity, fileId:
  */
 export async function readTransitBytes(db: PlatformDb, identity: Identity, fileId: unknown): Promise<TransitBytes> {
   const store = requireStore()
-  const row = await ownTransitRow(db, identity, transitIdOf(fileId), "ready")
+  const row = await readyTransitFile(db, identity, fileId)
   const url = await onStorage("read url", () => store.readUrl(objectKey(identity.org.id, row.id), { contentType: "application/octet-stream", disposition: "attachment" }))
   const bytes = await boundedBytes(url, row.name, FILE_MAX_BYTES)
   return { id: row.id, name: row.name, mime: row.mime, size: row.size, bytes }

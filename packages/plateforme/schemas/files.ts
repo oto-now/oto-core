@@ -4,7 +4,7 @@
 // que Windows annonce `application/vnd.ms-excel` reste un CSV. Sans lui, service et écran tiendraient chacun
 // leur liste de types et leurs limites.
 import * as z from "zod/v4"
-import { PLATFORM_API_PREFIX } from "./api"
+import { FILE_ADDRESS, PLATFORM_API_PREFIX } from "./api"
 import { fileExtension } from "./csv"
 import { nodePathSchema } from "./nodes"
 
@@ -106,7 +106,10 @@ export const fileIdSchema = z.uuid()
 /** `GET files/<id>?disposition=inline` : « Voir » d'un PDF, d'un `txt` ou d'un `csv` (AC-a5) ; ignoré pour un autre type. */
 export const fileReadQuerySchema = z.object({ disposition: z.literal("inline").optional() })
 
-/** Les routes des fichiers d'une personne connectée : `<route>/<id>`, `…/html`, `…/markdown`. */
+/**
+ * Les routes de l'API des fichiers d'une personne connectée : les vues des écrans (`<route>/<id>/html`, `…/markdown`) ;
+ * `<route>/<id>` redirige vers l'adresse du fichier (`FILE_ADDRESS`).
+ */
 export const FILES_ROUTE = `${PLATFORM_API_PREFIX}files`
 
 /**
@@ -118,12 +121,20 @@ export function publicFilesRoute(token: string): string {
 }
 
 /**
- * L'adresse de lecture d'un fichier joint, sur l'origine de la page (`GET files/<id>`, AC-a5) : celle que l'écran
- * donne à une image et à « Télécharger » (AC-b1, AC-b2), et que le markdown d'un bloc cite. `route` : celle d'un lien
- * public (`publicFilesRoute`), `FILES_ROUTE` sinon. Sans elle, écran et markdown écriraient chacun le chemin de la route.
+ * L'adresse de lecture d'un fichier, sur l'origine de la page (`/f/<id>`, AC-a5) : celle que l'écran donne à une image et
+ * à « Télécharger » (AC-b1, AC-b2), et que le markdown d'un bloc cite. `route` : celle d'un lien public
+ * (`publicFilesRoute`), `FILE_ADDRESS` sinon. Sans elle, écran et markdown écriraient chacun le chemin de la route.
  */
-export function filePath(id: string, route: string = FILES_ROUTE): string {
+export function filePath(id: string, route: string = FILE_ADDRESS): string {
   return `${route}/${id}`
+}
+
+/**
+ * La route isolée d'un fichier HTML (ADR-017), qui reste dans l'API (`FILES_ROUTE`) : l'adresse d'un fichier ne la porte
+ * pas. `route` : celle d'un lien public, ou `FILE_ADDRESS` pour une personne connectée.
+ */
+export function fileHtmlPath(id: string, route: string = FILE_ADDRESS): string {
+  return `${route === FILE_ADDRESS ? FILES_ROUTE : route}/${id}/html`
 }
 
 /**

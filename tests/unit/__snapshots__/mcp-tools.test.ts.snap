@@ -73,7 +73,7 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "type": "boolean",
         },
         "file": {
-          "description": "Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link /api/platform/files/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).",
+          "description": "Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link /f/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).",
           "maxLength": 100,
           "minLength": 1,
           "type": "string",

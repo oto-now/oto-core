@@ -55,7 +55,7 @@ describe("VisionneuseDeFichier — an HTML file (AC-c2, AC-c4)", () => {
     const { fetch } = monter()
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("rapport.html")
     expect(screen.getByText(tailleLisible(12_800))).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: FICHIERS.telechargerNom("rapport.html") })).toHaveAttribute("href", `/api/platform/files/${ID}`)
+    expect(screen.getByRole("link", { name: FICHIERS.telechargerNom("rapport.html") })).toHaveAttribute("href", `/f/${ID}`)
     expect(screen.getByRole("link", { name: "Ouvrir la page Rapports" })).toHaveAttribute("href", "/n/ventes/rapports")
     const banniere = screen.getByRole("note")
     expect(banniere).toHaveTextContent("Contenu interactif publié par Acme. N'y saisissez jamais de mot de passe.")

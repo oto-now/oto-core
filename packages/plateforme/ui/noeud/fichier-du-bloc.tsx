@@ -25,7 +25,8 @@ import { FileTxt } from "@phosphor-icons/react/dist/csr/FileTxt"
 import { FileXls } from "@phosphor-icons/react/dist/csr/FileXls"
 import { FileZip } from "@phosphor-icons/react/dist/csr/FileZip"
 import type { ImageWidth } from "../../schemas/blocks"
-import { filePath, FILES_ROUTE, fileTypeOf, IMAGE_TYPES, type FileType } from "../../schemas/files"
+import { FILE_ADDRESS } from "../../schemas/api"
+import { filePath, fileTypeOf, IMAGE_TYPES, type FileType } from "../../schemas/files"
 import { fichierDisponible } from "../api/client"
 import { Dialog } from "../ds/react/dialog"
 import { Icon, type Glyphe } from "../ds/react/icon"
@@ -63,9 +64,9 @@ const PROPORTIONS = "h-auto max-w-full object-contain"
 /**
  * L'adresse de « Voir » (AC-c1) : un PDF, un `txt` ou un `csv` à la route de lecture, `inline` ; un `html` ou un `md` à
  * la visionneuse, l'adresse de la page où l'on est suivie de `?view=<id>` (relative : `/n/<chemin>` comme `/p/<jeton>/…`) ;
- * `null` pour ce qui ne se voit pas. `route` : les routes d'un lien public (AC-c5), `FILES_ROUTE` sinon.
+ * `null` pour ce qui ne se voit pas. `route` : les routes d'un lien public (AC-c5), l'adresse d'un fichier (`/f`) sinon.
  */
-export function adresseDeVue(id: string, type: FileType | null, route: string = FILES_ROUTE): string | null {
+export function adresseDeVue(id: string, type: FileType | null, route: string = FILE_ADDRESS): string | null {
   if (type === null || !VUS.includes(type)) return null
   return AFFICHES_PAR_LE_NAVIGATEUR.includes(type) ? `${filePath(id, route)}?disposition=inline` : `?view=${encodeURIComponent(id)}`
 }
@@ -145,11 +146,11 @@ type CarteProps = { id: string; nom: string; taille: number; routeDesFichiers?: 
  * La carte d'un fichier joint (AC-b2) : l'icône de son type, son nom, sa taille lisible, « Voir » pour un `html`, un
  * `md`, un PDF, un `txt` ou un `csv`, et « Télécharger ». Indisponible, elle garde son nom et le dit (AC-b8).
  */
-export function CarteDeFichier({ id, nom, taille, routeDesFichiers = FILES_ROUTE }: CarteProps) {
+export function CarteDeFichier({ id, nom, taille, routeDesFichiers = FILE_ADDRESS }: CarteProps) {
   const adresse = filePath(id, routeDesFichiers)
   const type = fileTypeOf(nom)
   const vue = adresseDeVue(id, type, routeDesFichiers)
-  const servi = useDisponible(id, routeDesFichiers === FILES_ROUTE)
+  const servi = useDisponible(id, routeDesFichiers === FILE_ADDRESS)
   const glyphe = type === null ? FichierQuelconque : (GLYPHES[type] ?? (IMAGE_TYPES.includes(type) ? FileImage : FichierQuelconque))
   return (
     // La ligne d'un fichier du design system (`oto-file`, E11-S15, AC-b2) : filet, rayon et surface de carte ; elle se replie sous ses boutons.

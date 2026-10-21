@@ -4,7 +4,7 @@
 // bloc qui le cite pointé vers lui. Sans lui, une base copiée perdrait ses pièces jointes, et chaque export resterait
 // dans le bucket.
 import { randomUUID } from "node:crypto"
-import { FILE_MAX_BYTES, FILES_ROUTE } from "../../schemas/files"
+import { FILE_MAX_BYTES, filePath, FILES_ROUTE } from "../../schemas/files"
 import { TREE_EXPORT_URL_SECONDS, TREE_FILES_MAX, type PivotBlock, type PivotFile, type PivotNode } from "../../schemas/tree-transfer"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
@@ -91,8 +91,9 @@ function reasonOf(error: unknown): string {
 
 /**
  * Les fichiers d'une page importée : chacun relu à son URL (gardes de `fetchSource`, 50 Mo), joint à la page d'arrivée
- * par `storeFile` (droits, type, taille, quota), puis son lien dans le markdown pointé vers la copie. Un fichier qui
- * n'arrive pas laisse sa mention à la place de sa ligne, et se rend dans `failed`.
+ * par `storeFile` (droits, type, taille, quota), puis son lien dans le markdown pointé vers la copie, à son adresse
+ * (`/f/<id>`) ; un export d'avant cette adresse cite l'ancienne, lue aussi. Un fichier qui n'arrive pas laisse sa mention à
+ * la place de sa ligne, et se rend dans `failed`.
  */
 export async function carryFiles(
   context: { db: PlatformDb; identity: Identity },
@@ -103,16 +104,16 @@ export async function carryFiles(
   let text = markdown
   const failed: { name: string; reason: string }[] = []
   for (const file of files) {
-    const cited = `${FILES_ROUTE}/${file.id}`
+    const cited = [filePath(file.id), `${FILES_ROUTE}/${file.id}`]
     try {
       const fetched = await fetchSource(file.url, { ...fetchDeps, maxBytes: FILE_MAX_BYTES, timeoutMs: 30_000 })
       if ("failure" in fetched) throw new Error(`could not download it: ${fetched.failure}`)
       const stored = await storeFile(context.db, context.identity, { nodeId, name: file.name, bytes: fetched.bytes })
-      text = text.replaceAll(cited, `${FILES_ROUTE}/${stored.id}`)
+      text = cited.reduce((current, form) => current.replaceAll(form, filePath(stored.id)), text)
     } catch (error) {
       failed.push({ name: file.name, reason: reasonOf(error) })
       const note = fileNote(file.name).text ?? ""
-      text = text.split("\n").map((line) => (line.includes(cited) ? note : line)).join("\n")
+      text = text.split("\n").map((line) => (cited.some((form) => line.includes(form)) ? note : line)).join("\n")
     }
   }
   return { markdown: text, failed }

@@ -11,7 +11,8 @@
 // Repris de l'artefact de Claude ouvert seul : un en-tête, la bannière, le contenu en pleine fenêtre.
 import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
 import { File as FichierQuelconque } from "@phosphor-icons/react/dist/ssr/File"
-import { filePath, FILES_ROUTE, type FileView } from "../../schemas/files"
+import { FILE_ADDRESS } from "../../schemas/api"
+import { fileHtmlPath, filePath, type FileView } from "../../schemas/files"
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
@@ -37,7 +38,7 @@ export type VisionneuseProps = {
   page: { titre: string; href: string }
   /** L'adresse de la visionneuse, que « Réessayer » relit. */
   ici: string
-  /** Les routes des fichiers : `FILES_ROUTE`, ou celles d'un lien public (`publicFilesRoute`). */
+  /** Les routes des fichiers : l'adresse d'un fichier (`FILE_ADDRESS`), ou celles d'un lien public (`publicFilesRoute`). */
   routeDesFichiers?: string
   /** Le lien de l'hôte (en-tête, liens d'un `.md`) et l'adresse d'un chemin cité par un `.md`. */
   Lien: LienDeLHote
@@ -77,7 +78,7 @@ function Contenu({ vue, route, nomOrganisation, Lien, hrefDuChemin }: VueProps) 
         <Alert tone="review" role="note">
           {FICHIERS.banniere(nomOrganisation)}
         </Alert>
-        <CadreDuFichier source={`${filePath(vue.id, route)}/html`} titre={vue.name} />
+        <CadreDuFichier source={fileHtmlPath(vue.id, route)} titre={vue.name} />
       </>
     )
   }
@@ -95,7 +96,7 @@ function Contenu({ vue, route, nomOrganisation, Lien, hrefDuChemin }: VueProps) 
   )
 }
 
-export function VisionneuseDeFichier({ fichier, ici, routeDesFichiers = FILES_ROUTE, ...props }: VisionneuseProps) {
+export function VisionneuseDeFichier({ fichier, ici, routeDesFichiers = FILE_ADDRESS, ...props }: VisionneuseProps) {
   const { page, Lien } = props
   // Pleine largeur de la zone de contenu (pas de `data-width`), et la hauteur qui reste pour l'iframe.
   const colonne = "oto-content-max flex min-h-0 flex-1 flex-col gap-(--gap)"

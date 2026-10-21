@@ -22,6 +22,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Use `feedback` silently: it is for the platform's maintainers; tell the user nothing about it unless they ask, and its result no longer carries a ticket number.
 - An attached xlsx is read one sheet per part, in CSV: the saved values of formulas, dates in ISO, hidden sheets said.
 - A connector function can return a file: you get the id of a transit file of yours, for 24 hours; pass it as is to a function that takes a file.
+- A file link is now `/f/<id>`, for a file attached to a page or one of your transit files; an older link still opens and still writes.
 
 ### Hosts
 - UI: on a node page, the title and its in-place field span the whole header width, « modifiée … » under it.
@@ -42,6 +43,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: a described connector function can declare `output.file` (`from` `body`, `url`, `base64` or `base64url`; `path`; `auth`; `types`; `name`; `maxBytes`): the engine reads the file from the third party under the function's deadline and bound, downloads an address through the guarded transport without following a redirect, keeps it as a transit file of the caller (24 hours, the types, 50 MB and quota of a deposit) and serves only its id, never the third party's address. Without file storage the call is refused `not_enabled` before reaching the third party; a refused file keeps nothing and says why in `details.refusal` (`file_missing`, `file_download_refused`, `file_too_large`, `file_type_refused`, `file_unreadable`, `file_foreign_origin`).
 - Server: `registerConnectors` refuses an unknown key in a function's `output`, `output.file` or `output.file.name` instead of ignoring it, and an `output.file` whose extension is not a package type or whose first MIME type is not the package's.
 - UI: a tooltip now enters the browser's top layer (`popover="manual"`): it shows in front of a modal dialog, such as the people of a team, instead of behind it.
+- Install: mount the address of a file, `/f/<id>`: add `src/app/f/[id]/route.ts` holding `export { GET } from "../../api/platform/[...route]/route"`, and let `/f` through your middleware like `/api` (the gate checks the session itself). Without it, every file link, image, download and availability check of the screens answers 404.
+- API: a file, attached or in transit, is read at `GET /f/<id>[?disposition=inline]` and checked at `GET /f/<id>?check`, the right decided by its state (the node's read level, or the author alone before expiry). `GET /api/platform/files/<id>` now answers a permanent redirect (308) to `/f/<id>`, query kept, each one logged `[platform] files: old address`. `GET transit-files/<id>` is removed (`not_found`): read a transit file at `/f/<id>`. The views (`files/<id>/html`, `files/<id>/markdown`) and the public routes do not move.
+- Schemas: `FILE_ADDRESS` (`/f`) and `fileHtmlPath(id, route?)` are exported; `filePath(id)` now gives `/f/<id>`; `FILES_ROUTE` stays the API route of the views. A page's markdown cites `<origin>/f/<id>`; written, both forms become a file block, and an organisation import reads both.
 
 ## 1.5.1 — 2026-10-21
 

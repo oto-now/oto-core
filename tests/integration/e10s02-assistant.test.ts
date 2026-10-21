@@ -101,13 +101,13 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       select type, text, data from platform.blocks where node_id = ${nodeId} and state = ${state} order by position, id`
 
   describe("read and write of attached files (AC-d1, AC-d3)", () => {
-    it("should read back both forms from any origin on the page that holds them, take the file from its row, and serve them on the origin of the request", async () => {
+    it("should read back both forms from any origin, at the old address too, on the page that holds them, take the file from its row, and serve them on the origin of the request", async () => {
       const claire = await session("claire")
       const path = `ventes/d_formes_${hex(3)}`
       const node = await page(claire, path)
       const image = await attached(node, "plan.png", bytesOf("png"))
       const report = await attached(node, "rapport mars.pdf", null, { size: 1_200 })
-      const text = [`![Plan du site](https://ailleurs.example.invalid/api/platform/files/${image.toUpperCase()})`, `[le rapport (3 bytes, zip)](/api/platform/files/${report})`].join("\n\n")
+      const text = [`![Plan du site](https://ailleurs.example.invalid/api/platform/files/${image.toUpperCase()})`, `[le rapport (3 bytes, zip)](/f/${report})`].join("\n\n")
 
       const written = await claire.call("write", { path, base_revision: 0, ops: [{ op: "append", section: "Pièces", text }], publish: true })
       const read = await claire.call("read", { path })
@@ -118,7 +118,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         { type: "file", text: null, data: { file_id: report, name: "rapport mars.pdf", size: 1_200, mime: "application/pdf" } },
       ])
       expect(read.text).toContain(
-        `## Pièces\n\nIntro.\n\n![Plan du site](https://${o.host}/api/platform/files/${image})\n\n[rapport mars.pdf (1,200 bytes, pdf)](https://${o.host}/api/platform/files/${report})`,
+        `## Pièces\n\nIntro.\n\n![Plan du site](https://${o.host}/f/${image})\n\n[rapport mars.pdf (1,200 bytes, pdf)](https://${o.host}/f/${report})`,
       )
     })
 
@@ -164,7 +164,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       )
 
       expect(output.data).toMatchObject({ kept_as_text: 1 })
-      expect((await blocksOf(node, "published")).at(-1)).toEqual({ type: "code", text: `[source.pdf (10 bytes, pdf)](/api/platform/files/${elsewhere})`, data: {} })
+      expect((await blocksOf(node, "published")).at(-1)).toEqual({ type: "code", text: `[source.pdf (10 bytes, pdf)](/f/${elsewhere})`, data: {} })
     })
 
     it("should refuse a file block whose file was cited only by an image and has no ready row, and keep it in a code block in tolerant mode", async () => {
@@ -183,7 +183,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
       expect([strict.isError, strict.text]).toEqual([true, `File ${pending} is not attached to ${path}: upload it to this page first.`])
       expect(tolerant.data).toMatchObject({ kept_as_text: 1 })
-      expect((await blocksOf(node, "published")).at(-1)).toEqual({ type: "code", text: `[x (1 byte, application/octet-stream)](/api/platform/files/${pending})`, data: {} })
+      expect((await blocksOf(node, "published")).at(-1)).toEqual({ type: "code", text: `[x (1 byte, application/octet-stream)](/f/${pending})`, data: {} })
     })
   })
 

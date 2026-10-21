@@ -59,7 +59,7 @@ type BlocARendre = { type: string; text: string | null; data: Record<string, unk
  */
 export type Liens = { Lien: LienDUnBloc; hrefDuChemin: (chemin: string) => string; cibles?: CiblesDesLiens; lecture?: Promise<Resultat<Record<string, unknown>>> }
 
-/** `routeDesFichiers` : les routes des fichiers d'un lien public (`publicFilesRoute`, AC-c5) ; `FILES_ROUTE` sans elle. */
+/** `routeDesFichiers` : les routes des fichiers d'un lien public (`publicFilesRoute`, AC-c5) ; l'adresse d'un fichier (`/f`) sans elle. */
 type RenduProps = Liens & { bloc: BlocARendre; routeDesFichiers?: string }
 
 /** `numeroter` : chaque lien rendu porte son rang dans `liensDuTexte` (`data-lien`), que l'éditeur lit au clic (E11-S06, AC-b2). */

@@ -7,7 +7,7 @@
 // uniques, 40 000 caractères par opération, 50 opérations, bornes de la page, champs propres à chaque
 // opération), pour que le JSON Schema servi ne change que par les ajouts de la story.
 import * as z from "zod/v4"
-import { PLATFORM_API_PREFIX } from "./api"
+import { FILE_ADDRESS } from "./api"
 import type { BlockType } from "./blocks"
 
 export const NODE_PATH_PATTERN = /^[a-z0-9_]+(\/[a-z0-9_]+)*$/
@@ -196,7 +196,7 @@ export const readNodeSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      `Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link ${PLATFORM_API_PREFIX}files/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
+      `Id of one file attached to the page (html, md, txt, csv, or a format the host reads), from a file link ${FILE_ADDRESS}/<id>, to read its text alone; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
     ),
 })
 

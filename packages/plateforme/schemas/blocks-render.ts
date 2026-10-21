@@ -44,7 +44,7 @@ export type RenderOptions<B extends BlockLike = BlockLike> = {
   refs?: (block: B) => string | null
   /**
    * La route des fichiers d'un bloc `file` ou d'une image jointe (E10-S02, AC-d1) : `read` passe `<origine>` suivie de
-   * `FILES_ROUTE`, pour qu'un assistant tienne une adresse absolue ; sans elle, `FILES_ROUTE`, relative à la page.
+   * `FILE_ADDRESS` (`/f`), pour qu'un assistant tienne une adresse absolue ; sans elle, `FILE_ADDRESS`, relative à la page.
    */
   fileRoute?: string
 }

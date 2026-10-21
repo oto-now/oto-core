@@ -1,17 +1,18 @@
 // Les deux formes markdown d'un fichier joint (E10-S02, AC-d1) relues par `parseMarkdown` : l'image
-// `![<alt>](<origine>/api/platform/files/<id>)` et le fichier `[<nom> (<taille>, <type>)](<origine>/api/platform/files/<id>)`,
-// que `renderBlock` écrit (`schemas/blocks-render.ts`). Le chemin de la route fait la forme, quelle que soit l'origine,
-// absente comprise (aller-retour, ADR-011 § 5). Fichier à part de `markdown-parse.ts` pour la borne de 300 lignes.
+// `![<alt>](<origine>/f/<id>)` et le fichier `[<nom> (<taille>, <type>)](<origine>/f/<id>)`, que `renderBlock` écrit
+// (`schemas/blocks-render.ts`). Le chemin de l'adresse fait la forme, quelle que soit l'origine, absente comprise
+// (aller-retour, ADR-011 § 5). L'ancienne adresse, `/api/platform/files/<id>`, se lit aussi, tant que sa redirection vit
+// (fichiers et stockage, § Adresse unique) : un assistant qui recopie un ancien lien écrit un bloc juste. Fichier à part de `markdown-parse.ts` pour la borne de 300 lignes.
 //
 // Le nom, la taille et le type lus ici ne font pas foi : `writeNode` les reprend de la ligne `files` (AC-d3). Une
 // étiquette qui n'a pas la forme du rendu (« [le rapport](…) » écrit à la main) donne donc un bloc aux métadonnées
 // provisoires, que l'écriture remplace. Chaque lecture est linéaire (`security-patterns.md § Validation des inputs`) :
 // expressions ancrées dont chaque caractère n'a qu'une lecture, et recherche de la dernière `](` à la main.
-import { FILE_MAX_BYTES, FILE_TYPES, FILES_ROUTE, type BlockInput, type FileType } from "../../schemas"
+import { FILE_ADDRESS, FILE_MAX_BYTES, FILE_TYPES, FILES_ROUTE, type BlockInput, type FileType } from "../../schemas"
 import { chars } from "../../schemas/blocks"
 
-/** L'adresse de lecture d'un fichier : une origine `http(s)` facultative, la route, un uuid (casse indifférente). */
-const FILE_URL = new RegExp(`^(?:https?://[^\\s/?#()]+)?${FILES_ROUTE}/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+/** L'adresse d'un fichier : une origine `http(s)` facultative, `/f` ou l'ancienne route, un uuid (casse indifférente). */
+const FILE_URL = new RegExp(`^(?:https?://[^\\s/?#()]+)?(?:${FILE_ADDRESS}|${FILES_ROUTE})/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
 
 /** « 1,200 bytes, pdf » : la taille exacte et le type d'une étiquette rendue (`fileSizeText`). */
 const SIZE_AND_TYPE = /^(\d{1,3}(?:,\d{3})*) bytes?, (.+)$/
