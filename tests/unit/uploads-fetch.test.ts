@@ -53,33 +53,37 @@ function dns(answers: Record<string, LookupAddress[][]>): Resolve {
 const bytes = (text: string) => new TextEncoder().encode(text)
 
 describe("addresses a source_url never reaches (AC-f13)", () => {
-  it.each([
-    ["93.184.216.34", true],
-    ["2606:4700:4700::1111", true],
-    ["127.0.0.1", false],
-    ["10.1.2.3", false],
-    ["172.20.0.1", false],
-    ["192.168.1.1", false],
-    ["100.100.100.200", false],
-    ["169.254.169.254", false],
-    ["0.0.0.0", false],
-    ["::1", false],
-    ["::", false],
-    ["fe80::1", false],
-    ["fd00:ec2::254", false],
-    ["::ffff:127.0.0.1", false],
-    ["64:ff9b::7f00:1", false],
-    ["2002:7f00:1::", false],
-    // IPv4 compatible (::/96) et NAT64 local (64:ff9b:1::/48), refusés entiers ; leurs voisines hors des plages passent.
-    ["::7f00:1", false],
-    ["::a9fe:a9fe", false],
-    ["64:ff9b:1::a9fe:a9fe", false],
-    ["64:ff9b:1:ffff::1", false],
-    ["::1:0:0:1", true],
-    ["64:ff9b:2::1", true],
-    ["not-an-address", false],
-  ])("should say %s is public: %s", (address, expected) => {
-    expect(isPublicAddress(address)).toBe(expected)
+  const verdicts = (addresses: string[]) => Object.fromEntries(addresses.map((address) => [address, isPublicAddress(address)]))
+
+  it("should refuse a private, loopback, link-local, metadata, mapped or translated address, and what is not an address", () => {
+    const refused = [
+      "127.0.0.1",
+      "10.1.2.3",
+      "172.20.0.1",
+      "192.168.1.1",
+      "100.100.100.200",
+      "169.254.169.254",
+      "0.0.0.0",
+      "::1",
+      "::",
+      "fe80::1",
+      "fd00:ec2::254",
+      "::ffff:127.0.0.1",
+      "64:ff9b::7f00:1",
+      "2002:7f00:1::",
+      // IPv4 compatible (::/96) et NAT64 local (64:ff9b:1::/48), refusés entiers.
+      "::7f00:1",
+      "::a9fe:a9fe",
+      "64:ff9b:1::a9fe:a9fe",
+      "64:ff9b:1:ffff::1",
+      "not-an-address",
+    ]
+    expect(verdicts(refused)).toEqual(Object.fromEntries(refused.map((address) => [address, false])))
+  })
+
+  it("should let a public address pass, the neighbours of the refused ranges included", () => {
+    const passed = ["93.184.216.34", "2606:4700:4700::1111", "::1:0:0:1", "64:ff9b:2::1"]
+    expect(verdicts(passed)).toEqual(Object.fromEntries(passed.map((address) => [address, true])))
   })
 })
 
@@ -165,15 +169,17 @@ describe("download of a source_url (AC-f12, AC-f13)", () => {
 })
 
 describe("the type a markdown file or a CSV is downloaded under (FB-0014, HN-E10S02-118)", () => {
-  it.each([
-    ["text/markdown; charset=utf-8", null],
-    ["text/plain", null],
-    ["TEXT/CSV", null],
-    ["application/octet-stream", null],
-    [null, null],
-    ["text/html; charset=UTF-8", "source_url serves text/html, not a text file: a markdown file or a CSV is read from text/markdown, text/plain or text/csv"],
-    ["application/json", "source_url serves application/json, not a text file: a markdown file or a CSV is read from text/markdown, text/plain or text/csv"],
-  ])("should read %s as: %s", (type, failure) => {
-    expect(textSourceFailure(type)).toBe(failure)
+  const verdicts = (types: (string | null)[]) => Object.fromEntries(types.map((type) => [String(type), textSourceFailure(type)]))
+
+  it("should read a text type, an unnamed binary or no type, whatever its case", () => {
+    const read = ["text/markdown; charset=utf-8", "text/plain", "TEXT/CSV", "application/octet-stream", null]
+    expect(verdicts(read)).toEqual(Object.fromEntries(read.map((type) => [String(type), null])))
+  })
+
+  it("should refuse another type, naming it", () => {
+    expect(verdicts(["text/html; charset=UTF-8", "application/json"])).toEqual({
+      "text/html; charset=UTF-8": "source_url serves text/html, not a text file: a markdown file or a CSV is read from text/markdown, text/plain or text/csv",
+      "application/json": "source_url serves application/json, not a text file: a markdown file or a CSV is read from text/markdown, text/plain or text/csv",
+    })
   })
 })

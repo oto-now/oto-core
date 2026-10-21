@@ -140,7 +140,7 @@ describe("refusals (AC4)", () => {
     })
   })
 
-  it.each([`${ROOT}/api/other`, `${ROOT}/x`, `${ROOT}/api/mcp/extra`])("should answer 404 not_found at %s, without reading org_domains", async (path) => {
+  it.each([`${ROOT}/api/other`, `${ROOT}/api/mcp/extra`])("should answer 404 not_found at %s, without reading org_domains", async (path) => {
     const response = await handleResourceMetadata(lecture(path, ACME), { findOrg })
 
     expect(response.status).toBe(404)

@@ -165,7 +165,7 @@ oui, il ne sera pas jeté et répond seul à la seconde demande.
 ### Lot b — Modèle en ligne (M, fonctions pures)
 
 - [ ] **AC-b1 — Stabilité.** **Given** tout texte de bloc des tests existants (`tests/unit/ui-en-ligne*.test.ts`,
-  `e05s10a-liens.test.ts`, `e11s06-editeur.test.ts`, fixtures d'E10-S04) et du script de démo **When** il est
+  `ui-editeur-liens.test.ts`, `ui-editeur-liens.test.ts`, fixtures d'E10-S04) et du script de démo **When** il est
   lu en document puis réécrit sans changement **Then** la source est identique à l'octet près (`_it_` reste
   `_it_`, `<br/>` reste `<br/>`, `\*` reste `\*`, un `[[a|  T ]]` reste tel quel).
 - [ ] **AC-b2 — Fidélité.** **Given** un document écrit par l'éditeur (marques, atomes, et les caractères
@@ -366,8 +366,8 @@ de nouveau au lot a).
   → `rendu-des-blocs.tsx` (lecture, inchangée), `champ-de-bloc.tsx`, `elements-de-liste.tsx` ; classes :
   `rg -c "oto-block-pile|oto-block-rendu|data-rendu|oto-block-copie|oto-block-element|oto-block-repere" C:/apps/oto-pkg/packages C:/apps/oto-pkg/src C:/apps/oto-pkg/tests`
   → `editeur.css` (19), `blocks.css` (1), `champ-de-bloc.tsx`, `elements-de-liste.tsx` ; tests
-  `e11s06-editeur.test.tsx` (7), `e11s15-editeur.test.tsx` (4), `editeur-de-blocs.test.tsx` (4),
-  `e10s06-editeur.test.tsx`, `e05s11-editeur.test.tsx`, `procedure.test.tsx` (1 chacun) ; e2e
+  `liens-en-edition.test.tsx` (7), `editeur-de-blocs.test.tsx` (4), `editeur-de-blocs.test.tsx` (4),
+  `editeur-blocs-de-page.test.tsx`, `editeur-de-blocs.test.tsx`, `procedure.test.tsx` (1 chacun) ; e2e
   `e11s06-editeur.spec.ts` (3), `e05s11-page.spec.ts`, `e05s10a-edition.spec.ts` (1 chacun). Tous réécrits
   aux lots c et d.
 - Opérations sur un rang de la source : `rg -c "\bscinder\(|\bfondre\(|sortirDeLaListe\(|ecrireTexte\(" C:/apps/oto-pkg/packages C:/apps/oto-pkg/tests`
@@ -387,9 +387,9 @@ de nouveau au lot a).
   → `actions.ts` (7), `use-envois.ts` (6), `modele.ts` (3), `gestes.ts` (2) ; `ui/equipes/repli-du-focus.ts`
   (1) est un homonyme sans lien. Le geste unitaire reste, le groupe s'y ajoute.
 - Tests qui tapent dans un champ : `rg -c "toHaveValue|fireEvent\.(change|input)|setSelectionRange|selectionStart" C:/apps/oto-pkg/tests/integration C:/apps/oto-pkg/tests/unit`
-  → pour l'éditeur : `e11s06-editeur.test.tsx` (34), `editeur-de-blocs.test.tsx` (33), `e10s06-editeur.test.tsx`
-  (17), `ecran-de-noeud.test.tsx` (8), `procedure.test.tsx` (7), `e05s11-editeur.test.tsx` (6),
-  `e11s15-editeur.test.tsx` (2), `e10s02-fichiers.test.tsx` (2) ; les autres fichiers de la liste visent des
+  → pour l'éditeur : `liens-en-edition.test.tsx` (34), `editeur-de-blocs.test.tsx` (33), `editeur-blocs-de-page.test.tsx`
+  (17), `ecran-de-noeud.test.tsx` (8), `procedure.test.tsx` (7), `editeur-de-blocs.test.tsx` (6),
+  `editeur-de-blocs.test.tsx` (2), `fichiers-dans-l-editeur.test.tsx` (2) ; les autres fichiers de la liste visent des
   formulaires hors de l'éditeur, inchangés. Champ nommé : `rg -l "data-champ|oto-block-field|Modifier ce texte" C:/apps/oto-pkg/tests`
   → 22 fichiers (16 d'intégration, 6 e2e), triés au lot c : une assertion sur le nom ou le rôle tient, une
   sur la valeur passe au contenu du champ ou à l'e2e.

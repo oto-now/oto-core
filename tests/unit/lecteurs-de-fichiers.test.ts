@@ -60,24 +60,19 @@ afterEach(() => {
 })
 
 describe("registerReaders", () => {
-  it("should open at deposit the type a host reader reads, at its declared mime, and nothing else", () => {
+  it("should open at deposit the type a host reader reads, at its declared mime, tell the editor the host types by GET files, and still refuse a type no reader registered, whatever the client sends (lot 1b)", () => {
     expect(() => admittedType("plan.dxf")).toThrow("plan.dxf: this type of file is not admitted.")
+    expect(fileStorageState().hostTypes).toEqual([])
     registerReaders([planReader({})])
     expect([admittedType("Plan RDC.DXF"), admittedType("rapport.pdf")]).toEqual([
       { type: "dxf", mime: "image/vnd.dxf" },
       { type: "pdf", mime: "application/pdf" },
     ])
+    expect(fileStorageState().hostTypes).toEqual(["dxf"])
+    // Un client qui se croit autorisé (liste périmée, appel direct) : le service juge seul, par l'extension.
     expect(() => admittedType("plan.dwg")).toThrow(/plan\.dwg: this type of file is not admitted\. Admitted extensions: .*, dxf\./u)
     // 50 Mo pour un type d'hôte, comme un format binaire : la borne de 4 Mo ne vaut que pour un texte du paquet.
     expect(() => checkSize("plan.dxf", "dxf", READER_LIMITS.textBytes + 1)).not.toThrow()
-  })
-
-  it("should tell the editor the host types by GET files, and still refuse at deposit a type no reader registered, whatever the client sends (lot 1b)", () => {
-    expect(fileStorageState().hostTypes).toEqual([])
-    registerReaders([planReader({})])
-    expect(fileStorageState().hostTypes).toEqual(["dxf"])
-    // Un client qui se croit autorisé (liste périmée, appel direct) : le service juge seul, par l'extension.
-    expect(() => admittedType("plan.dwg")).toThrow("plan.dwg: this type of file is not admitted.")
     registerReaders([])
     expect(fileStorageState().hostTypes).toEqual([])
     expect(() => admittedType("plan.dxf")).toThrow("plan.dxf: this type of file is not admitted.")

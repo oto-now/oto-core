@@ -15,26 +15,21 @@ const duplicate = (shown: number) =>
   `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
 
 describe("ticketNumber (AC2)", () => {
-  it("should pad the organisation's number to four digits", () => {
+  it("should pad the organisation's number to four digits, and keep every digit beyond four", () => {
     expect(ticketNumber(7)).toBe("FB-0007")
     expect(ticketNumber(42)).toBe("FB-0042")
     expect(ticketNumber(1)).toBe("FB-0001")
-  })
-
-  it("should keep every digit beyond four", () => {
     expect(ticketNumber(12_345)).toBe("FB-12345")
   })
 })
 
 describe("duplicateMessage (AC3)", () => {
-  it("should say how many minutes ago the same report was recorded, rounded, and no ticket number", () => {
+  it("should say how many minutes ago the same report was recorded, rounded, one minute at least, and no ticket number", () => {
     expect(duplicateMessage(1)).toBe(duplicate(1))
     expect(duplicateMessage(3)).toBe(duplicate(3))
     expect(duplicateMessage(9)).toBe(duplicate(9))
     expect(duplicateMessage(2.6)).toBe(duplicate(3))
-  })
-
-  it("should say one minute for a ticket filed 20 seconds ago", () => {
+    // Un ticket déposé il y a 20 secondes.
     expect(duplicateMessage(20 / 60)).toBe(duplicate(1))
   })
 })

@@ -326,7 +326,8 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table published over i
     })
   })
 
-  describe("E11-S01: strict required column, proof by table", () => {
+  // La preuve par tableau (AC-f1) : `tables-schema-write.test.ts` (« settings of the screen »).
+  describe("E11-S01: strict required column", () => {
     it("should warn, rewriting no row, about the rows that only have verified_empty in a required column made strict (AC-b5)", async () => {
       await publish({ columns: [{ name: "email", required: true }] })
       const before = await tableRows(seed, ref)
@@ -338,18 +339,5 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table published over i
       expect(await tableRows(seed, ref)).toEqual(before)
     })
 
-    it("should publish proof in one step without reading any row, said « proof optional » then « proof required », and pending as « stop requiring proof » (AC-f1)", async () => {
-      await freshTable(seed, ref)
-      const pending = await writeAs(ref, "claire", { path: PROSPECTS.path, base_revision: 3, header: { proof: false } })
-      expect(pending.result?.text).toContain("header changed (stop requiring proof)")
-      const optional = await publish({ proof: false })
-      expect(optional.result?.text).toBe("Published ventes/suivi_prospects revision 4: proof optional. Next write: base_revision 4.")
-      expect(blockCalls(optional.calls)).toEqual([])
-      expect((await nodeAt(seed, ref, PROSPECTS.path))?.meta).toEqual({ ...PROSPECTS_HEADER, proof: false })
-      const required = await writeAs(ref, "claire", { path: PROSPECTS.path, base_revision: 4, header: { proof: true }, publish: true })
-      expect(required.result?.text).toBe("Published ventes/suivi_prospects revision 5: proof required. Next write: base_revision 5.")
-      expect(blockCalls(required.calls)).toEqual([])
-      expect((await nodeAt(seed, ref, PROSPECTS.path))?.meta).toEqual(PROSPECTS_HEADER)
-    })
   })
 })

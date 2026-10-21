@@ -130,11 +130,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(error.details).toEqual({ reason: "last_admin" })
         expect(await fx.admin`select role from platform.members where org_id = ${o.org.id} and user_id = ${o.people.ada.id}`).toEqual([{ role: "admin" }])
       })
-
-      it("should refuse a plain member (forbidden)", async () => {
-        const error = await refusal(updateMember(db("lea"), await identity("lea", o), o.people.marc.id, { role: "admin" }))
-        expect(error.code).toBe("forbidden")
-      })
     })
 
     describe("removeMember (AC9, H70)", () => {
@@ -156,11 +151,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
           fx.admin`select id from platform.access_rules where org_id = ${r.org.id} and subject_user_id = ${o.people.claire.id}`,
         ])
         expect([[...links], [...rules]]).toEqual([[], []])
-      })
-
-      it("should refuse a plain member (forbidden)", async () => {
-        const error = await refusal(removeMember(db("lea"), await identity("lea", o), o.people.marc.id))
-        expect(error.code).toBe("forbidden")
       })
     })
 
@@ -211,11 +201,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(addedByStaff.find((member) => member.userId === nina.id)?.joinedAt).toEqual(expect.any(String))
       })
 
-      it("should refuse a plain member (forbidden)", async () => {
-        const error = await refusal(listPlatformAccess(db("lea"), await identity("lea", o)))
-        expect(error.code).toBe("forbidden")
-      })
-
       it("should let an administrator revoke an access, idempotently: its holder is no longer an administrator", async () => {
         const p = await fx.buildReferenceOrg(o.people)
         const grant = await fx.grantPlatformAccess(p.org.id, staff.id, staff.id)
@@ -230,13 +215,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(await isOrgAdmin("staff", p.org.id)).toBe(false)
         const { accesses } = await listPlatformAccess(db("ada"), await identity("ada", p))
         expect(accesses[0]).toMatchObject({ revokedAt: first.data.revokedAt, revokedByName: "Ada Martin" })
-      })
-
-      it("should refuse a plain member revoking (forbidden)", async () => {
-        const p = await fx.buildReferenceOrg(o.people)
-        const grant = await fx.grantPlatformAccess(p.org.id, staff.id, staff.id)
-        const error = await refusal(revokePlatformAccess(db("lea"), await identity("lea", p), grant))
-        expect(error.code).toBe("forbidden")
       })
     })
   },

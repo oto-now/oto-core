@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react"
 import { describe, it, expect, afterEach } from "vitest"
-import { CoquilleOto, NavigateurDArbre, NavigateurDArbreChargement, type NoeudDArbre } from "@otomata_tech/oto_platform/ui"
+import { NavigateurDArbre, NavigateurDArbreChargement, type NoeudDArbre } from "@otomata_tech/oto_platform/ui"
 
 afterEach(cleanup)
 
@@ -124,14 +124,5 @@ describe("NavigateurDArbreChargement", () => {
     const statut = screen.getByRole("status")
     expect(statut).toHaveAttribute("aria-busy", "true")
     expect(statut).toHaveTextContent("Chargement de l'arbre…")
-  })
-})
-
-describe("CoquilleOto", () => {
-  it("should be the .oto root and carry the chosen theme", () => {
-    render(<CoquilleOto theme="foret">contenu</CoquilleOto>)
-    const racine = screen.getByText("contenu")
-    expect(racine).toHaveClass("oto")
-    expect(racine).toHaveAttribute("data-oto-theme", "foret")
   })
 })

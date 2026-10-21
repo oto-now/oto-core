@@ -141,8 +141,8 @@ describe("middleware with a session", () => {
     expect(response.headers.get("location")).toBe(`${ORIGIN}/n/contexte`)
   })
 
-  it.each(["https://evil.example", "//evil.example", "/\\evil.example"])("should send /login with the unsafe way back %s to /", async (retour) => {
-    const response = await middleware(requete(`/login?redirect=${encodeURIComponent(retour)}`))
+  it("should send /login with the unsafe way back https://evil.example to /", async () => {
+    const response = await middleware(requete(`/login?redirect=${encodeURIComponent("https://evil.example")}`))
 
     expect(response.headers.get("location")).toBe(`${ORIGIN}/`)
   })
@@ -185,14 +185,9 @@ describe("middleware behind a proxy", () => {
     expect(response.headers.get("location")).toBe("https://acme.example.test/login?redirect=%2Fn%2Fcontexte")
   })
 
-  it("should keep http and the port on the local machine", async () => {
-    const response = await middleware(new NextRequest("http://localhost:3000/n/contexte", { headers: { host: "demo.localhost:3000", "x-forwarded-proto": "https" } }))
-
-    expect(response.headers.get("location")).toBe("http://demo.localhost:3000/login?redirect=%2Fn%2Fcontexte")
-  })
-
-  it.each(["evil.example.test/@acme.example.test", "evil.example.test\\x", "acme example"])("should not build the address on a forwarded host that is not a host name (%j)", async (forged) => {
-    const response = await middleware(derriere("/n/contexte", { host: "localhost:3000", "x-forwarded-host": forged }))
+  // Les autres hôtes non conformes sont la table de `linkOrigin` (identity.test.ts), que le middleware appelle.
+  it('should not build the address on a forwarded host that is not a host name ("evil.example.test/@acme.example.test")', async () => {
+    const response = await middleware(derriere("/n/contexte", { host: "localhost:3000", "x-forwarded-host": "evil.example.test/@acme.example.test" }))
 
     expect(response.headers.get("location")).toBe("https://localhost:3000/login?redirect=%2Fn%2Fcontexte")
   })

@@ -11,21 +11,13 @@ import { renderBlocks, type BlockInput } from "../../packages/plateforme/schemas
 import type { Identity } from "../../packages/plateforme/server/identity"
 import type { DocBlock } from "../../packages/plateforme/server/nodes/document"
 import { checkProcedureBlocks, procedurePublicationError } from "../../packages/plateforme/server/procedures-check"
+import { BUSY_REFUSAL } from "../factories/test-functions"
 import { blockUuid, identityOf, ORG, OTHER_ORG } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { asCaller, seedWithAdmin, spyDb, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
 import { TEMPS_LINEAIRE_MS } from "../helpers/temps-lineaire"
 
-vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
-  const { TEST_FUNCTIONS } = await import("../factories/test-functions")
-  // Le catalogue de l'assistant aussi : les portes qui servent un assistant le lisent (`assistantFunctions`).
-  return {
-    ...original,
-    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS],
-    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS],
-  }
-})
+vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => (await import("../factories/test-functions")).withTestFunctions(importOriginal))
 
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
@@ -295,6 +287,45 @@ describe.skipIf(!sqlConfigured)(
         expect(key.refusals.map((refusal) => [refusal.kind, refusal.message])).toEqual([
           ["unknown_key", "before the first heading, call block 1: table.test_read has no argument « <table> »; its arguments: table"],
         ])
+      })
+    })
+
+    // Le texte des règles que seul ce contrôle dit, au préfixe de l'organisation (R4, R9, R11, R13) : un bloc `call` par
+    // cas, sous « Étapes », après une étape numérotée. Un refus de publication qui n'écrit rien : `procedures-service.test.ts`.
+    describe("checkProcedureBlocks — the text of each rule (AC2)", () => {
+      it("should refuse each call block with the text of its rule, the options of acme_call named by the prefix", async () => {
+        const at = "section « Étapes », call block 1 (step 1)"
+        const draft = { to: "<email du contact>", subject: "Suite à notre échange", body: "<texte>" }
+        const cases: Record<string, BlockInput> = {
+          R4: callBlock("acme_call", { function: "mail.send_draft" }),
+          "R9 (confirm)": callBlock("mail.send_draft", { id: "<id du brouillon>", confirm: true }),
+          "R9 (team)": callBlock("mail.create_draft", { ...draft, team: "ventes" }),
+          "R9 (envelope)": callBlock("mail.create_draft", { function: "mail.create_draft", ...draft }),
+          R11: callBlock("mail.create_draft", { to: "<email du contact>", body: "<texte>" }),
+          R13: callBlock("test.release", { table: "ventes/suivi_prospects", key: "<id>", worker: "<ton prénom>", state: "busy" }),
+        }
+        const verdicts: Record<string, [string, string][]> = {}
+        for (const [rule, block] of Object.entries(cases)) {
+          verdicts[rule] = (await check(stored([heading("Étapes"), steps(["Fais :"]), block]))).refusals.map((refusal) => [refusal.kind, refusal.message])
+        }
+        expect(verdicts).toEqual({
+          R4: [["invalid_block", `${at}: a call block starts with a function name such as table.rows, found « acme_call »`]],
+          "R9 (confirm)": [
+            [
+              "unknown_key",
+              `${at}: « confirm » is an option of acme_call, not an argument of mail.send_draft; say in the step's text to call again with confirm: true after the user's explicit approval`,
+            ],
+          ],
+          "R9 (team)": [
+            [
+              "unknown_key",
+              `${at}: « team » is an option of acme_call, not an argument of mail.create_draft; the team comes from where the procedure lives, and the account from that team or the organisation`,
+            ],
+          ],
+          "R9 (envelope)": [["unknown_key", `${at}: « function » belongs to the acme_call envelope; write only the arguments of mail.create_draft in the block`]],
+          R11: [["missing_argument", `${at}: mail.create_draft needs argument « subject »; write "<…>" for a value known only when the procedure runs`]],
+          R13: [["check_failed", `${at}: test.release: ${BUSY_REFUSAL}`]],
+        })
       })
     })
 

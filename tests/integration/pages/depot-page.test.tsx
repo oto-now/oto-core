@@ -129,7 +129,6 @@ describe("/upload/<token> (AC-f15)", () => {
   it.each([
     ["invalid_arguments", 400, "Ce fichier ne convient pas à cette destination"],
     ["too_large", 413, "Le fichier dépasse 1 Mo"],
-    ["not_found", 404, "Ce lien de dépôt est inconnu, déjà utilisé"],
   ])("should remove the drop zone after a %s refusal that served the link, say it, and move the focus to the alert", async (code, status, dit) => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code, message: "Refused." } }, { status })))
     await monter(page())

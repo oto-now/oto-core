@@ -16,7 +16,7 @@ import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { withAnonSession, type Tx } from "../../packages/plateforme/server/sql"
 import { TABLES } from "../../scripts/lib/org-transfer.mjs"
 import { ctxCode, hex, type TestOrg } from "../helpers/plateforme"
-import { codeOf, createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser, type TestSql } from "../helpers/sql"
+import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser, type TestSql } from "../helpers/sql"
 import { privateFolderPending, privateFolderSuite } from "../helpers/pending-migrations"
 
 // Ces tests supposent le dossier `private` en base (fiche D107) : sautés, la version nommée, tant que
@@ -515,22 +515,14 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     WRITES_TIMEOUT,
   )
 
-  // Option A de HN-E01S08-1, tranchée par JB (dans son organisation, une policy n'exige que l'appartenance et les
+  // AC8 : option A de HN-E01S08-1, tranchée par JB (dans son organisation, une policy n'exige que l'appartenance et les
   // invariants), remplacée par la décision d'Alexis du 20/10 : une policy d'écriture d'administration reprend le rôle
   // que son service exige (`ROLE_REQUIRED` de `tests/unit/rls-policies.test.ts`, migrations `20261019150000` et
-  // `20261020190000`). Le cas joué ici, une règle posée par un membre sans la gestion du nœud, est de nouveau refusé
-  // par `access_rules_insert_manager` (`node_level_for`), et les refus de chaque policy sont joués par
-  // `role-dans-les-policies.test.ts` et `role-dans-les-ajouts-et-modifications.test.ts`. Restent ouvertes sous une
-  // session, nommées, jamais jouées : créer un nœud déjà publié, ou avec `meta` ou un propriétaire explicite, le
-  // modifier, le déplacer ou le publier (`nodes_guard`, `publish_node`, `nodes_update_writer` : aucun niveau depuis
-  // E01-S12 partie c), et poser ou retirer une règle d'un compte sans le gérer (`accountLevelOf`, sans pendant en base).
-  it("should refuse a plain member posing a rule on a node of another team, which she does not manage (AC8)", async () => {
-    const posed = as("marc").tx(
-      (sql) => sql<{ id: string }[]>`
-        insert into platform.access_rules (org_id, node_id, subject_team_id, level, created_by)
-        values (${a.org.id}, ${a.nodes.devis}, ${a.teams.support}, 'read', ${a.people.marc.id}) returning id`,
-    )
-    expect(await codeOf(posed)).toBe("42501")
-    expect(await fx.admin`select 1 from platform.access_rules where node_id = ${a.nodes.devis} and subject_team_id = ${a.teams.support}`).toHaveLength(0)
-  })
+  // `20261020190000`). Une règle posée par un membre sans la gestion du nœud est refusée par
+  // `access_rules_insert_manager` (`node_level_for`) quel que soit son sujet, équipe ou personne :
+  // `role-dans-les-ajouts-et-modifications.test.ts` (« should refuse a rule on a node by whoever does not manage it »),
+  // et les refus de chaque policy par `role-dans-les-policies.test.ts`. Restent ouvertes sous une session, nommées,
+  // jamais jouées : créer un nœud déjà publié, ou avec `meta` ou un propriétaire explicite, le modifier, le déplacer ou
+  // le publier (`nodes_guard`, `publish_node`, `nodes_update_writer` : aucun niveau depuis E01-S12 partie c), et poser
+  // ou retirer une règle d'un compte sans le gérer (`accountLevelOf`, sans pendant en base).
 })

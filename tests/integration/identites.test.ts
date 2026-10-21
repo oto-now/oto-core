@@ -9,9 +9,8 @@
 // claims choisis est annulée à sa fin, avec ce qu'elle a écrit.
 import { randomBytes, randomUUID } from "crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { asClaims, type AdminTx } from "../helpers/admin-sql"
+import { adminAsCaller, asClaims, type AdminTx } from "../helpers/admin-sql"
 import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../helpers/sql"
-import { adminAsCaller } from "../helpers/sql-e01-s13"
 
 const NETWORK_TIMEOUT = 60_000
 const ready = sqlConfigured

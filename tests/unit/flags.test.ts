@@ -3,8 +3,8 @@
 // registre (AC7). Sur la base réelle (E01-S10, lot t1-e2b2), O semée (`seedReferenceOrg`,
 // `tests/helpers/reference-org-sql.ts`) et `setFlag` sous le client de la personne (`ref.db`, mode de
 // transition) : ses refus rendus avant toute lecture d'`orgs` (AC3, AC4), chaque requête vue par `watchDb`
-// (`tests/helpers/spy-t1-e2b2.ts`), sa décision et sa course (E01-S07 AC19, AC27). L'écriture d'un administrateur
-// et la course entre deux changements sont aussi couvertes par `tests/integration/flags-cell.test.ts`.
+// (`tests/helpers/spy-t1-e2b2.ts`) et sa décision (E01-S07 AC19). L'écriture d'un administrateur et la course
+// entre deux changements (E01-S07 AC27) : `tests/integration/flags-cell.test.ts`.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { flagNameSchema, flagToggleSchema, flagViewSchema } from "@otomata_tech/oto_platform/schemas"
 import { FLAGS, isEnabled, setFlag } from "@otomata_tech/oto_platform/server"
@@ -47,12 +47,13 @@ describe("isEnabled (AC1)", () => {
 
   // Une valeur qui n'est pas `true`, des drapeaux absents, des drapeaux qui ne sont pas un objet : les
   // autres permutations (faux, clé absente, nombre, undefined, chaîne) sont retirées (M11b).
-  it.each([
-    ["the string true", { nouvelle_grille: "true" }],
-    ["null flags", null],
-    ["an array", ["nouvelle_grille"]],
-  ])("should be false, without throwing, for %s", (_label, flags) => {
-    expect(isEnabled({ flags }, "nouvelle_grille")).toBe(false)
+  it("should be false, without throwing, for the string true, null flags and an array", () => {
+    const cas: [string, unknown][] = [
+      ["the string true", { nouvelle_grille: "true" }],
+      ["null flags", null],
+      ["an array", ["nouvelle_grille"]],
+    ]
+    expect(Object.fromEntries(cas.map(([label, flags]) => [label, isEnabled({ flags }, "nouvelle_grille")]))).toEqual(Object.fromEntries(cas.map(([label]) => [label, false])))
   })
 
   it("should not read a name inherited by every object", () => {
@@ -60,15 +61,8 @@ describe("isEnabled (AC1)", () => {
   })
 })
 
+// Le drapeau ajouté, puis écrit à faux sa clé gardée : `tests/integration/flags-cell.test.ts` (AC2), sur la base.
 describe("withFlag", () => {
-  it("should add the flag", () => {
-    expect(withFlag({}, "essai_drapeau", true)).toEqual({ essai_drapeau: true })
-  })
-
-  it("should write false and keep the key", () => {
-    expect(withFlag({ essai_drapeau: true }, "essai_drapeau", false)).toEqual({ essai_drapeau: false })
-  })
-
   it("should keep the other keys as they are, without changing its input", () => {
     const flags = { cle_inconnue: "garde", compteur: 1, objet: { liste: [1, 2] } }
     expect(withFlag(flags, "essai_drapeau", true)).toEqual({ ...flags, essai_drapeau: true })
@@ -87,8 +81,9 @@ describe("flagNameSchema", () => {
     expect(flagNameSchema.safeParse("a".repeat(40)).success).toBe(true)
   })
 
-  it.each(["a".repeat(41), "Nouvelle_grille", "nouvelle-grille"])("should reject %j", (name) => {
-    expect(flagNameSchema.safeParse(name).success).toBe(false)
+  it("should reject a name of 41 characters, a capital and a dash", () => {
+    const noms = ["a".repeat(41), "Nouvelle_grille", "nouvelle-grille"]
+    expect(Object.fromEntries(noms.map((name) => [name, flagNameSchema.safeParse(name).success]))).toEqual(Object.fromEntries(noms.map((name) => [name, false])))
   })
 })
 
@@ -100,11 +95,12 @@ describe("flagToggleSchema", () => {
 
   // Un `enabled` qui n'est pas un booléen et une clé de trop : `null`, l'absence et le nom invalide
   // (prouvé par `flagNameSchema`) sont retirés (M11b).
-  it.each([
-    ["enabled as a string", { name: "essai_drapeau", enabled: "true" }],
-    ["an extra key", { name: "essai_drapeau", enabled: true, org: "acme" }],
-  ])("should reject %s", (_label, input) => {
-    expect(flagToggleSchema.safeParse(input).success).toBe(false)
+  it("should reject enabled as a string and an extra key", () => {
+    const cas: [string, unknown][] = [
+      ["enabled as a string", { name: "essai_drapeau", enabled: "true" }],
+      ["an extra key", { name: "essai_drapeau", enabled: true, org: "acme" }],
+    ]
+    expect(Object.fromEntries(cas.map(([label, input]) => [label, flagToggleSchema.safeParse(input).success]))).toEqual(Object.fromEntries(cas.map(([label]) => [label, false])))
   })
 })
 
@@ -227,20 +223,6 @@ describe.skipIf(!sqlConfigured)(portable("setFlag on the real database, O"), { t
     })
   })
 
-  describe("setFlag write that changes no row after the decision (E01-S07 AC27)", () => {
-    it("should answer conflict and log it when orgs changed between the read and the write (HN-E01S07-6)", async () => {
-      const log = vi.spyOn(console, "error").mockImplementation(() => {})
-      // Une autre session écrit la marque juste avant le drapeau : `updated_at` avance, la garde ne trouve plus de ligne.
-      const { db } = watchDb(await ref.db("ada"), {
-        meanwhile: async (call) => {
-          if (touches(call, "orgs") && isWrite(call)) await ref.write({ orgs: [{ id: ORG.id, brand: { color: "#2d6a4f" } }] })
-        },
-      })
-      await expect(setFlag(db, ref.identityOf("ada"), { name: "essai_drapeau", enabled: true }, REGISTRY)).rejects.toMatchObject({
-        code: "conflict",
-        message: "The flags of Acme Test changed meanwhile. Reload them and retry.",
-      })
-      expect(log).toHaveBeenCalledWith(`[platform] setFlag: no row written for organisation ${ref.org.id}`)
-    })
-  })
+  // L'écriture qui ne change aucune ligne après la décision (E01-S07 AC27, HN-E01S07-6), réponse `conflict` et journal :
+  // `tests/integration/flags-cell.test.ts`, « should answer conflict to the change that lost the race… ».
 })

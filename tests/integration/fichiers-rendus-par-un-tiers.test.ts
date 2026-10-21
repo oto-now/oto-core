@@ -4,8 +4,9 @@
 // API rend la fiche d'un appel, qui porte l'adresse signée de l'enregistrement, qu'il sert aussi. Le moteur le télécharge
 // par le transport gardé (remplacé ici par un transport vers le serveur local, le poste n'ayant pas d'hôte public), le
 // range sous l'identité de l'appelant, 24 h, sous le quota, et ne rend que son identifiant. La base est le sujet : la
-// lecture réservée à l'auteur, l'échéance lue en base, le quota, aucune ligne partielle quand l'objet ne s'écrit pas, et
-// le stockage absent refusé sans appeler le tiers. Organisation de référence jetable (H120). Suite portable.
+// lecture réservée à l'auteur, l'échéance lue en base, le quota, aucune ligne partielle quand l'objet ne s'écrit pas. Le
+// stockage absent, refusé sans appeler le tiers, se prouve sans base (`tests/unit/connectors-file-output.test.ts`).
+// Organisation de référence jetable (H120). Suite portable.
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -212,12 +213,5 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     expect({ code: error?.code, message: error?.message }).toEqual({ code: "internal", message: "File storage unreachable. Retry later." })
     expect(await rows()).toEqual(before)
     expect([...memory.objects.keys()].filter((key) => key.startsWith(`${o.org.id}/`) && !before.some((row) => key === objectKey(o.org.id, row.id)))).toEqual([])
-  })
-
-  it("should refuse not_enabled without calling the third party when files are not enabled", async () => {
-    thirdParty()
-    storage.store = null
-    expect(await codeOf(recording("lea", 13))).toBe("not_enabled")
-    expect(asked).toEqual([])
   })
 })

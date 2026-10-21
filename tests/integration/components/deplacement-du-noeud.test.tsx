@@ -109,10 +109,10 @@ describe("envoyerLeDeplacement (AC21)", () => {
 
   it.each([
     ["forbidden", 403, "Ce déplacement vous est refusé : il faut la gestion de la page et l'écriture sous le nouveau parent."],
-    // Un nom pris ne refuse plus (fiche D125) : un conflit est une course, dite par le texte commun.
+    // Un nom pris ne refuse plus (fiche D125) : un conflit est une course, dite par le texte commun, la branche
+    // de tout autre code, `invalid_arguments` compris (`messageDErreur`).
     ["conflict", 409, "L'action entre en conflit avec l'état actuel. Rechargez la page."],
     ["not_found", 404, "Ce parent n'existe plus ou ne vous est plus partagé."],
-    ["invalid_arguments", 400, "Certaines valeurs sont invalides."],
   ])("should say %s, the parent gone only for not_found", async (code, statut, message) => {
     fetchMock.mockResolvedValueOnce(reponse(statut, { error: { code, message: "refused" } }))
     expect(await envoyerLeDeplacement(CHEMIN, "conseil/modele_relance")).toEqual({ message, disparu: code === "not_found" })

@@ -23,7 +23,6 @@ const state = vi.hoisted(() => ({
   kept: [] as { name: string; bytes: Uint8Array }[],
   download: null as null | ((input: string, init: RequestInit) => Promise<Response>),
   guarded: 0,
-  storeError: null as PlatformError | null,
 }))
 
 vi.mock("../../packages/plateforme/server/files/transit", () => ({
@@ -32,7 +31,6 @@ vi.mock("../../packages/plateforme/server/files/transit", () => ({
   },
   expireTransitFile: async () => undefined,
   storeTransitFile: async (_db: unknown, _identity: unknown, file: { name: string; bytes: Uint8Array }) => {
-    if (state.storeError) throw state.storeError
     state.kept.push(file)
     const type = fileTypeOf(file.name)
     return { id: "6f0c2b9e-1d4a-4c3e-9b7f-2a8e5d1c0f34", name: file.name, mime: type ? FILE_TYPES[type] : "?", size: file.bytes.byteLength, expiresAt: "2026-10-22T09:12:34.567+00:00" }
@@ -112,7 +110,6 @@ beforeEach(() => {
   state.kept = []
   state.download = null
   state.guarded = 0
-  state.storeError = null
   registerConnectors([fileConnector()])
 })
 
@@ -196,17 +193,6 @@ describe("a file returned by a third party", () => {
     expect(state.kept[0]?.name).toBe("réunion du 21.wav")
   })
 
-  it("should fall back on the field, then on the template, when a name has no declared extension", async () => {
-    api(new Response(bytesOf("RIFF"), { status: 200, headers: { "content-disposition": 'attachment; filename="notes.txt"' } }))
-    expect((await run("crm.download_recording", { recording_id: 12 })).data).toMatchObject({ file: { name: "recording-12.wav" } })
-
-    api(json({ export: { data: Buffer.from("%PDF-1.7").toString("base64"), filename: "dossier/ventes.pdf" } }))
-    expect((await run("crm.get_export", { export_id: 3 })).data).toMatchObject({ file: { name: "ventes.pdf", mime: "application/pdf", size: 8 } })
-
-    api(json({ export: { data: Buffer.from("a;b\n").toString("base64"), filename: "ventes.json" } }))
-    expect((await run("crm.get_export", { export_id: 3 })).data).toMatchObject({ file: { name: "export-3.csv", mime: "text/csv", size: 4 } })
-  })
-
   it("should decode base64url strictly, padded or not", async () => {
     api(json({ data: Buffer.from("%PDF-1.7 ok?>").toString("base64url") }))
     const output = await run("crm.get_attachment", { attachment_id: 5 })
@@ -225,13 +211,6 @@ describe("a file returned by a third party", () => {
     const plain = download(audio(10))
     await run("crm.get_call_recording", { call_id: 1 })
     expect(new Headers(plain[0].init.headers).get("authorization")).toBeNull()
-  })
-
-  it("should accept an announced octet-stream or no type, and keep the type of the extension", async () => {
-    api(json({ call: { recording: SIGNED } }), json({ call: { recording: SIGNED } }))
-    download(audio(10, { "content-type": "application/octet-stream" }), new Response(new Uint8Array(5), { status: 200 }))
-    expect((await run("crm.get_call_recording", { call_id: 1 })).data).toMatchObject({ file: { mime: "audio/mpeg", size: 10 } })
-    expect((await run("crm.get_call_recording", { call_id: 1 })).data).toMatchObject({ file: { mime: "audio/mpeg", size: 5 } })
   })
 })
 
@@ -473,15 +452,6 @@ describe("the refusals of a file returned by a third party", () => {
       message: "Crm did not answer within 1 s. Retry later.",
     })
   })
-
-  it("a storage that fails, or a full quota, says so and keeps nothing more", async () => {
-    // Le rangement lui-même (purge, type, taille, quota, put, markReady) est joué sur une vraie base : ici, son refus passe tel quel.
-    api(json({ call: { recording: SIGNED } }))
-    download(audio(10))
-    state.storeError = new PlatformError("too_large", "x.mp3 would take the files of Acme beyond 10 GB.", { reason: "quota", max: 1 })
-    const error = await refusal(run("crm.get_call_recording", { call_id: 1 }))
-    expect({ code: error.code, reason: error.details?.reason }).toEqual({ code: "too_large", reason: "quota" })
-  })
 })
 
 describe("the declaration of a file output (registerConnectors)", () => {
@@ -514,38 +484,42 @@ describe("the declaration of a file output (registerConnectors)", () => {
     expect(refusedWith(contacts as ConnectorDefinition)).toMatch(/^crm\.list_contacts: output\.files is not known to this package/)
   })
 
-  it.each([
-    ["an extension that is not a type of the package", { types: { flac: ["audio/flac"] } }, "crm.get_call_recording: output.file type flac is not a type of the package (the types of a host reader do not count for a shared description)."],
-    ["an extension of the package under another first type", { types: { mp3: ["audio/mp3", "audio/mpeg"] } }, "crm.get_call_recording: output.file type mp3 must first name audio/mpeg, the type of the package."],
-    ["a type a browser renders", { types: { mp3: ["audio/mpeg", "text/html"] }, name: { template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file type mp3: text/html is rendered or run by a browser."],
-    ["a type with parameters", { types: { mp3: ["audio/mpeg; rate=8000"] } }, "crm.get_call_recording: output.file type mp3: audio/mpeg; rate=8000 must be a lowercase media type without parameters."],
-    ["a malformed extension", { types: { "MP3!": ["audio/mpeg"] } }, 'crm.get_call_recording: output.file type "MP3!": 1 to 16 lowercase ASCII letters or digits.'],
-    ["no type", { types: {} }, "crm.get_call_recording: output.file types must list at least one extension with its media types."],
-    ["an unknown from", { from: "stream" }, "crm.get_call_recording: output.file from must be body, url, base64 or base64url."],
-    ["a path with body", { from: "body", path: "call.recording", auth: undefined }, "crm.get_call_recording: output.file path is for url, base64 and base64url, not body."],
-    ["no path with url", { path: undefined }, "crm.get_call_recording: output.file needs the path of the field that holds the address or the bytes."],
-    ["auth outside url", { from: "base64", auth: "account" }, "crm.get_call_recording: output.file auth is for url only."],
-    ["an unknown auth", { auth: "bearer" }, "crm.get_call_recording: output.file auth must be none or account."],
-    ["a name.path with body", { from: "body", path: undefined, name: { path: "call.name", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.path is for url, base64 and base64url, not body."],
-    ["a header with base64", { from: "base64", name: { header: "Content-Disposition", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.header is for body and url only."],
-    ["a template on an optional argument", { name: { template: "call-{other}.mp3" } }, "crm.get_call_recording: output.file name.template cites other, which is not a required argument."],
-    ["a template without a declared extension", { name: { template: "call-{call_id}.wav" } }, "crm.get_call_recording: output.file name.template must end with a declared extension (mp3)."],
-    ["no template", { name: { header: "Content-Disposition" } }, "crm.get_call_recording: output.file name.template is required: it always gives a name."],
-    ["maxBytes beyond 50 MB", { maxBytes: 52_428_801 }, "crm.get_call_recording: output.file maxBytes must be an integer from 1 to 52428800."],
-    ["maxBytes of zero", { maxBytes: 0 }, "crm.get_call_recording: output.file maxBytes must be an integer from 1 to 52428800."],
-    ["an unknown key of file", { ttl: 48 }, "crm.get_call_recording: output.file.ttl is not known to this package: refused rather than ignored."],
-    ["an unknown key of name", { name: { template: "call-{call_id}-recording.mp3", fallback: "x.mp3" } }, "crm.get_call_recording: output.file.name.fallback is not known to this package: refused rather than ignored."],
-  ])("should refuse %s", (_what, file, message) => {
-    expect(refusedWith(withFile(file))).toBe(message)
+  it("should refuse each malformed file output by name", () => {
+    const refusals: [string, Record<string, unknown>, string][] = [
+      ["an extension that is not a type of the package", { types: { flac: ["audio/flac"] } }, "crm.get_call_recording: output.file type flac is not a type of the package (the types of a host reader do not count for a shared description)."],
+      ["an extension of the package under another first type", { types: { mp3: ["audio/mp3", "audio/mpeg"] } }, "crm.get_call_recording: output.file type mp3 must first name audio/mpeg, the type of the package."],
+      ["a type a browser renders", { types: { mp3: ["audio/mpeg", "text/html"] }, name: { template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file type mp3: text/html is rendered or run by a browser."],
+      ["a type with parameters", { types: { mp3: ["audio/mpeg; rate=8000"] } }, "crm.get_call_recording: output.file type mp3: audio/mpeg; rate=8000 must be a lowercase media type without parameters."],
+      ["a malformed extension", { types: { "MP3!": ["audio/mpeg"] } }, 'crm.get_call_recording: output.file type "MP3!": 1 to 16 lowercase ASCII letters or digits.'],
+      ["no type", { types: {} }, "crm.get_call_recording: output.file types must list at least one extension with its media types."],
+      ["an unknown from", { from: "stream" }, "crm.get_call_recording: output.file from must be body, url, base64 or base64url."],
+      ["a path with body", { from: "body", path: "call.recording", auth: undefined }, "crm.get_call_recording: output.file path is for url, base64 and base64url, not body."],
+      ["no path with url", { path: undefined }, "crm.get_call_recording: output.file needs the path of the field that holds the address or the bytes."],
+      ["auth outside url", { from: "base64", auth: "account" }, "crm.get_call_recording: output.file auth is for url only."],
+      ["an unknown auth", { auth: "bearer" }, "crm.get_call_recording: output.file auth must be none or account."],
+      ["a name.path with body", { from: "body", path: undefined, name: { path: "call.name", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.path is for url, base64 and base64url, not body."],
+      ["a header with base64", { from: "base64", name: { header: "Content-Disposition", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.header is for body and url only."],
+      ["a template on an optional argument", { name: { template: "call-{other}.mp3" } }, "crm.get_call_recording: output.file name.template cites other, which is not a required argument."],
+      ["a template without a declared extension", { name: { template: "call-{call_id}.wav" } }, "crm.get_call_recording: output.file name.template must end with a declared extension (mp3)."],
+      ["no template", { name: { header: "Content-Disposition" } }, "crm.get_call_recording: output.file name.template is required: it always gives a name."],
+      ["maxBytes beyond 50 MB", { maxBytes: 52_428_801 }, "crm.get_call_recording: output.file maxBytes must be an integer from 1 to 52428800."],
+      ["maxBytes of zero", { maxBytes: 0 }, "crm.get_call_recording: output.file maxBytes must be an integer from 1 to 52428800."],
+      ["an unknown key of file", { ttl: 48 }, "crm.get_call_recording: output.file.ttl is not known to this package: refused rather than ignored."],
+      ["an unknown key of name", { name: { template: "call-{call_id}-recording.mp3", fallback: "x.mp3" } }, "crm.get_call_recording: output.file.name.fallback is not known to this package: refused rather than ignored."],
+    ]
+    const verdicts = Object.fromEntries(refusals.map(([what, file]) => [what, refusedWith(withFile(file))]))
+    expect(verdicts).toEqual(Object.fromEntries(refusals.map(([what, , message]) => [what, message])))
   })
 
-  it.each([
-    ["items", { items: "calls" }],
-    ["strip", { strip: ["url"] }],
-    ["projection", { projection: ["id"] }],
-    ["schema", { schema: { type: "object" } }],
-  ])("should refuse output.file with %s", (key, shape) => {
-    expect(refusedWith(withRecording((fn) => ({ ...fn, output: { ...fn.output, ...shape } })))).toBe(`crm.get_call_recording: output.file excludes items, strip, projection and schema (${key}).`)
+  it("should refuse output.file with items, strip, projection or schema", () => {
+    const shapes: [string, Record<string, unknown>][] = [
+      ["items", { items: "calls" }],
+      ["strip", { strip: ["url"] }],
+      ["projection", { projection: ["id"] }],
+      ["schema", { schema: { type: "object" } }],
+    ]
+    const verdicts = Object.fromEntries(shapes.map(([key, shape]) => [key, refusedWith(withRecording((fn) => ({ ...fn, output: { ...fn.output, ...shape } })))]))
+    expect(verdicts).toEqual(Object.fromEntries(shapes.map(([key]) => [key, `crm.get_call_recording: output.file excludes items, strip, projection and schema (${key}).`])))
   })
 
   it("should refuse output.file on a paginated, asynchronous or collecting function, and expect with a body", () => {

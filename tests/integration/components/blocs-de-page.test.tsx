@@ -5,12 +5,14 @@ import type { BlockView } from "@otomata_tech/oto_platform/schemas"
 import { Reader } from "../../../packages/plateforme/ui/ds/react/reader"
 import { BlocsRepliables } from "../../../packages/plateforme/ui/noeud/blocs-repliables"
 import { CADRE_DU_TABLEAU } from "../../../packages/plateforme/ui/noeud/libelles"
+import { FICHIERS } from "../../../packages/plateforme/ui/noeud/libelles-des-fichiers"
 import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { bloc } from "../../helpers/noeud"
 
 // Les formes de page d'E10-S04 à l'écran, par `RenduDUnBloc` (lecture, éditeur au repos, page publique) :
 // tableau simple (AC-a1), séparateur (AC-a2), repli (AC-a3), listes imbriquées (AC-b1), titres `h2` à `h6`
 // (AC-b3), marques en ligne dans une cellule (AC-c1) ; aucun HTML injecté (`security-patterns.md § XSS Prevention`).
+// Et les blocs lus d'E11-S15 (lot B) : la carte d'un fichier, les proportions d'une image, l'adresse web coupée.
 
 afterEach(() => {
   cleanup()
@@ -129,6 +131,44 @@ describe("RenduDUnBloc — page markdown forms (E10-S04)", () => {
     cleanup()
     rendre(titres, "h3")
     expect(screen.getAllByRole("heading").map((titre) => titre.tagName)).toEqual(["H3", "H4", "H5", "H6", "H6"])
+  })
+})
+
+describe("RenduDUnBloc — file, image and cut address (E11-S15, lot B)", () => {
+  /** Un bloc lu. Les routes d'un lien public : la carte d'un fichier ne relit pas sa disponibilité, qui demande une session. */
+  const lire = (un: BlockView) => render(<RenduDUnBloc bloc={un} Lien="a" hrefDuChemin={(chemin) => `/n/${chemin}`} routeDesFichiers="/api/platform/public/t/files" />)
+
+  it("should draw a joined file as the file row of the design system, name, size and actions kept (AC-b2)", () => {
+    lire(bloc(id(30), "file", null, { file_id: "f1150000-0000-4000-8000-0000000000aa", name: "devis.pdf", size: 2048 }))
+    const ligne = screen.getByText("devis.pdf").closest(".oto-file")
+    if (!(ligne instanceof HTMLElement)) throw new Error("ligne du fichier absente")
+    expect(within(ligne).getByRole("link", { name: FICHIERS.voirNom("devis.pdf") })).toBeInTheDocument()
+    expect(within(ligne).getByRole("link", { name: FICHIERS.telechargerNom("devis.pdf") })).toBeInTheDocument()
+  })
+
+  it("should keep the proportions of an image at each width chosen, its height following its width (AC-b3)", () => {
+    for (const largeur of ["small", "medium", "full"]) {
+      lire(bloc(id(31), "image", null, { src: "https://exemple.test/plan.png", alt: "Plan", width: largeur }))
+      const image = screen.getByRole("img", { name: "Plan" })
+      expect(image, largeur).toHaveClass("h-auto", "object-contain")
+      expect(image, largeur).not.toHaveAttribute("height")
+      cleanup()
+    }
+  })
+
+  it("should name and title a cut address as the browser follows it, never with its user name or password, the written address kept in href", () => {
+    // Une adresse à mot de passe se construit à l'exécution (testing-strategy.md § Anti-patterns : check:public).
+    const avecIdentifiants = `https://${["alice", "secret"].join(":")}@docs.exemple.fr/document/d/1AbCdEfGh/edit`
+    const deguisee = "https://evil.example\\@good.example/chemin"
+    lire(bloc(id(32), "paragraph", `Voir ${avecIdentifiants} et ${deguisee}`))
+    const lien = screen.getByRole("link", { name: "https://docs.exemple.fr/document/d/1AbCdEfGh/edit" })
+    expect(lien).toHaveTextContent("https://docs.exemple.fr/…bCdEfGh/edit")
+    expect(lien).toHaveAttribute("title", "https://docs.exemple.fr/document/d/1AbCdEfGh/edit")
+    expect(lien).toHaveAttribute("href", avecIdentifiants)
+    // L'hôte montré, nommé et au survol est celui qu'ouvre le navigateur.
+    const autre = screen.getByRole("link", { name: "https://evil.example/@good.example/chemin" })
+    expect(autre).toHaveTextContent("https://evil.example/…ample/chemin")
+    expect(autre).toHaveAttribute("title", "https://evil.example/@good.example/chemin")
   })
 })
 

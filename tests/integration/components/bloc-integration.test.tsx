@@ -1,30 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { BlockView } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
-import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
 import { INTEGRATION } from "../../../packages/plateforme/ui/noeud/libelles"
 import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { simulerLesDialogues } from "../../helpers/dialogue"
-import { bloc, ID, PAGE, simulerLAPI } from "../../helpers/noeud"
+import { bloc, ID, monterLEditeur, PAGE, simulerLAPI } from "../../helpers/noeud"
 
 // Le bloc « Iframe » (« Intégration » en 1.4.3) : lu, un cadre isolé (`sandbox`) à la hauteur du bloc, avec le lien qui ouvre la page ;
 // édité, l'entrée « Iframe » du « + » et de « / », le dialogue de l'adresse contrôlée comme la base, le cadre écrit
 // tout de suite, puis sa hauteur et son adresse changées par le menu de sa poignée.
 
-const rafraichir = vi.fn()
 let api: ReturnType<typeof simulerLAPI>
-
-function monter(blocs: BlockView[] = PAGE) {
-  render(
-    <ContexteDeRafraichissement.Provider value={rafraichir}>
-      <FileDOperations chemin="ventes/modele_relance" revisionPubliee={4} tampon={null}>
-        <EditeurDeBlocs blocs={blocs} revisionServie={4} prefixeDesPages="/n/" />
-      </FileDOperations>
-    </ContexteDeRafraichissement.Provider>,
-  )
-}
 
 const ADRESSE = "https://www.youtube.com/embed/abc"
 
@@ -32,7 +17,6 @@ beforeAll(() => simulerLesDialogues())
 
 beforeEach(() => {
   api = simulerLAPI()
-  rafraichir.mockReset()
 })
 
 afterEach(() => {
@@ -60,7 +44,7 @@ describe("RenduDUnBloc — an embed (1.4.3)", () => {
 
 describe("EditeurDeBlocs — an embed (1.4.3)", () => {
   it("should offer « Iframe » at the end of the « + », refuse an address that is not https, and write the frame at once after the block", async () => {
-    monter()
+    monterLEditeur()
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
     const menu = within(screen.getByRole("menu"))
     expect(menu.getAllByRole("menuitem").at(-1)).toHaveTextContent(INTEGRATION.entree)
@@ -79,7 +63,7 @@ describe("EditeurDeBlocs — an embed (1.4.3)", () => {
 
   // 1.4.6 : le code <iframe> qu'un site donne, collé tel quel, n'apporte que son adresse.
   it("should keep only the src address of a pasted <iframe> code, &amp; read as &, and refuse a code without src", async () => {
-    monter()
+    monterLEditeur()
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: INTEGRATION.entree }))
     const dialogue = screen.getByRole("dialog", { name: INTEGRATION.dialogue })
@@ -95,7 +79,7 @@ describe("EditeurDeBlocs — an embed (1.4.3)", () => {
   })
 
   it("should offer « Iframe » in the list of « / » too, the Texte emptied of its slash", async () => {
-    monter()
+    monterLEditeur()
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un bloc après — Objet de la relance" }))
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Texte" }))
     const texte = screen.getByRole("textbox", { name: "Modifier ce texte — bloc vide" })
@@ -110,7 +94,7 @@ describe("EditeurDeBlocs — an embed (1.4.3)", () => {
 
   it("should change the height of a frame and its address from the menu of its handle", async () => {
     const cadre = bloc("e1000000-0000-4000-8000-000000000001", "embed", null, { url: ADRESSE })
-    monter([...PAGE, cadre])
+    monterLEditeur([...PAGE, cadre])
     const mots = `${INTEGRATION.entree} ${ADRESSE}`
     fireEvent.click(screen.getByRole("button", { name: `Actions sur ce bloc — ${mots}` }))
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitemradio", { name: INTEGRATION.hauteurs.large }))

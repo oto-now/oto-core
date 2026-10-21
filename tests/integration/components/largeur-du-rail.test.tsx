@@ -80,14 +80,16 @@ describe("amenerEnVue", () => {
 
 // 1.5.1 : en largeur, un pas de retrait par niveau sous le premier, jamais plus, et seulement si la ligne dépasse.
 describe("defilementEnLargeur", () => {
-  it.each([
-    { profondeur: 1, pas: 16, deborde: true, actuel: 0, attendu: 0 },
-    { profondeur: 2, pas: 16, deborde: true, actuel: 0, attendu: 16 },
-    { profondeur: 3, pas: 16, deborde: true, actuel: 0, attendu: 32 },
-    { profondeur: 3, pas: 16, deborde: true, actuel: 200, attendu: 32 },
-    { profondeur: 3, pas: 16, deborde: false, actuel: 40, attendu: 40 },
-    { profondeur: 0, pas: 16, deborde: true, actuel: 0, attendu: 0 },
-  ])("should scroll a line at depth $profondeur (overflowing $deborde, from $actuel) to $attendu", ({ profondeur, pas, deborde, actuel, attendu }) => {
-    expect(defilementEnLargeur(profondeur, pas, deborde, actuel)).toBe(attendu)
+  it("should scroll each line by one indent step per level under the first, only when it overflows", () => {
+    const cas = [
+      { profondeur: 1, pas: 16, deborde: true, actuel: 0, attendu: 0 },
+      { profondeur: 2, pas: 16, deborde: true, actuel: 0, attendu: 16 },
+      { profondeur: 3, pas: 16, deborde: true, actuel: 0, attendu: 32 },
+      { profondeur: 3, pas: 16, deborde: true, actuel: 200, attendu: 32 },
+      { profondeur: 3, pas: 16, deborde: false, actuel: 40, attendu: 40 },
+      { profondeur: 0, pas: 16, deborde: true, actuel: 0, attendu: 0 },
+    ]
+    const nom = ({ profondeur, deborde, actuel }: (typeof cas)[number]) => `depth ${profondeur}, overflowing ${deborde}, from ${actuel}`
+    expect(Object.fromEntries(cas.map((un) => [nom(un), defilementEnLargeur(un.profondeur, un.pas, un.deborde, un.actuel)]))).toEqual(Object.fromEntries(cas.map((un) => [nom(un), un.attendu])))
   })
 })

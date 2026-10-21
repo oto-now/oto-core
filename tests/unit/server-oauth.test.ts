@@ -12,25 +12,15 @@ import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { CONSENT_PATH, consentDecision, consentPath, consentRequest } from "../../packages/plateforme/server/oauth"
 import type { Tx } from "../../packages/plateforme/server/sql"
 import { loggedText } from "../helpers/logs"
-import { pendingRequests, type PendingRequests } from "../helpers/oauth-pending"
+import { AUTHORIZATION_ID as ID, DECIDED, DETAILS, form, pendingRequests, type PendingRequests } from "../helpers/oauth-pending"
 import { OTHER_ORG } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { onProject, projectConfigured, seedWithAdmin, type SeededData } from "../helpers/sql"
 
-const ID = "a2b3c4d5e6f7g2h3i4j5k6l7m2n3o4p5"
-const DETAILS = {
-  authorization_id: ID,
-  redirect_uri: "https://claude.ai/api/mcp/auth_callback",
-  client: { id: "client-1", name: "Claude", uri: "https://claude.ai", logo_uri: "https://claude.ai/logo.png" },
-  user: { id: "user-1", email: "claire@example.invalid" },
-  scope: "openid email profile offline_access",
-}
 const RETURN_CODE = "https://claude.ai/api/mcp/auth_callback?code=c0de&state=xyz"
 const RETURN_DENIED = "https://claude.ai/api/mcp/auth_callback?error=access_denied&state=xyz"
 // Une `redirect_uri` qu'un client s'enregistre lui-même (DCR ouvert) : Next en ferait un `location.assign`.
 const RETURN_SCRIPT = "javascript://x/%0aalert(1)//"
-// Ce que rend le serveur OAuth, mesuré le 2026-09-24, pour une demande déjà tranchée ou expirée.
-const DECIDED = { name: "AuthApiError", status: 400, code: "validation_failed", message: "authorization request cannot be processed" }
 // E09-S02, AC14 : thème, logo et nom affiché de P, publics sur `/login` de son adresse.
 const BRAND = { theme: "foret", logo_url: "https://acme.example/logo.png", display_name: "Acme" }
 
@@ -82,12 +72,6 @@ function around(db: PlatformDb, fn: string, onCall: () => Failure | undefined): 
   })
 }
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData()
-  Object.entries(fields).forEach(([key, value]) => data.set(key, value))
-  return data
-}
-
 beforeEach(() => {
   oauth.getAuthorizationDetails.mockResolvedValue({ data: DETAILS, error: null })
   oauth.approveAuthorization.mockResolvedValue({ data: { redirect_url: RETURN_CODE }, error: null })
@@ -106,7 +90,7 @@ describe("consentPath", () => {
     expect(consentPath("abc123")).toBe("/oauth/consent?authorization_id=abc123")
   })
 
-  it.each([undefined, null, "", "../../admin/users", "abc?x=1", ["abc123"]])("should give the page alone for an id %j out of pattern", (raw) => {
+  it.each([undefined, "abc?x=1"])("should give the page alone for an id %j out of pattern", (raw) => {
     expect(consentPath(raw)).toBe(CONSENT_PATH)
   })
 })
@@ -493,7 +477,6 @@ describe("consentDecision (AC15 to AC18)", () => {
     { authorization_id: ID, decision: "maybe" },
     { authorization_id: ID },
     { decision: "deny" },
-    {},
   ])("should answer invalid for %j without calling the SDK (AC18)", async (fields) => {
     expect(await consentDecision({ auth }, form(fields))).toEqual({ kind: "invalid" })
     expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled()

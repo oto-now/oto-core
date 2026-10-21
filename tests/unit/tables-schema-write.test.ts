@@ -203,6 +203,20 @@ describe.skipIf(!sqlConfigured)(portable("tables written through write"), { time
         expect((await nodeAt(seed, ref, PROSPECTS.path))?.meta, change).toEqual(meta)
         expect(await draftsAt(seed, ref, PROSPECTS.path), change).toEqual([])
       }
+
+      // La preuve (AC-f1) : en attente, « stop requiring proof » ; rendue exigée, « proof required », sans lire de ligne.
+      await freshTable(seed, ref)
+      const lea = acmeIdentity(ref, "lea")
+      const write = async (base_revision: number, header: Record<string, unknown>, publish: boolean) => {
+        const { db, calls } = spyDb(await ref.db("lea"))
+        return { result: await writeNode(db, lea, { path: PROSPECTS.path, base_revision, header, publish }, { kind: "human" }), calls }
+      }
+      expect((await write(3, { proof: false }, false)).result.text).toContain("header changed (stop requiring proof)")
+      await write(3, { proof: false }, true)
+      const required = await write(4, { proof: true }, true)
+      expect(required.result.text).toBe("Published ventes/suivi_prospects revision 5: proof required. Next write: base_revision 5.")
+      expect(required.calls.filter((call) => call.kind === "table" && call.table === "blocks")).toEqual([])
+      expect((await nodeAt(seed, ref, PROSPECTS.path))?.meta).toEqual(PROSPECTS_HEADER)
     })
 
     it("should refuse a reader before any write, recording nothing", async () => {

@@ -12,19 +12,7 @@ const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
 
 describe("promptNames (AC9)", () => {
-  it("should name each prompt by the last segment of its path", () => {
-    expect(promptNames(["conseil/preparer_rdv", "support/reponse_ticket", "ventes/relance_devis"])).toEqual([
-      "preparer_rdv",
-      "reponse_ticket",
-      "relance_devis",
-    ])
-  })
-
-  it("should name two colliding prompts by their whole path, / turned into _", () => {
-    expect(promptNames(["support/relance", "ventes/relance"])).toEqual(["support_relance", "ventes_relance"])
-  })
-
-  it("should keep the last segment of the paths that do not collide", () => {
+  it("should name each prompt by the last segment of its path, two colliding ones by their whole path, / turned into _", () => {
     expect(promptNames(["support/relance", "ventes/relance", "ventes/relance_devis"])).toEqual([
       "support_relance",
       "ventes_relance",

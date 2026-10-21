@@ -4,6 +4,7 @@
 // personne hors de l'organisation. Suite portable depuis E01-S10 f2 : semée par la connexion
 // d'administration (`seedWithAdmin`), chaque appel sous l'appelant (`asCaller`), sans Supabase Auth ni
 // PostgREST ; le job `bare-postgres` la joue.
+import { isDeepStrictEqual } from "node:util"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { OTO_THEMES } from "@otomata_tech/oto_platform/schemas"
 import type { Json } from "../../packages/plateforme/server/database"
@@ -109,22 +110,35 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     })
 
     // Parité de la liste SQL (`v_themes`) et de `OTO_THEMES` (Zod) : chacun des huit thèmes s'écrit.
-    it.for(OTO_THEMES)("should write the theme %s", async (theme, ctx) => {
+    it("should write each of the eight themes", async (ctx) => {
       await skipIfPending(ctx)
-      expect(await update(lea, { theme })).toMatchObject({ theme })
+      const written: Record<string, unknown> = {}
+      for (const theme of OTO_THEMES) {
+        const profile = await update(lea, { theme })
+        written[theme] = profile && typeof profile === "object" && !Array.isArray(profile) ? profile.theme : profile
+      }
+      expect(written).toEqual(Object.fromEntries(OTO_THEMES.map((theme) => [theme, theme])))
     })
 
-    it.for([
-      ["an unknown key", { nickname: "Lé" }],
-      ["a theme outside the eight", { theme: "rose" }],
-      ["a first name over 80 characters", { first_name: "x".repeat(81) }],
-      ["a last name over 80 characters", { last_name: "x".repeat(81) }],
-      ["a theme that is not a string", { theme: 3 }],
-    ] as const)("should refuse %s (22023), writing nothing", async ([, patch], ctx) => {
+    it("should refuse an unknown key, a theme outside the eight or not a string, and a name over 80 characters (22023), writing nothing", async (ctx) => {
       await skipIfPending(ctx)
-      const before = await member()
-      await expect(update(lea, patch)).rejects.toMatchObject({ code: "22023" })
-      expect((await member()).profile).toEqual(before.profile)
+      const refused: [string, Json][] = [
+        ["an unknown key", { nickname: "Lé" }],
+        ["a theme outside the eight", { theme: "rose" }],
+        ["a first name over 80 characters", { first_name: "x".repeat(81) }],
+        ["a last name over 80 characters", { last_name: "x".repeat(81) }],
+        ["a theme that is not a string", { theme: 3 }],
+      ]
+      const verdicts: Record<string, { code: unknown; profileKept: boolean }> = {}
+      for (const [name, patch] of refused) {
+        const before = await member()
+        const code = await update(lea, patch).then(
+          () => "accepted",
+          (error: { code?: unknown }) => error.code,
+        )
+        verdicts[name] = { code, profileKept: isDeepStrictEqual((await member()).profile, before.profile) }
+      }
+      expect(verdicts).toEqual(Object.fromEntries(refused.map(([name]) => [name, { code: "22023", profileKept: true }])))
     })
   })
 })

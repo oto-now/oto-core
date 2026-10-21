@@ -45,7 +45,7 @@ Les suites du paquet tournent sur un Postgres nu ; seules celles de l'adaptateur
 serveur OAuth, Data API, outillage à comptes) gardent le projet.
 
 - L'identité d'une suite portable est un jeton de la forme « supabase » du port (`sub` = identifiant interne), signé par une clé locale (`testIssuer`) et vérifié par `makeVerifyToken({ jwks, issuer })` injecté ; les personnes viennent de `createSqlFixtures` ; aucun service joint (HN-E11S14-1).
-- La vérification d'un vrai jeton par la JWKS du projet est un `it` explicite de `mcp-http`, gardé par le projet (session par `createFixtures().sessionFor`) (HN-E11S14-4). AC1 et AC2 de `portabilite-schema` (lecture d'`auth.users` et `auth.oauth_*`) restent sur le projet, entiers (HN-E11S14-5). Le `describe` principal d'`org-transfer` (export et import par les emails des comptes Auth) reste sur le projet, inchangé ; seul le `describe` AC14 passe sur la base portable (HN-E11S14-9).
+- La vérification d'un vrai jeton par la JWKS du projet est un `it` explicite de `mcp-core`, gardé par le projet (session par `createFixtures().sessionFor`) (HN-E11S14-4). AC1 et AC2 de `portabilite-schema` (lecture d'`auth.users` et `auth.oauth_*`) restent sur le projet, entiers (HN-E11S14-5). Le `describe` principal d'`org-transfer` (export et import par les emails des comptes Auth) reste sur le projet, inchangé ; seul le `describe` AC14 passe sur la base portable (HN-E11S14-9).
 - `api-invitations` pose `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY` par `vi.stubEnv` (adresse en `.invalid`), `signInWithOtp` restant espionné : le client se construit, rien n'est joint (HN-E11S14-3).
 - `tests/unit/gardes-supabase.test.ts` lit les noms importés par `import {…} from`, `export {…} from` et un import dynamique déstructuré (`const {…} = await import(…)`), alias et `type` retirés (HN-E11S14-6). Sa liste est fermée dans les deux sens : un fichier qui importe une garde sans y être échoue, une ligne dont le fichier n'en importe plus échoue aussi ; les lignes « pending » des lots b et c en sont sorties avec leur lot (HN-E11S14-7).
 - Les noms de `describe` passés sur la base portable qui disaient « on the cloud project » disent « on a real database » ; rien d'autre de leur nom ne change (HN-E11S14-8).
@@ -81,7 +81,7 @@ serveur OAuth, Data API, outillage à comptes) gardent le projet.
 - Élagage des tests au minimum vital pour les fichiers postérieurs au dernier élagage (M11c).
 - Aides de la base de test (`seed.cleanup`, `valuesOf`, `ref.write`) et aides recopiées (M24, M25, M15b).
 - Un mode sans Supabase pour `org:export`, `org:import`, `test:cleanup` et `oauth:clients`, dont le verrouillage du mode Supabase par deux lancements de `scripts/demo-seed.mjs` (M85).
-- Ménage des bases `test_agent_*` du Postgres du poste (M62) ; tests qui échouent quand d'autres sessions travaillent dans le même checkout (M76) ; écart d'horloge entre la base et Node dans `e10s02-uploads` (M98) ; un service MinIO dans la CI pour l'adaptateur S3 réel (M88).
+- Ménage des bases `test_agent_*` du Postgres du poste (M62) ; tests qui échouent quand d'autres sessions travaillent dans le même checkout (M76) ; écart d'horloge entre la base et Node dans `uploads` (M98) ; un service MinIO dans la CI pour l'adaptateur S3 réel (M88).
 
 ## Questions ouvertes
 

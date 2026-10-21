@@ -9,9 +9,13 @@
 // Connecteurs au pied (AC-32), le menu de l'entreprise (AC-31, AC-33), le menu du compte (AC-6, AC-e22), le
 // « + » de Privé (AC-34), le résumé par genre (AC-e21), « Contexte · <section> » (AC-18). E05-S12 (lot D) : créer,
 // déposer et ranger sous un Contexte (AC-25 à AC-27). E11-S20 : l'arbre relu seul, à la navigation, au retour sur
-// l'onglet, après un geste (AC-3 à AC-8).
+// l'onglet, après un geste (AC-3 à AC-8). E05-S13 (lot B, AC-12) : le titre d'une section qui la plie. E05-S11
+// (lot e) et E11-S05 : la coque sans tiret cadratin, les glyphes d'une procédure et d'un tableau, le sélecteur
+// d'organisation ; en fin de fichier, sur un arbre à elle.
 // L'hôte est simulé par ce qu'il prête (`ContexteDeLHote`, la relecture) ; l'API, par `fetch`.
-import type { AnchorHTMLAttributes } from "react"
+import type { AnchorHTMLAttributes, ReactNode } from "react"
+import { Play } from "@phosphor-icons/react/dist/ssr/Play"
+import { Table } from "@phosphor-icons/react/dist/ssr/Table"
 import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MoveImpact, TreeNode } from "@otomata_tech/oto_platform/schemas"
@@ -19,11 +23,14 @@ import {
   ContexteDeLHote,
   ContexteDeRafraichissement,
   CoquilleOto,
+  NavigateurDArbre,
   RailApplication,
+  RailSection,
   SectionsDuRail,
   type AdressesDuRail,
   type RailApplicationProps,
 } from "@otomata_tech/oto_platform/ui"
+import * as LIBELLES_DE_LA_COQUE from "../../../packages/plateforme/ui/coque/libelles"
 import { simulerLesDialogues } from "../../helpers/dialogue"
 import { choisirDansLaListe } from "../../helpers/liste-de-choix"
 
@@ -1237,5 +1244,200 @@ describe("SectionsDuRail in the sidebar of an ERP (AC-a8)", () => {
     expect(appels[0]).toMatchObject({ url: "/api/platform/nodes", methode: "POST", corps: { path: "conseil/sans_titre", kind: "page" } })
     // E11-S20 : l'arbre de l'ERP est le sien ; seul `RailApplication` relit le sien.
     expect(relectures.nombre).toBe(0)
+  })
+})
+
+// E05-S13, lot B (retours du soir de JB) : le titre d'une section du rail qui la plie (AC-12).
+describe("RailSection, folded by its title (AC-12)", () => {
+  const AJOUTS = [{ label: "Page", onSelect: vi.fn() }]
+
+  it("should fold and unfold by its title, one button carrying the chevron and the title, the « + » apart", () => {
+    const plier = vi.fn()
+    const { rerender } = render(<RailSection label="Ventes" expanded onToggle={plier} controls="arbre-ventes" addItems={AJOUTS} />)
+
+    const pli = screen.getByRole("button", { name: "Replier Ventes" })
+    // Un seul contrôle : le titre visible est dans le bouton, atteint au clavier comme tout bouton natif.
+    expect(pli.tagName).toBe("BUTTON")
+    expect(pli).toHaveTextContent("Ventes")
+    expect(pli).not.toHaveAttribute("tabindex")
+    expect(pli).toHaveAttribute("aria-expanded", "true")
+    expect(pli).toHaveAttribute("aria-controls", "arbre-ventes")
+    // Le « + » reste un bouton à part, hors du pli.
+    const plus = screen.getByRole("button", { name: "Créer dans Ventes" })
+    expect(pli).not.toContainElement(plus)
+    expect(screen.getAllByRole("button")).toHaveLength(2)
+
+    fireEvent.click(within(pli).getByText("Ventes"))
+    expect(plier).toHaveBeenCalledWith(false)
+
+    rerender(<RailSection label="Ventes" expanded={false} onToggle={plier} controls="arbre-ventes" addItems={AJOUTS} />)
+    const replie = screen.getByRole("button", { name: "Déplier Ventes" })
+    expect(replie).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(replie)
+    expect(plier).toHaveBeenLastCalledWith(true)
+  })
+
+  it("should keep the link of a title that opens a page, the chevron alone folding", () => {
+    const plier = vi.fn()
+    render(<RailSection label="Ventes" to="/n/ventes" expanded onToggle={plier} controls="arbre-ventes" />)
+
+    expect(screen.getByRole("link", { name: "Ventes" })).toHaveAttribute("href", "/n/ventes")
+    const pli = screen.getByRole("button", { name: "Replier Ventes" })
+    expect(pli).not.toHaveTextContent("Ventes")
+    fireEvent.click(pli)
+    expect(plier).toHaveBeenCalledWith(false)
+  })
+})
+
+// E05-S11 (lot e) : la coque sans tiret cadratin (AC-18 : les tables de libellés de `ui/coque/`, et le rail
+// rendu), la procédure au glyphe `Play` partout où la table nature → glyphe sert (AC-35 : rail, palette,
+// création, navigateur d'arbre ; « Contenus liés », l'accueil et le fil lisent la table du rail, `GLYPHES`).
+// E11-S05 (AC-h2) : le tableau au glyphe `Table`, aux mêmes endroits. Le sélecteur d'organisation du menu de
+// l'entreprise. Un arbre à lui, où Ventes porte une procédure et un tableau.
+describe("the coque (E05-S11, lot e ; E11-S05)", () => {
+  const ARBRE_DE_LA_COQUE: TreeNode[] = [
+    noeud("guide", "page", "Guide de Démo", [
+      noeud("contexte", "context", "Contexte de l'organisation"),
+      noeud("private", "page", "Espaces personnels", [noeud("private/claire", "page", "Claire", [noeud("private/claire/contexte", "context", "Contexte")])]),
+      noeud("ventes", "page", "Ventes", [
+        noeud("ventes/contexte", "context", "Contexte"),
+        noeud("ventes/qualifier", "procedure", "Qualifier un prospect"),
+        noeud("ventes/suivi", "table", "Suivi des prospects"),
+      ]),
+    ]),
+  ]
+
+  const PROPS_DE_LA_COQUE: RailApplicationProps = {
+    entreprise: { nom: "Démo", logo: null },
+    arbre: { data: { tree: ARBRE_DE_LA_COQUE, truncated: false } },
+    equipes: { data: [{ slug: "ventes", name: "Ventes" }] },
+    handle: "claire",
+    compte: "Claire Morel",
+    administre: true,
+    adresses: { pages: "/n/", accueil: "/", journal: "/journal", equipes: "/teams", usage: "/admin/usage", organisation: "/admin/organization", connecteurs: "/admin/connectors", corbeille: "/trash", profil: "/profile" },
+  }
+
+  function Lien({ href, children, ...reste }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children?: ReactNode }) {
+    return (
+      <a href={href} {...reste}>
+        {children}
+      </a>
+    )
+  }
+
+  function monterLeRail(props: Partial<RailApplicationProps> = {}) {
+    render(
+      <CoquilleOto pleinePage>
+        <ContexteDeRafraichissement.Provider value={vi.fn()}>
+          <ContexteDeLHote.Provider value={{ Lien, chemin: "/n/ventes/qualifier", naviguer: vi.fn(), deconnecter: vi.fn() }}>
+            <RailApplication {...PROPS_DE_LA_COQUE} {...props} />
+          </ContexteDeLHote.Provider>
+        </ContexteDeRafraichissement.Provider>
+      </CoquilleOto>,
+    )
+    return screen.getByRole("navigation", { hidden: true })
+  }
+
+  /** Tous les textes d'une table de libellés : chaînes, objets imbriqués, et fonctions appelées sur des valeurs d'exemple. */
+  function textesDe(valeur: unknown): string[] {
+    if (typeof valeur === "string") return [valeur]
+    if (typeof valeur === "function") return textesDe(valeur("Exemple", 2))
+    if (valeur !== null && typeof valeur === "object") return Object.values(valeur).flatMap(textesDe)
+    return []
+  }
+
+  /** Le tracé du glyphe dans un élément : celui de son premier `<path>`. */
+  const traceDans = (element: Element) => element.querySelector("svg path")?.getAttribute("d")
+
+  let TRACE_DU_PLAY: string | null | undefined
+  let TRACE_DE_TABLE: string | null | undefined
+
+  beforeAll(() => {
+    const { container, unmount } = render(<Play />)
+    TRACE_DU_PLAY = traceDans(container)
+    unmount()
+    const table = render(<Table />)
+    TRACE_DE_TABLE = traceDans(table.container)
+    table.unmount()
+  })
+
+  describe("the coque without an em dash (E05-S11, AC-18)", () => {
+    it("should carry no « — » in any label table of the coque, nor in the text and names of the rendered rail", () => {
+      const textes = Object.values(LIBELLES_DE_LA_COQUE).flatMap(textesDe)
+      expect(textes.length).toBeGreaterThan(40)
+      expect(textes.filter((texte) => texte.includes("—"))).toEqual([])
+
+      const rail = monterLeRail()
+      expect(within(rail).getByRole("link", { name: "Contexte · Ventes" })).toBeInTheDocument()
+      expect(rail.textContent).not.toContain("—")
+      const noms = [...rail.querySelectorAll("[aria-label]")].map((element) => element.getAttribute("aria-label") ?? "")
+      expect(noms.filter((nom) => nom.includes("—"))).toEqual([])
+    })
+  })
+
+  describe("the glyphs of a procedure and a table (E05-S11, AC-35 ; E11-S05, AC-h2)", () => {
+    it("should draw a procedure with Play and a table with Table in the rail, the palette, the creation menu and the tree browser", () => {
+      const natures = [
+        { nature: "procedure", trace: TRACE_DU_PLAY, titre: "Qualifier un prospect", chemin: "ventes/qualifier", creation: "Une procédure", groupe: "Procédures", navigateur: "procedure" },
+        { nature: "table", trace: TRACE_DE_TABLE, titre: "Suivi des prospects", chemin: "ventes/suivi", creation: "Un tableau", groupe: "Tableaux", navigateur: "tableau" },
+      ] as const
+      const verdicts: Record<string, Record<string, boolean>> = {}
+      for (const { nature, trace, titre, chemin, creation, groupe, navigateur } of natures) {
+        const rail = monterLeRail()
+        const dansLeRail = traceDans(within(rail).getByRole("link", { name: titre }))
+        fireEvent.click(within(rail).getByRole("button", { name: "Créer dans Ventes" }))
+        const dansLaCreation = traceDans(within(screen.getByRole("menu")).getByRole("menuitem", { name: creation }))
+        fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+        fireEvent.click(within(rail).getByRole("searchbox", { name: "Rechercher" }))
+        const dansLaPalette = traceDans(within(screen.getByRole("group", { name: groupe })).getByRole("option", { name: titre }))
+        cleanup()
+        render(<NavigateurDArbre resultat={{ data: [{ chemin, titre, nature: navigateur }] }} hrefDuNoeud={(n) => `/n/${n.chemin}`} Lien={Lien} />)
+        const dansLeNavigateur = traceDans(screen.getByRole("link", { name: titre }))
+        cleanup()
+        verdicts[nature] = { drawn: Boolean(trace), rail: dansLeRail === trace, creation: dansLaCreation === trace, palette: dansLaPalette === trace, navigateur: dansLeNavigateur === trace }
+      }
+      const partout = { drawn: true, rail: true, creation: true, palette: true, navigateur: true }
+      expect(verdicts).toEqual({ procedure: partout, table: partout })
+    })
+  })
+
+  describe("the organisation switcher of the company menu (several organisations per person)", () => {
+    const ORGANISATIONS = [
+      { id: "org-a", name: "Atelier", host: "atelier.oto.test", current: false },
+      { id: "org-d", name: "Démo", host: "demo.oto.test", current: true },
+      { id: "org-s", name: "Sans adresse", host: null, current: false },
+    ]
+
+    it("should list the reachable organisations of the person, the current one checked, and leave for the address of the chosen one", () => {
+      const assign = vi.fn()
+      vi.stubGlobal("location", { ...window.location, protocol: "https:", assign })
+      const rail = monterLeRail({ organisations: ORGANISATIONS })
+      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo\. Réglages et changement d'entreprise/ }))
+      const choix = within(screen.getByRole("menu")).getAllByRole("menuitemradio")
+      expect(choix.map((item) => [item.textContent, item.getAttribute("aria-checked")])).toEqual([
+        ["Atelier", "false"],
+        ["Démo", "true"],
+      ])
+      fireEvent.click(choix[0])
+      expect(assign).toHaveBeenCalledWith("https://atelier.oto.test/")
+    })
+
+    it("should offer to create an organisation under the switcher when the host gives its signup address, and not otherwise", () => {
+      const rail = monterLeRail({ organisations: ORGANISATIONS, adresses: { ...PROPS_DE_LA_COQUE.adresses, inscription: "/signup" } })
+      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
+      const items = [...screen.getByRole("menu").querySelectorAll("[role^='menuitem']")].map((item) => item.textContent)
+      expect(items.slice(-3)).toEqual(["Atelier", "Démo", "Créer une organisation"])
+      cleanup()
+
+      const sans = monterLeRail({ organisations: ORGANISATIONS })
+      fireEvent.click(within(sans).getByRole("button", { name: /^Entreprise : Démo/ }))
+      expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "Créer une organisation" })).toBeNull()
+    })
+
+    it("should show no switcher with a single organisation", () => {
+      const rail = monterLeRail({ organisations: [ORGANISATIONS[1]] })
+      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
+      expect(within(screen.getByRole("menu")).queryAllByRole("menuitemradio")).toEqual([])
+    })
   })
 })

@@ -11,6 +11,7 @@ import { parseMarkdown } from "../../packages/plateforme/server/nodes/markdown-p
 import { applyOps } from "../../packages/plateforme/server/nodes/ops"
 import { RenduDUnBloc } from "../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { bloc } from "../helpers/noeud"
+import { readingRatio } from "../helpers/temps-lineaire"
 
 const fields = ({ type, text, data }: BlockInput) => ({ type, text: text ?? null, data })
 
@@ -148,30 +149,7 @@ describe("the tolerant mode through write (AC-a2)", () => {
   })
 })
 
-/** Le temps d'une lecture tolérante, en millisecondes. */
-function readingTime(text: string): number {
-  const start = performance.now()
-  parseMarkdown(text, { tolerant: true })
-  return performance.now() - start
-}
-
-/**
- * Le temps de lecture de `whole` et son rapport à celui de `quarter`, quatre fois plus court : chacun le plus court de
- * trois lectures alternées, après une lecture de chauffe. La charge de la machine ne fait que les allonger, et touche
- * les deux de la même façon.
- */
-function readingRatio(quarter: string, whole: string): { whole: number; ratio: number } {
-  readingTime(quarter)
-  let [fastQuarter, fastWhole] = [Infinity, Infinity]
-  for (let round = 0; round < 3; round++) {
-    fastQuarter = Math.min(fastQuarter, readingTime(quarter))
-    fastWhole = Math.min(fastWhole, readingTime(whole))
-  }
-  return { whole: fastWhole, ratio: fastWhole / fastQuarter }
-}
-
-/** Sous ce temps, trop court pour un rapport (le ramasse-miettes y pèse) : une lecture quadratique de 1 000 000 caractères prend des secondes. */
-const QUICK_MS = 50
+const readTolerant = (text: string) => parseMarkdown(text, { tolerant: true })
 
 describe("hostile texts of 1,000,000 characters in tolerant mode (security-patterns.md § Validation des inputs)", () => {
   const size = 1_000_000
@@ -185,11 +163,13 @@ describe("hostile texts of 1,000,000 characters in tolerant mode (security-patte
     ["dashes under text", (n) => "t\n---\n".repeat(n / 6)],
   ]
   // Un bloc de plus de 100 000 caractères reste refusé, même gardé en code : un texte d'opération en porte 40 000 au plus.
-  // Linéaire : quatre fois le texte, quatre fois le temps (jusqu'à 8 mesuré, ramasse-miettes compris) ; quadratique,
-  // seize. Le rapport ne dépend pas de la charge, qu'une borne en millisecondes subit (2,9 s pour 1 s dans un
-  // `pnpm verify` complet).
-  it.each(hostile)("should read %s in linear time", (_what, text) => {
-    const { whole, ratio } = readingRatio(text(size / 4), text(size))
-    expect(whole < QUICK_MS || ratio < 10, `${whole.toFixed(0)} ms for ${size} characters, ${ratio.toFixed(1)} times the time of a quarter`).toBe(true)
+  it("should read every hostile text in linear time", () => {
+    const verdicts = Object.fromEntries(
+      hostile.map(([what, text]) => {
+        const { whole, ratio, linear } = readingRatio(readTolerant, text(size / 4), text(size))
+        return [what, linear ? "linear" : `${whole.toFixed(0)} ms for ${size} characters, ${ratio.toFixed(1)} times the time of a quarter`]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(hostile.map(([what]) => [what, "linear"])))
   })
 })

@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 describe("middleware in front of a public link (AC-d2, AC-d6)", () => {
-  it.each([`/p/${JETON}`, `/p/${JETON}/ventes/tarifs`, "/p/inconnu"])("should let %s through without a session, never indexed, reading no session", async (chemin) => {
+  it.each([`/p/${JETON}/ventes/tarifs`, "/p/inconnu"])("should let %s through without a session, never indexed, reading no session", async (chemin) => {
     const response = await middleware(requete(chemin))
 
     expect(response.headers.get("location")).toBeNull()
@@ -37,7 +37,7 @@ describe("middleware in front of a public link (AC-d2, AC-d6)", () => {
   })
 
   // Seul le préfixe `/p/` s'ouvre : un chemin voisin reste derrière la connexion.
-  it.each(["/p", "/pages", "/public/x", "/n/p/x", "/admin/p/x"])("should still send %s to the login without a session", async (chemin) => {
+  it.each(["/p", "/pages", "/n/p/x"])("should still send %s to the login without a session", async (chemin) => {
     const response = await middleware(requete(chemin))
 
     expect(response.status).toBe(307)

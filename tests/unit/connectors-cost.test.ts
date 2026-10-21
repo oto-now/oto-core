@@ -1,11 +1,11 @@
 // @vitest-environment node
 // Coût d'un appel et travail asynchrone d'un connecteur décrit (format de connectors, « Coût d'un appel », « Travail
 // asynchrone ») : `registerConnectors` accepte la forme de la fabrique et refuse nommément ce que refusent ses règles 5,
-// 12 et 13 ; les fonctions pures en tirent le pire cas, la quantité à régler et la relève. Rien n'est réservé ni réglé.
+// 12 et 13. Le pire cas, la quantité à régler et la relève se prouvent par les cas communs (`connectors-cost-cases`).
+// Rien n'est réservé ni réglé.
 import { afterEach, describe, expect, it } from "vitest"
 import { CatalogRegistrationError, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
-import { collectionOf, ConnectorCostError, costOf, settledQuantity } from "../../packages/plateforme/server/connectors/cost"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
 import { billedConnector, describedConnector } from "../factories/described-connector"
@@ -22,12 +22,6 @@ function billed(changes: Record<string, Change>, base: ConnectorDefinition = bil
   return { ...base, functions: base.functions.map((fn) => changes[fn.name.slice("crm.".length)]?.(fn) ?? fn) }
 }
 
-const fnOf = (definition: ConnectorDefinition, short: string): ConnectorFunctionDefinition => {
-  const found = definition.functions.find((fn) => fn.name === `crm.${short}`)
-  if (!found) throw new Error(`no function ${short}`)
-  return found
-}
-
 function refusalOf(definition: ConnectorDefinition): string {
   try {
     registerConnectors([definition])
@@ -35,7 +29,7 @@ function refusalOf(definition: ConnectorDefinition): string {
     if (error instanceof CatalogRegistrationError) return error.message
     throw error
   }
-  throw new Error("expected a CatalogRegistrationError")
+  return "(declared, no refusal)"
 }
 
 const loose = (value: object) => value as unknown as ConnectorFunctionDefinition["cost"]
@@ -85,7 +79,7 @@ describe("registerConnectors: cost and asynchronous job", () => {
     expect(catalogFunctions().filter((fn) => fn.connector === "crm")).toHaveLength(8)
   })
 
-  it.each<[string, () => ConnectorDefinition, string]>([
+  const REFUSALS: [string, () => ConnectorDefinition, string][] = [
     ["an unknown per", () => billed({ get_contact: (fn) => ({ ...fn, cost: loose({ per: "call" }) }) }), "crm.get_contact: cost must be {per: request, page or item, items?, times? or weights?, unit?, settle?}."],
     ["an unknown cost key", () => billed({ get_contact: (fn) => ({ ...fn, cost: loose({ per: "request", amount: 2 }) }) }), "crm.get_contact: cost must be {per: request, page or item, items?, times? or weights?, unit?, settle?}."],
     ["items on a request cost", () => billed({ get_contact: (fn) => ({ ...fn, cost: loose({ per: "request", items: "contact_id" }) }) }), "crm.get_contact: cost.items, cost.times and cost.weights go with per item only."],
@@ -103,7 +97,6 @@ describe("registerConnectors: cost and asynchronous job", () => {
     ],
     ["times that are the items", () => billed({ submit_enrichment: (fn) => ({ ...fn, cost: { per: "item", items: "contacts", times: "contacts", unit: "u" } }) }), "crm.submit_enrichment: cost.times names the items argument contacts again."],
     ["a settled paginated function", () => billed({ list_contacts: (fn) => ({ ...fn, cost: { per: "page", unit: "u", settle: { path: "used" } } }) }), "crm.list_contacts: a paginated function costs per request or per page, without settle: each page is a request, and one response does not tell the quantity of the call."],
-    ["a balance probe whose function costs per page", () => ({ ...billed({ get_company: (fn) => ({ ...fn, cost: { per: "page" } }) }), probe: { function: "crm.get_company", nonEmpty: [], balance: { path: "credits", min: 1, unit: "credits" } } }), "crm: probe crm.get_company reads a balance, so it must declare no cost: one never pays to learn whether one can pay."],
     ["a job without its id", () => billed({ submit_enrichment: (fn) => ({ ...fn, async: looseJob({ collect: "crm.get_enrichment" }) }) }), "crm.submit_enrichment: async must be {collect, jobId: {from: a dotted path, to}, withinMs? or noDeadline: true?}."],
     ["a job id read at a malformed path", () => billed({ submit_enrichment: (fn) => ({ ...fn, async: { ...fn.async!, jobId: { from: "job id", to: "enrichment_id" } } }) }), "crm.submit_enrichment: async must be {collect, jobId: {from: a dotted path, to}, withinMs? or noDeadline: true?}."],
     ["a job collected by an unknown function", () => billed({ submit_enrichment: (fn) => ({ ...fn, async: { ...fn.async!, collect: "crm.nope" } }) }), "crm.submit_enrichment: async.collect crm.nope is not another function of the connector."],
@@ -116,7 +109,6 @@ describe("registerConnectors: cost and asynchronous job", () => {
     ["weights on a request cost", () => billed({ get_contact: (fn) => ({ ...fn, cost: loose({ per: "request", weights: { field: "fields", values: { email: 1, phone: 10 } } }) }) }), "crm.get_contact: cost.items, cost.times and cost.weights go with per item only."],
     ["weights with times", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", times: "contacts", weights: { field: "fields", values: { email: 1, phone: 10 } }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights replaces cost.times: declare one of them."],
     ["a weight of zero", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", weights: { field: "fields", values: { email: 0, phone: 10 } }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value."],
-    ["a negative weight", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", weights: { field: "fields", values: { email: -1, phone: 10 } }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value."],
     ["a weight that is not an integer", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", weights: { field: "fields", values: { email: 1.5, phone: 10 } }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value."],
     ["an empty weight table", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", weights: { field: "fields", values: {} }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value."],
     ["weights with an unknown key", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, cost: loose({ per: "item", items: "contacts", weights: { field: "fields", values: { email: 1, phone: 10 }, default: 1 }, unit: "credits" }) })) }), "crm.submit_enrichment: cost.weights must be {field, values: {value: an integer weight of 1 or more}}, with at least one value."],
@@ -128,88 +120,16 @@ describe("registerConnectors: cost and asynchronous job", () => {
     ["a no-deadline job with a delay", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, async: { ...fn.async!, withinMs: 600_000 } })) }), "crm.submit_enrichment: async.noDeadline is true or absent, and excludes async.withinMs: the vendor sets no deadline, or one is declared."],
     ["a no-deadline job set to false", () => billed({ submit_enrichment: reweigh((fn) => ({ ...fn, async: looseJob({ ...fn.async!, noDeadline: false }) })) }), "crm.submit_enrichment: async.noDeadline is true or absent, and excludes async.withinMs: the vendor sets no deadline, or one is declared."],
     ["a settled job whose collection settles too", () => billed({ get_enrichment: (fn) => ({ ...fn, cost: SETTLED }) }), "crm.submit_enrichment: its quantity is read in the responses of crm.get_enrichment, which must be neither paginated nor settled on its own."],
-  ])("should refuse %s by name, and declare nothing", (_case, definition, message) => {
-    registerConnectors([describedConnector("crm_before")])
-    expect(refusalOf(definition())).toBe(message)
-    expect(catalogFunctions().filter((fn) => fn.connector === "crm_before")).toHaveLength(6)
-  })
-})
+  ]
 
-describe("costOf, settledQuantity, collectionOf: a weighted cost", () => {
-  const submit = weighed(fnOf(billedConnector(), "submit_enrichment"))
-  const contacts = (...fields: string[][]) => ({ contacts: fields.map((asked, index) => ({ name: `c-${index}`, fields: asked })) })
-
-  it("should sum, over the items, the weights of the values each lists", () => {
-    expect(costOf(submit, contacts(["email", "phone"], ["email"]))).toEqual({ quantity: 12, unit: "credits" })
-  })
-
-  it("should refuse a value without a weight, and an item without values, instead of counting them for nothing", () => {
-    expect(() => costOf(submit, contacts(["email", "address"]))).toThrow('crm.submit_enrichment: fields value "address" has no weight')
-    expect(() => costOf(submit, contacts([]))).toThrow(ConnectorCostError)
-    expect(() => costOf(submit, { contacts: [{ name: "c-0" }] })).toThrow("crm.submit_enrichment: each element of contacts lists its fields")
-    expect(() => costOf(submit, { contacts: [] })).toThrow(ConnectorCostError)
-  })
-
-  it("should settle the credits read in the collection, and report a quantity above the worst case", () => {
-    const args = contacts(["email", "phone"])
-    expect(settledQuantity(submit, args, [{ status: "IN_PROGRESS" }, { cost: { credits: 10 } }])).toEqual({ quantity: 10, unit: "credits", from: "response", exceeded: false })
-    expect(settledQuantity(submit, args, [{ cost: { credits: 14 } }])).toEqual({ quantity: 14, unit: "credits", from: "response", exceeded: true })
-    expect(settledQuantity(submit, args, [{ status: "IN_PROGRESS" }])).toEqual({ quantity: 11, unit: "credits", from: "unreadable", exceeded: false })
-  })
-
-  it("should give the collection of a job without deadline", () => {
-    expect(collectionOf(submit, { job: { id: "e-9" } })).toEqual({ function: "crm.get_enrichment", args: { enrichment_id: "e-9" }, withinMs: null, noDeadline: true })
-  })
-})
-
-describe("costOf, settledQuantity, collectionOf", () => {
-  const definition = billedConnector()
-  const submit = fnOf(definition, "submit_enrichment")
-  const args = { contacts: ["c-1", "c-2", "c-3"], fields: ["email", "phone"] }
-
-  it("should give the worst case per item, contacts times fields, in the declared unit", () => {
-    expect(costOf(submit, args)).toEqual({ quantity: 6, unit: "fields" })
-    const once = { ...submit, cost: { per: "item", items: "contacts", unit: "contacts" } } as const
-    expect(costOf(once, args)).toEqual({ quantity: 3, unit: "contacts" })
-  })
-
-  it("should count the requests a call may send, every page with all_pages up to the declared bound", () => {
-    const list = { ...fnOf(definition, "list_contacts"), cost: { per: "page" } } as const
-    expect(costOf(list, {})).toEqual({ quantity: 1, unit: "pages" })
-    expect(costOf(list, { all_pages: true })).toEqual({ quantity: 3, unit: "pages" })
-    expect(costOf(list, { all_pages: true, max_pages: 2 })).toEqual({ quantity: 2, unit: "pages" })
-    expect(costOf({ ...list, cost: { per: "request" } }, { all_pages: true, max_pages: 9 })).toEqual({ quantity: 3, unit: "requests" })
-    expect(costOf(fnOf(definition, "get_contact"), {})).toBeNull()
-  })
-
-  it("should refuse to guess the worst case of a counted list absent or empty", () => {
-    expect(() => costOf(submit, { contacts: [], fields: ["email"] })).toThrow(ConnectorCostError)
-    expect(() => costOf(submit, { contacts: ["c-1"] })).toThrow("crm.submit_enrichment: cost argument fields is not a non-empty list")
-  })
-
-  it("should settle the first readable quantity of the responses, else the worst case as unreadable", () => {
-    expect(settledQuantity(submit, args, [{ state: "running" }, { summary: { found: 4 } }])).toEqual({ quantity: 4, unit: "fields", from: "response", exceeded: false })
-    expect(settledQuantity(submit, args, [{ summary: { found: 0 } }])).toEqual({ quantity: 0, unit: "fields", from: "response", exceeded: false })
-    for (const found of ["4", -1, null, Number.POSITIVE_INFINITY]) {
-      expect(settledQuantity(submit, args, [{ summary: { found } }])).toEqual({ quantity: 6, unit: "fields", from: "unreadable", exceeded: false })
-    }
-    expect(settledQuantity(submit, args, [])).toEqual({ quantity: 6, unit: "fields", from: "unreadable", exceeded: false })
-  })
-
-  it("should settle the requests sent without settle, and the worst case per item", () => {
-    const list = { ...fnOf(definition, "list_contacts"), cost: { per: "request" } } as const
-    expect(settledQuantity(list, { all_pages: true }, [{}, {}])).toEqual({ quantity: 2, unit: "requests", from: "requests", exceeded: false })
-    expect(() => settledQuantity(list, {}, [])).toThrow(ConnectorCostError)
-    const unsettled = { ...submit, cost: { per: "item", items: "contacts", unit: "contacts" } } as const
-    expect(settledQuantity(unsettled, args, [{ summary: { found: 1 } }])).toEqual({ quantity: 3, unit: "contacts", from: "worst_case", exceeded: false })
-    expect(settledQuantity(fnOf(definition, "get_contact"), {}, [{}])).toBeNull()
-  })
-
-  it("should give the collection of a submitted job, its id read in the submission's response", () => {
-    expect(collectionOf(submit, { job: { id: "e-9" } })).toEqual({ function: "crm.get_enrichment", args: { enrichment_id: "e-9" }, withinMs: 600_000, noDeadline: false })
-    expect(collectionOf({ ...submit, async: { ...submit.async!, withinMs: undefined } }, { job: { id: 12 } })).toEqual({ function: "crm.get_enrichment", args: { enrichment_id: 12 }, withinMs: null, noDeadline: false })
-    expect(() => collectionOf(submit, { job: {} })).toThrow("crm.submit_enrichment: the submission answered without its job id at job.id.")
-    expect(() => collectionOf(submit, { job: { id: "" } })).toThrow(ConnectorCostError)
-    expect(collectionOf(fnOf(definition, "get_contact"), {})).toBeNull()
+  it("should refuse each malformed cost or job by name, and declare nothing", () => {
+    const verdicts = Object.fromEntries(
+      REFUSALS.map(([name, definition]) => {
+        registerConnectors([describedConnector("crm_before")])
+        const message = refusalOf(definition())
+        return [name, { message, kept: catalogFunctions().filter((fn) => fn.connector === "crm_before").length }]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(REFUSALS.map(([name, , message]) => [name, { message, kept: 6 }])))
   })
 })

@@ -249,11 +249,11 @@ describe("EcranRetours gestures (AC10)", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  // Les phrases propres au geste pour `not_found` et pour un autre code : `ui-messages.test.ts`, « should prefer the
+  // phrase of the gesture for the reason, then for the code ».
   it.each([
-    ["not_found", reponse(404, { error: { code: "not_found", message: "Unknown ticket." } }), "Ce retour n'existe plus. Rechargez la page."],
     ["forbidden", reponse(403, { error: { code: "forbidden", message: "Reserved." } }), "Seul un administrateur de l'organisation peut traiter les retours."],
     ["network", null, "La connexion au serveur a échoué. Rien n'a changé."],
-    ["internal", reponse(500, { error: { code: "internal", message: "Internal error." } }), "Le retour n'a pas pu être mis à jour. Réessayez dans un instant."],
   ])("should say a %s refusal under the gesture", async (_code, reponseDeLAPI, message) => {
     if (reponseDeLAPI) fetchMock.mockResolvedValue(reponseDeLAPI)
     else fetchMock.mockRejectedValue(new TypeError("fetch failed"))

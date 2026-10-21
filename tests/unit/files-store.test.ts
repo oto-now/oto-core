@@ -32,8 +32,9 @@ const ORG = "8d3f2c1a-5b6e-4f70-9a81-2b3c4d5e6f70"
 const FILE = "0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f"
 
 describe("fileStore (AC-a1)", () => {
-  it.each(STORAGE_VARIABLES)("should be null without %s", (name) => {
-    expect(fileStore({ ...storageEnv(), [name]: "" })).toBeNull()
+  it("should be null without any one of the five variables", () => {
+    const verdicts = Object.fromEntries(STORAGE_VARIABLES.map((name) => [name, fileStore({ ...storageEnv(), [name]: "" })]))
+    expect(verdicts).toEqual(Object.fromEntries(STORAGE_VARIABLES.map((name) => [name, null])))
   })
 
   it("should give a store of seven operations with the five variables", () => {

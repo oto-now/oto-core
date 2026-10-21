@@ -238,24 +238,13 @@ describe("bare values of table.write: ignored when equal to the stored one, othe
   })
 })
 
-describe("E11-S01: proof by table, strict required column, host and worker, bounds said", () => {
-  /** L'en-tête de référence sans la preuve exigée (HN-E11S01-13). */
-  const OPEN: TableHeader = { ...HEADER, proof: false }
-  const stored = new Map(PROSPECT_ROWS.map((row) => [row.key, row]))
+// La preuve par tableau (AC-f2), l'hôte et le travailleur (AC-d2, AC-d3) : `tables-write-service.test.ts`, qui les voit
+// à travers le service (le bail du travailleur compris).
+describe("E11-S01: strict required column, bounds said", () => {
   const refusal = (parsed: { success: boolean; error?: { issues: Parameters<typeof issuesText>[0] } }) => (parsed.error ? issuesText(parsed.error.issues) : null)
   /** L'en-tête de référence où `contact` est requise, stricte ou non. */
   const contactRequired = (strict: boolean) =>
     headerOf({ ...PROSPECTS_HEADER, columns: PROSPECTS_HEADER.columns.map((column) => (column.name === "contact" ? { ...column, required: true, ...(strict ? { allow_verified_empty: false } : {}) } : column)) })
-
-  it("should write a bare new value on a table without proof, and still drop a bare value equal to the stored one (AC-f2, HN-E11S01-15)", () => {
-    const rows: TableRowWrite[] = [
-      { key: "Atelier 2", set: { ville: "Coudray", contact: "Nina Perrault" } },
-      { key: "Boulangerie du Pont", set: { ville: "Valbrune" } },
-    ]
-    expect(withoutBareValues(OPEN, rows, stored)).toEqual({ rows: [{ key: "Atelier 2", set: { ville: "Coudray" } }, rows[1]] })
-    const written = write({ set: { ville: "Coudray" } }, prospect("Atelier 2"), OPEN)
-    expect([written.problems, written.provenance.ville]).toEqual([[], AGENT])
-  })
 
   it("should refuse verified_empty on a column that needs a real value, and require its value at creation (AC-b2, AC-b3, AC-b4)", () => {
     const strict = contactRequired(true)
@@ -278,14 +267,6 @@ describe("E11-S01: proof by table, strict required column, host and worker, boun
     }
     expect(write({ set: { notes: proved("Relancer") } }, emptied, strict).notes).toEqual(["note: contact is required and has no value on this row."])
     expect(write({ set: { notes: proved("Relancer") } }, emptied, contactRequired(false)).notes).toEqual([])
-  })
-
-  it("should store host and worker in the provenance when known, and neither when unknown (AC-d2, AC-d3)", () => {
-    const request = { header: HEADER, path: PROSPECTS.path, argPath: "rows.0", reviewQueue: QUEUE, current: prospect("Atelier 2"), input: { key: "Atelier 2", set: { ville: proved("Coudray") } } }
-    const known = applyRowWrite({ ...request, actor: { ...ACTOR, host: "claude-ai@0.1.0", worker: "claude-claire" } })
-    expect(known.provenance.ville).toEqual({ ...AGENT, host: "claude-ai@0.1.0", worker: "claude-claire", comment: "Lu sur le site" })
-    const unknown = applyRowWrite({ ...request, actor: { ...ACTOR, host: null, worker: null } })
-    expect(unknown.provenance.ville).toEqual({ ...AGENT, comment: "Lu sur le site" })
   })
 
   it("should refuse revision with create_only at its path, and say the bounds of rows, limit and claim word for word (AC-a4, AC-c4)", () => {

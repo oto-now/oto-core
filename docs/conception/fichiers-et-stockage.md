@@ -129,7 +129,7 @@ Décidée par Alexis le 21/10 ; elle précise la cible ci-dessus. Écrite : l'ad
 - **Compatibilité** :
   - pages et lien public : rien à réécrire ; les blocs se rendent en `/f/<id>`, l'ancienne adresse redirige ;
   - un hôte : monter `/f/<id>` (un fichier de route, le middleware, `SEGMENTS_ADMIS`), rien d'autre (la route isolée `files/<id>/html` et son en-tête ne bougent pas) ; aucun n'appelle `GET transit-files/<id>` ;
-  - les tests qui figent les refus et l'adresse d'aujourd'hui changent à dessein : `files/<id>`, `read {file}` et `attachFiles` d'un fichier en transit (`tests/integration/e10s02-assistant.test.ts`, `tests/unit/api-transit-files.test.ts`), le rendu des liens (`renderBlock`, `fileRouteOf`) et le texte servi du paramètre `file` (`tests/unit/__snapshots__/mcp-tools.test.ts.snap`).
+  - les tests qui figent les refus et l'adresse d'aujourd'hui changent à dessein : `files/<id>`, `read {file}` et `attachFiles` d'un fichier en transit (`tests/integration/files-assistant.test.ts`, `tests/unit/api-transit-files.test.ts`), le rendu des liens (`renderBlock`, `fileRouteOf`) et le texte servi du paramètre `file` (`tests/unit/__snapshots__/mcp-tools.test.ts.snap`).
 
 ### Garder un fichier en transit sur une page (étape 3 du chantier « fichier »)
 

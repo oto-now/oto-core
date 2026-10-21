@@ -1,12 +1,7 @@
-import { renderToStaticMarkup } from "react-dom/server"
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { BlockView } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
-import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
-import { ouvrirLeChamp, texteDuBloc } from "../../helpers/champ-du-bloc"
-import { bloc, ID, PAGE, simulerLAPI } from "../../helpers/noeud"
+import { ouvrirLeChamp } from "../../helpers/champ-du-bloc"
+import { bloc, ID, monterLEditeur, simulerLAPI } from "../../helpers/noeud"
 
 // L'éditeur d'une page longue reste fluide (1.1.3) : un seul bloc monte son champ, celui qu'on touche, les autres se
 // lisent (A et E) ; une frappe ne rend que sa rangée (C) ; les menus se construisent au geste qui les ouvre (D) ; la
@@ -41,22 +36,9 @@ vi.mock("../../../packages/plateforme/ui/noeud/editeur/choix-de-bloc", async (im
 const TITRE = "Modifier ce titre — Objet"
 const TEXTE = "Modifier ce texte — Objet de la relance"
 const CODE = "Modifier ce code — select 1"
-const LISTE = "Modifier cette liste — Lire le devis Écrire"
-const rafraichir = vi.fn()
 let api: ReturnType<typeof simulerLAPI>
 
-function editeur(blocs: BlockView[] = PAGE) {
-  return (
-    <ContexteDeRafraichissement.Provider value={rafraichir}>
-      <FileDOperations chemin="ventes/modele_relance" revisionPubliee={4} tampon={null}>
-        <EditeurDeBlocs blocs={blocs} revisionServie={4} prefixeDesPages="/n/" />
-      </FileDOperations>
-      <button type="button">Ailleurs</button>
-    </ContexteDeRafraichissement.Provider>
-  )
-}
-
-const monter = (blocs?: BlockView[]) => render(editeur(blocs))
+const monter = monterLEditeur
 const bouton = (nom: string) => screen.getByRole("button", { name: nom })
 const champsMontes = () => document.querySelectorAll("textarea")
 const leBloc = (nom: string) => screen.getByRole("textbox", { name: nom })
@@ -81,7 +63,6 @@ function souris(element: Element, type: "pointerover" | "pointerout", vers: Elem
 
 beforeEach(() => {
   api = simulerLAPI()
-  rafraichir.mockReset()
   suivi.rendus.length = 0
   suivi.choix = 0
 })
@@ -95,17 +76,6 @@ afterEach(() => {
 })
 
 describe("EditeurDeBlocs, le seul bloc touché monte son champ (1.1.3)", () => {
-  it("should serve every written block read, named as its field and reachable by the keyboard, without any textarea", () => {
-    expect(renderToStaticMarkup(editeur())).not.toContain("<textarea")
-    monter()
-    expect(champsMontes()).toHaveLength(0)
-    const lus = screen.getAllByRole("textbox")
-    expect(lus.map((element) => element.getAttribute("aria-label"))).toEqual([TITRE, TEXTE, CODE, LISTE])
-    for (const lu of lus) expect(lu).toHaveAttribute("tabindex", "0")
-    expect(texteDuBloc(TEXTE)).toBe("Objet de la relance")
-    expect(texteDuBloc(LISTE)).toBe("Lire le devis\nÉcrire le brouillon")
-  })
-
   it("should mount the touched block's field, focused with the cursor at the end of its text, and read again the block it leaves", async () => {
     monter()
     const texte = ouvrirLeChamp(TEXTE)
@@ -138,16 +108,6 @@ describe("EditeurDeBlocs, le seul bloc touché monte son champ (1.1.3)", () => {
     expect(document.activeElement).toBe(document.body)
     souris(monte, "pointerout", document.body)
     expect(champsMontes()).toHaveLength(0)
-  })
-
-  it("should send the typed text when the focus leaves the field, and read the block with it", async () => {
-    monter()
-    fireEvent.change(ouvrirLeChamp(TEXTE), { target: { value: "Relance du devis" } })
-    act(() => bouton("Ailleurs").focus())
-    await unTour()
-    expect(champsMontes()).toHaveLength(0)
-    expect(texteDuBloc("Modifier ce texte — Relance du devis")).toBe("Relance du devis")
-    await waitFor(() => expect(api.envoyes.flatMap((corps) => corps.ops ?? [])).toContainEqual(expect.objectContaining({ op: "replace_block", block: ID.objet })))
   })
 
   it("should go to the previous block with ↑ at the start of a text, cursor at its end, and to the next one with ↓ at the end", () => {

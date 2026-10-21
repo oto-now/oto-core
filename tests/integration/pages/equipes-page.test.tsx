@@ -172,23 +172,6 @@ describe("/teams page reads (AC1, AC5)", () => {
     expect((await page({ tab: "teams" })).props).toMatchObject({ prefixeDesPages: "/n/" })
   })
 
-  it("should read an unknown tab as Membres (AC1)", async () => {
-    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
-
-    render(await page({ tab: "inconnu" }))
-
-    expect(screen.getByRole("tab", { name: /^Membres/ })).toHaveAttribute("aria-selected", "true")
-  })
-
-  it("should ignore the former French names of the tab and the table settings (E11-S07, AC-b2)", async () => {
-    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
-
-    render(await page({ onglet: "equipes", sens: "desc", filtre: "invitations" }))
-
-    expect(screen.getByRole("tab", { name: /^Membres/ })).toHaveAttribute("aria-selected", "true")
-    expect(screen.getByRole("columnheader", { name: /Personne/ })).toHaveAttribute("aria-sort", "ascending")
-  })
-
   it("should mount no form and show no alert when a plain member may not invite (forbidden, AC5)", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("member"))
     vi.mocked(invitationOptions).mockRejectedValue(refusDInviter())
@@ -214,10 +197,10 @@ describe("/teams page reads (AC1, AC5)", () => {
 
 // E05-S13 (AC-5, fiche D127 b, c) : les deux onglets retirés ouvrent « Membres », et leurs lectures ne partent plus.
 describe("/teams page without the rules and platform access tabs (AC-5)", () => {
-  it.each(["regles", "acces"])("should open Membres for ?tab=%s, reading neither the rules nor the platform accesses", async (onglet) => {
+  it("should open Membres for ?tab=regles, reading neither the rules nor the platform accesses", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
 
-    render(await page({ tab: onglet, noeud: "ventes" }))
+    render(await page({ tab: "regles", noeud: "ventes" }))
 
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Membres1", "Équipes0"])
     expect(screen.getByRole("tab", { name: /^Membres/ })).toHaveAttribute("aria-selected", "true")

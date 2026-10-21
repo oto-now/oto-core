@@ -97,8 +97,9 @@ describe("/ page session", () => {
     expect(metadata).toMatchObject({ title: "Accueil", robots: { index: false } })
   })
 
-  it.each(["unknown_org", "not_member"] as const)("should send %s to /no-organization, reading nothing", async (code) => {
-    vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code } })
+  // `not_member` suit la même branche (`if (identite?.error) redirect`) : un seul code la prouve.
+  it("should send unknown_org to /no-organization, reading nothing", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code: "unknown_org" } })
 
     await expect(page()).rejects.toThrow("NEXT_REDIRECT:/no-organization")
     expect(listActivities).not.toHaveBeenCalled()

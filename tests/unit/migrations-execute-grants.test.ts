@@ -43,7 +43,8 @@ function check(...sql: string[]): string[] {
   output = lines.join("\n")
   return lines
     .filter((line) => line.includes(" function-execute-widened"))
-    .map((line) => line.replace(/^.*\/(\d+)_m\.sql:/, "$1:").replace(/ — .*$/, ""))
+    // Le chemin du fichier, quel que soit le séparateur du système (barre inverse sous Windows), devient sa version.
+    .map((line) => line.replace(/^.*?(\d+)_m\.sql:/, "$1:").replace(/ — .*$/, ""))
 }
 
 /** Une fonction de `platform`, son corps et ses arguments au choix. */

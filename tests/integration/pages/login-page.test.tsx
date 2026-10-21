@@ -3,7 +3,7 @@ import { unstable_rethrow } from "next/navigation"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // Le formulaire a quitté la page (E09-S01) : la page, devenue serveur, rend l'en-tête de marque
-// (`marque-layout-connexion.test.tsx`). Les cas ci-dessous restent ceux d'E02-S01, sur le formulaire
+// (`ecrans-d-authentification.test.tsx`). Les cas ci-dessous restent ceux d'E02-S01, sur le formulaire
 // porté d'oto-frontend (E05-S09, partie d3) : l'adresse s'appelle « Adresse mail », et une adresse mal
 // formée se dit sous son champ. L'adresse d'abord (2026-10-20) : « Continuer » montre ensuite le mot de passe et le lien.
 import { FormulaireDeConnexion as LoginPage } from "@/app/(auth)/login/formulaire-de-connexion"
@@ -69,11 +69,6 @@ describe("LoginPage, the address first (2026-10-20)", () => {
 })
 
 describe("LoginPage magic link (AC24)", () => {
-  it("should mount the status region empty from the start", () => {
-    render(<LoginPage />)
-    expect(screen.getByRole("status")).toBeEmptyDOMElement()
-  })
-
   it("should ask for a link with the typed email and announce the answer in the status region", async () => {
     render(<LoginPage />)
     const region = screen.getByRole("status")

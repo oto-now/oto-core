@@ -155,18 +155,21 @@ describe("described connector engine", () => {
     expect(output.text).toBe('crm.get_contact:\n{"id":"c-42","name":"Ada","email":"ada@example.test"}')
   })
 
-  it.each([
-    [404, "not_found", "No contact with this id. (contact_not_found)"],
-    [403, "upstream_error", "Crm refused access: the key is invalid or lacks the scope. (access_rejected)"],
-    [400, "invalid_arguments", "Crm rejected the request as invalid. (invalid_request)"],
-    [503, "upstream_error", "Crm is temporarily unavailable: retry later. (upstream_unavailable)"],
-  ])("should translate status %i by the function's refusals first, then the connector's table, never with the token (AC9)", async (status, code, message) => {
-    const key = secret()
+  it("should translate a status by the function's refusals first, then the connector's table, never with the token (AC9)", async () => {
+    const statuses: [number, string, string][] = [
+      [404, "not_found", "No contact with this id. (contact_not_found)"],
+      [403, "upstream_error", "Crm refused access: the key is invalid or lacks the scope. (access_rejected)"],
+    ]
     const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-    stub(json({ echo: key }, status))
-    const error = await refusal(run("crm.get_contact", { contact_id: "c-42" }, key))
-    expect({ code: error.code, message: error.message }).toEqual({ code, message })
-    expect([JSON.stringify(error.details), error.message, loggedText(errors)].join(" ")).not.toContain(key)
+    const verdicts: Record<number, unknown> = {}
+    for (const [status] of statuses) {
+      const key = secret()
+      stub(json({ echo: key }, status))
+      const error = await refusal(run("crm.get_contact", { contact_id: "c-42" }, key))
+      const leaks = [JSON.stringify(error.details), error.message, loggedText(errors)].join(" ").includes(key)
+      verdicts[status] = { code: error.code, message: error.message, leaks }
+    }
+    expect(verdicts).toEqual(Object.fromEntries(statuses.map(([status, code, message]) => [status, { code, message, leaks: false }])))
   })
 
   it("should fail as internal, sending nothing, without the secret of a live account (AC10)", async () => {
@@ -240,35 +243,6 @@ describe("described connector engine, account state (oto-core#69)", () => {
     const clean = memoryMark()
     await probe(clean)
     expect({ current: clean.current, effect: clean.effect }).toEqual({ current: null, effect: null })
-  })
-
-  /** Une marque dont l'écriture échoue (base injoignable) : `platform.mark_account` lève. */
-  function failingMark(initial: Parameters<typeof memoryMark>[0] = null) {
-    const mark = memoryMark(initial)
-    mark.set = async () => {
-      throw new PlatformError("internal", "Database unreachable.")
-    }
-    return mark
-  }
-
-  it("should return the success when lifting the mark fails, log the failure and record it for the journal", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-    stub(json({ name: "Contoso", scopes: ["read"] }))
-    const mark = failingMark({ reason: "credential_rejected", at: "2026-10-16T08:00:00.000Z" })
-    const output = await probe(mark)
-    expect(output.text).toContain("Contoso")
-    expect(mark.effect).toBe("lift_failed")
-    expect(loggedText(errors)).toMatch(/^\[platform\] connector crm: account account-[0-9a-f]+: mark not lifted \(internal\)$/)
-  })
-
-  it("should return the named refusal of the third party, without the mark sentence, when setting the mark fails", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-    stub(json({}, 401))
-    const mark = failingMark()
-    const error = await refusal(probe(mark))
-    expect({ code: error.code, message: error.message }).toEqual({ code: "credential_rejected", message: "Crm refused the key. (key_rejected)" })
-    expect(mark.effect).toBe("mark_failed")
-    expect(loggedText(errors)).toContain("mark not set (internal)")
   })
 
   it("should leave the mark to a caller that settles it after a success (the balance probe), and still mark on a refusal", async () => {

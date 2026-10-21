@@ -7,15 +7,18 @@ import { messageDErreur } from "../../packages/plateforme/ui/api/messages"
 const refus = (code: string, raison?: string, details?: Record<string, unknown>) => ({ code, raison, statut: 409, details })
 
 describe("messageDErreur, lines added by E05-S03", () => {
-  it.each([
-    ["conflict", "last_admin", "C'est le dernier administrateur de l'organisation : nommez-en un autre avant."],
-    ["conflict", "name_taken", "Une équipe de l'organisation porte déjà ce nom."],
-    ["conflict", "path_taken", "Une page porte déjà ce nom : choisissez-en un autre pour l'équipe."],
-    ["conflict", "slug_taken", "Une autre équipe de l'organisation utilise déjà le chemin de ce nom : choisissez-en un autre."],
-    ["conflict", "team_owns_objects", "L'équipe possède encore des nœuds ou des comptes : transférez-les ou supprimez-les avant."],
-    ["invalid_arguments", "reserved_slug", "Ce nom est réservé : choisissez-en un autre."],
-  ])("should say %s / %s in French", (code, raison, message) => {
-    expect(messageDErreur(refus(code, raison))).toBe(message)
+  it("should say each code and reason in French", () => {
+    const lignes: [string, string, string][] = [
+      ["conflict", "last_admin", "C'est le dernier administrateur de l'organisation : nommez-en un autre avant."],
+      ["conflict", "name_taken", "Une équipe de l'organisation porte déjà ce nom."],
+      ["conflict", "path_taken", "Une page porte déjà ce nom : choisissez-en un autre pour l'équipe."],
+      ["conflict", "slug_taken", "Une autre équipe de l'organisation utilise déjà le chemin de ce nom : choisissez-en un autre."],
+      ["conflict", "team_owns_objects", "L'équipe possède encore des nœuds ou des comptes : transférez-les ou supprimez-les avant."],
+      ["invalid_arguments", "reserved_slug", "Ce nom est réservé : choisissez-en un autre."],
+    ]
+    expect(Object.fromEntries(lignes.map(([code, raison]) => [`${code} / ${raison}`, messageDErreur(refus(code, raison))]))).toEqual(
+      Object.fromEntries(lignes.map(([code, raison, message]) => [`${code} / ${raison}`, message])),
+    )
   })
 })
 
@@ -67,13 +70,17 @@ describe("messageDErreur, phrases of a gesture", () => {
 })
 
 describe("messageDErreur, organisation limits (E12-S02)", () => {
-  it.each([
-    [{ limit: "members_max", max: 5 }, "L'organisation est limitée à 5 membres, invitations en attente comprises."],
-    [{ limit: "teams_max", max: 1 }, "L'organisation est limitée à 1 équipe."],
-    [{ limit: "teams_max", max: 0 }, "La création d'équipes n'est pas ouverte pour cette organisation."],
-    [{ limit: "connectors_max", max: 2 }, "L'organisation est limitée à 2 connecteurs actifs."],
-  ])("should say the limit %o in French", (details, message) => {
-    expect(messageDErreur(refus("forbidden", "limit", details))).toBe(message)
+  it("should say each limit in French", () => {
+    const limites: [{ limit: string; max: number }, string][] = [
+      [{ limit: "members_max", max: 5 }, "L'organisation est limitée à 5 membres, invitations en attente comprises."],
+      [{ limit: "teams_max", max: 1 }, "L'organisation est limitée à 1 équipe."],
+      [{ limit: "teams_max", max: 0 }, "La création d'équipes n'est pas ouverte pour cette organisation."],
+      [{ limit: "connectors_max", max: 2 }, "L'organisation est limitée à 2 connecteurs actifs."],
+    ]
+    const nom = ({ limit, max }: { limit: string; max: number }) => `${limit} ${max}`
+    expect(Object.fromEntries(limites.map(([details]) => [nom(details), messageDErreur(refus("forbidden", "limit", details))]))).toEqual(
+      Object.fromEntries(limites.map(([details, message]) => [nom(details), message])),
+    )
   })
 
   it("should fall back to the forbidden sentence when the refusal carries no known limit", () => {

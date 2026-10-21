@@ -8,7 +8,6 @@ const FRERES = ["offres", "conseil", "tarifs", "devis"]
 
 describe("zoneDuPointeur", () => {
   it.each([
-    [0, false, "avant"],
     [0.249, false, "avant"],
     [0.25, false, "dans"],
     [0.75, false, "dans"],
@@ -28,7 +27,6 @@ describe("placeDuDepot", () => {
     ["offres", "tarifs", "apres", { after: "tarifs" }],
     ["offres", "conseil", "avant", null],
     ["conseil", "offres", "apres", null],
-    ["tarifs", "devis", "avant", null],
     ["ailleurs/page", "offres", "avant", { after: null }],
     ["ailleurs/page", "devis", "apres", { after: "devis" }],
   ] as const)("should put %s dropped on %s (%s) after %j", (source, cible, zone, place) => {

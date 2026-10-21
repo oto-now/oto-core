@@ -30,11 +30,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+// De petits arguments gardés tels quels : le cas courant de toute ligne de journal (`tests/integration/api-handler.test.ts`).
 describe("loggedArgs (AC16, N5)", () => {
-  it("should keep small arguments as they are", () => {
-    expect(loggedArgs({ query: "relance devis", type: "procedure" })).toEqual({ query: "relance devis", type: "procedure" })
-  })
-
   it("should mask secret values whatever the case, with or without - and _", () => {
     const masked = loggedArgs({
       password: "p1",

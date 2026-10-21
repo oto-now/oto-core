@@ -287,22 +287,5 @@ describe("prompts of the procedures (E03-S05: AC8, AC10, AC11)", () => {
   })
 })
 
-describe("a person who is not a member (AC5)", () => {
-  const outsider = () => connectDeps(deps({ kind: "not_member", refusal: REFUSAL }))
-
-  it("should still serve the six tools of the organisation", async () => {
-    const { tools } = await (await outsider()).client.listTools()
-    expect(tools.map((tool) => tool.name)).toEqual(["acme_context", "acme_find", "acme_read", "acme_call", "acme_write", "acme_feedback"])
-  })
-
-  it("should refuse every call with the not_member message, and journal nothing", async () => {
-    const session = await outsider()
-    for (const tool of ["context", "find", "read", "call", "write", "feedback"]) {
-      const refused = await session.call(tool, { ctx: "AAAA-BBBB", phrase: "x" })
-      expect(refused.isError, tool).toBe(true)
-      expect(refused.text, tool).toBe(REFUSAL)
-    }
-    expect(await session.client.listPrompts()).toEqual({ prompts: [] })
-    expect(session.journal).toEqual([])
-  })
-})
+// La personne qui n'est pas membre (AC5) : la liste servie, chaque appel refusé, aucun prompt, rien au journal,
+// prouvés sur une vraie base par `tests/integration/mcp-core.test.ts` (suite portable).

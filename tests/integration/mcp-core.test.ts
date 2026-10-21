@@ -6,11 +6,18 @@
 // passe au jeton de la personne, sous RLS ; la connexion d'administration ne sert qu'à poser et relire.
 // Suite portable (E11-S14) : personnes sans compte, jetons signés localement
 // (`tests/helpers/session-locale.ts`) ; relectures par la connexion d'administration.
+// La porte HTTP (E03-S01 : AC9, AC18, AC19) : vraie chaîne mcp-handler, jetons vérifiés par `verifyToken` ; `defer`
+// collecte les tâches, lancées une fois la réponse lue en entier. L'adresse sans organisation (AC4) et le jeton
+// forgé (AC2) sont prouvés sans base (`tests/unit/mcp-handler.test.ts`) ; un vrai jeton de Supabase Auth vérifié
+// par la JWKS du projet, sur le projet seul, par le dernier describe de ce fichier (HN-E11S14-4).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connectMcp } from "../helpers/mcp"
-import { hex, type TestOrg } from "../helpers/plateforme"
+import { createFixtures, hex, type Fixtures, type TestOrg } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
-import { portable, sqlConfigured, testAdminSql, type TestSql } from "../helpers/sql"
+import { onProject, portable, projectConfigured, sqlConfigured, testAdminSql, type TestSql } from "../helpers/sql"
+import pkg from "../../packages/plateforme/package.json"
+import { makeVerifyToken } from "../../packages/plateforme/mcp/auth"
+import { handleMcpPost } from "../../packages/plateforme/mcp/handler"
 import { buildTools } from "../../packages/plateforme/mcp/tools"
 import { callExamples, catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
 import { workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
@@ -49,6 +56,20 @@ type JournalRow = {
 }
 
 const SUITE = "MCP six tools on a real database"
+const PROTOCOL = "2025-06-18"
+
+type Task = () => Promise<void>
+type RpcMessage = {
+  result?: { tools?: { name: string }[]; content?: { type: string; text: string }[]; [field: string]: unknown }
+  error?: { code: number; message: string }
+}
+
+const initialize = (clientInfo?: { name: string; version: string }) => ({
+  jsonrpc: "2.0",
+  id: 1,
+  method: "initialize",
+  params: { protocolVersion: PROTOCOL, capabilities: {}, ...(clientInfo ? { clientInfo } : {}) },
+})
 
 describe.skipIf(!sqlConfigured)(
   portable(SUITE),
@@ -365,5 +386,129 @@ describe.skipIf(!sqlConfigured)(
         expect(session.journal).toEqual([])
       })
     })
+
+    // La porte HTTP, sur l'adresse de A, sous le jeton de Claire.
+    describe("HTTP door (AC9, AC18, AC19)", () => {
+      type PostOptions = { userAgent: string; accept?: string }
+
+      /** `POST /api/mcp` sur l'adresse de A ; rend le premier message et les tâches. */
+      async function post(body: unknown, { userAgent, accept = "application/json, text/event-stream" }: PostOptions) {
+        const request = new Request("http://localhost:3000/api/mcp", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept,
+            authorization: `Bearer ${people.claire.accessToken}`,
+            "user-agent": userAgent,
+            "x-forwarded-host": orgA.host,
+            "x-forwarded-proto": "https",
+            "mcp-protocol-version": PROTOCOL,
+          },
+          body: JSON.stringify(body),
+        })
+        const tasks: Task[] = []
+        const response = await handleMcpPost(request, { verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
+        // Le corps lu en entier : les outils ont fini d'écrire leurs lignes avant la fin du flux.
+        const text = await response.text()
+        const data = text.split("\n").find((line) => line.startsWith("data: "))
+        const message: RpcMessage | null = text ? JSON.parse(data ? data.slice("data: ".length) : text) : null
+        return { response, message, tasks }
+      }
+
+      const journal = (userAgent: string) =>
+        admin`select method, tool, ctx, host, user_agent, is_error from platform.journal where org_id = ${orgA.id} and user_agent = ${userAgent} order by id`
+
+      it("should initialize with the server identity and journal the client signature after the response (AC9, AC18)", async () => {
+        const userAgent = `http-init-${hex(4)}`
+        const { response, message, tasks } = await post(initialize({ name: "claude-ai", version: "0.1.0" }), { userAgent })
+        expect(response.status).toBe(200)
+        expect(message?.result).toMatchObject({
+          serverInfo: { name: "oto-platform", title: orgA.name, version: pkg.version },
+          capabilities: { tools: {}, prompts: {} },
+          instructions: expect.stringContaining(`${orgA.prefix}_context first`),
+        })
+        expect(await journal(userAgent)).toEqual([])
+
+        for (const task of tasks) await task()
+        expect(await journal(userAgent)).toEqual([
+          { method: "initialize", tool: null, ctx: null, host: "claude-ai@0.1.0", user_agent: userAgent, is_error: false },
+        ])
+      })
+
+      it("should write no initialize line for a response of 400 or more (AC18)", async () => {
+        const userAgent = `http-refused-${hex(4)}`
+        const { response, tasks } = await post(initialize({ name: "claude-ai", version: "0.1.0" }), { userAgent, accept: "application/json" })
+        expect(response.status).toBe(406)
+        for (const task of tasks) await task()
+        expect(await journal(userAgent)).toEqual([])
+      })
+
+      it("should list the six tools and sign the ctx with the initialize of the same user agent (AC19)", async () => {
+        const userAgent = `http-sig-${hex(4)}`
+        const init = await post(initialize({ name: "claude-ai", version: "0.1.0" }), { userAgent })
+        for (const task of init.tasks) await task()
+
+        const listed = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, { userAgent })
+        const tools = listed.message?.result?.tools ?? []
+        expect(tools.map((tool) => tool.name)).toEqual(
+          ["context", "find", "read", "call", "write", "feedback"].map((key) => `${orgA.prefix}_${key}`),
+        )
+
+        const called = await post(
+          { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: `${orgA.prefix}_context`, arguments: { phrase: "bonjour" } } },
+          { userAgent },
+        )
+        const content = called.message?.result?.content ?? []
+        const code = /^ctx: (\S+)/.exec(content[0]?.text ?? "")?.[1]
+        expect(code).toBeTruthy()
+        for (const task of [...listed.tasks, ...called.tasks]) await task()
+
+        expect(await admin`select host, user_agent from platform.ctx where code = ${code ?? ""}`).toEqual([{ host: "claude-ai@0.1.0", user_agent: userAgent }])
+        expect(await journal(userAgent)).toEqual([
+          expect.objectContaining({ method: "initialize", host: "claude-ai@0.1.0" }),
+          expect.objectContaining({ method: "tools/list" }),
+          expect.objectContaining({ method: "tools/call", tool: `${orgA.prefix}_context`, ctx: code, host: "claude-ai@0.1.0" }),
+        ])
+      })
+    })
   },
 )
+
+// La vérification d'un vrai jeton de Supabase Auth par la JWKS du projet (HN-E11S14-4) : le vérificateur de la
+// configuration de l'hôte, `makeVerifyToken()` sans argument, sur le projet seul.
+describe.skipIf(!projectConfigured)(onProject("MCP HTTP door under a Supabase Auth session"), { timeout: NETWORK_TIMEOUT }, () => {
+  let fx: Fixtures
+  let host: string
+  let token: string
+
+  beforeAll(async () => {
+    fx = createFixtures()
+    host = `t${hex(4)}.example.invalid`
+    const org = await fx.createOrg({ hosts: [host] })
+    const person = await fx.createUser()
+    await fx.addMember(org.id, person.id)
+    token = (await fx.sessionFor(person)).accessToken
+  }, 120_000)
+
+  afterAll(async () => {
+    await fx?.cleanup()
+  }, NETWORK_TIMEOUT)
+
+  it("should initialize with 200 under a token verified by the JWKS of the project (AC2)", async () => {
+    const request = new Request("http://localhost:3000/api/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "x-forwarded-host": host,
+        "x-forwarded-proto": "https",
+        "mcp-protocol-version": PROTOCOL,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: "claude-ai", version: "0.1.0" } } }),
+    })
+    // Le journal de cet appel n'est pas le sujet : prouvé par `mcp-core.test.ts`.
+    const response = await handleMcpPost(request, { verifyToken: makeVerifyToken(), defer: () => {} })
+    expect(response.status).toBe(200)
+  })
+})

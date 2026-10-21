@@ -14,7 +14,7 @@ import { tableGridRows, tableGridSummary, tableReviewQueue } from "../../package
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { spyDb, type DbCall } from "../helpers/spy-tables"
 import { seedWithAdmin, type SeededData, sqlConfigured, portable } from "../helpers/sql"
-import { PROSPECT_ROWS, PROSPECTS, TICKETS } from "../factories/table-fixture"
+import { manyRows, PROSPECT_ROWS, PROSPECTS, TICKETS } from "../factories/table-fixture"
 import { seedTableFixture } from "../factories/table-fixture-sql"
 import { acmeIdentity, freshTable } from "../factories/table-publish-sql"
 
@@ -104,11 +104,7 @@ describe.skipIf(!sqlConfigured)(portable("the screen of a table"), { timeout: NE
     it(
       "should serve the first rows in database key order beyond 5,000 rows, and refuse a filter there",
       async () => {
-        const rows: RowBlock[] = Array.from({ length: 5_001 }, (_, rang) => {
-          const entreprise = `Prospect ${String(rang).padStart(4, "0")}`
-          return { key: entreprise, data: { entreprise, statut: "à traiter" }, provenance: {}, revision: 1, claimed_by: null, claimed_by_user: null, lease_until: null }
-        })
-        await freshTable(seed, ref, { rows })
+        await freshTable(seed, ref, { rows: manyRows(5_001) })
         const db = await ref.db("lea")
         const lu = await tableGridRows(db, lea(), { table: PROSPECTS.path, limit: 3 })
         expect([keys(lu.rows), lu.total]).toEqual([["Prospect 0000", "Prospect 0001", "Prospect 0002"], 5_001])

@@ -486,7 +486,7 @@ describe("EditeurDeBlocs — files disabled (AC-b7)", () => {
 })
 
 describe("RenduDUnBloc — an unavailable file (AC-b8)", () => {
-  it("should say « Fichier indisponible » for an image the storage no longer serves and for a card whose check says it unavailable, without breaking the page", async () => {
+  it("should say « Fichier indisponible » for an image the storage no longer serves and for a card whose check says it unavailable or answers not_found, without breaking the page", async () => {
     const { appels } = simulerLeStockage({ disponible: false })
     render(
       <>
@@ -501,9 +501,9 @@ describe("RenduDUnBloc — an unavailable file (AC-b8)", () => {
     expect([screen.getByText("rapport.pdf"), screen.getByText("Suite de la page")].every((element) => element.isConnected)).toBe(true)
     // La carte lit la réponse JSON de sa route, jamais la redirection vers le stockage (HN-E10S02-43).
     expect(appels.filter((un) => un.adresse.startsWith("/f/")).map((un) => [un.methode, un.adresse])).toEqual([["GET", `/f/${ID_FICHIER}?check`]])
-  })
 
-  it("should say « Fichier indisponible » for a card whose check answers not_found (a file no longer readable)", async () => {
+    // Une vérification qui répond not_found (un fichier qui ne se lit plus) : la même carte.
+    cleanup()
     simulerLeStockage({ disponible: "not_found" })
     render(lu({ type: "file", text: null, data: { file_id: ID_FICHIER, name: "rapport.pdf", size: 1200, mime: "application/pdf" } }))
     expect(await screen.findByText(FICHIERS.indisponible)).toBeInTheDocument()

@@ -285,7 +285,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
   })
 
   // Depuis `20261021150000`, la corbeille ne se purge plus sous une session (`purge_trash`, `erase_team_trash`,
-  // `role-dans-la-corbeille.test.ts`) : ni un membre sur une page expirée, ni l'administrateur (`role-dans-les-vues.test.ts`).
+  // `role-dans-la-corbeille.test.ts`) : ni un membre sur une page expirée, ni l'administrateur, ni la création d'un autre.
   it.each(SESSIONS)("should refuse deleting a live page or one in the trash, to an administrator too, and let the undoing of a creation (session %s)", async (session) => {
     const remove = (id: string) => (sql: Tx) => sql`delete from platform.nodes where id = ${id} returning id`
     const [live, lately, teamLately] = [await orgPage(), await node(root, { trashedDaysAgo: 1 }), await node(root, { owner: { kind: "team", id: led }, trashedDaysAgo: 1 })]
@@ -294,18 +294,20 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     // Gérer une page ne la supprime pas : la corbeille la garde 30 jours.
     expect(await attempt(paul, remove(teamLately.id), session)).toBe(0)
     expect(await seed.admin`select 1 from platform.nodes where id in ${seed.admin([live.id, lately.id, teamLately.id])}`).toHaveLength(3)
-    const [expired, created, published] = [
+    const [expired, created, published, createdByPaul] = [
       await node(root, { trashedDaysAgo: 31 }),
       await node(root, { createdBy: lea.id, revision: 0 }),
       await node(root, { createdBy: lea.id, revision: 1 }),
+      await node(root, { createdBy: paul.id, revision: 0 }),
     ]
     expect(await attempt(lea, remove(published.id), session)).toBe(0)
     expect(await attempt(lea, remove(expired.id), session)).toBe(0)
     expect(await attempt(ada, remove(lately.id), session)).toBe(0)
     expect(await attempt(ada, remove(expired.id), session)).toBe(0)
+    expect(await attempt(lea, remove(createdByPaul.id), session)).toBe(0)
     expect(await attempt(lea, remove(created.id), session)).toBe(1)
-    const left = await seed.admin<{ id: string }[]>`select id from platform.nodes where id in ${seed.admin([expired.id, created.id, lately.id, published.id])}`
-    expect(left.map((row) => row.id).sort()).toEqual([expired.id, lately.id, published.id].sort())
+    const left = await seed.admin<{ id: string }[]>`select id from platform.nodes where id in ${seed.admin([expired.id, created.id, lately.id, published.id, createdByPaul.id])}`
+    expect(left.map((row) => row.id).sort()).toEqual([expired.id, lately.id, published.id, createdByPaul.id].sort())
   })
 
   it.each(SESSIONS)("should refuse a plain member excluding another member from the open entry, and let an administrator (session %s)", async (session) => {

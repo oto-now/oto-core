@@ -1,5 +1,5 @@
-// Les tableaux de la fixture sur une vraie base (E01-S10, lot t1-c1b) : le pendant de `table-publish.ts`
-// pour les tests réécrits sur la fixture semée (`seedTableFixture`, une graine par fichier). Chaque test
+// Les tableaux de la fixture sur une vraie base (E01-S10, lot t1-c1b), pour les tests réécrits sur la fixture
+// semée (`seedTableFixture`, une graine par fichier). Chaque test
 // repart du tableau semé (`freshTable`), comme un test simulé repartait de `fixtureTables()` ; un service
 // tourne sous la personne (`ref.db`), ses requêtes vues par `spyDb` ; l'état qu'il
 // laisse se relit par la connexion d'administration, en identifiants simulés (`readable`). `publish_node`

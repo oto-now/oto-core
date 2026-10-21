@@ -54,12 +54,9 @@ describe("testProjectRefusal", () => {
     expect(testProjectRefusal({ ...remote(TEST), PLATFORM_TEST_PROJECT_ID: TEST })).toBeNull()
   })
 
-  it.each([
-    ["the project id alone", { SUPABASE_PROJECT_ID: TEST }],
-    ["the API URL alone", { NEXT_PUBLIC_SUPABASE_URL: `https://${TEST}.supabase.co` }],
-    ["a pooler URL alone", { PLATFORM_DATABASE_URL: remote(TEST).PLATFORM_DATABASE_URL }],
-  ])("should require PLATFORM_TEST_PROJECT_ID for %s", (_, env) => {
-    expect(testProjectRefusal(env)).toMatch(/: PLATFORM_TEST_PROJECT_ID manque\./)
+  // L'URL de l'API seule, une URL du pooler seule : « should still check … at the remote address », plus haut.
+  it("should require PLATFORM_TEST_PROJECT_ID for the project id alone", () => {
+    expect(testProjectRefusal({ SUPABASE_PROJECT_ID: TEST })).toMatch(/: PLATFORM_TEST_PROJECT_ID manque\./)
   })
 
   it("should refuse a project id other than the test project", () => {
@@ -67,14 +64,7 @@ describe("testProjectRefusal", () => {
     expect(testProjectRefusal({ NEXT_PUBLIC_SUPABASE_URL: `https://${TEST}.supabase.co`, PLATFORM_TEST_PROJECT_ID: TEST })).toMatch(/: SUPABASE_PROJECT_ID ne vise pas/)
   })
 
-  it.each(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_DB_URL", "PLATFORM_DATABASE_URL", "PLATFORM_ADMIN_DATABASE_URL"] as const)(
-    "should name %s when it targets another project",
-    (key) => {
-      const env = { ...remote(TEST), [key]: remote(OTHER)[key], PLATFORM_TEST_PROJECT_ID: TEST }
-      expect(testProjectRefusal(env)).toMatch(new RegExp(`: ${key} ne vise pas`))
-    },
-  )
-
+  // Chaque variable qui vise un autre projet, nommée : « should never print a value » exige la liste des cinq.
   it("should refuse an API URL that does not name its project", () => {
     expect(testProjectRefusal({ ...remote(TEST), NEXT_PUBLIC_SUPABASE_URL: "https://api.example.invalid", PLATFORM_TEST_PROJECT_ID: TEST })).toMatch(/: NEXT_PUBLIC_SUPABASE_URL ne vise pas/)
   })

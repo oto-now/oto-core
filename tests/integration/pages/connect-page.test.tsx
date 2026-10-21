@@ -61,8 +61,9 @@ describe("/connect page session (AC9)", () => {
     expect(lastConnections).not.toHaveBeenCalled()
   })
 
-  it.each(["unknown_org", "not_member"] as const)("should send %s to /no-organization, reading nothing", async (code) => {
-    vi.mocked(getPlatformIdentity).mockResolvedValue({ error: { code } })
+  // `not_member` suit la même branche (`if (identite.error) redirect`) : un seul code la prouve.
+  it("should send unknown_org to /no-organization, reading nothing", async () => {
+    vi.mocked(getPlatformIdentity).mockResolvedValue({ error: { code: "unknown_org" } })
 
     await expect(ConnectPage()).rejects.toThrow("NEXT_REDIRECT:/no-organization")
     expect(usefulProcedures).not.toHaveBeenCalled()

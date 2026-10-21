@@ -110,38 +110,6 @@ describe.skipIf(!sqlConfigured)(portable("tables read on a real database"), { ti
       expect([loaded.node.path, loaded.header, loaded.level, loaded.movedFrom]).toEqual([PROSPECTS.path, PROSPECTS_HEADER, 3, null])
     })
 
-    it("should answer a table of level 0 like an unknown path, listing at most 20 readable tables, before any row is read", async () => {
-      const tables: Tables = { nodes: [] }
-      const tickets = fixtureTables().nodes.find((node) => node.id === nodeId(TICKETS.path))
-      // Vingt-cinq tableaux de Support, lisibles par Marc, après `private/claire/notes`, qu'il ne lit pas : la borne suit le filtre.
-      for (let rank = 1; rank <= 25; rank++) {
-        const path = `support/t${String(rank).padStart(2, "0")}`
-        tables.nodes.push({ ...structuredClone(tickets), id: nodeId(path), path })
-      }
-      const listed = Array.from({ length: 20 }, (_, index) => `support/t${String(index + 1).padStart(2, "0")}`).join(", ")
-      const spy = dbSpy()
-      await ref.write(tables)
-      try {
-        await expect(loadTable({ db: await clientOf(ref, MARC_SUPPORT, spy), identity: MARC_SUPPORT }, PROSPECTS.path)).rejects.toMatchObject({
-          code: "not_found",
-          message: `Unknown table ventes/suivi_prospects. Tables you can read: ${listed}. Use ${prefix}_find with type table for more.`,
-        })
-      } finally {
-        await seed.admin`delete from platform.nodes where id in ${seed.admin(tables.nodes.map((node) => ref.id(String(node.id))))}`
-      }
-      expect(blockCalls(spy.calls)).toEqual([])
-      const alone = { db: await clientOf(ref, MARC_SUPPORT), identity: MARC_SUPPORT }
-      await expect(loadTable(alone, "ventes/inexistant")).rejects.toMatchObject({
-        code: "not_found",
-        message: `Unknown table ventes/inexistant. Tables you can read: support/tickets. Use ${prefix}_find with type table for more.`,
-      })
-      const marc = ref.identityOf("marc")
-      await expect(loadTable({ db: await clientOf(ref, marc), identity: marc }, PROSPECTS.path)).rejects.toMatchObject({
-        code: "not_found",
-        message: "Unknown table ventes/suivi_prospects. You cannot read any table here.",
-      })
-    })
-
     it("should refuse a path of another kind, a table never published and a published header that is invalid", async () => {
       const identity = ref.identityOf("claire")
       const claire = { db: await clientOf(ref, identity), identity }
@@ -261,12 +229,42 @@ describe.skipIf(!sqlConfigured)(portable("tables read on a real database"), { ti
   })
 
   describe("rights and isolation in the service (AC20)", () => {
-    it("should decide the level before reading any row: none unknown, a rule opens, personal and foreign tables stay unknown", async () => {
+    it("should decide the level before reading any row: none unknown, listing at most 20 readable tables, a rule opens, personal and foreign tables stay unknown", async () => {
       for (const fn of [tableSchema, tableRows, tableAggregate]) {
         const { error, calls } = await refusal(fn, MARC_SUPPORT, { table: PROSPECTS.path })
         expect(error, fn.name).toMatchObject({ code: "not_found", message: UNKNOWN_FOR_MARC })
         expect(blockCalls(calls), fn.name).toEqual([])
       }
+      // Le niveau 0 se dit comme un chemin inconnu (AC4) : au plus vingt tableaux lisibles nommés. Vingt-cinq tableaux de
+      // Support, lisibles par Marc, après `private/claire/notes`, qu'il ne lit pas : la borne suit le filtre.
+      const tables: Tables = { nodes: [] }
+      const tickets = fixtureTables().nodes.find((node) => node.id === nodeId(TICKETS.path))
+      for (let rank = 1; rank <= 25; rank++) {
+        const path = `support/t${String(rank).padStart(2, "0")}`
+        tables.nodes.push({ ...structuredClone(tickets), id: nodeId(path), path })
+      }
+      const listed = Array.from({ length: 20 }, (_, index) => `support/t${String(index + 1).padStart(2, "0")}`).join(", ")
+      const spy = dbSpy()
+      await ref.write(tables)
+      try {
+        await expect(loadTable({ db: await clientOf(ref, MARC_SUPPORT, spy), identity: MARC_SUPPORT }, PROSPECTS.path)).rejects.toMatchObject({
+          code: "not_found",
+          message: `Unknown table ventes/suivi_prospects. Tables you can read: ${listed}. Use ${prefix}_find with type table for more.`,
+        })
+      } finally {
+        await seed.admin`delete from platform.nodes where id in ${seed.admin(tables.nodes.map((node) => ref.id(String(node.id))))}`
+      }
+      expect(blockCalls(spy.calls)).toEqual([])
+      const alone = { db: await clientOf(ref, MARC_SUPPORT), identity: MARC_SUPPORT }
+      await expect(loadTable(alone, "ventes/inexistant")).rejects.toMatchObject({
+        code: "not_found",
+        message: `Unknown table ventes/inexistant. Tables you can read: support/tickets. Use ${prefix}_find with type table for more.`,
+      })
+      const marc = ref.identityOf("marc")
+      await expect(loadTable({ db: await clientOf(ref, marc), identity: marc }, PROSPECTS.path)).rejects.toMatchObject({
+        code: "not_found",
+        message: "Unknown table ventes/suivi_prospects. You cannot read any table here.",
+      })
       const rule: RuleSpec = { node: PROSPECTS.path, team: "support", level: "read" }
       await withRule(rule, async () => {
         const opened = await run(tableSchema, MARC_SUPPORT, { table: PROSPECTS.path })

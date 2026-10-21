@@ -51,10 +51,10 @@ describe("readBrand (AC1)", () => {
     expect(readBrand({ name: NAME, brand: { theme: "rose" } }).theme).toBe("manuscrit")
   })
 
-  // https seul : `http:` et `javascript:` (sécurité) ; une chaîne qui n'est pas une adresse et un
-  // nombre, mêmes refus, sont retirés (M11b).
-  it.each(["http://example.com/logo.png", "javascript:alert(1)"])("should drop the logo %s", (logo) => {
-    expect(readBrand({ name: NAME, brand: { logo_url: logo } }).logoUrl).toBeNull()
+  // https seul : `javascript:` (sécurité) ; `http:`, une chaîne qui n'est pas une adresse et un nombre, mêmes
+  // refus, sont retirés (M11b ; `http:` refusé par `schemas/brand.test.ts`).
+  it("should drop the logo javascript:alert(1)", () => {
+    expect(readBrand({ name: NAME, brand: { logo_url: "javascript:alert(1)" } }).logoUrl).toBeNull()
   })
 
   // E05-S13 (AC-3, HN-E05S13-2) : un seul nom, celui de l'organisation, même quand `display_name` est rempli.

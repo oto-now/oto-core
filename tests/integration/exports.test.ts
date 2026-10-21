@@ -13,7 +13,7 @@ import type { RowBlock } from "../../packages/plateforme/server/tables/meta"
 import type { Person } from "../helpers/reference-org"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { portable, seedWithAdmin, sqlConfigured, type SeededData } from "../helpers/sql"
-import { fixtureTables, PERSONAL_TABLE, PROSPECTS } from "../factories/table-fixture"
+import { fixtureTables, manyRows, PERSONAL_TABLE, PROSPECTS } from "../factories/table-fixture"
 import { seedTableFixture } from "../factories/table-fixture-sql"
 import { acmeIdentity } from "../factories/table-publish-sql"
 import { BIG_TABLE_TIMEOUT, CASE_TIMEOUT, fixtureRows, SEED_TIMEOUT, type FixtureRows } from "../factories/table-rows-sql"
@@ -93,7 +93,7 @@ describe.skipIf(!sqlConfigured)(portable("the exports of a page and of a table")
   })
 
   it("should refuse a table of more than 5,000 rows (AC-b6)", { timeout: BIG_TABLE_TIMEOUT }, async () => {
-    await fixture.use(fixtureTables([], Array.from({ length: 5_001 }, (_, rank) => row({ entreprise: `Prospect ${String(rank).padStart(4, "0")}`, statut: "à traiter" }))))
+    await fixture.use(fixtureTables([], manyRows(5_001)))
     expect(await exported(tablesRoutes, "lea", PROSPECTS.path)).toMatchObject({
       code: "too_large",
       message: "ventes/suivi_prospects has more than 5,000 rows: an export holds 5,000 at most in this version.",

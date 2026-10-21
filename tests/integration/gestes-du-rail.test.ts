@@ -287,15 +287,8 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
   })
 
   describe("address that follows the title (AC-b12)", () => {
-    it("should move the node to the path of its new title on the screen, keep the old one as an alias", async () => {
-      const claire = as("claire")
-      await writeNode(claire.db, claire.identity, { path: "ventes/sans_titre", title: "Sans titre", summary: "À compléter.", publish: true }, { kind: "human" })
-      const renamed = await writeNode(claire.db, claire.identity, { path: "ventes/sans_titre", base_revision: 1, title: "Tarifs 2026", publish: true }, { kind: "human" })
-      expect(renamed.data).toMatchObject({ path: "ventes/tarifs_2026", renamed_from: "ventes/sans_titre" })
-      expect((await findNode(claire.db, claire.identity, "ventes/sans_titre"))?.node.path).toBe("ventes/tarifs_2026")
-    })
-
-    it("should move it too when an assistant publishes a new title, and say the new path in the result of write (MCP)", async () => {
+    // Le renommage à l'écran par une responsable passe par le même `followTitle` qu'une rédactrice (plus bas).
+    it("should move the node when an assistant publishes a new title, and say the new path in the result of write (MCP)", async () => {
       const claire = as("claire")
       const agent = { kind: "agent" as const, ctx: null }
       await writeNode(claire.db, claire.identity, { path: "ventes/grille", title: "Grille", summary: "Les prix.", publish: true }, agent)

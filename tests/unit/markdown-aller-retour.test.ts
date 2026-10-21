@@ -33,12 +33,17 @@ describe("a page exported to .md and imported back (AC-a6)", () => {
     expect([...types].sort()).toEqual(["callout", "checklist", "code", "divider", "heading", "image", "list", "mermaid", "paragraph", "simple_table", "toggle", "call", "file", "embed"].sort())
   })
 
-  it.each(produced.map((one) => [one.name, one.block] as const))("should give back the title and %s, nothing kept as text", (_name, block) => {
-    const file = readPageMarkdown(pageMarkdown("Compte rendu du 29 septembre", [block]), "export.md")
-    expect(file.title).toBe("Compte rendu du 29 septembre")
-    const back = file.chunks.map((chunk) => blocksOf(chunk, true))
-    expect(back.map((one) => one?.kept)).toEqual([0])
-    expect(back[0]?.blocks.map(fields)).toEqual([fields(block)])
+  // Une table de cas en un test (DG1) : le différentiel de `toEqual` nomme les cas fautifs.
+  it("should give back the title and every produced case, nothing kept as text", () => {
+    const title = "Compte rendu du 29 septembre"
+    const roundTrip = (block: BlockInput) => {
+      const file = readPageMarkdown(pageMarkdown(title, [block]), "export.md")
+      const back = file.chunks.map((chunk) => blocksOf(chunk, true))
+      return { title: file.title, kept: back.map((one) => one?.kept), blocks: back[0]?.blocks.map(fields) }
+    }
+    expect(Object.fromEntries(produced.map(({ name, block }) => [name, roundTrip(block)]))).toEqual(
+      Object.fromEntries(produced.map(({ name, block }) => [name, { title, kept: [0], blocks: [fields(block)] }])),
+    )
   })
 })
 

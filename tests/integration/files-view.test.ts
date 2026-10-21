@@ -1,7 +1,7 @@
 // @vitest-environment node
 // « Voir » un fichier joint sur une vraie base (E10-S02 lot c : AC-c2, AC-c3, AC-c5 ; ADR-017) : la route isolée d'un
 // fichier HTML par la porte (en-têtes exacts, texte servi, la même 404 en texte brut pour tout refus, `Sec-Fetch-Dest`,
-// 401 sans session), la route des blocs d'un `.md` (mode tolérant), ce que la visionneuse reçoit (`fileView`), et la
+// le 401 sans session prouvé sans base par `tests/unit/files-html.test.ts`), la route des blocs d'un `.md` (mode tolérant), ce que la visionneuse reçoit (`fileView`), et la
 // lecture publique par le jeton d'un lien (`public_file_by_token` sous `anon` : un fichier cité par un bloc publié du
 // périmètre, jamais par un seul brouillon, hors périmètre, `pending` ou d'un autre nœud même cité par un bloc publié,
 // par un lien désactivé ni à une autre adresse). Le bucket
@@ -154,14 +154,11 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       })
     })
 
-    it("should answer 401 without a session and serve a text that is not UTF-8 as a plain-text refusal, never as JSON", async () => {
+    it("should serve a text that is not UTF-8 as a plain-text refusal, never as JSON", async () => {
       vi.stubGlobal("fetch", memory.fetch)
       const node = await page("ventes/v_latin")
       const html = await attached(node, "ancien.html", new Uint8Array([0x3c, 0x70, 0x3e, 0xe9]))
-      expect([await answer(await get(`files/${html}/html`, { person: null, dest: "iframe" })), await answer(await get(`files/${html}/html`, { dest: "iframe" }))]).toEqual([
-        { status: 401, headers: REFUSED, body: "forbidden: Authentication required." },
-        { status: 400, headers: REFUSED, body: "invalid_arguments: the file is not UTF-8; download it instead" },
-      ])
+      expect(await answer(await get(`files/${html}/html`, { dest: "iframe" }))).toEqual({ status: 400, headers: REFUSED, body: "invalid_arguments: the file is not UTF-8; download it instead" })
     })
   })
 

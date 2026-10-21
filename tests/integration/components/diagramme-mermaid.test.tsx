@@ -1,12 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { BlockView } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
-import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
 import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { ouvrirLeChamp } from "../../helpers/champ-du-bloc"
-import { bloc, ID, simulerLAPI } from "../../helpers/noeud"
+import { bloc, ID, monterLEditeur, simulerLAPI } from "../../helpers/noeud"
 
 // Un bloc `mermaid` (1.1.3) à la lecture, par `RenduDUnBloc` : le texte rendu d'abord, puis le dessin de mermaid,
 // chargé dans le navigateur ; un texte que mermaid ne lit pas garde son texte et le dit ; le thème suit `.dark`. Dans
@@ -88,14 +85,7 @@ describe("DiagrammeMermaid — a mermaid block at reading (1.1.3)", () => {
 
 function editer(blocs: BlockView[]) {
   const api = simulerLAPI()
-  render(
-    <ContexteDeRafraichissement.Provider value={vi.fn()}>
-      <FileDOperations chemin="ventes/modele_relance" revisionPubliee={4} tampon={null}>
-        <EditeurDeBlocs blocs={blocs} revisionServie={4} prefixeDesPages="/n/" />
-      </FileDOperations>
-      <button type="button">Ailleurs</button>
-    </ContexteDeRafraichissement.Provider>,
-  )
+  monterLEditeur(blocs)
   return api
 }
 

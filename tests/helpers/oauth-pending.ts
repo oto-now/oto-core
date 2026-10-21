@@ -20,6 +20,26 @@ import type { TestSql } from "./sql"
 /** L'adresse de retour du client jetable ; celle que montre l'écran vient des détails du SDK simulé. */
 const REDIRECT = "http://127.0.0.1:9/callback"
 
+/** L'identifiant d'une demande que rend le SDK simulé du consentement (service et page). */
+export const AUTHORIZATION_ID = "a2b3c4d5e6f7g2h3i4j5k6l7m2n3o4p5"
+/** Les détails de cette demande, tels que les rend `getAuthorizationDetails`. */
+export const DETAILS = {
+  authorization_id: AUTHORIZATION_ID,
+  redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+  client: { id: "client-1", name: "Claude", uri: "https://claude.ai", logo_uri: "https://claude.ai/logo.png" },
+  user: { id: "user-1", email: "claire@example.invalid" },
+  scope: "openid email profile offline_access",
+}
+// Ce que rend le serveur OAuth, mesuré le 2026-09-24, pour une demande déjà tranchée ou expirée.
+export const DECIDED = { name: "AuthApiError", status: 400, code: "validation_failed", message: "authorization request cannot be processed" }
+
+/** Le formulaire de décision posté par la page. */
+export function form(fields: Record<string, string>): FormData {
+  const data = new FormData()
+  Object.entries(fields).forEach(([key, value]) => data.set(key, value))
+  return data
+}
+
 export type PendingRequests = {
   /** Une demande en attente pour `resource`, rattachée à `userId` (`null` : pas encore) ; rend son `authorization_id`. */
   pending(resource: string | null, userId: string | null): Promise<string>

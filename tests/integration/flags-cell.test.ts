@@ -4,9 +4,10 @@
 // de départ de chaque test sont posés par la connexion d'administration. Les refus avant toute lecture, le
 // drapeau posé par l'équipe plateforme avec un accès en cours (E01-S07 AC19 ; son cas sur la vraie base
 // est retiré par M11b) et l'état de la cellule sont prouvés sans base (`tests/unit/flags.test.ts`,
-// `tests/unit/cell.test.ts`). Suite portable depuis E01-S10 f2 (la personne par `fx.as`, sans Supabase
+// `tests/unit/cell.test.ts`). L'écriture d'un drapeau (vrai, puis faux, les autres clés gardées) et la course
+// perdue, journal compris, ne sont prouvées qu'ici. Suite portable depuis E01-S10 f2 (la personne par `fx.as`, sans Supabase
 // Auth ni PostgREST) : le job `bare-postgres` la joue.
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest"
 import type { FlagView } from "@otomata_tech/oto_platform/schemas"
 import { listFlags, resolveIdentity, setFlag, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import type { Json } from "../../packages/plateforme/server/database"
@@ -71,8 +72,10 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       expect((await stored()).flags).toEqual({ cle_inconnue: "garde", compteur: 1, essai_drapeau: false })
     })
 
-    it("should answer conflict to the change that lost the race and keep the winner's value (AC5)", async () => {
+    it("should answer conflict to the change that lost the race, log it and keep the winner's value (AC5 ; E01-S07 AC27, HN-E01S07-6)", async () => {
       await store({})
+      const log = vi.spyOn(console, "error").mockImplementation(() => {})
+      onTestFinished(() => log.mockRestore())
       // Le second changement passe entre la lecture et l'écriture du premier : la course perdue, sans dépendre
       // du hasard. `setFlag` écrit par la face SQL (E01-S10, partie e2) : l'espion retient son écriture le temps
       // que le gagnant écrive, par la connexion d'administration ; un `setFlag` de la même session y reprendrait
@@ -87,6 +90,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
         code: "conflict",
         message: CONFLICT,
       })
+      expect(log).toHaveBeenCalledWith(`[platform] setFlag: no row written for organisation ${org.id}`)
       expect((await stored()).flags).toEqual({ second_drapeau: true })
     })
   })

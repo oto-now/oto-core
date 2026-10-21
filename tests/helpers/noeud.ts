@@ -1,9 +1,15 @@
 // Fixtures de l'écran de nœud (E05-S02) : blocs et nœud tels que `loadNode` les sert (E03-S03, AC35),
 // et l'API simulée de `POST /api/platform/nodes` (réponse d'E03-S03, AC37 : `touched[].blocks`,
 // `draft_stamp`), partagées par les tests de l'écran, de l'éditeur et de l'en-tête. Sans elles, trois
-// fichiers réécrivaient la même page et la même API.
+// fichiers réécrivaient la même page et la même API. Et le montage de l'éditeur sous sa file d'écriture
+// (`monterLEditeur`), que neuf fichiers recopiaient.
+import { createElement, type ComponentProps, type ReactNode } from "react"
+import { render } from "@testing-library/react"
 import { vi } from "vitest"
 import type { BlockView, NodeView } from "@otomata_tech/oto_platform/schemas"
+import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
+import { EditeurDeBlocs } from "../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
+import { FileDOperations } from "../../packages/plateforme/ui/noeud/editeur/file-d-operations"
 
 export const ID = {
   titre: "a1000000-0000-4000-8000-000000000001",
@@ -110,5 +116,50 @@ export function simulerLAPI() {
       suites.push(new Promise<void>((resolve) => (relacher = resolve)))
       return () => relacher()
     },
+  }
+}
+
+type ProprietesDeLEditeur = ComponentProps<typeof EditeurDeBlocs>
+
+export type MontageDeLEditeur = {
+  /** Ce qui précède l'éditeur sous la même file : l'en-tête modifiable. */
+  avant?: ReactNode
+  /** Ce qui suit l'éditeur ; par défaut « Ailleurs », un bouton hors de l'éditeur : le focus qui y va quitte le champ et sa rangée, comme en suivant un lien. `null` : rien ne suit. */
+  apres?: ReactNode
+  cibles?: ProprietesDeLEditeur["cibles"]
+  liens?: ProprietesDeLEditeur["liens"]
+  /** La révision publiée et servie, 4 par défaut. */
+  revision?: number
+  tampon?: string | null
+}
+
+/** L'éditeur de `ventes/modele_relance` sous sa file d'écriture, tel que l'écran le monte. */
+export function lEditeur(blocs: BlockView[] = PAGE, montage: MontageDeLEditeur = {}, rafraichir: () => void = () => {}) {
+  const { avant = null, apres = createElement("button", { type: "button" }, "Ailleurs"), cibles, liens, revision = 4, tampon = null } = montage
+  return createElement(
+    ContexteDeRafraichissement.Provider,
+    { value: rafraichir },
+    createElement(
+      FileDOperations,
+      // Les enfants passent en troisième argument de `createElement`, que le type des propriétés (`children` requis) ne voit pas.
+      { chemin: "ventes/modele_relance", revisionPubliee: revision, tampon } as ComponentProps<typeof FileDOperations>,
+      avant,
+      createElement(EditeurDeBlocs, { blocs, revisionServie: revision, prefixeDesPages: "/n/", cibles, liens }),
+    ),
+    apres,
+  )
+}
+
+/**
+ * `lEditeur` rendu : `rafraichir` espionne la relecture de la page ; `relire` rerend avec les blocs relus (et une autre
+ * révision ou un autre tampon) ; `demonter` le retire, comme une navigation du client.
+ */
+export function monterLEditeur(blocs: BlockView[] = PAGE, montage: MontageDeLEditeur = {}) {
+  const rafraichir = vi.fn()
+  const rendu = render(lEditeur(blocs, montage, rafraichir))
+  return {
+    rafraichir,
+    relire: (relus: BlockView[], autre: MontageDeLEditeur = {}) => rendu.rerender(lEditeur(relus, { ...montage, ...autre }, rafraichir)),
+    demonter: rendu.unmount,
   }
 }

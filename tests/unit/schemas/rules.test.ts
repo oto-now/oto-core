@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto"
 import { describe, expect, it } from "vitest"
 import { ACCESS_LEVEL_NAMES, setNodeRuleSchema } from "@otomata_tech/oto_platform/schemas"
+import { ACCESS_LEVELS } from "@otomata_tech/oto_platform/server"
 
 const REGLE = { path: "ventes/devis", subject: { kind: "team", id: randomUUID() }, level: "read" }
 
@@ -22,13 +23,10 @@ describe("setNodeRuleSchema (AC17)", () => {
     expect(setNodeRuleSchema.safeParse({ ...REGLE, subject: { kind: "team", id: "ventes" } }).success).toBe(false)
   })
 
-  it("should accept each of the four levels", () => {
+  it("should accept each of the four levels, and refuse an unknown one", () => {
     for (const level of ACCESS_LEVEL_NAMES) {
       expect(setNodeRuleSchema.safeParse({ ...REGLE, level }).success).toBe(true)
     }
-  })
-
-  it("should refuse an unknown level", () => {
     expect(setNodeRuleSchema.safeParse({ ...REGLE, level: "admin" }).success).toBe(false)
   })
 })
@@ -36,7 +34,8 @@ describe("setNodeRuleSchema (AC17)", () => {
 // Le panneau `ReglesDuNoeud` nomme le niveau calculé par le service (`nodeLevel`, 0 à 3) par son rang
 // dans cette liste : l'ordre est le contrat.
 describe("ACCESS_LEVEL_NAMES", () => {
-  it("should list the four levels by rank, from none (0) to manage (3) (H65)", () => {
+  it("should rank the four levels the same in the schema and the server, from none (0) to manage (3) (H65)", () => {
     expect(ACCESS_LEVEL_NAMES).toEqual(["none", "read", "write", "manage"])
+    expect(Object.fromEntries(ACCESS_LEVEL_NAMES.map((name, rank) => [name, rank]))).toEqual(ACCESS_LEVELS)
   })
 })

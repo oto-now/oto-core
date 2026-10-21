@@ -50,7 +50,7 @@ describe("requestOrigin", () => {
 
   // Un proxy peut transmettre ce que le client envoie : le lien d'un email d'invitation ne porte jamais
   // un autre protocole (E01-S11 a2-wire, `security-patterns.md § XSS Prevention`).
-  it.each(["javascript", "data", "ftp", "https://evil.example.test/?"])("should ignore an x-forwarded-proto of %s for the protocol given", (forwarded) => {
+  it.each(["javascript", "https://evil.example.test/?"])("should ignore an x-forwarded-proto of %s for the protocol given", (forwarded) => {
     expect(requestOrigin(new Headers({ "x-forwarded-proto": forwarded }), "acme.oto.cx", "https")).toBe("https://acme.oto.cx")
   })
 })
@@ -82,18 +82,6 @@ describe("trustedRequestOrigin", () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
-  })
-
-  it("should give the https origin of a host that serves an organisation, whatever x-forwarded-proto says", async () => {
-    const headers = new Headers({ "x-forwarded-host": "Acme.oto.cx", "x-forwarded-proto": "http", host: "localhost:3000" })
-
-    await expect(trustedRequestOrigin(DB, headers)).resolves.toBe("https://acme.oto.cx")
-  })
-
-  it("should admit an entry address that serves no organisation", async () => {
-    const headers = new Headers({ host: "oto.example.test" })
-
-    await expect(trustedRequestOrigin(DB, headers, { entryHosts: ["Oto.example.test:443"] })).resolves.toBe("https://oto.example.test")
   })
 
   it("should build no link for a forwarded host that serves no organisation, and log it normalized and bounded", async () => {

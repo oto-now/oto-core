@@ -143,9 +143,10 @@ describe.skipIf(!sqlConfigured || privatePending)(
         const erreurs = vi.spyOn(console, "error").mockImplementation(() => {})
 
         try {
-          const { status } = await call("bea", "DELETE", `members/${bea.id}`)
+          const { status, body } = await call("bea", "DELETE", `members/${bea.id}`)
 
           expect(status).toBe(200)
+          expect(body).toEqual({ data: { member: { userId: bea.id } } })
           expect(await admin`select user_id from platform.members where org_id = ${o.org.id} and user_id = ${bea.id}`).toEqual([])
           expect(erreurs).toHaveBeenCalledWith("[platform] journal: insert failed", "42501")
           expect(await journal("DELETE members", bea.email)).toEqual([])
@@ -173,6 +174,9 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(second.body.data.access.alreadyRevoked).toBe(true)
         expect(await journal("POST platform-access/revoke", grant)).toHaveLength(2)
         expect((await call("lea", "POST", `platform-access/${grant}/revoke`, {})).status).toBe(403)
+        // POST platform-access/<id>/revoke seul : ni l'accès sans `revoke`, ni une autre méthode.
+        expect((await call("ada", "POST", `platform-access/${grant}`, {})).status).toBe(404)
+        expect((await call("ada", "DELETE", `platform-access/${grant}/revoke`)).status).toBe(404)
       })
 
       // Même limite (HN-E05S03-36) : entré par cet accès, sans ligne `members`, le staff qui le révoque

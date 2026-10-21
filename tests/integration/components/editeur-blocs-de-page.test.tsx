@@ -1,31 +1,15 @@
-import type { ReactNode } from "react"
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { BlockView } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
-import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
 import { MESSAGES_DU_BLOC } from "../../../packages/plateforme/ui/noeud/editeur/operations"
 import { ouvrirLeChamp } from "../../helpers/champ-du-bloc"
-import { bloc, ID, PAGE, simulerLAPI } from "../../helpers/noeud"
+import { bloc, ID, monterLEditeur, simulerLAPI } from "../../helpers/noeud"
 
 // L'éditeur des blocs de page (E10-S06) : le choix du « + » et de « / », le séparateur, les préfixes, les niveaux de
-// liste, le tableau simple et le repli, sous la file d'écriture (`fetch` simulé pour `POST /api/platform/nodes`).
-// « Ailleurs » est un bouton hors de l'éditeur : le focus qui y va quitte le bloc. `apres` dit ce qui suit l'éditeur.
+// liste, le tableau simple et le repli, sous la file d'écriture (`monterLEditeur` : `fetch` simulé pour
+// `POST /api/platform/nodes`). « Ailleurs » est un bouton hors de l'éditeur : le focus qui y va quitte le bloc. `apres`
+// dit ce qui suit l'éditeur.
 
-const rafraichir = vi.fn()
 let api: ReturnType<typeof simulerLAPI>
-
-function monter(blocs: BlockView[] = PAGE, apres: ReactNode = <button type="button">Ailleurs</button>) {
-  render(
-    <ContexteDeRafraichissement.Provider value={rafraichir}>
-      <FileDOperations chemin="ventes/modele_relance" revisionPubliee={4} tampon={null}>
-        <EditeurDeBlocs blocs={blocs} revisionServie={4} prefixeDesPages="/n/" />
-      </FileDOperations>
-      {apres}
-    </ContexteDeRafraichissement.Provider>,
-  )
-}
 
 const bouton = (nom: string) => screen.getByRole("button", { name: nom })
 const champ = (nom: string) => screen.getByRole("textbox", { name: nom })
@@ -73,7 +57,6 @@ function simulerLaRecherche() {
 
 beforeEach(() => {
   api = simulerLAPI()
-  rafraichir.mockReset()
 })
 
 afterEach(() => {
@@ -87,7 +70,7 @@ afterEach(() => {
 
 describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
   it("should open a menu in two groups, without HTML, walked with the arrows, Enter inserting the block after, Escape giving the focus back to the « + »", async () => {
-    monter()
+    monterLEditeur()
     const menu = choixApres("Objet de la relance")
     expect(Array.from(screen.getByRole("menu").querySelectorAll(".oto-menu-group-label"), (groupe) => groupe.textContent)).toEqual(["Texte", "Insérer"])
     expect(menu.getAllByRole("menuitem").map((entree) => entree.textContent)).toEqual([
@@ -128,7 +111,7 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
   })
 
   it("should insert a divider sent at once, the focus on its handle, and turn a Texte typed --- into a divider followed by a focused Texte", async () => {
-    monter()
+    monterLEditeur()
     insererApres("Objet de la relance", "Séparateur")
     await focusSur(bouton("Actions sur ce bloc — Séparateur"))
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
@@ -145,24 +128,11 @@ describe("EditeurDeBlocs, le « + » ouvre un choix (AC-a1)", () => {
     expect(document.querySelectorAll("hr.oto-separator")).toHaveLength(2)
   })
 
-  it("should make a small title of level 3 from ### typed at the start of a Texte, « Petit titre » in the menu", async () => {
-    monter()
-    const texte = await texteNeuf()
-    taper(texte, "### Budget")
-    const titre = champ("Modifier ce titre — Budget")
-    await focusSur(titre)
-    expect(titre.closest("h4")).not.toBeNull()
-    fireEvent.keyDown(titre, { key: "Escape" })
-    await waitFor(() => expect(api.envoyes).toHaveLength(1))
-    expect(api.envoyes[0].ops).toEqual([{ op: "insert_after", block: ID.objet, input: { type: "heading", text: "Budget", data: { level: 3 } } }])
-    fireEvent.click(bouton("Actions sur ce bloc — Budget"))
-    expect(within(screen.getByRole("menu")).getByRole("menuitemradio", { name: "Petit titre" })).toHaveAttribute("aria-checked", "true")
-  })
 })
 
 describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
   it("should open the list under an empty Texte, filter it without case nor accent, and replace the Texte by the block chosen with Enter", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     taper(texte, "/")
     const liste = screen.getByRole("listbox", { name: "Blocs à insérer" })
@@ -181,7 +151,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
   })
 
   it("should keep the typed text on Escape, say « Aucun bloc » when nothing matches, and leave a / typed elsewhere as text", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     taper(texte, "/")
     taper(texte, "/zzz")
@@ -199,7 +169,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
   })
 
   it("should choose with Tab too", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     taper(texte, "/")
     taper(texte, "/depl")
@@ -208,7 +178,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
   })
 
   it("should hold the delayed send while the list of « / » is open, and send a / text once the list is closed (HN-E10S06-10)", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     vi.useFakeTimers()
     taper(texte, "/")
@@ -222,7 +192,7 @@ describe("EditeurDeBlocs, « / » ouvre le même choix (AC-a2)", () => {
   })
 
   it("should drop the delayed send armed by an earlier keystroke when « / » opens the list (HN-E10S06-10)", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     vi.useFakeTimers()
     taper(texte, "a")
@@ -247,7 +217,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
   const LISTE = bloc("f7000000-0000-4000-8000-000000000007", "list", null, { items: ["a", "b"], ordered: true })
 
   it("should indent a line with Tab under the item before it, outdent it with Shift+Tab, and announce what cannot change", async () => {
-    monter([LISTE])
+    monterLEditeur([LISTE])
     const liste = ouvrirLeChamp("Modifier cette liste numérotée — a b")
     act(() => liste.focus())
     liste.setSelectionRange(0, 0)
@@ -269,7 +239,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
   // Retour arrière au début du texte d'un sous-élément l'effaçait d'un caractère de sa marque : la liste réécrivait la
   // ligne avec un tiret de plus, et le curseur partait au bout. Il remonte la ligne d'un niveau, comme Maj+Tab.
   it("should outdent a sub-item with Backspace at the start of its text or inside its mark, without touching its text", async () => {
-    monter([bloc("fa000000-0000-4000-8000-00000000000a", "list", null, { items: [{ text: "Léa", children: { items: ["relancer"] } }] })])
+    monterLEditeur([bloc("fa000000-0000-4000-8000-00000000000a", "list", null, { items: [{ text: "Léa", children: { items: ["relancer"] } }] })])
     const liste = ouvrirLeChamp(/^Modifier cette liste — Léa/)
     expect(liste).toHaveValue("Léa\n  - relancer")
     act(() => liste.focus())
@@ -287,7 +257,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
   it("should refuse a fourth level, keep Tab for a checklist, and let Tab choose in the list of « @ »", async () => {
     const trois = bloc("f8000000-0000-4000-8000-000000000008", "list", null, { items: [{ text: "a", children: { items: [{ text: "b", children: { items: ["c"] } }] } }] })
     const cases = bloc("f9000000-0000-4000-8000-000000000009", "checklist", null, { items: [{ text: "x", checked: false }, { text: "y", checked: false }] })
-    monter([trois, cases])
+    monterLEditeur([trois, cases])
     const liste = ouvrirLeChamp(/^Modifier cette liste — a/)
     expect(liste).toHaveValue("a\n  - b\n    - c")
     act(() => liste.focus())
@@ -302,7 +272,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
 
   it("should leave a list, then a table, from its handle with Tab after Escape, Shift+Tab left to the browser", async () => {
     const tableau = bloc("fd000000-0000-4000-8000-00000000000d", "simple_table", null, { columns: ["Nom", "Montant"], rows: [["a", "1"]] })
-    monter([LISTE, tableau])
+    monterLEditeur([LISTE, tableau])
     const liste = ouvrirLeChamp("Modifier cette liste numérotée — a b")
     act(() => liste.focus())
     fireEvent.keyDown(liste, { key: "Escape" })
@@ -337,7 +307,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
     { cas: "a table", dernier: bloc("fd000000-0000-4000-8000-00000000000d", "simple_table", null, { columns: ["Nom", "Montant"], rows: [["a", "1"]] }), mots: "Nom Montant" },
   ])("should leave $cas ending the page with Tab on its handle, its fields out of the tabulation for the browser's move only", async ({ dernier, mots }) => {
     // Rien ne suit l'éditeur, comme dans l'hôte de référence : le navigateur sort de la page.
-    monter([bloc("f1000000-0000-4000-8000-000000000001", "paragraph", "Avant", {}), dernier], null)
+    monterLEditeur([bloc("f1000000-0000-4000-8000-000000000001", "paragraph", "Avant", {}), dernier], { apres: null })
     const poignee = bouton(`Actions sur ce bloc — ${mots}`)
     // Les champs de la rangée : les cellules d'un tableau, ou le bloc lu d'une liste (1.1.3), qui porte `tabindex="0"`.
     const champs = Array.from(poignee.closest("[data-cle]")?.querySelectorAll<HTMLElement>("[data-champ]") ?? [])
@@ -354,16 +324,17 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
   })
 
   it("should skip what is not rendered after the editor: a hidden element, the content of a closed details", async () => {
-    monter(
-      [LISTE],
-      <>
-        <button type="button">Masqué</button>
-        <details>
-          <button type="button">Replié</button>
-        </details>
-        <button type="button">Ailleurs</button>
-      </>,
-    )
+    monterLEditeur([LISTE], {
+      apres: (
+        <>
+          <button type="button">Masqué</button>
+          <details>
+            <button type="button">Replié</button>
+          </details>
+          <button type="button">Ailleurs</button>
+        </>
+      ),
+    })
     // jsdom ne calcule pas le rendu : le navigateur dirait `display: none` de ce bouton par `checkVisibility`.
     Object.defineProperty(bouton("Masqué"), "checkVisibility", { value: () => false })
     const poignee = bouton("Actions sur ce bloc — a b")
@@ -375,7 +346,7 @@ describe("EditeurDeBlocs, niveaux de liste (AC-a6)", () => {
 
 describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
   it("should insert a 3 × 3 table, walk its cells with Tab, add a row from the last one, and send it once in insert_after then replace_block", async () => {
-    monter()
+    monterLEditeur()
     insererApres("Objet de la relance", "Tableau simple")
     const premiere = champ("En-tête de la colonne 1")
     await focusSur(premiere)
@@ -427,7 +398,7 @@ describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
   it("should add a row or a column after the current cell, remove them but never the header, align a column, and say the bound of 20 columns", async () => {
     const tableau = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom", "Montant"], rows: [["a", "1"]] })
     const large = bloc("fb000000-0000-4000-8000-00000000000b", "simple_table", null, { columns: Array.from({ length: 20 }, (_, rang) => `c${rang}`), rows: [] })
-    monter([tableau, large])
+    monterLEditeur([tableau, large])
     // Les cellules de chaque tableau, dans sa rangée : deux tableaux ont chacun leur « En-tête de la colonne 1 ».
     const cellule = (cle: string, nom: string) => within(document.querySelector<HTMLElement>(`[data-cle="${cle}"]`) ?? document.body).getByRole("textbox", { name: nom })
     const menu = (mots: string) => {
@@ -461,7 +432,7 @@ describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
   it("should offer « Convertir en tableau de données » for a table with columns only", () => {
     const vide = bloc("fe000000-0000-4000-8000-00000000000e", "simple_table", null, { columns: [], rows: [] })
     const plein = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom"], rows: [["a"]] })
-    monter([vide, plein])
+    monterLEditeur([vide, plein])
     fireEvent.click(bouton("Actions sur ce bloc — bloc vide"))
     expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "Convertir en tableau de données" })).toBeNull()
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
@@ -470,7 +441,7 @@ describe("EditeurDeBlocs, tableau simple (AC-b1, AC-b2, AC-b3)", () => {
   })
 
   it("should turn a spreadsheet pasted in an empty Texte into a table, reading text/plain only, a tag in a cell kept as text", async () => {
-    monter()
+    monterLEditeur()
     const texte = await texteNeuf()
     // Le HTML du presse-papiers n'est jamais lu : une balise tapée dans une cellule reste du texte.
     fireEvent.paste(texte, { clipboardData: { getData: (type: string) => (type === "text/plain" ? "<img src=x onerror=alert(1)>\tMontant\nPomme\t 3 \n" : '<img src=x onerror="alert(1)">') } })
@@ -486,7 +457,7 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
   it("should cite a content with « @ » in a cell, the list under the table, the link read at rest and sent with its bar escaped", async () => {
     simulerLaRecherche()
     const tableau = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom", "Lien"], rows: [["a", ""]] })
-    monter([tableau])
+    monterLEditeur([tableau])
     const cellule = zone(champ("Lien, rangée 1"))
     act(() => cellule.focus())
     taper(cellule, "Voir @gri")
@@ -509,7 +480,7 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
 
   it("should keep a cell on one line, a pasted line break becoming a blank", async () => {
     const tableau = bloc("fa000000-0000-4000-8000-00000000000a", "simple_table", null, { columns: ["Nom"], rows: [["a"]] })
-    monter([tableau])
+    monterLEditeur([tableau])
     const cellule = zone(champ("Nom, rangée 1"))
     act(() => cellule.focus())
     taper(cellule, "deux\nlignes")
@@ -519,7 +490,7 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
   it("should cite a content with « @ » in the body of a toggle, the cursor after the link", async () => {
     simulerLaRecherche()
     const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Corps", { summary: "Détails" })
-    monter([repli])
+    monterLEditeur([repli])
     fireEvent.click(bouton("Déplier le corps — Détails"))
     const corps = zone(champ("Corps du menu dépliant — Détails"))
     act(() => corps.focus())
@@ -538,7 +509,7 @@ describe("EditeurDeBlocs, « @ » dans un tableau et un repli (1.4.11)", () => {
 
 describe("EditeurDeBlocs, repli (AC-b4)", () => {
   it("should write a toggle in two fields, Enter going to the body and Backspace in an empty body back to the summary, and refuse an empty summary", async () => {
-    monter()
+    monterLEditeur()
     insererApres("Objet de la relance", "Menu dépliant")
     const resume = champ("Résumé du menu dépliant — bloc vide")
     await focusSur(resume)
@@ -568,7 +539,7 @@ describe("EditeurDeBlocs, repli (AC-b4)", () => {
   // Le dessin de la lecture (chevron à gauche, corps décalé), servi replié, déplié au chevron, l'état jamais envoyé.
   it("should draw the toggle as read, folded when served, unfold and fold it from the chevron without sending, and unfold it on Enter in the summary", async () => {
     const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Le **corps**", { summary: "Détails" })
-    monter([repli])
+    monterLEditeur([repli])
     const resume = zone(champ("Résumé du menu dépliant — Détails"))
     // Le chevron, un bouton natif avant le résumé (Entrée et Espace viennent du navigateur), dit l'état du corps.
     const chevron = bouton("Déplier le corps — Détails")
@@ -611,7 +582,7 @@ describe("EditeurDeBlocs, repli (AC-b4)", () => {
 
   it("should refuse a toggle inside the body", async () => {
     const repli = bloc("fc000000-0000-4000-8000-00000000000c", "toggle", "Corps", { summary: "Détails" })
-    monter([repli])
+    monterLEditeur([repli])
     fireEvent.click(bouton("Déplier le corps — Détails"))
     const corps = champ("Corps du menu dépliant — Détails")
     act(() => corps.focus())

@@ -1,7 +1,7 @@
 // Les cinq écrans d'authentification sur le gabarit porté d'oto-frontend (E05-S09, partie d3 ; E05-S07,
 // AC1, AC4, AC6 à AC10), au niveau des pages : `marqueDeLAdresse` simulé (Forêt avec logo, puis aucune
 // organisation) ; actions, fournisseurs et session simulés. La lecture réelle de la marque est couverte
-// par `marque-layout-connexion.test.tsx` et `tests/unit/marque-de-l-adresse.test.ts`.
+// par `tests/unit/marque-de-l-adresse.test.ts`.
 import { Suspense, type ReactNode } from "react"
 import type { Metadata } from "next"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
@@ -15,7 +15,7 @@ import AucuneOrganisationPage, { metadata as metadataAucuneOrganisation } from "
 import ConfirmerPage, { metadata as metadataConfirmer } from "@/app/auth/confirm/page"
 import WelcomePage from "@/app/(auth)/welcome/page"
 import { generateMetadata as metadataRacine } from "@/app/layout"
-import { forgotPasswordAction, loginAction, magicLinkAction, resetPasswordAction } from "@/lib/actions/auth"
+import { forgotPasswordAction, loginAction, resetPasswordAction } from "@/lib/actions/auth"
 import { marqueDeLAdresse } from "@/lib/plateforme/marque-de-l-adresse"
 import { getPlatformIdentitySafely, getPlatformSession, type PlatformSession } from "@/lib/plateforme/session"
 
@@ -66,7 +66,6 @@ const LOGO = "https://example.com/logo.png"
 const FORET: MarqueDOrganisation = { theme: "foret", logo: LOGO, nomAffiche: "Démo Forêt" }
 const LEGENDE_CONNEXION =
   "Pas encore de compte ? On entre sur invitation : demandez-en une à l'administrateur de votre organisation."
-const MESSAGE_DU_LIEN = "Si une invitation ou un compte existe pour cette adresse, un lien de connexion vient de partir."
 
 /** Rend un arbre qui contient des composants lisant une promesse (`use`). */
 async function rendre(arbre: ReactNode) {
@@ -206,20 +205,6 @@ describe("/login (AC-d3 ; E05-S07, AC6, AC7)", () => {
     expect(principal).toHaveAttribute("type", "submit")
     expect(principal.form).toBe(ilot.querySelector("form"))
     expect(principal).toHaveAttribute("aria-busy", "false")
-  })
-
-  it("should announce the magic link in the region of the island and bring the focus to its title", async () => {
-    vi.mocked(magicLinkAction).mockResolvedValue({ data: { message: MESSAGE_DU_LIEN } })
-    await rendre(await LoginPage({ searchParams: Promise.resolve({}) }))
-    fireEvent.change(screen.getByLabelText("Adresse mail"), { target: { value: "claire@acme.test" } })
-    fireEvent.click(screen.getByRole("button", { name: "Continuer" }))
-
-    fireEvent.click(await screen.findByRole("button", { name: "Recevoir un lien de connexion" }))
-
-    // La région montée d'emblée est la première ; l'`Alert` du statut s'y loge.
-    await waitFor(() => expect(screen.getAllByRole("status")[0]).toHaveTextContent(MESSAGE_DU_LIEN))
-    // Le focus part dans l'effet qui suit le rendu du statut : il s'attend comme lui.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "Se connecter" })))
   })
 
   it("should mark the sign-in button busy, and say so, while signing in", async () => {

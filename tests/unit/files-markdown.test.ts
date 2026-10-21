@@ -39,14 +39,16 @@ describe("markdown of attached files (AC-d1)", () => {
     expect([renderBlock(dxf), renderBlock(bare)]).toEqual([`[Plan RDC.DXF (1,200 bytes, dxf)](/f/${FILE})`, `[plan (1,200 bytes, image/vnd.dxf)](/f/${FILE})`])
   })
 
-  it.each([
-    ["the origin of read", ORIGIN],
-    ["another origin", "http://localhost:3000/f"],
-    ["no origin", "/f"],
-    ["the old address", "/api/platform/files"],
-    ["the old address on an origin", "https://acme.oto.test/api/platform/files"],
-  ])("should read both forms back from %s, identical", (_name, route) => {
-    expect(blocksOf(renderBlocks([plan, report], { fileRoute: route }))).toEqual([plan, report])
+  it("should read both forms back from any origin, the old address included, identical", () => {
+    const routes: [string, string][] = [
+      ["the origin of read", ORIGIN],
+      ["another origin", "http://localhost:3000/f"],
+      ["no origin", "/f"],
+      ["the old address", "/api/platform/files"],
+      ["the old address on an origin", "https://acme.oto.test/api/platform/files"],
+    ]
+    const verdicts = Object.fromEntries(routes.map(([name, route]) => [name, blocksOf(renderBlocks([plan, report], { fileRoute: route }))]))
+    expect(verdicts).toEqual(Object.fromEntries(routes.map(([name]) => [name, [plan, report]])))
   })
 
   it("should take the uuid in lower case, give a hand-written label provisional metadata, and keep an ordinary link as a paragraph", () => {

@@ -135,6 +135,17 @@ export const PERSONAL_TABLE = "private/claire/notes"
 export const DRAFT_TABLE = "ventes/brouillon"
 export const FOREIGN_TABLE = { id: "other:node:achats/fournisseurs", path: "achats/fournisseurs" }
 
+/**
+ * `count` lignes sans provenance ni bail, pour les bornes de taille (5 000 lignes, 1 000 groupes) : `make` donne les
+ * données de chaque rang, la clé étant son `entreprise` ; par défaut « Prospect 0000 »… « à traiter ».
+ */
+export function manyRows(count: number, make: (index: number) => Record<string, unknown> = (index) => ({ entreprise: `Prospect ${String(index).padStart(4, "0")}`, statut: "à traiter" })): RowBlock[] {
+  return Array.from({ length: count }, (_, index) => {
+    const data = make(index)
+    return { key: String(data.entreprise), data, provenance: {}, revision: 1, claimed_by: null, claimed_by_user: null, lease_until: null }
+  })
+}
+
 const SMALL_HEADER = { columns: [{ name: "nom", type: "text" }], key: "nom", closed: false }
 
 /** Les lignes de `blocks` d'un tableau : blocs `row` publiés du nœud. */

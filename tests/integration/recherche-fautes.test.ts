@@ -14,8 +14,8 @@ import { withAnonSession } from "../../packages/plateforme/server/sql"
 import { NEVER_EXPORTED, TABLES } from "../../scripts/lib/org-transfer.mjs"
 import { blockUuid, OTHER_ORG, type ContentNode, type Person } from "../helpers/reference-org"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
+import { adminAsCaller } from "../helpers/admin-sql"
 import { seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
-import { adminAsCaller } from "../helpers/sql-e01-s13"
 import { seedAcme } from "./fixtures/acme-sql"
 
 const NETWORK_TIMEOUT = 60_000

@@ -27,7 +27,7 @@ describe("profilePatchSchema (AC13, AC-5)", () => {
 
   // Une personne n'écrit que ses noms, sa langue et sa couleur : le `handle` fonde `private/<handle>` (H61), le
   // ton s'écrit dans le Contexte Perso (P39).
-  it.each([
+  const REFUSED: [string, unknown][] = [
     ["a name over 80 characters", { name: "\u{1F600}".repeat(81) }],
     ["a first name over 80 characters", { first_name: "x".repeat(81) }],
     ["a last name over 80 characters", { last_name: "x".repeat(81) }],
@@ -36,7 +36,9 @@ describe("profilePatchSchema (AC13, AC-5)", () => {
     ["an empty patch", {}],
     ["the handle", { handle: "lea2" }],
     ["the tone", { name: "Léa", tone: "direct" }],
-  ])("should refuse %s", (_cas, patch) => {
-    expect(profilePatchSchema.safeParse(patch).success).toBe(false)
+  ]
+
+  it("should refuse every patch out of its bounds", () => {
+    expect(Object.fromEntries(REFUSED.map(([cas, patch]) => [cas, profilePatchSchema.safeParse(patch).success]))).toEqual(Object.fromEntries(REFUSED.map(([cas]) => [cas, false])))
   })
 })

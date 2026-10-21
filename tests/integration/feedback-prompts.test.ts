@@ -277,17 +277,9 @@ describe.skipIf(!sqlConfigured)(
       })
     })
 
-    describe("prompts of the procedures (AC8, N4)", () => {
-      const listed = (key: keyof typeof ACME) => ({ name: key, title: ACME[key].title, description: ACME[key].summary })
-
-      it("should list the published procedures jb reads, in path order, with name, title and description only (AC8)", async () => {
-        const session = await connectMcp(acme, people.jb)
-        expect(session.client.getServerCapabilities()?.prompts).toBeDefined()
-        const { prompts } = await session.client.listPrompts()
-        expect(prompts).toEqual([listed("preparer_rdv"), listed("reponse_ticket"), listed("relance_devis"), listed("relance_prospects")])
-        for (const prompt of prompts) expect(Object.keys(prompt).sort()).toEqual(["description", "name", "title"])
-      })
-
+    // La liste des prompts (AC8) : `tests/unit/prompts.test.ts` (filtre, ordre, borne) et `tests/unit/mcp-server.test.ts`
+    // (nom, titre et description par le protocole).
+    describe("prompts of the procedures (N4)", () => {
       // Golden queries P1 et P2 sans host, pour la part que porte cette story : le message envoyé
       // (le titre) place sa procédure en tête des candidats du routage (H40, N4). La décision de
       // servir les étapes (seuil, écart) est celle d'E03-S02.

@@ -131,18 +131,16 @@ describe("OptionsDuTableau, un geste, une publication (AC-g3)", () => {
   })
 })
 
+// La phrase d'un autre refus (forbidden) : `tests/unit/ui-messages.test.ts`, que l'écran lit par `messageDErreur`.
 describe("OptionsDuTableau, refus (AC-g5)", () => {
-  it.each([
-    ["stale_revision", 409, "Le tableau a changé pendant que la page était ouverte. Rechargez la page, puis réessayez."],
-    ["forbidden", 403, "Vous n'avez pas le droit de faire cela."],
-  ])("should say %s under the switches, put the switch back to its published state and keep the focus on it", async (code, statut, phrase) => {
+  it("should say stale_revision under the switches, put the switch back to its published state and keep the focus on it", async () => {
     monter()
     ouvrir()
-    api.refuser(code, statut)
+    api.refuser("stale_revision", 409)
     const interrupteur = screen.getByRole("switch", { name: "Preuve exigée" })
     act(() => interrupteur.focus())
     fireEvent.click(interrupteur)
-    expect(await screen.findByText(phrase)).toHaveAttribute("role", "alert")
+    expect(await screen.findByText("Le tableau a changé pendant que la page était ouverte. Rechargez la page, puis réessayez.")).toHaveAttribute("role", "alert")
     expect(interrupteur).toBeChecked()
     expect(interrupteur).toBeEnabled()
     await waitFor(() => expect(document.activeElement).toBe(interrupteur))

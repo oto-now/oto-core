@@ -75,28 +75,13 @@ describe("oto-platform migrations sync", () => {
 })
 
 describe("oto-platform migrations check", () => {
-  it("should list each error as path:line rule, then count them", () => {
+  // Un hôte lance la CLI, le dépôt son script : la même sortie. Chaque règle, dont l'`EXECUTE` d'une fonction de
+  // `platform` non retiré à `public` (E02-S01) : `tests/unit/migrations-guard.test.ts`.
+  it("should list each error as path:line rule, then count them, like the repository script", () => {
     const file = fixture("create table public.items (id uuid primary key);\n")
     const result = cli(["migrations", "check", "--file", file])
     expect(result.status).toBe(1)
     expect(result.stdout).toBe(`${file}:1 table-outside-platform\n`)
-    expect(result.stderr).toBe("check:migrations — 1 erreur(s)\n")
-  })
-
-  // Contrôle d'E02-S01 : `anon` a l'usage du schéma `platform`, une fonction qui garde l'`EXECUTE`
-  // par défaut de `public` lui serait appelable. Un hôte lance la CLI, le dépôt son script.
-  it("should refuse, like the repository script, a platform function whose EXECUTE is not revoked from public", () => {
-    const file = fixture(
-      [
-        "create function platform.visible(p uuid) returns int language sql as $$ select 1 $$;",
-        "revoke execute on function platform.visible(uuid) from anon;",
-        "grant execute on function platform.visible(uuid) to authenticated;",
-        "",
-      ].join("\n"),
-    )
-    const result = cli(["migrations", "check", "--file", file])
-    expect(result.status).toBe(1)
-    expect(result.stdout).toBe(`${file}:1 function-execute-not-revoked\n`)
     expect(result.stderr).toBe("check:migrations — 1 erreur(s)\n")
     const script = spawnSync(process.execPath, [path.join(root, "scripts/check-migrations.mjs"), "--file", file], { cwd: root, encoding: "utf8" })
     expect({ status: script.status, stdout: script.stdout, stderr: script.stderr }).toEqual(result)

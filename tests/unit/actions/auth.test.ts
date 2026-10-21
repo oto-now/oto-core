@@ -206,16 +206,12 @@ describe("confirmerLienAction", () => {
     expect(auth.verifyOtp).not.toHaveBeenCalled()
   })
 
-  // Un navigateur retire tabulations et retours à la ligne d'une URL et lit `\` comme `/` :
-  // `/\t/evil.test` y devient `//evil.test`, une autre adresse (revue E02-S01, HAUTE).
-  it.each(["//evil.test", "https://evil.test", "/\\evil.test", "/\t/evil.test", "/\n/evil.test"])(
-    "should bring an absolute next (%j) back to /",
-    async (next) => {
-      auth.verifyOtp.mockResolvedValue({ data: { session: SESSION }, error: null })
+  // Un cas hostile prouve que l'action délègue ; les formes hostiles sont la table de `safeRedirect` (schemas/auth).
+  it("should bring an absolute next (//evil.test) back to /", async () => {
+    auth.verifyOtp.mockResolvedValue({ data: { session: SESSION }, error: null })
 
-      await expect(confirmerLienAction(form({ ...LINK, next }))).rejects.toThrow(/^NEXT_REDIRECT:\/$/)
-    },
-  )
+    await expect(confirmerLienAction(form({ ...LINK, next: "//evil.test" }))).rejects.toThrow(/^NEXT_REDIRECT:\/$/)
+  })
 
   it("should refuse a next whose dot segments resolve to //host", async () => {
     auth.verifyOtp.mockResolvedValue({ data: { session: SESSION }, error: null })
@@ -256,16 +252,13 @@ describe("forgotPasswordAction", () => {
   })
 
   // E09-S02, AC15 : le lien revient sur l'adresse d'où on le demande, lue par `getRequestOrigin()`.
-  it.each([
-    [{ "x-forwarded-host": "acme.cellule.test", "x-forwarded-proto": "https" }, "https://acme.cellule.test"],
-    [{ host: "localhost:3000", "x-forwarded-proto": "http" }, "http://localhost:3000"],
-  ])("should send a reset link back to the origin of the request (%j) (E09-S02, AC15)", async (values, origin) => {
-    requestHeaders(values)
+  it("should send a reset link back to the origin of the request (E09-S02, AC15)", async () => {
+    requestHeaders({ "x-forwarded-host": "acme.cellule.test", "x-forwarded-proto": "https" })
     auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
 
     await forgotPasswordAction(form({ email: "claire@acme.test" }))
 
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("claire@acme.test", { redirectTo: `${origin}/auth/callback?next=/reset-password` })
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("claire@acme.test", { redirectTo: "https://acme.cellule.test/auth/callback?next=/reset-password" })
   })
 })
 
@@ -274,7 +267,6 @@ describe("resetPasswordAction", () => {
   it.each([
     ["/teams", "/teams"],
     ["https://evil.test", "/"],
-    [undefined, "/"],
   ])("should save the password, then go to next %j (%j)", async (next, attendu) => {
     auth.getUser.mockResolvedValue({ data: { user: { id: "u-1" } }, error: null })
     auth.updateUser.mockResolvedValue({ data: {}, error: null })
@@ -300,11 +292,8 @@ describe("connexionFournisseurAction (E09-S03)", () => {
   const UNAVAILABLE = "Ce mode de connexion n'est pas disponible."
   const START_FAILED = "La connexion avec ce fournisseur n'a pas pu démarrer. Réessayez."
 
-  it.each([
-    [{ host: "localhost:3000", "x-forwarded-proto": "http" }, "http://localhost:3000"],
-    [{ "x-forwarded-host": "acme.example.test", "x-forwarded-proto": "https" }, "https://acme.example.test"],
-  ])("should start Google with a return to the origin of the request (%j) (AC2)", async (values, origin) => {
-    requestHeaders(values)
+  it("should start Google with a return to the origin of the request (AC2)", async () => {
+    requestHeaders({ "x-forwarded-host": "acme.example.test", "x-forwarded-proto": "https" })
     auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: PROVIDER_URL }, error: null })
 
     await expect(connexionFournisseurAction(null, form({ fournisseur: "google" }))).rejects.toThrow(
@@ -313,7 +302,7 @@ describe("connexionFournisseurAction (E09-S03)", () => {
     expect(auth.signInWithOAuth).toHaveBeenCalledTimes(1)
     expect(auth.signInWithOAuth.mock.calls[0][0]).toStrictEqual({
       provider: "google",
-      options: { redirectTo: `${origin}/auth/callback` },
+      options: { redirectTo: "https://acme.example.test/auth/callback" },
     })
     expect(redirect).toHaveBeenCalledWith(PROVIDER_URL)
   })
@@ -330,16 +319,13 @@ describe("connexionFournisseurAction (E09-S03)", () => {
     })
   })
 
-  it.each<Record<string, string>>([{ fournisseur: "github" }, { fournisseur: "Google" }, {}])(
-    "should refuse %j without calling Supabase (AC4)",
-    async (fields) => {
-      const result = await connexionFournisseurAction(null, form(fields))
+  it('should refuse {"fournisseur":"github"} without calling Supabase (AC4)', async () => {
+    const result = await connexionFournisseurAction(null, form({ fournisseur: "github" }))
 
-      expect(result).toEqual({ error: UNAVAILABLE })
-      expect(auth.signInWithOAuth).not.toHaveBeenCalled()
-      expect(redirect).not.toHaveBeenCalled()
-    },
-  )
+    expect(result).toEqual({ error: UNAVAILABLE })
+    expect(auth.signInWithOAuth).not.toHaveBeenCalled()
+    expect(redirect).not.toHaveBeenCalled()
+  })
 
   it("should return a generic error, never the SDK message, when Supabase fails (AC4)", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -366,16 +352,6 @@ describe("connexionFournisseurAction (E09-S03)", () => {
     expect(redirect).not.toHaveBeenCalled()
   })
 
-  it("should not call Supabase when the request has no host", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    requestHeaders({})
-
-    const result = await connexionFournisseurAction(null, form({ fournisseur: "google" }))
-
-    expect(result).toEqual({ error: START_FAILED })
-    expect(auth.signInWithOAuth).not.toHaveBeenCalled()
-  })
-
   // AC7 : une seule lecture de l'origine, celle de `getRequestOrigin()`.
   it("should read no forwarded or host header itself (AC7)", () => {
     const source = readFileSync(path.resolve(__dirname, "../../../src/lib/actions/auth.ts"), "utf8")
@@ -389,7 +365,8 @@ describe("connexionFournisseurAction (E09-S03)", () => {
 describe("way back after sign-in (E02-S02)", () => {
   const CONSENT = "/oauth/consent?authorization_id=abc123"
   const NEXT = "%2Foauth%2Fconsent%3Fauthorization_id%3Dabc123"
-  const HOSTILES = ["https://evil.example", "//evil.example", "/\\evil.example", "/oauth consent", "/\t/evil.example", `/${"a".repeat(2048)}`]
+  // Un cas hostile par point d'entrée prouve qu'il délègue ; les formes hostiles sont la table de `safeRedirect`.
+  const HOSTILE = "//evil.example"
   const PROVIDER_URL = "https://ref.supabase.test/auth/v1/authorize?provider=google&code_challenge=abc"
 
   it("should bring loginAction back to the requested page (AC7)", async () => {
@@ -403,10 +380,10 @@ describe("way back after sign-in (E02-S02)", () => {
     expect(auth.signInWithPassword).toHaveBeenCalledWith({ email: "user@example.com", password: "password123" })
   })
 
-  it.each(HOSTILES)("should bring loginAction to / for the redirect %j (AC8)", async (hostile) => {
+  it("should bring loginAction to / for the redirect //evil.example (AC8)", async () => {
     auth.signInWithPassword.mockResolvedValue({ data: {}, error: null })
 
-    await expect(loginAction(form({ email: "user@example.com", password: "password123", redirect: hostile }))).rejects.toThrow(
+    await expect(loginAction(form({ email: "user@example.com", password: "password123", redirect: HOSTILE }))).rejects.toThrow(
       /^NEXT_REDIRECT:\/$/,
     )
   })
@@ -423,10 +400,10 @@ describe("way back after sign-in (E02-S02)", () => {
     })
   })
 
-  it.each(HOSTILES)("should start Google without next for the redirect %j (AC8)", async (hostile) => {
+  it("should start Google without next for the redirect //evil.example (AC8)", async () => {
     auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: PROVIDER_URL }, error: null })
 
-    await expect(connexionFournisseurAction(null, form({ fournisseur: "google", redirect: hostile }))).rejects.toThrow("NEXT_REDIRECT")
+    await expect(connexionFournisseurAction(null, form({ fournisseur: "google", redirect: HOSTILE }))).rejects.toThrow("NEXT_REDIRECT")
     expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe("https://acme.test/auth/callback")
   })
 
@@ -441,10 +418,10 @@ describe("way back after sign-in (E02-S02)", () => {
     })
   })
 
-  it.each(HOSTILES)("should keep next=/ in the magic link for the redirect %j (AC8)", async (hostile) => {
+  it("should keep next=/ in the magic link for the redirect //evil.example (AC8)", async () => {
     auth.signInWithOtp.mockResolvedValue({ data: {}, error: null })
 
-    await magicLinkAction(form({ email: "claire@acme.test", redirect: hostile }))
+    await magicLinkAction(form({ email: "claire@acme.test", redirect: HOSTILE }))
 
     expect(auth.signInWithOtp.mock.calls[0][0].options.emailRedirectTo).toBe("https://acme.test/auth/confirm?next=/")
   })
@@ -481,15 +458,6 @@ describe("links only to a trusted address", () => {
 
     await expect(connexionFournisseurAction(null, form({ fournisseur: "google" }))).resolves.toEqual({ error: "La connexion avec ce fournisseur n'a pas pu démarrer. Réessayez." })
     expect(auth.signInWithOAuth).not.toHaveBeenCalled()
-  })
-
-  it("should keep https for an organisation address when the proxy forwards http", async () => {
-    requestHeaders({ "x-forwarded-host": "acme.test", "x-forwarded-proto": "http" })
-    auth.signInWithOtp.mockResolvedValue({ data: {}, error: null })
-
-    await magicLinkAction(form({ email: "claire@acme.test" }))
-
-    expect(auth.signInWithOtp.mock.calls[0][0].options.emailRedirectTo).toBe("https://acme.test/auth/confirm?next=/")
   })
 
   it("should admit the common address of the site, which serves no organisation", async () => {

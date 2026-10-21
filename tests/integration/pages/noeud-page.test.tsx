@@ -230,10 +230,11 @@ describe("/n/[...chemin] page reads (AC9, AC19, AC22)", () => {
 })
 
 describe("/n/[...chemin] page not found and failures (AC6, AC7)", () => {
-  it("should say the same sentence for a malformed path, read without asking the service, and for an unknown one, without « Partager » nor links", async () => {
+  it("should say the same sentence for a malformed path, read without asking the service, and for an unknown one, without « Partager » nor links, with a way to Tout le monde", async () => {
     await monter(await page(["Ventes"]))
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page introuvable")
     expect(screen.getByText("Cette page n'existe pas ou ne vous est pas partagée.")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Aller à Tout le monde" })).toHaveAttribute("href", "/n/contexte")
     expect(loadNode).not.toHaveBeenCalled()
     cleanup()
 
@@ -324,7 +325,6 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     ["private/lea/contexte", "Ce que votre assistant lit à chaque conversation ; vous seul le recevez."],
     // Le Contexte Perso d'une autre personne, qui l'a partagé : il n'est servi qu'à elle (HN-E05S04-22).
     ["private/marc/contexte", "Ce que l'assistant de la personne de cet espace lit à chaque conversation ; elle seule le reçoit."],
-    ["ventes/contexte", "Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe Ventes, lit à chaque conversation."],
   ])("should give the Contexte %s its annexes and what the agent will read, each line leading to the « Contexte » view, without « Ma fiche »", async (chemin, recu) => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ data: { identity: lea(), session: SESSION } })
     vi.mocked(loadNode).mockResolvedValue(vueDuNoeud({ path: chemin, kind: "context", title: "Contexte", level: 2 }))
@@ -352,15 +352,11 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
   })
 
   // E05-S11 (AC-17) : le titre du document d'un Contexte est celui de son `<h1>`, « Contexte · <section> » ;
-  // le titre enregistré (« Contexte ») ne change pas.
-  it.each([
-    ["contexte", "Contexte · Tout le monde"],
-    ["ventes/contexte", "Contexte · Ventes"],
-    ["private/lea/contexte", "Contexte · Privé"],
-  ])("should title the document of the Contexte %s « %s », not indexed", async (chemin, titre) => {
-    vi.mocked(loadNode).mockResolvedValue(vueDuNoeud({ path: chemin, kind: "context", title: "Contexte", level: 2 }))
+  // le titre enregistré (« Contexte ») ne change pas. Les autres sections : `titreDuContexte`, prouvé par l'écran.
+  it("should title the document of the Contexte ventes/contexte « Contexte · Ventes », not indexed", async () => {
+    vi.mocked(loadNode).mockResolvedValue(vueDuNoeud({ path: "ventes/contexte", kind: "context", title: "Contexte", level: 2 }))
 
-    expect(await generateMetadata({ params: Promise.resolve({ chemin: chemin.split("/") }) })).toEqual({ title: titre, robots: { index: false } })
+    expect(await generateMetadata({ params: Promise.resolve({ chemin: ["ventes", "contexte"] }) })).toEqual({ title: "Contexte · Ventes", robots: { index: false } })
   })
 
   it("should give a page neither annexes, nor a control, nor a phrase test", async () => {

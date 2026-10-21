@@ -44,24 +44,19 @@ const relative = (file: string) => path.relative(root, file).split(path.sep).joi
 describe("service key kept out of the package and the host (AC7)", () => {
   const files = SCANNED.flatMap((dir) => codeFiles(path.join(root, dir)))
 
-  it("should scan code files of the package and of the host", () => {
+  it("should find no secret key name, service_role or scripts/ path in the code files of the package and of the host", () => {
+    // Le parcours lit bien les deux : sans eux, la garde passerait à vide.
     expect(files.some((file) => relative(file).startsWith("packages/plateforme/server/"))).toBe(true)
     expect(files.some((file) => relative(file).startsWith("src/"))).toBe(true)
-  })
-
-  it("should find no secret key name, service_role or scripts/ path in that code", () => {
     const found = files.flatMap((file) => leaks(relative(file), fs.readFileSync(file, "utf8")))
     expect(found).toEqual([])
   })
 
-  it("should flag an in-memory file naming service_role, with its file and line", () => {
-    const text = 'import { createClient } from "@supabase/supabase-js"\nconst role = "service_role"\n'
-    expect(leaks("packages/plateforme/server/fixture.ts", text)).toEqual([
+  it("should flag service_role, the secret key names, the admin database connection and an import from scripts/, with its file and line", () => {
+    const role = 'import { createClient } from "@supabase/supabase-js"\nconst role = "service_role"\n'
+    expect(leaks("packages/plateforme/server/fixture.ts", role)).toEqual([
       "packages/plateforme/server/fixture.ts:2 : service_role",
     ])
-  })
-
-  it("should flag the secret key names, the admin database connection and an import from scripts/", () => {
     const text = [
       "const a = process.env.SUPABASE_SECRET_KEY",
       "const b = process.env.SUPABASE_SERVICE_ROLE_KEY",

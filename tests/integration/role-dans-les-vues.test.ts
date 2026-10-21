@@ -5,11 +5,10 @@
 // sur une page ouverte. Elle n'enregistre de vue que pour elle-même et d'une page qu'elle lit (`node_level_for` >= 1),
 // n'en avance pas une d'une page qu'elle ne lit plus, et ne supprime pas les lignes des autres. Les comptes de
 // l'organisation (« Les plus consultés » de l'accueil) passent par `node_view_counts`, `security definer`, filtrée par la
-// lecture de l'appelant ; le ménage des lignes de plus de 90 jours, par `sweep_node_views`. Et la suppression d'un nœud
-// sous une session ne garde que le retrait d'une création jamais publiée par son auteur (`undoCreation`) : ni un membre
-// sur un nœud expiré à la corbeille, ni l'administrateur sur un nœud à la corbeille, que purgent `purge_trash` et
-// `erase_team_trash`. Sous sa session comme sous celle du serveur, qui juge la même personne. Une lecture écartée par la
-// policy rend zéro ligne ; un `with check` refusé lève 42501 ; une fonction refusée aussi.
+// lecture de l'appelant ; le ménage des lignes de plus de 90 jours, par `sweep_node_views`. La suppression d'un nœud
+// sous une session (même migration) : `role-dans-les-noeuds.test.ts`. Sous sa session comme sous celle du serveur, qui
+// juge la même personne. Une lecture écartée par la policy rend zéro ligne ; un `with check` refusé lève 42501 ; une
+// fonction refusée aussi.
 import { afterAll, describe, expect, it } from "vitest"
 import { homeContents, recordNodeView, resolveIdentity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import type { Tx } from "../../packages/plateforme/server/sql"
@@ -20,10 +19,10 @@ const VERSION = "20261021150000"
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const suite = !sqlConfigured
-  ? `the views of the pages, and the deletion of a node (${SQL_SKIP_REASON})`
+  ? `the views of the pages (${SQL_SKIP_REASON})`
   : pending
-    ? `the views of the pages, and the deletion of a node (${pendingReason([VERSION])})`
-    : "the views of the pages, and the deletion of a node: a plain member reads and writes her own views of what she reads, the counts go through a function, the trash through its functions"
+    ? `the views of the pages (${pendingReason([VERSION])})`
+    : "the views of the pages: a plain member reads and writes her own views of what she reads, the counts go through a function"
 
 /** Les deux sessions d'une personne : la sienne, et celle du serveur, aux mêmes claims. */
 const SESSIONS = [undefined, "server"] as const
@@ -200,28 +199,6 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
         { node_id: w.open.id, user_id: w.lea.id, views: 2 },
       ]),
     )
-  })
-
-  it.each(SESSIONS)("should refuse deleting a node in the trash under a session, to a member past 30 days and to an administrator, and keep the undoing of a creation (session %s)", async (session) => {
-    const w = await world()
-    const remove = (page: Page) => (sql: Tx) => sql`delete from platform.nodes where id = ${page.id} returning id`
-    const expired = await node(w, { trashedDaysAgo: 31 })
-    const expiredHidden = await node(w, { team: w.led, trashedDaysAgo: 40 })
-    const lately = await node(w, { trashedDaysAgo: 1 })
-    const expiredForAda = await node(w, { trashedDaysAgo: 40 })
-    const created = await node(w, { createdBy: w.lea.id, revision: 0 })
-    const createdByPaul = await node(w, { createdBy: w.paul.id, revision: 0 })
-    expect({
-      expired: await attempt(w.lea, remove(expired), session),
-      expiredHidden: await attempt(w.lea, remove(expiredHidden), session),
-      adminLately: await attempt(w.ada, remove(lately), session),
-      adminExpired: await attempt(w.ada, remove(expiredForAda), session),
-      othersCreation: await attempt(w.lea, remove(createdByPaul), session),
-      ownCreation: await attempt(w.lea, remove(created), session),
-    }).toEqual({ expired: 0, expiredHidden: 0, adminLately: 0, adminExpired: 0, othersCreation: 0, ownCreation: 1 })
-    const left = await seed.admin<{ id: string }[]>`
-      select id from platform.nodes where id in ${seed.admin([expired, expiredHidden, lately, expiredForAda, created, createdByPaul].map((page) => page.id))}`
-    expect(left.map((row) => row.id).sort()).toEqual([expired, expiredHidden, lately, expiredForAda, createdByPaul].map((page) => page.id).sort())
   })
 
   it.each(SESSIONS)("should count the views of the organisation through node_view_counts, for the pages the caller reads only (session %s)", async (session) => {

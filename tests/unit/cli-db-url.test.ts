@@ -84,14 +84,8 @@ describe("oto-platform, the address of the database", () => {
     expect(run.stderr).not.toContain("db.example.invalid")
   })
 
-  it.each(COMMANDS)("should refuse %s %s with both addresses, and with none (code 2)", (...args) => {
-    const label = `« ${args[0]} ${args[1]} »`
-    expect([cli([...args, "--db-url", UNREACHABLE], { PLATFORM_ADMIN_DATABASE_URL: UNREACHABLE }), cli(args)].map(({ code, firstLine }) => [code, firstLine])).toEqual([
-      [2, `oto-platform : ${label} : deux adresses de base : PLATFORM_ADMIN_DATABASE_URL et --db-url, gardez-en une`],
-      [2, `oto-platform : ${label} : adresse de la base absente : PLATFORM_ADMIN_DATABASE_URL dans l'environnement, ou --db-url <url> sans mot de passe`],
-    ])
-  })
-
+  // Les deux adresses, ou aucune : refusées par `adminDbUrl` (« should refuse both addresses, and none »), que chaque
+  // commande lit comme le mot de passe ci-dessus, refusé avec le code 2 par chacune.
   it("should connect with PLATFORM_ADMIN_DATABASE_URL alone, password included, never writing it", () => {
     const { url, password } = urlWithPassword(UNREACHABLE)
     const run = cli(["db", "prepare"], { PLATFORM_ADMIN_DATABASE_URL: url })

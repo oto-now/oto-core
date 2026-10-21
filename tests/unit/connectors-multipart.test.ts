@@ -137,17 +137,19 @@ describe("files sent to a third party", () => {
     expect(transit.consumed).toEqual([])
   })
 
-  it.each([
-    ["a named refusal of the third party", () => json({ error: "bad type" }, 422), "document_rejected"],
-    ["a server error", () => json({}, 503), "upstream_unavailable"],
-    ["a timeout", () => Object.assign(new Error("timed out"), { name: "TimeoutError" }), null],
-  ])("should keep the file after %s, never consumed", async (_label, answer, refusalCode) => {
-    stub(answer())
-    const error = await refusal(run({ folder_id: 7, file: FILE }))
-    if (refusalCode) expect(error.details).toEqual({ refusal: refusalCode })
-    else expect(error.code).toBe("upstream_error")
-    expect(transit.consumed).toEqual([])
-    expect(transit.files.has(FILE)).toBe(true)
+  it("should keep the file after a named refusal of the third party, a server error or a timeout, never consumed", async () => {
+    const cas: [string, () => Response | Error, string, { refusal: string } | undefined][] = [
+      ["a named refusal of the third party", () => json({ error: "bad type" }, 422), "invalid_arguments", { refusal: "document_rejected" }],
+      ["a server error", () => json({}, 503), "upstream_error", { refusal: "upstream_unavailable" }],
+      ["a timeout", () => Object.assign(new Error("timed out"), { name: "TimeoutError" }), "upstream_error", undefined],
+    ]
+    const verdicts: Record<string, unknown> = {}
+    for (const [label, answer] of cas) {
+      stub(answer())
+      const error = await refusal(run({ folder_id: 7, file: FILE }))
+      verdicts[label] = { code: error.code, details: error.details, consumed: [...transit.consumed], kept: transit.files.has(FILE) }
+    }
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([label, , code, details]) => [label, { code, details, consumed: [], kept: true }])))
   })
 
   it("should send the same body again on a rate limit retry, and consume the file once", async () => {
@@ -187,25 +189,27 @@ describe("declaration of file parts", () => {
     return null
   }
 
-  it.each([
-    ["an empty map", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: {} } }), "crm.upload_document: request.files must map at least one part to an argument."],
-    ["a GET", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, method: "GET" as const } }), "crm.upload_document: request.files needs a method that sends a body (POST, PUT, PATCH)."],
-    [
-      "a paginated function",
-      (fn: ConnectorFunctionDefinition) => ({ ...fn, pagination: { kind: "cursor" as const, requestParam: "title", next: "next", maxPages: 2 } }),
-      "crm.upload_document: a function that sends files is not paginated.",
-    ],
-    [
-      "a file argument that is not text",
-      (fn: ConnectorFunctionDefinition) => ({ ...fn, schema: { ...fn.schema, properties: { ...(fn.schema.properties as object), file: { type: ["string", "null"] } } } }),
-      "crm.upload_document: file argument file must be declared as a string (the id of a transit file).",
-    ],
-    ["a file argument placed in the body too", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, body: { title: "title", copy: "file" } } }), "crm.upload_document: file argument file is placed elsewhere or encoded."],
-    ["an encoded file argument", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, encode: { file: "json" as const } } }), "crm.upload_document: encode file must be json, on a placed argument."],
-    ["a part that is also a body value", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: { title: "file" } } }), "crm.upload_document: multipart part title is both a file and a body value."],
-    ["a part that is also a body constant", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: { source: "file" } } }), "crm.upload_document: multipart part source is both a file and a body value."],
-  ])("should refuse %s", (_label, change, message) => {
-    expect(refused(change)).toBe(message)
+  it("should refuse each malformed file part by name", () => {
+    const cas: [string, (fn: ConnectorFunctionDefinition) => ConnectorFunctionDefinition, string][] = [
+      ["an empty map", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: {} } }), "crm.upload_document: request.files must map at least one part to an argument."],
+      ["a GET", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, method: "GET" as const } }), "crm.upload_document: request.files needs a method that sends a body (POST, PUT, PATCH)."],
+      [
+        "a paginated function",
+        (fn: ConnectorFunctionDefinition) => ({ ...fn, pagination: { kind: "cursor" as const, requestParam: "title", next: "next", maxPages: 2 } }),
+        "crm.upload_document: a function that sends files is not paginated.",
+      ],
+      [
+        "a file argument that is not text",
+        (fn: ConnectorFunctionDefinition) => ({ ...fn, schema: { ...fn.schema, properties: { ...(fn.schema.properties as object), file: { type: ["string", "null"] } } } }),
+        "crm.upload_document: file argument file must be declared as a string (the id of a transit file).",
+      ],
+      ["a file argument placed in the body too", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, body: { title: "title", copy: "file" } } }), "crm.upload_document: file argument file is placed elsewhere or encoded."],
+      ["an encoded file argument", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, encode: { file: "json" as const } } }), "crm.upload_document: encode file must be json, on a placed argument."],
+      ["a part that is also a body value", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: { title: "file" } } }), "crm.upload_document: multipart part title is both a file and a body value."],
+      ["a part that is also a body constant", (fn: ConnectorFunctionDefinition) => ({ ...fn, request: { ...fn.request, files: { source: "file" } } }), "crm.upload_document: multipart part source is both a file and a body value."],
+    ]
+    const verdicts = Object.fromEntries(cas.map(([label, change]) => [label, refused(change)]))
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([label, , message]) => [label, message])))
   })
 
   it("should accept the upload connector as written", () => {

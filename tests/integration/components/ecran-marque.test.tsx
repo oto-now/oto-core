@@ -38,7 +38,6 @@ function rendre(donnees: DonneesDeMarque = DEMO, enregistre = false) {
 
 const champLogo = () => screen.getByLabelText("Adresse du logo (https)")
 const enregistrer = () => fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
-const corpsEnvoye = () => JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
 
 beforeEach(() => {
   fetchMock.mockReset()
@@ -93,23 +92,9 @@ describe("EcranMarque for an administrator (AC6)", () => {
 })
 
 describe("EcranMarque saving (AC7, AC8)", () => {
-  // E05-S13 (AC-3) : l'envoi retire l'ancien nom affiché, que `readBrand` ne lit plus.
-  it("should send the whole brand to PATCH /api/platform/brand, the display name removed, then reload with ?saved=1", async () => {
-    const marque = { theme: "foret", logo_url: "https://example.com/logo.png", display_name: null }
-    fetchMock.mockResolvedValue(reponse(200, { data: marque }))
-    rendre({ ...DEMO, marque: { ...DEMO.marque, nomAffiche: "Démo Industrie" } })
-
-    fireEvent.click(screen.getByRole("radio", { name: "Forêt" }))
-    fireEvent.change(champLogo(), { target: { value: "https://example.com/logo.png" } })
-    enregistrer()
-
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("/admin/brand?saved=1"))
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe("/api/platform/brand")
-    expect(init?.method).toBe("PATCH")
-    expect(corpsEnvoye()).toEqual(marque)
-  })
-
+  // L'envoi de la marque entière par PATCH /api/platform/brand, puis le rechargement : le même formulaire
+  // (`FormulaireDeMarque`) est éprouvé par `ecran-organisation.test.tsx`, « should write the whole brand by PATCH
+  // /api/platform/brand… ».
   it("should disable the button while sending, busy and saying so", async () => {
     let terminer: (value: Response) => void = () => {}
     fetchMock.mockReturnValue(new Promise<Response>((resolve) => (terminer = resolve)))
@@ -181,11 +166,6 @@ describe("EcranMarque status (AC7, AC12)", () => {
   it("should mount the status region empty from the start", () => {
     rendre()
     expect(screen.getByRole("status")).toBeEmptyDOMElement()
-  })
-
-  it("should say the brand was saved after the reload", () => {
-    rendre(DEMO, true)
-    expect(screen.getByRole("status")).toHaveTextContent("Marque enregistrée.")
   })
 
   it("should write the saved message once hydrated, not in the server HTML, so that it is announced", async () => {

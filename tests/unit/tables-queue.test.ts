@@ -12,7 +12,6 @@ import { isRecord } from "../../packages/plateforme/schemas/tables"
 import type { CatalogFunction, FunctionOutput } from "../../packages/plateforme/server/catalog/define"
 import type { Identity } from "../../packages/plateforme/server/identity"
 import { tableClaim } from "../../packages/plateforme/server/tables/claim"
-import type { RowBlock } from "../../packages/plateforme/server/tables/meta"
 import { tableRelease } from "../../packages/plateforme/server/tables/release"
 import { tableWrite } from "../../packages/plateforme/server/tables/write"
 import { nodeId, PEOPLE } from "../helpers/reference-org"
@@ -20,7 +19,7 @@ import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import type { Row, Tables } from "../helpers/simulated-db"
 import { dbSpy, type DbSpy } from "../helpers/spy-t1-c1a"
 import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
-import { fixtureTables, LEASE_ACTIVE, LEASE_EXPIRED, PROSPECTS, rowBlocks, runFunction, TICKETS } from "../factories/table-fixture"
+import { fixtureTables, LEASE_ACTIVE, LEASE_EXPIRED, manyRows, PROSPECTS, rowBlocks, runFunction, TICKETS } from "../factories/table-fixture"
 import { seedTableFixture } from "../factories/table-fixture-sql"
 import { BIG_TABLE_TIMEOUT, CASE_TIMEOUT, clientOf, crossing, fixtureRows, SEED_TIMEOUT, type FixtureRows } from "../factories/table-rows-sql"
 
@@ -143,12 +142,8 @@ describe.skipIf(!sqlConfigured)(portable("work queue on a real database"), { tim
 
     it("should reach with a filter a waiting row beyond the first page of candidates, and refuse a filter on more than 5,000 rows (AC20, N14)", { timeout: BIG_TABLE_TIMEOUT }, async () => {
       // `count` prospects « à traiter » ; le dernier dans l'ordre de la file, seul à Port-Lise.
-      const waiting = (count: number): RowBlock[] =>
-        Array.from({ length: count }, (_, index) => {
-          const entreprise = `Prospect ${String(index + 1).padStart(4, "0")}`
-          const ville = index === count - 1 ? "Port-Lise" : "Valbrune"
-          return { key: entreprise, data: { entreprise, ville, statut: "à traiter" }, provenance: {}, revision: 1, claimed_by: null, claimed_by_user: null, lease_until: null }
-        })
+      const waiting = (count: number) =>
+        manyRows(count, (index) => ({ entreprise: `Prospect ${String(index + 1).padStart(4, "0")}`, ville: index === count - 1 ? "Port-Lise" : "Valbrune", statut: "à traiter" }))
       const port = await call(tableClaim, CLAIRE, { worker: "claude-claire", filter: { ville: "Port-Lise" } }, await fixture.database(fixtureTables([], waiting(1_001))))
       expect(claimed(port)).toEqual(["Prospect 1001"])
       const refused = await refusal(tableClaim, CLAIRE, { worker: "claude-claire", filter: { ville: "Port-Lise" } }, await fixture.database(fixtureTables([], waiting(5_001))))

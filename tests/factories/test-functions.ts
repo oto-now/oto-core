@@ -146,3 +146,19 @@ export const testInvoice = defineFunction({
 })
 
 export const TEST_FUNCTIONS: CatalogFunction[] = [testRead, testWrite, testSend, testOff, tableTestRead, testBig, testFail, testRelease, testInvoice]
+
+type Registry = typeof import("../../packages/plateforme/server/catalog/registry")
+
+/**
+ * La fabrique de `vi.mock` du registre : le catalogue réel complété de `TEST_FUNCTIONS`, celui de l'assistant aussi
+ * (les portes qui servent un assistant lisent `assistantFunctions`). Appelée par un import dynamique dans la
+ * fabrique, que `vi.mock` hisse au-dessus des imports du fichier.
+ */
+export async function withTestFunctions(importOriginal: <T = unknown>() => Promise<T>): Promise<Registry> {
+  const original = await importOriginal<Registry>()
+  return {
+    ...original,
+    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS],
+    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS],
+  }
+}

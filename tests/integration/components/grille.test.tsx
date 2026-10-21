@@ -301,14 +301,8 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
     expect(screen.getByRole("link", { name: "Retirer les filtres" })).toHaveAttribute("href", `${ADRESSE}?q=tilleuls&sort=ref`)
   })
 
-  it("should write the H95 operators, and true or false for a boolean, in the address (E11-S07, AC-b4)", () => {
-    rendre()
-    ouvrir("actif")
-    choisirDansLaListe(panneau("actif").getByLabelText("Égal à"), "Oui")
-    fireEvent.click(panneau("actif").getByRole("button", { name: "Filtrer" }))
-    expect(derniereAdresse().searchParams.getAll("f")).toEqual(["actif:eq:true"])
-  })
-
+  // Les opérateurs de H95 (E11-S07, AC-b4) : `tests/unit/ui-tableau-adresse.test.ts` ; leur câblage, et true ou false pour un
+  // booléen, ici.
   it("should apply a filter through the host keeping the other settings, remove it, and move the focus in and out of the panel", () => {
     rendre({ parametres: { q: "tilleuls", sort: "ref", f: ["montant_estime:gte:10000", "statut:eq:à traiter"] } })
     const bouton = screen.getByRole("button", { name: "Filtrer sur montant_estime" })
@@ -341,6 +335,12 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
     expect(screen.queryByRole("form", { name: "Filtrer sur montant_estime" })).toBeNull()
     expect(document.activeElement).toBe(bouton)
     expect(naviguer).toHaveBeenCalledTimes(2)
+
+    // Un booléen s'écrit true ou false dans l'adresse.
+    ouvrir("actif")
+    choisirDansLaListe(panneau("actif").getByLabelText("Égal à"), "Oui")
+    fireEvent.click(panneau("actif").getByRole("button", { name: "Filtrer" }))
+    expect(derniereAdresse().searchParams.getAll("f")).toEqual(["montant_estime:gte:10000", "statut:eq:à traiter", "actif:eq:true"])
   })
 })
 

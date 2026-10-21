@@ -8,7 +8,6 @@
 // l'ancien chemin. La parité des canaux, le schéma strict et les suites sont les règles d'E03-S01 et
 // d'E03-S04, prouvées par leurs tests.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { isRecord } from "../../packages/plateforme/schemas/tables"
 import type { CatalogFunction } from "../../packages/plateforme/server/catalog/define"
 import { describeFunction } from "../../packages/plateforme/server/catalog/registry"
 import type { Identity } from "../../packages/plateforme/server/identity"
@@ -115,8 +114,9 @@ describe.skipIf(!sqlConfigured)(portable("the table functions through acme_call"
     }
   })
 
+  // La révision et la preuve servies par table.schema (AC-d1, AC-f4) : `tables-read.test.ts` (« table.schema ») ; le
+  // refus d'une clé prise sous create_only (AC-a1) : `tables-write-service.test.ts`. Le passage par le canal : AC28.
   describe("E11-S01 through acme_call", () => {
-    const CLOSED_NO = "Closed: no — a new key creates a row."
     const HOST = "claude-ai@0.1.0"
     const CREATE_ONLY =
       "create_only: true only creates rows: a key that already exists is refused (conflict) with the row as it is, and nothing is written for it (default false: a known key updates its row)"
@@ -125,16 +125,6 @@ describe.skipIf(!sqlConfigured)(portable("the table functions through acme_call"
     function argumentsOf(fn: CatalogFunction): unknown {
       return describeFunction(fn, "acme").data.arguments_schema
     }
-
-    it("should serve the revision, the proof required and its structured fields in table.schema (AC-d1, AC-f4)", async () => {
-      const lea = await session("lea")
-      const schema = await lea.run("table.schema", { table: PROSPECTS.path })
-      const lines = schema.text.split("\n")
-      expect(lines[1]).toMatch(/ Revision: 3 \(the base_revision of acme_write to change the header\)\.$/)
-      const proof = "Proof: required — every new value needs {value, comment | link}; a new value without it refuses the whole call."
-      expect(lines.indexOf(proof)).toBe(lines.indexOf(CLOSED_NO) + 1)
-      expect(schema.result.structuredContent).toMatchObject({ result: { closed: false, proof: true, revision: 3 } })
-    })
 
     it("should describe a table without proof, with a strict column and decisions by the assistant, and write bare values with the host of the conversation (AC-b6, AC-e4, AC-f2, AC-f4, AC-d2)", async () => {
       const id = ref.nodeId(PROSPECTS.path)
@@ -167,18 +157,6 @@ describe.skipIf(!sqlConfigured)(portable("the table functions through acme_call"
           () => seed.admin`update platform.ctx set host = null where code = ${ref.id(CTX.claire)}`,
         ])
       }
-    })
-
-    it("should refuse a key that has its row under create_only with the row as it is (AC-a1)", async () => {
-      const lea = await session("lea")
-      const refused = await lea.run("table.write", { table: PROSPECTS.path, create_only: true, rows: [{ key: "Atelier 2", set: { notes: { value: "Relancer", comment: "Appel" } } }] })
-      const content: unknown = refused.result.structuredContent
-      const outcome = isRecord(content) && isRecord(content.result) && Array.isArray(content.result.rows) ? content.result.rows[0] : undefined
-      const current = isRecord(outcome) && isRecord(outcome.current) ? outcome.current : {}
-      expect([refused.isError, isRecord(outcome) ? outcome.code : null]).toEqual([false, "conflict"])
-      expect(refused.text.split("\n")[1]).toBe(
-        `Atelier 2: refused (conflict): a row with this key already exists (revision ${String(current.revision)}); nothing written (create_only). Current row: ${JSON.stringify(current)}. Pick another key, or write without create_only to update it.`,
-      )
     })
 
     it("should serve the texts of table.write, table.rows and table.release word for word (AC-a7, AC-c5, AC-e4, AC-f5)", () => {

@@ -1,6 +1,6 @@
 // Boutons des fournisseurs et retour en erreur sur `/login` (E09-S03, AC1, AC5, AC8) : page serveur
 // rendue avec `fournisseursActives` simulé ; en-têtes et lecture de la marque simulés comme dans
-// `marque-layout-connexion.test.tsx` (adresse sans organisation : pas d'en-tête de marque).
+// `identite-pages.test.tsx` (adresse sans organisation : pas d'en-tête de marque).
 import { Suspense, type ReactNode } from "react"
 import { headers } from "next/headers"
 import { act, cleanup, render, screen } from "@testing-library/react"

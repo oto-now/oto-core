@@ -9,7 +9,7 @@ import type { RowBlock } from "../../packages/plateforme/server/tables/meta"
 import { tableAggregate } from "../../packages/plateforme/server/tables/aggregate"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
-import { PROSPECT_ROWS, PROSPECTS, runFunction } from "../factories/table-fixture"
+import { manyRows, PROSPECT_ROWS, PROSPECTS, runFunction } from "../factories/table-fixture"
 import { seedTableFixture } from "../factories/table-fixture-sql"
 import { CASE_TIMEOUT, clientOf, fixtureRows, SEED_TIMEOUT, type FixtureRows } from "../factories/table-rows-sql"
 
@@ -17,10 +17,7 @@ type Aggregate = { text: string; data: { table: string; total: number; group_by?
 
 /** `count` lignes de clés `L0001`…, `notes` donné par rang. */
 function generated(count: number, notes: (index: number) => string): RowBlock[] {
-  return Array.from({ length: count }, (_, index) => {
-    const key = `L${String(index + 1).padStart(4, "0")}`
-    return { key, data: { entreprise: key, notes: notes(index), statut: "à traiter" }, provenance: {}, revision: 1, claimed_by: null, claimed_by_user: null, lease_until: null }
-  })
+  return manyRows(count, (index) => ({ entreprise: `L${String(index + 1).padStart(4, "0")}`, notes: notes(index), statut: "à traiter" }))
 }
 
 describe.skipIf(!sqlConfigured)(portable("table.aggregate on a real database"), { timeout: CASE_TIMEOUT }, () => {

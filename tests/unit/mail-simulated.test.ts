@@ -6,7 +6,6 @@
 // `tests/integration/mail-simulated.test.ts`.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { CatalogFunction, FunctionContext } from "../../packages/plateforme/server/catalog/define"
-import { describeFunction } from "../../packages/plateforme/server/catalog/registry"
 import type { ResolvedAccount } from "../../packages/plateforme/server/connectors/resolution"
 import { mailCreateDraft, mailSendDraft } from "../../packages/plateforme/server/connectors/simulated/mail"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -79,10 +78,11 @@ describe("mail.create_draft arguments (AC17)", () => {
     expect(parse(DRAFT)).toEqual({ success: true, data: DRAFT })
   })
 
-  it.each(["cc", "from"])("should refuse the unknown key %s, naming it", (key) => {
-    const result = parse({ ...DRAFT, [key]: "paul@valbrune.test" })
+  // `from`, une autre clé inconnue, suit la même règle (`strict`).
+  it("should refuse the unknown key cc, naming it", () => {
+    const result = parse({ ...DRAFT, cc: "paul@valbrune.test" })
     expect(result.success).toBe(false)
-    expect(result.error?.issues.map((issue) => issue.message)).toEqual([`Unrecognized key: "${key}"`])
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(['Unrecognized key: "cc"'])
   })
 
   it("should refuse an address that is not an email", () => {
@@ -134,11 +134,8 @@ describe("catalog metadata (AC19)", () => {
     expect(mailCreateDraft.summarize).toBeUndefined()
   })
 
-  it("should serve the send contract as a two-step confirmation", () => {
-    expect(describeFunction(mailSendDraft, "acme").text.split("\n")[0]).toBe(
-      "Function mail.send_draft (connector mail, origin connecteur, class sensitive: two-step confirmation)",
-    )
-  })
+  // La classe `sensitive` servie comme une confirmation en deux temps : `catalog.test.ts`, « should announce the
+  // two-step confirmation of a sensitive function ».
 })
 
 describe("guards before the database (H85)", () => {

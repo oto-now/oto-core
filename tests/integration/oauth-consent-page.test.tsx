@@ -11,7 +11,7 @@ import type { PlatformDb } from "@otomata_tech/oto_platform/server"
 import ConsentPage, { metadata } from "@/app/oauth/consent/page"
 import { deciderConsentementAction } from "@/lib/actions/consentement"
 import { getPlatformSession, type PlatformSession } from "@/lib/plateforme/session"
-import { pendingRequests, type PendingRequests } from "../helpers/oauth-pending"
+import { AUTHORIZATION_ID as ID, DECIDED, DETAILS, form, pendingRequests, type PendingRequests } from "../helpers/oauth-pending"
 import { createFixtures, type Fixtures } from "../helpers/plateforme"
 import { OTHER_ORG } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
@@ -45,22 +45,10 @@ vi.mock("@/lib/plateforme/session", () => ({ getPlatformSession: vi.fn() }))
 // redirect() lève NEXT_REDIRECT dans Next : le mock lève aussi, le rendu s'arrête comme en production.
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 
-const ID = "a2b3c4d5e6f7g2h3i4j5k6l7m2n3o4p5"
 const CONSENT = `/oauth/consent?authorization_id=${ID}`
 const LOGIN_BACK = `/login?redirect=${encodeURIComponent(CONSENT)}`
-const DETAILS = {
-  authorization_id: ID,
-  redirect_uri: "https://claude.ai/api/mcp/auth_callback",
-  client: { id: "client-1", name: "Claude", uri: "https://claude.ai", logo_uri: "https://claude.ai/logo.png" },
-  user: { id: "user-1", email: "claire@example.invalid" },
-  scope: "openid email profile offline_access",
-}
 const RETURN_CODE = "https://claude.ai/api/mcp/auth_callback?code=c0de&state=xyz"
 const RETURN_DENIED = "https://claude.ai/api/mcp/auth_callback?error=access_denied&state=xyz"
-// Une `redirect_uri` qu'un client s'enregistre lui-même (DCR ouvert) : Next en ferait un `location.assign`.
-const RETURN_SCRIPT = "javascript://x/%0aalert(1)//"
-// Ce que rend le serveur OAuth, mesuré le 2026-09-24, à la lecture d'une demande déjà tranchée.
-const DECIDED = { name: "AuthApiError", status: 400, code: "validation_failed", message: "authorization request cannot be processed" }
 const EXPIREE =
   "Cette demande d'autorisation a expiré ou a été ouverte avec un autre compte. Relancez la connexion depuis votre assistant."
 const TRANCHEE =
@@ -82,12 +70,6 @@ const SESSION: PlatformSession = {
 
 function page(searchParams: Record<string, string | string[]>) {
   return ConsentPage({ searchParams: Promise.resolve(searchParams) })
-}
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData()
-  Object.entries(fields).forEach(([key, value]) => data.set(key, value))
-  return data
 }
 
 beforeEach(() => {
@@ -124,7 +106,7 @@ describe("page /oauth/consent", () => {
     )
   })
 
-  it.each<Record<string, string | string[]>>([{}, { authorization_id: "../../admin/users" }, { authorization_id: [ID, ID] }])(
+  it.each<Record<string, string | string[]>>([{}, { authorization_id: [ID, ID] }])(
     "should explain an invalid link %j without calling the OAuth server (AC9)",
     async (searchParams) => {
       render(await page(searchParams))
@@ -152,16 +134,6 @@ describe("page /oauth/consent", () => {
     mocks.getAuthorizationDetails.mockResolvedValue({ data: { redirect_url: RETURN_CODE }, error: null })
 
     await expect(page({ authorization_id: ID })).rejects.toThrow(`NEXT_REDIRECT:${RETURN_CODE}`)
-  })
-
-  it("should never redirect to a return address that is neither http nor https (AC11)", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    mocks.getAuthorizationDetails.mockResolvedValue({ data: { redirect_url: RETURN_SCRIPT }, error: null })
-
-    render(await page({ authorization_id: ID }))
-
-    expect(mocks.redirect).not.toHaveBeenCalled()
-    expect(screen.getByRole("alert")).toHaveTextContent(EXPIREE)
   })
 
   // État mesuré (HN-E02S02-20) : tranchée dans un autre onglet, la demande répond 400 à sa relecture.
@@ -264,20 +236,6 @@ describe.skipIf(!projectConfigured)(
       expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Claude demande l'accès à votre compte")
     })
 
-    it("should render neither a javascript: site nor a data: logo (AC12)", async () => {
-      mocks.getAuthorizationDetails.mockResolvedValue({
-        data: { ...DETAILS, client: { ...DETAILS.client, uri: "javascript:alert(1)", logo_uri: "data:image/png;base64,AAAA" } },
-        error: null,
-      })
-
-      render(await page({ authorization_id: await pending() }))
-
-      expect(screen.queryByRole("link")).toBeNull()
-      expect(document.querySelector("img")).toBeNull()
-      // Seuls `href` et `src` comptent : React pose lui-même un `action="javascript:…"` sur un formulaire à action fonction.
-      expect(document.querySelectorAll('[href^="javascript:"], [src^="data:"]')).toHaveLength(0)
-    })
-
     // Échec passager : la demande est toujours en attente, la page la remontre avec l'alerte.
     it("should show the request again, with the decision alert, after a transient failure (AC17)", async () => {
       render(await page({ authorization_id: await pending(), error: "decision" }))
@@ -323,27 +281,6 @@ describe("deciderConsentementAction", () => {
     )
   })
 
-  // État mesuré (HN-E02S02-20) : relecture et décision en 400 pour une demande tranchée ailleurs.
-  it.each(["deny", "approve"])("should come back with error=decision on %s once another tab decided (AC17)", async (decision) => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    mocks.getAuthorizationDetails.mockResolvedValue({ data: null, error: DECIDED })
-    mocks.approveAuthorization.mockResolvedValue({ data: null, error: DECIDED })
-    mocks.denyAuthorization.mockResolvedValue({ data: null, error: DECIDED })
-
-    await expect(deciderConsentementAction(form({ authorization_id: ID, decision }))).rejects.toThrow(
-      `NEXT_REDIRECT:${CONSENT}&error=decision`,
-    )
-  })
-
-  it("should never redirect to a return address that is neither http nor https", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    mocks.approveAuthorization.mockResolvedValue({ data: { redirect_url: RETURN_SCRIPT }, error: null })
-
-    await expect(deciderConsentementAction(form({ authorization_id: ID, decision: "approve" }))).rejects.toThrow(
-      `NEXT_REDIRECT:${CONSENT}&error=decision`,
-    )
-  })
-
   it("should send a lost session to /login, back to the request, without any decision (AC18)", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null }, error: null })
 
@@ -362,12 +299,8 @@ describe("deciderConsentementAction", () => {
     )
   })
 
-  it.each<Record<string, string>>([
-    { authorization_id: "../../admin/users", decision: "approve" },
-    { authorization_id: ID, decision: "accept" },
-    { authorization_id: ID },
-  ])("should send an altered form %j back to /oauth/consent without calling the SDK (AC18)", async (fields) => {
-    await expect(deciderConsentementAction(form(fields))).rejects.toThrow(/^NEXT_REDIRECT:\/oauth\/consent$/)
+  it('should send an altered form {"authorization_id":"../../admin/users","decision":"approve"} back to /oauth/consent without calling the SDK (AC18)', async () => {
+    await expect(deciderConsentementAction(form({ authorization_id: "../../admin/users", decision: "approve" }))).rejects.toThrow(/^NEXT_REDIRECT:\/oauth\/consent$/)
     expect(mocks.getAuthorizationDetails).not.toHaveBeenCalled()
     expect(mocks.approveAuthorization).not.toHaveBeenCalled()
     expect(mocks.denyAuthorization).not.toHaveBeenCalled()

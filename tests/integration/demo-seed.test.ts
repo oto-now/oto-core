@@ -549,25 +549,16 @@ describe.skipIf(!supabaseConfigured || !sqlConfigured)(
         }
       }, NETWORK_TIMEOUT)
 
-      it("should refuse --slug with code 1, naming the organization", () => {
+      it("should refuse --slug and --reset --slug with code 1, naming the organization, and the reset called by its id, the organization lacking the mark", () => {
         expect(seeded.status).toBe(1)
         expect(seeded.stderr).toContain(`Refusé : l'organisation ${org.slug} (« ${org.name} »)`)
-      })
-
-      it("should refuse --reset --slug with code 1, naming the organization", () => {
         expect(reset.status).toBe(1)
         expect(reset.stderr).toContain(`Refusé : l'organisation ${org.slug} (« ${org.name} »)`)
-      })
-
-      it("should delete nothing when the reset is called by its id, the organization lacking the mark", () => {
         expect(directReset).toContain(`Réinitialisation refusée : l'organisation ${org.slug}`)
       })
 
-      it("should leave every row identical, identifiers and dates included", () => {
+      it("should leave every row identical, identifiers and dates included, and not create the E2E account", async () => {
         expect(after).toEqual(before)
-      })
-
-      it("should not create the E2E account", async () => {
         expect(await findUserId(account.email)).toBeNull()
       })
 

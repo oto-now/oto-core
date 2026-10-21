@@ -23,11 +23,9 @@ const ECRANS_SERVEUR = fichiers(UI).filter((fichier) => {
 })
 
 describe("server screens of ui/ and their icons", () => {
-  it("should find the server screens, the bin among them", () => {
-    expect(ECRANS_SERVEUR.map((fichier) => path.basename(fichier))).toContain("ecran-de-la-corbeille.tsx")
-  })
-
   it("should import no client icon in a server screen", () => {
+    // Le détecteur trouve les écrans serveur : sans eux, la garde passerait à vide.
+    expect(ECRANS_SERVEUR.map((fichier) => path.basename(fichier))).toContain("ecran-de-la-corbeille.tsx")
     const fautifs = ECRANS_SERVEUR.filter((fichier) => fs.readFileSync(fichier, "utf8").includes("@phosphor-icons/react/dist/csr/"))
     expect(fautifs.map((fichier) => path.relative(UI, fichier))).toEqual([])
   })

@@ -175,29 +175,19 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       expect(await lastLine()).toMatchObject({ tool: "DELETE invitations", target: INVITATION_ID, team_id: teamId, args: null })
     })
 
-    it("should cut args beyond 2048 characters", async () => {
-      vi.mocked(inviteMember).mockRejectedValue(new PlatformError("invalid_arguments", "Invalid email."))
-      const body = JSON.stringify({ email: "x".repeat(3000) })
-      const { tasks } = await call(request("POST", "invitations", { body }))
-      await tasks[0]()
-      expect((await lastLine())?.args).toEqual({ _truncated: true, head: body.slice(0, 2048) })
-    })
-
-    // E03-S01 AC27 : l'écrivain commun `server/journal.ts` masque les valeurs secrètes (H07).
-    it("should mask secret values in args, keeping a business key readable", async () => {
-      vi.mocked(inviteMember).mockRejectedValue(new PlatformError("invalid_arguments", "Invalid email."))
-      const body = JSON.stringify({ email: "a@x.test", api_key: "k-123", password: "p-456", key: "ref-042" })
-      const { tasks } = await call(request("POST", "invitations", { body }))
-      await tasks[0]()
-      expect((await lastLine())?.args).toEqual({ email: "a@x.test", api_key: "[masked]", password: "[masked]", key: "ref-042" })
-    })
-
-    // Revue du cycle 1 : même borne que la porte MCP (N4), coupée hors d'une paire de substitution.
-    it("should cut the error at 500 characters, never inside an emoji", async () => {
+    // E03-S01 AC27 : l'écrivain commun `server/journal.ts` masque les valeurs secrètes (H07), une clé métier restant
+    // lisible, puis coupe au-delà de 2 048 caractères ; l'erreur, à la même borne que la porte MCP (N4, revue du
+    // cycle 1), hors d'une paire de substitution. Chaque règle en détail : `tests/unit/server-journal.test.ts`.
+    it("should write args through the common writer (masked, then cut at 2,048) and the error cut at 500", async () => {
       vi.mocked(inviteMember).mockRejectedValue(new PlatformError("invalid_arguments", `${"m".repeat(480)}😀 and more`))
-      const { tasks } = await call(request("POST", "invitations", { body: JSON.stringify({ email: "a@x.test" }) }))
+      const args = { api_key: "k-123", password: "p-456", key: "ref-042", email: "x".repeat(3000) }
+      const { tasks } = await call(request("POST", "invitations", { body: JSON.stringify(args) }))
       await tasks[0]()
-      expect((await lastLine())?.error).toBe(`invalid_arguments: ${"m".repeat(480)}`)
+      const line = await lastLine()
+      expect({ args: line?.args, error: line?.error }).toEqual({
+        args: { _truncated: true, head: JSON.stringify({ ...args, api_key: "[masked]", password: "[masked]" }).slice(0, 2048) },
+        error: `invalid_arguments: ${"m".repeat(480)}`,
+      })
     })
 
     it("should keep the response unchanged when the journal write fails", async () => {

@@ -2,40 +2,31 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { BlockView } from "@otomata_tech/oto_platform/schemas"
-import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
 import { ListeACiter } from "../../../packages/plateforme/ui/noeud/editeur/citer"
-import { EditeurDeBlocs } from "../../../packages/plateforme/ui/noeud/editeur/editeur-de-blocs"
-import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
+import type { CiblesDesLiens } from "../../../packages/plateforme/ui/noeud/en-ligne"
+import { TitreModifiable } from "../../../packages/plateforme/ui/noeud/en-tete-modifiable"
+import { RenduDUnBloc } from "../../../packages/plateforme/ui/noeud/rendu-des-blocs"
 import { ouvrirLeChamp, texteDuBloc } from "../../helpers/champ-du-bloc"
-import { bloc, ID, PAGE, simulerLAPI } from "../../helpers/noeud"
+import { bloc, ID, lEditeur, monterLEditeur, PAGE, simulerLAPI } from "../../helpers/noeud"
 
 // L'éditeur de blocs (E05-S08 ; depuis la 1.1.3, un bloc se lit et son focus monte son champ, `ouvrirLeChamp` ; E05-S02 pour ce qui ne dépend pas du mode ; E05-S10,
-// partie a : menu de la poignée, glisser-déposer, blocs vides, un seul titre, publication seule, liens), sous
-// sa file d'écriture : `fetch` simulé pour `POST /api/platform/nodes`, relecture de la page espionnée ; une
-// relecture se joue en rerendant l'éditeur avec les blocs relus. « Ailleurs » est un bouton hors de
-// l'éditeur : le focus qui y va quitte le champ et sa rangée, comme en suivant un lien.
+// partie a : menu de la poignée, glisser-déposer, blocs vides, un seul titre, publication seule, liens ; E05-S11, lot b :
+// l'indication d'enregistrement, les pages citées au repos, tout sélectionner ; E11-S15, lot B : le tableau simple, le
+// menu de la poignée, le texte marqué au repos, « @ » avant toute frappe), sous sa file d'écriture (`monterLEditeur`) :
+// `fetch` simulé pour `POST /api/platform/nodes`, relecture de la page espionnée ; une relecture se joue en rerendant
+// l'éditeur avec les blocs relus. « Ailleurs » est un bouton hors de l'éditeur : le focus qui y va quitte le champ et sa
+// rangée, comme en suivant un lien.
 
 type Montage = { blocs?: BlockView[]; tampon?: string | null; revision?: number }
 
 /** Un bloc que l'écran n'écrit pas (un contenu cité ; un diagramme s'écrit depuis la 1.1.3) : il se lit, se déplace, se duplique et se supprime. */
 const CITE = bloc("f5000000-0000-4000-8000-000000000005", "reference", null, { path: "ventes/suivi" })
-const rafraichir = vi.fn()
 let api: ReturnType<typeof simulerLAPI>
 
-function editeur({ blocs = PAGE, tampon = null, revision = 4 }: Montage) {
-  return (
-    <ContexteDeRafraichissement.Provider value={rafraichir}>
-      <FileDOperations chemin="ventes/modele_relance" revisionPubliee={revision} tampon={tampon}>
-        <EditeurDeBlocs blocs={blocs} revisionServie={revision} prefixeDesPages="/n/" />
-      </FileDOperations>
-      <button type="button">Ailleurs</button>
-    </ContexteDeRafraichissement.Provider>
-  )
-}
-
-function monter(montage: Montage = {}) {
-  const rendu = render(editeur(montage))
-  return { relire: (relue: Montage) => rendu.rerender(editeur({ ...montage, ...relue })), demonter: rendu.unmount }
+/** L'éditeur monté ; `relire` rerend avec la lecture relue (blocs, révision). */
+function monter({ blocs = PAGE, ...montage }: Montage = {}) {
+  const monte = monterLEditeur(blocs, montage)
+  return { ...monte, relire: ({ blocs: relus = blocs, ...autre }: Montage) => monte.relire(relus, autre) }
 }
 
 const bouton = (nom: string) => screen.getByRole("button", { name: nom })
@@ -86,7 +77,6 @@ function choisir(mots: string, geste: string | RegExp) {
 
 beforeEach(() => {
   api = simulerLAPI()
-  rafraichir.mockReset()
 })
 
 afterEach(() => {
@@ -99,6 +89,8 @@ afterEach(() => {
 
 describe("EditeurDeBlocs, champs des blocs (AC1, AC9)", () => {
   it("should name every writable block as a textbox without a click, read with no field mounted, none focused, a heading in its element, the other blocks read, and no « Modifier ce bloc »", () => {
+    // Servi par le serveur, aucun champ non plus (1.1.3).
+    expect(renderToStaticMarkup(lEditeur([...PAGE, CITE]))).not.toContain("<textarea")
     monter({ blocs: [...PAGE, CITE] })
     expect(screen.getAllByRole("textbox").map((element) => element.getAttribute("aria-label"))).toEqual([
       "Modifier ce titre — Objet",
@@ -110,7 +102,7 @@ describe("EditeurDeBlocs, champs des blocs (AC1, AC9)", () => {
     expect(document.querySelector("textarea")).toBeNull()
     expect(document.activeElement).toBe(document.body)
     expect(screen.getByRole("textbox", { name: "Modifier ce titre — Objet" }).closest("h2")).toHaveAttribute("id", "objet")
-    // Une liste à puces écrite est dessinée par le design system (ses puces : `e11s06-editeur.test.tsx`) ; lue, elle
+    // Une liste à puces écrite est dessinée par le design system (ses puces : `liens-en-edition.test.tsx`) ; lue, elle
     // est atteinte au clavier.
     const liste = screen.getByRole("textbox", { name: "Modifier cette liste — Lire le devis Écrire" })
     expect(liste).toHaveAttribute("data-kind", "list")
@@ -234,11 +226,11 @@ describe("EditeurDeBlocs, envoi du texte (AC2)", () => {
 
   // Une navigation du client (retour du navigateur) démonte l'éditeur sans `blur` ni `beforeunload`.
   it("should send the text still waiting for its 1 200 ms when the editor goes away without the field losing the focus (HN-E05S08-16)", async () => {
-    const { unmount } = render(editeur({}))
+    const { demonter } = monter()
     // Tapé dans le champ ouvert, que le focus ne quitte pas : aucune sortie de champ ne l'envoie, seul le démontage.
     fireEvent.change(ouvrirLeChamp("Modifier ce texte — Objet de la relance"), { target: { value: "Objet revu" } })
     expect(api.envoyes).toHaveLength(0)
-    unmount()
+    demonter()
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
     expect(api.envoyes[0].ops).toEqual([{ op: "replace_block", block: ID.objet, revision: 3, input: { type: "paragraph", text: "Objet revu", data: {} } }])
   })
@@ -700,7 +692,7 @@ describe("EditeurDeBlocs, glisser-déposer (E05-S10, AC-a3)", () => {
 
 describe("EditeurDeBlocs, publication seule (E05-S10, AC-a6)", () => {
   it("should offer no « Publier », and publish 3 s after the last keystroke, after the text, on the stamp it returned", async () => {
-    monter()
+    const { rafraichir } = monter()
     expect(screen.queryByRole("button", { name: "Publier" })).toBeNull()
     vi.useFakeTimers()
     const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
@@ -756,7 +748,7 @@ describe("EditeurDeBlocs, publication seule (E05-S10, AC-a6)", () => {
   })
 
   it("should say a stale publication, keep the text, and publish again on « Réessayer »", async () => {
-    monter()
+    const { rafraichir } = monter()
     const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
     ecrireEtEchapper(texte, "Objet revu")
     await waitFor(() => expect(api.envoyes).toHaveLength(1))
@@ -923,7 +915,7 @@ describe("EditeurDeBlocs, liens d'un bloc (E05-S10, AC-a8, AC-a9 ; E05-S11, AC-2
 
 describe("EditeurDeBlocs, conflit au bloc (AC6)", () => {
   it("should reread on stale_revision, put the changed block in conflict with the final text prefilled by the saved version, lock the other fields, then save the final text on the new revision", async () => {
-    const { relire } = monter()
+    const { relire, rafraichir } = monter()
     api.refuser("stale_revision", 409)
     ecrireEtEchapper(ouvrirLeChamp("Modifier ce texte — Objet de la relance"), "Texte de Léa")
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
@@ -968,7 +960,7 @@ describe("EditeurDeBlocs, conflit au bloc (AC6)", () => {
   })
 
   it("should keep a block modified while being deleted, and let an abandoned text give way to the saved version, the queue running again", async () => {
-    const { relire } = monter()
+    const { relire, rafraichir } = monter()
     // Léa supprime B, que Claire vient de modifier : B est gardé et reparaît, relu.
     api.refuser("stale_revision", 409)
     choisir("Objet de la relance", "Supprimer")
@@ -1002,7 +994,7 @@ describe("EditeurDeBlocs, conflit au bloc (AC6)", () => {
   })
 
   it("should offer to reinsert a text whose block was deleted meanwhile, and ask for a retry when the page was published meanwhile", async () => {
-    const { relire } = monter()
+    const { relire, rafraichir } = monter()
     api.refuser("stale_revision", 409)
     ecrireEtEchapper(ouvrirLeChamp("Modifier ce texte — Objet de la relance"), "Texte de Léa")
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
@@ -1064,11 +1056,276 @@ describe("EditeurDeBlocs, refus et pannes (AC18 d'E05-S02)", () => {
     { cas: "not_member", code: "not_member", statut: 403, message: "Vous ne faites plus partie de cette organisation.", gestes: ["Copier mon texte"] },
     { cas: "unknown_org", code: "unknown_org", statut: 404, message: "Cette adresse ne sert plus d'organisation. Rechargez la page.", gestes: ["Copier mon texte"] },
   ])("should say $cas near the kept text, without rereading the page", async ({ code, statut: statutHttp, message, gestes }) => {
-    monter()
+    const { rafraichir } = monter()
     api.refuser(code, statutHttp)
     ecrireEtEchapper(ouvrirLeChamp("Modifier ce texte — Objet de la relance"), "Texte long")
     expect(await screen.findByText(message)).toHaveAttribute("role", "alert")
     for (const geste of gestes) expect(bouton(geste)).toBeInTheDocument()
     expect(rafraichir).not.toHaveBeenCalled()
+  })
+})
+
+// E05-S11, lot b : l'indication d'enregistrement dans la carte du document, qui se tait 5 s après la dernière écriture
+// réussie, titre compris (AC-1, AC-2) ; les pages citées lues dans la phrase au repos (AC-26, AC-27) ; tout le texte d'un
+// bloc sélectionné ouvre le menu de sa poignée, sans prendre le focus (AC-28). La position de l'indication (rien ne
+// bouge) se mesure dans un navigateur : `tests/e2e/e05s11-page.spec.ts`.
+describe("EditeurDeBlocs, indication d'enregistrement (E05-S11, AC-1, AC-2)", () => {
+  /** L'indication d'enregistrement de la carte : une seule région pour les blocs, le titre et la publication. */
+  function indication(): HTMLElement {
+    const region = document.querySelector<HTMLElement>(".oto-indication-d-enregistrement")
+    if (!region) throw new Error("indication d'enregistrement absente")
+    return region
+  }
+
+  it("should say « Enregistrement… » then « Enregistré. » in the card, silent 5 s after the last successful write, the title included", async () => {
+    vi.useFakeTimers()
+    monterLEditeur(PAGE, {
+      avant: (
+        <h1>
+          <TitreModifiable titre="Modèle de relance" revisionServie={4} tamponServi={null} />
+        </h1>
+      ),
+    })
+    // Dans la carte du document (l'îlot de lecture), montée vide.
+    expect(indication()).toHaveAttribute("role", "status")
+    expect(indication().closest(".oto-island-body")).not.toBeNull()
+    expect(indication()).toBeEmptyDOMElement()
+
+    const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
+    act(() => texte.focus())
+    fireEvent.change(texte, { target: { value: "Objet revu" } })
+    fireEvent.keyDown(texte, { key: "Escape" })
+    expect(indication()).toHaveTextContent("Enregistrement…")
+    expect(indication()).toHaveAttribute("aria-busy", "true")
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(indication()).toHaveTextContent("Enregistré.")
+    expect(indication()).toHaveAttribute("aria-busy", "false")
+
+    // Une nouvelle écriture, celle du titre écrit en place, le remplace par « Enregistrement… », dans la même région.
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    const titre = ouvrirLeChamp("Titre")
+    act(() => titre.focus())
+    fireEvent.change(titre, { target: { value: "Modèle revu" } })
+    act(() => titre.blur())
+    expect(indication()).toHaveTextContent("Enregistrement…")
+    expect(within(screen.getByRole("heading", { level: 1 })).queryByRole("status")).toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(api.envoyes.at(-1)).toMatchObject({ title: "Modèle revu" })
+    expect(indication()).toHaveTextContent("Enregistré.")
+
+    // La publication seule part 3 s après la dernière frappe, et se dit de même ; 5 s après elle, plus rien.
+    await act(() => vi.advanceTimersByTimeAsync(3_000))
+    expect(api.envoyes.at(-1)).toMatchObject({ publish: true })
+    expect(indication()).toHaveTextContent("Enregistré.")
+    await act(() => vi.advanceTimersByTimeAsync(4_999))
+    expect(indication()).toHaveTextContent("Enregistré.")
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    expect(indication()).toBeEmptyDOMElement()
+  })
+
+  it("should keep the alert of a refused write and say nothing in the card", async () => {
+    monterLEditeur()
+    api.refuser("forbidden", 403)
+    const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
+    act(() => texte.focus())
+    fireEvent.change(texte, { target: { value: "Objet revu" } })
+    fireEvent.keyDown(texte, { key: "Escape" })
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Vous n'avez pas le droit de modifier cette page/)
+    expect(indication()).toBeEmptyDOMElement()
+  })
+})
+
+describe("EditeurDeBlocs, pages citées au repos (E05-S11, AC-26, AC-27)", () => {
+  it("should read a cited page by its title in the sentence, a page with no visible target as plain text, and follow a moved one once the links are read", async () => {
+    let servir: (lu: { data: Record<string, unknown> }) => void = () => {}
+    const liens = new Promise<{ data: Record<string, unknown> }>((resolve) => (servir = resolve))
+    const cibles: CiblesDesLiens = { "ventes/grille": { titre: "Grille tarifaire", chemin: "ventes/grille" }, "ventes/perdue": null, "ventes/ancien": null }
+    await act(async () => {
+      monterLEditeur([bloc(PAGE[1].id, "paragraph", "Voir [[ventes/grille]], [[ventes/perdue]] et [[ventes/ancien]].")], { cibles, liens })
+    })
+    const texte = screen.getByRole("textbox", { name: /^Modifier ce texte — Voir/ })
+    const rendu = texte.parentElement?.querySelector<HTMLElement>(".oto-block-rendu")
+    if (!rendu) throw new Error("rendu au repos absent")
+    expect(rendu).toHaveTextContent("Voir Grille tarifaire, perdue et ancien.")
+    expect(within(rendu).getAllByRole("link").map((lien) => [lien.textContent, lien.getAttribute("href")])).toEqual([["Grille tarifaire", "/n/ventes/grille"]])
+    // Le texte brut reste celui du champ : c'est lui qui s'écrit au focus.
+    expect(texteDuBloc(/^Modifier ce texte — Voir/)).toBe("Voir [[ventes/grille]], [[ventes/perdue]] et [[ventes/ancien]].")
+    await act(async () => {
+      servir({ data: { links_out: [{ path: "ventes/ancien", status: "moved", title: "Nouveau", moved_to: "conseil/nouveau" }], links_out_total: 1, links_in: [], links_in_total: 0 } })
+    })
+    await waitFor(() => expect(within(rendu).getByRole("link", { name: "Nouveau" })).toHaveAttribute("href", "/n/conseil/nouveau"))
+  })
+})
+
+describe("EditeurDeBlocs, tout sélectionner (E05-S11, AC-28)", () => {
+  /** La sélection posée dans le champ (⌘A, un glissé), puis la touche relâchée, où React relit la sélection (`onSelect`). */
+  function selectionner(element: HTMLTextAreaElement, debut: number, fin: number) {
+    element.setSelectionRange(debut, fin)
+    fireEvent.keyUp(element, { key: "a", ctrlKey: true })
+  }
+
+  it("should open the menu of the handle when the whole text is selected, without taking the focus, and close it on Escape or the next keystroke", () => {
+    monterLEditeur()
+    const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
+    const poignee = screen.getByRole("button", { name: "Actions sur ce bloc — Objet de la relance" })
+    act(() => texte.focus())
+
+    // Une sélection partielle n'ouvre rien.
+    selectionner(texte, 0, 5)
+    expect(screen.queryByRole("menu")).toBeNull()
+
+    selectionner(texte, 0, texte.value.length)
+    expect(screen.getByRole("menu")).toBeInTheDocument()
+    expect(poignee).toHaveAttribute("aria-expanded", "true")
+    expect(document.activeElement).toBe(texte)
+
+    // Échap le ferme, rien d'autre : le focus reste dans le texte.
+    fireEvent.keyDown(texte, { key: "Escape" })
+    expect(screen.queryByRole("menu")).toBeNull()
+    expect(document.activeElement).toBe(texte)
+    expect(api.envoyes).toHaveLength(0)
+
+    // La frappe suivante le ferme, et s'écrit ; une touche de modification seule ne le ferme pas.
+    selectionner(texte, 0, texte.value.length)
+    fireEvent.keyDown(texte, { key: "Control" })
+    expect(screen.getByRole("menu")).toBeInTheDocument()
+    fireEvent.keyDown(texte, { key: "x" })
+    expect(screen.queryByRole("menu")).toBeNull()
+    expect(document.activeElement).toBe(texte)
+
+    // Un choix du menu ouvert par la sélection s'exécute.
+    selectionner(texte, 0, texte.value.length)
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Dupliquer" }))
+    expect(screen.getAllByRole("textbox", { name: "Modifier ce texte — Objet de la relance" })).toHaveLength(2)
+    expect(screen.queryByRole("menu")).toBeNull()
+  })
+
+  it("should open nothing when the selected text is empty", () => {
+    monterLEditeur()
+    const texte = ouvrirLeChamp("Modifier ce texte — Objet de la relance")
+    act(() => texte.focus())
+    fireEvent.change(texte, { target: { value: "   " } })
+    selectionner(texte, 0, 3)
+    expect(screen.queryByRole("menu")).toBeNull()
+  })
+})
+
+// E11-S15, lot B : un bloc lu passe par `RenduDUnBloc`, comme à l'écran de lecture. Ce que la feuille de style en fait
+// (teinte, bordures, hauteur) se contrôle à l'œil, dans les deux thèmes, à la campagne visuelle : jsdom ne calcule pas le
+// rendu. Le clic et le menu contextuel d'un lien (AC-b9) sont dans `liens-en-edition.test.tsx`.
+describe("EditeurDeBlocs, tableau simple et menu de la poignée (E11-S15, lot B)", () => {
+  const TABLEAU = bloc("e1150000-0000-4000-8000-000000000001", "simple_table", null, { columns: ["Nom", "Montant"], rows: [["a", "1"]] })
+
+  it("should mark the simple table, read and written, for its tinted header row and its cell fields bordered on hover or focus only (AC-b1)", () => {
+    render(<RenduDUnBloc bloc={TABLEAU} Lien="a" hrefDuChemin={(chemin) => `/n/${chemin}`} routeDesFichiers="/api/platform/public/t/files" />)
+    expect(screen.getByRole("table")).toHaveAttribute("data-simple")
+    cleanup()
+    monterLEditeur([TABLEAU])
+    const grille = screen.getByRole("table")
+    expect(grille).toHaveAttribute("data-simple")
+    expect(within(grille).getAllByRole("textbox")).toHaveLength(4)
+  })
+
+  // 1.1.5 : la colonne centrée du lecteur (`content.css`) exclut `data-reading="blocs"` ; le corps d'écriture garde sa pleine largeur.
+  it("should mark the writing body apart from the centered reading column", () => {
+    monterLEditeur([TABLEAU])
+    expect(screen.getByRole("table").closest(".oto-island-body")).toHaveAttribute("data-reading", "blocs")
+  })
+
+  it("should open the menu of a table's handle as the handle menu, whose height follows its entries (AC-b5)", () => {
+    monterLEditeur([TABLEAU])
+    fireEvent.click(screen.getByRole("button", { name: "Actions sur ce bloc — Nom Montant" }))
+    const menu = screen.getByRole("menu")
+    expect(menu).toHaveClass("oto-menu-de-poignee")
+    expect(within(menu).getByRole("menuitem", { name: "Ajouter une rangée après" })).toBeInTheDocument()
+  })
+})
+
+describe("EditeurDeBlocs, texte marqué au repos et « @ » avant toute frappe (E11-S15, lot B)", () => {
+  /** Le rendu au repos posé sur un champ, dans sa case. */
+  function renduDe(element: HTMLElement): HTMLElement {
+    const rendu = element.parentElement?.querySelector(".oto-block-rendu")
+    if (!(rendu instanceof HTMLElement)) throw new Error("rendu au repos absent")
+    return rendu
+  }
+
+  it("should render at rest the marks of a text without a link, bold on a part of it, italic, code and strikethrough, and no HTML (AC-b6)", () => {
+    const texte = "Un **gras** ici, *un* et _deux_, du `code` et ~~barré~~"
+    monterLEditeur([
+      bloc("e1150000-0000-4000-8000-000000000004", "paragraph", texte),
+      bloc("e1150000-0000-4000-8000-000000000006", "paragraph", "Voir <img src=x onerror=alert(1)> **b**"),
+      bloc("e1150000-0000-4000-8000-000000000005", "paragraph", "Objet de la relance"),
+    ])
+    const marque = screen.getByRole("textbox", { name: /^Modifier ce texte — Un gras ici/ })
+    // Le champ garde la source ; son rendu, posé dessus, la lit comme la lecture.
+    expect(texteDuBloc(/^Modifier ce texte — Un gras ici/)).toBe(texte)
+    expect(marque).toHaveAttribute("data-rendu")
+    const rendu = renduDe(marque)
+    expect(rendu).toHaveTextContent("Un gras ici, un et deux, du code et barré")
+    expect(Array.from(rendu.querySelectorAll("strong, em, code, s"), (une) => `${une.tagName}:${une.textContent}`)).toEqual([
+      "STRONG:gras",
+      "EM:un",
+      "EM:deux",
+      "CODE:code",
+      "S:barré",
+    ])
+    // Du HTML écrit reste du texte, que React échappe.
+    const hostile = renduDe(screen.getByRole("textbox", { name: /^Modifier ce texte — Voir/ }))
+    expect(hostile.querySelector("img")).toBeNull()
+    expect(hostile).toHaveTextContent("Voir <img src=x onerror=alert(1)> b")
+    // Sans marque ni lien : aucun rendu, le champ se lit tel quel.
+    const simple = screen.getByRole("textbox", { name: "Modifier ce texte — Objet de la relance" })
+    expect(simple).not.toHaveAttribute("data-rendu")
+    expect(simple.parentElement?.querySelector(".oto-block-rendu")).toBeNull()
+  })
+
+  it("should list the recent contents as « @ » opens, choose one with the keyboard, and give way to the search at the first letter typed (AC-b4)", async () => {
+    const RECENTS = [
+      { path: "ventes/devis", kind: "page", title: "Devis", snippet: null },
+      { path: "ventes/suivi", kind: "table", title: "Suivi des prospects", snippet: null },
+    ]
+    const TROUVES = [{ path: "ventes/grille_tarifaire", kind: "page", title: "Grille tarifaire", snippet: null }]
+    const RECENTS_HORS_DE_LA_PAGE = "/api/platform/search/recent?exclude=ventes%2Fmodele_relance"
+    const titresDesOptions = () => screen.queryAllByRole("option").map((option) => option.textContent)
+    // Les lectures de « @ » simulées ; les écritures vont à la file simulée.
+    const ecriture = api.fetchMock.getMockImplementation()
+    const lectures: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (adresse, init) => {
+        const url = String(adresse)
+        if (!url.includes("/api/platform/search")) return ecriture ? ecriture(adresse, init) : new Response(null, { status: 500 })
+        lectures.push(url)
+        const data = url.includes("/search/recent") ? { matches: RECENTS } : { matches: TROUVES, more: 0 }
+        return new Response(JSON.stringify({ data }), { status: 200, headers: { "content-type": "application/json" } })
+      }),
+    )
+    monterLEditeur([bloc("e1150000-0000-4000-8000-000000000004", "paragraph", "Voir")])
+    const texte = ouvrirLeChamp("Modifier ce texte — Voir")
+    act(() => texte.focus())
+
+    // « @ » seul : les récents, nommés, sans rien taper ; les flèches et Entrée les choisissent comme un trouvé.
+    fireEvent.change(texte, { target: { value: "Voir @" } })
+    await waitFor(() => expect(titresDesOptions()).toEqual(["Devisventes/devis", "Suivi des prospectsventes/suivi"]))
+    expect(screen.getByText("Vos contenus récents. Tapez au moins deux lettres pour en chercher un autre.")).toBeInTheDocument()
+    // La page qu'on édite ne se propose pas à elle-même.
+    expect(lectures).toEqual([RECENTS_HORS_DE_LA_PAGE])
+    fireEvent.keyDown(texte, { key: "ArrowDown" })
+    expect(texte).toHaveAttribute("aria-activedescendant", screen.getAllByRole("option")[1].id)
+    fireEvent.keyDown(texte, { key: "Enter" })
+    await screen.findByRole("textbox", { name: "Modifier ce texte — Voir Suivi des prospects" })
+    const lie = champ("Modifier ce texte — Voir Suivi des prospects")
+    expect(lie).toHaveValue("Voir [[Suivi des prospects]]")
+    expect(screen.queryByRole("listbox")).toBeNull()
+
+    // Rouverte, la liste relit les récents ; une lettre les retire, deux lancent la recherche.
+    fireEvent.change(lie, { target: { value: `${lie.value} @` } })
+    await waitFor(() => expect(titresDesOptions()).toHaveLength(2))
+    fireEvent.change(lie, { target: { value: `${lie.value}g` } })
+    expect(titresDesOptions()).toEqual([])
+    expect(screen.getByText("Tapez au moins deux lettres du contenu à citer.")).toBeInTheDocument()
+    fireEvent.change(lie, { target: { value: `${lie.value}r` } })
+    await waitFor(() => expect(titresDesOptions()).toEqual(["Grille tarifaireventes/grille_tarifaire"]))
+    expect(lectures).toEqual([RECENTS_HORS_DE_LA_PAGE, RECENTS_HORS_DE_LA_PAGE, "/api/platform/search?q=gr"])
   })
 })

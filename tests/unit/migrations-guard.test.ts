@@ -219,8 +219,6 @@ describe("check-migrations", () => {
     expect(fs.readFileSync(path.join(migrations, first), "utf8")).toMatch(/^DO \$\$ begin perform extensions\.similarity\('a', 'a'\); end \$\$;$/m)
   })
 
-  it("should accept every migration shipped by the package", () => {
-    const stdout = execFileSync(process.execPath, [script], { encoding: "utf8", stdio: "pipe" })
-    expect(stdout).toContain("conforme(s)")
-  })
+  // Chaque migration livrée par le paquet, acceptée : `tests/unit/cli-migrations.test.ts`, « should check every
+  // shipped migration without --file », et `pnpm check:migrations` en CI.
 })

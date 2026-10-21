@@ -10,7 +10,7 @@ import { avecCle, bloc, ID, PAGE, simulerLAPI, vueDuNoeud } from "../../helpers/
 // L'écran d'un nœud (E05-S02 : AC1 à AC9, AC14, AC17, AC19 ; E05-S09, partie c1 : porté d'oto-frontend ;
 // E05-S10, partie b : AC-a7, AC-b4, AC-b6), rendu comme la page de l'hôte le monte : lectures en
 // `resultat`, lien de l'hôte marqué, adresse d'un chemin ; la navigation du fil passe par l'hôte
-// (`ContexteDeLHote`), espionnée. Le panneau « Partager » a son fichier (`e05s10b-partage.test.tsx`). E05-S11 :
+// (`ContexteDeLHote`), espionnée. Le panneau « Partager » a son fichier (`partager.test.tsx`). E05-S11 :
 // le titre d'un Contexte (AC-17), une page citée par son titre (AC-26, AC-27). E11-S05 : « Cité dans », « Cite » et
 // « Sous-pages » en encarts (lot e), « Télécharger » (lot c), le résumé d'une procédure seule (lot f), la page vide (lot g).
 
@@ -399,13 +399,6 @@ describe("EcranDeNoeud, titre d'un Contexte (E05-S11, AC-17)", () => {
 })
 
 describe("EcranDeNoeud, états (AC6, AC7)", () => {
-  it("should say the same sentence for an unknown, invisible or malformed page, with a way to Tout le monde", () => {
-    rendre({ chemin: "Ventes", noeud: { data: null } })
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page introuvable")
-    expect(screen.getByText("Cette page n'existe pas ou ne vous est pas partagée.")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Aller à Tout le monde" })).toHaveAttribute("href", "/n/contexte")
-  })
-
   it("should render the loading state, a failed read with « Réessayer » on the same address, an empty page, and a table without editor", () => {
     render(<EcranDeNoeudChargement />)
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true")
@@ -615,18 +608,6 @@ describe("EcranDeNoeud, accès et partage (AC19 ; E05-S10, AC-b5)", () => {
     fireEvent.keyDown(champ, { key: "Escape" })
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
     expect(document.activeElement).toBe(partager)
-  })
-
-  it.each([
-    ["the rules", { regles: { error: "Une erreur est survenue. Réessayez." } }],
-    ["the teams or members", { sujets: { error: "Une erreur est survenue. Réessayez." } }],
-  ] as const)("should say a failed read of %s in the panel, with « Réessayer » on the same address", (_lecture, panne) => {
-    rendre({ partage: partage(panne), versionPubliee: true })
-    fireEvent.click(screen.getByRole("button", { name: "Partager · Ventes" }))
-    const panneau = within(screen.getByRole("dialog", { name: "Partager — Ventes" }))
-    expect(panneau.getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez.")
-    expect(panneau.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/n/ventes/modele_relance?version=published")
-    expect(panneau.queryByRole("combobox")).toBeNull()
   })
 })
 

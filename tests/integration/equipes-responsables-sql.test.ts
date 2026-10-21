@@ -139,17 +139,11 @@ describe.skipIf(!sqlConfigured || pending)(NAME, { timeout: 60_000 }, () => {
       }
     })
 
-    it("should say not_found for a person outside the team, and translate a legacy write of teams.lead_user_id into a lead", async () => {
+    // Une ancienne écriture de `teams.lead_user_id` devient un responsable de plus : `droits-equipes.test.ts`, « should
+    // turn a legacy write of lead_user_id into one more lead… ».
+    it("should say not_found for a person outside the team", async () => {
       const refusal = await setTeamMemberRole(db("ada"), await identity("ada"), { teamId: o.teams.ventes, userId: o.people.marc.id }, { role: "lead" }).catch((error: unknown) => error)
       expect(refusal).toMatchObject({ code: "not_found" })
-      // Outillage, ancien export : la personne devient responsable, les autres le restent, la colonne revient à null.
-      await fx.admin`update platform.teams set lead_user_id = ${o.people.marc.id} where id = ${o.teams.ventes}`
-      try {
-        expect(await leadsOf(o.teams.ventes)).toEqual([o.people.claire.id, o.people.marc.id].sort())
-        expect(await fx.admin`select lead_user_id from platform.teams where id = ${o.teams.ventes}`).toEqual([{ lead_user_id: null }])
-      } finally {
-        await fx.admin`delete from platform.team_members where team_id = ${o.teams.ventes} and user_id = ${o.people.marc.id}`
-      }
     })
   })
 

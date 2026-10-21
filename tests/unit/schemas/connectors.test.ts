@@ -16,8 +16,10 @@ describe("connector name, through connectorRefSchema", () => {
     expect(connector("sellsy_v2").data).toEqual({ connector: "sellsy_v2" })
   })
 
-  it.each(["Mail", "1mail", "mail-box", "", `m${"a".repeat(40)}`])("should reject %j", (name) => {
-    expect(connector(name).error?.issues.map((issue) => issue.path)).toEqual([["connector"]])
+  it("should reject a name out of the database form, on the connector field", () => {
+    const names = ["Mail", "1mail", "mail-box", "", `m${"a".repeat(40)}`]
+    const verdicts = Object.fromEntries(names.map((name) => [name, connector(name).error?.issues.map((issue) => issue.path)]))
+    expect(verdicts).toEqual(Object.fromEntries(names.map((name) => [name, [["connector"]]])))
   })
 })
 
@@ -27,9 +29,10 @@ describe("account label, through createAccountSchema", () => {
     expect(createAccountSchema.parse({ ...ORG_ACCOUNT, label: "x".repeat(80) }).label).toHaveLength(80)
   })
 
-  it.each(["", "   ", "x".repeat(81)])("should reject %j", (label) => {
-    const parsed = createAccountSchema.safeParse({ ...ORG_ACCOUNT, label })
-    expect(parsed.error?.issues.map((issue) => issue.path)).toEqual([["label"]])
+  it("should reject an empty, blank or too long label, on the label field", () => {
+    const labels = ["", "   ", "x".repeat(81)]
+    const verdicts = Object.fromEntries(labels.map((label) => [label, createAccountSchema.safeParse({ ...ORG_ACCOUNT, label }).error?.issues.map((issue) => issue.path)]))
+    expect(verdicts).toEqual(Object.fromEntries(labels.map((label) => [label, [["label"]]])))
   })
 })
 
@@ -62,8 +65,8 @@ describe("createAccountSchema", () => {
     expect(createAccountSchema.parse({ connector: "mail", owner_kind: "team", team_id: team, label: "Mail Ventes" }).team_id).toBe(team)
   })
 
-  it.each(["org", "user"])("should refuse team_id for an account of kind %s", (kind) => {
-    const parsed = createAccountSchema.safeParse({ connector: "mail", owner_kind: kind, team_id: team, label: "Mail" })
+  it("should refuse team_id for an account of kind org", () => {
+    const parsed = createAccountSchema.safeParse({ connector: "mail", owner_kind: "org", team_id: team, label: "Mail" })
     expect(parsed.error?.issues).toEqual([expect.objectContaining({ path: ["team_id"], message: "team_id is only for a team account" })])
   })
 

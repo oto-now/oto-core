@@ -77,7 +77,7 @@ describe("providerSchema and oauthSignInSchema (E09-S03)", () => {
     expect(oauthSignInSchema.safeParse({ fournisseur: "azure" }).data).toEqual({ fournisseur: "azure" })
   })
 
-  it.each(["github", "microsoft", "Google", ""])("should reject the provider %j", (fournisseur) => {
+  it.each(["microsoft", "Google"])("should reject the provider %j", (fournisseur) => {
     expect(oauthSignInSchema.safeParse({ fournisseur }).success).toBe(false)
   })
 

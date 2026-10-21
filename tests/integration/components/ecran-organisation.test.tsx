@@ -277,11 +277,11 @@ describe("EcranOrganisation, settings (AC3)", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  // Les phrases propres au geste pour `forbidden` et pour un autre code : `ui-messages.test.ts`, « should prefer the
+  // phrase of the gesture for the reason, then for the code ».
   it.each([
-    ["forbidden", () => Promise.resolve(reponse(403, { error: { code: "forbidden", message: "server text" } })), "Seul un administrateur de l'organisation peut modifier ces réglages."],
     ["conflict", () => Promise.resolve(reponse(409, { error: { code: "conflict", message: "server text" } })), "L'organisation a changé entre-temps : rechargez la page avant d'enregistrer."],
     ["network", () => Promise.reject(new TypeError("Failed to fetch")), "La connexion au serveur a échoué. Rien n'a été enregistré."],
-    ["another code", () => Promise.resolve(reponse(500, { error: { code: "internal", message: "server text" } })), "Les réglages n'ont pas pu être enregistrés. Réessayez dans un instant."],
   ])("should say a %s refusal in an alert, and keep what was typed", async (_code, refus, message) => {
     fetchMock.mockImplementation(refus)
     render(ecran())

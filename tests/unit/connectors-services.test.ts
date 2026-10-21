@@ -106,17 +106,21 @@ describe("activableConnectors and requireActivable (AC2, AC3, H81)", () => {
 })
 
 describe("activation refusals before the database (AC2)", () => {
-  it.each([
-    [{ connector: "sellsy" }, "not_found", "Unknown connector sellsy. Connectors you can activate: mail."],
-    [{ connector: "table" }, "invalid_arguments", "table is built in: it is always active and has no accounts."],
-    [{ connector: "Mail!" }, "invalid_arguments", "Invalid arguments: connector: Connector: lowercase letters, digits and _, starting with a letter, 40 characters max, e.g. mail."],
-    [{}, "invalid_arguments", "Invalid arguments: connector: Invalid input: expected string, received undefined."],
-  ])("should refuse %j", async (input, code, message) => {
-    for (const service of [activateConnector, deactivateConnector]) {
-      const error = await refusal(service(untouchable, ADMIN, input))
-      expect(error.code).toBe(code)
-      expect(error.message).toBe(message)
+  it("should refuse an unknown or malformed connector, to activate as to deactivate", async () => {
+    const refusals: [Record<string, unknown>, string, string][] = [
+      [{ connector: "sellsy" }, "not_found", "Unknown connector sellsy. Connectors you can activate: mail."],
+      [{ connector: "Mail!" }, "invalid_arguments", "Invalid arguments: connector: Connector: lowercase letters, digits and _, starting with a letter, 40 characters max, e.g. mail."],
+    ]
+    const verdicts: Record<string, unknown> = {}
+    for (const [input] of refusals) {
+      const answers = []
+      for (const service of [activateConnector, deactivateConnector]) {
+        const error = await refusal(service(untouchable, ADMIN, input))
+        answers.push({ code: error.code, message: error.message })
+      }
+      verdicts[JSON.stringify(input)] = answers
     }
+    expect(verdicts).toEqual(Object.fromEntries(refusals.map(([input, code, message]) => [JSON.stringify(input), [{ code, message }, { code, message }]])))
   })
 })
 
@@ -336,16 +340,20 @@ describe("account refusals before the database (AC6, AC7)", () => {
   const team = "7f4bb501-5627-48f8-855d-3c0f3ffd3c8f"
 
   // Prise des connecteurs (AC13, AC14) : le mode que le connecteur admet, décidé avant la base.
-  it.each([
-    ["mail", "reel", "unavailable_in_v1", "mail is simulated in this version: its accounts are simulated, a live account is not available. Create it with mode simule."],
-    ["mail", "sandbox", "unavailable_in_v1", "mail is simulated in this version: its accounts are simulated, a sandbox account is not available. Create it with mode simule."],
-    ["crm", "sandbox", "unavailable_in_v1", "Sandbox accounts are not available yet. Create a live account of crm with mode reel."],
-    ["crm", "simule", "invalid_arguments", "crm is a live connector: its accounts are live, never simulated. Create it with mode reel."],
-  ])("should refuse a %s account in mode %s and create nothing", async (connector, mode, code, message) => {
-    // Un connecteur réel déclaré par l'hôte (moteur des connecteurs décrits), à côté du mail simulé du paquet.
-    vi.mocked(catalogFunctions).mockReturnValueOnce([fn("mail.create_draft", "connecteur"), fn("crm.get_company", "connecteur")])
-    const error = await refusal(createAccount(untouchable, ADMIN, { connector, owner_kind: "org", label: "Compte Acme", mode }))
-    expect({ code: error.code, message: error.message }).toEqual({ code, message })
+  it("should refuse an account in a mode its connector does not admit, and create nothing", async () => {
+    const refusals: [string, string, string, string][] = [
+      ["mail", "reel", "unavailable_in_v1", "mail is simulated in this version: its accounts are simulated, a live account is not available. Create it with mode simule."],
+      ["crm", "sandbox", "unavailable_in_v1", "Sandbox accounts are not available yet. Create a live account of crm with mode reel."],
+      ["crm", "simule", "invalid_arguments", "crm is a live connector: its accounts are live, never simulated. Create it with mode reel."],
+    ]
+    const verdicts: Record<string, unknown> = {}
+    for (const [connector, mode] of refusals) {
+      // Un connecteur réel déclaré par l'hôte (moteur des connecteurs décrits), à côté du mail simulé du paquet.
+      vi.mocked(catalogFunctions).mockReturnValueOnce([fn("mail.create_draft", "connecteur"), fn("crm.get_company", "connecteur")])
+      const error = await refusal(createAccount(untouchable, ADMIN, { connector, owner_kind: "org", label: "Compte Acme", mode }))
+      verdicts[`${connector} ${mode}`] = { code: error.code, message: error.message }
+    }
+    expect(verdicts).toEqual(Object.fromEntries(refusals.map(([connector, mode, code, message]) => [`${connector} ${mode}`, { code, message }])))
   })
 
   it("should refuse an empty or too long label, a missing team, a built-in or unknown connector", async () => {

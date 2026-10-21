@@ -196,21 +196,24 @@ describe.skipIf(!sqlConfigured)(portable("listActivities on a real base: scope, 
 
   // Un service de lecture tient ses requêtes en une transaction (`supabase-patterns.md § Couplage à Supabase
   // (ADR-012)`) : les lectures de l'accueil, comptées par l'espion de la face SQL (`recordDb`).
-  it.each<[string, (db: PlatformDb, identity: Identity) => Promise<unknown>]>([
-    ["listActivities", (db, identity) => listActivities(db, identity, { periodDays: 7 })],
-    ["usefulProcedures", (db, identity) => usefulProcedures(db, identity, 6)],
-    // 1.4.13 : la carte « Reprendre » (une page par onglet) et les nouveautés.
-    ["homeContents (recent)", (db, identity) => homeContents(db, identity, { tab: "recent", scope: "teams" })],
-    ["homeContents (viewed)", (db, identity) => homeContents(db, identity, { tab: "viewed", scope: "org" })],
-  ])("should read %s in one transaction", async (name, read) => {
+  it("should read each list of the home page in one transaction", async () => {
+    const reads: [string, (db: PlatformDb, identity: Identity) => Promise<unknown>][] = [
+      ["listActivities", (db, identity) => listActivities(db, identity, { periodDays: 7 })],
+      ["usefulProcedures", (db, identity) => usefulProcedures(db, identity, 6)],
+      // 1.4.13 : la carte « Reprendre » (une page par onglet) et les nouveautés.
+      ["homeContents (recent)", (db, identity) => homeContents(db, identity, { tab: "recent", scope: "teams" })],
+      ["homeContents (viewed)", (db, identity) => homeContents(db, identity, { tab: "viewed", scope: "org" })],
+    ]
     const person = o.people.claire
     const identity = await resolveIdentity(fx.as(person), o.host, { userId: person.id, email: person.email })
-    const recorded = recordDb(fx.as(person))
-
-    await read(recorded.db, identity)
-    const transactions = recorded.requests.filter((request) => request.kind === "transaction").length
-    if (process.env.E05S12B_MESURE) console.info(`[e05s12b] ${name}: ${transactions} transactions`)
-    expect(transactions).toBe(1)
+    const verdicts: Record<string, number> = {}
+    for (const [name, read] of reads) {
+      const recorded = recordDb(fx.as(person))
+      await read(recorded.db, identity)
+      verdicts[name] = recorded.requests.filter((request) => request.kind === "transaction").length
+    }
+    if (process.env.E05S12B_MESURE) console.info(`[e05s12b] transactions: ${JSON.stringify(verdicts)}`)
+    expect(verdicts).toEqual(Object.fromEntries(reads.map(([name]) => [name, 1])))
   })
 
   /** Les chemins des procédures listées par le bloc servi à `context`, dans son ordre. */

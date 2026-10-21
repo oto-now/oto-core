@@ -1,5 +1,5 @@
 // La marque de l'adresse des écrans d'authentification (E05-S07, AC4) : en-têtes et services du
-// paquet simulés (comme `marque-layout-connexion.test.tsx`) ; `readBrand` reste le vrai.
+// paquet simulés (comme `identite-pages.test.tsx`) ; `readBrand` reste le vrai.
 import { headers } from "next/headers"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {

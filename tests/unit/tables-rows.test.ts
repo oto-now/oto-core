@@ -279,12 +279,8 @@ describe.skipIf(!sqlConfigured)(portable("table.rows on a real database"), { tim
   })
 
   describe("E11-S01: q by words, host and worker served", () => {
-    it("should keep a row when every word of q appears in its searched cells, in any order and in different cells (AC-c1)", async () => {
-      expect(keys(await rows({ q: "coudray MAIRIE" }))).toEqual(["Mairie de Coudray"])
-      expect(keys(await rows({ q: "valbrune nina" }))).toEqual(["Atelier 2"])
-      expect(keys(await rows({ q: "valbrune inconnu" }))).toEqual([])
-    })
-
+    // Chaque mot de q dans une cellule cherchée (AC-c1) : `tables-filters.test.ts` (même `matchesQuery`) ; le câblage de q
+    // par table.rows, par le test de match any qui suit.
     // E11-S19 (AC-f1 à AC-f3, HN-E11S19-11) : en OU, au moins un mot, le plus de mots d'abord, `sort` départage ; le ET reste le défaut.
     it("should keep the rows with at least one word of q under match any, most words first, then by sort, with a cursor of its own", async () => {
       expect(keys(await rows({ q: "valbrune sophie" }))).toEqual(["École de Valbrune"])

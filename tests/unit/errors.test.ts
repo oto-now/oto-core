@@ -73,15 +73,9 @@ describe("PLATFORM_ERROR_CODES", () => {
   })
 })
 
+// Son code, son message et ses détails, rendus par la porte : `api-handler.test.ts`, « should render a service refusal
+// with its status and details ».
 describe("PlatformError", () => {
-  it("should carry its code, message and details", () => {
-    const error = new PlatformError("forbidden", "No.", { reason: "not_allowed" })
-    expect(error).toBeInstanceOf(Error)
-    expect(error.code).toBe("forbidden")
-    expect(error.message).toBe("No.")
-    expect(error.details).toEqual({ reason: "not_allowed" })
-  })
-
   it("should be recognised by isPlatformError, a plain Error should not", () => {
     expect(isPlatformError(new PlatformError("internal", "x"))).toBe(true)
     expect(isPlatformError(new Error("x"))).toBe(false)

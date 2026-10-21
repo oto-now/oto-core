@@ -40,6 +40,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
 }))
 
 const ORG = { id: "org-1", slug: "acme", name: "Acme Énergies", prefix: "acm", brand: {}, domains: null }
+const LOGO = "https://example.com/logo.png"
 const SESSION: PlatformSession = {
   user: { id: "user-1", email: "claire@acme.test" },
   accessToken: "session-token",
@@ -75,16 +76,6 @@ function menuDuCompte(nom: string): string[] {
 }
 
 describe("(dashboard) layout (AC25)", () => {
-  it("should show the organisation name at the top of the rail for a member", async () => {
-    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(membre())
-
-    render(await DashboardLayout({ children: <p>Contenu</p> }))
-
-    expect(screen.getByRole("button", { name: /^Entreprise : Acme Énergies/ })).toBeInTheDocument()
-    expect(within(screen.getByRole("main")).getByText("Contenu")).toBeInTheDocument()
-    expect(menuDuCompte("claire")).toContain("Déconnexion")
-  })
-
   it.each(["unknown_org", "not_member"] as const)("should send %s to /no-organization", async (code) => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code } })
 
@@ -100,6 +91,80 @@ describe("(dashboard) layout (AC25)", () => {
     expect(screen.getByText("Contenu")).toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent("L'arbre n'a pas pu être chargé")
     expect(menuDuCompte("Mon compte")).toContain("Déconnexion")
+  })
+})
+
+/** Une administratrice sous la marque de son organisation et le thème choisi dans son profil (E09-S01, E05-S11). */
+function sousLaMarque(brand: Identity["org"]["brand"], profile: Identity["member"]["profile"] = {}) {
+  const identity = identite("admin")
+  return { data: { identity: { ...identity, org: { ...ORG, brand }, member: { ...identity.member, profile } }, session: SESSION } }
+}
+
+// La marque là où la personne la voit (E09-S01, AC3, AC4) ; la marque se règle dans « Organisation »
+// depuis E05-S11 (AC-22 : `admin-config-pages.test.tsx`).
+describe("(dashboard) layout brand (AC3, AC4)", () => {
+  it("should render the content under a single .oto carrying the theme of the organisation", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({ theme: "foret" }))
+
+    const { container } = render(await DashboardLayout({ children: <p>Contenu</p> }))
+
+    const racines = container.querySelectorAll<HTMLElement>(".oto")
+    expect(racines).toHaveLength(1)
+    expect(racines[0]).toHaveAttribute("data-oto-theme", "foret")
+    expect(within(racines[0]).getByText("Contenu")).toBeInTheDocument()
+  })
+
+  // Depuis E05-S09 (AC-a3), la tête du rail est la pastille d'entreprise d'oto-frontend : le logo, à la
+  // place du mark, puis le nom de l'organisation (E05-S13, AC-3 : un ancien nom affiché n'est plus lu).
+  it("should open the rail with the logo, then the organisation name", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({ logo_url: LOGO, display_name: "Acme Forêt" }))
+
+    render(await DashboardLayout({ children: <p>Contenu</p> }))
+
+    const entreprise = screen.getByRole("button", { name: /^Entreprise : Acme Énergies\./ })
+    const logo = entreprise.firstElementChild
+    expect(logo?.tagName).toBe("IMG")
+    expect(logo).toHaveAttribute("src", LOGO)
+    expect(entreprise).toHaveTextContent(/^Acme Énergies$/)
+  })
+
+  it("should keep a single .oto, without a theme, when the identity is unavailable", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(null)
+
+    const { container } = render(await DashboardLayout({ children: <p>Contenu</p> }))
+
+    expect(container.querySelectorAll(".oto")).toHaveLength(1)
+    expect(container.querySelector(".oto")).not.toHaveAttribute("data-oto-theme")
+    expect(container.querySelector("nav img")).toBeNull()
+  })
+
+  // E05-S11 (AC-4, AC-6) : la couleur est celle que la personne a choisie dans Profil, sinon celle de son
+  // organisation ; un thème enregistré hors des huit ne compte pas. La ligne « Couleur » quitte le rail.
+  it.each([
+    ["the person's own", { theme: "cobalt" }, "cobalt"],
+    ["the organisation's without a choice", {}, "foret"],
+    ["the organisation's for a theme out of the eight", { theme: "rose" }, "foret"],
+  ])("should colour the whole group with %s theme, and offer no colour line in the rail", async (_nom, profile, attendu) => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({ theme: "foret" }, profile))
+
+    const { container } = render(await DashboardLayout({ children: <p>Contenu</p> }))
+
+    const racines = container.querySelectorAll<HTMLElement>(".oto")
+    expect(racines).toHaveLength(1)
+    expect(racines[0]).toHaveAttribute("data-oto-theme", attendu)
+    expect(screen.queryByRole("button", { name: "Couleur du thème" })).toBeNull()
+  })
+
+  // E05-S11 (AC-32, AC-6, AC-e22) : les adresses que le layout donne au pied du rail ; le menu de
+  // l'entreprise (AC-31, AC-33) : `admin-pages.test.tsx`.
+  // E11-S10 (AC-e1) : « Contexte » en tête du menu du compte, à `/context`. Le compte porte le nom de la personne.
+  it("should give the rail Connecteurs at its foot, then Contexte, Profil and Corbeille in the account menu", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({}))
+
+    render(await DashboardLayout({ children: <p>Contenu</p> }))
+
+    expect(screen.getByRole("link", { name: "Connecteurs" })).toHaveAttribute("href", "/admin/connectors")
+    expect(menuDuCompte("claire")).toEqual(["Contexte", "Profil", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille", "Déconnexion"])
   })
 })
 

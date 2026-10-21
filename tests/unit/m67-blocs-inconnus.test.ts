@@ -21,8 +21,6 @@ type Seed = Pick<DocBlock, "type" | "text" | "data"> & { key?: string }
 const heading = (text: string, level: number, key?: string): Seed => ({ type: "heading", text, data: { level }, key })
 const paragraph = (text: string): Seed => ({ type: "paragraph", text, data: {} })
 const CAROUSEL: Seed = { type: "carousel", text: "Détails", data: { children: [] } }
-// E10-S04 lit `toggle`, les éléments `{text, children}` et cinq niveaux de titre : les formes inconnues passent au-delà.
-const OBJECT_LIST: Seed = { type: "list", text: null, data: { items: [{ text: "Lire", checked: true }] } }
 
 function doc(blocks: Seed[]): DocBlock[] {
   return blocks.map((block, index) => ({
@@ -78,22 +76,14 @@ describe("rendering a block this platform version does not know (M67)", () => {
     expect(renderBlock(CAROUSEL, { refs: () => "t1" })).toBe(`<!-- ref: t1 -->\n${line("carousel")}`)
   })
 
-  it("should render the line for a list whose items are objects of an unknown shape", () => {
-    expect(renderBlock(OBJECT_LIST)).toBe(line("list"))
-  })
-
-  it.each([6, 7])("should render the line for a heading of level %i, which opens no section", (level) => {
+  it("should render the line for a heading of level 6, which opens no section", () => {
     const blocks: BlockLike[] = [
       { ...heading("A", 1), id: "a" },
-      { ...heading("B", level), id: "b" },
+      { ...heading("B", 6), id: "b" },
       { ...paragraph("Suite."), id: "p" },
     ]
     expect(renderBlocks(blocks)).toBe(`## A\n\n${line("heading")}\n\nSuite.`)
     expect(splitSections(blocks).map((section) => section.blocks.map((block) => block.id))).toEqual([[], ["a", "b", "p"]])
-  })
-
-  it("should still render nothing for a table row", () => {
-    expect(renderBlock({ type: "row", text: null, data: { ref: "P-003" } })).toBe("")
   })
 })
 

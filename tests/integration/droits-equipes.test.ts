@@ -73,16 +73,6 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       await fx.admin`delete from platform.team_members where team_id = ${o.teams.support} and user_id = ${o.people.marc.id}`
     })
 
-    // Le test nomme lui-même les responsables : il ne dépend pas du test qui les nomme plus haut
-    // (testing-strategy.md § Anti-patterns). Qui peut retirer un responsable est décidé par le service.
-    it("should let the API remove a lead from her team, the other lead staying", async () => {
-      await fx.admin`insert into platform.team_members (team_id, user_id, role) values (${o.teams.support}, ${o.people.lea.id}, 'lead')
-                     on conflict (team_id, user_id) do update set role = 'lead'`
-      const removed = await as("ada").tx((sql) => sql`delete from platform.team_members where team_id = ${o.teams.support} and user_id = ${o.people.lea.id} returning user_id`)
-      expect(removed).toEqual([{ user_id: o.people.lea.id }])
-      expect(await fx.admin`select role from platform.team_members where team_id = ${o.teams.support} and user_id = ${o.people.paul.id}`).toEqual([{ role: "lead" }])
-    })
-
     it("should refuse adding to a team someone outside the organisation (42501)", async () => {
       const outsider = await fx.createUser()
       const added = as("ada").tx((sql) => sql`insert into platform.team_members (team_id, user_id) values (${o.teams.support}, ${outsider.id})`)

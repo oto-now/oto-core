@@ -84,37 +84,48 @@ describe("GuideDeBranchement tabs (AC-1)", () => {
 })
 
 describe("GuideDeBranchement first tab (AC-2)", () => {
-  it.each<[string, Props["connexions"], Assistant]>([
-    ["claude.ai", { data: [connexion("claude.ai"), connexion("ChatGPT")] }, "claude.ai"],
-    ["ChatGPT", { data: [connexion("ChatGPT"), connexion("claude.ai")] }, "ChatGPT"],
-    ["Mistral", { data: [connexion("Mistral"), connexion("claude.ai")] }, "Mistral"],
-    ["Claude Code", { data: [connexion("Claude Code"), connexion("ChatGPT")] }, "Claude Code"],
-    ["no connection", { data: [] }, "claude.ai"],
-    ["an unknown family", { data: [connexion("Client non identifié"), connexion("ChatGPT")] }, "claude.ai"],
-    ["a failed read", { error: ECHEC }, "claude.ai"],
-  ])("should open on the tab of the latest family, with %s", (_cas, connexions, onglet) => {
-    monter({ connexions })
-
-    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(onglet)
+  it("should open on the tab of the latest family, claude.ai without a known one", () => {
+    const cas: [string, Props["connexions"], Assistant][] = [
+      ["ChatGPT", { data: [connexion("ChatGPT"), connexion("claude.ai")] }, "ChatGPT"],
+      ["Mistral", { data: [connexion("Mistral"), connexion("claude.ai")] }, "Mistral"],
+      ["Claude Code", { data: [connexion("Claude Code"), connexion("ChatGPT")] }, "Claude Code"],
+      ["no connection", { data: [] }, "claude.ai"],
+      ["an unknown family", { data: [connexion("Client non identifié"), connexion("ChatGPT")] }, "claude.ai"],
+      ["a failed read", { error: ECHEC }, "claude.ai"],
+    ]
+    const verdicts = Object.fromEntries(
+      cas.map(([nom, connexions]) => {
+        monter({ connexions })
+        const choisi = screen.getByRole("tab", { selected: true }).textContent
+        cleanup()
+        return [nom, choisi]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([nom, , onglet]) => [nom, onglet])))
   })
 })
 
 describe("GuideDeBranchement steps (AC-3 to AC-6)", () => {
-  it.each<[Assistant, number, string]>([
-    ["claude.ai", 5, "Dans claude.ai, ouvrez Paramètres → Connecteurs, puis ajoutez un connecteur personnalisé."],
-    ["ChatGPT", 5, "Dans ChatGPT, ouvrez Paramètres → Applications → Paramètres avancés, puis activez le mode développeur."],
-    ["Mistral", 4, "Dans Le Chat, ouvrez Connecteurs, cliquez sur « Ajouter un connecteur », puis choisissez l'onglet « Connecteur MCP personnalisé »."],
-    ["Claude Code", 3, "Dans un terminal, ajoutez le serveur :"],
-  ])("should list the steps of %s in order, %i of them, as written", (assistant, nombre, premiere) => {
+  it("should list the steps of each assistant in order, as written, the last one saying it is plugged in", () => {
+    const cas: [Assistant, number, string][] = [
+      ["claude.ai", 5, "Dans claude.ai, ouvrez Paramètres → Connecteurs, puis ajoutez un connecteur personnalisé."],
+      ["ChatGPT", 5, "Dans ChatGPT, ouvrez Paramètres → Applications → Paramètres avancés, puis activez le mode développeur."],
+      ["Mistral", 4, "Dans Le Chat, ouvrez Connecteurs, cliquez sur « Ajouter un connecteur », puis choisissez l'onglet « Connecteur MCP personnalisé »."],
+      ["Claude Code", 3, "Dans un terminal, ajoutez le serveur :"],
+    ]
     monter()
 
-    const panneau = ouvrir(assistant)
-    const lues = etapes(panneau)
-    expect(lues).toHaveLength(nombre)
-    expect(lues).toEqual(attendues(assistant))
-    expect(lues[0]).toBe(premiere)
-    expect(lues.at(-1)).toMatch(/^C'est branché\. /)
-    expect(panneau.querySelector("ol > li:last-child strong")).toHaveTextContent("C'est branché.")
+    const verdicts = Object.fromEntries(
+      cas.map(([assistant]) => {
+        const panneau = ouvrir(assistant)
+        const lues = etapes(panneau)
+        const fort = panneau.querySelector("ol > li:last-child strong")?.textContent?.trim()
+        return [assistant, { nombre: lues.length, lues, premiere: lues[0], branche: lues.at(-1)?.startsWith("C'est branché. "), fort }]
+      }),
+    )
+    expect(verdicts).toEqual(
+      Object.fromEntries(cas.map(([assistant, nombre, premiere]) => [assistant, { nombre, lues: attendues(assistant), premiere, branche: true, fort: "C'est branché." }])),
+    )
   })
 
   it("should give claude.ai no refresh step, its two fields as a definition list, each whole value in code with its copy, and the preference sentence (AC-3)", async () => {
@@ -158,18 +169,24 @@ describe("GuideDeBranchement requests to try (AC-7)", () => {
   const titres = (nombre: number) => ["Qualifier un prospect", "Relancer les devis", "Préparer un rendez-vous", "Clore le mois"].slice(0, nombre).map((titre) => ({ titre }))
   const demandes = (panneau: HTMLElement) => [...panneau.querySelectorAll("ol > li:last-child ul code")].map((code) => code.textContent)
 
-  it.each<[string, Props["exemples"], string[]]>([
-    ["four procedures", { data: titres(4) }, ["Qualifier un prospect", "Relancer les devis", "Préparer un rendez-vous"]],
-    ["one procedure", { data: titres(1) }, ["Qualifier un prospect", ...EXEMPLES_GENERIQUES.slice(0, 2)]],
-    ["no procedure", { data: [] }, ["Qu'est-ce que je peux te demander ici ?", "Quelles procédures puis-je lancer ?", "Résume ce qui a changé cette semaine."]],
-  ])("should give three requests to copy in the last step of every tab, with %s", (_cas, exemples, attendu) => {
-    monter({ exemples })
-
-    for (const assistant of ASSISTANTS) {
-      const panneau = ouvrir(assistant)
-      expect(demandes(panneau)).toEqual(attendu)
-      expect(within(panneau).getByRole("button", { name: `Copier la demande « ${attendu[0]} »` })).toBeInTheDocument()
-    }
+  it("should give three requests to copy in the last step of every tab, procedures first, then generic ones", () => {
+    const cas: [string, Props["exemples"], string[]][] = [
+      ["four procedures", { data: titres(4) }, ["Qualifier un prospect", "Relancer les devis", "Préparer un rendez-vous"]],
+      ["one procedure", { data: titres(1) }, ["Qualifier un prospect", ...EXEMPLES_GENERIQUES.slice(0, 2)]],
+      ["no procedure", { data: [] }, ["Qu'est-ce que je peux te demander ici ?", "Quelles procédures puis-je lancer ?", "Résume ce qui a changé cette semaine."]],
+    ]
+    const verdicts = Object.fromEntries(
+      cas.map(([nom, exemples, attendu]) => {
+        monter({ exemples })
+        const lues = ASSISTANTS.map((assistant) => {
+          const panneau = ouvrir(assistant)
+          return { demandes: demandes(panneau), copie: within(panneau).queryByRole("button", { name: `Copier la demande « ${attendu[0]} »` }) !== null }
+        })
+        cleanup()
+        return [nom, lues]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([nom, , attendu]) => [nom, ASSISTANTS.map(() => ({ demandes: attendu, copie: true }))])))
   })
 
   it("should say a failed read in place of the requests, with « Réessayer », the rest of the guide intact", () => {

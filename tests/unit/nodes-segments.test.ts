@@ -20,13 +20,11 @@ describe("titleSegment", () => {
     ])
   })
 
-  it("should cut a long title to 60 characters without a trailing underscore", () => {
+  // E11-S18 (AC-7) : coupé au dernier mot entier, à 60 caractères, sans `_` final ; un premier mot plus long que la
+  // borne, à la borne.
+  it("should cut a long title after its last whole word, within 60 characters and without a trailing underscore, and a single long word at the bound", () => {
     expect(titleSegment(`${"a".repeat(59)} b`)).toBe("a".repeat(59))
     expect(slugOf("ab cd", 3)).toBe("ab")
-  })
-
-  // E11-S18 (AC-7) : coupé au dernier mot entier ; un premier mot plus long que la borne, à la borne.
-  it("should cut a long title after its last whole word, and a single long word at the bound", () => {
     expect(titleSegment("Traiter un ticket SAV de l'atelier : répondre à un client producteur d'énergie")).toBe("traiter_un_ticket_sav_de_l_atelier_repondre_a_un_client")
     expect(slugOf("abcdef gh", 6)).toBe("abcdef")
     expect(slugOf("abcdefgh ij", 6)).toBe("abcdef")

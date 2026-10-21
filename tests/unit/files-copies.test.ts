@@ -2,7 +2,7 @@
 // Les copies d'objets de la duplication (E10-S02, AC-e3, HN-E10S02-113) : par lots de 8 au plus, chaque lot attendu
 // avant le suivant ; une copie en échec laisse sa ligne `pending` sans arrêter les autres, et seules les copies réussies
 // passent à `ready`. Stockage et base simulés : la borne est le sujet ; la duplication sur une vraie base est dans
-// `tests/integration/e10s02-corbeille-duplication.test.ts`.
+// `tests/integration/files-trash-duplication.test.ts`.
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { copyFileObjects } from "../../packages/plateforme/server/files/service"

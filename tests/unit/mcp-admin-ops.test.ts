@@ -9,12 +9,18 @@
 // Une panne ou une course qu'aucune donnée ne provoque, la base simulée la posait sur une requête : l'espion
 // des deux faces du client de la session (`spyDb`) la pose de même, avant l'envoi de cette requête.
 // En suite portable (`sqlConfigured`) : le projet, ou le Postgres nu du job `bare-postgres`.
+// Les résultats des cinq outils d'E08-S06 (AC21, AC22) : une ligne `admin_journal` par opération, avec son
+// organisation et sa cible ; le même texte dans les deux canaux, les données en champs ; une page qui tient sous le
+// plafond de 45 000 caractères et dont la suite reprend après le dernier élément servi. La graine porte pour eux
+// l'arbre d'acme, `mail` actif, un compte, une conversation et un ticket.
+import * as z from "zod/v4"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { day } from "../../packages/plateforme/mcp/admin/ops"
+import { MAX_RESULT_CHARS } from "../../packages/plateforme/mcp/result"
 import { adminTables, codes, connectAdminMcp, ORGS, PERSONS, TEAMS, type AdminPerson } from "../helpers/mcp-admin"
 import { seedAdminFixture, type AdminFixtureSql } from "../helpers/mcp-admin-sql"
 import { hex } from "../helpers/plateforme"
-import type { Row } from "../helpers/simulated-db"
+import type { Row, Tables } from "../helpers/simulated-db"
 import { isoInstants, seedWithAdmin, spyDb, sqlConfigured, type SeededData, type SentQuery, type SpyOptions, portable } from "../helpers/sql"
 
 const CODE = /^ctx: ([0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}) \(admin session, valid 24 hours\)$/
@@ -38,6 +44,26 @@ function bySlug<T>(entries: [string, T][]): T[] {
   return [...entries].sort(([a], [b]) => a.localeCompare(b)).map(([, item]) => item)
 }
 
+const HOUR_AGO = new Date(Date.now() - HOUR).toISOString()
+
+/** Le rang que portent les arguments des appels servis, lu par un schéma plutôt qu'affirmé. */
+const rankedCalls = z.array(z.object({ args: z.object({ rank: z.number() }) }))
+
+/** `mail` actif, « Mail Ventes », une conversation d'un appel et un ticket d'acme ; l'outil appelé porte le préfixe, jetable, d'acme. */
+function renderTables(prefix: string): Tables {
+  const owner = { owner_kind: "team", owner_team_id: TEAMS.ventes.id, owner_user_id: null }
+  return {
+    connector_activations: [{ org_id: ORGS.acme.id, connector: "mail", state: "active", activated_by: PERSONS.ada.id, updated_at: HOUR_AGO }],
+    accounts: [{ id: "c2000000-0000-4000-8000-000000000001", org_id: ORGS.acme.id, connector: "mail", label: "Mail Ventes", mode: "simule", status: "active", ...owner }],
+    journal: [
+      { id: 1, org_id: ORGS.acme.id, ts: HOUR_AGO, user_id: PERSONS.claire.id, team_id: null, ctx: "AAAA-0001", tool: `${prefix}_read`, target: "ventes", is_error: false, error: null, host: null, user_agent: null, account_id: null, duration_ms: 5, args: {} },
+    ],
+    feedback: [
+      { id: 1, org_id: ORGS.acme.id, number: 12, created_at: HOUR_AGO, user_id: PERSONS.claire.id, ctx: null, type: "gap", target: null, text: "Missing.", state: "open", resolution: null, handled_by: null, handled_at: null },
+    ],
+  }
+}
+
 /** Le jour de création d'une organisation jetable (`seed.createOrg` : le jour du passage, à l'horloge de la base). */
 async function createdDay(seed: SeededData, orgId: string): Promise<string> {
   const [row] = await seed.admin<{ day: string }[]>`select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD') as day from platform.orgs where id = ${orgId}`
@@ -59,7 +85,8 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
 
   beforeAll(async () => {
     seed = seedWithAdmin()
-    admin = await seedAdminFixture(seed)
+    admin = await seedAdminFixture(seed, { tree: true })
+    await admin.write(renderTables(admin.orgs.acme.prefix))
   }, SETUP_TIMEOUT)
 
   afterAll(async () => {
@@ -558,7 +585,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
   })
 
   describe("separate admin journal (AC22)", () => {
-    it("should write one line per request of the caller in admin_journal, secrets masked, and none in journal", async () => {
+    it("should write one line per request of the caller in admin_journal, secrets masked, each operation with its organisation and target, and none in journal (E08-S06, AC21)", async () => {
       const before = await lastAdminLine()
       const { session, code } = await opened()
       const acme = admin.orgs.acme.slug
@@ -592,6 +619,106 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       session.deps.journal.splice(0, session.deps.journal.length, { user_id: admin.persons.theo.id, method: "tools/list" })
       await session.flush()
       expect(await linesAfter(flushed)).toEqual([expect.objectContaining({ method: "tools/list", user_id: PERSONS.sam.id })])
+
+      // E08-S06 (AC21) : une ligne par opération des cinq outils, avec son organisation et sa cible.
+      const mark = await lastAdminLine()
+      const conversation = admin.id("AAAA-0001")
+      const fresh = await opened()
+      const call = (tool: string, args: Record<string, unknown>) => fresh.session.call(tool, { ctx: fresh.code, ...args })
+      try {
+        await call("admin_node", { op: "rules", org: acme, path: "ventes" })
+        await call("admin_connector", { op: "activate", org: acme, connector: "mail" })
+        await call("admin_connector", { op: "account_rules", org: acme, account: "Mail Ventes" })
+        await call("admin_journal", { op: "conversation", org: acme, code: conversation })
+        await call("admin_feedback", { op: "set_state", org: acme, ticket: "FB-0012", state: "resolved" })
+        await call("admin_cell", { op: "version" })
+        await fresh.session.flush()
+        const operations = await seed.admin<Row[]>`
+          select tool, op, org_id, target, is_error from platform.admin_journal
+           where user_id = ${sam} and id > ${mark} and tool is distinct from 'admin_context' order by id`
+        expect(admin.readable([...operations]).map((line) => [line.tool, line.op, line.org_id, line.target, line.is_error])).toEqual([
+          ["admin_node", "rules", ORGS.acme.id, "ventes", false],
+          ["admin_connector", "activate", ORGS.acme.id, "mail", false],
+          ["admin_connector", "account_rules", ORGS.acme.id, "account:Mail Ventes", false],
+          ["admin_journal", "conversation", ORGS.acme.id, `conversation:${conversation}`, false],
+          ["admin_feedback", "set_state", ORGS.acme.id, "FB-0012", false],
+          ["admin_cell", "version", null, "cell", false],
+        ])
+        const [{ count: after }] = await seed.admin<{ count: number }[]>`select count(*)::int as count from platform.journal where user_id = ${sam}`
+        expect(after).toBe(0)
+      } finally {
+        // FB-0012 rendu à l'état de la graine (ouvert, sans décision) : la graine du fichier sert aux autres tests.
+        await seed.admin`
+          update platform.feedback set state = 'open', resolution = null, handled_by = null, handled_at = null where org_id = ${admin.orgs.acme.id} and number = 12`
+      }
+    })
+  })
+
+  describe("results (E08-S06, AC22)", () => {
+    /** La session admin de Sam, ouverte ; `call` lui passe son code. */
+    async function session() {
+      const { session: mcp, code } = await opened()
+      const call = (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args })
+      return { mcp, call }
+    }
+
+    it("should serve the same text in both channels, with the data in fields", async () => {
+      const { call } = await session()
+      const acme = admin.orgs.acme.slug
+      const served = [
+        [await call("admin_node", { op: "rules", org: acme, path: "ventes" }), "rules"],
+        [await call("admin_connector", { op: "catalogue", org: acme }), "connectors"],
+        [await call("admin_connector", { op: "accounts", org: acme }), "accounts"],
+        [await call("admin_journal", { op: "conversations", org: acme }), "conversations"],
+        [await call("admin_journal", { op: "conversation", org: acme, code: admin.id("AAAA-0001") }), "calls"],
+        [await call("admin_journal", { op: "admin_log" }), "rows"],
+        [await call("admin_feedback", { op: "list", org: acme }), "tickets"],
+        [await call("admin_cell", { op: "migrations" }), "cell"],
+      ] as const
+      for (const [result, field] of served) {
+        expect(result.isError, field).toBe(false)
+        expect(result.structured?.text, field).toBe(result.text)
+        expect(result.structured, field).toHaveProperty(field)
+      }
+    })
+
+    it("should keep a long conversation under 45,000 characters and continue it right after the last call served", async () => {
+      // 200 appels aux arguments longs : ils ne tiennent pas en une page ; retirés après le test.
+      const calls: Row[] = Array.from({ length: 200 }, (_, index) => ({
+        id: 100 + index,
+        org_id: ORGS.acme.id,
+        ts: HOUR_AGO,
+        user_id: PERSONS.claire.id,
+        team_id: null,
+        ctx: "FFFF-0006",
+        tool: `${admin.orgs.acme.prefix}_read`,
+        target: "ventes",
+        is_error: false,
+        error: null,
+        host: null,
+        user_agent: null,
+        account_id: null,
+        duration_ms: 5,
+        args: { rank: index, note: "x".repeat(280) },
+      }))
+      // Une seule écriture : la base tire les identifiants dans l'ordre des lignes, celui des rangs.
+      await admin.write({ journal: calls })
+      try {
+        const { call } = await session()
+        const acme = admin.orgs.acme.slug
+        const code = admin.id("FFFF-0006")
+        const first = await call("admin_journal", { op: "conversation", org: acme, code })
+        expect(JSON.stringify(first.result.structuredContent).length).toBeLessThanOrEqual(MAX_RESULT_CHARS)
+        expect(first.structured?.truncated).toBeUndefined()
+        const shown = rankedCalls.parse(first.structured?.calls).map((entry) => entry.args.rank)
+        expect(shown.length).toBeLessThan(200)
+        expect(shown).toEqual(Array.from({ length: shown.length }, (_, index) => index))
+        expect(first.text.split("\n").at(-1)).toBe(`next_cursor: ${String(first.structured?.next_cursor)}`)
+        const second = await call("admin_journal", { op: "conversation", org: acme, code, cursor: first.structured?.next_cursor })
+        expect(rankedCalls.parse(second.structured?.calls)[0].args.rank).toBe(shown.length)
+      } finally {
+        await seed.admin`delete from platform.journal where ctx = ${admin.id("FFFF-0006")}`
+      }
     })
   })
 

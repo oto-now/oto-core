@@ -2,7 +2,7 @@
 // chaque bloc du rapport de `previewContext` y prend ses caractères, dans l'ordre, les blocs étant séparés
 // par une ligne vide, puis vient le reste (l'avis de budget). Fonctions pures, sans libellé. Même règle que
 // `renderContext` et `recededReport` du moteur (`server/context/engine.ts`), réécrite ici parce que `ui/`
-// n'importe pas `server/` : le test de parité les confronte (`tests/unit/e05s11-parties-du-contexte.test.ts`).
+// n'importe pas `server/` : le test de parité les confronte (`tests/unit/texte-servi.test.ts`).
 // Sans elles, la vue « Contexte » de l'accueil ne saurait pas où commence chaque partie, ni l'encart d'un
 // Contexte où mener chaque ligne.
 //

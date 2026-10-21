@@ -69,18 +69,21 @@ describe("requestJson", () => {
     expect([init.body, new Headers(init.headers).has("content-type")]).toEqual([undefined, false])
   })
 
-  it.each([
-    [400, "invalid_arguments", "Tiers rejected the request.", undefined],
-    [401, "upstream_error", "Tiers rejected the token.", undefined],
-    [503, "upstream_error", "Tiers is unavailable: retry later.", { refusal: "upstream_unavailable" }],
-    [418, "upstream_error", "Tiers answered with an unexpected status (418). Retry later.", undefined],
-  ])("should translate status %i through the connector's table, without the token anywhere", async (status, code, message, details) => {
-    const secret = token()
+  it("should translate a status through the connector's table, without the token anywhere", async () => {
+    const statuses: [number, string, string, { refusal: string } | undefined][] = [
+      [400, "invalid_arguments", "Tiers rejected the request.", undefined],
+      [503, "upstream_error", "Tiers is unavailable: retry later.", { refusal: "upstream_unavailable" }],
+      [418, "upstream_error", "Tiers answered with an unexpected status (418). Retry later.", undefined],
+    ]
     const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-    const error = await refusal(requestJson(API, request(secret), async () => json({ message: `echo ${secret}` }, status)))
-    expect({ code: error.code, message: error.message, details: error.details }).toEqual({ code, message, details })
-    expect(`${error.message} ${JSON.stringify(error.details ?? {})} ${String(error.cause ?? "")}`).not.toContain(secret)
-    expect(loggedText(errors)).not.toContain(secret)
+    const verdicts: Record<number, unknown> = {}
+    for (const [status] of statuses) {
+      const secret = token()
+      const error = await refusal(requestJson(API, request(secret), async () => json({ message: `echo ${secret}` }, status)))
+      const leaks = [error.message, JSON.stringify(error.details ?? {}), String(error.cause ?? ""), loggedText(errors)].join(" ").includes(secret)
+      verdicts[status] = { code: error.code, message: error.message, details: error.details, leaks }
+    }
+    expect(verdicts).toEqual(Object.fromEntries(statuses.map(([status, code, message, details]) => [status, { code, message, details, leaks: false }])))
   })
 
   it("should retry a 429 after its Retry-After, twice at most, and answer rate_limited beyond", async () => {

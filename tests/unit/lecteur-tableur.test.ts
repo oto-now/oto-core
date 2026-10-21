@@ -250,16 +250,8 @@ describe("red cases of the xlsx reader", () => {
     expect(typeof (await terminate.mock.results[0].value)).toBe("number")
   })
 
-  it(
-    "should give too_large for a worker that runs out of its memory, failed for one that throws",
-    async () => {
-      vi.spyOn(console, "error").mockImplementation(() => {})
-      expect(await statusOf(xlsxBytes(BUDGET), HUNGRY)).toEqual({ status: "too_large", detail: "reading it needs more than 256 MB of memory" })
-      expect(await statusOf(xlsxBytes(BUDGET), CRASHING)).toEqual({ status: "failed" })
-    },
-    HEAVY_TIMEOUT,
-  )
-
+  // too_large pour un worker à court de mémoire, failed pour un worker qui lève : « the worker places of a process »,
+  // dont la première assertion est la même.
   it("should refuse a password-protected workbook (an OLE container) as encrypted, an old binary one and a non-zip as unsupported", async () => {
     const statuses = await Promise.all([cfbBytes("EncryptedPackage"), cfbBytes("Workbook"), strToU8("client;montant\n")].map((bytes) => statusOf(bytes)))
     expect(statuses).toEqual([

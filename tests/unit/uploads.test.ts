@@ -3,7 +3,7 @@
 // rendues pour un nom qui porte espaces, apostrophe, `$` et accent grave (AC-f2), l'entrée d'`upload.link` (AC-f1), et
 // la porte sans session (AC-f4, AC-f11) : servie avant le jeton de session, ses refus 1 à 4 dans leur ordre, en texte
 // brut, sans aucun client de base ouvert (espion) ni lecture du corps au-delà de la borne. Le masquage de `source_url`
-// au journal (AC-f14), avec les clés voisines qui restent lisibles. Sur une vraie base : `e10s02-uploads.test.ts`.
+// au journal (AC-f14), avec les clés voisines qui restent lisibles. Sur une vraie base : `tests/integration/uploads.test.ts`.
 import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
@@ -198,18 +198,16 @@ describe("door without session (AC-f4, AC-f11)", () => {
 })
 
 describe("source_url in the journal (AC-f14)", () => {
-  it.each([
-    ["source_url", "[masked]"],
-    ["sourceUrl", "[masked]"],
-    ["url", "https://example.invalid/a.md"],
-    ["source", "https://example.invalid/a.md"],
-    ["source_path", "https://example.invalid/a.md"],
-    // Le nom est comparé en entier : les clés qui le contiennent restent lisibles.
-    ["resource_url", "https://example.invalid/a.md"],
-    ["resourceUrl", "https://example.invalid/a.md"],
-    ["datasource_url", "https://example.invalid/a.md"],
-    ["source-url", "[masked]"],
-  ])("should log %s as %s", (key, logged) => {
-    expect(loggedArgs({ function: "upload.link", arguments: { [key]: "https://example.invalid/a.md" } })).toEqual({ function: "upload.link", arguments: { [key]: logged } })
+  const ADDRESS = "https://example.invalid/a.md"
+  const logged = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, loggedArgs({ function: "upload.link", arguments: { [key]: ADDRESS } })]))
+
+  it("should mask source_url in each of its spellings", () => {
+    const keys = ["source_url", "sourceUrl", "source-url"]
+    expect(logged(keys)).toEqual(Object.fromEntries(keys.map((key) => [key, { function: "upload.link", arguments: { [key]: "[masked]" } }])))
+  })
+
+  it("should leave the neighbouring keys readable, the name being compared whole", () => {
+    const keys = ["url", "source", "source_path", "resource_url", "resourceUrl", "datasource_url"]
+    expect(logged(keys)).toEqual(Object.fromEntries(keys.map((key) => [key, { function: "upload.link", arguments: { [key]: ADDRESS } }])))
   })
 })

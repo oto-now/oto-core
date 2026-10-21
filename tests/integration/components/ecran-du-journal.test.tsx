@@ -137,11 +137,22 @@ describe("EcranDuJournal states (AC2)", () => {
   })
 
   // Chaque lecture en échec se dit à sa place, jamais en liste vide (`portage-ecrans.md § 4`).
-  it.each(["resultat", "conversation", "equipes", "personnes"] as const)("should say a failed %s read, with « Réessayer » to the same address", (prop) => {
-    rendre({ period: "30", errors: "1", conversation: "K7M2-9QXR" }, { conversation: { data: DETAIL }, [prop]: { error: ECHEC } })
-    expect(screen.getByRole("alert")).toHaveTextContent(ECHEC)
-    expect(lien("Réessayer")).toHaveAttribute("href", "/journal?period=30&errors=1&conversation=K7M2-9QXR")
-    if (prop === "resultat") expect(screen.queryByRole("table")).toBeNull()
+  it("should say each failed read (result, conversation, teams, people), with « Réessayer » to the same address", () => {
+    const lectures = ["resultat", "conversation", "equipes", "personnes"] as const
+    const verdicts = Object.fromEntries(
+      lectures.map((prop) => {
+        rendre({ period: "30", errors: "1", conversation: "K7M2-9QXR" }, { conversation: { data: DETAIL }, [prop]: { error: ECHEC } })
+        const verdict = {
+          alerte: screen.getByRole("alert").textContent?.includes(ECHEC),
+          reessayer: lien("Réessayer").getAttribute("href"),
+          ...(prop === "resultat" ? { tableau: screen.queryByRole("table") !== null } : {}),
+        }
+        cleanup()
+        return [prop, verdict]
+      }),
+    )
+    const dite = { alerte: true, reessayer: "/journal?period=30&errors=1&conversation=K7M2-9QXR" }
+    expect(verdicts).toEqual({ resultat: { ...dite, tableau: false }, conversation: dite, equipes: dite, personnes: dite })
   })
 
   it("should say an empty period, offering to remove the filters only when one is set", () => {

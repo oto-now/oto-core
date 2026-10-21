@@ -95,13 +95,11 @@ describe("ReglesDuNoeud reading (AC16)", () => {
     expect(screen.getByText("Sans règle : son propriétaire seul.")).toBeInTheDocument()
   })
 
-  it("should say a team without a lead", () => {
+  // E05-S13 (AC-23) : `leadName` joint tous les responsables ; le pluriel suit leur nombre, pas une virgule.
+  it("should name no lead, or every lead of a team with several", () => {
     rendre({ ...DEVIS, owner: { kind: "team", teamName: "Support" } })
     expect(screen.getByText("Propriétaire : équipe Support (sans responsable)")).toBeInTheDocument()
-  })
-
-  // E05-S13 (AC-23) : `leadName` joint tous les responsables ; le pluriel suit leur nombre, pas une virgule.
-  it("should say every lead of a team with several", () => {
+    cleanup()
     rendre({ ...DEVIS, owner: { kind: "team", teamName: "Ventes", leadName: "Claire Morel, Léa Roux", leadCount: 2 } })
     expect(screen.getByText("Propriétaire : équipe Ventes (responsables : Claire Morel, Léa Roux)")).toBeInTheDocument()
     cleanup()

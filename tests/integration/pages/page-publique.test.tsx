@@ -1,6 +1,6 @@
 // La page publique d'un lien de partage, `/p/<jeton>` et `/p/<jeton>/<chemin>` (E05-S10, AC-d2 à AC-d6 ;
 // ADR-013) : lue hors session par `readPublicNode` (simulé ici ; ses cas sur base réelle sont dans
-// `e05s10e-partage-public.test.ts`), rendue en lecture seule au thème de l'organisation de l'adresse, les liens
+// `partage-public.test.ts`), rendue en lecture seule au thème de l'organisation de l'adresse, les liens
 // hors de portée en texte, le 404 indistinct, jamais indexée. E11-S05 (lot d, AC-f2) : le visiteur télécharge ce que
 // la page a lu, sans requête ; le résumé ne se montre que pour une procédure.
 import { headers } from "next/headers"

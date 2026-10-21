@@ -3,7 +3,6 @@
 // et schémas, calculés sans base pour deux organisations. Les textes attendus sont ceux de la
 // section « Contrat MCP » de la story, mot pour mot : c'est ce que lisent les hosts (H04, P14).
 import { describe, expect, it } from "vitest"
-import pkg from "../../packages/plateforme/package.json"
 import { serverOptions } from "../../packages/plateforme/mcp/server"
 import { inputSchemas, parseInput } from "../../packages/plateforme/mcp/schemas"
 import { buildTools, displayOrg, prerequisite, serverInstructions, TOOL_KEYS, toolKey } from "../../packages/plateforme/mcp/tools"
@@ -44,27 +43,24 @@ const ANNOTATIONS: Record<string, Record<string, boolean>> = {
 
 type Property = { type?: string; description?: string }
 
+// Une seconde organisation (DELTA) : son préfixe est prouvé par « should share no tool name… », « should recognise
+// only the tools of the prefix » et la description de write au préfixe de 12 caractères ; la borne de 1 000
+// caractères, par le pire cas d'AC7.
 describe("six tools per organisation (AC6)", () => {
-  for (const org of [ACME, DELTA]) {
-    const tools = buildTools(org, [])
+  const tools = buildTools(ACME, [])
 
-    it(`${org.prefix}: should list exactly six prefixed tools, in order, with ASCII names`, () => {
-      expect(tools.map((tool) => tool.name)).toEqual(KEYS.map((key) => `${org.prefix}_${key}`))
-      for (const tool of tools) expect(tool.name).toMatch(/^[a-z0-9_]{1,64}$/)
-    })
+  it("acme: should list exactly six prefixed tools, in order, with ASCII names", () => {
+    expect(tools.map((tool) => tool.name)).toEqual(KEYS.map((key) => `${ACME.prefix}_${key}`))
+    for (const tool of tools) expect(tool.name).toMatch(/^[a-z0-9_]{1,64}$/)
+  })
 
-    it(`${org.prefix}: should keep every description under 1,000 characters`, () => {
-      for (const tool of tools) expect(tool.description.length, tool.name).toBeLessThan(1000)
-    })
+  it("acme: should open the five tools other than context with the ctx prerequisite", () => {
+    for (const tool of tools.slice(1)) expect(tool.description.startsWith(`${prerequisite(ACME.prefix)} `), tool.name).toBe(true)
+  })
 
-    it(`${org.prefix}: should open the five tools other than context with the ctx prerequisite`, () => {
-      for (const tool of tools.slice(1)) expect(tool.description.startsWith(`${prerequisite(org.prefix)} `), tool.name).toBe(true)
-    })
-
-    it(`${org.prefix}: should declare oauth2 on every tool`, () => {
-      for (const tool of tools) expect(tool._meta).toEqual({ securitySchemes: [{ type: "oauth2" }] })
-    })
-  }
+  it("acme: should declare oauth2 on every tool", () => {
+    for (const tool of tools) expect(tool._meta).toEqual({ securitySchemes: [{ type: "oauth2" }] })
+  })
 
   it("should serve the exact titles, annotations and descriptions of the contract", () => {
     const tools = buildTools(ACME, ["mail.create_draft", "table.rows"])
@@ -122,14 +118,11 @@ describe("size bounds (AC7)", () => {
   }
   const EXAMPLES = ["connector1.function_ab", "connector2.function_cd", "connector3.function_ef"]
 
-  it("should build a worst case of 80, 12 and 150 characters", () => {
+  it("should keep every description under 1,000 characters, in a worst case of 80, 12 and 150 characters", () => {
     expect(LONG.name).toHaveLength(80)
     expect(LONG.prefix).toHaveLength(12)
     expect(LONG.domains).toHaveLength(150)
     for (const example of EXAMPLES) expect(example).toHaveLength(22)
-  })
-
-  it("should keep every description under 1,000 characters", () => {
     for (const tool of buildTools(LONG, EXAMPLES)) expect(tool.description.length, tool.name).toBeLessThan(1000)
   })
 
@@ -173,9 +166,10 @@ describe("input schemas (AC8)", () => {
     expect(tools[0].inputSchema.required ?? []).not.toContain("ctx")
   })
 
-  it("should describe every top-level property and keep the schemas flat", () => {
+  it("should describe every top-level property and keep the schemas flat, with no $schema key", () => {
     const nested = new Set(["acme_write.ops", "acme_write.header", "acme_call.arguments"])
     for (const tool of tools) {
+      expect(tool.inputSchema, tool.name).not.toHaveProperty("$schema")
       // `inputSchema` est typé `Record<string, unknown>` : sa forme vient de `z.toJSONSchema`.
       const properties = tool.inputSchema.properties as Record<string, Property>
       for (const [field, schema] of Object.entries(properties)) {
@@ -185,10 +179,6 @@ describe("input schemas (AC8)", () => {
         expect(scalar || nested.has(where), where).toBe(true)
       }
     }
-  })
-
-  it("should serve no $schema key", () => {
-    for (const tool of tools) expect(tool.inputSchema).not.toHaveProperty("$schema")
   })
 
   it("should keep the JSON Schemas frozen (ADR-002: add, never modify)", () => {
@@ -225,13 +215,8 @@ describe("input schemas (AC8)", () => {
   })
 })
 
+// L'identité du serveur (nom, titre, version, capacités) : `mcp-server.test.ts` > « initialize (AC9) ».
 describe("server identity and instructions (AC9)", () => {
-  it("should name the server oto-platform, titled by the organisation, at the package version", () => {
-    const options = serverOptions(ACME)
-    expect(options.serverInfo).toEqual({ name: "oto-platform", title: "Acme Énergies", version: pkg.version })
-    expect(options.capabilities).toEqual({ tools: {}, prompts: {} })
-  })
-
   it("should give one sentence of instructions, exactly the contract's", () => {
     const text = serverInstructions(ACME)
     expect(text).toBe(

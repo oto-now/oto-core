@@ -1,14 +1,15 @@
 // @vitest-environment node
-// État de la cellule (E08-S04) sans base : présence des variables (AC10), version du paquet, et
-// `GET /api/platform/cell` servi sans identité par l'adresse (AC12), `cellStatus` posé par le test.
-// `cellStatus` lui-même (AC8, AC9, AC11) tourne sur une base réelle depuis la partie e2 d'E01-S10
-// (`tests/integration/cell-status.test.ts`) ; `applied_migrations` dans `tests/integration/role-plateforme.test.ts`.
+// État de la cellule (E08-S04) sans base : présence des variables (AC10), et `GET /api/platform/cell` servi
+// sans identité par l'adresse (AC12), `cellStatus` posé par le test. `cellStatus` lui-même (AC8, AC9, AC11 : la
+// version du paquet, la base qui ne répond pas) tourne sur une base réelle depuis la partie e2 d'E01-S10
+// (`tests/integration/cell-status.test.ts`) ; `applied_migrations` dans `tests/integration/role-plateforme.test.ts` ;
+// un refus du service rendu avec son statut, par `tests/unit/api-handler.test.ts`.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import pkg from "@otomata_tech/oto_platform/package.json"
 import { PlatformError, type CellStatus } from "@otomata_tech/oto_platform/server"
 import type { VerifyToken } from "../../packages/plateforme/mcp/auth"
-import { cellStatus, envReport, packageVersion } from "../../packages/plateforme/server/cell"
+import { cellStatus, envReport } from "../../packages/plateforme/server/cell"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 
 // La porte construit son client avec `createPlatformDb` : ici, un client que seul `cellStatus`, posé par le
@@ -72,12 +73,6 @@ describe("envReport (AC10)", () => {
   })
 })
 
-describe("packageVersion", () => {
-  it("should be the version of the package manifest", () => {
-    expect(packageVersion).toBe(pkg.version)
-  })
-})
-
 describe("GET /api/platform/cell (AC12)", () => {
   const NOWHERE = "nowhere.example.invalid"
 
@@ -112,13 +107,6 @@ describe("GET /api/platform/cell (AC12)", () => {
     const { response, body } = await call(request())
     expect(response.status).toBe(403)
     expect(body).toEqual({ error: { code: "forbidden", message: "The cell status is reserved to the platform team." } })
-  })
-
-  it("should answer 500 internal when the database does not answer", async () => {
-    vi.mocked(cellStatus).mockRejectedValue(new PlatformError("internal", "Database unreachable."))
-    const { response, body } = await call(request())
-    expect(response.status).toBe(500)
-    expect(body).toEqual({ error: { code: "internal", message: "Database unreachable." } })
   })
 
   it("should answer 401 without a token, like the other resources", async () => {

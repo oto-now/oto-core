@@ -80,7 +80,7 @@ Claude Code doit pouvoir déposer un fichier qu'il a déjà (un fichier à joind
 
 ## Écart avec le code
 
-- M98 : le test d'expiration du ticket (`tests/integration/e10s02-uploads.test.ts`) dépasse 900 000 ms d'une milliseconde quand l'horloge de la base avance sur celle du poste.
+- M98 : le test d'expiration du ticket (`tests/integration/uploads.test.ts`) dépasse 900 000 ms d'une milliseconde quand l'horloge de la base avance sur celle du poste.
 
 ## Questions ouvertes
 

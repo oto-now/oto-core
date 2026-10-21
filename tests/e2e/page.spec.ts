@@ -22,7 +22,7 @@ import { CHEMINS, EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 // E11-S02 (AC-c1, AC-c2, AC-c5, AC-g1) : une page créée par le « + » du rail, son titre tapé, se lit publiée
 // après un rechargement ; une publication refusée pour son en-tête (réponse simulée) se dit sans « Réessayer »,
 // en clair puis en sombre. Le compte E2E, seul compte de la campagne, y est au niveau gestion : le niveau
-// écriture est tenu par `ecran-de-noeud.test.tsx` (AC-c2) et `e05s10e-gestes.test.ts` (AC-c1). E11-S05 (AC-e2, AC-g1,
+// écriture est tenu par `ecran-de-noeud.test.tsx` (AC-c2) et `gestes-du-rail.test.ts` (AC-c1). E11-S05 (AC-e2, AC-g1,
 // AC-g2) : « À quoi sert cette page » s'ouvre par Entrée ; Entrée dans le titre d'une page neuve mène à son Texte vide,
 // qui porte l'invite, et une page vide déjà titrée s'ouvre le focus dans ce Texte.
 

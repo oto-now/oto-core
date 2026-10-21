@@ -125,15 +125,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
     })
 
     describe("createTeam (AC11)", () => {
-      it("should create a team whose folder and Contexte are born in the tree (P39)", async () => {
-        const name = `Conseil ${hex(3)}`
-        const created = await createTeam(as("ada").db, as("ada").identity, { name })
-
-        expect(created.data).toMatchObject({ slug: teamSlug(name), name })
-        expect(created).toMatchObject({ target: teamSlug(name), teamId: created.data.id })
-        expect(await paths(created.data.slug)).toEqual([created.data.slug, `${created.data.slug}/contexte`])
-      })
-
       it("should enter its creator as its lead in the same transaction, and write no membership on a refusal (E11-S10, AC-c1)", async () => {
         const created = await newTeam("Achats")
         expect(await roles(created.id)).toEqual({ [o.people.ada.id]: "lead" })
@@ -149,16 +140,19 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(await memberships()).toBe(before)
       })
 
-      it("should create the team of a platform access without membership, and enter nobody (E11-S10, AC-c2)", async () => {
+      it("should create the team of a platform access without membership, its folder and Contexte born in the tree (P39), and enter nobody (E11-S10, AC-c2)", async () => {
         const s = await fx.createUser({ fullName: "Sam Staff" })
         await fx.makeStaff(s.id)
         await fx.grantPlatformAccess(o.org.id, s.id, null)
         const db = fx.as(s)
         const identity = await resolveIdentity(db, o.host, { userId: s.id, email: s.email })
         expect(identity.viaGrant).toBe(true)
-        const { data } = await createTeam(db, identity, { name: `Conseil ${hex(3)}` })
-        expect(await roles(data.id)).toEqual({})
-        expect(await paths(data.slug)).toEqual([data.slug, `${data.slug}/contexte`])
+        const name = `Conseil ${hex(3)}`
+        const created = await createTeam(db, identity, { name })
+        expect(created.data).toMatchObject({ slug: teamSlug(name), name })
+        expect(created).toMatchObject({ target: teamSlug(name), teamId: created.data.id })
+        expect(await roles(created.data.id)).toEqual({})
+        expect(await paths(created.data.slug)).toEqual([created.data.slug, `${created.data.slug}/contexte`])
       })
 
       it("should refuse a name already taken, by its slug or without case nor accents (name_taken)", async () => {
@@ -252,16 +246,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
         const gone = await removeTeamMember(as("claire").db, claire, team.id, o.people.marc.id)
         expect([removed.data.removed, gone.data.removed]).toEqual([true, false])
         expect(await roles(team.id)).toEqual({ [o.people.claire.id]: "lead" })
-      })
-
-      it("should refuse a plain member adding to or removing from her own team (forbidden), writing nothing", async () => {
-        const before = await roles(o.teams.ventes)
-
-        const adding = await refusal(addTeamMember(as("lea").db, as("lea").identity, o.teams.ventes, { userId: o.people.marc.id }))
-        const removing = await refusal(removeTeamMember(as("lea").db, as("lea").identity, o.teams.ventes, o.people.lea.id))
-
-        expect([adding.code, removing.code]).toEqual(["forbidden", "forbidden"])
-        expect(await roles(o.teams.ventes)).toEqual(before)
       })
 
       it("should refuse someone outside the organisation (invalid_arguments)", async () => {

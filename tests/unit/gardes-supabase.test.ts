@@ -26,7 +26,7 @@ const SUPABASE_GUARDED: Record<string, string> = {
   "tests/integration/oauth-lectures.test.ts": "the OAuth server of Supabase and the auth schema",
   "tests/integration/test-cleanup.test.ts": "the script lists and deletes Auth accounts",
   // Suites mixtes : seule leur partie Supabase se saute.
-  "tests/integration/mcp-http.test.ts": "one describe proves a real Auth token checked by the JWKS of the project",
+  "tests/integration/mcp-core.test.ts": "one describe proves a real Auth token checked by the JWKS of the project",
   "tests/integration/portabilite-schema.test.ts": "AC1 and AC2 read auth.users and auth.oauth_*, absent from a bare Postgres",
   "tests/integration/oauth-consent-page.test.tsx": "one describe drives the OAuth server of Supabase",
   "tests/integration/platform-staff-script.test.ts": "one describe runs the script in its Supabase mode",

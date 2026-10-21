@@ -69,23 +69,19 @@ describe("routes served before the session token (AC-c3, AC-c5)", () => {
     ]).toEqual([true, true, true, true, false, false, false, false, false])
   })
 
-  it("should answer 401 forbidden in plain text, with the isolation headers, to a request without a session, verifying nothing", async () => {
+  it("should answer 401 forbidden in plain text, with the isolation headers, to a request without a session, verifying nothing, and to a token that does not verify", async () => {
     const verifyToken = vi.fn()
-    const response = await fileHtmlResponse(new Request(`https://demo.oto.test/api/platform/files/${FICHIER}/html`), { accessToken: null, host: "demo.oto.test", verifyToken }, ["files", FICHIER, "html"])
-    expect({ status: response.status, body: await response.text(), headers: Object.fromEntries(response.headers) }).toEqual({
+    const request = () => new Request(`https://demo.oto.test/api/platform/files/${FICHIER}/html`)
+    const answer = async (response: Response) => ({ status: response.status, body: await response.text(), headers: Object.fromEntries(response.headers) })
+    const expected = {
       status: 401,
       body: "forbidden: Authentication required.",
       headers: Object.fromEntries(Object.entries(htmlHeaders({ error: true, publicRoute: false })).map(([nom, valeur]) => [nom.toLowerCase(), valeur])),
-    })
+    }
+    expect({
+      sansSession: await answer(await fileHtmlResponse(request(), { accessToken: null, host: "demo.oto.test", verifyToken }, ["files", FICHIER, "html"])),
+      jetonRefuse: await answer(await fileHtmlResponse(request(), { accessToken: "jeton-refuse", host: "demo.oto.test", verifyToken: async () => undefined }, ["files", FICHIER, "html"])),
+    }).toEqual({ sansSession: expected, jetonRefuse: expected })
     expect(verifyToken).not.toHaveBeenCalled()
-  })
-
-  it("should answer 401 in plain text to a token that does not verify", async () => {
-    const response = await fileHtmlResponse(
-      new Request(`https://demo.oto.test/api/platform/files/${FICHIER}/html`),
-      { accessToken: "jeton-refuse", host: "demo.oto.test", verifyToken: async () => undefined },
-      ["files", FICHIER, "html"],
-    )
-    expect([response.status, response.headers.get("content-type"), await response.text()]).toEqual([401, "text/plain; charset=utf-8", "forbidden: Authentication required."])
   })
 })

@@ -76,13 +76,26 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "context blocks on the SQL face"
     return { identity, ...spyDb(asCaller(ref.people.lea.id, ref.people.lea.email), { fail }) }
   }
 
-  it.each(FAILURES)("should make the block of %s reject when its first read fails, naming the read in the log and never the database text (AC13)", async (_block, table, context, run) => {
+  // Une table de cas en un test (DG1) : le verdict de chaque bloc, le différentiel de `toEqual` nomme les fautifs.
+  it("should make the block of each module reject when its first read fails, naming the read in the log and never the database text (AC13)", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {})
-    const { db, identity, sent } = lea((query) => (query.face === "sql" && query.target === table ? TIMEOUT : null))
-
-    await expect(run(db, identity)).rejects.toMatchObject({ name: "PlatformError", code: "internal", message: "Internal error." })
-    expect(sent.filter((query) => query.face === "sql" && query.target === table)).toHaveLength(1)
-    expect(log).toHaveBeenCalledWith(`[platform] ${context}`, TIMEOUT.code)
+    const verdicts: Record<string, unknown> = {}
+    for (const [block, table, context, run] of FAILURES) {
+      log.mockClear()
+      const { db, identity, sent } = lea((query) => (query.face === "sql" && query.target === table ? TIMEOUT : null))
+      const refusal = await run(db, identity).then(
+        () => null,
+        (error: unknown) => (error instanceof Error ? { name: error.name, code: "code" in error ? error.code : undefined, message: error.message } : error),
+      )
+      verdicts[block] = {
+        refusal,
+        failedReads: sent.filter((query) => query.face === "sql" && query.target === table).length,
+        logged: log.mock.calls.some(([line, code]) => line === `[platform] ${context}` && code === TIMEOUT.code),
+      }
+    }
+    expect(verdicts).toEqual(
+      Object.fromEntries(FAILURES.map(([block]) => [block, { refusal: { name: "PlatformError", code: "internal", message: "Internal error." }, failedReads: 1, logged: true }])),
+    )
   })
 
   it("should read the leads of all the identity's teams in one query (E03-S01, AC22)", async () => {

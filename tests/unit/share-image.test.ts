@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Les données de l'image de partage d'une adresse (E11-S21, AC-3 à AC-5), sans base : l'organisation de l'adresse,
 // la lecture d'un lien et le téléchargement du logo simulés (leurs règles sont prouvées sur base réelle par
-// `e05s10e-partage-public.test.ts` et par les tests de `fetchSource`). Ici : ce que l'image reçoit, et ses replis.
+// `tests/integration/partage-public.test.ts` et par les tests de `fetchSource`). Ici : ce que l'image reçoit, et ses replis.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PlatformError, shareImageData, type IdentityOrg } from "@otomata_tech/oto_platform/server"
 import type { PublicNodeView } from "@otomata_tech/oto_platform/schemas"
@@ -95,13 +95,17 @@ describe("shareImageData", () => {
     expect(loggedText(erreurs)).toContain("[platform] share image: organisation unreadable")
   })
 
-  it.each([
-    ["a type the image does not decode", { bytes: PNG, type: "image/webp" }],
-    ["a failed download", { failure: "source_url leads to a private, loopback, link-local or metadata address" }],
-  ])("should replace the logo by the initial on %s (AC-3)", async (_cas, telecharge) => {
-    vi.mocked(fetchSource).mockResolvedValueOnce(telecharge)
-
-    expect((await shareImageData(HOST)).org).toEqual({ name: "Démo", theme: "lagune", logo: null })
+  it("should replace the logo by the initial on a type the image does not decode, and on a failed download (AC-3)", async () => {
+    const cas: [string, Awaited<ReturnType<typeof fetchSource>>][] = [
+      ["a type the image does not decode", { bytes: PNG, type: "image/webp" }],
+      ["a failed download", { failure: "source_url leads to a private, loopback, link-local or metadata address" }],
+    ]
+    const verdicts: Record<string, unknown> = {}
+    for (const [nom, telecharge] of cas) {
+      vi.mocked(fetchSource).mockResolvedValueOnce(telecharge)
+      verdicts[nom] = (await shareImageData(HOST)).org
+    }
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([nom]) => [nom, { name: "Démo", theme: "lagune", logo: null }])))
   })
 
   it("should not download anything for an organisation without a logo", async () => {

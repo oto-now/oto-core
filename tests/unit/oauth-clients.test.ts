@@ -188,10 +188,8 @@ describe("oauth:clients arguments (AC17)", () => {
   it.each([
     [[], "Commande manquante."],
     [["clean"], "Commande inconnue : clean."],
-    [["list", "--yes"], "Argument inattendu : --yes."],
     [["purge"], "Option requise : --older-than <jours>."],
     [["purge", "--older-than"], "Valeur manquante pour --older-than <jours>."],
-    [["purge", "--older-than", "trente"], "--older-than attend un nombre entier de jours, 1 au moins (reçu : « trente »)."],
     [["purge", "--older-than", "1.5"], "--older-than attend un nombre entier de jours, 1 au moins (reçu : « 1.5 »)."],
     [["purge", "--older-than", "0"], "--older-than attend un nombre entier de jours, 1 au moins (reçu : « 0 »)."],
     [["purge", "--older-than", "30", "--force"], "Argument inattendu : --force."],

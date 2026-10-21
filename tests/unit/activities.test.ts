@@ -1,7 +1,7 @@
 // Le classement et le regroupement des activités de l'accueil (E05-S12, lot B, AC-12 à AC-15 ; HN-E05S12-15,
 // -16) : fonctions pures de `server/activities.ts`, sans base. Une ligne de journal devient un geste pour son
 // lecteur (verbe, chemin coupé sur l'espace personnel d'autrui, D44), puis les gestes relus se regroupent.
-// La portée, les niveaux et la requête sont éprouvés sur une vraie base par `e05s12-activites-sql.test.ts`.
+// La portée, les niveaux et la requête sont éprouvés sur une vraie base par `activities-sql.test.ts`.
 import { describe, expect, it } from "vitest"
 import { classifyRow, groupGestures, type ActivityRow, type Gesture, type Resolution } from "../../packages/plateforme/server/activities"
 import type { JournalReader } from "../../packages/plateforme/server/journal-rows"
@@ -31,7 +31,7 @@ const row = (surcharge: Partial<ActivityRow>): ActivityRow => ({
 const verbOf = (surcharge: Partial<ActivityRow>) => classifyRow(row(surcharge), READER, PREFIX)?.verb ?? null
 
 describe("classifyRow: the verb of a journal line (AC-12, HN-E05S12-15)", () => {
-  it.each<[string, Partial<ActivityRow>, string | null]>([
+  const VERBS: [string, Partial<ActivityRow>, string | null][] = [
     ["a screen write without base_revision", {}, "created"],
     ["a screen write with base_revision", { revised: true }, "edited"],
     ["a screen write with publish: true", { revised: true, publish: true }, "published"],
@@ -63,8 +63,10 @@ describe("classifyRow: the verb of a journal line (AC-12, HN-E05S12-15)", () => 
     ["a context phrase", { method: "tools/call", tool: "acme_context", target: "relance les devis" }, null],
     ["a find", { method: "tools/call", tool: "acme_find", target: "ventes" }, null],
     ["a line of another method", { method: "initialize", tool: null }, null],
-  ])("should classify %s", (_cas, surcharge, verb) => {
-    expect(verbOf(surcharge)).toBe(verb)
+  ]
+
+  it("should classify every line", () => {
+    expect(Object.fromEntries(VERBS.map(([cas, surcharge]) => [cas, verbOf(surcharge)]))).toEqual(Object.fromEntries(VERBS.map(([cas, , verb]) => [cas, verb])))
   })
 
   it("should take the path of node.trash and the table of table.delete_rows from the arguments, and the rows to review of an execution (E11-S02, AC-h3)", () => {
@@ -124,17 +126,25 @@ describe("groupGestures: one activity per person, content and verb within an hou
     expect(activity).toMatchObject({ id: 3, at: "2026-09-26T10:50:00Z", count: 3, path: "ventes/tarifs_2026", title: "Tarifs 2026", kind: "page", userName: "Léa Roux" })
   })
 
-  it.each<[string, Gesture]>([
-    ["an hour or more before", gesture(1, "2026-09-26T09:00:00Z")],
-    ["another verb", gesture(1, "2026-09-26T09:50:00Z", { verb: "published" })],
-    ["another person", gesture(1, "2026-09-26T09:50:00Z", { userId: ADA })],
-    ["another content", gesture(1, "2026-09-26T09:50:00Z", { path: "ventes/devis" })],
-  ])("should keep apart a gesture made %s", (_cas, other) => {
-    const activities = group([gesture(2, "2026-09-26T10:00:00Z"), other])
-    expect(activities.map((activity) => [activity.id, activity.count])).toEqual([
-      [2, 1],
-      [1, 1],
-    ])
+  it("should keep apart a gesture made an hour or more before, or with another verb, person or content, each condition alone", () => {
+    const others: [string, Gesture][] = [
+      ["an hour or more before", gesture(1, "2026-09-26T09:00:00Z")],
+      ["another verb", gesture(1, "2026-09-26T09:50:00Z", { verb: "published" })],
+      ["another person", gesture(1, "2026-09-26T09:50:00Z", { userId: ADA })],
+      ["another content", gesture(1, "2026-09-26T09:50:00Z", { path: "ventes/devis" })],
+    ]
+    const verdicts = Object.fromEntries(others.map(([cas, other]) => [cas, group([gesture(2, "2026-09-26T10:00:00Z"), other]).map((activity) => [activity.id, activity.count])]))
+    expect(verdicts).toEqual(
+      Object.fromEntries(
+        others.map(([cas]) => [
+          cas,
+          [
+            [2, 1],
+            [1, 1],
+          ],
+        ]),
+      ),
+    )
   })
 
   it("should group the gestures made on the old and the new path of the same content", () => {

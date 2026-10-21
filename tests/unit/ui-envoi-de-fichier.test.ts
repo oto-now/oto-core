@@ -11,19 +11,21 @@ import { FICHIERS } from "../../packages/plateforme/ui/noeud/libelles-des-fichie
 
 describe("messageDEnvoi (AC-b4)", () => {
   const rapport = { name: "rapport.pdf", size: 1200 }
-  it.each([
-    ["invalid_arguments", undefined, { name: "setup.exe", size: 3 }, FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg")],
-    // Une extension admise : le service a refusé le nom, pas le type.
-    ["invalid_arguments", undefined, { name: `rapport${String.fromCodePoint(1)}.pdf`, size: 3 }, FICHIERS.nomRefuse],
-    ["too_large", undefined, { name: "gros.pdf", size: 60_000_000 }, FICHIERS.tropLourd("50 Mo", "4 Mo")],
-    ["too_large", undefined, { name: "vide.pdf", size: 0 }, FICHIERS.vide],
-    ["too_large", "quota", rapport, FICHIERS.quota("10 Go")],
-    ["forbidden", undefined, rapport, FICHIERS.interdit],
-    ["not_enabled", undefined, rapport, FICHIERS.desactives],
-    ["conflict", undefined, rapport, FICHIERS.different],
-    ["internal", undefined, rapport, FICHIERS.stockage],
-  ])("should translate %s (%s) for %o", (code, raison, fichier, attendu) => {
-    expect(messageDEnvoi({ code, raison, statut: 400 }, fichier, [])).toBe(attendu)
+  it("should translate each refusal by its code, the quota by its reason, a refused name and an empty file by the file sent", () => {
+    const cas: [string, string, string | undefined, { name: string; size: number }, string][] = [
+      ["type refused", "invalid_arguments", undefined, { name: "setup.exe", size: 3 }, FICHIERS.typeRefuse("png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg")],
+      // Une extension admise : le service a refusé le nom, pas le type.
+      ["name refused", "invalid_arguments", undefined, { name: `rapport${String.fromCodePoint(1)}.pdf`, size: 3 }, FICHIERS.nomRefuse],
+      ["too large", "too_large", undefined, { name: "gros.pdf", size: 60_000_000 }, FICHIERS.tropLourd("50 Mo", "4 Mo")],
+      ["empty", "too_large", undefined, { name: "vide.pdf", size: 0 }, FICHIERS.vide],
+      ["quota", "too_large", "quota", rapport, FICHIERS.quota("10 Go")],
+      ["forbidden", "forbidden", undefined, rapport, FICHIERS.interdit],
+      ["not enabled", "not_enabled", undefined, rapport, FICHIERS.desactives],
+      ["conflict", "conflict", undefined, rapport, FICHIERS.different],
+      ["internal", "internal", undefined, rapport, FICHIERS.stockage],
+    ]
+    const verdicts = Object.fromEntries(cas.map(([nom, code, raison, fichier]) => [nom, messageDEnvoi({ code, raison, statut: 400 }, fichier, [])]))
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([nom, , , , attendu]) => [nom, attendu])))
   })
 
   it("should name the host types in a refused type, and take a refused host type for a refused name (lot 1b)", () => {

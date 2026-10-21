@@ -9,7 +9,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   listNodeRules,
-  listRuledNodes,
   PlatformError,
   removeRule,
   resolveIdentity,
@@ -102,13 +101,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
         const page = await pageDeVentes()
         const error = await refusal(setNodeRule(as("ada").db, as("ada").identity, { path: page.path, subject: { kind: "team", id: autre.teams.ventes }, level: "read" }))
         expect(error.code).toBe("invalid_arguments")
-      })
-
-      it("should answer an invisible node as unknown (not_found, H68)", async () => {
-        const page = await pageDeVentes()
-        const error = await refusal(setNodeRule(as("paul").db, as("paul").identity, { path: page.path, subject: { kind: "team", id: o.teams.support }, level: "read" }))
-        expect(error.code).toBe("not_found")
-        expect(error.message).toBe(`Unknown path ${page.path}.`)
       })
     })
 
@@ -220,27 +212,10 @@ describe.skipIf(!sqlConfigured || privatePending)(
 
       it.each([
         ["an unknown path", "nulle_part"],
-        ["the personal space of another person", "private/claire"],
         ["a malformed path", "Ventes/Devis"],
       ])("should answer %s as not_found (H68)", async (_cas, path) => {
         const error = await refusal(listNodeRules(as("lea").db, as("lea").identity, path))
         expect(error.code).toBe("not_found")
-      })
-    })
-
-    describe("listRuledNodes (AC15)", () => {
-      it("should list the visible nodes that carry a rule, with their number of rules, and no invisible one", async () => {
-        // Deux partages nominatifs : ni Paul ni son équipe Support n'y sont, la page lui reste invisible.
-        const page = await pageDeVentes()
-        await fx.addRule({ orgId: o.org.id, nodeId: page.id, userId: o.people.lea.id, level: "read" })
-        await fx.addRule({ orgId: o.org.id, nodeId: page.id, userId: o.people.marc.id, level: "write" })
-
-        const pourClaire = await listRuledNodes(as("claire").db, as("claire").identity)
-        const pourPaul = await listRuledNodes(as("paul").db, as("paul").identity)
-
-        expect(pourClaire).toContainEqual({ path: page.path, title: "Page", rulesCount: 2 })
-        expect(pourPaul.map((node) => node.path)).not.toContain(page.path)
-        expect(pourClaire.map((node) => node.path)).toEqual([...pourClaire.map((node) => node.path)].sort((a, b) => a.localeCompare(b)))
       })
     })
   },

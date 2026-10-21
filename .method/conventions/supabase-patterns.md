@@ -215,7 +215,7 @@ franchit une de ces règles passe par un ADR.
   `extra_float_digits` de la session, que `server/sql.ts` ne pose pas (sous 1, il revient à 15 chiffres :
   `1365.3333333333333` revient `1365.33333333333`, et l'égalité avec la valeur envoyée échoue). Le rang se contrôle par le nombre de lignes et une
   colonne sans arrondi (`type`, `key`). **Vérifiable :** `insertBlocks` de `server/nodes/store.ts` ; son test pose
-  `extra_float_digits = 0` dans la transaction (`tests/unit/e11s18-ecriture-assistants.test.ts`).
+  `extra_float_digits = 0` dans la transaction (`tests/unit/nodes-write.test.ts`).
 - **Un paramètre `timestamptz` d'une requête postgres.js passe par une `Date`, à la milliseconde** : son sérialiseur (`new Date(x).toISOString()`) coupe les microsecondes d'une date passée
   en texte, et une date lue en `Date` les a déjà perdues. Une date relue puis réécrite, ou comparée à
   l'égalité à une colonne (tampon de garde : `p_draft_stamp` de `publish_node`), reste dans la base,

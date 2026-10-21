@@ -10,7 +10,6 @@ import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { PlatformError, type Identity } from "@otomata_tech/oto_platform/server"
 import type { VerifyToken } from "../../packages/plateforme/mcp/auth"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
-import { removeMember, revokePlatformAccess, updateMember } from "../../packages/plateforme/server/members"
 import { removeRule, setNodeRule } from "../../packages/plateforme/server/rules"
 import { addTeamMember, createTeam, deleteTeam, removeTeamMember, setTeamMemberRole, updateTeam } from "../../packages/plateforme/server/teams"
 import { TEAMS } from "../helpers/reference-org"
@@ -43,13 +42,6 @@ vi.mock("../../packages/plateforme/server/teams", async (importOriginal) => ({
   addTeamMember: vi.fn(),
   removeTeamMember: vi.fn(),
   setTeamMemberRole: vi.fn(),
-}))
-
-vi.mock("../../packages/plateforme/server/members", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../packages/plateforme/server/members")>()),
-  updateMember: vi.fn(),
-  removeMember: vi.fn(),
-  revokePlatformAccess: vi.fn(),
 }))
 
 vi.mock("../../packages/plateforme/server/rules", async (importOriginal) => ({
@@ -208,20 +200,8 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     })
   })
 
-  describe("members, rules and platform-access routes", () => {
-    it("should change a member with PATCH members/<userId> and remove one with DELETE", async () => {
-      vi.mocked(updateMember).mockResolvedValue({ data: { userId: USER, role: "admin" }, target: "lea@acme.test", teamId: null })
-      vi.mocked(removeMember).mockResolvedValue({ data: { userId: USER }, target: "lea@acme.test", teamId: null })
-
-      const changement = await call(request("PATCH", `members/${USER}`, { role: "admin" }))
-      expect(updateMember).toHaveBeenCalledWith(expect.anything(), identity, USER, { role: "admin" })
-      expect(changement.line).toMatchObject({ tool: "PATCH members", target: "lea@acme.test" })
-
-      const retrait = await call(request("DELETE", `members/${USER}`))
-      expect(retrait.status).toBe(200)
-      expect(retrait.body).toEqual({ data: { member: { userId: USER } } })
-    })
-
+  // Membres et accès plateforme : `api-equipes.test.ts`, avec les vrais services.
+  describe("rules routes", () => {
     it("should answer 201 for a new rule, 200 for a replaced one, and journal the node path", async () => {
       const regle = { path: "ventes/devis", subject: { kind: "team" as const, id: TEAM }, level: "read" as const }
       vi.mocked(setNodeRule).mockResolvedValueOnce({ data: { id: USER, ...regle, created: true }, target: "ventes/devis", teamId: TEAM })
@@ -240,18 +220,6 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       expect(status).toBe(200)
       expect(removeRule).toHaveBeenCalledWith(expect.anything(), identity, USER)
       expect(line).toMatchObject({ tool: "DELETE rules", target: "ventes/devis" })
-    })
-
-    it("should revoke with POST platform-access/<id>/revoke only", async () => {
-      vi.mocked(revokePlatformAccess).mockResolvedValue({ data: { id: USER, revokedAt: "2026-09-24T10:00:00Z", alreadyRevoked: false }, target: USER, teamId: null })
-
-      const revocation = await call(request("POST", `platform-access/${USER}/revoke`, {}))
-
-      expect(revocation.status).toBe(200)
-      expect(revokePlatformAccess).toHaveBeenCalledWith(expect.anything(), identity, USER)
-      expect(revocation.line).toMatchObject({ tool: "POST platform-access/revoke", target: USER })
-      expect((await call(request("POST", `platform-access/${USER}`, {}))).status).toBe(404)
-      expect((await call(request("DELETE", `platform-access/${USER}/revoke`))).status).toBe(404)
     })
   })
 })

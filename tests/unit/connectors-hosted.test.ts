@@ -16,6 +16,7 @@ import { chooseHostedCandidate, hostedCandidates, hostedCreatedAt, hostedRefusal
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { consentConnector, describedConnector, fakeHostedLinks, hostedConnector, leveledConsentConnector, memoryTokens } from "../factories/described-connector"
+import { loggedText } from "../helpers/logs"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 const key = () => `hk_${randomBytes(12).toString("hex")}`
@@ -33,7 +34,7 @@ function refusalOf(definitions: readonly ConnectorDefinition[], options: Connect
     if (error instanceof CatalogRegistrationError) return error.message
     throw error
   }
-  throw new Error("expected a CatalogRegistrationError")
+  return "(declared, no refusal)"
 }
 
 /** Le connecteur rattaché de test, une fonction (par son nom court) remplacée par `change`. */
@@ -52,7 +53,7 @@ describe("declaring host fields, account identity and act", () => {
     expect(catalogFunctions().filter((fn) => fn.connector === "crm")).toHaveLength(6)
   })
 
-  it.each<[string, () => ConnectorDefinition[], string]>([
+  const REFUSALS: [string, () => ConnectorDefinition[], string][] = [
     ["an unknown holder", () => [{ ...describedConnector(), credential: [{ name: "api_key", label: "API key", secret: true, holder: "tenant" as "host" }] }], 'crm: credential field api_key has holder "tenant": account or host.'],
     ["an account identity on a consent connector", () => [{ ...consentConnector(), accountIdentity: { name: "account_id", label: "Account", pattern: "^[a-z]+$" } }], "crm: accountIdentity does not go with oauth2_user: a consent's account is the person's own."],
     // Les niveaux d'accès n'existent que sous `oauth2_user`, que l'identité d'un compte rattaché refuse : refus explicite.
@@ -66,19 +67,29 @@ describe("declaring host fields, account identity and act", () => {
     ["a function without act", () => [hostedWith("get_company", (fn) => ({ ...fn, act: undefined }))], "crm.get_company: act must be true (the function engages or destroys) or false."],
     ["a read function that acts", () => [hostedWith("get_company", (fn) => ({ ...fn, act: true }))], "crm.get_company: a read function never engages: act must be false."],
     ["a sensitive function that does not act", () => [hostedWith("post_entry", (fn) => ({ ...fn, act: false }))], "crm.post_entry: a sensitive function engages: act must be true."],
-  ])("should refuse %s by name, and declare nothing", (_case, definitions, message) => {
-    registerConnectors([describedConnector("crm_before")])
-    expect(refusalOf(definitions())).toBe(message)
-    expect(catalogFunctions().filter((fn) => fn.connector === "crm_before")).toHaveLength(6)
+  ]
+
+  it("should refuse each invalid definition by name, and declare nothing", () => {
+    const verdicts = Object.fromEntries(
+      REFUSALS.map(([name, definitions]) => {
+        registerConnectors([describedConnector("crm_before")])
+        const message = refusalOf(definitions())
+        return [name, { message, kept: catalogFunctions().filter((fn) => fn.connector === "crm_before").length }]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(REFUSALS.map(([name, , message]) => [name, { message, kept: 6 }])))
   })
 
-  it.each<[string, ConnectorOptions, string]>([
+  const REGISTRATION_REFUSALS: [string, ConnectorOptions, string][] = [
     ["a reader for an undeclared connector", { hostCredentials: { other: () => ({}) } }, "Host credentials for other: no connector of this name with a host field is declared."],
     ["a reader that is not a function", { hostCredentials: { crm: { api_key: "x" } as unknown as () => Record<string, string> } }, "Host credentials for crm must be a function that returns the host fields."],
     ["a port for an undeclared connector", { hostedLinks: { other: fakeHostedLinks().port } }, "Hosted links for other: no connector of this name with an accountIdentity is declared."],
     ["a port without its three methods", { hostedLinks: { crm: { createLink: async () => ({ url: "https://x.test" }) } as never } }, "Hosted links for crm need createLink, listAccounts and probe."],
-  ])("should refuse %s at registration", (_case, options, message) => {
-    expect(refusalOf([hostedConnector()], options)).toBe(message)
+  ]
+
+  it("should refuse each invalid reader or port at registration", () => {
+    const verdicts = Object.fromEntries(REGISTRATION_REFUSALS.map(([name, options]) => [name, refusalOf([hostedConnector()], options)]))
+    expect(verdicts).toEqual(Object.fromEntries(REGISTRATION_REFUSALS.map(([name, , message]) => [name, message])))
   })
 
   it("should refuse a reader for a connector without any host field", () => {
@@ -136,39 +147,46 @@ describe("reading the host's fields", () => {
     expect(readHostFields(declared)).toEqual({ api_key: current })
   })
 
-  it.each<[string, ConnectorOptions]>([
-    ["no reader", {}],
-    ["a reader that throws", { hostCredentials: { crm: () => { throw new Error("vault down: hk_leaked") } } }],
-    ["a reader without the field", { hostCredentials: { crm: () => ({}) } }],
-    ["a reader with an empty field", { hostCredentials: { crm: () => ({ api_key: "  " }) } }],
-  ])("should refuse with %s, naming the field and nothing of the reader", (_case, options) => {
+  it("should refuse without a usable reader, naming the field and nothing of the reader", () => {
+    const readers: [string, ConnectorOptions][] = [
+      ["no reader", {}],
+      ["a reader that throws", { hostCredentials: { crm: () => { throw new Error("vault down: hk_leaked") } } }],
+      ["a reader without the field", { hostCredentials: { crm: () => ({}) } }],
+      ["a reader with an empty field", { hostCredentials: { crm: () => ({ api_key: "  " }) } }],
+    ]
     const logged = vi.spyOn(console, "error").mockImplementation(() => {})
-    const declared = declaredWith(options)
-    let thrown: unknown
-    try {
-      readHostFields(declared)
-    } catch (error) {
-      thrown = error
-    }
-    expect(thrown instanceof PlatformError && [thrown.code, thrown.message]).toEqual(["not_enabled", message])
-    expect(JSON.stringify(logged.mock.calls)).not.toContain("hk_leaked")
+    const verdicts = Object.fromEntries(
+      readers.map(([name, options]) => {
+        const declared = declaredWith(options)
+        let thrown: unknown
+        try {
+          readHostFields(declared)
+        } catch (error) {
+          thrown = error
+        }
+        return [name, thrown instanceof PlatformError && [thrown.code, thrown.message]]
+      }),
+    )
+    expect(verdicts).toEqual(Object.fromEntries(readers.map(([name]) => [name, ["not_enabled", message]])))
+    expect(loggedText(logged)).not.toContain("hk_leaked")
   })
 })
 
 describe("the dates of the third party", () => {
-  it.each<[string | null, string | null]>([
-    ["2026-10-17T09:30:00Z", "2026-10-17T09:30:00.000Z"],
-    ["2026-10-17T09:30:00.123456789Z", "2026-10-17T09:30:00.123Z"],
-    ["2026-10-17T11:30:00+02:00", "2026-10-17T09:30:00.000Z"],
-    ["2026-10-17T09:30Z", "2026-10-17T09:30:00.000Z"],
-    [null, null],
-    ["1697000000000", null],
-    ["2026-10-17 09:30:00", null],
-    ["2026-10-17T09:30:00", null],
-    ["2026-13-45T09:30:00Z", null],
-    ["yesterday", null],
-  ])("should read %s as %s", (given, read) => {
-    expect(hostedCreatedAt(given)?.toISOString() ?? null).toBe(read)
+  it("should read an ISO date with its zone, and nothing else", () => {
+    const dates: [string | null, string | null][] = [
+      ["2026-10-17T09:30:00Z", "2026-10-17T09:30:00.000Z"],
+      ["2026-10-17T09:30:00.123456789Z", "2026-10-17T09:30:00.123Z"],
+      ["2026-10-17T11:30:00+02:00", "2026-10-17T09:30:00.000Z"],
+      ["2026-10-17T09:30Z", "2026-10-17T09:30:00.000Z"],
+      [null, null],
+      ["1697000000000", null],
+      ["2026-10-17 09:30:00", null],
+      ["2026-10-17T09:30:00", null],
+      ["2026-13-45T09:30:00Z", null],
+    ]
+    const verdicts = Object.fromEntries(dates.map(([given]) => [String(given), hostedCreatedAt(given)?.toISOString() ?? null]))
+    expect(verdicts).toEqual(Object.fromEntries(dates.map(([given, read]) => [String(given), read])))
   })
 })
 

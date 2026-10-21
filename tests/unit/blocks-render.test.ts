@@ -467,8 +467,16 @@ describe("blocks the shared schema refuses (E01-S06 N44)", () => {
   // M67 (D122) : un bloc refusé est servi à sa place par une ligne, jamais effacé en silence.
   const unknown = (type: unknown) => `<!-- block ${String(type)} not shown: this platform version does not know it -->`
 
-  it.each(DOCUMENT_CASES.filter((c) => !c.valid).map((c) => [c.name, c] as const))("should render %s as the unknown-block line", (_name, c) => {
-    expect(renderBlock(asBlock(c.block), { refs: () => "ref" })).toBe(`<!-- ref: ref -->\n${unknown(c.block.type)}`)
+  // Une table de cas en un test (DG1) : le verdict de chaque cas, le différentiel de `toEqual` nomme les fautifs.
+  it("should render every refused case as the unknown-block line, with its reference line, and no accepted case as it", () => {
+    const verdict = (block: BlockLike, type: unknown) => {
+      if (renderBlock(block, { refs: () => "ref" }) === `<!-- ref: ref -->\n${unknown(type)}`) return "unknown-block line"
+      return renderBlock(block) === "" ? "nothing" : "rendered"
+    }
+    const expected = (c: (typeof DOCUMENT_CASES)[number]) => (!c.valid ? "unknown-block line" : c.name === "an empty paragraph" ? "nothing" : "rendered")
+    expect(Object.fromEntries(DOCUMENT_CASES.map((c) => [c.name, verdict(asBlock(c.block), c.block.type)]))).toEqual(
+      Object.fromEntries(DOCUMENT_CASES.map((c) => [c.name, expected(c)])),
+    )
   })
 
   it("should not hand a reference block the schema refuses to the reference option", () => {
@@ -483,13 +491,6 @@ describe("blocks the shared schema refuses (E01-S06 N44)", () => {
     expect(markdown).toBe(unknown("reference"))
     expect(seen).toEqual([])
   })
-
-  it.each(DOCUMENT_CASES.filter((c) => c.valid && c.name !== "an empty paragraph").map((c) => [c.name, c] as const))(
-    "should render %s",
-    (_name, c) => {
-      expect(renderBlock(asBlock(c.block))).not.toBe("")
-    },
-  )
 
   it("should render as the unknown-block line, and open no section with, a heading whose level the database admits in an array", () => {
     const blocks: BlockLike[] = [

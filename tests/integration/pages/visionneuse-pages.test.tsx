@@ -114,15 +114,20 @@ describe("/n/<chemin>?view=<id> (AC-c2)", () => {
     expect(screen.getByRole("link", { name: "Ouvrir la page Modèle de relance" })).toHaveAttribute("href", "/n/ventes/modele_relance")
   })
 
-  it.each([
-    ["an unknown file", new PlatformError("not_found", "Unknown file."), "Fichier introuvable"],
-    ["a .md that is not UTF-8", new PlatformError("invalid_arguments", "the file is not UTF-8; download it instead", { reason: "not_utf8" }), "Ce fichier n'est pas en UTF-8 : téléchargez-le."],
-  ])("should say %s in the viewer's own sentence", async (_cas, refus, phrase) => {
-    vi.mocked(fileView).mockRejectedValue(refus)
+  it("should say an unknown file, or a .md that is not UTF-8, in the viewer's own sentence", async () => {
+    const cas: [string, PlatformError, string][] = [
+      ["an unknown file", new PlatformError("not_found", "Unknown file."), "Fichier introuvable"],
+      ["a .md that is not UTF-8", new PlatformError("invalid_arguments", "the file is not UTF-8; download it instead", { reason: "not_utf8" }), "Ce fichier n'est pas en UTF-8 : téléchargez-le."],
+    ]
     vi.spyOn(console, "error").mockImplementation(() => undefined)
-    await monter(page({ view: ID }))
-    expect(screen.getAllByText(phrase).length).toBeGreaterThan(0)
-    expect(document.querySelector("iframe")).toBeNull()
+    const verdicts: Record<string, unknown> = {}
+    for (const [nom, refus, phrase] of cas) {
+      vi.mocked(fileView).mockRejectedValue(refus)
+      await monter(page({ view: ID }))
+      verdicts[nom] = { dit: screen.queryAllByText(phrase).length > 0, iframe: document.querySelector("iframe") !== null }
+      cleanup()
+    }
+    expect(verdicts).toEqual(Object.fromEntries(cas.map(([nom]) => [nom, { dit: true, iframe: false }])))
   })
 
   it("should give a table no viewer: view is not read", async () => {

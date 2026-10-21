@@ -1,12 +1,52 @@
 import { describe, expect, it } from "vitest"
-import { liensDuTexte, type CiblesDesLiens } from "../../packages/plateforme/ui/noeud/en-ligne"
+import { linksIn } from "../../packages/plateforme/schemas/link-syntax"
+import { citationAuCurseur, lienVers } from "../../packages/plateforme/ui/noeud/editeur/citer"
+import { liensDuTexte, segmentsEnLigne, type CiblesDesLiens } from "../../packages/plateforme/ui/noeud/en-ligne"
 import { avecLeLien, sansLeLien, type LienVoulu } from "../../packages/plateforme/ui/noeud/editeur/lien-du-bloc"
 
-// Le panneau « Lien » de l'éditeur (E11-S06, lot b), en fonctions pures : les liens d'un texte et leurs bornes, lus
-// comme l'écran les rend ; le lien réécrit par « Appliquer », seul, relu avant d'être écrit (AC-b4, AC-b5) ; le lien
-// retiré (AC-b6). La linéarité de la lecture est prouvée sur `segmentsEnLigne` (`ui-en-ligne.test.ts`), que
-// `liensDuTexte` parcourt une fois. Les repères des listes (lot a) se lisent dans l'éditeur rendu :
-// `tests/integration/components/e11s06-editeur.test.tsx`, et `numerosDeGouttiere` dans `ui-editeur-blocs-de-page.test.ts`.
+// Les liens de l'éditeur, en fonctions pures. Ceux d'un bloc (E05-S10) : une adresse collée devient un lien, coupée au
+// milieu à l'écran (AC-a8 ; E11-S15, AC-b10) ; « @ » lit la citation que le curseur termine et insère le lien
+// `[[chemin|titre]]` que la publication extrait (AC-a9). Le panneau « Lien » (E11-S06, lot b) : les liens d'un texte et
+// leurs bornes, lus comme l'écran les rend ; le lien réécrit par « Appliquer », seul, relu avant d'être écrit (AC-b4,
+// AC-b5) ; le lien retiré (AC-b6). La linéarité de la lecture est prouvée sur `segmentsEnLigne` (`ui-en-ligne.test.ts`),
+// que `liensDuTexte` parcourt une fois. Les repères des listes (lot a) se lisent dans l'éditeur rendu :
+// `tests/integration/components/liens-en-edition.test.tsx`, et `numerosDeGouttiere` dans `ui-editeur-blocs-de-page.test.ts`.
+
+describe("adresse web dans un bloc (AC-a8)", () => {
+  it("should read a pasted address as a web link outside code and internal links, without its closing punctuation", () => {
+    const longue = "https://docs.exemple.fr/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit?usp=sharing"
+    expect(segmentsEnLigne(`Voir ${longue}. Et [[ventes/tarifs]], puis \`https://code.exemple\`.`)).toEqual([
+      { genre: "texte", texte: "Voir " },
+      { genre: "web", adresse: longue, libelle: "https://docs.exemple.fr/…tUvWxYz/edit" },
+      { genre: "texte", texte: ". Et " },
+      { genre: "lien", chemin: "ventes/tarifs", reference: null, libelle: "" },
+      { genre: "texte", texte: ", puis " },
+      { genre: "code", texte: "https://code.exemple" },
+      { genre: "texte", texte: "." },
+    ])
+    // Un souligné dans une adresse n'ouvre pas d'italique.
+    expect(segmentsEnLigne("a https://x.fr/_b_ c").map((segment) => segment.genre)).toEqual(["texte", "web", "texte"])
+  })
+})
+
+describe("« @ » dans un bloc (AC-a9)", () => {
+  it("should read the citation the caret ends, after a blank or at the start, and nothing in an address or after a blank", () => {
+    expect(citationAuCurseur("@tar", 4)).toEqual({ debut: 0, requete: "tar" })
+    expect(citationAuCurseur("Voir @tarifs", 12)).toEqual({ debut: 5, requete: "tarifs" })
+    expect(citationAuCurseur("Voir @", 6)).toEqual({ debut: 5, requete: "" })
+    expect(citationAuCurseur("jean@exemple", 12)).toBeNull()
+    expect(citationAuCurseur("@tarifs puis", 12)).toBeNull()
+    expect(citationAuCurseur("Voir @tarifs et", 12)).toEqual({ debut: 5, requete: "tarifs" })
+  })
+
+  it("should insert a link by path with the title as its label, that the publication extracts", () => {
+    // Un `]` du titre fermerait le lien : il devient un blanc.
+    const lien = lienVers({ path: "ventes/grille_tarifaire", title: "Grille [tarifaire]" })
+    expect(lien).toBe("[[ventes/grille_tarifaire|Grille [tarifaire]]")
+    expect(linksIn(`Voir ${lien}.`).map((trouve) => trouve.link)).toEqual([{ path: "ventes/grille_tarifaire", key: null, label: "Grille [tarifaire" }])
+    expect(segmentsEnLigne(lien)).toEqual([{ genre: "lien", chemin: "ventes/grille_tarifaire", reference: null, libelle: "Grille [tarifaire" }])
+  })
+})
 
 /** Le lien de rang `rang` d'un texte, tel que le panneau l'ouvre dans un bloc qui n'est pas une liste. */
 function ouvert(texte: string, rang = 0) {
@@ -62,8 +102,12 @@ describe("avecLeLien (AC-b4, AC-b5)", () => {
     expect(avecLeLien(texte, ouvert(texte), page("é".repeat(200)))).not.toHaveProperty("refus")
   })
 
-  it.each(["http://a.fr", "javascript:alert(1)", 'https://a.fr" onmouseover=alert(1)', "https://a b.fr", "https://a.fr.", "data:text/html,x"])("should never write the address %s", (adresse) => {
-    expect(avecLeLien(texte, ouvert(texte), web(adresse, "Doc"))).toEqual({ refus: "adresse" })
+  // Une table de cas en un test (DG1) : le différentiel de `toEqual` nomme les adresses fautives.
+  it("should never write an address that is not https:// without a blank nor a trailing dot", () => {
+    const adresses = ["http://a.fr", "javascript:alert(1)", 'https://a.fr" onmouseover=alert(1)', "https://a b.fr", "https://a.fr.", "data:text/html,x"]
+    expect(Object.fromEntries(adresses.map((adresse) => [adresse, avecLeLien(texte, ouvert(texte), web(adresse, "Doc"))]))).toEqual(
+      Object.fromEntries(adresses.map((adresse) => [adresse, { refus: "adresse" }])),
+    )
   })
 
   it("should refuse a page destination with no page chosen, a link no longer in its place, and a link that would not read back", () => {

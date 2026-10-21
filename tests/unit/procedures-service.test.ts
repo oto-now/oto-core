@@ -13,22 +13,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { BlockInput } from "../../packages/plateforme/schemas"
 import { writeNode, type WriteOrigin } from "../../packages/plateforme/server/nodes/write"
 import { checkProcedure, listProcedures } from "../../packages/plateforme/server/procedures"
-import { BUSY_REFUSAL } from "../factories/test-functions"
 import { CONTENT_AT, nodeId, ORG, OTHER_ORG, TEAMS, type ContentNode, type Person, type RuleSpec } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { callsFunction, isWrite, touches, watchDb, type DbCall, type WatchOptions } from "../helpers/spy-t1-e2b2"
 import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
 
-vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
-  const { TEST_FUNCTIONS } = await import("../factories/test-functions")
-  // Le catalogue de l'assistant aussi : les portes qui servent un assistant le lisent (`assistantFunctions`).
-  return {
-    ...original,
-    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS],
-    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS],
-  }
-})
+vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => (await import("../factories/test-functions")).withTestFunctions(importOriginal))
 
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
@@ -78,22 +68,14 @@ const reads = (calls: DbCall[], table: string) => calls.filter((call) => touches
 const draftBlockReads = (calls: DbCall[]) =>
   reads(calls, "blocks").filter((call) => call.kind === "sql" && (call.values.includes("draft") || call.text.includes("'draft'")))
 
-/** Un problème par cas R de la liste exhaustive, sous « Étapes », après une étape numérotée ; son texte au préfixe de O. */
+/**
+ * Un refus de publication, sous « Étapes », après une étape numérotée ; son texte au préfixe de O. Le texte de chaque
+ * autre règle est prouvé par `checkProcedureBlocks` (`tests/integration/procedures-check.test.ts`) ; R2 sur un bloc
+ * de texte reste ici, son texte n'y étant comparé nulle part ailleurs en entier.
+ */
 const STEP = [heading("Étapes"), steps(["Fais :"])]
 const AT = "section « Étapes », call block 1 (step 1)"
 const CASES: { rule: string; blocks: BlockInput[]; active?: string[]; kind: string; problem: (prefix: string) => string }[] = [
-  {
-    rule: "R1",
-    blocks: [heading("Étapes"), paragraph("x".repeat(13_521))],
-    kind: "too_long",
-    problem: (p) => `steps: 13,532 characters; a procedure is served whole by ${p}_context and holds at most 12,000: move reference material to a page and link to it`,
-  },
-  {
-    rule: "R2 (code block)",
-    blocks: [...STEP, { type: "code", text: 'mail.send_draft {"id": "<id>"}', data: { language: " call " } }],
-    kind: "invalid_block",
-    problem: () => "section « Étapes », code block: this code block is marked call but is plain code, so it was never checked; write it as a call block",
-  },
   {
     rule: "R2 (text block)",
     blocks: [...STEP, paragraph('Envoie :\n```call\nmail.send_draft {"id": "<id>"}\n```')],
@@ -101,67 +83,10 @@ const CASES: { rule: string; blocks: BlockInput[]; active?: string[]; kind: stri
     problem: () => "section « Étapes », text block: this text holds a call fence but is plain text, so it was never checked; write it as a call block",
   },
   {
-    rule: "R4",
-    blocks: [...STEP, callBlock("acme_call", { function: "mail.send_draft" })],
-    kind: "invalid_block",
-    problem: () => `${AT}: a call block starts with a function name such as table.rows, found « acme_call »`,
-  },
-  {
     rule: "R7",
     blocks: [...STEP, callBlock("mail.send", { id: "<id>" })],
     kind: "unknown_function",
     problem: (p) => `${AT}: unknown function « mail.send »; ${p}_find with type function lists the functions`,
-  },
-  {
-    rule: "R8",
-    blocks: [...STEP, callBlock("mail.create_draft", DRAFT_ARGS)],
-    active: [],
-    kind: "function_not_active",
-    problem: () => `${AT}: mail.create_draft belongs to connector mail, which is not enabled for Acme Test; an administrator enables it on the dashboard`,
-  },
-  {
-    rule: "R9 (confirm)",
-    blocks: [...STEP, callBlock("mail.send_draft", { id: "<id du brouillon>", confirm: true })],
-    kind: "unknown_key",
-    problem: (p) =>
-      `${AT}: « confirm » is an option of ${p}_call, not an argument of mail.send_draft; say in the step's text to call again with confirm: true after the user's explicit approval`,
-  },
-  {
-    rule: "R9 (team)",
-    blocks: [...STEP, callBlock("mail.create_draft", { ...DRAFT_ARGS, team: "ventes" })],
-    kind: "unknown_key",
-    problem: (p) =>
-      `${AT}: « team » is an option of ${p}_call, not an argument of mail.create_draft; the team comes from where the procedure lives, and the account from that team or the organisation`,
-  },
-  {
-    rule: "R9 (envelope)",
-    blocks: [...STEP, callBlock("mail.create_draft", { function: "mail.create_draft", ...DRAFT_ARGS })],
-    kind: "unknown_key",
-    problem: (p) => `${AT}: « function » belongs to the ${p}_call envelope; write only the arguments of mail.create_draft in the block`,
-  },
-  {
-    rule: "R10",
-    blocks: [...STEP, callBlock("mail.create_draft", { ...DRAFT_ARGS, destinataire: "sophie@valbrune.test" })],
-    kind: "unknown_key",
-    problem: () => `${AT}: mail.create_draft has no argument « destinataire »; its arguments: to, subject, body`,
-  },
-  {
-    rule: "R11",
-    blocks: [...STEP, callBlock("mail.create_draft", { to: "<email du contact>", body: "<texte>" })],
-    kind: "missing_argument",
-    problem: () => `${AT}: mail.create_draft needs argument « subject »; write "<…>" for a value known only when the procedure runs`,
-  },
-  {
-    rule: "R12",
-    blocks: [...STEP, callBlock("mail.create_draft", { ...DRAFT_ARGS, to: "claire" })],
-    kind: "invalid_value",
-    problem: () => `${AT}: mail.create_draft argument « to »: Invalid email address (got "claire")`,
-  },
-  {
-    rule: "R13",
-    blocks: [...STEP, callBlock("test.release", { table: "ventes/suivi_prospects", key: "<id>", worker: "<ton prénom>", state: "busy" })],
-    kind: "check_failed",
-    problem: () => `${AT}: test.release: ${BUSY_REFUSAL}`,
   },
 ]
 

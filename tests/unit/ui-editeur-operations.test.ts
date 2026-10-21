@@ -59,21 +59,23 @@ describe("opérations par bloc (AC10 à AC12)", () => {
 describe("contrôle avant envoi (AC13)", () => {
   const titre = (text: string): BlocEdite => ({ type: "heading", text, data: { level: 1 }, key: null })
 
-  it.each<[string, BlocEdite, string]>([
-    ["an empty heading", titre("  "), MESSAGES_DU_BLOC.titreVide],
-    ["a heading on two lines", titre("Objet\ndu devis"), MESSAGES_DU_BLOC.titreUneLigne],
-    ["a heading of 201 characters", titre("x".repeat(201)), MESSAGES_DU_BLOC.titreLong],
-    ["a text of 100 001 characters", { type: "paragraph", text: "x".repeat(100_001), data: {}, key: null }, MESSAGES_DU_BLOC.tropLong],
-    ["a list of 501 items", { type: "list", text: null, data: { items: Array.from({ length: 501 }, () => "x") }, key: null }, MESSAGES_DU_BLOC.listeLongue],
-    // E10-S04 (AC-b1, AC-b2) : les sous-éléments comptent ; un quatrième niveau frappé est refusé.
-    ["a list of 501 items, sub-items included", { type: "list", text: null, data: { items: [{ text: "a", children: { items: Array.from({ length: 500 }, () => "x") } }] }, key: null }, MESSAGES_DU_BLOC.listeLongue],
-    [
-      "a list typed four levels deep",
-      { type: "list", text: null, data: { items: [{ text: "a", children: { items: [{ text: "b", children: { items: [{ text: "c", children: { items: ["d"] } }] } }] } }] }, key: null },
-      MESSAGES_DU_BLOC.troisNiveaux,
-    ],
-  ])("should refuse %s before sending", (_cas, bloc, message) => {
-    expect(controler(bloc)).toEqual({ message })
+  // Une table de cas en un test (DG1) : le différentiel de `toEqual` nomme les cas fautifs.
+  it("should refuse each of these blocks before sending, with its message", () => {
+    const cas: [string, BlocEdite, string][] = [
+      ["an empty heading", titre("  "), MESSAGES_DU_BLOC.titreVide],
+      ["a heading on two lines", titre("Objet\ndu devis"), MESSAGES_DU_BLOC.titreUneLigne],
+      ["a heading of 201 characters", titre("x".repeat(201)), MESSAGES_DU_BLOC.titreLong],
+      ["a text of 100 001 characters", { type: "paragraph", text: "x".repeat(100_001), data: {}, key: null }, MESSAGES_DU_BLOC.tropLong],
+      ["a list of 501 items", { type: "list", text: null, data: { items: Array.from({ length: 501 }, () => "x") }, key: null }, MESSAGES_DU_BLOC.listeLongue],
+      // E10-S04 (AC-b1, AC-b2) : les sous-éléments comptent ; un quatrième niveau frappé est refusé.
+      ["a list of 501 items, sub-items included", { type: "list", text: null, data: { items: [{ text: "a", children: { items: Array.from({ length: 500 }, () => "x") } }] }, key: null }, MESSAGES_DU_BLOC.listeLongue],
+      [
+        "a list typed four levels deep",
+        { type: "list", text: null, data: { items: [{ text: "a", children: { items: [{ text: "b", children: { items: [{ text: "c", children: { items: ["d"] } }] } }] } }] }, key: null },
+        MESSAGES_DU_BLOC.troisNiveaux,
+      ],
+    ]
+    expect(Object.fromEntries(cas.map(([nom, bloc]) => [nom, controler(bloc)]))).toEqual(Object.fromEntries(cas.map(([nom, , message]) => [nom, { message }])))
   })
 
   it("should see an emptied Texte, heading or list as empty, which is deleted rather than replaced", () => {
@@ -95,15 +97,17 @@ describe("contrôle d'un tableau, d'un repli et d'un séparateur (E10-S06, AC-a4
     expect(estVide(repli(" ", ""))).toBe(true)
   })
 
-  it.each<[string, BlocEdite, string]>([
-    ["a table of 21 columns forced in the model", tableau(Array.from({ length: 21 }, () => "x"), []), MESSAGES_DU_BLOC.colonnes],
-    ["a table of 201 rows", tableau(["x"], Array.from({ length: 201 }, () => ["y"])), MESSAGES_DU_BLOC.rangees],
-    ["a toggle without summary", repli("  ", "Le corps"), MESSAGES_DU_BLOC.resumeVide],
-    ["a toggle summary of 201 characters", repli("é".repeat(201), ""), MESSAGES_DU_BLOC.resumeLong],
-    ["a toggle holding a toggle", repli("Détails", "avant\n  <details open>\naprès"), MESSAGES_DU_BLOC.repliDansRepli],
-    ["a toggle holding a closing tag", repli("Détails", "</details>"), MESSAGES_DU_BLOC.repliDansRepli],
-  ])("should refuse %s before sending", (_cas, bloc, message) => {
-    expect(controler(bloc)).toEqual({ message })
+  // Une table de cas en un test (DG1) : le différentiel de `toEqual` nomme les cas fautifs.
+  it("should refuse each of these tables and toggles before sending, with its message", () => {
+    const cas: [string, BlocEdite, string][] = [
+      ["a table of 21 columns forced in the model", tableau(Array.from({ length: 21 }, () => "x"), []), MESSAGES_DU_BLOC.colonnes],
+      ["a table of 201 rows", tableau(["x"], Array.from({ length: 201 }, () => ["y"])), MESSAGES_DU_BLOC.rangees],
+      ["a toggle without summary", repli("  ", "Le corps"), MESSAGES_DU_BLOC.resumeVide],
+      ["a toggle summary of 201 characters", repli("é".repeat(201), ""), MESSAGES_DU_BLOC.resumeLong],
+      ["a toggle holding a toggle", repli("Détails", "avant\n  <details open>\naprès"), MESSAGES_DU_BLOC.repliDansRepli],
+      ["a toggle holding a closing tag", repli("Détails", "</details>"), MESSAGES_DU_BLOC.repliDansRepli],
+    ]
+    expect(Object.fromEntries(cas.map(([nom, bloc]) => [nom, controler(bloc)]))).toEqual(Object.fromEntries(cas.map(([nom, , message]) => [nom, { message }])))
   })
 
   it("should send the cells without edge blanks and every typed | escaped, the summary trimmed and the body without edge blank lines", () => {

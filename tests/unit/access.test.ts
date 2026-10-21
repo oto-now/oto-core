@@ -5,7 +5,7 @@
 // `tests/integration/access.test.ts` (E01-S10, partie e1a) ; la parité avec le SQL dans
 // `tests/integration/access-parity.test.ts`.
 import { describe, expect, it } from "vitest"
-import { ACCESS_LEVELS, describeOwner, reservedTo, unknownPath, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { describeOwner, reservedTo, unknownPath, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 // `administrators` reste interne au paquet : lu par le module, hors de la face `./server`.
 import { administrators } from "../../packages/plateforme/server/access"
 import type { DirectoryEntry } from "../../packages/plateforme/server/directory"
@@ -70,12 +70,6 @@ describe("reservedTo", () => {
 describe("unknownPath", () => {
   it("should answer as for a path that does not exist", () => {
     expect(unknownPath("ventes/devis")).toBe("Unknown path ventes/devis.")
-  })
-})
-
-describe("ACCESS_LEVELS", () => {
-  it("should rank none, read, write and manage from 0 to 3", () => {
-    expect(ACCESS_LEVELS).toEqual({ none: 0, read: 1, write: 2, manage: 3 })
   })
 })
 

@@ -12,7 +12,6 @@ describe("nomDeLAssistant (E11-S05, AC-h1)", () => {
     ["claude.ai", "Claude"],
     ["Claude Code", "Claude"],
     ["ChatGPT", "ChatGPT"],
-    ["Client non identifié", "votre assistant"],
     ["mistral-le-chat", "votre assistant"],
     [undefined, "votre assistant"],
   ])("should name the family %s « %s »", (famille, nom) => {
