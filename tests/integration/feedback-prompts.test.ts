@@ -61,13 +61,14 @@ const steps = (step: string): BlockInput[] => [
   { type: "list", data: { items: [step], ordered: true } },
 ]
 
-const duplicateText = (ticket: string, minutes: number) =>
-  `Ticket ${ticket} was already reported ${minutes} minute(s) ago with the same text; no new ticket was created. If the problem happened again, report what changed: another call, another argument or another moment.`
+// 21/10 : rien que l'assistant répéterait à la personne, ni numéro ni « l'équipe a été prévenue » ; le numéro reste au journal.
+const RECORDED = "Recorded for the platform maintainers; nothing to tell the user."
+const duplicateText = (minutes: number) =>
+  `Already recorded ${minutes} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
 
-/** Le numéro servi en données (`structuredContent.ticket`, H26). */
-function ticketOf(answer: { result: object }): unknown {
-  const data = "structuredContent" in answer.result ? answer.result.structuredContent : undefined
-  return data && typeof data === "object" && "ticket" in data ? data.ticket : undefined
+/** Le numéro du dernier appel de la session, lu au journal (`target`) : l'assistant ne le reçoit plus. */
+function ticketOf(session: { journal: readonly { target?: string | null }[] }): unknown {
+  return session.journal.at(-1)?.target
 }
 
 type Ticket = { id: string; org_id: string; user_id: string | null; ctx: string | null; type: string; target: string | null; text: string; state: string; number: number }
@@ -174,8 +175,8 @@ describe.skipIf(!sqlConfigured)(
         const [row] = await tickets(acme.id, { ctx: code })
         const ticket = `FB-${String(row.number).padStart(4, "0")}`
         expect(answer.isError).toBe(false)
-        expect(answer.text).toBe(`Ticket ${ticket} recorded.`)
-        expect(answer.result.structuredContent).toEqual({ text: answer.text, ticket, type: "gap", state: "open", duplicate: false, next_actions: [] })
+        expect(answer.text).toBe(RECORDED)
+        expect(answer.result.structuredContent).toEqual({ text: RECORDED, recorded: true, type: "gap", duplicate: false, next_actions: [] })
         expect(row).toMatchObject({
           org_id: acme.id,
           user_id: people.jb.id,
@@ -198,19 +199,19 @@ describe.skipIf(!sqlConfigured)(
         const first = await session.call("feedback", { ctx: code, type: "error", text, target: "table.rows" })
         const [row] = await tickets(acme.id, { text })
         const ticket = `FB-${String(row.number).padStart(4, "0")}`
-        expect(first.text).toBe(`Ticket ${ticket} recorded.`)
+        expect([first.text, ticketOf(session)]).toEqual([RECORDED, ticket])
 
         const again = await session.call("feedback", { ctx: code, type: "error", text: `  ${text}  `, target: " table.rows " })
         expect(again.isError).toBe(false)
-        expect(again.text).toBe(duplicateText(ticket, 1))
-        expect(again.result.structuredContent).toEqual({ text: again.text, ticket, type: "error", state: "open", duplicate: true, next_actions: [] })
+        expect(again.text).toBe(duplicateText(1))
+        expect(again.result.structuredContent).toEqual({ text: again.text, recorded: true, type: "error", duplicate: true, next_actions: [] })
         expect(session.journal.at(-1)).toMatchObject({ target: ticket })
 
         await age(row.id, 3)
         await admin`update platform.feedback set state = 'acknowledged' where id = ${row.id}`
         const later = await session.call("feedback", { ctx: code, type: "error", text, target: "table.rows" })
-        expect(later.text).toBe(duplicateText(ticket, 3))
-        expect(later.result.structuredContent).toMatchObject({ ticket, state: "acknowledged", duplicate: true })
+        expect(later.text).toBe(duplicateText(3))
+        expect([later.result.structuredContent, ticketOf(session)]).toMatchObject([{ duplicate: true }, ticket])
         expect(await tickets(acme.id, { text })).toHaveLength(1)
       })
 
@@ -218,9 +219,10 @@ describe.skipIf(!sqlConfigured)(
         const { session, code } = await withCtx(acme, people.jb)
         const text = `Consigne floue ${hex(3)}.`
         const first = await session.call("feedback", { ctx: code, type: "friction", text })
+        const premier = ticketOf(session)
         const again = await session.call("feedback", { ctx: code, type: "friction", text })
         expect(first.result.structuredContent).toMatchObject({ duplicate: false })
-        expect(again.result.structuredContent).toMatchObject({ ticket: ticketOf(first), duplicate: true })
+        expect([again.result.structuredContent, ticketOf(session)]).toMatchObject([{ duplicate: true }, premier])
         expect(await tickets(acme.id, { text })).toHaveLength(1)
       })
 
@@ -238,22 +240,28 @@ describe.skipIf(!sqlConfigured)(
           [claire, base],
         ] as const
         const answers = []
-        for (const [who, report] of reports) answers.push(await who.session.call("feedback", { ...report, ctx: who.code }))
+        const numbers: unknown[] = []
+        for (const [who, report] of reports) {
+          answers.push(await who.session.call("feedback", { ...report, ctx: who.code }))
+          numbers.push(ticketOf(who.session))
+        }
 
         const [first] = await tickets(acme.id, { text })
         await age(first.id, 11)
         answers.push(await jb.session.call("feedback", { ...base, ctx: jb.code }))
+        numbers.push(ticketOf(jb.session))
         for (const answer of answers) expect(answer.result.structuredContent, answer.text).toMatchObject({ duplicate: false })
-        expect(new Set(answers.map(ticketOf)).size).toBe(7)
+        expect(new Set(numbers).size).toBe(7)
       })
 
       it("should record a text carrying half a surrogate pair, the half turned into U+FFFD, and find it again (N8)", async () => {
         const { session, code } = await withCtx(acme, people.jb)
         const text = `Export cassé ${hex(3)} a\ud83d`
         const first = await session.call("feedback", { ctx: code, type: "error", text })
+        const premier = ticketOf(session)
         const again = await session.call("feedback", { ctx: code, type: "error", text })
         expect(first.result.structuredContent).toMatchObject({ duplicate: false })
-        expect(again.result.structuredContent).toMatchObject({ ticket: ticketOf(first), duplicate: true })
+        expect([again.result.structuredContent, ticketOf(session)]).toMatchObject([{ duplicate: true }, premier])
         expect((await tickets(acme.id, { ctx: code })).map((row) => row.text)).toEqual([`${text.slice(0, -1)}�`])
       })
 
@@ -261,9 +269,10 @@ describe.skipIf(!sqlConfigured)(
         const { session, code } = await withCtx(acme, people.jb)
         const text = `${"漢".repeat(3994)}${hex(3)}`
         const first = await session.call("feedback", { ctx: code, type: "gap", text })
+        const premier = ticketOf(session)
         const again = await session.call("feedback", { ctx: code, type: "gap", text })
         expect(first.isError, first.text).toBe(false)
-        expect(again.result.structuredContent).toMatchObject({ ticket: ticketOf(first), duplicate: true })
+        expect([again.result.structuredContent, ticketOf(session)]).toMatchObject([{ duplicate: true }, premier])
         expect(await tickets(acme.id, { ctx: code })).toHaveLength(1)
       })
     })

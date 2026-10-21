@@ -10,8 +10,9 @@ import { duplicateMessage, ticketNumber } from "../../packages/plateforme/server
 
 const ACME = { prefix: "acme", name: "Acme Énergies", domains: "sales, customer support, energy consulting" }
 
-const duplicate = (ticket: string, shown: number) =>
-  `Ticket ${ticket} was already reported ${shown} minute(s) ago with the same text; no new ticket was created. If the problem happened again, report what changed: another call, another argument or another moment.`
+// 21/10 : rien que l'assistant répéterait à la personne, ni numéro ni « l'équipe a été prévenue ».
+const duplicate = (shown: number) =>
+  `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
 
 describe("ticketNumber (AC2)", () => {
   it("should pad the organisation's number to four digits", () => {
@@ -26,15 +27,15 @@ describe("ticketNumber (AC2)", () => {
 })
 
 describe("duplicateMessage (AC3)", () => {
-  it("should say how many minutes ago the ticket was filed, rounded", () => {
-    expect(duplicateMessage("FB-0042", 1)).toBe(duplicate("FB-0042", 1))
-    expect(duplicateMessage("FB-0042", 3)).toBe(duplicate("FB-0042", 3))
-    expect(duplicateMessage("FB-0042", 9)).toBe(duplicate("FB-0042", 9))
-    expect(duplicateMessage("FB-0042", 2.6)).toBe(duplicate("FB-0042", 3))
+  it("should say how many minutes ago the same report was recorded, rounded, and no ticket number", () => {
+    expect(duplicateMessage(1)).toBe(duplicate(1))
+    expect(duplicateMessage(3)).toBe(duplicate(3))
+    expect(duplicateMessage(9)).toBe(duplicate(9))
+    expect(duplicateMessage(2.6)).toBe(duplicate(3))
   })
 
   it("should say one minute for a ticket filed 20 seconds ago", () => {
-    expect(duplicateMessage("FB-0042", 20 / 60)).toBe(duplicate("FB-0042", 1))
+    expect(duplicateMessage(20 / 60)).toBe(duplicate(1))
   })
 })
 

@@ -1,7 +1,7 @@
 # Journal et retours
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-10-21
 
 ## Résumé
 
@@ -69,6 +69,7 @@ il faut que l'assistant puisse dire ce qui l'a gêné, et que l'administrateur v
 ### Retours des assistants (`feedback`)
 
 - Un ticket est numéroté par organisation (`FB-0001`), lié au `ctx`, donc recoupable avec le journal ; type `friction`, `gap` ou `error`.
+- `feedback` sert les mainteneurs de la plateforme, pas la personne : sa description demande à l'assistant de l'employer sans le dire à la personne (ni le signalement, ni son envoi, ni un numéro), sauf si elle demande si quelque chose a été signalé ; son résultat ne porte plus de numéro (« Recorded for the platform maintainers; nothing to tell the user. ») ; le numéro reste au journal (`target`) et à l'écran « Retours ». Sans cela, une personne lisait « ticket FB-0002 » sans savoir qu'en faire.
 - Un signalement en doublon (même personne, organisation, type, texte et cible, absente des deux côtés comprise, dans les 10 minutes) ne crée pas de ticket : le ticket existant est rendu et le résultat le dit (E03-S05 N1). Le doublon se cherche parmi les 50 tickets les plus récents de la personne, même organisation, type et cible, de moins de 10 minutes ; le texte se compare dans le service, pas dans le filtre (E03-S05 N6).
 - Texte et cible d'un signalement sont rendus bien formés (`toWellFormed`) avant la recherche et l'insertion : une moitié de paire de substitution devient U+FFFD (E03-S05 N8).
 - Quand l'hôte déclare des personnes, texte et cible sont pseudonymisés avant la recherche du doublon et l'insertion, puis coupés aux bornes de la table (4 000 et 500 caractères) : l'équipe plateforme qui les traite est un tiers pour l'organisation.
@@ -127,3 +128,4 @@ Les procédures publiées lisibles se servent aussi en prompts MCP ([procédures
 - 2026-10-20 : page « Activité » à deux onglets (Statistiques pour l'administrateur, Journal pour tous) à l'adresse du journal, courbe hebdomadaire, tableaux triables par équipe et par personne — décidé par JB (source : session du 20/10/2026, issue du chantier).
 - 2026-10-20 : « Activité » se range dans les réglages, à la place du Journal ; « Suivi de l'entreprise » ne porte que Retours, un membre simple garde un seul groupe — décidé par JB (source : session du 20/10/2026).
 - 2026-10-20 : « Retours » toujours montré à l'administrateur, décidé sur l'identité sans requête ; la page des retours dit l'option éteinte et l'allume sur place — décidé par JB (source : session du 20/10/2026 ; plafond de requêtes de l'affichage d'une page).
+- 2026-10-21 : `feedback` silencieux pour la personne, sans numéro dans son résultat — décidé par JB (source : retour d'une utilisatrice, session du 21/10/2026).

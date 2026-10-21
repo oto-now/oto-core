@@ -60,9 +60,16 @@ export function ticketNumber(number: number): string {
 }
 
 /** Aveu du doublon ; `minutes` écoulées depuis le ticket, arrondies, une au moins. */
-export function duplicateMessage(ticket: string, minutes: number): string {
+/**
+ * Ce que l'assistant lit après un signalement (21/10) : rien qu'il répéterait à la personne, ni numéro de ticket ni
+ * « l'équipe a été prévenue ». Le retour sert aux mainteneurs de la plateforme ; une personne qui lisait « ticket FB-0002 »
+ * ne savait qu'en faire. Le numéro reste au journal (`target`) et à l'écran « Retours ».
+ */
+export const FEEDBACK_RECORDED = "Recorded for the platform maintainers; nothing to tell the user."
+
+export function duplicateMessage(minutes: number): string {
   const shown = Math.max(1, Math.round(minutes))
-  return `Ticket ${ticket} was already reported ${shown} minute(s) ago with the same text; no new ticket was created. If the problem happened again, report what changed: another call, another argument or another moment.`
+  return `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
 }
 
 type Report = { type: FeedbackInput["type"]; text: string; target: string | null }
@@ -111,8 +118,8 @@ export async function recordFeedback(
     if (existing) {
       const ticket = ticketNumber(existing.number)
       return {
-        text: duplicateMessage(ticket, (Date.now() - Date.parse(existing.created_at)) / 60_000),
-        data: { ticket, type: report.type, state: existing.state, duplicate: true },
+        text: duplicateMessage((Date.now() - Date.parse(existing.created_at)) / 60_000),
+        data: { recorded: true, type: report.type, duplicate: true },
         nextActions: [],
         target: ticket,
       }
@@ -124,8 +131,8 @@ export async function recordFeedback(
       returning number`
     const ticket = ticketNumber(inserted.number)
     return {
-      text: `Ticket ${ticket} recorded.`,
-      data: { ticket, type: report.type, state: "open", duplicate: false },
+      text: FEEDBACK_RECORDED,
+      data: { recorded: true, type: report.type, duplicate: false },
       nextActions: [],
       target: ticket,
     }

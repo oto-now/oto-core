@@ -65,7 +65,10 @@ describe.skipIf(!sqlConfigured)(
       // Le même signalement, il y a une minute : de Claire dans O, de Léa dans P ; la base rend les deux à Léa.
       await replaceTickets([ticket(1, ORG.id, "claire"), ticket(2, OTHER_ORG.id, "lea")])
 
-      expect((await recordFeedback(lea, ref.identityOf("lea"), REPORT, "7K3Q-M2XA")).data).toMatchObject({ ticket: "FB-0002", duplicate: false })
+      // 21/10 : le numéro va au journal (`target`), jamais à ce que lit l'assistant.
+      const ecrit = await recordFeedback(lea, ref.identityOf("lea"), REPORT, "7K3Q-M2XA")
+      expect([ecrit.target, ecrit.data]).toEqual(["FB-0002", { recorded: true, type: REPORT.type, duplicate: false }])
+      expect(ecrit.text).not.toMatch(/FB-/)
       expect(await tickets()).toEqual([
         { org_id: ORG.id, user_id: PEOPLE.claire.id, number: 1, ctx: null, ...REPORT, state: "open" },
         { org_id: ORG.id, user_id: PEOPLE.lea.id, number: 2, ctx: "7K3Q-M2XA", ...REPORT, state: "open" },
@@ -74,7 +77,9 @@ describe.skipIf(!sqlConfigured)(
 
       // Son propre signalement, lui, est retrouvé.
       await replaceTickets([ticket(3, ORG.id, "lea")])
-      expect((await recordFeedback(lea, ref.identityOf("lea"), REPORT, "7K3Q-M2XA")).data).toMatchObject({ ticket: "FB-0003", duplicate: true })
+      const double = await recordFeedback(lea, ref.identityOf("lea"), REPORT, "7K3Q-M2XA")
+      expect([double.target, double.data]).toEqual(["FB-0003", { recorded: true, type: REPORT.type, duplicate: true }])
+      expect(double.text).not.toMatch(/FB-/)
     })
   },
 )
