@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-22] — Connecteurs décrits : le corps entier à clés libres à valeur simple
+**À appliquer :** les épingles de `@otomata_tech/connectors` et du paquet montent ensemble : une description dont le corps entier admet des clés libres à valeur simple (lemlist 1.2.1) demande ce paquet, qu'un paquet antérieur refuse (`body_argument_not_strict`), et avec elle toute la déclaration de l'hôte.
+**Quoi :** `additionalProperties` de l'argument du corps entier peut aussi valoir exactement `{ type: ["string", "number", "boolean"], personal: true }` (`body-argument.ts`, `freeKeys`, qui remplace `freeTextKeys`) : toute clé libre est un texte, un nombre ou un vrai/faux, contrôlée par Ajv avant l'envoi ; `null`, objet et liste refusés. Les textes et nombres des clés libres sortent du journal ; un vrai/faux y reste, comme celui d'une propriété déclarée `personal`, le journal retirant les valeurs et non les places.
+**Pourquoi :** les champs personnalisés d'un CRM sont typés chez le tiers (lemlist, Salesforce) ; décidé par Alexis le 2026-10-22, format de `connectors` a0af78c.
+**Fichiers :** `packages/plateforme/server/connectors/body-argument.ts`, `packages/plateforme/CHANGELOG.md`, `docs/conception/connecteurs-et-comptes.md`, `tests/factories/body-cases.ts`, `tests/unit/connectors-body-cases.test.ts`.
+
 ## [2026-10-22] — Connecteurs décrits : une clé inconnue d'une fonction refusée
 **À appliquer :** rien dans un hôte dont les descriptions ne déclarent que ce que le paquet exécute. Une description qui déclare une fonction longue (`background: true`, `connectors` depuis 62fbd79, comme `mistral` 1.0.0) est désormais refusée à la déclaration, et avec elle toute la déclaration de l'hôte : ne l'épingler qu'avec le paquet qui exécute la tâche de fond.
 **Quoi :** `registerConnectors` refuse une fonction qui porte une clé hors de celles que le paquet exécute (`<fonction>: unknown key <clé>: …`), jugée la première des contrôles de la fonction préparée ; `background` en est une tant que la tâche de fond n'est pas écrite. Délai d'attente en file avant `not_started` fixé à 24 h dans la conception.

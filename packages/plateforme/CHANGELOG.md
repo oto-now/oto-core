@@ -74,6 +74,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerConnectors` judges the five coded refusals of rule 17 of the `connectors` fabrique first, in order, the message ending with the code: `file_output_not_alone`, `file_auth_not_url`, `file_json_types`, `file_json_name`, `file_json_max_bytes`; the first two were already refused, their message now ends with the code.
 - Schemas: `FILE_TYPES` and `TEXT_TYPES` gain `json` (`application/json`): a `.json` file is admitted attached or in transit, read as text by `read {file}`, kept on a page up to 4 MB, served as an attachment.
 - Server: `registerConnectors` refuses a function with a key it does not execute (`<function>: unknown key <key>`), `background` included: a description that declares a long function is refused, never called synchronously; it needs the package that runs it in the background.
+- Server: the free keys of a whole body may also be simple values: `additionalProperties` exactly `{ type: ["string", "number", "boolean"], personal: true }`, the three types in this order; each free key is then a text, a number or a boolean (a date as a text), personal data whatever its type; `null`, an object or a list are refused before anything is sent. Any other form stays `body_argument_not_strict`.
 
 ## 1.5.1 — 2026-10-21
 

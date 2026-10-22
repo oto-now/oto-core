@@ -23,7 +23,7 @@ import { PlatformError } from "../../packages/plateforme/server/errors"
 import type { Identity } from "../../packages/plateforme/server/identity"
 import { failedEntry, PERSONAL, servedEntry, type JournalEntry } from "../../packages/plateforme/server/journal"
 import { memoryTokens } from "../factories/described-connector"
-import { bodyCases, bodyRefusals, bodyRefusedFunctions, bodyRejectedInputs, connector, createLead, upsertContact } from "../factories/body-cases"
+import { bodyCases, bodyRefusals, bodyRefusedFunctions, bodyRejectedInputs, connector, createLead, updateAccount, upsertContact } from "../factories/body-cases"
 
 const BASE = "https://api.example.test/v1"
 
@@ -85,7 +85,7 @@ describe("the shared whole-body cases", () => {
   })
 
   it("should declare the connector of the shared cases", () => {
-    expect(bodyCases).toHaveLength(11)
+    expect(bodyCases).toHaveLength(13)
     expect(connector.functions.every((fn) => findFunction(catalogFunctions(), fn.name) !== undefined)).toBe(true)
   })
 
@@ -140,7 +140,11 @@ describe("the shared refused whole bodies (registerConnectors)", () => {
     ["personal_text", { type: "string", personal: "true" }],
     ["type_list", { type: ["string"], personal: true }],
     ["description", { type: "string", personal: true, description: "A field." }],
-  ] as const)("should refuse free keys other than exactly { type: string, personal: true }: %s", (_name, additional) => {
+    ["simple_personal_one", { type: ["string", "number", "boolean"], personal: 1 }],
+    ["simple_twice", { type: ["string", "number", "boolean", "boolean"], personal: true }],
+    ["simple_integer", { type: ["string", "integer", "boolean"], personal: true }],
+    ["simple_other_order", { type: ["boolean", "number", "string"], personal: true }],
+  ] as const)("should refuse free keys other than exactly one of the two forms: %s", (_name, additional) => {
     const contact = { ...(upsertContact.schema.properties as Record<string, Record<string, unknown>>).contact, additionalProperties: additional }
     const fn = { ...upsertContact, schema: { ...upsertContact.schema, properties: { contact } } }
     expect(bodyArgumentProblem(fn)).toMatch(/ \(body_argument_not_strict\)\.$/)
@@ -204,5 +208,38 @@ describe("free text keys of a whole body, all personal data", () => {
     const line = JSON.stringify(failed)
     for (const value of [EMAIL, "Valbrune-sur-Test", "10-50"]) expect(line).not.toContain(value)
     expect(failed.args).toMatchObject({ arguments: { contact: { first_name: "Ada", city: PERSONAL, seats: PERSONAL } } })
+  })
+})
+
+describe("free keys of a simple value, all personal data whatever their type", () => {
+  // Les clés libres (`seats`, `revenue`, `founded`, `is_customer`) ; `name` et `domain`, déclarées sans la marque,
+  // restent lisibles.
+  const account = { name: "Valbrune", domain: "valbrune.test", seats: 4321, revenue: 2500000.5, founded: "2001-04-01", is_customer: true }
+
+  beforeEach(() => {
+    registerConnectors([connector])
+  })
+
+  it("should send texts, numbers and booleans as given, and refuse null, an object or a list before anything is sent", async () => {
+    expect(updateAccount.schema.properties).toMatchObject({ account: { additionalProperties: { type: ["string", "number", "boolean"], personal: true } } })
+    const { sent } = recorder()
+    expect(await call("body_cases_act.update_account", { account })).toEqual({ refused: null })
+    expect(sent[0].body).toEqual(account)
+    for (const value of [null, { city: "Lyon" }, ["vip"]]) {
+      expect((await call("body_cases_act.update_account", { account: { name: "Valbrune", extra: value } })).refused).not.toBeNull()
+    }
+    expect(sent).toHaveLength(1)
+  })
+
+  it("should keep the texts and numbers of free keys out of the journal line, and the declared keys readable", () => {
+    const fn = findFunction(catalogFunctions(), "body_cases_act.update_account")
+    if (!fn) throw new Error("update_account is not declared")
+    const personal = personalValues(fn, { account })
+    expect(personal.sort()).toEqual(["2001-04-01", "2500000.5", "4321"])
+    const entry: JournalEntry = { org_id: "org-1", user_id: "user-1", method: "tools/call", args: { function: fn.name, arguments: { account } } }
+    servedEntry(entry, { text: "", target: fn.name, personal }, { ctx: null, host: null, resultChars: 0 })
+    expect(entry.args).toMatchObject({
+      arguments: { account: { name: "Valbrune", domain: "valbrune.test", seats: PERSONAL, revenue: PERSONAL, founded: PERSONAL } },
+    })
   })
 })
