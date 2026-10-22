@@ -17,6 +17,7 @@ import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../pac
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
+import { completeFileUpload, requestFileUpload } from "../../packages/plateforme/server/files/service"
 import { storeTransitFile } from "../../packages/plateforme/server/files/transit"
 import { callFunction } from "../../packages/plateforme/server/function-call"
 import { resolveIdentity, type Identity } from "../../packages/plateforme/server/identity"
@@ -295,6 +296,22 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(lines[1]).toMatchObject({ error: null, account_id: account.id, args: { _job: job, _cost: { quantity: 42, unit: "seconds", from: "response" } } })
     expect(typeof lines[1].duration_ms).toBe("number")
     expect(JSON.stringify(lines)).not.toContain("Durand")
+  })
+
+  it("should send a file attached to a page the author reads, at the run as at the queueing, and never consume it", async () => {
+    await fx.createNode(o.org.id, { parentId: o.nodes.ventes, path: "ventes/t_audio", title: "Audio" })
+    const requested = await requestFileUpload(ada.db, ada.identity, { node: "ventes/t_audio", name: "reunion.mp3", mime: "", size: 16 })
+    const { id, upload } = requested.data
+    expect((await storage.store?.fetch(upload.url, { method: "PUT", headers: upload.headers, body: new Uint8Array(16).fill(7) }))?.status).toBe(200)
+    await completeFileUpload(ada.db, ada.identity, id)
+    answer = () => json({ text: "Bonjour.", usage: { audio_seconds: 12 } })
+
+    const job = queued(await call(ada, { function: `${CONNECTOR}.transcribe`, arguments: { file: id } }))
+    await runJobs({ limit: 1 })
+
+    const done = (await readJob(ada, job)).data.result as { status: string }
+    const [row] = await fx.admin<{ attached: boolean }[]>`select node_id is not null as attached from platform.files where id = ${id}`
+    expect({ status: done.status, sent: sent.map((request) => request.body), attached: row?.attached }).toEqual({ status: "done", sent: ["[multipart]"], attached: true })
   })
 
   it("should ask the approval of a sensitive long function before queueing, and fail with the refusal of the call", async () => {

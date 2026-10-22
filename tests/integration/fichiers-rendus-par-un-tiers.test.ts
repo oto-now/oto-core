@@ -19,7 +19,8 @@ import { registerConnectors } from "../../packages/plateforme/server/connectors/
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
 import { objectKey } from "../../packages/plateforme/server/files/store"
 import { fileReadUrl } from "../../packages/plateforme/server/files/address"
-import { readTransitBytes, TRANSIT_HOURS } from "../../packages/plateforme/server/files/transit"
+import { readCallerBytes } from "../../packages/plateforme/server/files/caller-file"
+import { TRANSIT_HOURS } from "../../packages/plateforme/server/files/transit"
 import { fileConnector, memoryTokens } from "../factories/described-connector"
 import { pendingMigrations } from "../helpers/pending-migrations"
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
@@ -179,12 +180,12 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
 
     // Lisible par son auteur seul : ni un membre de son équipe, ni un administrateur.
     const lea = as("lea")
-    const read = await readTransitBytes(lea.db, lea.identity, file.id)
+    const read = await readCallerBytes(lea.db, lea.identity, file.id)
     expect(Buffer.from(read.bytes).equals(Buffer.from(RECORDING))).toBe(true)
     expect(await codeOf(fileReadUrl(lea.db, lea.identity, file.id, {}))).toBe("ok")
     for (const person of ["claire", "ada"] as const) {
       const { db, identity } = as(person)
-      expect({ person, read: await codeOf(readTransitBytes(db, identity, file.id)), url: await codeOf(fileReadUrl(db, identity, file.id, {})) }).toEqual({ person, read: "not_found", url: "not_found" })
+      expect({ person, read: await codeOf(readCallerBytes(db, identity, file.id)), url: await codeOf(fileReadUrl(db, identity, file.id, {})) }).toEqual({ person, read: "not_found", url: "not_found" })
     }
   })
 

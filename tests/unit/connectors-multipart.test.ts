@@ -16,17 +16,20 @@ import { PlatformError } from "../../packages/plateforme/server/errors"
 import { memoryTokens, uploadConnector } from "../factories/described-connector"
 
 const transit = vi.hoisted(() => ({
-  files: new Map<string, { id: string; name: string; mime: string; size: number; bytes: Uint8Array }>(),
+  files: new Map<string, { id: string; name: string; mime: string; size: number; bytes: Uint8Array; attached: boolean }>(),
   consumed: [] as string[],
   consumeFails: false,
 }))
 
-vi.mock("../../packages/plateforme/server/files/transit", () => ({
-  readTransitBytes: async (_db: unknown, _identity: unknown, id: unknown) => {
+vi.mock("../../packages/plateforme/server/files/caller-file", () => ({
+  readCallerBytes: async (_db: unknown, _identity: unknown, id: unknown) => {
     const file = typeof id === "string" ? transit.files.get(id) : undefined
     if (!file) throw new PlatformError("not_found", "Unknown file.")
     return file
   },
+}))
+
+vi.mock("../../packages/plateforme/server/files/transit", () => ({
   expireTransitFile: async (_db: unknown, _identity: unknown, id: string) => {
     if (transit.consumeFails) throw new PlatformError("internal", "storage down")
     transit.consumed.push(id)
@@ -35,6 +38,8 @@ vi.mock("../../packages/plateforme/server/files/transit", () => ({
 }))
 
 const FILE = "0f8fad5b-d9cb-469f-a165-70867728950e"
+// Un fichier joint à une page que l'appelant lit : il part comme un fichier en transit, sans jamais être consommé.
+const ATTACHED = "3d6f0a3e-8a1c-4f5b-9e2d-7b4c1a0f9e8d"
 const CONTENT = "%PDF-1.7 contenu confidentiel"
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
@@ -90,7 +95,8 @@ beforeEach(() => {
   transit.files.clear()
   transit.consumed = []
   transit.consumeFails = false
-  transit.files.set(FILE, { id: FILE, name: "facture-2026-10.pdf", mime: "application/pdf", size: CONTENT.length, bytes: new TextEncoder().encode(CONTENT) })
+  transit.files.set(FILE, { id: FILE, name: "facture-2026-10.pdf", mime: "application/pdf", size: CONTENT.length, bytes: new TextEncoder().encode(CONTENT), attached: false })
+  transit.files.set(ATTACHED, { id: ATTACHED, name: "devis.pdf", mime: "application/pdf", size: CONTENT.length, bytes: new TextEncoder().encode(CONTENT), attached: true })
   registerConnectors([uploadConnector()])
 })
 
@@ -119,6 +125,14 @@ describe("files sent to a third party", () => {
     expect(output.text).not.toContain(CONTENT)
   })
 
+  it("should send a file attached to a page the caller reads, under its own name and type, and never consume it", async () => {
+    const { requests } = stub(json({ id: 45 }, 201))
+    await run({ folder_id: 7, file: ATTACHED })
+    expect((await requests())[0]?.document).toEqual({ name: "devis.pdf", type: "application/pdf", text: CONTENT })
+    expect(transit.consumed).toEqual([])
+    expect(transit.files.has(ATTACHED)).toBe(true)
+  })
+
   it("should leave out an optional text part that is not given", async () => {
     const { requests } = stub(json({ id: 42 }, 201))
     await run({ folder_id: 7, file: FILE })
@@ -131,7 +145,7 @@ describe("files sent to a third party", () => {
     const malformed = await refusal(run({ folder_id: 7, file: "not-an-id" }))
     for (const error of [unknown, malformed]) {
       expect(error.code).toBe("not_found")
-      expect(error.message).toBe("crm.upload_document: file names no transit file of yours (unknown, expired or already sent). Nothing was sent.")
+      expect(error.message).toBe("crm.upload_document: file names no file you can send: neither a transit file of yours (unknown, expired or already sent) nor a file on a page you read. Nothing was sent.")
     }
     expect(send).not.toHaveBeenCalled()
     expect(transit.consumed).toEqual([])

@@ -2,7 +2,8 @@
 // Un fichier en transit envoyé à un tiers par une fonction décrite, sur une vraie base (connecteurs et comptes, § Fichiers
 // envoyés à un tiers) : le moteur lit le fichier sous l'identité de l'appelant, jamais celui d'une autre personne de son
 // équipe ni d'un administrateur ; il l'envoie en corps multipart et ne le consomme qu'après un appel réussi. La base est
-// le sujet : la garde du fichier en transit (service et RLS) vue par le moteur, et sa consommation. Le tiers est un
+// le sujet : la garde du fichier en transit (service et RLS) vue par le moteur, et sa consommation. Un fichier joint à
+// une page part aussi, pour qui lit la page, sans jamais être consommé. Le tiers est un
 // `fetch` simulé, le bucket l'adaptateur en mémoire. Organisation de référence jetable (H120). Suite portable.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
@@ -11,7 +12,9 @@ import type { FunctionContext } from "../../packages/plateforme/server/catalog/d
 import { catalogFunctions, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
-import { completeTransitUpload, readTransitBytes, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
+import { readCallerBytes } from "../../packages/plateforme/server/files/caller-file"
+import { completeFileUpload, requestFileUpload } from "../../packages/plateforme/server/files/service"
+import { completeTransitUpload, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
 import { memoryTokens, uploadConnector } from "../factories/described-connector"
 import { pendingMigrations } from "../helpers/pending-migrations"
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
@@ -97,6 +100,18 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     return requested.id
   }
 
+  /** Un fichier joint par `person` à la page `path`, créée sous `parentId`. */
+  async function attach(person: Person, parentId: string, path: string, name: string): Promise<string> {
+    await fx.createNode(o.org.id, { parentId, path, title: "Pièces" })
+    const { db, identity } = as(person)
+    const requested = await requestFileUpload(db, identity, { node: path, name, mime: "", size: bytesOf(CONTENT).byteLength })
+    const { id, upload } = requested.data
+    const sent = await memory.fetch(upload.url, { method: "PUT", headers: upload.headers, body: bytesOf(CONTENT) })
+    expect(sent.status).toBe(200)
+    await completeFileUpload(db, identity, id)
+    return id
+  }
+
   /** La fonction déclarée, appelée comme `call` l'appelle, sous la session de `person`. */
   async function upload(person: Person, file: string) {
     const fn = findFunction(catalogFunctions(), "crm_act.upload_document")
@@ -130,7 +145,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     })
     // Consommé : illisible pour son auteur, la ligne partie.
     const lea = as("lea")
-    expect(await codeOf(readTransitBytes(lea.db, lea.identity, id))).toBe("not_found")
+    expect(await codeOf(readCallerBytes(lea.db, lea.identity, id))).toBe("not_found")
     expect((await fx.admin`select id from platform.files where id = ${id}`).length).toBe(0)
   })
 
@@ -139,7 +154,37 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     const id = await deposit("lea", "releve.pdf")
     expect(await codeOf(upload("lea", id))).toBe("invalid_arguments")
     const lea = as("lea")
-    const kept = await readTransitBytes(lea.db, lea.identity, id)
+    const kept = await readCallerBytes(lea.db, lea.identity, id)
     expect(new TextDecoder().decode(kept.bytes)).toBe(CONTENT)
+  })
+
+  it("should send a file attached to a page to whoever reads the page, never consume it, and refuse it to a person who does not read the page", async () => {
+    const calls = thirdParty()
+    // Joint par Léa à une page de Ventes : Claire, qui lit Ventes, l'envoie, comme Léa.
+    const shared = await attach("lea", o.nodes.ventes, "ventes/t_envoi", "devis.pdf")
+    await upload("claire", shared)
+    await upload("lea", shared)
+    // Joint par Claire à son espace personnel : Léa ne lit pas la page, rien ne part.
+    const secret = await attach("claire", o.spaces.claire, "private/claire/t_envoi", "contrat.pdf")
+    const refused = await codeOf(upload("lea", secret))
+    const forms = await Promise.all(
+      calls.map(async (call) => {
+        const type = new Headers(call.init.headers).get("content-type") ?? ""
+        const document = (await new Response(call.init.body as BodyInit, { headers: { "content-type": type } }).formData()).get("document") as File
+        return { name: document.name, text: await document.text() }
+      }),
+    )
+    const rows = await fx.admin`select id, node_id is not null as attached from platform.files where id in (${shared}, ${secret}) order by name`
+    expect({ forms, refused, rows: rows.map((row) => ({ ...row })) }).toEqual({
+      forms: [
+        { name: "devis.pdf", text: CONTENT },
+        { name: "devis.pdf", text: CONTENT },
+      ],
+      refused: "not_found",
+      rows: [
+        { id: secret, attached: true },
+        { id: shared, attached: true },
+      ],
+    })
   })
 })

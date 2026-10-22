@@ -13,10 +13,10 @@ import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme
 import { fileReadUrl } from "../../packages/plateforme/server/files/address"
 import { requestFileUpload } from "../../packages/plateforme/server/files/service"
 import { objectKey } from "../../packages/plateforme/server/files/store"
+import { readCallerBytes } from "../../packages/plateforme/server/files/caller-file"
 import {
   completeTransitUpload,
   expireTransitFile,
-  readTransitBytes,
   requestTransitUpload,
   TRANSIT_HOURS,
 } from "../../packages/plateforme/server/files/transit"
@@ -112,12 +112,12 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
 
     // À son adresse, `/f/<id>`, comme un fichier joint ; téléchargé même sur « Voir » (décision du 19/10).
     const author = await fileReadUrl(lea.db, lea.identity, id, { disposition: "inline" })
-    const engine = await readTransitBytes(lea.db, lea.identity, id)
+    const engine = await readCallerBytes(lea.db, lea.identity, id)
     const refusedTo = async (person: Exclude<Person, "lea">) => {
       const { db, identity } = as(person)
       return {
         read: await codeOf(fileReadUrl(db, identity, id, {})),
-        engine: await codeOf(readTransitBytes(db, identity, id)),
+        engine: await codeOf(readCallerBytes(db, identity, id)),
         complete: await codeOf(completeTransitUpload(db, identity, id)),
         expire: await codeOf(expireTransitFile(db, identity, id)),
         rows: (await seen(person, id)).length,
@@ -139,7 +139,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       platformTeam: { read: "not_found", engine: "not_found", complete: "not_found", expire: "not_found", rows: 0 },
     })
     // Les refus n'ont rien effacé : l'auteur le lit encore.
-    expect(await codeOf(readTransitBytes(lea.db, lea.identity, id))).toBe("ok")
+    expect(await codeOf(readCallerBytes(lea.db, lea.identity, id))).toBe("ok")
   })
 
   it("should set the expiry of a transit file 24 hours after its creation by the database clock, and refuse the former hour (42501)", async () => {
@@ -178,7 +178,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
 
     const expired = {
       read: await codeOf(fileReadUrl(lea.db, lea.identity, id, {})),
-      engine: await codeOf(readTransitBytes(lea.db, lea.identity, id)),
+      engine: await codeOf(readCallerBytes(lea.db, lea.identity, id)),
       freed: counted - (await used("claire")),
       rowKept: (await fx.admin`select id from platform.files where id = ${id}`).length,
     }
@@ -217,7 +217,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     const lea = as("lea")
     const csv = `id;montant\n${"1;42\n".repeat(1_250_000)}`
     const { id } = await deposit("lea", "export.csv", csv, "text/csv")
-    const engine = await readTransitBytes(lea.db, lea.identity, id)
+    const engine = await readCallerBytes(lea.db, lea.identity, id)
     const request = (size: number) => codeOf(requestTransitUpload(lea.db, lea.identity, { name: "gros.csv", mime: "", size }))
     expect({
       size: engine.size > 4 * 1024 * 1024,

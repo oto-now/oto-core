@@ -33,10 +33,13 @@ const state = vi.hoisted(() => ({
   guarded: 0,
 }))
 
-vi.mock("../../packages/plateforme/server/files/transit", () => ({
-  readTransitBytes: async () => {
+vi.mock("../../packages/plateforme/server/files/caller-file", () => ({
+  readCallerBytes: async () => {
     throw new PlatformError("not_found", "Unknown file.")
   },
+}))
+
+vi.mock("../../packages/plateforme/server/files/transit", () => ({
   expireTransitFile: async () => undefined,
   storeTransitFile: async (_db: unknown, _identity: unknown, file: { name: string; bytes: Uint8Array }) => {
     state.kept.push(file)

@@ -6,7 +6,7 @@
 import type { CatalogBackground } from "../catalog/define"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
-import { readyTransitFile } from "../files/transit"
+import { callerFile } from "../files/caller-file"
 import type { Identity } from "../identity"
 import { jobDigestOf, sealArguments } from "./seal"
 import { requireBackgroundRunner, RETRY_AFTER_S } from "./trigger"
@@ -34,15 +34,16 @@ export type QueuedJob = { job: string; created: boolean }
 /**
  * Met le travail en file pour l'auteur de `identity` ; rend son identifiant, ou celui d'un travail identique en cours
  * (`created` faux). Refus : aucun déclencheur déclaré (`unavailable_in_v1`) ; un accès de l'équipe plateforme
- * (`forbidden`, un travail est celui d'un membre) ; un fichier d'entrée inconnu, d'un autre ou effacé (le refus d'un
- * fichier en transit).
+ * (`forbidden`, un travail est celui d'un membre) ; un fichier d'entrée inconnu, effacé, en transit d'un autre ou joint à
+ * une page que l'auteur ne lit pas (le refus d'un fichier en transit).
  */
 export async function enqueueJob(db: PlatformDb, identity: Identity, request: JobRequest): Promise<QueuedJob> {
   requireBackgroundRunner(request.function)
   if (identity.viaGrant) {
     throw new PlatformError("forbidden", `${request.function} runs in the background for a member of ${identity.org.name}: an access of the platform team queues nothing.`)
   }
-  for (const name of request.background.files) await readyTransitFile(db, identity, request.args[name])
+  // Un argument fichier absent (facultatif) ne fait pas de partie, comme à l'envoi (`uploadOf`).
+  for (const name of request.background.files) if (request.args[name] !== undefined) await callerFile(db, identity, request.args[name])
   const digest = jobDigestOf({ userId: identity.user.id, function: request.function, teamId: request.journalTeamId, accountId: request.accountId, args: request.args })
   const sealed = sealArguments(digest, request.args)
   const worst = request.background.worst(request.args)

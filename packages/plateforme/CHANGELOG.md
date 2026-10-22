@@ -30,6 +30,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - `read {file}` gives the file's origin in `file.origin`: the function that returned it, who and when, the conversation to its author only; a copy says the file it comes from.
 - A connector function can return a JSON file (the answer or one branch of it); read a json file with `read {file}`, keep it on a page up to 4 MB.
 - A long function answers at once with a job; read it with `job.read {job}` after `retry_after_s` seconds: done gives the call's answer, failed its refusal.
+- A connector function that takes a file now takes a file attached to a page you read too, sent as is and never deleted.
 
 ### Hosts
 - Migrations: apply this version's migration together with the package: the table `jobs` holds the background jobs of long functions (`background: true`), readable by their author only, arguments and result sealed by the vault (`PLATFORM_VAULT_KEY`); five `security definer` functions for the server role; a person removed takes their jobs.
@@ -79,6 +80,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Schemas: `FILE_TYPES` and `TEXT_TYPES` gain `json` (`application/json`): a `.json` file is admitted attached or in transit, read as text by `read {file}`, kept on a page up to 4 MB, served as an attachment.
 - Server: `registerConnectors` refuses a function with a key it does not execute (`<function>: unknown key <key>`), `background` included: a description that declares a long function is refused, never called synchronously; it needs the package that runs it in the background.
 - Server: the free keys of a whole body may also be simple values: `additionalProperties` exactly `{ type: ["string", "number", "boolean"], personal: true }`, the three types in this order; each free key is then a text, a number or a boolean (a date as a text), personal data whatever its type; `null`, an object or a list are refused before anything is sent. Any other form stays `body_argument_not_strict`.
+- Server: `request.files` sends a file attached to a page the caller reads (level ≥ 1, outside the trash), never consumed, as well as a transit file of the caller; a long function checks it at queueing and reads it again at the run. `readTransitBytes` is gone: `readCallerBytes` (`server/files/caller-file.ts`) reads either; the refusal of a file that cannot be sent changes its text.
 
 ## 1.5.1 — 2026-10-21
 

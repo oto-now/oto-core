@@ -10,7 +10,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { fileAvailability, fileReadUrl } from "../../packages/plateforme/server/files/address"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
-import { completeTransitUpload, expireTransitFile, purgeTransitFiles, readTransitBytes, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
+import { readCallerBytes } from "../../packages/plateforme/server/files/caller-file"
+import { completeTransitUpload, expireTransitFile, purgeTransitFiles, requestTransitUpload } from "../../packages/plateforme/server/files/transit"
 import { pendingMigrations } from "../helpers/pending-migrations"
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
 
@@ -115,7 +116,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     expect({
       read: await refusalOf(fileReadUrl(lea.db, lea.identity, id, {})),
       check: await refusalOf(fileAvailability(lea.db, lea.identity, id)),
-      engine: await refusalOf(readTransitBytes(lea.db, lea.identity, id)),
+      engine: await refusalOf(readCallerBytes(lea.db, lea.identity, id)),
       teammate: await refusalOf(fileReadUrl(claire.db, claire.identity, id, {})),
       seenByAuthor: (await seen(lea, id)).length,
       seenByTeammate: (await seen(claire, id)).length,

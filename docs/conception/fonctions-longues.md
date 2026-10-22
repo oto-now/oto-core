@@ -162,8 +162,9 @@ message qui le dit.
   passé par `sent`.
 - La réservation et le plafond de coût n'existent pas (`connecteurs-et-comptes.md`, « Écart avec le code ») : une
   fonction longue d'une clé de l'hôte n'a pas de plafond par organisation tant qu'ils manquent.
-- La transcription attend aussi un lot hors de ce document : un fichier joint à une page admis comme source de
-  `call.files` (`fichiers-et-stockage.md`). Le fichier JSON (`output.file.from: json`, avec le type `json`) est écrit
+- Un fichier joint à une page est admis comme source de `call.files`, pour qui lit la page, jamais consommé : vérifié
+  à la mise en file, relu à l'exécution sous l'auteur ([connecteurs et comptes](connecteurs-et-comptes.md) § Fichiers
+  envoyés à un tiers). Le fichier JSON (`output.file.from: json`, avec le type `json`) est écrit
   ([connecteurs et comptes](connecteurs-et-comptes.md) § Fichiers rendus par un tiers).
 
 ## Questions ouvertes
@@ -178,3 +179,5 @@ message qui le dit.
 - 2026-10-23 : le moteur exécute la tâche de fond (table des travaux, mise en file, `runJobs`, `job.read`, coût au
   journal), déclencheur `process` seul ; arguments scellés par le coffre du paquet — décidé par Alexis (source : la
   présente conception).
+- 2026-10-23 : un fichier joint à une page, admis comme fichier d'entrée d'une fonction longue, pour qui lit la page,
+  jamais consommé — choix du projet ([connecteurs et comptes](connecteurs-et-comptes.md) § Fichiers envoyés à un tiers).

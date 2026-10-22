@@ -1,38 +1,41 @@
 // Les fichiers qu'une fonction décrite envoie à un tiers (`connecteurs-et-comptes.md` § Fichiers envoyés à un tiers) :
 // `request.files` associe une partie d'un corps `multipart/form-data` à l'argument qui porte l'identifiant d'un fichier
-// en transit de l'appelant. Le moteur lit ses octets sous l'identité de l'appelant (`readTransitBytes`), les envoie au
-// nom et au type du fichier, et ne le consomme (`expireTransitFile`) qu'après un appel réussi. Sans ce module, un dépôt
+// de l'appelant : en transit et à lui, ou joint à une page qu'il lit. Le moteur lit ses octets sous l'identité de
+// l'appelant (`readCallerBytes`), les envoie au nom et au type du fichier, et ne consomme (`expireTransitFile`) qu'un
+// fichier en transit, après un appel réussi ; un fichier joint n'est jamais consommé. Sans ce module, un dépôt
 // chez un tiers ferait passer les octets par l'agent. Le contenu d'un fichier n'est jamais rendu, journalisé ni cité
 // dans une erreur ; un log ne nomme que la fonction.
 import type { FunctionContext } from "../catalog/define"
 import { PlatformError } from "../errors"
 import { FILE_ADDRESS, type TransitFile } from "../../schemas"
-import { expireTransitFile, readTransitBytes, storeTransitFile, type TransitBytes } from "../files/transit"
+import { readCallerBytes, type CallerBytes } from "../files/caller-file"
+import { expireTransitFile, storeTransitFile } from "../files/transit"
 import { isJsonObject } from "../json"
 import { bodyTable } from "./body-argument"
 import type { ConnectorFunctionDefinition } from "./definition"
 import type { RawBody } from "./http"
 
 /**
- * Les fichiers en transit de l'appelant, tels que le moteur les lit, les consomme, et range celui qu'une fonction rend
- * (`keep`, `connecteurs-et-comptes.md` § Fichiers rendus par un tiers).
+ * Les fichiers de l'appelant, tels que le moteur les lit (en transit, ou joints à une page qu'il lit), consomme ceux en
+ * transit, et range celui qu'une fonction rend (`keep`, `connecteurs-et-comptes.md` § Fichiers rendus par un tiers).
  */
 export type TransitFiles = {
   /** L'adresse des fichiers de l'appelant (`<origine>/f`, relative sans origine), où se lit celui qu'une fonction rend. */
   route: string
-  read(id: unknown): Promise<TransitBytes>
+  read(id: unknown): Promise<CallerBytes>
   consume(id: string): Promise<void>
   keep(file: { name: string; bytes: Uint8Array }): Promise<TransitFile>
 }
 
 /**
- * Les fichiers en transit de la personne qui appelle, sous son identité : jamais ceux d'un autre. Celui que la fonction
+ * Les fichiers de la personne qui appelle, sous son identité : ses fichiers en transit, jamais ceux d'un autre, et les
+ * fichiers joints aux pages qu'elle lit. Celui que la fonction
  * `fn` rend porte son origine : la fonction et la conversation de l'appel.
  */
 export function callerTransitFiles(context: Pick<FunctionContext, "db" | "identity" | "origin" | "ctx">, fn: string): TransitFiles {
   return {
     route: `${context.origin ?? ""}${FILE_ADDRESS}`,
-    read: (id) => readTransitBytes(context.db, context.identity, id),
+    read: (id) => readCallerBytes(context.db, context.identity, id),
     consume: (id) => expireTransitFile(context.db, context.identity, id),
     keep: (file) => storeTransitFile(context.db, context.identity, { ...file, origin: { kind: "function", function: fn, ctx: context.ctx ?? null } }),
   }
@@ -65,13 +68,13 @@ export function filesProblem(fn: ConnectorFunctionDefinition): string | null {
   return null
 }
 
-/** Un corps multipart prêt à partir, et les fichiers en transit qu'un appel réussi consommera. */
+/** Un corps multipart prêt à partir, et les fichiers en transit qu'un appel réussi consommera (jamais un fichier joint). */
 export type Upload = { body: RawBody; sent: string[] }
 
 /**
  * Lit les fichiers que nomment les arguments (un argument absent ne part pas) puis compose le corps : les parties
- * texte d'abord, dans l'ordre donné, puis chaque fichier à son nom et à son type. Un fichier inconnu, échu ou d'une
- * autre personne : le même refus, et rien n'est envoyé.
+ * texte d'abord, dans l'ordre donné, puis chaque fichier à son nom et à son type. Un fichier inconnu, échu, d'une
+ * autre personne ou joint à une page que l'appelant ne lit pas : le même refus, et rien n'est envoyé.
  */
 export async function uploadOf(
   fn: ConnectorFunctionDefinition,
@@ -79,14 +82,14 @@ export async function uploadOf(
   files: TransitFiles,
   texts: readonly (readonly [string, string])[],
 ): Promise<Upload> {
-  const read: [string, TransitBytes][] = []
+  const read: [string, CallerBytes][] = []
   for (const [part, argument] of Object.entries(fn.request.files ?? {})) {
     if (args[argument] === undefined) continue
     try {
       read.push([part, await files.read(args[argument])])
     } catch (error) {
       if (!(error instanceof PlatformError) || error.code !== "not_found") throw error
-      throw new PlatformError("not_found", `${fn.name}: ${argument} names no transit file of yours (unknown, expired or already sent). Nothing was sent.`)
+      throw new PlatformError("not_found", `${fn.name}: ${argument} names no file you can send: neither a transit file of yours (unknown, expired or already sent) nor a file on a page you read. Nothing was sent.`)
     }
   }
   const form = new FormData()
@@ -96,7 +99,7 @@ export async function uploadOf(
   const encoded = new Response(form)
   const contentType = encoded.headers.get("content-type")
   if (contentType === null) throw new Error("[platform] connectors: multipart body without its content type")
-  return { body: { bytes: new Uint8Array(await encoded.arrayBuffer()), contentType }, sent: read.map(([, file]) => file.id) }
+  return { body: { bytes: new Uint8Array(await encoded.arrayBuffer()), contentType }, sent: read.filter(([, file]) => !file.attached).map(([, file]) => file.id) }
 }
 
 /**

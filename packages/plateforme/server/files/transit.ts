@@ -1,18 +1,18 @@
 // Le fichier en transit (fichiers et stockage, § Fichier en transit ; décision d'Alexis du 19/10) : un fichier qui passe
 // entre une personne et un connecteur, une ligne `files` sans nœud, avec une échéance. Il se dépose en trois temps comme
-// un fichier joint (demande, envoi au bucket, confirmation), se relit à son adresse (`address.ts`), se lit en octets par le moteur
+// un fichier joint (demande, envoi au bucket, confirmation), se relit à son adresse (`address.ts`), se lit en octets par le moteur (`caller-file.ts`)
 // et s'efface à son échéance ou à sa consommation. Seule la personne qui l'a fait entrer le lit : le service le décide en
 // filtrant sur elle avant toute URL, et la RLS le cache à tout autre (organisation, équipe, administrateur, équipe
 // plateforme). Le moteur court sous l'identité de la personne qui appelle, donc ne lit que les siens. Il compte au quota
 // de l'organisation jusqu'à son échéance (`rows.ts`). Un fichier rendu par un tiers s'y range par le serveur
 // (`storeTransitFile`), sans URL d'envoi. Sans lui, une pièce rendue par un connecteur ou envoyée à un connecteur devrait
 // être rangée sous une page, où toute l'équipe la lirait.
-import { FILE_MAX_BYTES, fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
+import { fileIdSchema, transitFileRequestSchema, type TransitFile, type TransitFileUpload } from "../../schemas"
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { insertPending, markReady, type FileOrigin } from "./rows"
-import { admittedType, boundedBytes, checkSize, confirmObject, onStorage, removeObjects, requireStore, unknownFile } from "./service"
+import { admittedType, checkSize, confirmObject, onStorage, removeObjects, requireStore, unknownFile } from "./service"
 import { objectKey } from "./store"
 
 /**
@@ -24,9 +24,6 @@ export const TRANSIT_HOURS = 24
 
 /** Une ligne en transit de l'appelant, non échue, avec son échéance. */
 type TransitRow = { id: string; name: string; mime: string; size: number; expires_at: string }
-
-/** Un fichier en transit lu en octets par le moteur : ce qu'un envoi au tiers doit en dire, et ses octets. */
-export type TransitBytes = { id: string; name: string; mime: string; size: number; bytes: Uint8Array }
 
 /** L'identifiant d'un fichier, sinon la réponse d'un fichier inconnu. */
 function transitIdOf(input: unknown): string {
@@ -129,19 +126,6 @@ export async function readyTransitFile(db: PlatformDb, identity: Identity, fileI
     if (!(error instanceof PlatformError) || error.code !== "not_found") throw error
     throw (await erasedRefusal(db, identity, id)) ?? error
   }
-}
-
-/**
- * Les octets d'un fichier en transit, pour le moteur pendant un transfert, sous l'identité de la personne qui appelle : sa
- * ligne `ready`, non échue, puis l'objet lu par le serveur, 50 Mo au plus. Ne l'efface pas : sa consommation se décide
- * après l'envoi au tiers (`expireTransitFile`).
- */
-export async function readTransitBytes(db: PlatformDb, identity: Identity, fileId: unknown): Promise<TransitBytes> {
-  const store = requireStore()
-  const row = await readyTransitFile(db, identity, fileId)
-  const url = await onStorage("read url", () => store.readUrl(objectKey(identity.org.id, row.id), { contentType: "application/octet-stream", disposition: "attachment" }))
-  const bytes = await boundedBytes(url, row.name, FILE_MAX_BYTES)
-  return { id: row.id, name: row.name, mime: row.mime, size: row.size, bytes }
 }
 
 /**

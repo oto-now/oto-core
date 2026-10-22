@@ -9,7 +9,7 @@ import { blockRef, fileKeepSchema, fileLink, fileTypeOf, TEXT_FILE_MAX_BYTES, TE
 import { fileSizeText } from "../../schemas/files"
 import { ACCESS_LEVELS, requireNodeLevel } from "../access"
 import type { PlatformDb } from "../db"
-import { inTransaction, invalidInput, isPlatformError, PlatformError } from "../errors"
+import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import type { DocBlock } from "../nodes/document"
 import { findNode, unknownNode, type NodeRow } from "../nodes/lookup"
@@ -20,9 +20,9 @@ import { citedFile } from "../nodes/write-files"
 import type { WriteOrigin } from "../nodes/write-result"
 import type { ToolOutput } from "../tool-output"
 import { insertPending, markReady } from "./rows"
-import { INLINE_IMAGES, onStorage, readableFile, removeObjects, requireStore } from "./service"
+import { callerFile, type CallerFile } from "./caller-file"
+import { INLINE_IMAGES, onStorage, removeObjects, requireStore } from "./service"
 import { objectKey } from "./store"
-import { readyTransitFile } from "./transit"
 
 /** La porte qui garde : la provenance de l'écriture, et la route des liens rendus (`<origine>/f`). */
 export type KeepOptions = { origin: WriteOrigin; route: string }
@@ -31,7 +31,7 @@ export type KeepOptions = { origin: WriteOrigin; route: string }
 export type Kept = { text: string; data: Record<string, unknown>; teamId?: string | null }
 
 /** Le fichier gardé : sa ligne, et son échéance s'il est en transit. */
-type Source = { id: string; name: string; size: number; mime: string; node_id: string | null; expires_at: string | null }
+type Source = CallerFile
 
 type Keeping = { node: NodeRow; args: FileKeep; source: Source; blocks: DocBlock[]; options: KeepOptions }
 
@@ -45,22 +45,6 @@ async function targetNode(db: PlatformDb, identity: Identity, path: string): Pro
   if (node.kind === "table") throw new PlatformError("invalid_arguments", `${node.path} is a table: a file goes into a page, a procedure or a context page.`)
   if (found.level < ACCESS_LEVELS.write) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, "write")
   return node
-}
-
-/**
- * Le fichier : en transit et à l'appelant (`readyTransitFile`, refus daté d'un fichier effacé compris), sinon joint à une
- * page qu'il lit (`readableFile`) ; pour tout autre, le refus du transit (`not_found`).
- */
-async function sourceOf(db: PlatformDb, identity: Identity, fileId: string): Promise<Source> {
-  try {
-    return { ...(await readyTransitFile(db, identity, fileId)), node_id: null }
-  } catch (error) {
-    if (!isPlatformError(error) || error.code !== "not_found" || error.details?.reason === "file_erased") throw error
-    const joined = await readableFile(db, identity, fileId).catch(() => {
-      throw error
-    })
-    return { ...joined, expires_at: null }
-  }
 }
 
 /** Un texte de plus de 4 Mo ne se garde pas (décidé par Alexis le 21/10) : le refus dit pourquoi, et le téléchargement. */
@@ -169,7 +153,7 @@ export async function keepTransitFile(db: PlatformDb, identity: Identity, input:
   const args = parsed.data
   if (args.section !== undefined && args.after_block !== undefined) throw new PlatformError("invalid_arguments", BOTH)
   const node = await targetNode(db, identity, args.path)
-  const source = await sourceOf(db, identity, args.file)
+  const source = await callerFile(db, identity, args.file)
   const draft = await loadDraft(db, node.id)
   const keeping: Keeping = { node, args, source, blocks: await loadBlocks(db, node.id, draft ? "draft" : "published"), options }
   if (source.node_id === null) return keepInTransit(db, identity, keeping)
