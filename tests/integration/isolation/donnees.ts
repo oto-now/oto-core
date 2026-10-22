@@ -318,6 +318,11 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`
     insert into platform.erased_files (id, org_id, created_by, erased_at, cause, keep_until)
     values (gen_random_uuid(), ${b.id}, ${people.b.id}, now(), 'consumed', now() + interval '30 days')`
+  // Un travail en tâche de fond de B (`20261022230000`) : écrit par le serveur seul, ses arguments chiffrés (un chiffré
+  // factice ici : aucune session ne l'ouvre).
+  await admin`
+    insert into platform.jobs (org_id, user_id, function, origin, timeout_ms, digest, arguments_ciphertext)
+    values (${b.id}, ${people.b.id}, 'crm.transcribe', 'https://b.example.invalid', 120000, ${hex(32)}, 'v2:sealed')`
   // Un ticket de dépôt par lien de B (E10-S02 lot f, ADR-018) : son empreinte seule, jamais un jeton. Deux
   // empreintes tirées à chaque passage : elles sont uniques dans toute la table, et les suites d'isolation
   // sèment chacune leur B en parallèle.

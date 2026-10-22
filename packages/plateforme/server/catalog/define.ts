@@ -46,6 +46,26 @@ export type FunctionContext = {
   host?: string | null
   /** Origine de l'adresse appelée (`https://acme.oto.cx`) : lien d'un écran cité par un refus (E07-S02, AC17). */
   origin?: string
+  /**
+   * L'exécution d'un travail en tâche de fond (`jobs/runner.ts`) : reçoit les réponses JSON d'un appel réussi d'une
+   * fonction décrite, où se lit sa quantité réglée ; absent hors d'un travail.
+   */
+  answered?: (answers: readonly unknown[]) => void
+}
+
+/**
+ * Une fonction longue d'un connecteur décrit (`fonctions-longues.md`) : `call` la met en file au lieu de l'exécuter et
+ * rend aussitôt son travail, que relève `job.read` ; l'exécutant de l'hôte (`runJobs`) la court sous son auteur.
+ */
+export type CatalogBackground = {
+  /** Le délai de l'appel lui-même, file non comprise : le bail d'un travail y ajoute 30 secondes. */
+  timeoutMs: number
+  /** Les arguments qui portent un fichier en transit de l'appelant (`request.files`), vérifiés dès la mise en file. */
+  files: readonly string[]
+  /** Le pire cas de l'appel sur ses arguments validés (`costOf`) ; `null` sans coût. */
+  worst: (args: Record<string, unknown>) => { quantity: number; unit: string } | null
+  /** La quantité réglée d'un appel réussi, sur ses réponses JSON (`settledQuantity`) ; `null` sans coût. */
+  settled: (args: Record<string, unknown>, answers: readonly unknown[]) => { quantity: number; unit: string; from: string } | null
 }
 
 /** Récapitulatif d'une fonction sensible, montré avant l'accord : texte et données en champs (H26). */
@@ -114,6 +134,8 @@ export type CatalogFunction = {
    * déclarés) ; servis à l'assistant, ils deviennent le jeton de l'entité.
    */
   output?: { entityFields?: readonly EntityFields[] }
+  /** Une fonction longue d'un connecteur décrit (`background: true`) : mise en file par `call`, jamais courue pendant l'appel. */
+  background?: CatalogBackground
   run: (context: FunctionContext, args: never) => Promise<FunctionOutput>
   /** Fonctions sensibles : récapitulatif nominatif montré avant l'accord, sans rien exécuter. */
   summarize?: (context: FunctionContext, args: never) => Promise<FunctionSummary>

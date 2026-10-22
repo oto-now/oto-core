@@ -192,11 +192,16 @@ function withoutPersonal(entry: JournalEntry, values: readonly string[] | undefi
   if (typeof entry.error === "string") entry.error = clip(scrubbed(entry.error, values), MAX_ERROR_CHARS)
 }
 
-/** Les clés réservées des arguments d'une ligne de `call` : ce que la fonction a fait, et à qui était le compte servi. */
-function reservedArgs(entry: JournalEntry, output: Pick<ToolOutput, "outcome" | "lentBy">): void {
+/**
+ * Les clés réservées des arguments d'une ligne de `call` : ce que la fonction a fait, à qui était le compte servi, et le
+ * travail en tâche de fond et sa quantité.
+ */
+function reservedArgs(entry: JournalEntry, output: Pick<ToolOutput, "outcome" | "lentBy" | "job" | "cost">): void {
   if (!isJsonObject(entry.args)) return
   if (output.outcome) entry.args = { ...entry.args, _outcome: output.outcome }
   if (output.lentBy) entry.args = { ...entry.args, _lent_by: output.lentBy }
+  if (output.job) entry.args = { ...entry.args, _job: output.job }
+  if (output.cost) entry.args = { ...entry.args, _cost: output.cost }
 }
 
 /**
@@ -226,7 +231,7 @@ export function servedEntry(entry: JournalEntry, output: ToolOutput, served: Ser
 export function failedEntry(
   entry: JournalEntry,
   failure: { code: string; message: string },
-  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy" | "personal"> },
+  served: ServedEntry & { trace: Pick<ToolOutput, "teamId" | "accountId" | "outcome" | "lentBy" | "personal" | "job" | "cost"> },
 ): void {
   Object.assign(entry, {
     ctx: served.ctx,

@@ -11,16 +11,18 @@ import type { CatalogFunction, FunctionContext } from "../catalog/define"
 import { CatalogRegistrationError } from "../catalog/erp"
 import { ACT_SUFFIX, actName, catalogFunctions, looksLikeFunction } from "../catalog/registry"
 import { issuesText, PlatformError } from "../errors"
+import { backgroundRunnerProblem, declareBackgroundRunner, type BackgroundRunner } from "../jobs/trigger"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import { bodyArgumentProblem, bodyTable } from "./body-argument"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
+import { backgroundProblem, backgroundTraits, servedDescription } from "./background-declaration"
 import { asyncProblem, costProblem, functionKeysProblem } from "./cost-declaration"
 import { errorTable } from "./error-table"
 import { fileOutputProblem } from "./file-output"
-import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
+import { accountIdentityProblem, baseAddressProblem, checkedApplications, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { callerTransitFiles, filesProblem } from "./multipart"
 import { isScopeList, type UserConsentAuth } from "./oauth-user"
 import { stripProblem } from "./output"
@@ -245,7 +247,8 @@ function describedCall(prepared: PreparedFunction, context: FunctionContext): De
     throw new PlatformError("internal", "Internal error.")
   }
   const files = prepared.fn.request.files !== undefined || prepared.fn.output?.file !== undefined
-  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}) }
+  const answered = context.answered ? { answered: context.answered } : {}
+  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}), ...answered }
 }
 
 /** Une fonction décrite au contrat du catalogue : origine `connecteur`, exemples sans titre, exécution par le moteur. */
@@ -258,7 +261,9 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
     connector: connector.name,
     class: fn.class,
     origin: "connecteur",
-    description: fn.description,
+    // Une fonction longue : la phrase fixe du moteur, et ce qu'en lit `call` pour la mettre en file.
+    description: servedDescription(fn),
+    ...backgroundTraits(fn),
     schema,
     examples: fn.examples.map((example) => ({ ...example.input })),
     refusals: refusalLines(connector, fn),
@@ -317,7 +322,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
+    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -344,20 +349,11 @@ export type ConnectorOptions = HostOptions & {
    * (`<connecteur>.<f>`, `<connecteur>_act.<f>`). `callFunction` les court ; l'assistant ne les voit jamais.
    */
   serverOnly?: ServerOnlyOption
-}
-
-/** Les applications OAuth contrôlées : chacune d'un connecteur `oauth2_user` déclaré, identifiant et secret non vides. */
-function checkedApplications(definitions: readonly ConnectorDefinition[], given: ConnectorOptions["oauthApplications"]): Map<string, OAuthApplication> {
-  const applications = new Map<string, OAuthApplication>()
-  for (const [name, application] of Object.entries(given ?? {})) {
-    const definition = definitions.find((candidate) => candidate.name === name)
-    if (definition?.auth.kind !== "oauth2_user") throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
-    const filled = (value: unknown): value is string => typeof value === "string" && value.trim() !== ""
-    const complete = isJsonObject(application) && filled(application.clientId) && filled(application.clientSecret)
-    if (!complete) throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)
-    applications.set(name, { clientId: application.clientId, clientSecret: application.clientSecret })
-  }
-  return applications
+  /**
+   * Le déclencheur des travaux en tâche de fond (`jobs/trigger.ts`) : `"process"`, un processus à part qui boucle sur
+   * `runJobs`. Sans lui, une fonction longue (`background`) est déclarée, et refusée à la mise en file.
+   */
+  backgroundRunner?: BackgroundRunner
 }
 
 /**
@@ -369,14 +365,15 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
  * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre (toute clé inconnue d'une
- * fonction refusée, `background` compris tant que le paquet ne l'exécute pas), coût (`cost`) et travail
+ * fonction refusée), fonction longue (`background`, comme la règle 21 de la fabrique), coût (`cost`) et travail
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
  * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,
  * comme la règle 18 de la fabrique) ; enfin la sonde et
  * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au
- * serveur de l'hôte (`server-only.ts`) ; tous fournis par l'hôte. Au premier refus,
+ * serveur de l'hôte (`server-only.ts`) ; `options.backgroundRunner` : le déclencheur des travaux en tâche de fond ; tous
+ * fournis par l'hôte. Au premier refus,
  * `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
@@ -386,9 +383,12 @@ export function registerConnectors(definitions: readonly ConnectorDefinition[], 
   const reserved = new Set([...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf))
   const seen = new Set<string>()
   const applications = checkedApplications(definitions, options.oauthApplications)
+  const runnerProblem = backgroundRunnerProblem(options.backgroundRunner)
+  if (runnerProblem) throw new CatalogRegistrationError(runnerProblem)
   const { readers, ports } = checkedHostGifts(definitions, options)
   const gift = (name: string): HostGiven => ({ application: applications.get(name) ?? null, hostCredentials: readers.get(name) ?? null, hostedLinks: ports.get(name) ?? null })
   const connectors = definitions.map((definition) => declared(definition, reserved, seen, gift(definition.name)))
+  declareBackgroundRunner(options.backgroundRunner)
   replaceDeclaredConnectors(withServerOnly(connectors, options.serverOnly))
 }
 

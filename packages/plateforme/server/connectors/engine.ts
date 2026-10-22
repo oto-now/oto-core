@@ -42,9 +42,17 @@ export type PreparedFunction = {
  * Ce qu'il faut pour un appel : le compte résolu (champs, réglages, jeton), son identifiant (clé du rythme), et `fetch`.
  * `settlesMark` : l'appelant lève ou pose la marque du compte lui-même après un succès (la sonde à solde, qui juge le
  * solde lu) ; un refus qui marque la pose toujours ici. `files` : les fichiers en transit de l'appelant, pour une
- * fonction qui en envoie (`request.files`) ou qui en rend un (`output.file`, `keep`).
+ * fonction qui en envoie (`request.files`) ou qui en rend un (`output.file`, `keep`). `answered` : reçoit les réponses JSON
+ * d'un appel réussi, telles que le tiers les a envoyées (un travail en tâche de fond y lit sa quantité réglée).
  */
-export type DescribedCall = { credential: AccountCredential | undefined; accountId: string; fetcher?: Fetch; settlesMark?: true; files?: TransitFiles }
+export type DescribedCall = {
+  credential: AccountCredential | undefined
+  accountId: string
+  fetcher?: Fetch
+  settlesMark?: true
+  files?: TransitFiles
+  answered?: (answers: readonly unknown[]) => void
+}
 
 /** La valeur au chemin pointé (`items`, `data.next_cursor`, `lines.0.id`), `undefined` s'il manque. */
 export function valueAt(value: unknown, path: string): unknown {
@@ -302,6 +310,7 @@ export async function executeDescribed(
   // Le premier appel réussi lève la marque du compte ; une levée qui échoue ne rend jamais l'appel en échec.
   const mark = credential.mark
   if (mark && !call.settlesMark) await settleMark(mark, null, `connector ${connector.name}: account ${call.accountId}`)
+  call.answered?.(answers)
   return { answers, next }
 }
 

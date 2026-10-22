@@ -66,3 +66,32 @@ export function decryptToken(accountId: string, ciphertext: string, env: Env = p
 export function consentVerifier(state: string, env: Env = process.env): string {
   return createHmac("sha256", vaultKey(env)).update(`pkce/${state}`, "utf8").digest("base64url")
 }
+
+/**
+ * Le chiffré d'un texte d'un travail en tâche de fond (`jobs/seal.ts`) : ses arguments ou son issue, sous `subject` (son
+ * empreinte, son identifiant) et `column`, liés au chiffré comme l'est un compte : un chiffré d'un autre travail ou d'une
+ * autre colonne ne s'ouvre pas.
+ */
+export function encryptJobText(subject: string, column: string, text: string, env: Env = process.env): string {
+  return seal(vaultKey(env), subject, column, text)
+}
+
+/** Le texte d'un travail ; illisible (autre clé, autre travail, autre colonne), panne de l'hôte, sans le chiffré au log. */
+export function decryptJobText(subject: string, column: string, ciphertext: string, env: Env = process.env): string {
+  const key = vaultKey(env)
+  try {
+    return open(key, subject, column, ciphertext).text
+  } catch (error) {
+    if (!(error instanceof VaultError)) throw error
+    console.error(`[platform] vault: ${column} of job ${subject} unreadable (another key, another job or an unknown format)`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+}
+
+/**
+ * L'empreinte d'un texte par la clé de l'hôte (HMAC-SHA-256, préfixe `job/`) : deux travaux identiques ont la même, et nul
+ * ne la refait sans la clé, ni ne retrouve les arguments d'un travail depuis elle.
+ */
+export function jobDigest(text: string, env: Env = process.env): string {
+  return createHmac("sha256", vaultKey(env)).update(`job/${text}`, "utf8").digest("base64url")
+}

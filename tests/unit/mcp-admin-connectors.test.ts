@@ -201,6 +201,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
           `- node (built in): always active — ${nodes.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           "- upload (built in): always active — upload.link (write)",
           "- file (built in): always active — file.keep (write)",
+          "- job (built in): always active — job.read (read)",
           "- application functions: always active — erp.lookup_customer (read)",
         ].join("\n"),
       )
@@ -221,6 +222,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         { name: "node", kind: "built_in", activable: false, state: "always_active", since: null, functions: nodes.map((fn) => ({ name: fn.name, class: fn.class })) },
         { name: "upload", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "upload.link", class: "write" }] },
         { name: "file", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "file.keep", class: "write" }] },
+        { name: "job", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "job.read", class: "read" }] },
         { name: "application", kind: "application", activable: false, state: "always_active", since: null, functions: [{ name: "erp.lookup_customer", class: "read" }] },
       ])
       // Sans activation, le connecteur activable est dit inactif (HN-E08S06-9).

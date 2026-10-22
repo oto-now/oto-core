@@ -251,7 +251,8 @@ NEVER_EXPORTED.push('hosted_link_requests')
 // repose les règles, y écrit leurs lignes « posée » hors session. Les lignes de la source citeraient des équipes et des
 // personnes par leurs anciens identifiants. Les traces des fichiers en transit effacés (`20261021190000`) : 30 jours, lues
 // par leur auteur ; un fichier en transit reste hors de l'export, sa trace aussi.
-NEVER_EXPORTED.push('account_share_events', 'erased_files')
+// Les travaux en tâche de fond (`20261022230000`), chiffrés sous la clé de la source : un travail se relance.
+NEVER_EXPORTED.push('account_share_events', 'erased_files', 'jobs')
 
 /** @param {string} name */
 function tableSpec(name) {

@@ -120,6 +120,8 @@ describe("catalog (AC23)", () => {
       "upload.link",
       // Étape 3 du chantier « fichier » : garder un fichier en transit sur une page.
       "file.keep",
+      // Les fonctions longues : relever un travail en tâche de fond.
+      "job.read",
     ])
     expect(callExamples(catalogFunctions(), NONE)).toEqual(["table.rows"])
   })

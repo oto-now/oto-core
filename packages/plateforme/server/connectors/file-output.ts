@@ -275,8 +275,11 @@ function announcedType(type: string | null): string | null {
   return media === "" ? null : media
 }
 
-/** Ce que le moteur garde d'un fichier lu : son nom retenu et ses octets. */
-type ReadFile = { name: string; bytes: Uint8Array }
+/**
+ * Ce que le moteur garde d'un fichier lu : son nom retenu et ses octets ; `answer`, la réponse JSON qui le portait (pour
+ * la quantité réglée d'un travail en tâche de fond), `null` quand le fichier est le corps même de la réponse.
+ */
+type ReadFile = { name: string; bytes: Uint8Array; answer: unknown }
 
 /** Les refus d'une fonction qui rend un fichier. */
 type Refusals = ReturnType<typeof refusalsOf>
@@ -296,10 +299,10 @@ function namedAndTyped(fail: Refusals, file: ConnectorFileOutput, args: Record<s
 }
 
 /** Les octets lus d'un fichier : sous la borne, non vides. */
-function fileOf(fail: Refusals, max: number, read: { name: string; bytes: Uint8Array | null; empty: string }): ReadFile {
+function fileOf(fail: Refusals, max: number, read: { name: string; bytes: Uint8Array | null; empty: string; answer: unknown }): ReadFile {
   if (read.bytes === null || read.bytes.byteLength > max) throw fail.tooLarge()
   if (read.bytes.byteLength === 0) throw fail.missing(read.empty)
-  return { name: read.name, bytes: read.bytes }
+  return { name: read.name, bytes: read.bytes, answer: read.answer }
 }
 
 /** La taille encodée en base64 de `bytes` octets. */
@@ -325,7 +328,7 @@ async function readFile(prepared: PreparedFunction, file: ConnectorFileOutput, a
     const value = file.path === undefined ? json : valueAt(json, file.path)
     if (!nonEmpty(value)) throw fail.missing(file.path === undefined ? "its answer is empty" : `${file.path} is empty`)
     const bytes = new TextEncoder().encode(JSON.stringify(value))
-    return fileOf(fail, max, { name: nameOf(file, args, null, null), bytes, empty: "its answer is empty" })
+    return fileOf(fail, max, { name: nameOf(file, args, null, null), bytes, empty: "its answer is empty", answer: json })
   }
   const accept = [...new Set(Object.values(typesOf(file)).flat())].join(", ")
   let name = ""
@@ -336,7 +339,7 @@ async function readFile(prepared: PreparedFunction, file: ConnectorFileOutput, a
     const asking = (sent: ApiRequest): ApiRequest => ({ ...sent, headers: { ...sent.headers, accept } })
     const renewed = resign ? async () => asking(await resign()) : undefined
     const answer = await requestFile(api, asking(request), fetcher, { resign: renewed, maxBytes: max, before: named(null) })
-    return fileOf(fail, max, { name, bytes: answer.bytes, empty: "its body is empty" })
+    return fileOf(fail, max, { name, bytes: answer.bytes, empty: "its body is empty", answer: null })
   }
   const path = file.path ?? ""
   const bound = file.from === "url" ? undefined : { maxBytes: MAX_ANSWER_BYTES + encodedSize(max), tooLarge: fail.tooLarge }
@@ -362,12 +365,12 @@ async function readFile(prepared: PreparedFunction, file: ConnectorFileOutput, a
       throw error instanceof PlatformError && error.code === "not_enabled" ? fail.address() : error
     })
     if (!downloaded.file) throw fail.downloadRefused(downloaded.status)
-    return fileOf(fail, max, { name, bytes: downloaded.file.bytes, empty: `the file at ${path} is empty` })
+    return fileOf(fail, max, { name, bytes: downloaded.file.bytes, empty: `the file at ${path} is empty`, answer: json })
   }
   const bytes = decoded(value, file.from)
   if (!bytes) throw fail.unreadable()
   name = namedAndTyped(fail, file, args, { type: null, headers: new Headers(), json })
-  return fileOf(fail, max, { name, bytes, empty: `${path} is empty` })
+  return fileOf(fail, max, { name, bytes, empty: `${path} is empty`, answer: json })
 }
 
 /** La fin d'échéance dite à l'assistant : `2026-10-22 09:12`, en UTC, à la minute (jamais plus tard que l'échéance). */
@@ -404,8 +407,11 @@ export async function runFileOutput(prepared: PreparedFunction, call: DescribedC
   }
   requireStore()
   try {
-    const { answers } = await executeDescribed(prepared, call, args, (exchange) => readFile(prepared, file, args, exchange))
-    return keptOutput(fn, await files.keep(answers[0] as ReadFile), files.route)
+    // Les réponses JSON qui portaient le fichier, pas le fichier : ce que lit la quantité réglée.
+    const answered = call.answered && ((answers: readonly unknown[]) => call.answered?.(answers.map((read) => (read as ReadFile).answer)))
+    const { answers } = await executeDescribed(prepared, { ...call, answered }, args, (exchange) => readFile(prepared, file, args, exchange))
+    const { name, bytes } = answers[0] as ReadFile
+    return keptOutput(fn, await files.keep({ name, bytes }), files.route)
   } catch (error) {
     const named = error instanceof PlatformError && typeof error.details?.refusal === "string" && error.details.refusal.startsWith("file_")
     if (!named) console.error(`[platform] connector ${connector.name}: ${fn.name}: file not kept (${error instanceof PlatformError ? error.code : error instanceof Error ? error.name : typeof error})`)

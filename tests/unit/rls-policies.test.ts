@@ -132,6 +132,9 @@ ADDED.push("pseudonym_orgs_select_member")
 // La trace d'un fichier en transit effacé (`20261021190000`) : lue par son seul auteur, jamais écrite par une session
 // (le déclencheur `files_erased_trace` et `purge_transit_files`, `security definer`).
 ADDED.push("erased_files_select_own")
+// Les travaux en tâche de fond des fonctions longues (`20261022230000`) : lus par leur seul auteur, jamais écrits par une
+// session (`enqueue_job`, `claim_jobs`, `mark_job_sent`, `finish_job`, `sweep_jobs`, `security definer`, au rôle du serveur).
+ADDED.push("jobs_select_own")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

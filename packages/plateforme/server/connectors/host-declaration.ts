@@ -1,7 +1,7 @@
 // Ce que le compte de l'hôte et le compte rattaché ajoutent à la déclaration des connecteurs (`connecteurs-et-comptes.md`
 // § Compte de l'hôte et compte rattaché) : le titulaire d'un champ (`holder`), l'identité d'un compte rattaché
 // (`accountIdentity`) et sa place dans l'adresse de base, `act` de chaque fonction, et ce que l'hôte passe à
-// `registerConnectors` pour eux (le lecteur de ses champs, le port du branchement). Lu par `declaration.ts` seule :
+// `registerConnectors` pour eux (le lecteur de ses champs, le port du branchement) et ses applications OAuth. Lu par `declaration.ts` seule :
 // module à part pour garder la déclaration à sa taille ; il n'en importe rien.
 import { CatalogRegistrationError } from "../catalog/erp"
 import { isJsonObject } from "../json"
@@ -103,4 +103,18 @@ export function checkedHostGifts(definitions: readonly ConnectorDefinition[], op
     ports.set(name, port)
   }
   return { readers, ports }
+}
+
+/** Les applications OAuth contrôlées : chacune d'un connecteur `oauth2_user` déclaré, identifiant et secret non vides. */
+export function checkedApplications(definitions: readonly ConnectorDefinition[], given: Readonly<Record<string, OAuthApplication>> | undefined): Map<string, OAuthApplication> {
+  const applications = new Map<string, OAuthApplication>()
+  for (const [name, application] of Object.entries(given ?? {})) {
+    const definition = definitions.find((candidate) => candidate.name === name)
+    if (definition?.auth.kind !== "oauth2_user") throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
+    const filled = (value: unknown): value is string => typeof value === "string" && value.trim() !== ""
+    const complete = isJsonObject(application) && filled(application.clientId) && filled(application.clientSecret)
+    if (!complete) throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)
+    applications.set(name, { clientId: application.clientId, clientSecret: application.clientSecret })
+  }
+  return applications
 }

@@ -147,10 +147,19 @@ message qui le dit.
 
 ## Écart avec le code
 
-- `background` est écrit dans le format et la fabrique de `connectors` (règle 21). Le moteur ne l'exécute pas encore :
-  ni la table des travaux, `runJobs`, `job.read`, la mise en file dans `runCall`, ni la quantité sur la ligne de
-  journal. En attendant, `registerConnectors` refuse toute clé inconnue d'une fonction, `background` compris : une
-  description qui déclare une fonction longue est refusée à la déclaration, jamais appelée en synchrone.
+- Le moteur exécute `background` (règle 21 de la fabrique, jugée par `registerConnectors` dans son ordre et sous ses
+  codes) : la table `platform.jobs`, la mise en file dans `runCall`, `runJobs`, `job.read`, la quantité sur la ligne
+  de journal de fin. Seul le déclencheur d'un hôte sur une box est écrit (`registerConnectors(…, { backgroundRunner:
+  "process" })`, le processus de l'hôte bouclant sur `runJobs`) ; le déclencheur serverless, son `defer` et le filet
+  de `job.read` ne le sont pas, et `runCall` ne pousse aucun `defer`. La boucle et ses 3 voies sont à écrire chez
+  l'hôte.
+- Les arguments d'un travail sont scellés par le coffre du paquet (`PLATFORM_VAULT_KEY`, AES-256-GCM, lié au travail
+  et à sa colonne), remis à nul dès la fin ; l'issue l'est de même et s'efface 24 h après la fin, la ligne 30 jours
+  plus tard. Le dédoublonnage compare une empreinte HMAC de l'auteur, de la fonction, de l'équipe, du compte et des
+  arguments, sans rien en révéler.
+- Le fichier d'entrée, vérifié à la mise en file, est relu pendant l'appel, donc après que le travail est marqué
+  envoyé : échu entre-temps, le travail finit refusé comme l'appel synchrone, sans coût (aucune réponse reçue), mais
+  passé par `sent`.
 - La réservation et le plafond de coût n'existent pas (`connecteurs-et-comptes.md`, « Écart avec le code ») : une
   fonction longue d'une clé de l'hôte n'a pas de plafond par organisation tant qu'ils manquent.
 - La transcription attend aussi un lot hors de ce document : un fichier joint à une page admis comme source de
@@ -166,3 +175,6 @@ message qui le dit.
 - 2026-10-22 : création — décidé par Alexis (source : note de conception du 22/10/2026 et ses quatre réponses).
 - 2026-10-22 : délai d'attente en file de 24 h avant `not_started` ; clés inconnues d'une fonction refusées à la
   déclaration — décidé par Alexis.
+- 2026-10-23 : le moteur exécute la tâche de fond (table des travaux, mise en file, `runJobs`, `job.read`, coût au
+  journal), déclencheur `process` seul ; arguments scellés par le coffre du paquet — décidé par Alexis (source : la
+  présente conception).

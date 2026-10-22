@@ -51,6 +51,16 @@ export type ToolOutput = {
    */
   personal?: readonly string[]
   /**
+   * Pour le journal : le travail en tâche de fond qu'un `call` a mis en file, ou dont la ligne dit la fin
+   * (`fonctions-longues.md`), écrit en `args._job` : les deux lignes d'un travail se relient par lui.
+   */
+  job?: string
+  /**
+   * Pour le journal : la quantité d'un travail en tâche de fond conclu, lue dans sa réponse (`cost.settle`) ou son pire cas,
+   * écrite en `args._cost` avec son unité et d'où elle vient.
+   */
+  cost?: { quantity: number; unit: string; from: string }
+  /**
    * La vue du widget qui rend ce résultat ; ses données sont déjà dans `data`. La porte la sert avec le thème quand
    * les widgets sont allumés (`structuredContent.view`), l'ignore sinon (story widgets-dans-la-conversation).
    */

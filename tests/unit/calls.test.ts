@@ -400,7 +400,7 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       const { call, writes } = setup()
       const marc = ref.identityOf("marc")
       const created = await call(marc, { function: "mail.create_draft", arguments: DRAFT, account: "Mail Claire" })
-      if (created.data.status === "needs_confirmation") throw new Error("a draft needs no confirmation")
+      if (created.data.status !== undefined) throw new Error("a draft needs no confirmation and runs at once")
       const draftId = String(created.data.result.draft_id)
       const written = writes().length
       const refused = call(marc, { function: "mail.send_draft", arguments: { id: draftId }, account: "Mail Claire", confirm: true })

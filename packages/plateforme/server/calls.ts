@@ -2,7 +2,8 @@
 // la maquette : la fonction (nom normalisé, N6), son activation (H81), ses arguments (schéma strict),
 // l'équipe porteuse (H84) et le compte (H83) d'E04-S01, le secret d'un compte réel d'un connecteur réel (H85 :
 // refus d'un compte simulé ou sans secret), le récapitulatif d'une fonction sensible sans `confirm` (H86, N1), puis
-// l'exécution, le secret déchiffré pour elle seule, et son compte-rendu (N4). Le service ne lit aucune table et ne
+// l'exécution, le secret déchiffré pour elle seule, et son compte-rendu (N4) ; une fonction longue est mise en file à la
+// place (`jobs/queue.ts`), et l'exécutant de l'hôte la court plus tard par ici. Le service ne lit aucune table et ne
 // décide aucun droit lui-même : les services qu'il orchestre décident avant leur requête, et il sert leurs refus tels
 // quels (H123). Sans lui, `<p>_call` répond `unavailable_in_v1` et aucune fonction ne court.
 //
@@ -30,6 +31,8 @@ import type { Dictionary } from "./pseudonym/dictionary"
 import { pseudonymizedText } from "./pseudonym/gate"
 import { resolvedCallArguments } from "./pseudonym/inputs"
 import { withEntityTokens } from "./pseudonym/outputs"
+import { enqueueJob, JOB_READ, queuedText } from "./jobs/queue"
+import { RETRY_AFTER_S } from "./jobs/trigger"
 import type { ToolOutput } from "./tool-output"
 
 /**
@@ -68,10 +71,12 @@ export type CallAccount = { id: string; label: string; mode: ResolvedAccount["mo
 
 /**
  * Données en champs d'un `call` (F7) : la fonction, l'équipe, le compte d'une fonction de connecteur, puis le résultat
- * de l'exécution, ou le récapitulatif d'une fonction sensible appelée sans `confirm` (H86), où rien n'a couru.
+ * de l'exécution, le récapitulatif d'une fonction sensible appelée sans `confirm` (H86), où rien n'a couru, ou le
+ * travail d'une fonction longue mis en file (`fonctions-longues.md`), à relever par `job.read`.
  */
 export type CallData = { function: string; team: CallTeam | null; account?: CallAccount } & (
   | { status: "needs_confirmation"; summary: Record<string, unknown> }
+  | { status: "queued"; job: string; retry_after_s: number }
   | { status?: never; result: Record<string, unknown> }
 )
 
@@ -105,6 +110,12 @@ export type CallDeps = {
   dictionary?: Dictionary | null
   /** Vrai quand la porte MCP pseudonymise ce qui part : les champs déclarés (`output.entityFields`) deviennent des jetons. */
   gated?: boolean
+  /**
+   * L'exécution d'un travail en tâche de fond par l'exécutant (`jobs/runner.ts`) : la fonction longue court au lieu
+   * d'être mise en file ; `beforeSend` marque le travail envoyé juste avant l'appel au tiers (il lève quand le bail est
+   * perdu : rien ne part), `answered` reçoit les réponses JSON d'un appel réussi.
+   */
+  job?: { beforeSend(): Promise<void>; answered(answers: readonly unknown[]): void }
 }
 
 const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true."
@@ -283,14 +294,30 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     origin: deps.origin,
     accessToken: fn.origin === "erp" ? deps.accessToken : undefined,
     ...(deps.dictionary ? { pseudonymized: pseudonymizerOf(deps.dictionary) } : {}),
+    ...(deps.job ? { answered: deps.job.answered } : {}),
   }
   const journal = { target: fn.name, teamId: trace.teamId, accountId: trace.accountId, lentBy: trace.lentBy, personal: trace.personal }
   if (fn.class === "sensitive" && input.confirm !== true) {
     const { text, summary } = await confirmationRequest(fn, context, args, { team, account: data.account })
     return { text, data: { ...data, status: "needs_confirmation", summary }, nextActions: [], ...journal }
   }
+  // Une fonction longue se met en file, après les mêmes contrôles ; seul l'exécutant la court (`deps.job`).
+  if (fn.background && !deps.job) {
+    const request = { function: fn.name, background: fn.background, args, teamSlug: team?.slug ?? null, journalTeamId: trace.teamId ?? null }
+    const queued = await enqueueJob(db, identity, { ...request, accountId: account?.id ?? null, ctx: deps.ctxCode, origin: deps.origin })
+    const text = queuedText(fn.name, queued)
+    return {
+      text: data.account ? [text, ...accountLines(team, data.account)].join("\n") : text,
+      data: { ...data, status: "queued", job: queued.job, retry_after_s: RETRY_AFTER_S },
+      nextActions: nextActions([JOB_READ], functions, active),
+      ...journal,
+      job: queued.job,
+    }
+  }
   // Le secret ne va qu'à `run`, déchiffré au dernier moment : jamais au récapitulatif, ni au journal, ni au texte.
   const credential = openCredential ? await openCredential() : undefined
+  // Un travail en tâche de fond : marqué envoyé juste avant l'appel ; un bail perdu lève, et rien ne part.
+  await deps.job?.beforeSend()
   // Arguments validés par `fn.schema` : le type commun du catalogue les efface en `never`.
   const ran = await fn.run({ ...context, credential }, args as never).catch((error: unknown) => {
     // Un refus qui a marqué le compte le dit à la ligne de l'échec.

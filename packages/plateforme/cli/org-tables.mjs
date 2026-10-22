@@ -45,6 +45,7 @@ export const ORG_TABLES = [
   deleted('connector_consents'),
   deleted('hosted_link_requests'),
   deleted('sim_outbox'),
+  deleted('jobs'),
   deleted('ctx'),
   deleted('journal'),
   deleted('feedback'),

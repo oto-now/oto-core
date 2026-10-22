@@ -356,6 +356,11 @@ export type ConnectorFunctionDefinition = {
   readonly timeoutMs?: number
   /** Le travail que la fonction soumet, relevé plus tard ; contrôlé à la déclaration, rien n'est relevé par le moteur. */
   readonly async?: ConnectorAsyncJob
+  /**
+   * Une fonction longue (`fonctions-longues.md`) : le tiers répond en minutes ; `call` met l'appel en file et rend aussitôt
+   * un travail, que l'exécutant de l'hôte court (`runJobs`) et que relève `job.read`. Exige son propre `timeoutMs`.
+   */
+  readonly background?: true
   /** Ce que coûte un appel ; contrôlé à la déclaration, lu par `costOf` et `settledQuantity`, ni réservé ni réglé par le moteur. */
   readonly cost?: ConnectorFunctionCost
   /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */

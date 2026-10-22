@@ -45,16 +45,19 @@ type FunctionCallFields = {
 /**
  * Ce que rend `callFunction` : `done`, la fonction a couru, avec son résultat et les fonctions proposées ensuite (ni
  * sensibles ni inactives) ; `needs_confirmation`, fonction sensible appelée sans `confirm: true`, rien n'a couru, et son
- * récapitulatif est à montrer à la personne avant de rappeler avec `confirm: true`.
+ * récapitulatif est à montrer à la personne avant de rappeler avec `confirm: true` ; `queued`, fonction longue mise en
+ * file, son travail à relever par `job.read` après `retryAfterSeconds`.
  */
 export type FunctionCallResult =
   | (FunctionCallFields & { status: "done"; result: Record<string, unknown>; nextActions: string[] })
   | (FunctionCallFields & { status: "needs_confirmation"; summary: Record<string, unknown> })
+  | (FunctionCallFields & { status: "queued"; job: string; retryAfterSeconds: number })
 
 function resultOf(output: CallOutput): FunctionCallResult {
   const { data } = output
   const fields: FunctionCallFields = { function: data.function, text: output.text, team: data.team, account: data.account ?? null }
   if (data.status === "needs_confirmation") return { ...fields, status: "needs_confirmation", summary: data.summary }
+  if (data.status === "queued") return { ...fields, status: "queued", job: data.job, retryAfterSeconds: data.retry_after_s }
   return { ...fields, status: "done", result: data.result, nextActions: output.nextActions }
 }
 

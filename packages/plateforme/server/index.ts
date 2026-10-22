@@ -166,6 +166,11 @@ export type { AccountHealth, ProbedBalance } from "./connectors/probe"
 export { callFunction, HOST_CALL_JOURNAL } from "./function-call"
 export type { FunctionCallInput, FunctionCallOptions, FunctionCallResult } from "./function-call"
 export type { CallAccount, CallTeam } from "./calls"
+// Les travaux en tâche de fond des fonctions longues : l'exécutant, qu'appelle le déclencheur que l'hôte déclare
+// (`registerConnectors`, `backgroundRunner: "process"` : un processus à part du serveur web, qui boucle sur lui).
+export { runJobs } from "./jobs/runner"
+export type { RunJobsOptions, RunJobsReport } from "./jobs/runner"
+export type { BackgroundRunner } from "./jobs/trigger"
 export { CatalogRegistrationError, defineErpFunction, registerFunctions, registerWidgetViews } from "./catalog/erp"
 export type { ErpFunction, ErpFunctionContext } from "./catalog/erp"
 // E07-S03 : la grille, son résumé et la file de revue d'un tableau, la décision de la revue, les blocs

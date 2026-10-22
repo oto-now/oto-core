@@ -401,6 +401,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   copie, reprend l'origine d'une source de la même organisation que l'appelant lit (`42501` sinon). `origin_by` mis à
   nul quand la personne quitte l'organisation ou est oubliée (clé vers `members`). `duplicate_subtree` recréée : ses
   copies portent `copied_from`. Les lignes d'avant restent sans origine ; rien à relancer avant.
+- `20261022230000_platform_travaux_en_tache_de_fond.sql` (fonctions longues, décidées par Alexis le 22/10) : la table
+  `jobs` des travaux en tâche de fond, lisible par son seul auteur, sans aucune écriture sous une session. Arguments et
+  résultat chiffrés par le serveur (le coffre) ; empreinte des arguments pour rendre un travail identique en cours
+  (index unique partiel). Cinq fonctions `security definer` réservées au rôle du serveur : `enqueue_job` (mise en file
+  par l'auteur), `claim_jobs` (`for update skip locked`, bail du délai plus 30 s sous un jeton neuf), `mark_job_sent`,
+  `finish_job` (passages conditionnés par l'état et le jeton) et `sweep_jobs` (bail réclamé expiré remis en file, bail
+  envoyé expiré `outcome_unknown`, en file depuis 24 h `not_started`, résultat effacé 24 h après la fin, ligne retirée
+  30 jours après). Clés vers `orgs` et `members` en cascade : une personne retirée, ou oubliée, emporte ses travaux.
+  Une table, cinq fonctions, une policy ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

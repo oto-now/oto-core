@@ -242,3 +242,12 @@ export async function translateCaller(caller: IssuedCaller): Promise<string | nu
 export function withAnonSession<T>(fn: (sql: Tx) => Promise<T>): Promise<T> {
   return inSession("anon", { role: "anon" }, fn)
 }
+
+/**
+ * `fn` dans une transaction du serveur sans appelant : rôle `platform_server`, `auth.uid()` nul. Pour l'exécutant des
+ * travaux en tâche de fond seul (`jobs/store.ts`), qui réclame et range les travaux de tous les auteurs par les fonctions
+ * réservées à ce rôle (`claim_jobs`, `mark_job_sent`, `finish_job`, `sweep_jobs`) ; la RLS n'y montre aucune ligne.
+ */
+export function withRunnerSession<T>(fn: (sql: Tx) => Promise<T>): Promise<T> {
+  return inSession("platform_server", { role: "platform_server" }, fn)
+}
