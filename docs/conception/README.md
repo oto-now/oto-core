@@ -51,6 +51,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Routage et recherche](routage-et-recherche.md) | Comment une demande trouve-t-elle la procédure ou le contenu qui y répond ? | validé avec JB le 23/09/2026 |
 | [Procédures](procedures.md) | Qu'est-ce qu'une procédure, comment s'écrit-elle, se contrôle-t-elle et se sert-elle ? | proposé |
 | [Connecteurs et comptes](connecteurs-et-comptes.md) | Comment un appel de fonction atteint-il un service tiers, sous quel compte et avec quel secret ? | validé avec JB le 30/09/2026 |
+| [Fonctions longues](fonctions-longues.md) | Comment une fonction de connecteur qui répond en minutes s'exécute-t-elle sans faire attendre l'assistant ? | validé avec Alexis le 22/10/2026 |
 | [Pseudonymisation](pseudonymisation.md) | Comment les personnes que l'hôte déclare sont-elles remplacées par des jetons dans ce que lit un assistant, et qui peut les rendre en clair ? | validé avec Alexis le 19/10/2026 |
 
 ### Le contenu
