@@ -1,11 +1,12 @@
 // Le fichier que rend une fonction décrite (`connecteurs-et-comptes.md` § Fichiers rendus par un tiers ; `connectors :
 // docs/conception/format-de-description.md` § Fichiers, « Un fichier rendu ») : `output.file` contrôlé à la déclaration
 // comme la règle 17 de la fabrique, plus les types du paquet et toute clé inconnue d'`output` refusée ; à l'appel, le
-// fichier lu chez le tiers (le corps de la réponse, une adresse téléchargée par le transport gardé, un champ en base64),
-// sous le délai et la borne de la fonction, nommé, son type annoncé contrôlé, puis rangé en fichier en transit de
-// l'appelant (`keep`, `storeTransitFile`) ; seul son identifiant revient. Sans ce module, l'assistant recevrait l'adresse
-// signée du tiers ou ses octets. Ni l'adresse, ni la réponse JSON qui la porte, ni les octets ne vont à un texte, une
-// erreur ou un log : un log nomme le connecteur, la fonction, le statut et le refus.
+// fichier lu chez le tiers (le corps de la réponse, une adresse téléchargée par le transport gardé, un champ en base64,
+// la réponse JSON ou sa branche, écrite en JSON), sous le délai et la borne de la fonction, nommé, son type annoncé
+// contrôlé (hors JSON, dont le type est fixe), puis rangé en fichier en transit de l'appelant (`keep`,
+// `storeTransitFile`) ; seul son identifiant revient. Sans ce module, l'assistant recevrait l'adresse signée du tiers ou
+// ses octets. Ni l'adresse, ni la réponse JSON qui la porte, ni les octets ne vont à un texte, une erreur ou un log : un
+// log nomme le connecteur, la fonction, le statut et le refus.
 import { FILE_MAX_BYTES, FILE_TYPES, fileExtension, fileLink, filePath, type TransitFile } from "../../schemas"
 import type { FunctionOutput } from "../catalog/define"
 import { actName } from "../catalog/registry"
@@ -14,7 +15,7 @@ import { MEDIA_TYPE, REFUSED_MIMES } from "../files/readers/registry"
 import { requireStore } from "../files/service"
 import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorFileOutput, ConnectorFunctionDefinition } from "./definition"
-import { executeDescribed, valueAt, type DescribedCall, type Exchange, type PreparedFunction } from "./engine"
+import { executeDescribed, nonEmpty, valueAt, type DescribedCall, type Exchange, type PreparedFunction } from "./engine"
 import { MAX_ANSWER_BYTES, requestDownload, requestFile, requestJson, type ApiRequest, type FileAnswer } from "./http"
 import { DOTTED_PATH } from "./probe-declaration"
 
@@ -22,7 +23,9 @@ const OUTPUT_KEYS = ["items", "strip", "projection", "schema", "file"]
 const FILE_KEYS = ["from", "path", "auth", "types", "name", "maxBytes"]
 const NAME_KEYS = ["header", "path", "template"]
 const SHAPING_KEYS = ["items", "strip", "projection", "schema"]
-const FROMS = ["body", "url", "base64", "base64url"]
+const FROMS = ["body", "url", "base64", "base64url", "json"]
+/** Le type d'un fichier `from: json`, fixe : `types` n'est pas déclaré. */
+const JSON_TYPES: Readonly<Record<string, readonly string[]>> = { json: [FILE_TYPES.json] }
 /** L'extension d'un type, comme `fileExtension` la lit. */
 const EXTENSION = /^[a-z0-9]{1,16}$/
 /** Un nom d'en-tête HTTP (un `token` de la RFC 9110). */
@@ -55,7 +58,7 @@ function typesProblem(at: string, types: unknown): string | null {
 /** Le problème du nom : en-tête (corps et adresse seulement), champ, puis gabarit exigé sur les arguments requis. */
 function nameProblem(fn: ConnectorFunctionDefinition, at: string, file: Record<string, unknown>): string | null {
   const { from, name } = file
-  const types = file.types as Record<string, unknown>
+  const types = from === "json" ? JSON_TYPES : (file.types as Record<string, unknown>)
   if (!isJsonObject(name)) return `${at} name.template is required: it always gives a name.`
   const unknown = unknownKey(name, NAME_KEYS)
   if (unknown !== undefined) return `${fn.name}: output.file.name.${unknown} is not known to this package: refused rather than ignored.`
@@ -76,13 +79,34 @@ function nameProblem(fn: ConnectorFunctionDefinition, at: string, file: Record<s
 }
 
 /**
+ * Les cinq refus codés de la règle 17, jugés avant les autres et dans cet ordre, le message finissant par son code :
+ * `output.file` seul (`file_output_not_alone`) ; `auth` avec `url` seulement (`file_auth_not_url`) ; pour `from: json`,
+ * sans `types` (`file_json_types`), nommé par son gabarit seul, fini par `.json` (`file_json_name`), 4 Mo au plus
+ * (`file_json_max_bytes`).
+ */
+function codedProblem(at: string, output: Record<string, unknown>, file: Record<string, unknown>): string | null {
+  const shaping = SHAPING_KEYS.find((key) => output[key] !== undefined)
+  if (shaping !== undefined) return `${at} excludes items, strip, projection and schema: ${shaping} (file_output_not_alone).`
+  if (file.auth !== undefined && file.from !== "url") return `${at} auth is for url only (file_auth_not_url).`
+  if (file.from !== "json") return null
+  if (file.types !== undefined) return `${at} from json is application/json: types is refused (file_json_types).`
+  const name = file.name
+  if (isJsonObject(name) && (name.header !== undefined || name.path !== undefined || (typeof name.template === "string" && !name.template.endsWith(".json")))) {
+    return `${at} from json is named by its template alone, ending with .json (file_json_name).`
+  }
+  if (typeof file.maxBytes === "number" && file.maxBytes > MAX_ANSWER_BYTES) return `${at} from json maxBytes is ${MAX_ANSWER_BYTES} at most (file_json_max_bytes).`
+  return null
+}
+
+/**
  * Le problème de la sortie d'une fonction ; `null` : aucun. Toute clé d'`output` hors de celles que le paquet exécute est
  * refusée, jamais ignorée : un paquet qui ignorerait `file` rendrait l'adresse signée. Puis `output.file`, comme la règle
- * 17 de la fabrique (exclusif des quatre autres clés, ni pagination, ni travail asynchrone ni relève ; `path` hors
- * `body` seulement ; `auth` avec `url` ; `header` avec `body` ou `url`, `name.path` hors `body` ; gabarit sur les arguments requis, à une
- * extension déclarée ; extensions et types MIME bien formés, jamais un type qu'un navigateur rend ; `maxBytes` de 1 à
- * 50 Mo ; `expect` refusé avec `body`), et de plus : chaque extension est un type du paquet (`FILE_TYPES`), à son premier
- * type MIME (une description partagée sert tous les hôtes : un type ouvert par `registerReaders` n'y vaut pas).
+ * 17 de la fabrique : ses cinq refus codés d'abord (`codedProblem`), puis ni pagination, ni travail asynchrone ni
+ * relève ; `path` exigé avec `url`, `base64` et `base64url`, facultatif avec `json`, refusé avec `body` ; `header` avec
+ * `body` ou `url`, `name.path` hors `body` ; gabarit sur les arguments requis, à une extension déclarée ; extensions et
+ * types MIME bien formés, jamais un type qu'un navigateur rend ; `maxBytes` de 1 à 50 Mo ; `expect` refusé avec `body`.
+ * De plus : chaque extension est un type du paquet (`FILE_TYPES`), à son premier type MIME (une description partagée sert
+ * tous les hôtes : un type ouvert par `registerReaders` n'y vaut pas).
  */
 export function fileOutputProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string | null {
   const output: unknown = fn.output
@@ -96,19 +120,17 @@ export function fileOutputProblem(definition: ConnectorDefinition, fn: Connector
   if (!isJsonObject(file)) return `${at} must be an object.`
   const unknownOfFile = unknownKey(file, FILE_KEYS)
   if (unknownOfFile !== undefined) return `${fn.name}: output.file.${unknownOfFile} is not known to this package: refused rather than ignored.`
-  const shaping = SHAPING_KEYS.find((key) => output[key] !== undefined)
-  if (shaping !== undefined) return `${at} excludes items, strip, projection and schema (${shaping}).`
+  const coded = codedProblem(at, output, file)
+  if (coded) return coded
   const collected = definition.functions.some((other) => other.async?.collect === fn.name)
   if (fn.pagination !== undefined || fn.async !== undefined || collected) return `${at} is not for a paginated function, an asynchronous one or the collect of an asynchronous job.`
   const from = file.from
-  if (typeof from !== "string" || !FROMS.includes(from)) return `${at} from must be body, url, base64 or base64url.`
-  if (from === "body" && file.path !== undefined) return `${at} path is for url, base64 and base64url, not body.`
-  if (from !== "body" && (typeof file.path !== "string" || !DOTTED_PATH.test(file.path))) return `${at} needs the path of the field that holds the address or the bytes.`
-  if (file.auth !== undefined) {
-    if (file.auth !== "none" && file.auth !== "account") return `${at} auth must be none or account.`
-    if (from !== "url") return `${at} auth is for url only.`
-  }
-  const typesFault = typesProblem(at, file.types)
+  if (typeof from !== "string" || !FROMS.includes(from)) return `${at} from must be body, url, base64, base64url or json.`
+  if (from === "body" && file.path !== undefined) return `${at} path is for url, base64, base64url and json, not body.`
+  if (from === "json" && file.path !== undefined && (typeof file.path !== "string" || !DOTTED_PATH.test(file.path))) return `${at} path must be a dotted path.`
+  if (from !== "body" && from !== "json" && (typeof file.path !== "string" || !DOTTED_PATH.test(file.path))) return `${at} needs the path of the field that holds the address or the bytes.`
+  if (file.auth !== undefined && file.auth !== "none" && file.auth !== "account") return `${at} auth must be none or account.`
+  const typesFault = from === "json" ? null : typesProblem(at, file.types)
   if (typesFault) return typesFault
   const nameFault = nameProblem(fn, at, file)
   if (nameFault) return nameFault
@@ -116,6 +138,17 @@ export function fileOutputProblem(definition: ConnectorDefinition, fn: Connector
   if (max !== undefined && !(Number.isInteger(max) && Number(max) >= 1 && Number(max) <= FILE_MAX_BYTES)) return `${at} maxBytes must be an integer from 1 to ${FILE_MAX_BYTES}.`
   if (from === "body" && (fn.expect?.length ?? 0) > 0) return `${at} from body has no JSON: expect is refused.`
   return null
+}
+
+/** La borne d'un fichier rendu : la sienne, sinon 4 Mo pour `json`, 50 Mo pour un autre. */
+const maxBytesOf = (file: ConnectorFileOutput): number => file.maxBytes ?? (file.from === "json" ? MAX_ANSWER_BYTES : FILE_MAX_BYTES)
+
+/** Les types d'un fichier rendu : ceux déclarés, fixes pour `json`. */
+function typesOf(file: ConnectorFileOutput): Readonly<Record<string, readonly string[]>> {
+  if (file.from === "json") return JSON_TYPES
+  // La déclaration exige des types hors `json` : sans eux ici, câblage fautif.
+  if (file.types === undefined) throw new PlatformError("internal", "Internal error.")
+  return file.types
 }
 
 const MB = 1_048_576
@@ -144,7 +177,7 @@ function refusalsOf(prepared: PreparedFunction, file: ConnectorFileOutput) {
     missing: (where: string) => refused("not_found", "file_missing", `${label} answered without a file (${where}). Nothing was kept.`),
     downloadRefused: (status: number) =>
       refused("upstream_error", "file_download_refused", `${label} refused the download (HTTP ${status}); the link may have expired: call ${served} again. Nothing was kept.`, status),
-    tooLarge: () => refused("too_large", "file_too_large", `the file is over ${sizeText(file.maxBytes ?? FILE_MAX_BYTES)}. Nothing was kept.`),
+    tooLarge: () => refused("too_large", "file_too_large", `the file is over ${sizeText(maxBytesOf(file))}. Nothing was kept.`),
     type: (announced: string, extension: string) => refused("upstream_error", "file_type_refused", `${label} sent ${announced} instead of the file (${extension}). Nothing was kept.`),
     interrupted: () => refused("upstream_error", "file_download_refused", `${label} cut the download short; call ${served} again. Nothing was kept.`),
     unreadable: (what = `a file field that is not valid ${file.from}`) => refused("upstream_error", "file_unreadable", `${label} sent ${what}. Nothing was kept.`),
@@ -230,7 +263,7 @@ function nameOf(file: ConnectorFileOutput, args: Record<string, unknown>, header
   candidates.push(file.name.template.replace(/\{([^{}]+)\}/g, (_whole, argument: string) => argumentText(args[argument])))
   for (const candidate of candidates) {
     const name = cleanName(candidate)
-    if (name !== "" && Object.hasOwn(file.types, fileExtension(name))) return name
+    if (name !== "" && Object.hasOwn(typesOf(file), fileExtension(name))) return name
   }
   // La déclaration exige un gabarit à une extension déclarée : sans nom ici, câblage fautif.
   throw new PlatformError("internal", "Internal error.")
@@ -256,7 +289,7 @@ function namedAndTyped(fail: Refusals, file: ConnectorFileOutput, args: Record<s
   const name = nameOf(file, args, head.headers, head.json)
   const extension = fileExtension(name)
   const announced = announcedType(head.type)
-  if (announced !== null && !NEUTRAL_TYPES.includes(announced) && !file.types[extension].includes(announced)) {
+  if (announced !== null && !NEUTRAL_TYPES.includes(announced) && !typesOf(file)[extension].includes(announced)) {
     throw fail.type(/^[a-z0-9!#$&^_.+-]{1,64}\/[a-z0-9!#$&^_.+-]{1,64}$/.test(announced) ? announced : "another type", extension)
   }
   return name
@@ -278,13 +311,23 @@ const encodedSize = (bytes: number) => 4 * Math.ceil(bytes / 3)
  * joués), puis l'adresse au chemin `path`, téléchargée par le transport gardé (`https`, hôte public, aucune
  * redirection), sans authentification, ou, sous `auth: account`, avec celle du compte vers l'origine de l'adresse de
  * base seulement. `base64`, `base64url` : la réponse JSON lue jusqu'à la taille encodée de `maxBytes` au-delà des 4 Mo
- * d'une réponse ordinaire, le champ décodé strictement. Rien n'est gardé ici.
+ * d'une réponse ordinaire, le champ décodé strictement. `json` : la réponse JSON (4 Mo au plus, sinon `file_too_large` ;
+ * illisible, `file_unreadable`), ses `expect` joués, entière ou sa branche au chemin `path`, écrite par `JSON.stringify`
+ * et bornée par `maxBytes`, nommée par son gabarit, sans contrôle du type annoncé. Rien n'est gardé ici.
  */
 async function readFile(prepared: PreparedFunction, file: ConnectorFileOutput, args: Record<string, unknown>, exchange: Exchange): Promise<ReadFile> {
   const { api, request, fetcher, resign } = exchange
   const fail = refusalsOf(prepared, file)
-  const max = file.maxBytes ?? FILE_MAX_BYTES
-  const accept = [...new Set(Object.values(file.types).flat())].join(", ")
+  const max = maxBytesOf(file)
+  if (file.from === "json") {
+    const json = await requestJson(api, request, fetcher, { resign, bound: { maxBytes: MAX_ANSWER_BYTES, tooLarge: fail.tooLarge }, unreadable: () => fail.unreadable("an answer that is not JSON") })
+    exchange.expect(json)
+    const value = file.path === undefined ? json : valueAt(json, file.path)
+    if (!nonEmpty(value)) throw fail.missing(file.path === undefined ? "its answer is empty" : `${file.path} is empty`)
+    const bytes = new TextEncoder().encode(JSON.stringify(value))
+    return fileOf(fail, max, { name: nameOf(file, args, null, null), bytes, empty: "its answer is empty" })
+  }
+  const accept = [...new Set(Object.values(typesOf(file)).flat())].join(", ")
   let name = ""
   const named = (json: unknown) => (head: Omit<FileAnswer, "bytes">) => {
     name = namedAndTyped(fail, file, args, { ...head, json })

@@ -162,6 +162,12 @@ describe("text readers of the package", () => {
     expect((await packageReader("csv").read({ name: "a.csv", bytes: bytesOf("a;b"), signal: new AbortController().signal })) as ReaderDocument).toMatchObject({ parts: [{ name: "line 1", chars: 3 }] })
   })
 
+  it("should read a json file as it is, in runs of lines: the compact JSON a function writes is one part", async () => {
+    const text = '{"text":"réunion","pages":[1,2]}'
+    const { read, whole } = await readPackage("json", text)
+    expect([read.parts, read.summary, whole]).toEqual([[{ name: "line 1", chars: text.length }], "1 line", text])
+  })
+
   it("should refuse a text that is not UTF-8 with the status unsupported", async () => {
     const deadline = startDeadline()
     const error = await refusal(readText(packageReader("txt"), { name: "ancien.txt", bytes: new Uint8Array([0x45, 0x74, 0xe9]) }, deadline))

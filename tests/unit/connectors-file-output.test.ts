@@ -3,8 +3,17 @@
 // sans base ni bucket, le rangement en transit simulé. La déclaration (`fileOutputProblem` à `registerConnectors`, clé
 // inconnue d'`output` refusée), la lecture (corps, adresse par le transport gardé sans redirection, base64), le nom, le
 // type, les bornes, le texte servi et les six refus nommés ; l'adresse du tiers n'apparaît jamais, ni dans un texte, ni
-// dans une erreur, ni dans un log. Les cas communs avec la lib, copiés (`tests/factories/file-cases.ts`), en attendant
-// `@otomata_tech/connectors/file-cases`.
+// dans une erreur, ni dans un log. Les cas communs avec la lib (`@otomata_tech/connectors/file-cases`, dépendance de
+// développement épinglée à un commit) : les appels simulés, le fichier JSON comparé octet pour octet, et les fonctions
+// que la règle 17 refuse sous un code.
+import {
+  connector as fileCasesConnector,
+  fileCases,
+  fileDeclarationRefusals,
+  fileRefusals,
+  fileRefusedFunctions,
+  type FileCaseAnswer,
+} from "@otomata_tech/connectors/file-cases"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { FILE_TYPES, fileTypeOf } from "../../packages/plateforme/schemas"
 import { checkArguments } from "../../packages/plateforme/server/catalog/arguments"
@@ -16,7 +25,6 @@ import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../pac
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { fileConnector, memoryTokens } from "../factories/described-connector"
-import { connector as fileCasesConnector, fileCases, type FileCaseAnswer } from "../factories/file-cases"
 
 const state = vi.hoisted(() => ({
   storage: true,
@@ -101,6 +109,17 @@ function logs() {
   const spies = [vi.spyOn(console, "error"), vi.spyOn(console, "warn"), vi.spyOn(console, "log"), vi.spyOn(console, "info")]
   for (const spy of spies) spy.mockImplementation(() => undefined)
   return () => spies.flatMap((spy) => spy.mock.calls.map((call) => call.map(String).join(" "))).join("\n")
+}
+
+/** Le message du refus de `registerConnectors`, ou `"declared"`. */
+function refusedWith(definition: ConnectorDefinition): string {
+  try {
+    registerConnectors([definition])
+  } catch (error) {
+    if (error instanceof CatalogRegistrationError) return error.message
+    throw error
+  }
+  return "declared"
 }
 
 const audio = (size: number, headers: Record<string, string> = { "content-type": "audio/mpeg" }) => new Response(new Uint8Array(size).fill(7), { status: 200, headers: { ...headers, "content-length": String(size) } })
@@ -462,15 +481,6 @@ describe("the declaration of a file output (registerConnectors)", () => {
     functions: base.functions.map((fn) => (fn.name === recording.name ? (change(fn) as ConnectorFunctionDefinition) : fn)),
   })
   const withFile = (file: Record<string, unknown>) => withRecording((fn) => ({ ...fn, output: { file: { ...fn.output?.file, ...file } } }))
-  const refusedWith = (definition: ConnectorDefinition): string => {
-    try {
-      registerConnectors([definition])
-    } catch (error) {
-      if (error instanceof CatalogRegistrationError) return error.message
-      throw error
-    }
-    return "declared"
-  }
 
   it("should declare the functions that return a file", () => {
     expect(refusedWith(base)).toBe("declared")
@@ -492,10 +502,11 @@ describe("the declaration of a file output (registerConnectors)", () => {
       ["a type with parameters", { types: { mp3: ["audio/mpeg; rate=8000"] } }, "crm.get_call_recording: output.file type mp3: audio/mpeg; rate=8000 must be a lowercase media type without parameters."],
       ["a malformed extension", { types: { "MP3!": ["audio/mpeg"] } }, 'crm.get_call_recording: output.file type "MP3!": 1 to 16 lowercase ASCII letters or digits.'],
       ["no type", { types: {} }, "crm.get_call_recording: output.file types must list at least one extension with its media types."],
-      ["an unknown from", { from: "stream" }, "crm.get_call_recording: output.file from must be body, url, base64 or base64url."],
-      ["a path with body", { from: "body", path: "call.recording", auth: undefined }, "crm.get_call_recording: output.file path is for url, base64 and base64url, not body."],
+      ["an unknown from", { from: "stream" }, "crm.get_call_recording: output.file from must be body, url, base64, base64url or json."],
+      ["a path with body", { from: "body", path: "call.recording", auth: undefined }, "crm.get_call_recording: output.file path is for url, base64, base64url and json, not body."],
+      ["a malformed path with json", { from: "json", path: "call..recording", auth: undefined, types: undefined, name: { template: "call-{call_id}.json" } }, "crm.get_call_recording: output.file path must be a dotted path."],
       ["no path with url", { path: undefined }, "crm.get_call_recording: output.file needs the path of the field that holds the address or the bytes."],
-      ["auth outside url", { from: "base64", auth: "account" }, "crm.get_call_recording: output.file auth is for url only."],
+      ["auth outside url", { from: "base64", auth: "account" }, "crm.get_call_recording: output.file auth is for url only (file_auth_not_url)."],
       ["an unknown auth", { auth: "bearer" }, "crm.get_call_recording: output.file auth must be none or account."],
       ["a name.path with body", { from: "body", path: undefined, name: { path: "call.name", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.path is for url, base64 and base64url, not body."],
       ["a header with base64", { from: "base64", name: { header: "Content-Disposition", template: "call-{call_id}-recording.mp3" } }, "crm.get_call_recording: output.file name.header is for body and url only."],
@@ -519,7 +530,7 @@ describe("the declaration of a file output (registerConnectors)", () => {
       ["schema", { schema: { type: "object" } }],
     ]
     const verdicts = Object.fromEntries(shapes.map(([key, shape]) => [key, refusedWith(withRecording((fn) => ({ ...fn, output: { ...fn.output, ...shape } })))]))
-    expect(verdicts).toEqual(Object.fromEntries(shapes.map(([key]) => [key, `crm.get_call_recording: output.file excludes items, strip, projection and schema (${key}).`])))
+    expect(verdicts).toEqual(Object.fromEntries(shapes.map(([key]) => [key, `crm.get_call_recording: output.file excludes items, strip, projection and schema: ${key} (file_output_not_alone).`])))
   })
 
   it("should refuse output.file on a paginated, asynchronous or collecting function, and expect with a body", () => {
@@ -567,7 +578,7 @@ describe("the shared file cases", () => {
   })
 
   it("should declare the connector of the shared cases", () => {
-    expect(fileCases).toHaveLength(43)
+    expect(fileCases).toHaveLength(70)
     expect(fileCasesConnector.functions.every((fn) => findFunction(catalogFunctions(), fn.name) !== undefined)).toBe(true)
   })
 
@@ -582,9 +593,12 @@ describe("the shared file cases", () => {
     if (!checked.success) throw new Error("invalid case arguments")
     const work = fn.run({ db: {}, identity: {}, credential, account: { id: "account-1" } } as unknown as FunctionContext, checked.data as never)
     if (one.file) {
+      const { text, ...served } = one.file
       const output = await work
-      expect((output.data as { file: unknown }).file).toMatchObject(one.file)
-      expect(state.kept.map((kept) => ({ name: kept.name, size: kept.bytes.byteLength }))).toEqual([{ name: one.file.name, size: one.file.size }])
+      expect((output.data as { file: unknown }).file).toMatchObject(served)
+      expect(state.kept.map((kept) => ({ name: kept.name, size: kept.bytes.byteLength }))).toEqual([{ name: served.name, size: served.size }])
+      // Le fichier écrit, octet pour octet : celui qu'écrit la lib Python.
+      if (text !== undefined) expect(state.kept[0].bytes).toEqual(bytesOf(text))
     } else {
       expect((await refusal(work)).details?.refusal).toBe(one.refusal)
       expect(state.kept).toEqual([])
@@ -594,5 +608,20 @@ describe("the shared file cases", () => {
     expect(logged()).not.toMatch(/signature=|user:pass/)
   })
 
-  it.todo("should play the file cases of @otomata_tech/connectors/file-cases, shared with the Python lib, once the connectors pin brings them")
+  it("should name every file refusal of the cases", () => {
+    expect(new Set(fileCases.flatMap((one) => (one.refusal ? [one.refusal] : [])))).toEqual(new Set(fileRefusals))
+  })
+})
+
+describe("the shared refused file outputs (registerConnectors)", () => {
+  it("should name the five coded refusals of rule 17, each with a refused function", () => {
+    expect(fileDeclarationRefusals).toHaveLength(5)
+    expect(new Set(fileRefusedFunctions.map((one) => one.refusal))).toEqual(new Set(fileDeclarationRefusals))
+  })
+
+  it.each(fileRefusedFunctions.map((one) => [one.name, one] as const))("%s", (_name, one) => {
+    const message = refusedWith({ ...fileCasesConnector, functions: [one.function] })
+    expect(message.startsWith(`${one.function.name}: output.file`)).toBe(true)
+    expect(message.endsWith(`(${one.refusal}).`)).toBe(true)
+  })
 })

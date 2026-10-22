@@ -36,7 +36,7 @@ import { checkCursor, paginate, type PageSubject } from "./read-pages"
 import { ownerOf, teamOf } from "./view"
 
 /** Le mot de tête de la clôture d'un fichier texte (AC-d2) ; `text` pour un autre type. */
-const FENCE_INFO: Readonly<Record<string, string>> = { html: "html", md: "markdown", csv: "csv", txt: "text" }
+const FENCE_INFO: Readonly<Record<string, string>> = { html: "html", md: "markdown", csv: "csv", txt: "text", json: "json" }
 
 /** La valeur de `section` qui sert tout le texte d'un fichier. */
 const WHOLE = "*"

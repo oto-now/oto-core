@@ -127,7 +127,7 @@ describe("the xlsx reader", () => {
     expect(admittedType("Budget 2026.XLSX")).toEqual({ type: "xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
     expect(() => checkSize("budget.xlsx", "xlsx", READER_LIMITS.binaryBytes)).not.toThrow()
     expect(readerFor("xlsx")).toMatchObject({ reader: XLSX_READER, extension: "xlsx", maxBytes: READER_LIMITS.binaryBytes })
-    expect(readableExtensions()).toEqual(["html", "md", "txt", "csv", "xlsx"])
+    expect(readableExtensions()).toEqual(["html", "md", "txt", "csv", "json", "xlsx"])
   })
 
   it("should run a worker script built from the current sources (pnpm widgets:build)", async () => {

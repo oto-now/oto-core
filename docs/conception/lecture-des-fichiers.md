@@ -1,7 +1,7 @@
 # Lecture des fichiers par un assistant
 
 - **Statut** : validé avec Alexis le 15/10/2026
-- **Dernière révision** : 2026-10-21
+- **Dernière révision** : 2026-10-22
 
 ## Résumé
 
@@ -67,6 +67,7 @@ Read one part with section: "<name>"; the whole text with section: "*".
 | `md` | Titre (frontmatter, premier titre, sinon le nom) et résumé (`splitFrontmatter`) | Tel quel ; ses titres font le plan |
 | `txt` | Première ligne, nombre de lignes | Tel quel |
 | `csv` | Colonnes, nombre de lignes, séparateur | Tel quel : un CSV est déjà le plus court pour un tableau |
+| `json` | Nombre de lignes | Tel quel, en suites de lignes ; le fichier qu'écrit `output.file.from: json` tient sur une ligne, servie par le curseur de `read` |
 | `svg` | `<title>`, `<desc>` | Le texte de `<title>`, `<desc>` et des `<text>` |
 | `zip` | Nombre d'entrées, taille décompressée déclarée | La liste des entrées (chemin, taille) ; les `.md` et `.csv` s'importent par `node.import_tree` |
 | `png`, `jpeg`, `gif`, `webp` | Dimensions | Question ouverte |
@@ -157,6 +158,7 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - **Lot 1 fait (21/10)** : registre (`defineReader`, `registerReaders`, `server/files/readers/`), types de l'hôte ouverts au dépôt, lecteurs texte du paquet (`html`, `md`, `txt`, `csv`) passés par le registre, bornes et statuts (`READER_LIMITS`, `READER_STATUSES`), plan au-delà de 12 000 caractères, `section` et `*` avec `file`.
 - **Lot 1b fait (21/10)** : l'éditeur admet un fichier d'un type d'hôte (dépôt, « Fichier » du « + », types dits avant le choix) ; il apprend ces types par `GET files`, qui rend `{ enabled, hostTypes }`, sans nouvelle route ni nouveau composant (les écrans quittent oto-core, décision du 20/10). Ce refus dans le navigateur n'est qu'un confort : le dépôt reste jugé par `admittedType`. La ligne de page d'un fichier montre l'extension de son nom (`dxf`), jamais son type MIME, sauf pour un nom sans extension.
 - **Lot 2 fait (21/10)** : lecteur `xlsx` du paquet dans un worker (`server/files/readers/xlsx.ts`, `xlsx/`, `worker/`), ZIP compté à la décompression (`archive.ts`), tokeniseur XML (`xml.ts`), échéance préemptive pour ce lecteur ; `ReaderStatusError` pour un statut levé par `text(part)`.
+- **Type `json` (22/10)** : lecteur texte du paquet, en lignes, comme `txt` (`TEXT_READERS`), clôture `json` ; le fichier compact qu'écrit une fonction de connecteur (`output.file.from: json`) n'a qu'une ligne, donc une seule partie : au-delà de 12 000 caractères, pas de plan, le texte entier coupé par le curseur à 45 000 caractères.
 - Reste : la colonne d'aperçu et sa ligne dans `read` d'une page (lot 4) ; le texte utile d'un `html` (sans balises, ses titres pour parties), servi aujourd'hui en source ; les lecteurs docx, PDF, pptx, odt, ods, zip ; `raw` ; le worker des lecteurs du PDF et des autres formats.
 - **Limite connue** (décision du 21/10) : une section dont le nom porte une personne déclarée se lit sous la pseudonymisation par son nom en clair, que l'assistant n'a pas : `section` ne résout pas les jetons (comme pour une page). Traitée si un cas réel apparaît.
 - `node.import_tree` n'importe pas encore une feuille de xlsx en tableau.
@@ -175,3 +177,4 @@ Read one part with section: "<name>"; the whole text with section: "*".
 - 2026-10-21 : lot 1 écrit (registre, bornes, plan et `section`) ; un lecteur de l'hôte ouvre au dépôt le seul type qu'il lit, refus de redéfinir un type du paquet (décision a) ; l'échéance de 10 secondes et son statut `timeout`, non préemptive au lot 1 (décision c) ; 64 Mo de décompression propres aux lecteurs ; un fichier en transit ne se lit pas encore par `read {file}` ; l'aperçu écrit par le seul rôle serveur — arrêté au lancement du lot 1 (source : issue des lecteurs de fichiers, 21/10/2026).
 - 2026-10-21 : lot 2 écrit (tableur `xlsx`) ; la lecture court dans un worker lancé par `eval` d'un script généré, seul chargement qui tienne dans un hôte Next (`standalone` compris), 256 Mo de tas, terminé à l'échéance ; tout `<!DOCTYPE>` refusé ; une feuille cachée gardée, suivie de « (hidden) » ; un titre `## <feuille>` en tête de chaque partie ; la borne de 64 Mo comptée en octets produits, par passage — arrêté au lancement du lot 2 (source : issue des lecteurs de fichiers, 21/10/2026). Le même jour : deux workers au plus par processus, une lecture de plus attendant dans son échéance (option a) ; la borne de 64 Mo par passage gardée en limite connue (source : issue des lecteurs de fichiers, 21/10/2026).
 - 2026-10-21 : lot 6 écrit avec l'étape 2 du chantier « fichier » : `read {file}` sans `path` lit un fichier en transit de l'appelant, mêmes lecteurs, bornes, politique de l'hôte et curseur, lié au fichier ; un fichier joint lu par `file` seul se lit sur son nœud — décidé par Alexis (source : [fichiers et stockage](fichiers-et-stockage.md) § Adresse unique et lecture d'un fichier en transit).
+- 2026-10-22 : `json` lu par un lecteur texte du paquet, en lignes, comme `txt` — décidé par Alexis avec le type `json` ([fichiers et stockage](fichiers-et-stockage.md), « Type `json` »).

@@ -146,7 +146,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect({ code: disabled.code, named: STORAGE_VARIABLES.every((name) => disabled.message?.includes(name)) }).toEqual({ code: "not_enabled", named: true })
       expect(unreadable).toMatchObject({ code: "not_found", message: expect.stringContaining("Unknown path ventes/f_ordre") })
       expect(readOnly).toMatchObject({ code: "forbidden", message: "Writing ventes/f_ordre is reserved to team Ventes (lead: Claire Morel). Ask them for access." })
-      expect(badType).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("Admitted extensions: png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg.") })
+      expect(badType).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("Admitted extensions: png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, json, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg.") })
       expect([tooBig.code, tooBigText.code, empty.code]).toEqual(["too_large", "too_large", "too_large"])
       expect(spies.flatMap((spy) => fileInserts(spy.sent))).toEqual([])
     })
@@ -433,8 +433,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         text: "notes.md (11 bytes)\n\n```markdown\n# Été\n\n```",
         refusals: [
           { code: "invalid_arguments", message: "ancien.txt cannot be read: the file is not UTF-8; download it instead (unsupported)." },
-          { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt, csv and xlsx files are read as text." },
-          { code: "invalid_arguments", message: "appel.mp3 is a mp3 file; only html, md, txt, csv and xlsx files are read as text." },
+          { code: "invalid_arguments", message: "rapport.pdf is a pdf file; only html, md, txt, csv, json and xlsx files are read as text." },
+          { code: "invalid_arguments", message: "appel.mp3 is a mp3 file; only html, md, txt, csv, json and xlsx files are read as text." },
           { code: "not_found", message: "Unknown file." },
           { code: "too_large", message: "gros.csv is over 4 MB: download it instead." },
         ],

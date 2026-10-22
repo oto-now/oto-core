@@ -164,6 +164,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     const long = Array.from({ length: 1_200 }, (_, index) => `ligne ${String(index).padStart(4, "0")} ${"x".repeat(40)}`).join("\n")
     const notes = await deposit(path, "notes.md", `# Résumé\n\nCourt.\n\n# Journal\n\n${long}\n\n## Fin\n\nVoilà.`)
     const table = await deposit(path, "ventes.csv", "client;montant\nValbrune;1200")
+    const report = await deposit(path, "rapport.json", '{"client":"Valbrune","montant":1200}')
 
     const outline = await mcp.call("read", { path, file: notes })
     const first = await mcp.call("read", { path, file: notes, section: "Journal" })
@@ -171,6 +172,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     const second = await mcp.call("read", { path, file: notes, section: "Journal", cursor })
     const unknown = await mcp.call("read", { path, file: notes, section: "Annexes" })
     const csv = await mcp.call("read", { path, file: table })
+    const json = await mcp.call("read", { path, file: report })
 
     expect(outline.text).toContain("outline (3 parts, 62,")
     expect(outline.text).toContain("\n- Résumé (17 characters)\n- Journal (")
@@ -178,6 +180,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     expect([second.isError, second.text.includes("ligne 1199"), first.text.includes("ligne 1199")]).toEqual([false, true, false])
     expect([unknown.isError, unknown.text]).toEqual([true, `Unknown section « Annexes » in notes.md. Sections: « Résumé », « Journal », « Fin »; or "*" for the whole text.`])
     expect([csv.isError, csv.text]).toEqual([false, "ventes.csv (28 bytes)\n\n```csv\nclient;montant\nValbrune;1200\n```"])
+    expect([json.isError, json.text]).toEqual([false, 'rapport.json (36 bytes)\n\n```json\n{"client":"Valbrune","montant":1200}\n```'])
   })
 
   it("should pseudonymize the outline and a section of a file", async () => {

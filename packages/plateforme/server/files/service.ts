@@ -40,7 +40,7 @@ const TEXT_READ_TIMEOUT_MS = 10_000
 
 const MB = 1_048_576
 
-/** Les fichiers texte, dits dans un refus : « html, md, txt, csv ». */
+/** Les fichiers texte, dits dans un refus : « html, md, txt, csv, json ». */
 const TEXT_LIST = TEXT_TYPES.join(", ")
 
 /** Les images servies `inline` : les matricielles ; un `svg` se télécharge à la navigation (ADR-016 § 5). */

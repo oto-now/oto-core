@@ -198,7 +198,7 @@ export const readNodeSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      `Id of a file (html, md, txt, csv, or a format the host reads), from its link ${FILE_ADDRESS}/<id>, to read its text alone: attached to the page of path, or, without path, any file you can open, your transit files included; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
+      `Id of a file (html, md, txt, csv, json, or a format the host reads), from its link ${FILE_ADDRESS}/<id>, to read its text alone: attached to the page of path, or, without path, any file you can open, your transit files included; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
     ),
 })
 

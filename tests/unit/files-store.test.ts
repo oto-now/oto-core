@@ -185,7 +185,7 @@ describe("admitted types and limits", () => {
       null,
       null,
     ])
-    expect(Object.keys(FILE_TYPES)).toEqual(["png", "jpeg", "jpg", "gif", "webp", "svg", "pdf", "csv", "txt", "md", "html", "docx", "xlsx", "pptx", "odt", "ods", "zip", "mp3", "wav", "m4a", "ogg"])
+    expect(Object.keys(FILE_TYPES)).toEqual(["png", "jpeg", "jpg", "gif", "webp", "svg", "pdf", "csv", "txt", "md", "html", "json", "docx", "xlsx", "pptx", "odt", "ods", "zip", "mp3", "wav", "m4a", "ogg"])
   })
 
   it("should admit the audio types, by extension, at their media type (decided on 21/10)", () => {
@@ -202,7 +202,7 @@ describe("admitted types and limits", () => {
       file: 52_428_800,
       text: 4_194_304,
       quota: 10_737_418_240,
-      texts: ["html", "md", "txt", "csv"],
+      texts: ["html", "md", "txt", "csv", "json"],
     })
   })
 })
@@ -229,10 +229,11 @@ describe("readResponse (AC-a5)", () => {
     ])
   })
 
-  it("should serve html, md and everything else as an attachment, disposition=inline ignored", () => {
-    expect([read("page.html", true), read("notes.md", true), read("archive.zip", true), read("note.docx")]).toEqual([
+  it("should serve html, md, json and everything else as an attachment, disposition=inline ignored", () => {
+    expect([read("page.html", true), read("notes.md", true), read("report.json", true), read("archive.zip", true), read("note.docx")]).toEqual([
       attachment("page.html"),
       attachment("notes.md"),
+      attachment("report.json"),
       attachment("archive.zip"),
       attachment("note.docx"),
     ])

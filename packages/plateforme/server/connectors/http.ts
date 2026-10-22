@@ -214,8 +214,11 @@ async function answered(api: ConnectorApi, request: ApiRequest, fetcher: Fetch, 
 /** La borne d'une réponse JSON, et le refus au-delà ; les 4 Mo d'une réponse ordinaire à défaut. */
 export type AnswerBound = { maxBytes: number; tooLarge: () => PlatformError }
 
-/** Ce qui s'ajoute à une requête : sa signature de neuf après un 401 (`resign`), et une autre borne que 4 Mo (`bound`). */
-export type RequestOptions = { resign?: () => Promise<ApiRequest>; bound?: AnswerBound }
+/**
+ * Ce qui s'ajoute à une requête : sa signature de neuf après un 401 (`resign`), une autre borne que 4 Mo (`bound`), et
+ * un autre refus d'une réponse qui n'est pas du JSON (`unreadable`).
+ */
+export type RequestOptions = { resign?: () => Promise<ApiRequest>; bound?: AnswerBound; unreadable?: () => PlatformError }
 
 /**
  * Envoie la requête au tiers et rend le JSON de sa réponse, `null` pour une réponse vide. Un 429 se rejoue deux fois au
@@ -224,10 +227,11 @@ export type RequestOptions = { resign?: () => Promise<ApiRequest>; bound?: Answe
  * ou `upstream_error` ; un 2xx dont le corps satisfait une ligne à condition de son statut (un refus sous un 200) ;
  * panne, délai dépassé, réponse trop grosse ou illisible : `upstream_error`. `resign` : après un 401, la requête signée
  * de neuf (un jeton renouvelé), envoyée une fois de plus. `bound` : une autre borne que 4 Mo (un fichier en base64).
+ * `unreadable` : le refus d'une réponse illisible (un fichier JSON, `file_unreadable`).
  */
 export async function requestJson(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, options: RequestOptions = {}): Promise<unknown> {
   const answer = await answered(api, request, fetcher, options.resign)
-  const value = await readAnswer(api, answer, options.bound)
+  const value = await readAnswer(api, answer, options)
   const refused = rowOf(api, answer.status, value)
   if (refused) {
     console.error(`[platform] connector ${api.label}: status ${answer.status} refused by its body`)
@@ -238,9 +242,9 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
 
 /**
  * Le JSON d'une réponse, borné à 4 Mo (ou à `bound`), `null` pour une réponse vide ; trop grosse (le refus de `bound`) ou
- * illisible : `upstream_error`.
+ * illisible (le refus d'`unreadable`) : `upstream_error` à défaut.
  */
-async function readAnswer(api: ConnectorApi, answer: Response, bound?: AnswerBound): Promise<unknown> {
+async function readAnswer(api: ConnectorApi, answer: Response, { bound, unreadable }: RequestOptions = {}): Promise<unknown> {
   let bytes: Uint8Array | null
   try {
     bytes = answer.body ? await readBounded(answer.body, bound?.maxBytes ?? MAX_ANSWER_BYTES, () => null) : new Uint8Array()
@@ -254,7 +258,7 @@ async function readAnswer(api: ConnectorApi, answer: Response, bound?: AnswerBou
     return JSON.parse(new TextDecoder().decode(bytes))
   } catch {
     console.error(`[platform] connector ${api.label}: answer is not JSON`)
-    throw new PlatformError("upstream_error", `${api.label} sent an unreadable answer. Retry later.`)
+    throw unreadable ? unreadable() : new PlatformError("upstream_error", `${api.label} sent an unreadable answer. Retry later.`)
   }
 }
 

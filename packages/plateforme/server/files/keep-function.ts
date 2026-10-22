@@ -21,7 +21,7 @@ export const fileKeep = defineFunction({
     "A file deleted: the refusal gives its date and what to do.",
     "A stale or missing base_revision: nothing is written, read the page again.",
     "Both section and after_block, or an unknown section or block.",
-    "A text file (html, md, txt, csv) over 4 MB: download it from its link before it expires.",
+    "A text file (html, md, txt, csv, json) over 4 MB: download it from its link before it expires.",
   ],
   run: async (context, args) => {
     const kept = await keepTransitFile(context.db, context.identity, args, {

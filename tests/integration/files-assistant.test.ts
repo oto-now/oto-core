@@ -225,7 +225,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       expect(missing.map((one) => [one.isError, one.text])).toEqual(
         [unknown, pending, elsewhere].map((id) => [true, `Unknown file ${id} in ${path}: read the page to get its file links.`]),
       )
-      expect([binary.isError, binary.text]).toEqual([true, "rapport.pdf is a pdf file; only html, md, txt, csv and xlsx files are read as text."])
+      expect([binary.isError, binary.text]).toEqual([true, "rapport.pdf is a pdf file; only html, md, txt, csv, json and xlsx files are read as text."])
     })
 
     it("should serve a long text as an outline, cut its whole text at 45,000 characters and read the rest with the cursor, the file and the section in the cursor's request", async () => {

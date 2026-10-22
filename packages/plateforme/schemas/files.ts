@@ -21,6 +21,8 @@ export const FILE_TYPES = {
   txt: "text/plain",
   md: "text/markdown",
   html: "text/html",
+  // Le JSON (décidé le 22/10) : un fichier texte, que rend une fonction de connecteur (`output.file.from: json`).
+  json: "application/json",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -40,7 +42,7 @@ export type FileType = keyof typeof FILE_TYPES
 export const IMAGE_TYPES: readonly FileType[] = ["png", "jpeg", "jpg", "gif", "webp", "svg"]
 
 /** Les fichiers texte : lus par le serveur (route HTML, `read {file}`), bornés à 4 Mo (HN-E10S02-9). */
-export const TEXT_TYPES: readonly FileType[] = ["html", "md", "txt", "csv"]
+export const TEXT_TYPES: readonly FileType[] = ["html", "md", "txt", "csv", "json"]
 
 /** 50 Mo par fichier (fiche D113). */
 export const FILE_MAX_BYTES = 52_428_800

@@ -248,17 +248,19 @@ export type ConnectorPagination = {
 /**
  * Le fichier que rend une fonction (`connecteurs-et-comptes.md` § Fichiers rendus par un tiers), rangé en fichier en
  * transit de l'appelant, dont seul l'identifiant revient à l'assistant. `from` : où sont les octets, le corps de la
- * réponse (`body`), une adresse que porte la réponse JSON au chemin `path`, téléchargée aussitôt (`url`), ou un champ
- * encodé (`base64`, `base64url`). `auth` (`url` seulement) : `account`, l'authentification du compte, vers l'origine de
- * l'adresse de base seulement ; `none` par défaut. `types` : extension → types MIME que le tiers peut annoncer, le
- * premier celui du paquet (`FILE_TYPES`). `name` : un en-tête (`Content-Disposition` selon la RFC 6266), un champ, puis
- * le gabarit sur les arguments requis, toujours là. `maxBytes` : 50 Mo au plus, et par défaut.
+ * réponse (`body`), une adresse que porte la réponse JSON au chemin `path`, téléchargée aussitôt (`url`), un champ
+ * encodé (`base64`, `base64url`), ou la réponse JSON elle-même, ou sa branche au chemin `path` facultatif, écrite en
+ * JSON (`json`). `auth` (`url` seulement) : `account`, l'authentification du compte, vers l'origine de l'adresse de base
+ * seulement ; `none` par défaut. `types` (hors `json`, dont le type est fixe) : extension → types MIME que le tiers peut
+ * annoncer, le premier celui du paquet (`FILE_TYPES`). `name` : un en-tête (`Content-Disposition` selon la RFC 6266),
+ * un champ, puis le gabarit sur les arguments requis, toujours là (seul, fini par `.json`, pour `json`). `maxBytes` :
+ * 50 Mo au plus, et par défaut ; 4 Mo pour `json`.
  */
 export type ConnectorFileOutput = {
-  readonly from: "body" | "url" | "base64" | "base64url"
+  readonly from: "body" | "url" | "base64" | "base64url" | "json"
   readonly path?: string
   readonly auth?: "none" | "account"
-  readonly types: { readonly [extension: string]: readonly string[] }
+  readonly types?: { readonly [extension: string]: readonly string[] }
   readonly name: { readonly header?: string; readonly path?: string; readonly template: string }
   readonly maxBytes?: number
 }

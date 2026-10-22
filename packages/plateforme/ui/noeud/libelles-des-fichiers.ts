@@ -3,7 +3,7 @@
 // depuis `schemas/files.ts` (`portage-ecrans.md § 6`).
 import { TEXT_TYPES } from "../../schemas/files"
 
-/** Les fichiers texte, bornés plus bas : « html, md, txt, csv ». */
+/** Les fichiers texte, bornés plus bas : « html, md, txt, csv, json ». */
 const TEXTES = TEXT_TYPES.join(", ")
 
 export const FICHIERS = {

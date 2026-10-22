@@ -1,9 +1,9 @@
-// Les lecteurs texte du paquet (`lecture-des-fichiers.md` § Ce que rend chaque format) : `html`, `md`, `txt` et `csv`,
-// tels quels, en UTF-8 strict, BOM retiré. Leurs parties découpent le texte sans rien en retirer (jointes par un saut de
-// ligne, elles le redonnent) : les titres `#`, `##` et `###` d'un `md` hors des blocs de code, sinon des suites de lignes
-// d'au plus une page (`lines 1-230`). Un `html` se découpe en lignes jusqu'à son lecteur du texte utile : ses titres
-// demandent un vrai analyseur, pas une expression rationnelle (§ Décisions). Chaque ligne se lit à la main, en temps
-// linéaire (`security-patterns.md § Validation des inputs`). Sans eux, `read {file}` n'aurait ni plan ni partie.
+// Les lecteurs texte du paquet (`lecture-des-fichiers.md` § Ce que rend chaque format) : `html`, `md`, `txt`, `csv` et
+// `json`, tels quels, en UTF-8 strict, BOM retiré. Leurs parties découpent le texte sans rien en retirer (jointes par un
+// saut de ligne, elles le redonnent) : les titres `#`, `##` et `###` d'un `md` hors des blocs de code, sinon des suites
+// de lignes d'au plus une page (`lines 1-230`). Un `html` se découpe en lignes jusqu'à son lecteur du texte utile : ses
+// titres demandent un vrai analyseur, pas une expression rationnelle (§ Décisions). Chaque ligne se lit à la main, en
+// temps linéaire (`security-patterns.md § Validation des inputs`). Sans eux, `read {file}` n'aurait ni plan ni partie.
 import { FILE_TYPES, type FileType } from "../../../schemas/files"
 import { frontmatterHead, splitFrontmatter } from "../../../schemas/frontmatter"
 import { PAGE_FULL_MAX } from "../../nodes/limits"
@@ -153,7 +153,7 @@ function textReader(type: FileType, shape: (name: string, lines: readonly string
   }
 }
 
-/** Un fichier lu en suites de lignes : `html`, `txt`, `csv`. */
+/** Un fichier lu en suites de lignes : `html`, `txt`, `csv`, `json`. */
 const byLines = (name: string, lines: readonly string[]) => documentOf({ title: name, summary: linesSummary(lines) }, lineSlices(lines))
 
 /** Un `md` : titre du frontmatter, sinon du premier titre, sinon le nom ; parties à ses titres, sinon en lignes. */
@@ -166,4 +166,4 @@ function markdown(name: string, lines: readonly string[]): ReaderDocument {
 }
 
 /** Les lecteurs que le paquet inscrit d'office, un par fichier texte. */
-export const TEXT_READERS: readonly Reader[] = [textReader("html", byLines), textReader("md", markdown), textReader("txt", byLines), textReader("csv", byLines)]
+export const TEXT_READERS: readonly Reader[] = [textReader("html", byLines), textReader("md", markdown), textReader("txt", byLines), textReader("csv", byLines), textReader("json", byLines)]

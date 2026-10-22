@@ -149,8 +149,9 @@ message qui le dit.
   la mise en file dans `runCall`, ni la quantité sur la ligne de journal.
 - La réservation et le plafond de coût n'existent pas (`connecteurs-et-comptes.md`, « Écart avec le code ») : une
   fonction longue d'une clé de l'hôte n'a pas de plafond par organisation tant qu'ils manquent.
-- La transcription attend aussi deux lots hors de ce document : `output.file.from: json` avec le type `json`, et un
-  fichier joint à une page admis comme source de `call.files` (`fichiers-et-stockage.md`).
+- La transcription attend aussi un lot hors de ce document : un fichier joint à une page admis comme source de
+  `call.files` (`fichiers-et-stockage.md`). Le fichier JSON (`output.file.from: json`, avec le type `json`) est écrit
+  ([connecteurs et comptes](connecteurs-et-comptes.md) § Fichiers rendus par un tiers).
 
 ## Questions ouvertes
 
