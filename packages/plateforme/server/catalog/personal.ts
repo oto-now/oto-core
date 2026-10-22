@@ -7,8 +7,12 @@ import { isJsonObject, jsonLeaves } from "../json"
 import { argumentsJsonSchema, PERSONAL_KEYWORD } from "./arguments"
 import type { CatalogFunction } from "./define"
 
-/** Un pas d'un chemin dans les arguments : une clé, ou tout élément d'une liste ou toute clé d'un dictionnaire. */
-type Step = { key: string } | { any: true }
+/**
+ * Un pas d'un chemin dans les arguments : une clé, ou tout élément d'une liste ou toute clé d'un dictionnaire, sauf
+ * celles d'`except` : les clés que `properties` déclare à côté d'`additionalProperties`, qui suivent leur propre schéma
+ * (les clés libres d'un objet sont marquées, pas ses clés déclarées).
+ */
+type Step = { key: string } | { any: true; except?: readonly string[] }
 type Path = readonly Step[]
 
 /** Au-delà, les `$ref` ne sont plus suivis : un schéma récursif reste borné. */
@@ -40,10 +44,12 @@ function collect(search: Search, node: unknown, path: Path, depth: number): void
   }
   const target = depth < MAX_REF_DEPTH ? resolved(root, node.$ref) : null
   if (target) collect(search, target, path, depth + 1)
+  const declared = isJsonObject(node.properties) ? Object.keys(node.properties) : []
   if (isJsonObject(node.properties)) {
     for (const [key, child] of Object.entries(node.properties)) collect(search, child, [...path, { key }], depth)
   }
-  for (const key of ["items", "additionalProperties"]) collect(search, node[key], [...path, { any: true }], depth)
+  collect(search, node.items, [...path, { any: true }], depth)
+  collect(search, node.additionalProperties, [...path, declared.length > 0 ? { any: true, except: declared } : { any: true }], depth)
   if (Array.isArray(node.prefixItems)) for (const child of node.prefixItems) collect(search, child, [...path, { any: true }], depth)
   for (const key of ["anyOf", "oneOf", "allOf"]) {
     const list = node[key]
@@ -73,7 +79,9 @@ function walk(value: unknown, path: Path, into: Set<string>): void {
     return
   }
   if (Array.isArray(value)) for (const item of value) walk(item, rest, into)
-  else if (isJsonObject(value)) for (const item of Object.values(value)) walk(item, rest, into)
+  else if (isJsonObject(value)) {
+    for (const [key, item] of Object.entries(value)) if (!step.except?.includes(key)) walk(item, rest, into)
+  }
 }
 
 /**

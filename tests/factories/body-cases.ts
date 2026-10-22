@@ -1,5 +1,5 @@
 // Les cas communs du corps entier (`call.body` qui nomme un argument, règle 20 de la fabrique), copiés tels quels de
-// la sortie de la fabrique de `connectors` (`connectors/_cases/body.yaml`, `ts/src/body-cases.ts`, commit 7f6336f),
+// la sortie de la fabrique de `connectors` (`connectors/_cases/body.yaml`, `ts/src/body-cases.ts`, commit 1636da1),
 // typés par la définition du paquet. Le moteur du paquet et `registerConnectors` les jouent
 // (`connectors-body-cases.test.ts`). Ils seront lus de `@otomata_tech/connectors/body-cases` quand l'épingle de
 // développement l'apportera : ce fichier sera alors retiré.
@@ -84,6 +84,43 @@ export const updateCampaign: ConnectorFunctionDefinition = {
   },
 }
 
+export const upsertContact: ConnectorFunctionDefinition = {
+  name: "body_cases.upsert_contact",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Create or update a contact; the contact is the whole body, its custom fields free text keys.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["contact"],
+    "properties": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": {"type": "string", "personal": true},
+        "required": ["email"],
+        "properties": {
+          "email": {"type": "string", "personal": true},
+          "first_name": {"type": "string"},
+          "score": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  },
+  examples: [
+    { title: "One contact", input: {"contact": {"email": "ada@example.test", "city": "Lyon"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/contacts",
+    pathParams: [],
+    query: {},
+    body: "contact",
+    headers: {},
+  },
+}
+
 export const removeLeads: ConnectorFunctionDefinition = {
   name: "body_cases.remove_leads",
   connector: "body_cases",
@@ -139,6 +176,7 @@ export const connector = described({
   functions: [
     createLead,
     updateCampaign,
+    upsertContact,
     removeLeads,
   ],
 })
@@ -312,6 +350,291 @@ export const refusedKeysByPattern: ConnectorFunctionDefinition = {
   },
   examples: [
     { title: "A note", input: {"note": {"text": "Hello", "x_any": "Hi"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysNotPersonal: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "string"},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "mood": "calm"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysPersonalFalse: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "string", "personal": false},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "mood": "calm"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysANumber: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "number", "personal": true},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "weight": 2}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysTextOrNull: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": ["string", "null"], "personal": true},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "mood": null}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysAnObject: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "object", "personal": true},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "meta": {}}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysUntyped: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"personal": true},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "mood": 3}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysOneWordMore: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "string", "personal": true, "maxLength": 100},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "mood": "calm"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysAndKeysByPattern: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {
+        "type": "object",
+        "additionalProperties": {"type": "string", "personal": true},
+        "patternProperties": {"^x_": {"type": "string"}},
+        "properties": {"text": {"type": "string"}}
+      }
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"text": "Hello", "x_any": "Hi"}} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/notes",
+    pathParams: [],
+    query: {},
+    body: "note",
+    headers: {},
+  },
+}
+
+export const refusedFreeKeysNoDeclaredProperty: ConnectorFunctionDefinition = {
+  name: "body_cases.add_note",
+  connector: "body_cases",
+  class: "write",
+  act: true,
+  description: "Add a note.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["note"],
+    "properties": {
+      "note": {"type": "object", "additionalProperties": {"type": "string", "personal": true}, "properties": {}}
+    }
+  },
+  examples: [
+    { title: "A note", input: {"note": {"mood": "calm"}} },
   ],
   refusals: [],
   request: {
@@ -748,6 +1071,41 @@ export const bodyCases: readonly BodyCase[] = [
     },
   },
   {
+    name: "free_text_keys_are_sent",
+    function: upsertContact,
+    input: {
+      "contact": {"email": "ada@example.test", "first_name": "Ada", "score": 3, "city": "Lyon", "team_size": "10-50"}
+    },
+    request: {
+      path: "/contacts",
+      query: [],
+      headers: {},
+      body: {"email": "ada@example.test", "first_name": "Ada", "score": 3, "city": "Lyon", "team_size": "10-50"},
+    },
+  },
+  {
+    name: "declared_keys_only",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "score": 0}},
+    request: {
+      path: "/contacts",
+      query: [],
+      headers: {},
+      body: {"email": "ada@example.test", "score": 0},
+    },
+  },
+  {
+    name: "empty_free_text_is_sent",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "Favourite colour": ""}},
+    request: {
+      path: "/contacts",
+      query: [],
+      headers: {},
+      body: {"email": "ada@example.test", "Favourite colour": ""},
+    },
+  },
+  {
     name: "delete_with_body",
     function: removeLeads,
     input: {"campaign_id": "cam-1", "selection": {"ids": ["l-1", "l-2"]}},
@@ -787,6 +1145,36 @@ export const bodyRejectedInputs: readonly BodyRejectedInput[] = [
     function: updateCampaign,
     input: {"campaign_id": "cam-1", "changes": {"daily_limit": 0}},
   },
+  {
+    name: "free_key_is_a_number",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "team_size": 12}},
+  },
+  {
+    name: "free_key_is_null",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "city": null}},
+  },
+  {
+    name: "free_key_is_an_object",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "address": {"city": "Lyon"}}},
+  },
+  {
+    name: "free_key_is_a_list",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "tags": ["vip"]}},
+  },
+  {
+    name: "declared_key_keeps_its_schema",
+    function: upsertContact,
+    input: {"contact": {"email": "ada@example.test", "score": "high"}},
+  },
+  {
+    name: "free_keys_without_a_required_property",
+    function: upsertContact,
+    input: {"contact": {"city": "Lyon"}},
+  },
 ]
 
 /** The functions rule 20 refuses, in the order of the file. */
@@ -814,6 +1202,51 @@ export const bodyRefusedFunctions: readonly BodyRefusedFunction[] = [
   {
     name: "keys_by_pattern",
     function: refusedKeysByPattern,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_not_personal",
+    function: refusedFreeKeysNotPersonal,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_personal_false",
+    function: refusedFreeKeysPersonalFalse,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_a_number",
+    function: refusedFreeKeysANumber,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_text_or_null",
+    function: refusedFreeKeysTextOrNull,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_an_object",
+    function: refusedFreeKeysAnObject,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_untyped",
+    function: refusedFreeKeysUntyped,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_one_word_more",
+    function: refusedFreeKeysOneWordMore,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_and_keys_by_pattern",
+    function: refusedFreeKeysAndKeysByPattern,
+    refusal: "body_argument_not_strict",
+  },
+  {
+    name: "free_keys_no_declared_property",
+    function: refusedFreeKeysNoDeclaredProperty,
     refusal: "body_argument_not_strict",
   },
   {

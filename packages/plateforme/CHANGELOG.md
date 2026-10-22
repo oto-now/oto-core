@@ -67,6 +67,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerConnectors` refuses an empty `output.strip` list, as the `connectors` schema does (absent, nothing is removed).
 - Install: the pins of `@otomata_tech/connectors` and of this package go up together: a description whose `request.body` names one argument (the whole body) needs this version; an older package refuses it ("request needs pathParams, query, body and headers"), and with it the host's whole `registerConnectors`.
 - Server: a described function's `request.body` may name one argument instead of mapping API names to arguments: a strict object of the schema (`type: "object"`, `additionalProperties: false`, at least one declared property, no `patternProperties`), required, sent as validated as the JSON body. `registerConnectors` refuses it unknown, not strict, optional, under `GET`, placed elsewhere, encoded, joined by a body constant or a file, or paginated, each by the code of rule 20 of the `connectors` fabrique (`body_argument_*`).
+- Server: the object of a whole body may admit free text keys at its root: `additionalProperties` exactly `{ type: "string", personal: true }` instead of `false`; declared keys keep their schema, any other key must be a text, and is sent in the same JSON body; its values are personal data, never journaled. Any other `additionalProperties` stays refused as `body_argument_not_strict`.
 
 ## 1.5.1 — 2026-10-21
 
