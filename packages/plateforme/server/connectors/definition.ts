@@ -214,8 +214,12 @@ export type ConnectorRequest = {
   readonly path: string
   readonly pathParams: readonly string[]
   readonly query: ConnectorArgumentMap
-  /** Corps JSON, quelle que soit la méthode ; avec `files`, les parties texte du corps multipart. */
-  readonly body: ConnectorArgumentMap
+  /**
+   * Corps JSON, quelle que soit la méthode ; avec `files`, les parties texte du corps multipart. Ou le nom d'un argument,
+   * un objet strict et requis du schéma, qui forme le corps entier, envoyé tel que validé (`body-argument.ts`, règle 20
+   * de la fabrique de `connectors`).
+   */
+  readonly body: ConnectorArgumentMap | string
   readonly headers: ConnectorArgumentMap
   /**
    * Nom de partie → argument qui porte l'identifiant d'un fichier en transit de l'appelant. Présent, le corps part en

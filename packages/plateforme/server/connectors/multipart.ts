@@ -9,6 +9,7 @@ import { PlatformError } from "../errors"
 import { FILE_ADDRESS, type TransitFile } from "../../schemas"
 import { expireTransitFile, readTransitBytes, storeTransitFile, type TransitBytes } from "../files/transit"
 import { isJsonObject } from "../json"
+import { bodyTable } from "./body-argument"
 import type { ConnectorFunctionDefinition } from "./definition"
 import type { RawBody } from "./http"
 
@@ -53,8 +54,8 @@ export function filesProblem(fn: ConnectorFunctionDefinition): string | null {
   if (fn.pagination !== undefined) return `${fn.name}: a function that sends files is not paginated.`
   const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
   const spec = fn.request
-  const elsewhere = [...spec.pathParams, ...Object.values(spec.query), ...Object.values(spec.body), ...Object.values(spec.headers)]
-  const texts = [...Object.keys(spec.body), ...Object.keys(spec.constants?.body ?? {})]
+  const elsewhere = [...spec.pathParams, ...Object.values(spec.query), ...Object.values(bodyTable(spec)), ...Object.values(spec.headers)]
+  const texts = [...Object.keys(bodyTable(spec)), ...Object.keys(spec.constants?.body ?? {})]
   for (const [part, argument] of Object.entries(files)) {
     const property = properties[argument]
     if (!isJsonObject(property) || property.type !== "string") return `${fn.name}: file argument ${argument} must be declared as a string (the id of a transit file).`

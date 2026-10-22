@@ -65,6 +65,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: a body condition of an error entry or refusal may be `{ path, contains: [texts] }` instead of `{ path, equals }`: it holds when the value at the path is a text containing one of the texts, both lowercased (no locale); a missing, null or non-text value, or a non-JSON body, never holds.
 - Server: `cost.quantity` (an integer of 2 or more, with `unit`, `per: request` or `page` only) is what one request costs: `costOf` and `settledQuantity` without `settle` multiply the requests by it; a settled quantity is read as is, `exceeded` judged against that worst case.
 - Server: `registerConnectors` refuses an empty `output.strip` list, as the `connectors` schema does (absent, nothing is removed).
+- Install: the pins of `@otomata_tech/connectors` and of this package go up together: a description whose `request.body` names one argument (the whole body) needs this version; an older package refuses it ("request needs pathParams, query, body and headers"), and with it the host's whole `registerConnectors`.
+- Server: a described function's `request.body` may name one argument instead of mapping API names to arguments: a strict object of the schema (`type: "object"`, `additionalProperties: false`, at least one declared property, no `patternProperties`), required, sent as validated as the JSON body. `registerConnectors` refuses it unknown, not strict, optional, under `GET`, placed elsewhere, encoded, joined by a body constant or a file, or paginated, each by the code of rule 20 of the `connectors` fabrique (`body_argument_*`).
 
 ## 1.5.1 — 2026-10-21
 
