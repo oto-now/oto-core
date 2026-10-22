@@ -95,8 +95,8 @@ stateDiagram-v2
 - **Coût** : la quantité facturée (`cost.settle.path`, lu dans la réponse) est écrite sur la ligne de journal de fin
   du travail. `outcome_unknown` compte le pire cas, un échec avant l'envoi ne compte rien. Le règlement est clé par
   l'identifiant du travail, donc idempotent.
-- **Échéance** : un travail resté en file au-delà du délai d'attente du moteur (un réglage, le même pour tous) finit
-  `not_started`, sans coût.
+- **Échéance** : un travail resté en file au-delà du délai d'attente du moteur (24 h, un réglage, le même pour tous)
+  finit `not_started`, sans coût.
 - **Fichier d'entrée** : consommé seulement après un envoi réussi, comme un appel synchrone ; échu entre-temps, le
   refus est celui d'aujourd'hui.
 - **Journal** : une ligne à la mise en file (fonction, arguments masqués, identifiant du travail), une à la fin (durée
@@ -124,6 +124,8 @@ message qui le dit.
   journal suffit à suivre la dépense par organisation (Alexis, 22/10/2026).
 - **Écrire les deux hôtes ensemble** : écarté, l'hôte sur une box d'abord ; l'hôte serverless branche son déclencheur
   quand il en a besoin (Alexis, 22/10/2026).
+- **Un délai d'attente en file court** (15 min ou 1 h) : écarté, un travail retardé par une panne de l'exécutant
+  reste voulu ; il attend autant que vit son résultat, 24 h (Alexis, 22/10/2026).
 - **Un appel synchrone de 300 s** : écarté, un connecteur ne fait jamais attendre l'assistant (Alexis, 22/10/2026).
 - **Le traitement par lots du tiers** (Batch Mistral) : écarté pour la transcription, l'audio resterait stocké chez le
   tiers jusqu'à effacement, son entrée audio n'est pas documentée et son délai va jusqu'à 24 h.
@@ -145,8 +147,10 @@ message qui le dit.
 
 ## Écart avec le code
 
-- Rien n'est écrit : ni `background` dans le format et la fabrique, ni la table des travaux, `runJobs`, `job.read`,
-  la mise en file dans `runCall`, ni la quantité sur la ligne de journal.
+- `background` est écrit dans le format et la fabrique de `connectors` (règle 21). Le moteur ne l'exécute pas encore :
+  ni la table des travaux, `runJobs`, `job.read`, la mise en file dans `runCall`, ni la quantité sur la ligne de
+  journal. En attendant, `registerConnectors` refuse toute clé inconnue d'une fonction, `background` compris : une
+  description qui déclare une fonction longue est refusée à la déclaration, jamais appelée en synchrone.
 - La réservation et le plafond de coût n'existent pas (`connecteurs-et-comptes.md`, « Écart avec le code ») : une
   fonction longue d'une clé de l'hôte n'a pas de plafond par organisation tant qu'ils manquent.
 - La transcription attend aussi un lot hors de ce document : un fichier joint à une page admis comme source de
@@ -155,9 +159,10 @@ message qui le dit.
 
 ## Questions ouvertes
 
-- La valeur du délai d'attente en file avant `not_started`.
 - L'hôte serverless admet-il une route de 360 s ?
 
 ## Historique
 
 - 2026-10-22 : création — décidé par Alexis (source : note de conception du 22/10/2026 et ses quatre réponses).
+- 2026-10-22 : délai d'attente en file de 24 h avant `not_started` ; clés inconnues d'une fonction refusées à la
+  déclaration — décidé par Alexis.

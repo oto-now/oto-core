@@ -1,13 +1,16 @@
 // Le coût d'un appel et le travail asynchrone dans la déclaration d'un connecteur décrit (`connecteurs-et-comptes.md`
 // § Moteur des connecteurs décrits) : `cost` (pire cas et quantité relue) et `async` (soumission et relève), contrôlés
 // comme les règles 12 et 13 de la fabrique du dépôt `connectors`. Tenu à part de `declaration.ts`, qui l'appelle sur
-// chaque fonction préparée ; la règle 5 (aucun coût sur une sonde à solde) reste dans `probe-declaration.ts`.
+// chaque fonction préparée ; la règle 5 (aucun coût sur une sonde à solde) reste dans `probe-declaration.ts`. Aussi
+// les clés d'une fonction : une clé que le paquet n'exécute pas (une fonction longue, `background`, que la tâche de fond
+// n'exécute pas encore) est refusée, jamais ignorée, sans quoi la fonction partirait autrement que décrite.
 import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "./definition"
 import { DOTTED_PATH } from "./probe-declaration"
 
 const COST_KEYS = ["per", "quantity", "items", "times", "weights", "unit", "settle"]
 const ASYNC_KEYS = ["collect", "jobId", "withinMs", "noDeadline"]
+const FUNCTION_KEYS = ["name", "connector", "class", "act", "scopes", "description", "schema", "examples", "refusals", "checks", "expect", "request", "pagination", "output", "timeoutMs", "async", "cost", "confirm"]
 /** Le délai de relève : des secondes entières dans la description (`within_s`), d'une seconde à un jour. */
 const COLLECT_MIN_MS = 1_000
 const COLLECT_MAX_MS = 86_400_000
@@ -130,4 +133,10 @@ export function asyncProblem(definition: ConnectorDefinition, fn: ConnectorFunct
     return `${fn.name}: its quantity is read in the responses of ${collect.name}, which must be neither paginated nor settled on its own.`
   }
   return null
+}
+
+/** La première clé d'une fonction que le paquet n'exécute pas ; `null` : aucune. */
+export function functionKeysProblem(fn: ConnectorFunctionDefinition): string | null {
+  const unknown = Object.keys(fn).find((key) => !FUNCTION_KEYS.includes(key))
+  return unknown === undefined ? null : `${fn.name}: unknown key ${unknown}: this package does not execute it, so the function is refused, not run otherwise.`
 }

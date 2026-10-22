@@ -269,6 +269,14 @@ describe("registerConnectors", () => {
       "crm: probe crm.get_company reads a balance, so it must declare no cost: one never pays to learn whether one can pay.",
     ],
     ["a function timeout equal to the connector's", () => [timedConnector(5_000)], "crm.get_company: timeoutMs equals the connector's (5000): it says nothing, drop it."],
+    // Une fonction longue (`background`, règle 21 de la fabrique) que le paquet n'exécute pas encore : refusée, jamais
+    // appelée en synchrone sous son délai propre, l'assistant attendant jusqu'à 300 s.
+    [
+      "a long function this package does not execute",
+      () => [withFunction("get_company", (fn) => ({ ...fn, timeoutMs: 120_000, background: true }) as ConnectorFunctionDefinition)],
+      "crm.get_company: unknown key background: this package does not execute it, so the function is refused, not run otherwise.",
+    ],
+    ["an unknown key on a function", () => [withFunction("get_contact", (fn) => ({ ...fn, retries: 3 }) as ConnectorFunctionDefinition)], "crm.get_contact: unknown key retries: this package does not execute it, so the function is refused, not run otherwise."],
     ...(
       [
         ["a function timeout that is not an integer", 1_500.5],

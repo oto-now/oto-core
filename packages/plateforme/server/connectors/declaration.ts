@@ -17,7 +17,7 @@ import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./au
 import { bodyArgumentProblem, bodyTable } from "./body-argument"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
-import { asyncProblem, costProblem } from "./cost-declaration"
+import { asyncProblem, costProblem, functionKeysProblem } from "./cost-declaration"
 import { errorTable } from "./error-table"
 import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
@@ -317,7 +317,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
+    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -368,7 +368,8 @@ function checkedApplications(definitions: readonly ConnectorDefinition[], given:
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre, coût (`cost`) et travail
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre (toute clé inconnue d'une
+ * fonction refusée, `background` compris tant que le paquet ne l'exécute pas), coût (`cost`) et travail
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
  * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,
  * comme la règle 18 de la fabrique) ; enfin la sonde et

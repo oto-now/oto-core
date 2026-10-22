@@ -73,6 +73,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: a described function's `output.file` may take `from: "json"`: the JSON answer, or its branch at the optional `path`, written by `JSON.stringify` as an `application/json` transit file, named by its template alone (ending in `.json`), `maxBytes` 4 MB at most and by default; `ConnectorFileOutput.types` is now optional (absent for `json`). A missing, null or empty branch is `file_missing`, a non-JSON answer `file_unreadable`.
 - Server: `registerConnectors` judges the five coded refusals of rule 17 of the `connectors` fabrique first, in order, the message ending with the code: `file_output_not_alone`, `file_auth_not_url`, `file_json_types`, `file_json_name`, `file_json_max_bytes`; the first two were already refused, their message now ends with the code.
 - Schemas: `FILE_TYPES` and `TEXT_TYPES` gain `json` (`application/json`): a `.json` file is admitted attached or in transit, read as text by `read {file}`, kept on a page up to 4 MB, served as an attachment.
+- Server: `registerConnectors` refuses a function with a key it does not execute (`<function>: unknown key <key>`), `background` included: a description that declares a long function is refused, never called synchronously; it needs the package that runs it in the background.
 
 ## 1.5.1 — 2026-10-21
 
