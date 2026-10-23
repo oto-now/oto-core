@@ -12,7 +12,7 @@ import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { asCaller, failureOf, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData, type SeededOrg, type SeededPerson } from "../helpers/sql"
 import type { Tx } from "../../packages/plateforme/server/sql"
 
-const VERSION = "20261021180000"
+const VERSION = "20261023120000" // 20261023120000_v1_6_0.sql, partie écrite en 20261021180000
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const suite = !sqlConfigured

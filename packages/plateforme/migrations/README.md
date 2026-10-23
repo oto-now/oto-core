@@ -357,59 +357,65 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `nodes_delete_manager`, recréée sous son nom, perd ses deux branches de la corbeille : sous une session, un nœud ne
   se supprime plus que par son auteur, jamais publié (`undoCreation`). Cinq policies et deux fonctions ; aucune table
   ni colonne ; rien à relancer avant.
-- `20261021160000_platform_transit_de_24_heures.sql` (fichier en transit de 24 h, décision du 21/10) : la garde
-  `files_expires_at_clock`, recréée sous son nom, exige pour un fichier en transit l'échéance `now()` + 24 heures au
-  lieu d'une heure, celle que pose `TRANSIT_HOURS` du paquet de la même version ; les deux concordent, et le paquet et
-  la migration s'appliquent ensemble : le paquet sans elle voit toute entrée en transit refusée (`42501`), elle sans
-  le paquet refuse l'heure du paquet précédent. Un fichier déjà en transit garde son échéance. Un déclencheur ; aucune
-  table, colonne ni fonction ; rien à relancer avant.
-- `20261021170000_platform_role_dans_la_suppression_des_fichiers.sql` (suite de `20261021140000`, issue #81) :
-  `files_delete_member`, recréée sous son nom, exige l'écriture du nœud (`node_level_for` ≥ 2) pour supprimer la ligne
-  d'un fichier joint ; un fichier en transit ne se supprime toujours que par son auteur. La purge des envois abandonnés,
-  qui comptait sur la policy large, passe par une fonction `security definer` que `server/files/service.ts` de la même
-  version appelle : `purge_pending_files(org)` (membre de l'organisation, sinon `42501` ; les lignes `pending` de plus
-  d'une heure, délai fixé en base, d'un fichier joint sur toute page, lue ou non, et les envois en transit de
-  l'appelant ; ne rend que les identifiants). Une policy et une fonction ; aucune table ni colonne ; rien à relancer
-  avant.
-- `20261021180000_platform_ecriture_des_blocs_par_instruction.sql` (suite de `20261021120000` et `20261021130000`) :
-  l'écriture d'un nœud (`node_level_for` ≥ 2) qu'exige l'écriture de ses blocs se juge une fois par nœud et par
-  instruction, par un déclencheur de fin d'instruction sur les lignes écrites (`blocks_write_guard`, trois
-  déclencheurs : ajout, modification, suppression), sous `authenticated` et `platform_server` : une instruction qui
-  touche un nœud qu'on n'écrit pas est refusée en entier (`42501`). `blocks_insert_writer`, `blocks_update_writer` et
-  `blocks_delete_writer`, recréées sous leur nom, ne gardent que la forme, l'auteur et le dernier auteur, et pour une
-  ligne d'un tableau modifiée ou supprimée l'écriture du tableau sur cette seule ligne (zéro ligne pour qui le lit).
-  Même garantie qu'avant ; une page de 1 000 blocs s'écrit en une instruction sous le délai d'une session. Une
-  fonction, trois déclencheurs, trois policies ; aucune table ni colonne ; rien à relancer avant.
-- `20261021190000_platform_trace_des_fichiers_effaces.sql` (fichiers et stockage, § Adresse unique et lecture d'un
-  fichier en transit ; durée décidée par Alexis le 21/10) : la trace d'un fichier en transit effacé, échu ou consommé,
-  30 jours (`erased_files` : identifiant, organisation, auteur, date, cause, fin de la trace), lisible par son seul
-  auteur, hors quota, sans nom ni taille. Un déclencheur (`files_erased_trace`) la pose à la suppression d'une ligne
-  `ready` en transit, quel que soit le chemin ; aucune pour une ligne `pending`, ni pour une personne qui n'est plus
-  membre. Clés vers `orgs` et `members` en cascade : une organisation supprimée ou une personne retirée, ou oubliée,
-  emporte ses traces. `purge_transit_files`, recréée, retire aussi les traces passées. Une table, une fonction, un
-  déclencheur, une policy ; rien à relancer avant.
-- `20261021230000_platform_garder_un_fichier_en_transit.sql` (fichiers et stockage, § Garder un fichier en transit sur
-  une page ; étape 3 du chantier « fichier », décidée par Alexis le 21/10) : `keep_transit_file(p_file, p_node)`,
-  `security definer`, joint un fichier en transit au nœud et lève son échéance, dans une seule instruction, pour son
-  seul auteur, `ready`, non échu, sur un nœud de son organisation hors corbeille, hors tableau, qu'il écrit ; sinon
-  `42501`. Aucun privilège de `files` ne s'ouvre. Une fonction ; rien à relancer avant.
-- `20261021233000_platform_origine_des_fichiers.sql` (fichiers et stockage, § Origine d'un fichier ; étape 4 du
-  chantier « fichier », décidée par Alexis le 21/10) : six colonnes facultatives de `files`, `origin_kind` (`upload`,
-  `link`, `function`), `origin_function`, `origin_ctx`, `origin_by`, `origin_at`, `copied_from`. Le service écrit les
-  trois premières et `copied_from` (`INSERT` accordé sur elles seules) ; le déclencheur `files_origin` (`security
-  definer`) pose l'auteur et la date, vérifie que la conversation est celle de l'auteur (`42501` sinon) et, pour une
-  copie, reprend l'origine d'une source de la même organisation que l'appelant lit (`42501` sinon). `origin_by` mis à
-  nul quand la personne quitte l'organisation ou est oubliée (clé vers `members`). `duplicate_subtree` recréée : ses
-  copies portent `copied_from`. Les lignes d'avant restent sans origine ; rien à relancer avant.
-- `20261022230000_platform_travaux_en_tache_de_fond.sql` (fonctions longues, décidées par Alexis le 22/10) : la table
-  `jobs` des travaux en tâche de fond, lisible par son seul auteur, sans aucune écriture sous une session. Arguments et
-  résultat chiffrés par le serveur (le coffre) ; empreinte des arguments pour rendre un travail identique en cours
-  (index unique partiel). Cinq fonctions `security definer` réservées au rôle du serveur : `enqueue_job` (mise en file
-  par l'auteur), `claim_jobs` (`for update skip locked`, bail du délai plus 30 s sous un jeton neuf), `mark_job_sent`,
-  `finish_job` (passages conditionnés par l'état et le jeton) et `sweep_jobs` (bail réclamé expiré remis en file, bail
-  envoyé expiré `outcome_unknown`, en file depuis 24 h `not_started`, résultat effacé 24 h après la fin, ligne retirée
-  30 jours après). Clés vers `orgs` et `members` en cascade : une personne retirée, ou oubliée, emporte ses travaux.
-  Une table, cinq fonctions, une policy ; rien à relancer avant.
+- `20261023120000_v1_6_0.sql` (version 1.6.0 ; un seul fichier de migration par version publiée, fiche D124) : les
+  sept migrations ajoutées depuis 1.5.1, écrites une par chantier pendant le développement puis réunies avant le tag,
+  au contenu identique, dans l'ordre de leurs horodatages ; une bannière nomme le sujet et le fichier d'origine de
+  chaque partie, et chaque partie garde son bloc `-- ROLLBACK:` à sa fin (aucune ligne changée) : pour défaire, les
+  parties dans l'ordre inverse. Aucune version publiée ne portait les sept fichiers d'origine (§ « Hôtes qui avaient
+  appliqué une migration de la 1.6.0 »).
+  1. `20261021160000_platform_transit_de_24_heures.sql` (fichier en transit de 24 h, décision du 21/10) : la garde
+     `files_expires_at_clock`, recréée sous son nom, exige pour un fichier en transit l'échéance `now()` + 24 heures au
+     lieu d'une heure, celle que pose `TRANSIT_HOURS` du paquet de la même version ; les deux concordent, et le paquet et
+     la migration s'appliquent ensemble : le paquet sans elle voit toute entrée en transit refusée (`42501`), elle sans
+     le paquet refuse l'heure du paquet précédent. Un fichier déjà en transit garde son échéance. Un déclencheur ; aucune
+     table, colonne ni fonction ; rien à relancer avant.
+  2. `20261021170000_platform_role_dans_la_suppression_des_fichiers.sql` (suite de `20261021140000`, issue #81) :
+     `files_delete_member`, recréée sous son nom, exige l'écriture du nœud (`node_level_for` ≥ 2) pour supprimer la ligne
+     d'un fichier joint ; un fichier en transit ne se supprime toujours que par son auteur. La purge des envois abandonnés,
+     qui comptait sur la policy large, passe par une fonction `security definer` que `server/files/service.ts` de la même
+     version appelle : `purge_pending_files(org)` (membre de l'organisation, sinon `42501` ; les lignes `pending` de plus
+     d'une heure, délai fixé en base, d'un fichier joint sur toute page, lue ou non, et les envois en transit de
+     l'appelant ; ne rend que les identifiants). Une policy et une fonction ; aucune table ni colonne ; rien à relancer
+     avant.
+  3. `20261021180000_platform_ecriture_des_blocs_par_instruction.sql` (suite de `20261021120000` et `20261021130000`) :
+     l'écriture d'un nœud (`node_level_for` ≥ 2) qu'exige l'écriture de ses blocs se juge une fois par nœud et par
+     instruction, par un déclencheur de fin d'instruction sur les lignes écrites (`blocks_write_guard`, trois
+     déclencheurs : ajout, modification, suppression), sous `authenticated` et `platform_server` : une instruction qui
+     touche un nœud qu'on n'écrit pas est refusée en entier (`42501`). `blocks_insert_writer`, `blocks_update_writer` et
+     `blocks_delete_writer`, recréées sous leur nom, ne gardent que la forme, l'auteur et le dernier auteur, et pour une
+     ligne d'un tableau modifiée ou supprimée l'écriture du tableau sur cette seule ligne (zéro ligne pour qui le lit).
+     Même garantie qu'avant ; une page de 1 000 blocs s'écrit en une instruction sous le délai d'une session. Une
+     fonction, trois déclencheurs, trois policies ; aucune table ni colonne ; rien à relancer avant.
+  4. `20261021190000_platform_trace_des_fichiers_effaces.sql` (fichiers et stockage, § Adresse unique et lecture d'un
+     fichier en transit ; durée décidée par Alexis le 21/10) : la trace d'un fichier en transit effacé, échu ou consommé,
+     30 jours (`erased_files` : identifiant, organisation, auteur, date, cause, fin de la trace), lisible par son seul
+     auteur, hors quota, sans nom ni taille. Un déclencheur (`files_erased_trace`) la pose à la suppression d'une ligne
+     `ready` en transit, quel que soit le chemin ; aucune pour une ligne `pending`, ni pour une personne qui n'est plus
+     membre. Clés vers `orgs` et `members` en cascade : une organisation supprimée ou une personne retirée, ou oubliée,
+     emporte ses traces. `purge_transit_files`, recréée, retire aussi les traces passées. Une table, une fonction, un
+     déclencheur, une policy ; rien à relancer avant.
+  5. `20261021230000_platform_garder_un_fichier_en_transit.sql` (fichiers et stockage, § Garder un fichier en transit sur
+     une page ; étape 3 du chantier « fichier », décidée par Alexis le 21/10) : `keep_transit_file(p_file, p_node)`,
+     `security definer`, joint un fichier en transit au nœud et lève son échéance, dans une seule instruction, pour son
+     seul auteur, `ready`, non échu, sur un nœud de son organisation hors corbeille, hors tableau, qu'il écrit ; sinon
+     `42501`. Aucun privilège de `files` ne s'ouvre. Une fonction ; rien à relancer avant.
+  6. `20261021233000_platform_origine_des_fichiers.sql` (fichiers et stockage, § Origine d'un fichier ; étape 4 du
+     chantier « fichier », décidée par Alexis le 21/10) : six colonnes facultatives de `files`, `origin_kind` (`upload`,
+     `link`, `function`), `origin_function`, `origin_ctx`, `origin_by`, `origin_at`, `copied_from`. Le service écrit les
+     trois premières et `copied_from` (`INSERT` accordé sur elles seules) ; le déclencheur `files_origin` (`security
+     definer`) pose l'auteur et la date, vérifie que la conversation est celle de l'auteur (`42501` sinon) et, pour une
+     copie, reprend l'origine d'une source de la même organisation que l'appelant lit (`42501` sinon). `origin_by` mis à
+     nul quand la personne quitte l'organisation ou est oubliée (clé vers `members`). `duplicate_subtree` recréée : ses
+     copies portent `copied_from`. Les lignes d'avant restent sans origine ; rien à relancer avant.
+  7. `20261022230000_platform_travaux_en_tache_de_fond.sql` (fonctions longues, décidées par Alexis le 22/10) : la table
+     `jobs` des travaux en tâche de fond, lisible par son seul auteur, sans aucune écriture sous une session. Arguments et
+     résultat chiffrés par le serveur (le coffre) ; empreinte des arguments pour rendre un travail identique en cours
+     (index unique partiel). Cinq fonctions `security definer` réservées au rôle du serveur : `enqueue_job` (mise en file
+     par l'auteur), `claim_jobs` (`for update skip locked`, bail du délai plus 30 s sous un jeton neuf), `mark_job_sent`,
+     `finish_job` (passages conditionnés par l'état et le jeton) et `sweep_jobs` (bail réclamé expiré remis en file, bail
+     envoyé expiré `outcome_unknown`, en file depuis 24 h `not_started`, résultat effacé 24 h après la fin, ligne retirée
+     30 jours après). Clés vers `orgs` et `members` en cascade : une personne retirée, ou oubliée, emporte ses travaux.
+     Une table, cinq fonctions, une policy ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -582,6 +588,31 @@ porte `20260930100000_v1_1_0.sql` et plus aucun des six fichiers, `DB_URL` posé
 
 Les copies des six dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il
 ne retire rien.
+
+## Hôtes qui avaient appliqué une migration de la 1.6.0
+
+Les sept fichiers d'origine de `20261023120000_v1_6_0.sql` (`20261021160000`, `20261021170000`, `20261021180000`,
+`20261021190000`, `20261021230000`, `20261021233000`, `20261022230000`) n'ont été publiés par aucune version : seule
+une base de développement, ou le projet de test de ce dépôt, a pu en appliquer. Comme pour la 1.1.0 (§ précédent), par
+qui exploite la base, jamais par la CI, à la racine d'un dépôt dont `supabase/migrations/` porte
+`20261023120000_v1_6_0.sql` et plus aucun des sept fichiers, `DB_URL` posée comme au § « marquer la ligne de base V1
+appliquée » :
+
+- **Base locale de test** : `pnpm db:local --reset` la recrée, rien d'autre.
+- **Les sept appliquées** (`supabase migration list` les montre côté base) : seul l'historique change.
+
+  ```bash
+  npx supabase migration repair --db-url "$DB_URL" --status reverted 20261021160000 20261021170000 20261021180000 20261021190000 20261021230000 20261021233000 20261022230000
+  npx supabase migration repair --db-url "$DB_URL" --status applied 20261023120000
+  npx supabase migration list --db-url "$DB_URL"
+  npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
+  ```
+
+- **Une partie seulement** : appliquer d'abord, à la main et dans l'ordre, les parties du fichier de version qui
+  suivent la dernière appliquée (chaque bannière nomme son fichier d'origine), puis le cas précédent ; une base qui en a
+  sauté une se recrée.
+
+Les copies des sept dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
 
 ## Supprimer une personne
 

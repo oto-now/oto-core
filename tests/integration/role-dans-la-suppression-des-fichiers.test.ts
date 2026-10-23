@@ -25,7 +25,7 @@ vi.mock("../../packages/plateforme/server/files/store", async (importOriginal) =
   fileStore: () => storage.store,
 }))
 
-const VERSION = "20261021170000"
+const VERSION = "20261023120000" // 20261023120000_v1_6_0.sql, partie écrite en 20261021170000
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const suite = !sqlConfigured

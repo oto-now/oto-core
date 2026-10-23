@@ -190,7 +190,7 @@ Pour une application Next 15 (App Router) sur Supabase.
      MIME seuls, jamais le nom, et un refus par son seul code. Effacé (échu, ou consommé par un envoi réussi), il
      laisse à son auteur, 30 jours, une trace qui fait dire à `/f/<id>`, à `read {file}` et au moteur « File <id> was
      deleted on <date> (<cause>) … » (`not_found`, raison `file_erased`), sans nom (migration
-     `20261021190000_platform_trace_des_fichiers_effaces.sql`) ; cité dans une page par son auteur, l'écriture est
+     `20261023120000_v1_6_0.sql`, partie 4) ; cité dans une page par son auteur, l'écriture est
      refusée avec ce qu'il faut faire.
    - « Voir » d'un fichier `html` ou `md` ouvre la visionneuse à l'adresse du contenu, `?view=<id>` : la page de
      l'hôte passe `fileView` (`/n/<chemin>`) ou `publicFileView` (`/p/<jeton>/<chemin>`, avec
