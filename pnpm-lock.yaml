@@ -267,8 +267,8 @@ importers:
         specifier: 1.32.1
         version: 1.32.1(supports-color@7.2.0)(zod@3.25.76)
       '@otomata_tech/connectors':
-        specifier: github:otomata-tech/connectors#cdc7e84d59246e88b48923bcede66c5c53d655dc&path:/ts
-        version: https://codeload.github.com/otomata-tech/connectors/tar.gz/cdc7e84d59246e88b48923bcede66c5c53d655dc#path:/ts
+        specifier: github:otomata-tech/connectors#d66460f64707fa02ac43ef29018bcda90ed21194&path:/ts
+        version: https://codeload.github.com/otomata-tech/connectors/tar.gz/d66460f64707fa02ac43ef29018bcda90ed21194#path:/ts
       '@playwright/test':
         specifier: ^1
         version: 1.58.2
@@ -1142,9 +1142,9 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
-  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/cdc7e84d59246e88b48923bcede66c5c53d655dc#path:/ts':
-    resolution: {gitHosted: true, integrity: sha512-VFlS3jrxD/JoCF3xZTsL7/YdvgD7mzuuEIryvShzDU1H5fK7JbxtRd//OLDL705avcIiV74gDv+VGbMfblCo2w==, path: /ts, tarball: https://codeload.github.com/otomata-tech/connectors/tar.gz/cdc7e84d59246e88b48923bcede66c5c53d655dc}
-    version: 1.196.0
+  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/d66460f64707fa02ac43ef29018bcda90ed21194#path:/ts':
+    resolution: {gitHosted: true, integrity: sha512-KnKRcdNdBo23bEGDkvy01vBY3dattK83cy4byolNfD1Sm/0GPCBjNjK742lmJUh92PIyaEXNd7CKKtF8uP3wGw==, path: /ts, tarball: https://codeload.github.com/otomata-tech/connectors/tar.gz/d66460f64707fa02ac43ef29018bcda90ed21194}
+    version: 1.197.0
 
   '@phosphor-icons/react@2.1.10':
     resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
@@ -5145,7 +5145,7 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/cdc7e84d59246e88b48923bcede66c5c53d655dc#path:/ts': {}
+  '@otomata_tech/connectors@https://codeload.github.com/otomata-tech/connectors/tar.gz/d66460f64707fa02ac43ef29018bcda90ed21194#path:/ts': {}
 
   '@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:

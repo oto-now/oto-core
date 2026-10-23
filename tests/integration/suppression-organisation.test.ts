@@ -93,10 +93,11 @@ describe.skipIf(!sqlConfigured || privatePending)(name(SUITE), () => {
     await admin`
       insert into platform.sim_outbox (org_id, account_id, connector, function, payload, created_by)
       values (${org.org.id}, ${account}, 'mail', 'mail.create_draft', ${admin.json({ to: "x@example.invalid" })}, ${claire.id})`
-    // Un travail en tâche de fond (fonctions longues) : écrit par le serveur seul, ses arguments chiffrés (factices ici).
+    // Un travail en tâche de fond (fonctions longues) : écrit par le serveur seul, son résultat chiffré (factice ici).
+    // Fini, jamais en file : `runJobs` d'un autre test le réclamerait, la base est partagée.
     await admin`
-      insert into platform.jobs (org_id, user_id, function, origin, timeout_ms, digest, arguments_ciphertext)
-      values (${org.org.id}, ${claire.id}, 'crm.transcribe', 'https://acme.example.invalid', 120000, ${sha()}, 'v2:sealed')`
+      insert into platform.jobs (org_id, user_id, function, origin, timeout_ms, digest, state, finished_at, outcome_ciphertext)
+      values (${org.org.id}, ${claire.id}, 'crm.transcribe', 'https://acme.example.invalid', 120000, ${sha()}, 'done', now(), 'v2:sealed')`
     const code = await fx.seedCtxJournal(org.org, claire, [{ tool: "t_read", target: "ventes/offre" }])
     await admin`insert into platform.feedback (org_id, user_id, type, text, number) values (${org.org.id}, ${lea.id}, 'gap', 'Il manque la grille.', 0)`
     await admin`insert into platform.pseudonym_orgs (org_id, salt, witness) values (${org.org.id}, ${randomBytes(12).toString("hex")}, 'abcd')`

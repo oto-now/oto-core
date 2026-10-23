@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-23] — Version 1.6.0 du paquet
+**À appliquer :** depuis 1.5.1, ce que dit la section 1.6.0 du `CHANGELOG.md` du paquet : sept migrations avec le paquet de cette version (`20261021160000` à `20261022230000`, chacune nommée par sa ligne) ; l'épingle de `@otomata_tech/connectors` à d66460f au moins (`mistral` 1.0.1), montée avec celle du paquet, sans y déclarer `salesforce` 1.0.0, que cette version refuse ; pour une fonction longue, `registerConnectors(…, { backgroundRunner: "process" })` et un processus à part du serveur web, de même environnement, qui boucle sur `runJobs({ limit: 3 })` ; la route `/f/<id>` ; la lecture `nouveautes` de l'accueil retirée.
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.6.0 — 2026-10-23` ; `packages/plateforme/package.json` passe à 1.6.0 ; une section `## Unreleased` vide reste au-dessus. Les lignes des hôtes nomment chaque migration au lieu de « this version's migration », disent l'environnement et les voies du processus qui boucle sur `runJobs`, et l'épingle de `connectors` (d66460f, à la place de cdc7e84) ; l'épingle de développement du paquet monte de même à d66460f.
+**Pourquoi :** publier les fichiers rendus et envoyés à un tiers, les fonctions longues en tâche de fond et les corps entiers arrivés depuis 1.5.1, qu'oto-now épinglera sur npm ; sur sept migrations, « la migration de cette version » ne dit plus laquelle.
+**Fichiers :** `packages/plateforme/package.json`, `packages/plateforme/CHANGELOG.md`, `package.json`, `pnpm-lock.yaml`, `docs/changelog.md`.
+
 ## [2026-10-23] — Connecteurs décrits : un fichier joint à une page envoyé à un tiers
 **À appliquer :** rien dans un hôte. Un assistant peut passer à une fonction qui prend un fichier (`request.files`) l'identifiant d'un fichier joint à une page qu'il lit ; le refus d'un fichier qui ne part pas change de texte.
 **Quoi :** `callerFile` et `readCallerBytes` (`server/files/caller-file.ts`) : un fichier en transit de l'appelant, sinon joint à une page qu'il lit, le contrôle de `file.keep` (`sourceOf` y passe) ; le moteur des fichiers envoyés (`multipart.ts`) les lit par lui et ne consomme qu'un fichier en transit ; la mise en file d'une fonction longue (`jobs/queue.ts`) contrôle de même, un argument fichier absent écarté comme à l'envoi ; `readTransitBytes` retiré.

@@ -71,7 +71,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "@otomata_tech/connectors": "github:otomata-tech/connectors#cdc7e84d59246e88b48923bcede66c5c53d655dc&path:/ts",
+    "@otomata_tech/connectors": "github:otomata-tech/connectors#d66460f64707fa02ac43ef29018bcda90ed21194&path:/ts",
     "@playwright/test": "^1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6",
