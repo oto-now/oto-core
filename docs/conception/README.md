@@ -39,6 +39,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Base et portabilité](base-et-portabilite.md) | De quoi le paquet a-t-il besoin chez l'hôte (une base Postgres, un émetteur), et où se décident les droits en base ? | validé avec JB le 24/09/2026 |
 | [Identité et connexion](identite-et-connexion.md) | Comment une personne et un assistant prouvent-ils qui ils sont, et dans quelle organisation entrent-ils ? | validé avec JB le 23/09/2026 |
 | [Droits d'accès](droits-d-acces.md) | Qui lit, écrit et gère quoi, et comment ces droits se posent et se retirent ? | validé avec JB le 27/09/2026 |
+| [Mode contrôle](mode-controle.md) | Comment un administrateur lit-il, puis corrige-t-il, le contenu personnel d'un membre, et qu'en garde la trace ? | validé avec Alexis le 23/10/2026 |
 | [Offres de l'hôte](offres-de-l-hote.md) | Que décide le paquet, et que fournit l'hôte, quand l'hôte vend des offres : inscription libre et capacités par organisation ? | validé avec JB le 01/10/2026 |
 | [Adresses et langue](adresses-et-langue.md) | En quelle langue sont les adresses, les écrans et les réponses de l'assistant ? | validé avec JB le 30/09/2026 |
 
