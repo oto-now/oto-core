@@ -1,16 +1,15 @@
 # Exposition des fonctions
 
-- **Statut** : proposé
+- **Statut** : validé avec Alexis le 23/10/2026 (principe et modes) ; la forme reste à revoir avec JB
 - **Dernière révision** : 2026-10-23
 
 ## Résumé
 
 Les fonctions métier d'un hôte et celles des connecteurs passent déjà par un seul catalogue et un seul chemin d'appel ;
-quelques services manquent encore aux premières. Ce document propose un réglage posé à la déclaration, qui choisit
-comment chaque fonction est servie : par `call` seulement (l'état présent, le défaut) ou, en plus, comme un outil MCP à
-plat. Les outils à plat sont choisis par l'hôte, nommément et en nombre borné. C'est une entorse au gel des six outils
-(`outils-mcp.md`), à trancher avec JB. À l'activation d'un connecteur, un message dit ce qui marche tout de suite et ce
-qui reste à faire.
+quelques services manquent encore aux premières. L'hôte choisit à la déclaration comment chaque connecteur est servi :
+par `call` seulement (le défaut), par un outil MCP pour le connecteur, ou par un outil par fonction. Il fixe un mode
+pour tous et peut le forcer connecteur par connecteur, sans borne de nombre. À l'activation d'un connecteur, un message
+dit ce qui marche tout de suite et ce qui reste à faire.
 
 ## Contexte
 
@@ -18,8 +17,8 @@ qui reste à faire.
   servies, comme celles des connecteurs (`registerConnectors`), par les six outils figés : l'assistant les trouve par
   `find`, `read` ou `context`, puis les appelle par `call`. Aucune n'est un outil MCP à elle seule.
 - Demande d'Alexis (point du 23/10/2026 avec JB) : un seul moule pour les deux voies, avec les mêmes services ; une
-  exposition choisie à la déclaration (tout par `call`, tout à plat, ou un mélange) ; un message à l'activation, parce
-  qu'aujourd'hui on « active et il ne se passe rien, puis il faut configurer à côté ».
+  exposition choisie à la déclaration ; un message à l'activation, parce qu'aujourd'hui on « active et il ne se passe
+  rien, puis il faut configurer à côté ».
 - Ce que le banc a mesuré, et qui a fondé le gel (`outils-mcp.md` § Contexte) :
   - les clients figent la liste d'outils et n'appliquent une mise à jour qu'après un geste de l'utilisateur ;
   - `notifications/tools/list_changed` n'est relue que par Claude Code ;
@@ -28,15 +27,15 @@ qui reste à faire.
     outils (`ctx`).
   - La dégradation du routage quand les outils se multiplient est affirmée, mais elle n'est pas chiffrée. Aucun client
     ne refuse 504 outils : la limite tient au routage et au coût en contexte (`.method/conventions/mcp-patterns.md`).
-- Le dépôt connectors a déjà un bloc `exposure` (`per_action`, `per_connector`, `via_call`). Il ne sert qu'à oto 1 ;
-  oto-core l'ignore (`server/connectors/definition.ts`).
+- Oto 1 sert déjà ses connecteurs selon trois modes : `via_call`, `per_connector` et `per_action`. Le dépôt connectors
+  les décrit dans un bloc `exposure`, qu'oto-core ignore aujourd'hui (`server/connectors/definition.ts`).
 
 ## Objectifs et non-objectifs
 
 - **Objectifs :**
   - relever ce qui diffère entre les deux voies, et dire quoi combler ;
-  - un réglage d'exposition posé par l'hôte à la déclaration, par fonction ;
-  - un outil à plat qui garde tout ce que garde `call` : journal, plafonds, confirmation, pseudonymisation ;
+  - trois modes d'exposition, choisis par l'hôte à la déclaration : un défaut, et un choix forcé par connecteur ;
+  - un outil exposé qui garde tout ce que garde `call` : journal, plafonds, confirmation, pseudonymisation ;
   - un message d'activation qui dit ce qui reste à faire.
 - **Non-objectifs :**
   - une exposition choisie par l'organisation ou par l'utilisateur ;
@@ -67,79 +66,76 @@ Les deux voies partagent déjà le catalogue (`catalogFunctions`, `server/catalo
 
 Ce qui manque aux fonctions métier ne s'ajoute que sur un besoin d'hôte : fichier rendu, fonction longue. La
 retaille reste à l'hôte, qui compose déjà sa réponse. Le seul manque qui touche tous les hôtes est celui des exemples
-de `call`, qui taisent les fonctions métier : à combler dans le même lot.
+de `call`, qui taisent les fonctions métier : à combler dans le même lot. Pour l'exposition, l'espace d'une fonction
+métier (`<espace>.<fonction>`) tient lieu de connecteur.
 
-### Le réglage d'exposition
+### Les trois modes
 
-- **Valeurs** : `call` (défaut, l'état présent) ou `tool`. Une fonction en `tool` reste appelable par `call` ; elle
-  est en plus listée comme un outil MCP. Le mélange (« tout par `call`, sauf celle-là ») est le cas général, puisque le
-  réglage se pose fonction par fonction.
-- **Où il se pose** :
-  - fonction métier : un champ de `defineErpFunction` (`expose: "tool"`) ;
-  - connecteur : une option de `registerConnectors`, une liste de noms servis, sur le modèle de `serverOnly`. Le nom
-    d'un connecteur vaut toutes ses fonctions.
-  - Le réglage est à l'hôte, pas à la description du connecteur : un hôte choisit ce qu'il montre.
-- **Bornes, contrôlées à la déclaration** (`CatalogRegistrationError`, rien n'est déclaré) :
-  - au plus N outils à plat par hôte (proposé : 10) ;
-  - pas de `tool` sur une fonction `serverOnly` ;
-  - un nom d'outil en ASCII, de 64 caractères au plus. Claude Code casse au-delà de 128, et claude.ai retire un nom non
-    ASCII sans le dire.
-- **L'outil** :
-  - nom : `<préfixe>_<espace>_<fonction>`, avec le préfixe d'organisation des six outils ;
-  - description : celle de la fonction, dont la première phrase doit suffire ;
-  - schéma d'entrée : celui de la fonction, plus `ctx` obligatoire (le levier mesuré) et `confirm` pour une fonction
-    sensible.
-  - Un appel passe par `runCall`, comme `call` : même journal, même ligne, même refus.
-- **La liste** : `tools/list` rend les six outils, puis les outils à plat. Pour une fonction métier, toujours active,
-  la liste est la même pour toutes les organisations d'un hôte : elle ne change qu'au déploiement. Pour un connecteur,
-  activé par organisation, deux formes sont possibles ; elles sont en question ouverte :
-  - la liste suit l'activation, et elle change sans que le client le voie ;
-  - la liste est fixe, et un outil d'un connecteur éteint rend le refus de `call` (« … is not enabled … »).
+| Mode | Ce que voit l'assistant | Outil |
+|---|---|---|
+| `call` (défaut) | les six outils, rien de plus | aucun : `find`, `read`, puis `call` |
+| `connector` | un outil par connecteur | `<préfixe>_<connecteur>`, la fonction en paramètre |
+| `function` | un outil par fonction | `<préfixe>_<connecteur>_<fonction>` |
+
+- **Où il se pose** : une option de `registerConnectors` et de `registerFunctions`. Elle porte un mode par défaut,
+  `call` si l'hôte ne dit rien, et une table des connecteurs ou espaces dont le mode est forcé :
+  `{ default: "call", connectors: { crm: "function", agenda: "connector" } }`.
+- **Aucune borne de nombre** (décidé par Alexis). La déclaration ne refuse qu'un mode inconnu, un connecteur non
+  déclaré, ou un nom d'outil hors des règles des clients : ASCII et 64 caractères au plus, puisque Claude Code casse
+  au-delà de 128 et que claude.ai retire un nom non ASCII sans le dire.
+- **Les fonctions `serverOnly`** ne sont jamais exposées, quel que soit le mode.
+- **Un outil exposé :**
+  - en `function`, la description est celle de la fonction, dont la première phrase doit suffire. Le schéma d'entrée
+    est celui de la fonction, plus `ctx` obligatoire (le levier mesuré) et `confirm` pour une fonction sensible ;
+  - en `connector`, la description liste les fonctions du connecteur, une ligne chacune. Le schéma d'entrée est
+    `{ ctx, function, arguments, confirm? }`, et les arguments se lisent par `read` comme pour `call` ;
+  - dans les deux cas, l'appel passe par `runCall`, comme `call` : même journal, même ligne, même refus. La fonction
+    reste appelable par `call`.
+- **La liste** : `tools/list` rend les six outils, puis les outils exposés des connecteurs actifs dans l'organisation,
+  et ceux des espaces métier, toujours actifs. Elle suit donc l'activation, sans que le client le voie tout de suite :
+  c'est ce que dit le message d'activation.
 
 ### Le message d'activation
 
 L'activation (écran et MCP admin) rend un message calculé sur l'état réel :
 
 - toujours : « `<c>` est actif : ses fonctions s'appellent tout de suite par `call`. » ;
-- si des fonctions sont exposées à plat : « Votre client affichera ses outils au prochain démarrage d'une
-  conversation. » Le client ne relit pas sa liste tout de suite ;
+- si le connecteur est exposé en `connector` ou en `function` : « Votre client Claude mettra un moment à afficher ses
+  outils : au prochain démarrage d'une conversation. » ;
 - s'il manque un compte ou une clé : ce qui manque, et le lien vers l'écran Connecteurs. C'est la réponse au constat
   « il ne se passe rien ».
 
 ### Ce qui change pour le gel des six outils, et ce qui se perd
 
-- **Change** :
-  - la liste d'outils n'est plus la même pour tous les hôtes ;
-  - le test qui fige le contrat (D8) fige les six outils, et laisse passer les outils déclarés par l'hôte ;
+- **Ne change pas, en mode `call`** : c'est le défaut, et un hôte qui ne dit rien garde exactement les six outils.
+- **Change, dès qu'un hôte expose** :
+  - la liste d'outils n'est plus la même pour tous les hôtes, ni pour toutes les organisations d'un hôte ;
+  - le test qui fige le contrat (D8) fige les six outils, et laisse passer les outils exposés ;
   - « pas d'outil par famille d'objets » devient « pas d'outil que l'hôte n'a pas choisi ».
 - **Reste** : les six outils, leurs champs et leur gel ; `ctx` obligatoire partout ; un seul chemin d'exécution.
-- **Se perd** :
-  - la stabilité de la liste : un outil ajouté ne se voit qu'après un geste de l'utilisateur, sauf sur Claude Code ;
+- **Se perd, pour un hôte qui expose** :
+  - la stabilité de la liste : un outil ajouté à l'activation ne se voit qu'après un geste, sauf sur Claude Code ;
   - une part du routage : plus d'outils, c'est un choix plus difficile pour l'assistant, et sans mesure chiffrée ;
-  - le coût en contexte : chaque outil à plat porte sa description et son schéma dans la liste ;
-  - la garantie que l'assistant passe par `find` ou `read` avant d'appeler. Il lit alors la description de la
-    fonction, mais pas son contrat complet (refus, exemples) ;
-  - le contenu sans surface : un outil à plat est une surface. Le renommer, ou changer son sens, casse les clients
-    comme casserait un des six.
+  - le coût en contexte : chaque outil porte sa description et son schéma dans la liste ;
+  - la garantie que l'assistant lit le contrat complet (refus, exemples) par `read` avant d'appeler ;
+  - le contenu sans surface : un outil exposé est une surface. Le renommer, ou changer son sens, casse les clients.
 
 ## Décisions et alternatives écartées
 
-- **Tout à plat par défaut, ou un outil par capacité** : écarté par le banc (`outils-mcp.md` § Alternatives). La liste
-  devient longue et changeante, et le routage revient au client.
-- **Exposition choisie par l'organisation** : écarté. La liste diffère d'une organisation à l'autre, change au gré des
-  administrateurs, et aucun client ne le voit sans geste.
+- **Des outils à plat choisis un par un par l'hôte, en nombre borné** : proposé le 23/10 dans la première version de
+  cette note, et écarté par Alexis le même jour au profit des trois modes par connecteur, sans borne.
+- **Exposition choisie par l'organisation** : écarté. Elle ferait varier la liste au gré des administrateurs, et
+  aucun client ne le voit sans geste.
 - **Pousser `list_changed`** : écarté. Seul Claude Code le relit, et le transport est sans état (ADR-009).
 - **Septième outil générique (`act`)** : déjà écarté par Alexis le 17/10.
-- **Réutiliser le bloc `exposure` des descriptions** : écarté. Il décrit les modes d'oto 1, et l'exposition est un
-  choix d'hôte, pas une propriété du tiers.
 
 ## Sécurité et confidentialité
 
-- Un outil à plat n'ouvre aucun chemin nouveau. Il appelle `runCall` avec les mêmes contrôles : activation, équipe,
+- Un outil exposé n'ouvre aucun chemin nouveau. Il appelle `runCall` avec les mêmes contrôles : activation, équipe,
   compte, `confirm` d'une fonction sensible, plafonds, journal et masquage.
-- `ctx` reste obligatoire : une conversation ne peut appeler un outil à plat sans avoir lu son contexte.
-- Une fonction `serverOnly` ne peut pas être exposée : la déclaration la refuse.
-- Le nom d'un outil à plat est vu par tout utilisateur de l'hôte, y compris quand la fonction lui est refusée.
+- `ctx` reste obligatoire : une conversation ne peut appeler un outil exposé sans avoir lu son contexte.
+- Une fonction `serverOnly` n'est jamais exposée.
+- Le nom d'un outil exposé est vu par tout utilisateur de l'organisation, y compris quand la fonction lui est refusée.
 
 ## Écart avec le code
 
@@ -148,20 +144,21 @@ Rien n'est réalisé. Les points d'accroche :
 - `mcp/tools.ts` : la liste fixe `TOOL_KEYS`, `buildTools`, et `toolKey`, qui refuse tout nom hors des six ;
 - `mcp/server.ts` : `SERVICES`, indexée par `ToolKey`, et le handler de `tools/list` ;
 - `server/catalog/define.ts` : `CatalogFunction`, qui porte déjà `serverOnly` et `background` ;
-- `server/catalog/erp.ts` : `ErpFunctionInput` et `functionProblem` ;
+- `server/catalog/erp.ts` : `registerFunctions` et ses options ;
 - `server/connectors/declaration.ts` : `ConnectorOptions` ;
 - `server/catalog/registry.ts` : `callExamples`, qui ne cite aucune fonction métier ;
 - `mcp/admin/tools/connector.ts` et `api/admin/connectors.ts` : le message d'activation.
 
 ## Questions ouvertes
 
-- Rouvre-t-on le gel des six outils pour des outils à plat choisis par l'hôte ? À trancher avec JB.
-- Le premier lot couvre-t-il les fonctions métier seules (liste stable, besoin des hôtes ERP), ou aussi les
-  connecteurs ?
-- Quelle borne N par hôte ?
-- Pour un connecteur : une liste qui suit l'activation, ou une liste fixe qui refuse ?
+- La forme de l'option, les noms des modes et la forme de l'outil en mode `connector` : à revoir avec JB.
+- Une description de connecteur peut-elle imposer son mode (le bloc `exposure` existant) ? Ou bien le choix
+  reste-t-il seulement à l'hôte ?
 - Quels services porter aux fonctions métier, et pour quel hôte : fichier rendu, fonction longue ?
 
 ## Historique
 
 - 2026-10-23 : note ouverte, proposée — demande d'Alexis (source : point du 23/10/2026 avec JB).
+- 2026-10-23 : trois modes (`call` par défaut, `connector`, `function`), un défaut et un choix forcé par connecteur,
+  connecteurs et fonctions métier, sans borne de nombre ; la liste suit l'activation — décidé par Alexis (source :
+  réponse à la note).
