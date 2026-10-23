@@ -6,6 +6,7 @@
 // valeur n'en sort ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import type { DeclaredConnector } from "../catalog/connector-source"
 import { PlatformError } from "../errors"
+import type { IdentityOrg } from "../identity"
 import type { ConnectorDefinition } from "./definition"
 
 /** Les champs du credential que l'hôte fournit. */
@@ -27,22 +28,33 @@ function hostFieldMissing(definition: ConnectorDefinition, field: { name: string
   )
 }
 
+/** Le refus d'une organisation à qui l'hôte ne donne pas sa clé : l'application l'ouvre, pas l'organisation. */
+function hostFieldsClosed(definition: ConnectorDefinition, org: IdentityOrg): PlatformError {
+  return new PlatformError(
+    "not_enabled",
+    `${definition.label} is not open to ${org.name} with the key of this application. Ask whoever runs this application to open it.`,
+    { reason: "host_closed" },
+  )
+}
+
 /**
- * Les champs de l'hôte d'un connecteur, lus par son lecteur à cet appel ; `{}` sans champ de l'hôte. Un lecteur absent,
- * qui lève, ou qui ne rend pas un champ (ou le rend vide) : `not_enabled`, qui nomme le champ.
+ * Les champs de l'hôte d'un connecteur, lus par son lecteur à cet appel, pour l'organisation `org` ; `{}` sans champ de
+ * l'hôte. Un lecteur absent, qui lève, ou qui ne rend pas un champ (ou le rend vide) : `not_enabled`, qui nomme le champ ;
+ * un lecteur qui rend `null` : `not_enabled` (`host_closed`), l'hôte ne donnant pas sa clé à cette organisation.
  */
-export function readHostFields(declared: DeclaredConnector): Record<string, string> {
+export function readHostFields(declared: DeclaredConnector, org: IdentityOrg): Record<string, string> {
   const { definition, hostCredentials } = declared
   const wanted = hostFieldsOf(definition)
   if (wanted.length === 0) return {}
   if (!hostCredentials) throw hostFieldMissing(definition, wanted[0])
-  let given: Record<string, string>
+  let given: Record<string, string> | null
   try {
-    given = hostCredentials()
+    given = hostCredentials({ org: { id: org.id, slug: org.slug } })
   } catch (error) {
     console.error(`[platform] connector ${definition.name}: the host credentials reader failed (${error instanceof Error ? error.name : typeof error})`)
     throw hostFieldMissing(definition, wanted[0])
   }
+  if (given === null) throw hostFieldsClosed(definition, org)
   const fields: Record<string, string> = {}
   for (const field of wanted) {
     const value = typeof given === "object" && given !== null ? given[field.name] : undefined

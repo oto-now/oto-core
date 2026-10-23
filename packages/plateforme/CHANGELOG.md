@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Server: a `hostCredentials` reader gets the calling organisation, `({ org: { id, slug } })`; return `null` to keep your key from it, and its calls and hosted links are refused by name (`not_enabled`, reason `host_closed`). A reader that ignores its argument works as before.
+
 ## 1.6.0 — 2026-10-23
 
 ### Assistants

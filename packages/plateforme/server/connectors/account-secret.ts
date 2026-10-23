@@ -311,7 +311,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
   }
   // Un compte sans champ à lui (tous fournis par l'hôte) n'a pas de secret : il n'en exige pas.
   if (!row.secret && !hostKey) throw new PlatformError("not_enabled", `Account « ${account.label} » has no secret yet. Ask ${await who()} to set it.`)
-  readHostFields(declared)
+  readHostFields(declared, identity.org)
   const linkedId = declared.definition.accountIdentity ? await linkedIdOf(db, identity, account, declared) : undefined
   const checked = accountSettings(declared.definition, row.settings)
   if ("problem" in checked) {
@@ -328,7 +328,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
   return async () => {
     const fields = ciphertext ? fieldsOf(declared, decryptCredential(account.id, ciphertext)) : {}
     await refuseMissing(Object.keys(fields))
-    return { fields: { ...fields, ...readHostFields(declared) }, settings: checked.settings, tokens: tokenStore(db, account.id), mark, ...(linkedId !== undefined ? { linkedId } : {}) }
+    return { fields: { ...fields, ...readHostFields(declared, identity.org) }, settings: checked.settings, tokens: tokenStore(db, account.id), mark, ...(linkedId !== undefined ? { linkedId } : {}) }
   }
 }
 

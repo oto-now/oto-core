@@ -145,6 +145,7 @@ export type {
   ConnectorFunctionCost,
   ConnectorFunctionDefinition,
   ConnectorProbeBalance,
+  HostCredentialContext,
   HostCredentialReader,
   HostedLinkProvider,
   OAuthApplication,

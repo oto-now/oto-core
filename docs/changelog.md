@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-23] — Clé de l'hôte : le lecteur sait quelle organisation appelle
+**À appliquer :** rien ; un lecteur `hostCredentials` qui ignore son argument marche comme avant. Pour réserver la clé à certaines organisations, le lecteur lit `org` et rend `null` pour les autres.
+**Quoi :** `HostCredentialReader` reçoit `{ org: { id, slug } }` (type exporté `HostCredentialContext`) et peut rendre `null` : l'appel d'une fonction et le branchement hébergé de cette organisation sont refusés, `not_enabled` avec la raison `host_closed`, qui nomment le connecteur et l'organisation. Aucune migration.
+**Pourquoi :** l'inscription libre d'un hôte (décidée par Alexis le 23/10) : un espace qui s'inscrit ne reçoit pas la clé d'un connecteur que l'hôte paie tant que l'hôte ne l'ouvre pas ; les drapeaux d'organisation, que ses administrateurs changent eux-mêmes, ne peuvent pas la garder.
+**Fichiers :** `packages/plateforme/server/connectors/{definition,host-fields,account-secret,hosted-link}.ts`, `packages/plateforme/server/index.ts`, `tests/unit/connectors-hosted.test.ts`, `tests/integration/comptes-rattaches.test.ts`, `packages/plateforme/README.md`, `packages/plateforme/CHANGELOG.md`, `docs/conception/connecteurs-et-comptes.md`, `docs/changelog.md`.
+
 ## [2026-10-23] — Version 1.6.0 : une seule migration, `20261023120000_v1_6_0.sql`
 **À appliquer :** un hôte qui monte de 1.5.1 applique le seul fichier `20261023120000_v1_6_0.sql` avec le paquet. Une base qui avait appliqué l'un des sept fichiers d'origine (base de développement, projet de test de ce dépôt) répare son historique avant la poussée, par qui l'exploite, jamais par la CI : `migrations/README.md` § « Hôtes qui avaient appliqué une migration de la 1.6.0 ».
 **Quoi :** les sept migrations ajoutées depuis 1.5.1 (`20261021160000` à `20261022230000`) sont réunies dans `20261023120000_v1_6_0.sql`, dans `packages/plateforme/migrations` comme dans `supabase/migrations`, au contenu identique, dans l'ordre de leurs horodatages, chacune sous une bannière qui nomme son sujet et son fichier d'origine, son bloc `-- ROLLBACK:` gardé à sa fin ; les sept fichiers sont retirés. Le README des migrations décrit le fichier par ses sept parties et donne la réparation de l'historique ; les lignes des hôtes du `CHANGELOG.md` de 1.6.0 ne nomment plus que lui ; les suites d'intégration qui se sautaient tant que leur migration manquait attendent sa version.

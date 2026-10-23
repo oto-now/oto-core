@@ -38,11 +38,16 @@ export type ConnectorCredentialField = { readonly name: string; readonly label: 
  */
 export type ConnectorAccountIdentity = { readonly name: string; readonly label: string; readonly pattern: string }
 
+/** L'organisation pour laquelle le paquet demande les champs de l'hôte. */
+export type HostCredentialContext = { readonly org: { readonly id: string; readonly slug: string } }
+
 /**
  * Le lecteur des champs `holder: host` d'un connecteur, fourni par l'hôte (son environnement, son coffre) : appelé à
- * chaque appel, jamais gardé par le paquet.
+ * chaque appel, pour l'organisation qui appelle, jamais gardé par le paquet. `null` : l'hôte ne donne pas sa clé à cette
+ * organisation (un connecteur que l'application paie, ouvert organisation par organisation) ; l'appel et le branchement
+ * d'un compte sont refusés, nommément.
  */
-export type HostCredentialReader = () => Record<string, string>
+export type HostCredentialReader = (context: HostCredentialContext) => Record<string, string> | null
 
 /**
  * Le port du branchement hébergé d'un connecteur à `accountIdentity`, que l'hôte fournit à `registerConnectors`

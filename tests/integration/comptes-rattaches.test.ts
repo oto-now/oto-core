@@ -65,9 +65,12 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     return found
   }
 
-  const register = (options: { host?: boolean; port?: boolean } = {}) =>
+  /** `opened` : les organisations à qui l'hôte donne sa clé (un connecteur qu'il paie) ; sans elle, à toutes. */
+  const register = (options: { host?: boolean; port?: boolean; opened?: readonly string[] } = {}) =>
     registerConnectors([hostedConnector(CONNECTOR)], {
-      ...(options.host === false ? {} : { hostCredentials: { [CONNECTOR]: () => ({ api_key: KEY }) } }),
+      ...(options.host === false
+        ? {}
+        : { hostCredentials: { [CONNECTOR]: ({ org }) => (!options.opened || options.opened.includes(org.slug) ? { api_key: KEY } : null) } }),
       ...(options.port === false ? {} : { hostedLinks: { [CONNECTOR]: fake.port } }),
     })
 
@@ -473,6 +476,18 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const portless = await start("lea")
     expect([portless.status, portless.error?.code]).toEqual([403, "not_enabled"])
     expect(sent).toEqual([])
+  })
+
+  it("should refuse the call and the link of an organisation the host keeps its key from, by name, and serve the one it opens", async () => {
+    await connect("lea", accountId("lea"))
+    register({ opened: [o2.org.slug] })
+    const lea = person("lea", o)
+    const called = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
+    const started = await start("lea")
+    const message = `${LABEL} is not open to ${o.org.name} with the key of this application. Ask whoever runs this application to open it.`
+    const opened = await start("lea", o2)
+    register()
+    expect([called.code, called.message, started.status, started.error, opened.status]).toEqual(["not_enabled", message, 403, { code: "not_enabled", message, details: { reason: "host_closed" } }, 200])
   })
 
   it("should keep linked_id out of reach of authenticated: no read, no insert, no update, and no update of a request", async () => {

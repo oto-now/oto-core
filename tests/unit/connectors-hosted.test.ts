@@ -138,13 +138,14 @@ describe("reading the host's fields", () => {
     return declared
   }
   const message = "Hosted Crm needs the API key of this application, which is not configured. Ask whoever runs this application to configure it."
+  const org = { id: "0b5e8f1c-2d3a-4c5b-8e6f-7a8b9c0d1e2f", slug: "acme", name: "Acme", prefix: "acme", brand: {}, domains: null }
 
   it("should give the host's fields read at each call", () => {
     let current = key()
     const declared = declaredWith({ hostCredentials: { crm: () => ({ api_key: current }) } })
-    expect(readHostFields(declared)).toEqual({ api_key: current })
+    expect(readHostFields(declared, org)).toEqual({ api_key: current })
     current = key()
-    expect(readHostFields(declared)).toEqual({ api_key: current })
+    expect(readHostFields(declared, org)).toEqual({ api_key: current })
   })
 
   it("should refuse without a usable reader, naming the field and nothing of the reader", () => {
@@ -160,7 +161,7 @@ describe("reading the host's fields", () => {
         const declared = declaredWith(options)
         let thrown: unknown
         try {
-          readHostFields(declared)
+          readHostFields(declared, org)
         } catch (error) {
           thrown = error
         }
@@ -169,6 +170,36 @@ describe("reading the host's fields", () => {
     )
     expect(verdicts).toEqual(Object.fromEntries(readers.map(([name]) => [name, ["not_enabled", message]])))
     expect(loggedText(logged)).not.toContain("hk_leaked")
+  })
+
+  // Un connecteur que l'application paie, ouvert organisation par organisation : le lecteur reçoit l'organisation qui
+  // appelle, et `null` refuse pour elle seule.
+  it("should give the reader the organisation that calls, and refuse it by name when the reader keeps its key from it", () => {
+    const opened = new Set(["acme"])
+    const asked: unknown[] = []
+    const declared = declaredWith({
+      hostCredentials: {
+        crm: (context) => {
+          asked.push(context)
+          return opened.has(context.org.slug) ? { api_key: "hk_open" } : null
+        },
+      },
+    })
+    let refusal: unknown
+    try {
+      readHostFields(declared, { ...org, id: "1c6f9a2d-3e4b-4d6c-9f7a-8b9cad0e1f30", slug: "nouvelle", name: "Nouvelle" })
+    } catch (error) {
+      refusal = error
+    }
+    expect({
+      opened: readHostFields(declared, org),
+      refusal: refusal instanceof PlatformError && [refusal.code, refusal.message, refusal.details],
+      asked,
+    }).toEqual({
+      opened: { api_key: "hk_open" },
+      refusal: ["not_enabled", "Hosted Crm is not open to Nouvelle with the key of this application. Ask whoever runs this application to open it.", { reason: "host_closed" }],
+      asked: [{ org: { id: "1c6f9a2d-3e4b-4d6c-9f7a-8b9cad0e1f30", slug: "nouvelle" } }, { org: { id: org.id, slug: "acme" } }],
+    })
   })
 })
 

@@ -565,6 +565,10 @@ registerConnectors([messagerie.connector], {
   rend `{ url }` ; envoyez-y le navigateur. Le paquet sert le retour (`/api/platform/hosted-link/callback`, en `GET`
   avec la session), lie le compte sur le compte personnel de la personne et revient à `return_to` avec
   `?hosted=connected&account=…` ou `?hosted=failed&reason=<raison>`.
+- **Clé gardée** : le lecteur reçoit l'organisation qui appelle (`{ org: { id, slug } }`) ; qu'il rende `null`
+  pour celle à qui vous ne donnez pas votre clé (un connecteur que vous payez, ouvert à certaines seulement), et
+  son appel comme son branchement sont refusés nommément (`not_enabled`, raison `host_closed`). Un connecteur où
+  l'organisation apporte sa propre clé ne passe pas par ce lecteur.
 - **Appel** : la personne n'a pas à nommer son compte rattaché, son appel le prend ; elle peut le partager comme
   tout compte personnel (qui le reçoit le nomme dans `account`).
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.

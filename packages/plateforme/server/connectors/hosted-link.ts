@@ -12,7 +12,7 @@ import { hostedLinkReturnSchema, hostedLinkSchema } from "../../schemas/connecto
 import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError, type PlatformErrorCode } from "../errors"
-import type { Identity } from "../identity"
+import type { Identity, IdentityOrg } from "../identity"
 import type { Tx } from "../sql"
 import { accountRows, summary, type AccountSummary } from "./accounts"
 import { CONSENT_DEFAULT_RETURN, consentLabel } from "./consent"
@@ -38,7 +38,7 @@ export function hostedLinkReturnUrl(origin: string, requestId: string): string {
 /** Un connecteur à compte rattaché déclaré, avec son port ; sinon le refus nommé. */
 type HostedConnector = DeclaredConnector & { identityOf: ConnectorAccountIdentity; port: HostedLinkProvider }
 
-function hostedConnector(name: string): HostedConnector {
+function hostedConnector(name: string, org: IdentityOrg): HostedConnector {
   const declared = declaredConnector(name)
   const identityOf = declared?.definition.accountIdentity
   if (!declared || !identityOf) throw new PlatformError("invalid_arguments", `Connector ${name} does not connect an account hosted by a third party.`)
@@ -51,7 +51,7 @@ function hostedConnector(name: string): HostedConnector {
   }
   // Les champs de l'hôte sont exigés au branchement comme à l'appel : un compte lié qu'aucun appel ne pourrait servir
   // ne se branche pas.
-  readHostFields(declared)
+  readHostFields(declared, org)
   return { ...declared, identityOf, port: declared.hostedLinks }
 }
 
@@ -258,7 +258,7 @@ async function ownedPlan(identity: Identity, connector: HostedConnector, owned: 
 export async function startHostedLink(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = hostedLinkSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
-  const connector = hostedConnector(parsed.data.connector)
+  const connector = hostedConnector(parsed.data.connector, identity.org)
   const name = connector.definition.name
   const returnTo = parsed.data.return_to ?? CONSENT_DEFAULT_RETURN
   const owned = await inTransaction(db, "startHostedLink: my_hosted_accounts", async (sql) => {
@@ -344,7 +344,7 @@ export async function linkHostedAccount(db: PlatformDb, identity: Identity, quer
   try {
     const declaredLabel = declaredConnector(pending.connector)?.definition.label ?? pending.connector
     if (pending.expires) throw hostedRefusal("expired", declaredLabel)
-    const connector = hostedConnector(pending.connector)
+    const connector = hostedConnector(pending.connector, identity.org)
     const label = connector.definition.label
     const hint = query[connector.identityOf.name]
     if (hint !== undefined && !acceptedId(connector, hint)) throw hostedRefusal("invalid_arguments", label)
