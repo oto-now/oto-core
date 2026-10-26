@@ -19,6 +19,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ### Hosts
 - Server: a `hostCredentials` reader gets the calling organisation, `({ org: { id, slug } })`; return `null` to keep your key from it, and its calls and hosted links are refused by name (`not_enabled`, reason `host_closed`). A reader that ignores its argument works as before.
+- Server: a table `request.body` may nest tables of the same form, at any depth (`{ variables: { id: "issue_id", input: { title: "title" } } }`): the body constant, copied, then each given argument at its key path, parents created as needed; an argument not given creates nothing; a key is a key, a dot in it is a character. `registerConnectors` refuses a value that is neither an argument name nor a table, an empty nested table (`body_nested_empty`), a path both constant and argument or one under the other, at the first level too (`body_key_twice`), a nested table beside `files` (`body_nested_multipart`). A pagination cursor is placed wherever its argument is.
+- Install: the pins of `@otomata_tech/connectors` and of this package go up together: a description with a nested body table needs this version; an older package refuses it (`request places [object Object]`), and with it the whole declaration of the host.
 
 ## 1.6.0 — 2026-10-23
 

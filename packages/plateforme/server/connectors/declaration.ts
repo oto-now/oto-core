@@ -15,7 +15,8 @@ import { backgroundRunnerProblem, declareBackgroundRunner, type BackgroundRunner
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
-import { bodyArgumentProblem, bodyTable } from "./body-argument"
+import { bodyArgumentProblem } from "./body-argument"
+import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { backgroundProblem, backgroundTraits, servedDescription } from "./background-declaration"
@@ -108,19 +109,19 @@ function typesOf(property: unknown): unknown[] {
   return Array.isArray(property.type) ? property.type : [property.type]
 }
 
-/** Le problème de la requête d'une fonction, son corps entier compris (`body-argument.ts`) ; `null` : aucun. */
+/** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`) ou emboîté (`body-table.ts`) compris ; `null` : aucun. */
 function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
   const spec = fn.request
   if (!isJsonObject(spec) || !METHODS.includes(spec.method) || typeof spec.path !== "string" || !spec.path.startsWith("/")) {
     return `${fn.name}: request needs a method (GET, POST, PUT, PATCH, DELETE) and a path starting with /.`
   }
-  const shaped = isJsonObject(spec.query) && (isJsonObject(spec.body) || typeof spec.body === "string") && isJsonObject(spec.headers) && Array.isArray(spec.pathParams)
-  const shape = shaped ? bodyArgumentProblem(fn) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
+  const shaped = isJsonObject(spec.query) && (bodyTableShaped(spec.body) || typeof spec.body === "string") && isJsonObject(spec.headers) && Array.isArray(spec.pathParams)
+  const shape = shaped ? (bodyArgumentProblem(fn) ?? bodyTableProblem(fn)) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
   if (shape) return shape
   const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
   const inPath = [...spec.path.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1])
   // Un corps entier n'a pas de table : son argument est déjà jugé (`bodyArgumentProblem`), déclaré et jamais encodé.
-  const placed = [...inPath, ...Object.values(spec.query), ...Object.values(bodyTable(spec)), ...Object.values(spec.headers)]
+  const placed = [...inPath, ...Object.values(spec.query), ...bodyArguments(spec), ...Object.values(spec.headers)]
   const unknown = placed.find((argument) => !Object.hasOwn(properties, argument))
   if (unknown !== undefined) return `${fn.name}: request places ${unknown}, which the schema does not declare.`
   const unlisted = inPath.find((argument) => !spec.pathParams.includes(argument))
@@ -144,7 +145,7 @@ function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDe
 
 /**
  * L'argument qui porte le curseur (`requestParam`, un argument de la fonction, comme la fabrique l'exige), placé en
- * query ou en corps ; ou le problème.
+ * query ou en corps, emboîté ou non (`body-table.ts`) ; ou le problème.
  */
 function cursorArgument(fn: ConnectorFunctionDefinition): string | null | { problem: string } {
   const pagination = fn.pagination
@@ -153,7 +154,7 @@ function cursorArgument(fn: ConnectorFunctionDefinition): string | null | { prob
     return { problem: `${fn.name}: pagination needs kind cursor or page, next and a positive maxPages.` }
   }
   const argument = pagination.requestParam
-  const placed = Object.values(fn.request.query).includes(argument) || Object.values(bodyTable(fn.request)).includes(argument)
+  const placed = Object.values(fn.request.query).includes(argument) || bodyArguments(fn.request).includes(argument)
   return placed ? argument : { problem: `${fn.name}: pagination requestParam ${argument} is not an argument placed in the query or the body.` }
 }
 

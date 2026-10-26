@@ -12,6 +12,7 @@ import { readCallerBytes, type CallerBytes } from "../files/caller-file"
 import { expireTransitFile, storeTransitFile } from "../files/transit"
 import { isJsonObject } from "../json"
 import { bodyTable } from "./body-argument"
+import { bodyArguments } from "./body-table"
 import type { ConnectorFunctionDefinition } from "./definition"
 import type { RawBody } from "./http"
 
@@ -57,7 +58,7 @@ export function filesProblem(fn: ConnectorFunctionDefinition): string | null {
   if (fn.pagination !== undefined) return `${fn.name}: a function that sends files is not paginated.`
   const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
   const spec = fn.request
-  const elsewhere = [...spec.pathParams, ...Object.values(spec.query), ...Object.values(bodyTable(spec)), ...Object.values(spec.headers)]
+  const elsewhere = [...spec.pathParams, ...Object.values(spec.query), ...bodyArguments(spec), ...Object.values(spec.headers)]
   const texts = [...Object.keys(bodyTable(spec)), ...Object.keys(spec.constants?.body ?? {})]
   for (const [part, argument] of Object.entries(files)) {
     const property = properties[argument]

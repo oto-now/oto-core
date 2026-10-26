@@ -213,6 +213,12 @@ export type ConnectorExample = { readonly title: string; readonly input: { reado
 /** Nom côté API → nom de l'argument. */
 export type ConnectorArgumentMap = { readonly [apiName: string]: string }
 
+/**
+ * Le corps en table : nom côté API → argument, ou → une table de même forme, emboîtée à toute profondeur (`body-table.ts`,
+ * règle 22 de la fabrique de `connectors`).
+ */
+export type ConnectorBodyMap = { readonly [apiName: string]: string | ConnectorBodyMap }
+
 export type ConnectorRequest = {
   readonly method: ConnectorHttpMethod
   /** Relatif à `baseUrl`, avec des `{param}` listés dans `pathParams`. */
@@ -220,11 +226,12 @@ export type ConnectorRequest = {
   readonly pathParams: readonly string[]
   readonly query: ConnectorArgumentMap
   /**
-   * Corps JSON, quelle que soit la méthode ; avec `files`, les parties texte du corps multipart. Ou le nom d'un argument,
+   * Corps JSON, quelle que soit la méthode, en table emboîtée ou non (`body-table.ts`) ; avec `files`, les parties texte du
+   * corps multipart, une table plate. Ou le nom d'un argument,
    * un objet strict et requis du schéma, qui forme le corps entier, envoyé tel que validé (`body-argument.ts`, règle 20
    * de la fabrique de `connectors`).
    */
-  readonly body: ConnectorArgumentMap | string
+  readonly body: ConnectorBodyMap | string
   readonly headers: ConnectorArgumentMap
   /**
    * Nom de partie → argument qui porte l'identifiant d'un fichier en transit de l'appelant. Présent, le corps part en

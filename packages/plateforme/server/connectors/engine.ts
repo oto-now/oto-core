@@ -1,11 +1,11 @@
 // Le moteur des connecteurs décrits (`connecteurs-et-comptes.md` § Moteur des connecteurs décrits) : il exécute une
 // fonction déclarée par l'hôte à partir de sa seule définition. Contrôles des arguments (`checks`) avant tout envoi ;
 // requête composée (en-têtes du connecteur, puis constantes et arguments de la fonction, authentification en dernier ;
-// chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode ; `encode:
-// json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse (`expect`) ; sortie taillée
-// (`output`, chemins de `strip` compris, `output.ts`) et texte du résultat composé ici ; table d'erreurs de la fonction
-// (`error-table.ts`) ; adresse résolue sur les réglages du compte et sur son identité chez le tiers (`linkedId`, compte
-// rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
+// chemin aux `{param}` encodés ; query, listes selon `queryArrays` ; corps JSON quelle que soit la méthode, en table
+// emboîtée ou non ; `encode: json`) ; pagination suivie quand l'agent passe `all_pages` ; contrôles de la réponse
+// (`expect`) ; sortie taillée (`output`, chemins de `strip` compris, `output.ts`) et texte du résultat composé ici ;
+// table d'erreurs de la fonction (`error-table.ts`) ; adresse résolue sur les réglages du compte et sur son identité
+// chez le tiers (`linkedId`, compte rattaché) ; corps multipart d'une fonction qui envoie un fichier en transit de l'appelant
 // (`multipart.ts`), consommé après un appel réussi ; fichier rendu par la fonction (`output.file`, `file-output.ts`), rangé
 // en transit de l'appelant. Sans lui, chaque connecteur s'écrirait à la main. Le secret ne va que dans
 // l'authentification de la requête (`auth.ts`) : jamais dans un argument, un texte, une erreur ni un log.
@@ -17,6 +17,7 @@ import { isJsonObject } from "../json"
 import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
 import { bodyArgument, bodyTable } from "./body-argument"
+import { bodyEntries, tableBody } from "./body-table"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { runFileOutput } from "./file-output"
 import { requestJson, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
@@ -160,11 +161,14 @@ function placedValue(fn: ConnectorFunctionDefinition, args: Record<string, unkno
   return fn.request.encode?.[argument] === "json" ? JSON.stringify(args[argument]) : args[argument]
 }
 
-/** Les parties texte d'un corps multipart : constantes du corps, puis arguments donnés, en texte. */
+/**
+ * Les parties texte d'un corps multipart : constantes du corps, puis arguments donnés, en texte. La table y est plate
+ * (`body_nested_multipart`) : chaque chemin n'a qu'une clé.
+ */
 function textParts(fn: ConnectorFunctionDefinition, args: Record<string, unknown>): [string, string][] {
   const constants = Object.entries(fn.request.constants?.body ?? {}).map(([name, value]): [string, string] => [name, asText(value)])
-  const given = Object.entries(bodyTable(fn.request)).filter(([, argument]) => args[argument] !== undefined)
-  return [...constants, ...given.map(([name, argument]): [string, string] => [name, asText(placedValue(fn, args, argument))])]
+  const given = bodyEntries(bodyTable(fn.request)).filter(([, argument]) => args[argument] !== undefined)
+  return [...constants, ...given.map(([path, argument]): [string, string] => [path.join("."), asText(placedValue(fn, args, argument))])]
 }
 
 /**
@@ -224,11 +228,9 @@ function buildRequest(prepared: PreparedFunction, args: Record<string, unknown>,
     if (!isJsonObject(args[whole])) throw new PlatformError("invalid_arguments", `${fn.name}: argument ${whole} is required.`)
     return { method: spec.method, path, query, headers, body: args[whole], pacingKey: accountId }
   }
-  const table = bodyTable(spec)
-  const withBody = Object.keys(table).length > 0 || spec.constants?.body !== undefined
-  const body: Record<string, unknown> = { ...spec.constants?.body }
-  for (const [name, argument] of Object.entries(table)) if (args[argument] !== undefined) body[name] = placed(argument)
-  return { method: spec.method, path, query, headers, body: withBody ? body : undefined, pacingKey: accountId }
+  // Le corps en table (`body-table.ts`) : la constante, puis chaque argument donné à son chemin, emboîté ou non.
+  const withBody = Object.keys(bodyTable(spec)).length > 0 || spec.constants?.body !== undefined
+  return { method: spec.method, path, query, headers, body: withBody ? tableBody(spec, args, placed) : undefined, pacingKey: accountId }
 }
 
 /** Le curseur de la page suivante, `null` à la dernière page (`more` faux, ou `next` absent ou vide). */

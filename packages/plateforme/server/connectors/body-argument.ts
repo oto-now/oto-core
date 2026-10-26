@@ -5,7 +5,7 @@
 // déclaration contrôlée comme la règle 20 de la fabrique, avec ses codes. Sans ce module, un client qui envoie un objet
 // entier (un contact, les réglages d'une campagne) ne se décrirait qu'en recopiant chaque clé en argument.
 import { isJsonObject } from "../json"
-import type { ConnectorArgumentMap, ConnectorFunctionDefinition, ConnectorRequest } from "./definition"
+import type { ConnectorBodyMap, ConnectorFunctionDefinition, ConnectorRequest } from "./definition"
 
 /** Les méthodes qui n'envoient pas de corps (`fetch` refuse un corps en `GET`). */
 const NO_BODY_METHODS = ["GET"]
@@ -15,8 +15,11 @@ export function bodyArgument(spec: ConnectorRequest): string | null {
   return typeof spec.body === "string" ? spec.body : null
 }
 
-/** La table du corps, nom côté API → argument ; vide quand le corps est un argument entier, qui n'a pas de nom côté API. */
-export function bodyTable(spec: ConnectorRequest): ConnectorArgumentMap {
+/**
+ * La table du corps, nom côté API → argument ou table emboîtée (`body-table.ts`) ; vide quand le corps est un argument
+ * entier, qui n'a pas de nom côté API.
+ */
+export function bodyTable(spec: ConnectorRequest): ConnectorBodyMap {
   return typeof spec.body === "string" ? {} : spec.body
 }
 
