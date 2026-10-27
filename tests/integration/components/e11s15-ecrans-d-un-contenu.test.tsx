@@ -237,8 +237,10 @@ describe("the « Contexte » view explained (E11-S15, AC-a8)", () => {
   // Le conteneur de `render` tient lieu de `.oto-content` : un de ses enfants directs est cadré par `.oto-content > *`,
   // dont la marge `auto` s'efface sous la marge propre d'un encart (`.oto-linked`) ; l'encart, dans la colonne de ses
   // voisins, en suit l'alignement et la largeur (`portage-ecrans.md § 0`).
+  // Le bloc des contenus récents, seul servi : un aperçu sans bloc ne rend aucune partie.
+  const RECENT = "## Recent content (new: published since 2026-10-20)\n- ventes/devis (page, 2026-10-26): Devis"
   it.each([
-    ["the parts", { data: { apercu: { data: { text: "", budget: 35_000, blocks: [] } }, contextes: {}, equipes: [] } }, () => screen.getByRole("region", { name: NOMS_DES_BLOCS.news })],
+    ["the parts", { data: { apercu: { data: { text: RECENT, budget: 35_000, blocks: [{ name: "recent content", chars: RECENT.length, status: "full", path: null }] } }, contextes: {}, equipes: [] } }, () => screen.getByRole("region", { name: NOMS_DES_BLOCS["recent content"] })],
     ["the failure", { error: "Une erreur est survenue. Réessayez." }, () => screen.getByRole("alert")],
   ] as const)("should put the explanation in the column of %s, not beside it at the level of the screen", (_, resultat, voisin) => {
     const { container } = render(<EcranDuContexte resultat={resultat} Lien={LienDeTest} prefixeDesPages="/n/" ici="/context" />)

@@ -184,7 +184,7 @@ describe("écran d'une procédure, celui d'une page (M59)", () => {
       <ProcedureDuNoeud
         chemin={CHEMIN}
         phrase="Qualifie les prospects à traiter"
-        controle={{ data: [{ kind: "too_long", message: "Too long." }] }}
+        controle={{ data: [{ kind: "invalid_block", message: "Invalid block." }] }}
         blocs={PROCEDURE}
         apercu={{ data: { text: "ctx: XXXX-XXXX", served: null, candidates: [] } }}
         Lien={LienDeTest}
@@ -321,7 +321,6 @@ describe("publication refusée, par emplacement (AC7)", () => {
     expect(within(ligne ?? document.body).getByText(REFUS_DE_SORTIE.message).closest("details")).toHaveTextContent(/^Détail technique/)
 
     const refus: [Record<string, unknown>, string][] = [
-      [{ kind: "too_long" }, `Procédure · procédure de plus de ${new Intl.NumberFormat("fr-FR").format(12_000)} caractères : déplacez les informations de référence dans une page et liez-la`],
       [{ kind: "invalid_block", block: 1 }, "Avant le premier titre, bloc 1 · bloc d'appel mal formé"],
       [{ kind: "unknown_function", section: "Étapes", block: 2, step: 2, function: "mail.send" }, "Section « Étapes », bloc 2, étape 2 · mail.send · fonction inconnue"],
       [{ kind: "function_not_active", section: "Étapes", block: 4, step: 5, function: "mail.create_draft" }, "Section « Étapes », bloc 4, étape 5 · mail.create_draft · fonction non activée pour l'organisation"],
@@ -334,10 +333,10 @@ describe("publication refusée, par emplacement (AC7)", () => {
     refuserLaPublication(refus.map(([un], rang) => ({ ...un, message: `Problem ${rang + 1}.` })))
     // Une publication refusée repart à la sortie suivante de la page.
     act(() => window.dispatchEvent(new Event("pagehide")))
-    expect(await screen.findByText("La publication est refusée : 9 problèmes à corriger.")).toHaveAttribute("role", "alert")
+    expect(await screen.findByText("La publication est refusée : 8 problèmes à corriger.")).toHaveAttribute("role", "alert")
     const lignes = within(screen.getByRole("group", { name: "Publication" })).getAllByRole("listitem")
     expect(lignes.map((element) => element.querySelector("p")?.textContent)).toEqual(refus.map(([, attendue]) => attendue))
-    expect(within(lignes[7]).getByRole("link", { name: /^Aller au bloc/ })).toHaveAttribute("href", `#${refDe(9)}`)
+    expect(within(lignes[6]).getByRole("link", { name: /^Aller au bloc/ })).toHaveAttribute("href", `#${refDe(9)}`)
     expect(within(lignes[0]).queryByRole("link")).toBeNull()
 
     // Rien n'est publié : le brouillon reste, la page n'est pas relue.

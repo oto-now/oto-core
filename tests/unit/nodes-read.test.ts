@@ -259,6 +259,12 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       addBlocks(flat, "conseil/texte", "published", Array.from({ length: 13 }, (_, index) => paragraph(String(index).repeat(1000))))
       await content(flat)
       expect((await read("marc", { path: "conseil/texte" })).text).toContain(`${"12".repeat(1000)}`)
+      // 2026-10-27 : une procédure se sert entière au-delà de 12 000 caractères, sans plan : ses étapes se suivent en entier.
+      const procedure = base([{ path: "conseil/procedure_longue", kind: "procedure", title: "Procédure longue", summary: "Longue." }])
+      addBlocks(procedure, "conseil/procedure_longue", "published", [heading("Étape 1"), paragraph("a".repeat(7000)), heading("Étape 2"), paragraph("b".repeat(7000))])
+      await content(procedure)
+      const steps = await read("marc", { path: "conseil/procedure_longue" })
+      expect([steps.text.includes("a".repeat(7000)), steps.text.includes("b".repeat(7000)), steps.text.includes("outline (")]).toEqual([true, true, false])
     })
 
     it("should serve the outline asked for, without the start of the page nor the limit (AC8)", async () => {

@@ -34,8 +34,6 @@ const APERCU = {
       { name: "contexte", chars: 2_400, status: "full", path: "contexte", head: 60 },
       { name: "private/lea/contexte", chars: 1_100, status: "cut", path: "private/lea/contexte", head: 90 },
       { name: "ventes/contexte", chars: 6_300, status: "cut", path: "ventes/contexte", head: 640 },
-      { name: "news", chars: 0, status: "omitted", path: null, head: 0 },
-      { name: "procedures", chars: 400, status: "full", path: null, head: 0 },
       { name: "recent content", chars: 170, status: "full", path: null, head: 0 },
       { name: "calendar", chars: 0, status: "omitted", path: null, head: 0 },
     ],
@@ -230,13 +228,11 @@ describe("voici ce que votre agent va lire (AC12 ; E05-S11, AC-9 à AC-11)", () 
       ["Contexte : Tout le monde", null],
       ["Contexte : Privé", null],
       ["Contexte : équipe Ventes (ce contexte)", "page"],
-      ["Nouveautés", null],
-      ["Procédures utiles", null],
-      ["Contenus récents", null],
+      ["Contenus récents et nouveautés", null],
       ["calendar", null],
     ])
     expect(within(apercu().getByRole("list", { name: "Ordre de lecture" })).getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(
-      ["everyone-context", "private-context", "context-ventes", "news", "procedures", "recent-content", "part-8"].map((ancre) => `/context#${ancre}`),
+      ["everyone-context", "private-context", "context-ventes", "recent-content", "part-6"].map((ancre) => `/context#${ancre}`),
     )
     for (const lien of apercu().getAllByRole("link")) expect(lien).not.toHaveAttribute("tabindex", "-1")
     // AC-10 : le texte servi replié est parti (il se lit dans la vue « Contexte »).

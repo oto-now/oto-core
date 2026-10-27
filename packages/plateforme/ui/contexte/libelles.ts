@@ -57,9 +57,7 @@ export function aQuoiSert(portee: Portee): string {
  */
 export const NOMS_DES_BLOCS: Readonly<Record<string, string>> = {
   code: "Règles Oto",
-  news: "Nouveautés",
-  procedures: "Procédures utiles",
-  "recent content": "Contenus récents",
+  "recent content": "Contenus récents et nouveautés",
 }
 
 /**
@@ -100,14 +98,13 @@ export const JAUGE_DU_BUDGET = {
 
 /**
  * La vue « Contexte » (E05-S11, AC-13 à AC-15) : les parties du texte servi, empilées, sans chiffres (E05-S13) ; son écran
- * (E11-S10, AC-e2), la partie sans corps (AC-f2) et « Nouveautés » sans nouveauté servie (AC-f5).
+ * (E11-S10, AC-e2) et la partie sans corps (AC-f2).
  */
 export const CONTEXTE_SERVI = {
   titre: "Contexte",
   chargement: "Chargement du contexte…",
   omise: "Cette partie ne tient pas dans le budget : l'assistant ne la lit pas.",
   vide: "L'assistant ne reçoit rien de ce contexte pour l'instant.",
-  aucuneNouveaute: "Aucune nouveauté n'est servie à l'assistant en ce moment.",
   fin: "Fin du texte",
 } as const
 
@@ -116,8 +113,8 @@ export const CONTEXTE_SERVI = {
  * contexte (`mcp/tools.ts`, description de `context`), comment il vit (servi par l'outil `context`, relu à chaque
  * conversation, seul le publié ; relu quand un Contexte reçu change : `server/ctx.ts`, `requireCtx`), la procédure servie
  * quand le routage la reconnaît dans la demande (`decide` de `server/routing.ts` : seuil et écart), et son ordre (`assembleContext` de
- * `server/context/index.ts`, `contextPaths` et `contextBody` de `blocks/contexts.ts`, les blocs `news`, `procedures`,
- * `recent`, le plafond de `engine.ts`). Aucune borne chiffrée : elles vivent dans `server/`, que l'écran ne lit pas.
+ * `server/context/index.ts`, `contextPaths` et `contextBody` de `blocks/contexts.ts`, le bloc `recent` et ses nouveautés,
+ * le plafond de `engine.ts`). Aucune borne chiffrée : elles vivent dans `server/`, que l'écran ne lit pas.
  */
 export const EXPLICATION_DU_CONTEXTE = {
   ceQuEst: "Le contexte, c'est ce que votre Claude/ChatGPT/Mistral lit au début de chaque conversation sur votre travail, avant de vous répondre.",
@@ -125,18 +122,16 @@ export const EXPLICATION_DU_CONTEXTE = {
     "Oto le lui donne par son outil « context », au début de chaque nouvelle conversation : ce que vous publiez dans un Contexte y arrive dès la suivante, un brouillon jamais. Si la version publiée d'un Contexte que vous recevez change pendant une conversation, l'assistant relit le contexte avant de continuer.",
   ordre: "Il est assemblé dans cet ordre :",
   etapes: [
-    "les règles d'Oto, les mêmes pour tous (non montrées ici) ;",
-    "la procédure qui correspond à votre demande, quand Oto en reconnaît clairement une (non montrée ici) ;",
+    "l'adresse de cet Oto et ses règles, les mêmes pour tous (non montrées ici) ;",
+    "les procédures les plus proches de votre demande, la meilleure en tête quand Oto en reconnaît clairement une, que l'assistant lit avant d'en suivre les étapes, et les pages et tableaux proches (non montrés ici) ;",
     "le Contexte de Tout le monde, puis le vôtre (Privé), puis celui de chacune de vos équipes : chacun s'ouvre sur quelques faits (l'organisation, vous, l'équipe et ses connecteurs), puis son texte, puis la liste des contenus rangés dessous et des pages qu'il cite, par leur titre et leur résumé, sans leur contenu ;",
-    "les nouveautés depuis votre dernière conversation : contenus publiés et connecteurs activés ;",
-    "les procédures publiées que vous pouvez lire, les plus utilisées par vous et vos équipes d'abord ;",
-    "vos contenus récents : les pages et tableaux que vous avez lus ou écrits ces derniers temps.",
+    "vos contenus récents, les pages et tableaux que vous avez lus ou écrits ces derniers temps, avec les nouveautés depuis votre dernière conversation (contenus publiés, marqués comme tels, et connecteurs activés).",
   ],
   plafond: "Le tout a une longueur maximale : ce qui dépasse est coupé, et le texte le signale.",
 } as const
 
-/** « page », « tableau » : la nature d'un contenu récent servi (`page`, `table`) ; une autre, telle que servie. */
-const NATURES: Readonly<Record<string, string>> = { page: "page", table: "tableau" }
+/** La nature d'un contenu récent ou nouveau servi (`page`, `table`, `procedure`, `context`) ; une autre, telle que servie. */
+const NATURES: Readonly<Record<string, string>> = { page: "page", table: "tableau", procedure: "procédure", context: "contexte" }
 
 /** Accordé au nombre : « 1 procédure », « 3 procédures ». */
 function accorde(nombre: number, singulier: string, pluriel: string): string {
@@ -148,13 +143,9 @@ function accorde(nombre: number, singulier: string, pluriel: string): string {
  * pas. Les dates arrivent lisibles (`dateLisible`), les noms de blocs traduits (`nomDuBloc`).
  */
 export const LIGNES_SERVIES = {
-  procedures: (nombre: number) => accorde(nombre, "procédure", "procédures"),
-  aucuneProcedure: "Aucune procédure publiée.",
-  autresProcedures: (nombre: number) => `… et ${accorde(nombre, "autre", "autres")}, que l'assistant trouve par la recherche.`,
-  depuis: (date: string) => `Depuis le ${date}`,
-  version: (revision: number, date: string) => `version ${revision}, publiée le ${date}`,
+  depuis: (date: string) => `Nouveau : publié depuis le ${date}`,
+  version: (nature: string, revision: number, date: string) => `${NATURES[nature] ?? nature}, nouveau : version ${revision}, publiée le ${date}`,
   connecteur: (nom: string, date: string) => `Connecteur ${nom} activé le ${date}`,
-  rienDeNouveau: "Rien de nouveau.",
   recent: (nature: string, date: string) => `${NATURES[nature] ?? nature}, ${date}`,
   children: "Rangés sous ce contexte",
   linked: "Pages citées",

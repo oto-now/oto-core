@@ -128,7 +128,8 @@ describe.skipIf(!sqlConfigured)(
     })
 
     describe("checkProcedureBlocks — every problem at once (AC3)", () => {
-      it("should list the size first, then the blocks in document order, in one refusal whose details hold them", async () => {
+      // Plus de borne de taille depuis le 2026-10-27 : une procédure de plus de 12 000 caractères n'est refusée que pour ses blocs.
+      it("should list the blocks in document order, in one refusal whose details hold them, and never refuse a procedure for its size", async () => {
         const blocks = stored([
           heading("Étapes"),
           steps(["Annonce.", "Envoie :"]),
@@ -138,13 +139,12 @@ describe.skipIf(!sqlConfigured)(
           paragraph("x".repeat(12_000)),
         ])
         const { refusals } = await check(blocks)
-        const size = renderBlocks(blocks).length
+        expect(renderBlocks(blocks).length).toBeGreaterThan(12_000)
         const error = procedurePublicationError("ventes/relance_test", refusals, "acme")
         expect(error).toMatchObject({
           code: "invalid_arguments",
           message: [
-            "Publication of ventes/relance_test refused: 3 problem(s). The draft is kept; nothing was published.",
-            `- steps: ${size.toLocaleString("en-US")} characters; a procedure is served whole by acme_context and holds at most 12,000: move reference material to a page and link to it`,
+            "Publication of ventes/relance_test refused: 2 problem(s). The draft is kept; nothing was published.",
             `- section « Étapes », call block 1 (step 2): ${unknown("mail.send")}`,
             '- section « Étapes », call block 2 (step 4): mail.create_draft argument « to »: Invalid email address (got "claire")',
             FOOTER,
@@ -152,8 +152,8 @@ describe.skipIf(!sqlConfigured)(
           ].join("\n"),
         })
         expect(error.details).toEqual({ refusals })
-        expect(refusals.map((refusal) => refusal.kind)).toEqual(["too_long", "unknown_function", "invalid_value"])
-        expect(refusals[2]).toMatchObject({ block_id: blocks[4].id, function: "mail.create_draft", element: "to" })
+        expect(refusals.map((refusal) => refusal.kind)).toEqual(["unknown_function", "invalid_value"])
+        expect(refusals[1]).toMatchObject({ block_id: blocks[4].id, function: "mail.create_draft", element: "to" })
       })
 
       it("should list 20 problems, then count the others, and keep all 25 in details", async () => {

@@ -19,7 +19,7 @@ export const ACTIVITIES_MAX = 20
 /** Deux gestes d'une même personne, sur le même contenu et du même verbe, à moins d'une heure : une ligne (AC-14). */
 export const ACTIVITY_GROUP_MS = 3_600_000
 
-/** Procédures utiles montrées à l'accueil (AC-18), dans l'ordre du bloc servi par `context`. */
+/** Procédures utiles montrées à l'accueil (AC-18), par usage puis par chemin (`usefulProcedures`). */
 export const USEFUL_PROCEDURES_SHOWN = 6
 
 /**

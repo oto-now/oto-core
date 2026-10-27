@@ -21,6 +21,7 @@ import { handleMcpPost } from "../../packages/plateforme/mcp/handler"
 import { buildTools } from "../../packages/plateforme/mcp/tools"
 import { callExamples, catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
 import { workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
+import { orgAddress } from "../../packages/plateforme/server/context/blocks/org"
 import { MAX_LOGGED_ARGS_CHARS, writeJournal } from "../../packages/plateforme/server/journal"
 
 const NETWORK_TIMEOUT = 60_000
@@ -161,10 +162,13 @@ describe.skipIf(!sqlConfigured)(
 
         expect(opened.isError).toBe(false)
         expect(opened.text).toMatch(CROCKFORD)
+        // L'adresse d'Oto, l'origine de la requête, en première règle (2026-10-27) : l'assistant y compose le lien d'une page.
+        const origin = /\n- This Oto is at (https?:\/\/t[0-9a-f]+\.example\.invalid)\. /.exec(opened.text)?.[1]
+        expect(origin).toBeDefined()
         const opening = [
           `ctx: ${opened.code}`,
           `Pass this ctx to every ${orgA.prefix}_ tool. If a result starts with "context has changed", it gives a new ctx and the changed contexts: read them and use the new ctx from then on; the call itself ran, do not repeat it.`,
-          workspaceRules(orgA.prefix),
+          workspaceRules(orgA.prefix, orgAddress(origin)),
           "## This request",
           `Request « Relance les devis en attente »: no procedure matches. Say so instead of guessing; ${orgA.prefix}_find can search pages, tables and functions.`,
           "",
@@ -183,12 +187,9 @@ describe.skipIf(!sqlConfigured)(
           "## Context: team Ventes (ventes/contexte)",
           "Team Ventes. Lead: Claire Morel.",
         ].join("\n")
-        // E03-S08 : puis le contexte dynamique ; l'organisation du test n'a ni Contexte publié, ni procédure, ni document.
-        expect(opened.text.startsWith(`${opening}\n\n## What's new since `)).toBe(true)
-        // Puis l'adresse d'Oto, l'origine de la requête : l'assistant y compose le lien d'une page (21/10).
-        expect(opened.text.slice(opening.length)).toMatch(
-          /^\n\n## What's new since \d{4}-\d{2}-\d{2}\nNothing new\.\n\n## Procedures you can run, most used first \(0\)\nNone published yet\.\n\nThis Oto is at (https?:\/\/t[0-9a-f]+\.example\.invalid)\. A page opens at \1\/n\/<path>: give the user that link when you point to a page\.$/,
-        )
+        // E03-S08 : l'organisation du test n'a ni Contexte publié, ni procédure, ni document : aucun contenu récent ni
+        // nouveauté ; depuis le 2026-10-27, ni procédures utiles, ni l'adresse en fin de texte.
+        expect(opened.text).toBe(opening)
         expect(opened.text.length).toBeLessThanOrEqual(20_000)
         expect(opened.result.structuredContent).toEqual({
           ctx: opened.code,
@@ -228,7 +229,8 @@ describe.skipIf(!sqlConfigured)(
         expect(text).toContain(
           `\n\n## Context: everyone (contexte)\nOrganisation: ${orgB.name}.\n\n## Context: you only\nYou: `,
         )
-        expect(text).toContain(`, member of ${orgB.name}. Teams: none. Reply in French unless the user writes in another language.\n\n## What's new`)
+        // Le Privé finit le texte : ni nouveauté, ni contenu récent (2026-10-27, plus de « What's new » à part).
+        expect(text.endsWith(`, member of ${orgB.name}. Teams: none. Reply in French unless the user writes in another language.`)).toBe(true)
         expect(text).not.toContain("## Context: team")
       })
     })

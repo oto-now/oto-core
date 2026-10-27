@@ -70,7 +70,7 @@ function contextDescription(org: ToolOrg): string {
   const { name, domains } = displayOrg(org)
   const p = org.prefix
   const scope = domains ? `Loads your work context at ${name} (${domains})` : `Loads your work context at ${name}`
-  return `${scope} and routes the user's request to the right procedure; call it first, before any other ${p}_ tool, with phrase = the user's request, verbatim, then again for each new request with since_ctx = your ctx, which routes it without reloading. Returns the ctx code that every other ${p}_ tool requires, the steps of the matching procedure when the match is clear, who you work for, the rules, what's new, and the useful procedures and documents. When it returns candidates instead of steps, follow the instruction that comes with them. A result starting with "context has changed" gives a new ctx: use it, no retry. Call it only for ${name}'s work, or when the user's preferences ask for it. Otherwise do not call it.`
+  return `${scope} and routes the user's request to the right procedure; call it first, before any other ${p}_ tool, with phrase = the user's request, verbatim, then again for each new request with since_ctx = your ctx, which routes it without reloading. Returns the ctx code that every other ${p}_ tool requires, the rules, the procedures closest to the request (the best match first when it is clear: read it, then follow its steps), who you work for, and recent and new content. Follow the instruction that comes with the procedures. A result starting with "context has changed" gives a new ctx: use it, no retry. Call it only for ${name}'s work, or when the user's preferences ask for it. Otherwise do not call it.`
 }
 
 function descriptions(org: ToolOrg, callExamples: string[]): Record<ToolKey, string> {

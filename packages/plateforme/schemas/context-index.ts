@@ -4,8 +4,8 @@
 // d'un Contexte écrivable. Sans ce module, un texte changé côté service ferait disparaître ces listes de l'écran
 // sans erreur (`portage-ecrans.md § 6`).
 //
-// E05-S13 (retour 8, AC-14 à AC-16 ; HN-E05S13-12) : les formats des blocs `procedures`, `news`, `recent content` et
-// l'en-tête des règles de l'espace, écrits par `blocks/procedures.ts`, `news.ts`, `recent.ts` et `code.ts`, relus par
+// E05-S13 (retour 8, AC-14 à AC-16 ; HN-E05S13-12) : les formats du bloc `recent content` (nouveautés comprises depuis
+// le 2026-10-27) et l'en-tête des règles de l'espace, écrits par `blocks/recent.ts` et `code.ts`, relus par
 // l'écran pour les dire en français ; le texte servi ne change pas d'un octet (tests du texte servi inchangés). La
 // ligne « Not loaded » (`blocks/contexts.ts`) et l'avis de budget (`engine.ts`) s'écrivent et se relisent par les
 // mêmes constantes.
@@ -32,42 +32,24 @@ export const CONTEXT_INDEX = {
 } as const
 
 /**
- * Le bloc des procédures utiles : `## Procedures you can run, most used first (<n>)`, puis `- <chemin>: <résumé>` par
- * procédure, ou `None published yet.` ; `… and <k> more: find them with <p>_find, type procedure.` quand toutes ne sont
- * pas listées. Le titre dit l'ordre (usage de la personne et de ses équipes sur 90 jours) : l'agent ne le savait pas.
+ * Le bloc des contenus récents et des nouveautés (« What's new » et « Recent content » fusionnés le 2026-10-27) :
+ * `## Recent content`, suivi de ` (new: published since <AAAA-MM-JJ>)` quand la borne des nouveautés est connue, puis une
+ * ligne par contenu : `- <chemin> (<genre>, <AAAA-MM-JJ>): <titre>` pour un contenu lu ou écrit par la personne,
+ * `- <chemin> (<genre>, new v<rév>, <AAAA-MM-JJ>): <titre>` pour une version publiée depuis la borne, et
+ * `- Connector <nom> activated (<AAAA-MM-JJ>)` pour un connecteur activé depuis la borne.
  */
-export const SERVED_PROCEDURES = {
-  title: "## Procedures you can run, most used first",
+export const SERVED_RECENT = {
+  title: "## Recent content",
+  sinceStart: " (new: published since ",
+  sinceEnd: ")",
   item: "- ",
-  separator: ": ",
-  none: "None published yet.",
-  moreStart: "… and ",
-  moreEnd: " more: find them with ",
-} as const
-
-/**
- * Le bloc des nouveautés : `## What's new since <AAAA-MM-JJ>`, puis `- <chemin> v<rév> (<AAAA-MM-JJ>): <titre>` par
- * version, `- Connector <nom> activated (<AAAA-MM-JJ>)` par connecteur, ou `Nothing new.`.
- */
-export const SERVED_NEWS = {
-  title: "## What's new since ",
-  item: "- ",
-  revision: " v",
-  dateStart: " (",
+  kindStart: " (",
+  newMark: "new v",
+  dateStart: ", ",
   dateEnd: "): ",
   connector: "- Connector ",
   activated: " activated (",
   connectorEnd: ")",
-  nothing: "Nothing new.",
-} as const
-
-/** Le bloc des contenus récents : `## Recent content`, puis `- <chemin> (<genre>, <AAAA-MM-JJ>): <titre>`. */
-export const SERVED_RECENT = {
-  title: "## Recent content",
-  item: "- ",
-  kindStart: " (",
-  dateStart: ", ",
-  dateEnd: "): ",
 } as const
 
 /** L'en-tête des règles de l'espace (« Règles Oto », `blocks/code.ts`), suivi d'une ligne `- ` par règle. */

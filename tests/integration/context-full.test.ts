@@ -74,7 +74,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       }
     }, SETUP_TIMEOUT)
 
-    it("should serve the Contextes, what's new, the procedures and the recent content from the real schema, and print its latency", async () => {
+    it("should serve the Contextes, the closest procedures and the recent and new content from the real schema, and print its latency", async () => {
       const session = await connectMcp(org, jb, `context-full-${hex(3)}`)
       const durations: number[] = []
       const texts: string[] = []
@@ -103,11 +103,18 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(first).toContain(`\n\n## Context: everyone (contexte)\nOrganisation: ${org.name}.\n`)
       expect(first).toContain(`\n\n## Context: team Conseil (conseil/contexte)\nTeam Conseil. Lead: ${ACME_PEOPLE.jb.name}.\n`)
       expect(first).toContain(`\n\n→ page: ${grille.title} — ${grille.summary} (${GRILLE})\n\nLinked pages:\n- ${GRILLE} — ${grille.title} — ${grille.summary}\n\n`)
-      expect(first).toMatch(/\n## What's new since \d{4}-\d{2}-\d{2}\n- contexte v2 \(\d{4}-\d{2}-\d{2}\): Contexte\n/)
-      expect(first).toContain(`\n## Procedures you can run, most used first (1)\n- ${ACME_PROCEDURES[0].path}: ${ACME_PROCEDURES[0].summary}\n`)
-      expect(first).toMatch(new RegExp(`\\n## Recent content\\n- ${ACME_TABLE.path} \\(table, \\d{4}-\\d{2}-\\d{2}\\): ${ACME_TABLE.title}\\n- ${GRILLE} \\(page, \\d{4}-\\d{2}-\\d{2}\\): ${grille.title}\\n\\nThis Oto is at `))
-      // La conversation suivante ne revoit pas la nouveauté (AC3, sur le vrai schéma) ; rien depuis le jour même : aucun bloc (M53).
-      expect(next).not.toContain("## What's new")
+      // 2026-10-27 : l'adresse d'Oto en première règle ; nouveautés et contenus récents en un bloc, en fin de texte ; ni
+      // étapes, ni procédures utiles ; la procédure décidée en tête des proches.
+      expect(first).toMatch(/\n## How this workspace works\n- This Oto is at /)
+      expect(first).toContain(`closest procedures, the best match first:\n- ${ACME_PROCEDURES[0].path} — `)
+      for (const absent of ["## Procedure ", "Procedures you can run", "## What's new"]) expect(first).not.toContain(absent)
+      const recent = first.slice(first.indexOf("\n\n## Recent content"))
+      expect(recent).toMatch(/^\n\n## Recent content \(new: published since \d{4}-\d{2}-\d{2}\)\n/)
+      expect(recent).toMatch(/\n- contexte \(context, new v2, \d{4}-\d{2}-\d{2}\): Contexte(\n|$)/)
+      expect(recent).toMatch(new RegExp(`\\n- ${ACME_TABLE.path} \\(table, (new v\\d+, )?\\d{4}-\\d{2}-\\d{2}\\): ${ACME_TABLE.title}(\\n|$)`))
+      expect(recent).toMatch(new RegExp(`\\n- ${GRILLE} \\(page, (new v\\d+, )?\\d{4}-\\d{2}-\\d{2}\\): ${grille.title}(\\n|$)`))
+      // La conversation suivante ne revoit pas la nouveauté (AC3, sur le vrai schéma).
+      expect(next).not.toContain("- contexte (context, new v2")
     })
   },
 )

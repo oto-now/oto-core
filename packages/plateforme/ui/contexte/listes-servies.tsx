@@ -33,7 +33,6 @@ function date(servie: string): string {
 }
 
 function legende(une: Legende): string {
-  if (une.genre === "procedures") return LIGNES_SERVIES.procedures(une.nombre)
   if (une.genre === "nouveautes") return LIGNES_SERVIES.depuis(date(une.depuis))
   return LIGNES_SERVIES[une.genre]
 }
@@ -54,11 +53,8 @@ function Ligne({ ligne, ...navigation }: Navigation & { ligne: LigneServie }): R
   switch (ligne.genre) {
     case "connecteur":
       return LIGNES_SERVIES.connecteur(ligne.nom, date(ligne.date))
-    // Une procédure utile se lit par son chemin : le texte servi n'a pas son titre (HN-E05S13-15).
-    case "procedure":
-      return <VersLeContenu chemin={ligne.chemin} texte={ligne.chemin} precision={ligne.resume} {...navigation} />
     case "version":
-      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.version(ligne.revision, date(ligne.date))} {...navigation} />
+      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.version(ligne.nature, ligne.revision, date(ligne.date))} {...navigation} />
     case "recent":
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.recent(ligne.nature, date(ligne.date))} {...navigation} />
     case "index":
@@ -108,8 +104,6 @@ function Brut({ texte }: { texte: string }) {
 }
 
 const PHRASES = {
-  "aucune-procedure": LIGNES_SERVIES.aucuneProcedure,
-  "rien-de-nouveau": LIGNES_SERVIES.rienDeNouveau,
   suite: LIGNES_SERVIES.suite,
   "non-charge": LIGNES_SERVIES.nonCharge,
 } as const
@@ -120,8 +114,6 @@ function Morceau({ morceau, id, equipes = [], ...navigation }: Navigation & { mo
       return <Liste morceau={morceau} id={id} {...navigation} />
     case "phrase":
       return <p className="text-mute">{PHRASES[morceau.phrase]}</p>
-    case "autres-procedures":
-      return <p className="text-mute">{LIGNES_SERVIES.autresProcedures(morceau.nombre)}</p>
     case "budget": {
       const noms = morceau.noms.map(({ nom, coupe }) => (coupe ? LIGNES_SERVIES.coupe(nomDuBloc({ name: nom }, equipes)) : nomDuBloc({ name: nom }, equipes)))
       const liste = [...noms, ...(morceau.autres > 0 ? [LIGNES_SERVIES.autres(morceau.autres)] : [])].join(", ")

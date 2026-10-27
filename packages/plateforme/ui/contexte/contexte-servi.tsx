@@ -18,8 +18,8 @@
 // E11-S10 (lot f, HN-E11S10-14, -15, -22) : la vue quitte l'accueil pour son écran (`EcranDuContexte`) ; la tête
 // servie d'une partie de Contexte (faits, connecteurs) n'est plus montrée, l'assistant la reçoit toujours ; ni lien
 // vers Profil, ni « Règles Oto » (le bloc `code`, sauté, les autres parties gardant leur ancre) ; une partie sans
-// corps le dit ; « Nouveautés » a toujours sa section, même quand rien n'en est servi ; l'ancre de l'adresse est
-// suivie au montage et à chaque changement (`VersLaPartie`).
+// corps le dit ; l'ancre de l'adresse est suivie au montage et à chaque changement (`VersLaPartie`). Le 2026-10-27, la
+// section « Nouveautés » toujours présente part : les nouveautés sont servies dans les contenus récents.
 import type { ReactNode } from "react"
 import type { NodeView } from "../../schemas"
 import type { Resultat } from "../api/resultat"
@@ -30,10 +30,9 @@ import { blocsAffiches, niveauDEcritureDe } from "../noeud/corps-du-noeud"
 import { EditeurDeBlocs } from "../noeud/editeur/editeur-de-blocs"
 import { FileDOperations } from "../noeud/editeur/file-d-operations"
 import type { DonneesDeLApercu } from "./apercu-du-contexte"
-import { APERCU_DU_CONTEXTE, CONTEXTE_SERVI, NOMS_DES_BLOCS, nomDuBloc, type EquipesNommees } from "./libelles"
+import { APERCU_DU_CONTEXTE, CONTEXTE_SERVI, nomDuBloc, type EquipesNommees } from "./libelles"
 import { ListesServies } from "./listes-servies"
 import {
-  ancreDeLaPartie,
   cheminDuContexte,
   estUnContexte,
   morceauxDeLaFin,
@@ -152,40 +151,20 @@ function Partie({ nom, ...corps }: PartieProps) {
 
 type PartiesProps = Omit<CorpsProps, "partie"> & { apercu: DonneesDeLApercu }
 
-/** Le nom servi du bloc des nouveautés, et ceux des blocs servis après lui (P39) : procédures utiles, contenus récents. */
-const NOUVEAUTES = "news"
-const APRES_LES_NOUVEAUTES = new Set(["procedures", "recent content"])
-
-/** « Nouveautés » quand le rapport n'en sert pas (AC-f5, HN-E11S10-22) : sa section, son ancre, et ce qui en est. */
-function AucuneNouveaute() {
-  const ancre = ancreDeLaPartie({ name: NOUVEAUTES }, 0)
-  return (
-    <section id={ancre} aria-labelledby={`${ancre}-titre`} className="flex flex-col gap-2">
-      <h2 id={`${ancre}-titre`} className="text-base font-semibold text-ink">
-        {NOMS_DES_BLOCS[NOUVEAUTES]}
-      </h2>
-      <p className="oto-caption">{CONTEXTE_SERVI.aucuneNouveaute}</p>
-    </section>
-  )
-}
-
 /**
  * Les parties, dans l'ordre servi, sans « Règles Oto » (le bloc `code`, AC-f4 : chacune garde l'ancre de son rang
- * d'origine) ; « Nouveautés » à sa place quand rien n'en est servi, avant les procédures ; puis la fin du texte
- * (l'avis qui nomme les blocs omis) s'il y en a une.
+ * d'origine) ; puis la fin du texte (l'avis qui nomme les blocs omis) s'il y en a une. Les nouveautés sont dans les
+ * contenus récents depuis le 2026-10-27 : plus de section « Nouveautés » à part, ni de phrase quand rien n'en est servi.
  */
 function Parties({ apercu, ...corps }: PartiesProps) {
   const { parties, reste } = partiesDuContexte(apercu)
   const montrees = parties.filter((partie) => partie.name !== "code")
-  const rendre = (partie: PartieServie) => (
-    // Une partie n'a pas d'identité propre : son ancre, tirée de son rang dans l'ordre servi, que rien ne réordonne.
-    <Partie key={partie.ancre} partie={partie} nom={nomDuBloc(partie, corps.equipes)} {...corps} />
-  )
   return (
     <>
-      {montrees.filter((partie) => !APRES_LES_NOUVEAUTES.has(partie.name)).map(rendre)}
-      {!montrees.some((partie) => partie.name === NOUVEAUTES) && <AucuneNouveaute />}
-      {montrees.filter((partie) => APRES_LES_NOUVEAUTES.has(partie.name)).map(rendre)}
+      {montrees.map((partie) => (
+        // Une partie n'a pas d'identité propre : son ancre, tirée de son rang dans l'ordre servi, que rien ne réordonne.
+        <Partie key={partie.ancre} partie={partie} nom={nomDuBloc(partie, corps.equipes)} {...corps} />
+      ))}
       {reste !== "" && (
         <section aria-label={CONTEXTE_SERVI.fin} className="flex flex-col gap-2">
           <ListesServies morceaux={morceauxDeLaFin(reste)} ancre="fin" equipes={corps.equipes} prefixeDesPages={corps.prefixeDesPages} Lien={corps.Lien} />

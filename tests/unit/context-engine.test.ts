@@ -1,19 +1,17 @@
 // @vitest-environment node
 // Moteur de blocs de `context` (E03-S01, AC21, H30) : blocs entiers tant qu'ils tiennent, coupe à
-// la ligne, blocs de fin omis et nommés, résultat dans le budget. E03-S02, AC9 : le bloc de la
-// procédure servie, lu par `procedureBlock` sur Acme, cède la place à son pointeur. Depuis E01-S10
+// la ligne, blocs de fin omis et nommés, résultat dans le budget. Le bloc de la procédure servie (E03-S02, AC9) et ses
+// tests sont partis le 2026-10-27 : `context` ne sert plus d'étapes. Depuis E01-S10
 // (lot t1-c2), ce qui lit la base tourne sur une base réelle : Acme sur l'organisation O, semée par la
 // connexion d'administration (`seedAcme`, `tests/integration/fixtures/acme-sql.ts`), lue sous la personne.
 import { afterAll, describe, expect, it } from "vitest"
 import { nodeId, ORG, PEOPLE } from "../helpers/reference-org"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { seedWithAdmin, sqlConfigured, type SeededData, portable } from "../helpers/sql"
-import { acmeNode, candidate, simulatedBlockId } from "../integration/fixtures/acme"
+import { acmeNode, simulatedBlockId } from "../integration/fixtures/acme"
 import { seedAcme } from "../integration/fixtures/acme-sql"
 import { assembleContext } from "../../packages/plateforme/server/context"
-import { procedureBlock } from "../../packages/plateforme/server/context/blocks/procedure"
 import { CONTEXT_BUDGET, renderContext } from "../../packages/plateforme/server/context/engine"
-import { READ_PAGE_ROWS } from "../../packages/plateforme/server/errors"
 
 const BLOCKS = [
   { name: "code", text: "ctx: AAAA-BBBB\nPass this ctx to every acme_ tool." },
@@ -38,11 +36,6 @@ afterAll(async () => {
   // Organisations et personnes.
   await seed?.cleanup()
 }, REAL_BASE_TIMEOUT)
-
-/** La procédure servie à Claire, son nœud réel ; le candidat que le routage aurait rendu. */
-async function servedTo(ref: ReferenceOrgSql, path: string) {
-  return procedureBlock(await ref.db("claire"), { ...candidate(path, 1), nodeId: ref.nodeId(path), title: acmeNode(path).title }, ref.identityOf("claire"))
-}
 
 describe("renderContext (AC21)", () => {
   it("should keep every block whole, separated by a blank line, when all fit", () => {
@@ -154,66 +147,6 @@ describe("renderContext (AC21)", () => {
     })
   })
 
-  // E03-S02, AC9 : une procédure trop longue n'est jamais coupée au milieu.
-  it.skipIf(!sqlConfigured)(
-    portable("should replace the served procedure that does not fit by its pointer to read and go on, or omit it with the next ones"),
-    async () => {
-      const path = "ventes/relance_devis"
-      const ref = await seedAcme(theSeed())
-      // Un bloc publié de plus, qui fait dépasser le budget à la procédure.
-      const text = "Une étape très détaillée. ".repeat(80)
-      const long = { id: simulatedBlockId(900), org_id: ORG.id, node_id: nodeId(path), state: "published", position: 99_999, type: "paragraph", text, data: {}, key: null }
-      await ref.write({ blocks: [long] })
-      const served = await servedTo(ref, path)
-      if (served === null) throw new Error(`${path} should be read`)
-
-      expect(renderContext([BLOCKS[0], served.block, BLOCKS[1]], 1000, "acme").text).toBe(
-        [
-          BLOCKS[0].text,
-          "## Procedure ventes/relance_devis (v1): Relancer les devis en attente\n" +
-            `Its steps do not fit in this context: read them with ${ref.org.prefix}_read {"path": "ventes/relance_devis"} before acting, and ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.`,
-          BLOCKS[1].text,
-        ].join("\n\n"),
-      )
-      // Le pointeur lui-même ne tient pas : omis avec les blocs suivants.
-      expect(renderContext([BLOCKS[0], served.block, BLOCKS[1]], 500, "acme").text).toBe(
-        `${BLOCKS[0].text}\n\n[Context budget reached. Omitted: procedure, person. Use acme_find or acme_read for more.]`,
-      )
-    },
-    REAL_BASE_TIMEOUT,
-  )
-
-  // E03-S02, N32 : une lecture bornée à une page peut en cacher d'autres ; la procédure n'est jamais servie en partie.
-  it.skipIf(!sqlConfigured)(
-    portable("should serve only the pointer to read when the published blocks fill a page (N32)"),
-    async () => {
-      const path = "ventes/relance_devis"
-      const ref = await seedAcme(theSeed())
-      // Des étapes courtes, qui tiendraient dans le budget : seule la page pleine décide du pointeur.
-      const steps = Array.from({ length: READ_PAGE_ROWS }, (_, index) => ({
-        id: simulatedBlockId(0x20000 + index),
-        org_id: ORG.id,
-        node_id: nodeId(path),
-        state: "published",
-        position: 100_000 + index,
-        type: "paragraph",
-        text: `Étape ${index}.`,
-        data: {},
-        key: null,
-      }))
-      await ref.write({ blocks: steps })
-      const served = await servedTo(ref, path)
-      if (served === null) throw new Error(`${path} should be read`)
-
-      expect(served.block.text).toBe(
-        "## Procedure ventes/relance_devis (v1): Relancer les devis en attente\n" +
-          `Its steps do not fit in this context: read them with ${ref.org.prefix}_read {"path": "ventes/relance_devis"} before acting, and ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.`,
-      )
-      expect(served.revision).toBe(1)
-    },
-    REAL_BASE_TIMEOUT,
-  )
-
   it("should count the last omitted blocks when their names overflow the reserve, within the budget", () => {
     const blocks = Array.from({ length: 12 }, (_, i) => ({ name: `a context block with a long name ${i}`, text: "y".repeat(500) }))
     const { text } = renderContext([BLOCKS[0], ...blocks], 1000, "abcdefghijkl")
@@ -240,9 +173,9 @@ describe("renderContext (AC21)", () => {
 
 describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { timeout: REAL_BASE_TIMEOUT }, () => {
   /**
-   * Acme dans O, tous les blocs présents pour Claire : procédure servie (le vrai routage la rend nette : son
-   * résumé porte la demande mot pour mot), Contextes de Tout le monde et de Ventes, une nouveauté, les
-   * procédures utiles, un document récent. Rien n'est écrit par l'assemblage : une graine pour ses deux appels.
+   * Acme dans O, tous les blocs présents pour Claire : procédure décidée (le vrai routage la rend nette : son
+   * résumé porte la demande mot pour mot), Contextes de Tout le monde et de Ventes, une nouveauté, un document
+   * récent. Rien n'est écrit par l'assemblage : une graine pour ses deux appels.
    */
   async function everyBlockRef(): Promise<ReferenceOrgSql> {
     const now = new Date().toISOString()
@@ -261,32 +194,31 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
     return ref
   }
 
-  // E05-S12 (AC-1) : une partie par Contexte, après la procédure servie ; le code porte ~1 750 caractères de
-  // règles de plus, le budget de la coupe grandit d'autant (4 800 au lieu de 3 000) ; E11-S16 : les autres candidates
-  // par titre et résumé, et leur consigne, allongent le bloc code (5 800) ; 1.4.12 : la notice d'une procédure, ~580 de plus (6 400).
-  it("should order the blocks as P39 and, in a budget of 6,400, keep the code and the served procedure whole and name the omitted end blocks", async () => {
+  // E05-S12 (AC-1) : une partie par Contexte, après les règles et le routage ; 2026-10-27 : ni étapes servies, ni
+  // procédures utiles, nouveautés et contenus récents en un bloc ; le budget de la coupe suit la taille du début.
+  it("should order the blocks as P39 and, in a budget just over its start, keep the code and the close contents whole and name the omitted end blocks", async () => {
     const ref = await everyBlockRef()
     const db = await ref.db("claire")
     const assembly = { phrase: "relance les devis en attente", code: "AAAA-BBBB", since: new Date(Date.now() - 14 * 86_400_000).toISOString() }
     const full = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget: CONTEXT_BUDGET })
     expect(full.report.map(({ name, status }) => [name, status])).toEqual(
-      ["code", "procedure", "related", "contexte", "private/claire/contexte", "ventes/contexte", "news", "procedures", "recent content"].map((name) => [name, "full"]),
+      ["code", "related", "contexte", "private/claire/contexte", "ventes/contexte", "recent content"].map((name) => [name, "full"]),
     )
     expect(full.text.length).toBeLessThanOrEqual(CONTEXT_BUDGET)
 
-    const cut = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget: 6400 })
-    expect(cut.text.length).toBeLessThanOrEqual(6400)
-    // Le code et la procédure servie, entiers : le début du texte servi dans le budget complet.
+    // Le code (règles, procédures proches) et les contenus proches, entiers : le début du texte servi dans le budget complet.
     const head = full.text.slice(0, full.report[0].chars + 2 + full.report[1].chars)
     expect(head.startsWith("ctx: AAAA-BBBB\n")).toBe(true)
-    expect(head).toContain("\n\n## Procedure ventes/relance_devis (v1): Relancer les devis en attente\nFollow these steps now.")
-    const grille = acmeNode("conseil/grille_tarifaire_2026")
-    expect(head.endsWith(`\n\n→ page: ${grille.title} — ${grille.summary} (${grille.path})`)).toBe(true)
+    expect(head).toContain("closest procedures, the best match first:\n- ventes/relance_devis — Relancer les devis en attente: ")
+    expect(head).not.toContain("## Procedure ")
+    const budget = head.length + 600
+    const cut = await assembleContext(db, ref.identityOf("claire"), { ...assembly, budget })
+    expect(cut.text.length).toBeLessThanOrEqual(budget)
     expect(cut.text.startsWith(`${head}\n\n`)).toBe(true)
     expect(cut.report.map((block) => block.name)).toEqual(full.report.map((block) => block.name))
     // Le premier bloc qui dépasse est coupé ou omis, tous les suivants sont omis, le dernier compris.
     const first = cut.report.findIndex((block) => block.status !== "full")
-    expect(first).toBeGreaterThan(1)
+    expect(first).toBe(2)
     expect(cut.report.slice(first + 1).map((block) => block.status)).toEqual(cut.report.slice(first + 1).map(() => "omitted"))
     expect(cut.report.at(-1)?.status).toBe("omitted")
     const named = cut.report.filter((block) => block.status !== "full").map((block) => (block.status === "cut" ? `${block.name} (cut)` : block.name))

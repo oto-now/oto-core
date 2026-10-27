@@ -92,7 +92,7 @@ test.describe("E05-S13 : les retours du soir", () => {
 
         // AC-13, AC-14 : la vue « Contexte » (`/context`, E11-S10), ses parties en cartes et en français, sans chiffres ni
         // « Règles Oto ».
-        // Un connecteur parmi les nouveautés (AC-14), qui n'en gardent que les 10 plus récentes : les specs parallèles
+        // Un connecteur parmi les nouveautés (AC-14), le bloc n'en gardant que les 20 lignes plus récentes : les specs parallèles
         // publient des versions du Privé du compte, qui chassent l'activation semée. Elle est redatée juste avant la
         // lecture, comme une réactivation (`updated_at`, la date que lit le bloc).
         const redatees = await avecLaBase(
@@ -106,11 +106,12 @@ test.describe("E05-S13 : les retours du soir", () => {
         await page.goto(`${ESPACE.adresse}/context`)
         const vue = main
         await attendre(vue.getByRole("region", { name: "Contexte : Tout le monde" })).toBeVisible()
-        for (const partie of ["Nouveautés", "Procédures utiles", "Contenus récents"]) await expect(vue.getByRole("region", { name: new RegExp(`^${partie}`) })).toBeVisible()
+        // 2026-10-27 : nouveautés et contenus récents en une partie ; plus de procédures utiles servies.
+        await expect(vue.getByRole("region", { name: /^Contenus récents et nouveautés/ })).toBeVisible()
+        for (const partie of ["Nouveautés", "Procédures utiles"]) await expect(vue.getByRole("region", { name: new RegExp(`^${partie}`) })).toHaveCount(0)
         await expect(vue.getByRole("region", { name: "Règles Oto" })).toHaveCount(0)
         for (const retire of RETIRES) await expect(vue, retire).not.toContainText(retire)
-        await expect(vue.getByRole("region", { name: /^Procédures utiles/ }).locator(`a[href="/n/${CHEMINS.procedure}"]`)).toBeVisible()
-        await expect(vue.getByRole("region", { name: /^Nouveautés/ }).getByText(/^Connecteur .+ activé le /).first()).toBeVisible()
+        await expect(vue.getByRole("region", { name: /^Contenus récents/ }).getByText(/^Connecteur .+ activé le /).first()).toBeVisible()
         await expect(vue.getByRole("region", { name: /^Contenus récents/ }).locator('a[href^="/n/"]').first()).toBeVisible()
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
         await capturer(page, testInfo, `vue-contexte-${nom}`)

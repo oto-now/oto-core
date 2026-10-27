@@ -1,11 +1,11 @@
 # Procédures
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-10-27
 
 ## Résumé
 
-Une procédure est une page `kind: procedure` : un titre, un résumé qui dit comment on la demande, des étapes, et chaque appel exact en bloc `call`. Le serveur ne lit que ses blocs `call`, contrôlés à la publication ; `context` la sert quand le routage la reconnaît. À l'écran, elle s'édite et se lit comme une page.
+Une procédure est une page `kind: procedure` : un titre, un résumé qui dit comment on la demande, des étapes, et chaque appel exact en bloc `call`. Le serveur ne lit que ses blocs `call`, contrôlés à la publication ; `context` la met en tête des procédures proches quand le routage la reconnaît, et l'assistant la lit par `read`, entière, sans borne de taille. À l'écran, elle s'édite et se lit comme une page.
 
 ## Contexte
 
@@ -35,15 +35,15 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Le contrôle lit les blocs (types `call` et `code`, et les lignes ```` ```call ```` que rend un bloc), jamais le markdown ; la clôture ```` ```call ```` n'est que la forme markdown d'un bloc `call` (E03-S06 N1).
 - Un bloc `code` de langage `call` (rogné, sans casse) est refusé (R2) : `renderBlocks` l'écrirait comme un appel jamais contrôlé (E03-S06 N3). R2 vaut pour toute clôture `call` : un bloc `code` dont la ligne d'ouverture rendue ouvre une clôture `call`, et tout texte rendu tel quel dont une ligne rognée en ouvre une (accents graves ou tildes, puis `call` ; `callout` exclu) (E03-S06 N17).
 - `confirm`, `team`, `account`, `ctx`, `function` ou `arguments` écrits dans les arguments d'un bloc `call` : refus R9 avec l'indice (E03-S06 N11).
-- La borne de 12 000 caractères d'une procédure (8 000 jusqu'au 2026-10-19, trop court pour une procédure réelle ; `PROCEDURE_MAX_CHARS`, `schemas/procedures.ts`, lue par le contrôle et par l'écran) (P24, [tableaux](tableaux.md)) se mesure sur `renderBlocks` (options par défaut) de ses blocs, sans titre ni résumé (E03-S06 N6).
+- Aucune borne de taille (2026-10-27) : une procédure se publie quelle que soit la longueur de ses étapes ; `read` la sert entière, sans plan d'office au-delà de 12 000 caractères (`PAGE_FULL_MAX` ne vaut que pour une page), et seul son curseur la découpe au-delà de 45 000 caractères (`server/nodes/read-body.ts`).
 - Le refus donne tous les problèmes d'un coup (20 listés, le reste compté) et `details.refusals` complet, avec l'`id` du bloc fautif (E03-S06 N5). Les refus vont dans `details.refusals` ; `effectiveHeader` est exporté ; `previewContext` rend aussi `served` et `candidates` (P19).
 - `checkProcedure` contrôle le brouillon quand le niveau calculé vaut au moins 2, sinon les blocs publiés ; `listProcedures` liste les nœuds de genre `procedure` de niveau ≥ 1, une page au genre en attente n'y entrant qu'à sa publication (E03-S06 N8).
 - `publishNode` lit le tampon du brouillon (`node_drafts.updated_at`) avant ses blocs, pour tout genre, et le passe en `p_draft_stamp` : un brouillon changé pendant le contrôle rend `stale_revision`, et rien n'est publié (E03-S06 N9).
-- Le service refuse encore la publication d'une procédure trop longue ou d'un bloc `call` déjà écrit ; l'écran de refus de publication en dit l'emplacement et le genre (HN-M59-3).
+- Le service refuse encore la publication d'un bloc `call` invalide ; l'écran de refus de publication en dit l'emplacement et le genre (HN-M59-3).
 
 ### Service aux assistants
 
-- Le bloc procédure de `context` dit comment recopier un bloc `call` en appel de `<p>_call`, chaque valeur `<…>` remplacée par la vraie (E03-S06 N12). Sa forme servie et ses bornes : [routage et recherche](routage-et-recherche.md), [contexte servi](contexte-servi.md).
+- `context` ne sert pas les étapes (2026-10-27) : la procédure décidée est en tête des procédures proches, avec la consigne de la lire par `read` puis de suivre ses étapes, et comment recopier un bloc `call` en appel de `<p>_call`, chaque valeur `<…>` remplacée par la vraie (E03-S06 N12). Forme servie : [routage et recherche](routage-et-recherche.md), [contexte servi](contexte-servi.md).
 - Les procédures publiées lisibles sont aussi des prompts MCP (message = titre) ; côté assistants, rien ne dépend de l'écran (`context`, prompts, vérification à la publication) (D104).
 
 ### À l'écran
@@ -58,7 +58,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Un Contexte s'édite sur son écran de nœud (`/n/<chemin>`), ses annexes à droite (qui le reçoit, ce que le modèle recevra) ; aucune route `/contexte`, aucun lien de navigation « Contexte » (HN-E05S04-6). Publier un Contexte vide demande confirmation (« Publier quand même »), sans prendre le focus de qui écrit (HN-E05S04-10). Le Contexte Perso d'une autre personne se dit reçu par « la personne de cet espace seulement » et « Personne d'autre ne le reçoit, vous non plus. » ; il se reconnaît à l'absence de « Ma fiche » (HN-E05S04-22). Ce que sert un Contexte : [contexte servi](contexte-servi.md).
 - « Ma fiche » vit dans les annexes du Contexte Perso de la personne, sur le sien seulement (HN-E05S04-7). Elle s'écrit par `PATCH /api/platform/profile`, puis `update_my_profile(p_org, p_patch)` : seuls les champs changés partent ; une personne peut vider un champ, un agent non (HN-E05S04-4). Les langues de la fiche sont `fr` et `en` (HN-E05S04-5). `updateProfile` refuse avant sa requête un appelant sans ligne `members` (entré par un accès plateforme) : `forbidden` `Only members of <org> have a profile here.` (HN-E05S04-12).
 
-- Avertissements à la publication (1.4.3, `server/procedure-advice.ts`), jamais des refus : une procédure sans partie « Quand l'utiliser » (« When to use it »), une procédure qui nomme ses outils avec le préfixe d'une organisation. Une dépendance à un connecteur de l'assistant, hors de la plateforme, s'écrit dans une partie « Prérequis » (« Prerequisites »), servie avec les étapes : l'assistant qui ne l'a pas le dit à la personne au lieu d'échouer à l'étape. Les règles de qualité se lisent au guide de la plateforme, section `procedures`.
+- Avertissements à la publication (1.4.3, `server/procedure-advice.ts`), jamais des refus : une procédure sans partie « Quand l'utiliser » (« When to use it »), une procédure qui nomme ses outils avec le préfixe d'une organisation. Une dépendance à un connecteur de l'assistant, hors de la plateforme, s'écrit dans une partie « Prérequis » (« Prerequisites »), lue avec les étapes : l'assistant qui ne l'a pas le dit à la personne au lieu d'échouer à l'étape. Les règles de qualité se lisent au guide de la plateforme, section `procedures`.
 
 ## Décisions et alternatives écartées
 
@@ -67,6 +67,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - **Un éditeur d'appels structuré à l'écran dès la V1** : reporté ; tant que les connecteurs ne sont pas là, la procédure est une page en texte seul (D104, HN-M59-1).
 - **La page de liste `/procedures`** : plus en vigueur, elle a disparu (tout nœud s'ouvre à son adresse, ADR-008 § 7) ; un espace personnel se nomme « Privé », reconnu à son chemin `perso/…` (HN-E05S04-21).
 - **Refuser une procédure sous une procédure à l'écriture** : écarté ; l'arborescence existante et importée resterait bloquée à la moindre écriture, alors qu'une consigne, l'écran et `node.check` suffisent à l'éviter et à la retrouver.
+- **Une borne de taille d'une procédure** (R1, genre de refus `too_long`, P24, E03-S06 N6 : 8 000 caractères, puis 12 000 le 2026-10-19, `PROCEDURE_MAX_CHARS` lue par le contrôle, l'écran, le contrat `write.procedure` et le guide) : retirée le 2026-10-27 par JB ; elle existait parce que `context` servait la procédure entière, ce qu'il ne fait plus. Une procédure longue se lit par `read`, entière.
 - **Une route `/contexte` et une route API d'aperçu** : écartées ; le Contexte s'édite sur son écran de nœud (HN-E05S04-6), l'aperçu est calculé par la page serveur (HN-E05S04-1).
 
 ## Sécurité et confidentialité
@@ -87,4 +88,5 @@ Aucune à ce jour.
 
 - 2026-09-29 : procédure réduite à une page `kind: procedure`, blocs `call` contrôlés à la publication, contrats `write.procedure` et `write.table`, éditeurs et aperçu « Tester une phrase » livrés dans la V1, publiée en 1.0.0 (source : stories E03-S06, E05-S04 ; choix H59, H60, H62, P19, P37, P38).
 - 2026-09-29 : à l'écran, une procédure est une page comme les autres tant que les connecteurs ne sont pas là — décidé par JB, date de la fiche non conservée, en vigueur à la 1.0.0 (source : fiche D104, tâche M59).
+- 2026-10-27 : plus de borne de taille d'une procédure ; `context` ne sert plus ses étapes, `read` la sert entière — décidé par JB (source : session du 27/10/2026, `context` trop lourd).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend la fiche D104, les choix H59, H60, H62, P19, P37, P38 et ceux des stories E03-S06 et E05-S04 — décidé par Alexis, accord de JB.

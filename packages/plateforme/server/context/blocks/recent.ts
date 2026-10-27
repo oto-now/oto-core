@@ -1,5 +1,5 @@
 // Bloc « Recent content » de `context` (E03-S08, AC5, AC6 ; H36, N4 ; « Recent documents » jusqu'à E05-S12,
-// AC-20 : renommé seulement) : les pages et tableaux que la
+// AC-20 : renommé seulement ; depuis le 2026-10-27, les nouveautés de `news.ts` y sont servies, marquées) : les pages et tableaux que la
 // personne a lus ou écrits sur 90 jours — lectures et écritures au journal, blocs qu'elle a écrits
 // (brouillon d'une page, ligne d'un tableau), nœuds qu'elle a publiés —, datés de leur source la plus
 // récente, 20 au plus (sans taille, E11-S03) ; ni procédure, ni Contexte, ni la racine, ni nœud
@@ -17,8 +17,9 @@ import { ROOT_PATH } from "../../nodes/lookup"
 import { day } from "../../nodes/read-format"
 import { daysAgo, type ContextBlock } from "../engine"
 import { byPath } from "./contexts"
+import { newsItems, type News } from "./news"
 
-/** Documents listés au plus (H36). */
+/** Lignes servies au plus, nouveautés comprises (H36 ; 2026-10-27). */
 const RECENT_MAX = 20
 
 const RECENT_DAYS = 90
@@ -113,19 +114,58 @@ export async function recentDocuments(db: PlatformDb, identity: Identity): Promi
   return kept.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || byPath(a, b)).slice(0, RECENT_MAX)
 }
 
+/** Une ligne du bloc, datée (ISO) ; `path` : le contenu qu'elle nomme, `""` pour un connecteur. */
+type Line = { at: string; path: string; text: string }
+
 /**
- * Le texte du bloc (AC5, AC6 ; E05-S12, AC-20) : « ## Recent content » et une ligne par document, servi entier
- * (E11-S03, AC-b1) ; `null` sans document. Formats de `SERVED_RECENT`, que l'écran relit (E05-S13, AC-16) ; exporté pour son test
- * de parité, sans base.
+ * Le texte du bloc (AC5, AC6 ; E05-S12, AC-20 ; 2026-10-27, « What's new » et « Recent content » fusionnés, décision de
+ * JB) : « ## Recent content », la borne des nouveautés quand elle est connue, puis une ligne par contenu, jamais deux fois
+ * le même : une version publiée depuis la borne, marquée `new v<rév>` (elle l'emporte sur la ligne du même contenu lu
+ * ou écrit), un contenu de la personne, un connecteur activé ; les plus récentes d'abord, 20 au plus, servi entier
+ * (E11-S03, AC-b1) ; `null` sans ligne. Formats de `SERVED_RECENT`, que l'écran relit (E05-S13, AC-16) ; exporté pour son
+ * test de parité, sans base.
  */
-export function recentText(documents: readonly (Pick<DocumentNode, "path" | "kind" | "title"> & { at: string })[]): ContextBlock | null {
-  if (documents.length === 0) return null
-  const { title, item, kindStart, dateStart, dateEnd } = SERVED_RECENT
-  const lines = documents.map((document) => `${item}${document.path}${kindStart}${document.kind}${dateStart}${day(document.at)}${dateEnd}${document.title}`)
-  return { name: "recent content", text: [title, ...lines].join("\n") }
+export function recentText(
+  documents: readonly (Pick<DocumentNode, "path" | "kind" | "title"> & { at: string })[],
+  news: News | null,
+  since: string | null,
+): ContextBlock | null {
+  const { title, sinceStart, sinceEnd, item, kindStart, newMark, dateStart, dateEnd, connector, activated, connectorEnd } = SERVED_RECENT
+  const versions = news?.versions ?? []
+  const fresh = new Set(versions.map((version) => version.path))
+  const lines: Line[] = [
+    ...versions.map((version) => ({
+      at: version.at,
+      path: version.path,
+      text: `${item}${version.path}${kindStart}${version.kind}${dateStart}${newMark}${version.revision}${dateStart}${day(version.at)}${dateEnd}${version.title}`,
+    })),
+    ...(news?.activations ?? []).map((activation) => ({ at: activation.at, path: "", text: `${connector}${activation.connector}${activated}${day(activation.at)}${connectorEnd}` })),
+    ...documents
+      .filter((document) => !fresh.has(document.path))
+      .map((document) => ({ at: document.at, path: document.path, text: `${item}${document.path}${kindStart}${document.kind}${dateStart}${day(document.at)}${dateEnd}${document.title}` })),
+  ]
+  if (lines.length === 0) return null
+  const shown = lines.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || byPath(a, b)).slice(0, RECENT_MAX)
+  const head = since === null ? title : `${title}${sinceStart}${day(since)}${sinceEnd}`
+  return { name: "recent content", text: [head, ...shown.map((line) => line.text)].join("\n") }
 }
 
-/** Le bloc : les documents récents de la personne (`recentDocuments`), rendus par `recentText`. */
-export async function recentBlock(db: PlatformDb, identity: Identity): Promise<ContextBlock | null> {
-  return recentText(await recentDocuments(db, identity))
+/**
+ * Le bloc : les documents récents de la personne (`recentDocuments`) et les nouveautés depuis `since` (`newsItems`),
+ * lus en parallèle, sur 90 jours au plus (une borne plus ancienne est ramenée à 90 jours). `since` nul (borne illisible)
+ * ou nouveautés en panne : les seuls documents, sans borne dite ; la panne au log, `context` répond (AC13).
+ */
+export async function recentBlock(db: PlatformDb, identity: Identity, since: string | null): Promise<ContextBlock | null> {
+  const window = daysAgo(RECENT_DAYS)
+  const from = since === null ? null : Date.parse(since) > Date.parse(window) ? since : window
+  const [documents, news] = await Promise.all([
+    recentDocuments(db, identity),
+    from === null
+      ? null
+      : newsItems(db, identity, from).catch((error: unknown) => {
+          console.error("[platform] context: news read failed", error)
+          return null
+        }),
+  ])
+  return recentText(documents, news, news === null ? null : from)
 }

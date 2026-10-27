@@ -42,12 +42,11 @@ const PREFILTER = 50
 const ROUTED_KIND = "procedure"
 const ROUTING_USAGE_DAYS = 30
 /**
- * Candidats montrés par `context`, par titre et résumé, entre lesquels l'assistant choisit (E11-S16) : sur
- * 25 paraphrases jouées en direct parmi 60 procédures, la bonne était en tête pour 21 et dans les trois
- * premiers pour 24 (story E11-S16, § Contexte) ; sur le jeu à l'échelle (`tests/integration/routing.test.ts`),
- * cinq montrés, aucune au rang 4 ou 5.
+ * Procédures montrées par `context`, par titre et résumé, entre lesquelles l'assistant choisit (E11-S16), la décidée en
+ * tête (2026-10-27, décision de JB : cinq au lieu de trois, les étapes n'étant plus servies, la liste des procédures utiles
+ * retirée) ; `decide` ne lit que les deux premières.
  */
-export const CANDIDATES_SHOWN = 3
+export const CANDIDATES_SHOWN = 5
 const DAY_MS = 86_400_000
 
 /** Composantes rendues par `route_candidates` pour un nœud. */

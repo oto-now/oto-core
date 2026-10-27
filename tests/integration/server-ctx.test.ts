@@ -322,7 +322,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
         "## This request",
       ])
       expect(light.result.structuredContent).toMatchObject({ ctx: code })
-      for (const absent of ["## Context:", "## What's new", "## Procedures you can run, most used first", SERVED_RULES.title]) expect(light.text).not.toContain(absent)
+      for (const absent of ["## Context:", "## Recent content", "This Oto is at", SERVED_RULES.title]) expect(light.text).not.toContain(absent)
       expect(await count()).toBe(before)
     })
 

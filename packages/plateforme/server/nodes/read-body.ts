@@ -1,5 +1,5 @@
 // Le corps de `read` selon le mode demandé (E03-S03, AC4 à AC13) : page entière, plan servi d'office
-// au-delà de 12 000 caractères, plan demandé, section par titre (homonymes compris), écart depuis une
+// au-delà de 12 000 caractères (jamais pour une procédure, servie entière), plan demandé, section par titre (homonymes compris), écart depuis une
 // révision, et les lignes de fin (`To edit`, `Publish it`). Fonction pure sur les
 // blocs déjà lus. Fichier à part de `read.ts` et de `read-format.ts` : ensemble, ils dépasseraient la
 // borne de 300 lignes (`coding-standards.md § Complexité`).
@@ -105,7 +105,10 @@ export function serveBody(request: BodyRequest): Served {
   if (input.section !== undefined) return served(sectionText(request, refs))
   if (input.outline) return { ...served(outlineText(request, refs, false), false), outlined: true }
   const sections = splitSections(blocks)
-  if (blocksSize(blocks) > PAGE_FULL_MAX && sections.length > 1) {
+  // Une procédure se sert entière, au-delà de 12 000 caractères aussi (2026-10-27) : ses étapes se suivent en entier,
+  // `context` ne les sert plus ; seul le curseur de `read` la découpe au-delà de 45 000.
+  const kind = (draftMode ? request.draft?.kind : null) ?? node.kind
+  if (kind !== "procedure" && blocksSize(blocks) > PAGE_FULL_MAX && sections.length > 1) {
     const start = renderServed(sections[0].blocks, refs, request.reference, request.fileRoute)
     return { ...served([start, outlineText(request, refs, true)].filter((part) => part !== "").join("\n\n"), false), outlined: true }
   }

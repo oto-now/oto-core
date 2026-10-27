@@ -12,7 +12,7 @@
 //
 // M71 : les listes d'index d'une partie (enfants, pages liées) ne sont que dans son texte servi, pas dans les blocs
 // de son Contexte ; `morceauxDuContexte` les en relit par les textes que le service écrit (`CONTEXT_INDEX`).
-import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_NEWS, SERVED_PROCEDURES, SERVED_RECENT } from "../../schemas"
+import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_RECENT } from "../../schemas"
 import { PERSO } from "../arbre/depuis-l-arbre"
 import type { DonneesDeLApercu } from "./apercu-du-contexte"
 
@@ -34,10 +34,9 @@ export const CONTEXTE_DE_TOUT_LE_MONDE = "contexte"
 /**
  * Les ancres des blocs qui ne sont pas un Contexte, par leur nom servi (HN-E05S11-9, HN-E05S12-10), en anglais
  * (E11-S07). Aucune pour le bloc `code`, que ni la vue ni l'encart n'affichent plus (HN-E11S07-11) : son rang suffit.
+ * Depuis le 2026-10-27, `context` ne sert plus ni nouveautés ni procédures utiles en blocs à part.
  */
 const ANCRES_DES_BLOCS: Readonly<Record<string, string>> = {
-  news: "news",
-  procedures: "procedures",
   "recent content": "recent-content",
 }
 
@@ -104,22 +103,23 @@ export function partiesDuContexte({ text, blocks }: Pick<DonneesDeLApercu, "text
 // reconnue reste un morceau `brut`, montré tel que servi (jamais perdu). Sans ces fonctions, l'écran ne montrerait
 // que le texte anglais brut que lit l'assistant.
 
-/** Une ligne reconnue d'une liste servie. */
+/** Une ligne reconnue d'une liste servie : `version`, un contenu publié depuis la conversation précédente. */
 export type LigneServie =
-  | { genre: "procedure"; chemin: string; resume: string }
-  | { genre: "version"; chemin: string; revision: number; date: string; titre: string }
+  | { genre: "version"; chemin: string; nature: string; revision: number; date: string; titre: string }
   | { genre: "connecteur"; nom: string; date: string }
   | { genre: "recent"; chemin: string; nature: string; date: string; titre: string }
   | { genre: "index"; chemin: string; titre: string; resume: string }
 
-/** La légende d'une liste servie : l'en-tête du bloc relu, ou le titre d'une liste d'index d'un Contexte. */
-export type Legende = { genre: "procedures"; nombre: number } | { genre: "nouveautes"; depuis: string } | { genre: "children" } | { genre: "linked" }
+/**
+ * La légende d'une liste servie : la borne des nouveautés lue dans l'en-tête des contenus récents, ou le titre d'une
+ * liste d'index d'un Contexte.
+ */
+export type Legende = { genre: "nouveautes"; depuis: string } | { genre: "children" } | { genre: "linked" }
 
 /** Un morceau d'une partie relue : une liste, une phrase fixe, l'avis de budget, ou du texte tel que servi. */
 export type MorceauServi =
   | { genre: "liste"; legende: Legende | null; lignes: LigneServie[] }
-  | { genre: "phrase"; phrase: "aucune-procedure" | "rien-de-nouveau" | "suite" | "non-charge" }
-  | { genre: "autres-procedures"; nombre: number }
+  | { genre: "phrase"; phrase: "suite" | "non-charge" }
   | { genre: "budget"; noms: { nom: string; coupe: boolean }[]; autres: number }
   | { genre: "brut"; texte: string }
 
@@ -152,40 +152,30 @@ function ligneDIndex(ligne: string): LigneServie | null {
   return { genre: "index", chemin: lue.chemin, titre, resume }
 }
 
-function ligneDeProcedure(ligne: string): LigneServie | null {
-  const lue = cheminEtReste(ligne, SERVED_PROCEDURES.separator)
-  return lue && { genre: "procedure", chemin: lue.chemin, resume: lue.reste }
-}
-
 /** `- Connector <nom> activated (<date>)`. */
 function ligneDeConnecteur(ligne: string): LigneServie | null {
-  const corps = entre(ligne, SERVED_NEWS.connector, SERVED_NEWS.connectorEnd)
-  const activation = corps === null ? -1 : corps.lastIndexOf(SERVED_NEWS.activated)
+  const corps = entre(ligne, SERVED_RECENT.connector, SERVED_RECENT.connectorEnd)
+  const activation = corps === null ? -1 : corps.lastIndexOf(SERVED_RECENT.activated)
   if (corps === null || activation <= 0) return null
-  const date = corps.slice(activation + SERVED_NEWS.activated.length)
+  const date = corps.slice(activation + SERVED_RECENT.activated.length)
   return DATE_SERVIE.test(date) ? { genre: "connecteur", nom: corps.slice(0, activation), date } : null
 }
 
-/** `- <chemin> v<rév> (<date>): <titre>`, ou un connecteur activé. */
-function ligneDeNouveaute(ligne: string): LigneServie | null {
+/** `- <chemin> (<genre>, <date>): <titre>`, `- <chemin> (<genre>, new v<rév>, <date>): <titre>`, ou un connecteur activé. */
+function ligneRecente(ligne: string): LigneServie | null {
   const connecteur = ligneDeConnecteur(ligne)
   if (connecteur) return connecteur
-  const lue = cheminEtReste(ligne, SERVED_NEWS.revision)
-  const fin = lue ? lue.reste.indexOf(SERVED_NEWS.dateEnd) : -1
-  if (!lue || fin < 0) return null
-  const [revision, date] = lue.reste.slice(0, fin).split(SERVED_NEWS.dateStart)
-  if (!NOMBRE_SERVI.test(revision) || date === undefined || !DATE_SERVIE.test(date)) return null
-  return { genre: "version", chemin: lue.chemin, revision: Number(revision), date, titre: lue.reste.slice(fin + SERVED_NEWS.dateEnd.length) }
-}
-
-/** `- <chemin> (<genre>, <date>): <titre>`. */
-function ligneRecente(ligne: string): LigneServie | null {
   const lue = cheminEtReste(ligne, SERVED_RECENT.kindStart)
   const fin = lue ? lue.reste.indexOf(SERVED_RECENT.dateEnd) : -1
   if (!lue || fin < 0) return null
-  const [nature, date] = lue.reste.slice(0, fin).split(SERVED_RECENT.dateStart)
-  if (!nature || date === undefined || !DATE_SERVIE.test(date)) return null
-  return { genre: "recent", chemin: lue.chemin, nature, date, titre: lue.reste.slice(fin + SERVED_RECENT.dateEnd.length) }
+  const [nature, ...suite] = lue.reste.slice(0, fin).split(SERVED_RECENT.dateStart)
+  const date = suite.at(-1)
+  if (!nature || date === undefined || !DATE_SERVIE.test(date) || suite.length > 2) return null
+  const titre = lue.reste.slice(fin + SERVED_RECENT.dateEnd.length)
+  if (suite.length === 1) return { genre: "recent", chemin: lue.chemin, nature, date, titre }
+  const revision = entre(suite[0], SERVED_RECENT.newMark, "")
+  if (revision === null || !NOMBRE_SERVI.test(revision)) return null
+  return { genre: "version", chemin: lue.chemin, nature, revision: Number(revision), date, titre }
 }
 
 /** Les morceaux en construction : une ligne non reconnue rejoint le morceau brut qui la précède, une ligne reconnue la liste. */
@@ -206,54 +196,28 @@ function assembleur() {
   }
 }
 
-/**
- * Les lignes d'un bloc sous sa légende : chacune reconnue par `lire`, sinon une phrase fixe (`phrase`), sinon brute.
- * Une légende sans ligne (aucune procédure, rien de nouveau) garde sa place : elle dit le compte ou la date.
- */
-function lignesDuBloc(lignes: readonly string[], legende: Legende | null, lire: (ligne: string) => LigneServie | null, phrase: (ligne: string) => MorceauServi | null) {
+/** Les lignes d'un bloc sous sa légende : chacune reconnue par `lire`, sinon brute. */
+function lignesDuBloc(lignes: readonly string[], legende: Legende | null, lire: (ligne: string) => LigneServie | null) {
   const { morceaux, brut, ligne } = assembleur()
   if (legende) morceaux.push({ genre: "liste", legende, lignes: [] })
   for (const texte of lignes) {
     const lue = lire(texte)
-    const fixe = lue ? null : phrase(texte)
     if (lue) ligne(lue)
-    else if (fixe) morceaux.push(fixe)
     else brut(texte)
   }
   return morceaux
 }
 
-/** `… and <k> more: find them with <p>_find, type procedure.` : `<k>`. */
-function autresProcedures(ligne: string): number | null {
-  if (!ligne.startsWith(SERVED_PROCEDURES.moreStart)) return null
-  const fin = ligne.indexOf(SERVED_PROCEDURES.moreEnd)
-  const nombre = fin < 0 ? "" : ligne.slice(SERVED_PROCEDURES.moreStart.length, fin)
-  return NOMBRE_SERVI.test(nombre) ? Number(nombre) : null
-}
-
-function procedures(lignes: readonly string[]): MorceauServi[] | null {
-  const nombre = entre(lignes[0], `${SERVED_PROCEDURES.title} (`, ")")
-  if (nombre === null || !NOMBRE_SERVI.test(nombre)) return null
-  return lignesDuBloc(lignes.slice(1), { genre: "procedures", nombre: Number(nombre) }, ligneDeProcedure, (ligne) => {
-    if (ligne === SERVED_PROCEDURES.none) return { genre: "phrase", phrase: "aucune-procedure" }
-    const autres = autresProcedures(ligne)
-    return autres === null ? null : { genre: "autres-procedures", nombre: autres }
-  })
-}
-
-function nouveautes(lignes: readonly string[]): MorceauServi[] | null {
-  const depuis = lignes[0].startsWith(SERVED_NEWS.title) ? lignes[0].slice(SERVED_NEWS.title.length) : ""
-  if (!DATE_SERVIE.test(depuis)) return null
-  return lignesDuBloc(lignes.slice(1), { genre: "nouveautes", depuis }, ligneDeNouveaute, (ligne) => (ligne === SERVED_NEWS.nothing ? { genre: "phrase", phrase: "rien-de-nouveau" } : null))
-}
-
+/** `## Recent content`, ou `## Recent content (new: published since <date>)` : la borne en légende. */
 function recents(lignes: readonly string[]): MorceauServi[] | null {
-  return lignes[0] === SERVED_RECENT.title ? lignesDuBloc(lignes.slice(1), null, ligneRecente, () => null) : null
+  const { title, sinceStart, sinceEnd } = SERVED_RECENT
+  if (lignes[0] === title) return lignesDuBloc(lignes.slice(1), null, ligneRecente)
+  const depuis = entre(lignes[0], `${title}${sinceStart}`, sinceEnd)
+  if (depuis === null || !DATE_SERVIE.test(depuis)) return null
+  return lignesDuBloc(lignes.slice(1), { genre: "nouveautes", depuis }, ligneRecente)
 }
 
 const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[]) => MorceauServi[] | null>> = {
-  procedures,
-  news: nouveautes,
   "recent content": recents,
 }
 

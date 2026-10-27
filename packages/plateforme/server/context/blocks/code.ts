@@ -32,7 +32,7 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - A renamed or moved content keeps its old path: it still leads there.
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
-- When a request matches a procedure, its steps come right after this part: follow them in order. Otherwise the closest procedures are listed there: use the one that fits, or search; ask the user when nothing fits.
+- The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with <p>_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.
 - A procedure is a page of numbered steps an assistant follows to do one recurring task the same way every time; a one-off answer needs none. Its title and summary route requests to it: the summary says what it does and how people ask for it.
 - A good procedure has a part « When to use it » (and when not), one action per step, each call in a call block right after its step, what to do with each result (stop, branch, report), the expected output, and who to ask when a case is not covered. Before writing one, read path help, section procedures, then path write.procedure.
 - <p>_read with path journal shows what was done, call by call: trust it over memory.
@@ -40,10 +40,27 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash. contexte is the context page of the organisation, a team or your space: give no other page that name.
 - Never invent a path, a figure or a result: read it, or say you could not.`
 
-/** La section des règles pour l'organisation de préfixe `prefix`. */
-export function workspaceRules(prefix: string): string {
-  return WORKSPACE_RULES.replaceAll("<p>", prefix)
+/**
+ * La section des règles pour l'organisation de préfixe `prefix` ; `address` (`orgAddress`, 2026-10-27, décision de JB) en
+ * première règle, sous le titre : l'adresse d'Oto se lit avec les règles, pas en fin de texte. Sans adresse lisible
+ * (l'aperçu, une origine illisible), les règles seules.
+ */
+export function workspaceRules(prefix: string, address?: string | null): string {
+  const rules = WORKSPACE_RULES.replaceAll("<p>", prefix)
+  if (!address) return rules
+  const [title, ...rest] = rules.split("\n")
+  return [title, `${SERVED_RULES.item}${address}`, ...rest].join("\n")
 }
+
+/**
+ * L'accord porte sur ce qui dépasse la procédure demandée (fiche D99, M53) : ses propres étapes (réserver, écrire, rendre)
+ * se suivent sans question, un envoi demande toujours l'accord.
+ */
+const APPROVAL = "the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for"
+
+/** Comment recopier un bloc `call` lu en appel (E03-S06, AC7, règle 8, N12) : `read` sert le bloc, pas son mode d'emploi. */
+const callLine = (prefix: string) =>
+  `Each \`\`\`call block in it holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.`
 
 type CodeBlockInput = {
   prefix: string
@@ -63,6 +80,8 @@ type CodeBlockInput = {
   since?: { code: string; changed: readonly string[] }
   /** Sans procédure servie (1.4.3) : les fonctions qui répondent à la demande et la section du guide la plus proche. */
   hints?: RoutingHints
+  /** L'adresse d'Oto (`orgAddress`), première règle ; ni dans l'aperçu, ni dans le `context` léger, qui ne redit pas les règles. */
+  address?: string | null
 }
 
 /** Les mots de la demande trouvés dans une candidate (E11-S19, AC-d2) : ce qu'un auteur ajouterait au résumé. */
@@ -78,18 +97,34 @@ function servedFrom(settings: RoutingSettings | null | undefined): string {
 
 /**
  * Une candidate par ligne, avec son titre et son résumé (E11-S16, AC-a1) : l'assistant départage ce que le score
- * lexical ne sait pas départager (« Relancer les devis » et « Relancer les tickets »).
+ * lexical ne sait pas départager (« Relancer les devis » et « Relancer les tickets ») ; la procédure décidée, en tête,
+ * le dit (« best match », 2026-10-27).
  */
-function candidateLines(phrase: string, candidates: readonly Candidate[]): string {
+function candidateLines(phrase: string, candidates: readonly Candidate[], best?: string): string {
   return candidates
-    .map((candidate) => `- ${candidate.path} — ${candidate.title}: ${candidate.summary} (${formatScore(candidate.score)}; ${scoreReason(phrase, candidate)})`)
+    .map((candidate) => {
+      const mark = candidate.path === best ? "best match; " : ""
+      return `- ${candidate.path} — ${candidate.title}: ${candidate.summary} (${mark}${formatScore(candidate.score)}; ${scoreReason(phrase, candidate)})`
+    })
     .join("\n")
 }
 
 /**
- * La ligne du routage (AC7, AC8, AC18) : servie, candidats et consigne, rien, ou routage en panne. E11-S16 (décision
- * de JB) : l'assistant arbitre entre les candidates, sans consigne par genre de phrase ; seule une procédure servie
- * sur une demande « comment » garde de n'exécuter que sur demande.
+ * La consigne d'une procédure décidée (2026-10-27, décision de JB : ses étapes ne sont plus servies par `context`) : la
+ * lire par `read`, puis suivre ses étapes ; sur une demande « comment » (ADR-003 § 4), les expliquer et ne les exécuter
+ * que si la personne le demande.
+ */
+function bestMatchLine(prefix: string, served: Candidate, kind: RequestKind | null): string {
+  const read = `${prefix}_read {"path": "${served.path}"}`
+  if (kind === "how") return `It asks how: read ${served.path} with ${read}, explain its steps, and run them only if the user asks.`
+  return `If the request is about « ${served.title} », read ${served.path} with ${read}, then follow its steps in order (if it is about another one listed, read and follow that one instead). ${callLine(prefix)} Ask ${APPROVAL}.`
+}
+
+/**
+ * La ligne du routage (AC7, AC8, AC18) : les procédures les plus proches, la décidée en tête et sa consigne, ou les
+ * proches et leur consigne, rien, ou routage en panne. E11-S16 (décision de JB) : l'assistant arbitre entre les
+ * candidates, sans consigne par genre de phrase ; seule une procédure décidée sur une demande « comment » garde de
+ * n'exécuter que sur demande.
  */
 function routingLine({ prefix, phrase, candidates, served, kind, settings }: CodeBlockInput & { phrase: string }): string {
   // Phrase reprise, bornée comme la cible du journal (N4).
@@ -97,14 +132,8 @@ function routingLine({ prefix, phrase, candidates, served, kind, settings }: Cod
   const search = `${prefix}_find can search pages, tables and functions.`
   if (candidates === null) return `${request}: no procedure could be matched right now. ${search}`
   if (served) {
-    const others = candidates.filter((candidate) => candidate.path !== served.path)
-    const matched = `${request} matches ${served.path} (score ${formatScore(served.score)}): its steps follow, if the request is about « ${served.title} ».`
-    const tail =
-      others.length > 0
-        ? `\nOther candidates:\n${candidateLines(phrase, others)}\nIf the request is about one of them instead, read that one with ${prefix}_read and follow it rather than these steps.`
-        : ""
-    const how = kind === "how" ? "\nIt asks how: explain these steps, and run them only if the user asks." : ""
-    return `${matched}${tail}${how}`
+    const listed = [served, ...candidates.filter((candidate) => candidate.path !== served.path)]
+    return `${request}: closest procedures, the best match first:\n${candidateLines(phrase, listed, served.path)}\n${bestMatchLine(prefix, served, kind)}`
   }
   if (candidates.length > 0) {
     return `${request}: no clear match${servedFrom(settings)}. Closest procedures:\n${candidateLines(phrase, candidates)}\nRead the one that fits the request with ${prefix}_read, if any; otherwise search with ${prefix}_find or ask the user.`
@@ -130,7 +159,7 @@ export function codeBlock(input: CodeBlockInput): ContextBlock {
     `ctx: ${code}`,
     // Un Contexte changé ne refuse pas l'appel : son résultat commence par l'avis, le nouveau code et les Contextes changés.
     `Pass this ctx to every ${prefix}_ tool. If a result starts with "context has changed", it gives a new ctx and the changed contexts: read them and use the new ctx from then on; the call itself ran, do not repeat it.`,
-    since ? sinceLine(since) : workspaceRules(prefix),
+    since ? sinceLine(since) : workspaceRules(prefix, input.address),
     "## This request",
     phrase
       ? routingLine({ ...input, phrase })

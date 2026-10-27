@@ -32,7 +32,8 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
   // La vue « Contexte » de l'accueil (E05-S11, retours 4 et 6 de JB, AC-13 à AC-15) : les parties du texte que
   // `context` servirait, empilées dans l'ordre, chacune nommée et à son ancre (sans chiffres depuis E05-S13) ; un Contexte que la personne peut écrire (niveau décidé par le service, lu par la page) s'y écrit en
   // place avec l'éditeur d'une page, les autres se lisent ; les échecs se disent. E11-S10 (lot f) : ni tête servie, ni
-  // lien vers Profil, ni « Règles Oto » ; une partie sans corps le dit ; « Nouveautés » toujours là ; l'ancre suivie.
+  // lien vers Profil, ni « Règles Oto » ; une partie sans corps le dit ; l'ancre suivie (« Nouveautés » toujours là
+  // jusqu'au 2026-10-27 : les nouveautés sont depuis dans les contenus récents).
   // `fetch` simulé pour `POST /api/platform/nodes`, relecture espionnée.
 
   /** Les têtes des parties de Contexte (E05-S12, D109) : en-tête et ligne de faits. */
@@ -47,7 +48,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
     toutLeMonde: `${TETES.toutLeMonde}\nNous vendons des logiciels.`,
     prive: `${TETES.prive}\nSignature : Léa.`,
     ventes: `${TETES.ventes}\nTutoie les clients.`,
-    avis: "[Context budget reached. Omitted: news. Use demo_find or demo_read for more.]",
+    avis: "[Context budget reached. Omitted: recent content. Use demo_find or demo_read for more.]",
   }
 
   const TEXTE = [PARTIES.code, PARTIES.toutLeMonde, PARTIES.prive, PARTIES.ventes, PARTIES.avis].join("\n\n")
@@ -61,7 +62,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
         { name: "contexte", chars: PARTIES.toutLeMonde.length, status: "full", path: "contexte", head: TETES.toutLeMonde.length },
         { name: "private/lea/contexte", chars: PARTIES.prive.length, status: "full", path: "private/lea/contexte", head: TETES.prive.length },
         { name: "ventes/contexte", chars: PARTIES.ventes.length, status: "cut", path: "ventes/contexte", head: TETES.ventes.length },
-        { name: "news", chars: 0, status: "omitted", path: null, head: 0 },
+        { name: "recent content", chars: 0, status: "omitted", path: null, head: 0 },
       ],
     },
   }
@@ -104,7 +105,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
         ["Contexte : Tout le monde", "everyone-context"],
         ["Contexte : Privé", "private-context"],
         ["Contexte : équipe Ventes", "context-ventes"],
-        ["Nouveautés", "news"],
+        ["Contenus récents et nouveautés", "recent-content"],
         ["Fin du texte", ""],
       ])
       // E05-S13 (AC-13) : ni taille, ni état, ni note des versions, ni total.
@@ -112,7 +113,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
       // Une partie en lecture : son corps tel que servi, dans sa carte, sans la tête servie (E11-S10, AC-f1) ; l'avis de
       // fin, en français.
       expect(partie("Contexte : Tout le monde").getAllByText(/./, { selector: "pre" }).map((texte) => texte.textContent)).toEqual(["Nous vendons des logiciels."])
-      expect(partie("Fin du texte").getByText("Budget atteint : l'assistant ne lit pas Nouveautés.")).toBeInTheDocument()
+      expect(partie("Fin du texte").getByText("Budget atteint : l'assistant ne lit pas Contenus récents et nouveautés.")).toBeInTheDocument()
       expect(document.body.textContent).not.toMatch(/## Context:|Organisation: Démo\.|You: |Team Ventes, /)
     })
   })
@@ -160,7 +161,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
 
     it("should say an omitted part is not read, and a Contexte that could not be read, its served text kept", () => {
       monter({ contextes: { ...CONTEXTES, contexte: { error: ECHEC } } })
-      expect(partie("Nouveautés").getByText("Cette partie ne tient pas dans le budget : l'assistant ne la lit pas.")).toBeInTheDocument()
+      expect(partie("Contenus récents et nouveautés").getByText("Cette partie ne tient pas dans le budget : l'assistant ne la lit pas.")).toBeInTheDocument()
       expect(partie("Contexte : Tout le monde").getByText("Nous vendons des logiciels.", { selector: "pre" })).toBeInTheDocument()
       expect(partie("Contexte : Tout le monde").getByRole("alert")).toHaveTextContent(ECHEC)
     })
@@ -196,25 +197,16 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
       expect(document.body.textContent).not.toContain("Lead: Paul")
     })
 
-    it("should keep a « Nouveautés » section when none is served, before the procedures, and only one when news are served (AC-f5)", () => {
+    // 2026-10-27 : les nouveautés sont dans les contenus récents ; plus de section « Nouveautés » à part (AC-f5 retiré).
+    it("should show only the served parts, without a « Nouveautés » section of its own", () => {
       monter({
         apercu: apercuDe([
           { name: "code", texte: "ctx: XXXX-XXXX" },
           { name: "contexte", texte: PARTIES.toutLeMonde, head: TETES.toutLeMonde.length },
-          { name: "procedures", texte: "Procédures du jour." },
         ]),
       })
-      expect(screen.getAllByRole("region").map((une) => [within(une).getByRole("heading", { level: 2 }).textContent, une.id])).toEqual([
-        ["Contexte : Tout le monde", "everyone-context"],
-        ["Nouveautés", "news"],
-        ["Procédures utiles", "procedures"],
-      ])
-      expect(partie("Nouveautés").getByText("Aucune nouveauté n'est servie à l'assistant en ce moment.")).toBeInTheDocument()
-      cleanup()
-
-      monter({ apercu: apercuDe([{ name: "news", texte: "Nouveau depuis hier." }]) })
-      expect(document.querySelectorAll("#news")).toHaveLength(1)
-      expect(screen.queryByText("Aucune nouveauté n'est servie à l'assistant en ce moment.")).toBeNull()
+      expect(screen.getAllByRole("region").map((une) => [within(une).getByRole("heading", { level: 2 }).textContent, une.id])).toEqual([["Contexte : Tout le monde", "everyone-context"]])
+      expect(document.body.textContent).not.toContain("Nouveautés")
     })
 
     it("should bring the part of the address on mount and on each hashchange, the top of the view for an unknown anchor, and stop at unmount (AC-f6)", () => {
@@ -226,11 +218,11 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
       try {
         window.history.replaceState(null, "", "#context-ventes")
         monter()
-        window.history.replaceState(null, "", "#news")
+        window.history.replaceState(null, "", "#recent-content")
         act(() => window.dispatchEvent(new HashChangeEvent("hashchange")))
         window.history.replaceState(null, "", "#rules")
         act(() => window.dispatchEvent(new HashChangeEvent("hashchange")))
-        expect(amenes).toEqual(["context-ventes", "news", "haut-de-la-vue"])
+        expect(amenes).toEqual(["context-ventes", "recent-content", "haut-de-la-vue"])
         cleanup()
         window.dispatchEvent(new HashChangeEvent("hashchange"))
         expect(amenes).toHaveLength(3)
@@ -356,13 +348,9 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
   describe("une partie par Contexte (AC-6)", () => {
     it("should name every part in the view and in the insert, a Contexte not served by its name, and none after the old blocks", () => {
       monterLaVue()
-      // Sans « Règles Oto » (E11-S10, AC-f4, AC-g2) ; « Nouveautés » dans la vue même quand rien n'en est servi (AC-f5).
-      const noms = ["Contexte : Tout le monde", "Contexte : Privé", "Contexte : équipe Ventes", "Contexte : équipe Conseil", "Contenus récents"]
-      expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby") ?? "")?.textContent)).toEqual([
-        ...noms.slice(0, 4),
-        "Nouveautés",
-        "Contenus récents",
-      ])
+      // Sans « Règles Oto » (E11-S10, AC-f4, AC-g2) ; plus de « Nouveautés » à part depuis le 2026-10-27.
+      const noms = ["Contexte : Tout le monde", "Contexte : Privé", "Contexte : équipe Ventes", "Contexte : équipe Conseil", "Contenus récents et nouveautés"]
+      expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby") ?? "")?.textContent)).toEqual(noms)
       for (const ancien of ["Vous", "Organisation", "Vos équipes", "Connecteurs", "Code de la conversation", "Documents récents"]) {
         expect(screen.queryByRole("region", { name: ancien })).toBeNull()
       }
@@ -410,7 +398,7 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
       expect(marquees.map((lien) => lien.textContent?.startsWith("Contexte : Privé (ce contexte)"))).toEqual([true])
       cleanup()
       monterLaVue()
-      expect(screen.getAllByRole("region").map((region) => region.id)).toEqual(["everyone-context", "private-context", "context-ventes", "context-conseil", "news", "recent-content"])
+      expect(screen.getAllByRole("region").map((region) => region.id)).toEqual(["everyone-context", "private-context", "context-ventes", "context-conseil", "recent-content"])
     })
   })
 
@@ -509,16 +497,19 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
       "## How this workspace works",
       ...Array.from({ length: 12 }, (_, rang) => `- Rule ${rang + 1}.`),
     ]
-    const PROCEDURES = [
-      "## Procedures you can run, most used first (62)",
-      ...Array.from({ length: 60 }, (_, rang) => `- ventes/p${String(rang).padStart(2, "0")}: Demandez la procédure ${rang}.`),
-      "… and 2 more: find them with demo_find, type procedure.",
-    ]
+    // 2026-10-27 : nouveautés et contenus récents en un bloc ; plus de procédures utiles.
     const PARTIES = [
       { name: "code", texte: ["ctx: XXXX-XXXX", "Pass this ctx to every demo_ tool.", ...REGLES, "## This request", "No request given."].join("\n") },
-      { name: "news", texte: ["## What's new since 2026-09-20", "- ventes/devis v3 (2026-09-27): Devis type", "- Connector mail activated (2026-09-26)"].join("\n") },
-      { name: "procedures", texte: PROCEDURES.join("\n") },
-      { name: "recent content", texte: ["## Recent content", "- ventes/tarifs (table, 2026-09-25): Tarifs 2026", "- ventes/faq (page, 2026-09-24): FAQ"].join("\n") },
+      {
+        name: "recent content",
+        texte: [
+          "## Recent content (new: published since 2026-09-20)",
+          "- ventes/devis (page, new v3, 2026-09-27): Devis type",
+          "- Connector mail activated (2026-09-26)",
+          "- ventes/tarifs (table, 2026-09-25): Tarifs 2026",
+          "- ventes/faq (page, 2026-09-24): FAQ",
+        ].join("\n"),
+      },
     ]
 
     function monter() {
@@ -545,27 +536,11 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
     }
     const lignes = (element: HTMLElement) => within(element).getAllByRole("listitem").map((ligne) => [ligne.textContent, within(ligne).queryByRole("link")?.getAttribute("href") ?? null])
 
-    it("should read « Nouveautés » with its date, a version and a connector", () => {
+    it("should read « Contenus récents et nouveautés » under the bound of the news: a new version, a connector, each content by title, kind and date", () => {
       monter()
-      const nouveautes = carte("Nouveautés")
-      expect(lignes(nouveautes.getByRole("list", { name: "Depuis le 20 septembre 2026" }))).toEqual([
-        ["Devis type — version 3, publiée le 27 septembre 2026", "/n/ventes/devis"],
+      expect(lignes(carte("Contenus récents et nouveautés").getByRole("list", { name: "Nouveau : publié depuis le 20 septembre 2026" }))).toEqual([
+        ["Devis type — page, nouveau : version 3, publiée le 27 septembre 2026", "/n/ventes/devis"],
         ["Connecteur mail activé le 26 septembre 2026", null],
-      ])
-    })
-
-    it("should read « Procédures utiles » with its count, each path a link, and the ones not listed", () => {
-      monter()
-      const procedures = carte("Procédures utiles")
-      const liste = lignes(procedures.getByRole("list", { name: "62 procédures" }))
-      expect(liste).toHaveLength(60)
-      expect(liste[0]).toEqual(["ventes/p00 — Demandez la procédure 0.", "/n/ventes/p00"])
-      expect(procedures.getByText("… et 2 autres, que l'assistant trouve par la recherche.")).toBeInTheDocument()
-    })
-
-    it("should read « Contenus récents » by title, kind and date", () => {
-      monter()
-      expect(lignes(carte("Contenus récents").getByRole("list"))).toEqual([
         ["Tarifs 2026 — tableau, 25 septembre 2026", "/n/ventes/tarifs"],
         ["FAQ — page, 24 septembre 2026", "/n/ventes/faq"],
       ])
@@ -573,7 +548,7 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
 
     it("should leave none of the served English headers in the page", () => {
       monter()
-      for (const anglais of ["Procedures you can run", "What's new", "Recent content", "Nothing new", "How this workspace works", "Rule 1."]) {
+      for (const anglais of ["Recent content", "new: published since", "new v3", "How this workspace works", "Rule 1."]) {
         expect(document.body.textContent).not.toContain(anglais)
       }
     })

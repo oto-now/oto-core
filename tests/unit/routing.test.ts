@@ -7,8 +7,7 @@
 // rendre, lignes interdites comprises, et le service prouve qu'il les filtre
 // (`security-patterns.md § Droits dans le service`) ; leur classement réel est le sujet de
 // `tests/integration/routing.test.ts` et de `tests/integration/search-content.test.ts`. Les niveaux, le
-// bonus d'usage (journal), le réglage de O, les blocs servis et les Contextes viennent de la base ; les blocs
-// de la procédure servie y arrivent à rebours (AC7, `reverse` de `watchDb`).
+// bonus d'usage (journal), le réglage de O, la révision de la procédure décidée et les Contextes viennent de la base.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { connectDeps } from "../helpers/mcp"
 import { TEMPS_LINEAIRE_MS } from "../helpers/temps-lineaire"
@@ -20,7 +19,6 @@ import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../help
 import { acmeNode, acmeSearchRow, candidate, NO_CATALOG, simulatedBlockId } from "../integration/fixtures/acme"
 import { seedAcme } from "../integration/fixtures/acme-sql"
 import type { McpDeps } from "../../packages/plateforme/mcp/server"
-import { renderBlocks } from "../../packages/plateforme/schemas"
 import { buildContext } from "../../packages/plateforme/server/context"
 import { find } from "../../packages/plateforme/server/find"
 import {
@@ -58,7 +56,6 @@ type AcmeDbOptions = {
   search?: (query: unknown) => Row[]
   journal?: Row[]
   fail?: WatchOptions["fail"]
-  reverse?: WatchOptions["reverse"]
   /** `orgs.settings` de O ; sans lui, `{}` (réglage par défaut). */
   settings?: Row
 }
@@ -248,7 +245,6 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
         search_content: (args) => (options.search?.(args.p_query) ?? []).map(found),
       },
       fail: options.fail,
-      reverse: options.reverse,
     })
   }
 
@@ -313,68 +309,57 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
     })
   })
 
-  describe("context serves the steps (AC7)", () => {
-    it("should serve the published blocks of the matched procedure, never its open draft, with data and journal target", async () => {
+  // 2026-10-27 (JB) : `context` ne sert plus les étapes ; la procédure décidée, en tête des cinq plus proches, se lit par `read`.
+  describe("context lists the closest procedures, the best match first (AC7)", () => {
+    it("should list the decided procedure first, to read, then the other close ones, never its steps nor its draft, with data and journal target", async () => {
       const path = "ventes/relance_devis"
-      const node = ref.nodeId(path)
-      // Les blocs publiés de la procédure servie, que `procedureBlock` lit sans `order` : la base les rend déjà par
-      // `position` (semés dans cet ordre, index `(node_id, state, position)`), l'espion les rend à rebours. L'ordre
-      // servi vient de `position` (`orderBlocks`), jamais de l'ordre de lecture (revue d'E03-S02, cycle 1).
-      const servedBlocks = (call: DbCall) => touches(call, "blocks") && call.kind === "sql" && call.values.includes(node)
-      // Un brouillon ouvert, que la base rend à qui la lit : le service ne sert que les blocs publiés.
+      // Un brouillon ouvert, que la base rend à qui la lit : rien n'en est servi.
       await ref.openDraft(path)
       await ref.addBlocks(path, "draft", [{ type: "paragraph", text: "BROUILLON : une étape en cours d'écriture." }])
       try {
-        const { db, calls } = await acmeDb("claire", {
+        const { db } = await acmeDb("claire", {
           route: [
             routeRow(path, { s_summary: 1, s_title: 0.7, lexical: 1, query_lexemes: 3 }),
             routeRow("ventes/relance_prospects", { s_summary: 0.45, s_title: 0.4, lexical: 0.33, query_lexemes: 3 }),
             routeRow("ventes/qualifier_prospects", { s_summary: 0.4, s_title: 0.3, lexical: 0.33, query_lexemes: 3 }),
-            // Quatrième candidat de score ≥ 0,30 (0,34) : trois au plus sont montrés (E11-S16, AC-a1).
+            // Quatrième candidat de score ≥ 0,30 (0,34) : cinq au plus sont montrés depuis le 2026-10-27.
             routeRow("ventes/point_pipeline", { s_summary: 0.3, s_title: 0.2, lexical: 0.33, query_lexemes: 3 }),
           ],
-          reverse: servedBlocks,
         })
         const session = await connectDeps(mcpDeps(db, "claire"))
-        const { text, result } = await session.call("context", { phrase: "relance les devis en attente" })
-        // La lecture rendue à rebours est bien celle des étapes servies : sans elle, l'ordre ne serait plus prouvé.
-        expect(calls.filter(servedBlocks)).toHaveLength(1)
+        const phrase = "relance les devis en attente"
+        const { text, result } = await session.call("context", { phrase })
 
         const relance = acmeNode(path)
-        // Le rendu attendu des lignes relues : `jsonb` range à sa façon les clés des arguments d'un bloc `call`.
-        const published = await seed.admin<{ type: string; text: string | null; data: unknown; key: string | null }[]>`
-          select type, text, data, key from platform.blocks where node_id = ${ref.nodeId(path)} and state = 'published' order by position`
-        const steps = renderBlocks([...published], { headingBase: 3 })
-        const [code, procedure, everyone] = text.split("\n\n## ")
-        // E05-S12 (AC-9) : la ligne du routage finit le bloc code, sous ses règles, juste avant les étapes ; E11-S16
-        // (AC-a1, AC-a2) : les autres candidates par titre et résumé, et la consigne de lire plutôt celle qui correspond.
-        const other = (otherPath: string, score: string) => `- ${otherPath} — ${acmeNode(otherPath).title}: ${acmeNode(otherPath).summary} (${score})`
+        const [code] = text.split("\n\n## ")
+        // E11-S19 (AC-d2) : les mots de la demande trouvés dans chacune.
+        const reason = (otherPath: string) => {
+          const words = wordsInCommon(phrase, acmeNode(otherPath))
+          return words.length > 0 ? `words in common: ${words.join(", ")}` : "no word in common"
+        }
+        const line = (otherPath: string, score: string, mark = "") => `- ${otherPath} — ${acmeNode(otherPath).title}: ${acmeNode(otherPath).summary} (${mark}${score}; ${reason(otherPath)})`
+        const prefix = ref.org.prefix
         expect(code.slice(code.indexOf("Request « "))).toBe(
           [
-            `Request « relance les devis en attente » matches ventes/relance_devis (score 1.00): its steps follow, if the request is about « ${relance.title} ».`,
-            "Other candidates:",
-            // E11-S19 (AC-d2) : les mots de la demande trouvés dans chacune.
-            other("ventes/relance_prospects", "0.43; words in common: relance"),
-            other("ventes/qualifier_prospects", "0.40; no word in common"),
-            `If the request is about one of them instead, read that one with ${ref.org.prefix}_read and follow it rather than these steps.`,
+            `Request « ${phrase} »: closest procedures, the best match first:`,
+            line(path, "1.00", "best match; "),
+            line("ventes/relance_prospects", "0.43"),
+            line("ventes/qualifier_prospects", "0.40"),
+            line("ventes/point_pipeline", "0.34"),
+            `If the request is about « ${relance.title} », read ${path} with ${prefix}_read {"path": "${path}"}, then follow its steps in order (if it is about another one listed, read and follow that one instead). ` +
+              `Each \`\`\`call block in it holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one. ` +
+              "Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.",
           ].join("\n"),
         )
-        // E03-S06 (AC7) : la ligne qui dit comment recopier un bloc `call` en appel, après la consigne.
-        const callLine = `A \`\`\`call block holds <function> <arguments JSON>: run it with ${ref.org.prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.`
-        expect(text).toContain(
-          `\n\n## Procedure ventes/relance_devis (v1): Relancer les devis en attente\nFollow these steps now. Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.\n${callLine}\n\n${steps}\n\n## Context: everyone`,
-        )
-        expect(procedure.startsWith("Procedure ")).toBe(true)
-        expect(everyone.startsWith("Context: everyone")).toBe(true)
-        for (const title of ["### Quand l'utiliser", "### Étapes", "### Règles"]) expect(steps).toContain(title)
-        expect(steps).toContain('```call\nsellsy.list_estimates {"status":"sent","older_than_days":7}\n```')
-        expect(text).not.toContain("BROUILLON")
+        // Ni étapes, ni brouillon, ni liste des procédures utiles.
+        for (const absent of ["## Procedure ", "### Étapes", "sellsy.list_estimates", "BROUILLON", "Procedures you can run"]) expect(text).not.toContain(absent)
         expect(result.structuredContent).toMatchObject({
           served: { path: "ventes/relance_devis", revision: 1, score: 1 },
           candidates: [
             { path: "ventes/relance_devis", title: relance.title, kind: "procedure", score: 1 },
             { path: "ventes/relance_prospects", title: acmeNode("ventes/relance_prospects").title, kind: "procedure", score: 0.43 },
             { path: "ventes/qualifier_prospects", title: acmeNode("ventes/qualifier_prospects").title, kind: "procedure", score: 0.4 },
+            { path: "ventes/point_pipeline", title: acmeNode("ventes/point_pipeline").title, kind: "procedure", score: 0.34 },
           ],
           data_question: false,
         })
@@ -464,8 +449,11 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
       // Revue du cycle 2 : la procédure décidée (1.00, écart net) mais illisible faisait demander à l'utilisateur de choisir.
       const failures = {
         "routing failed": await acmeDb("claire", { route, fail: (call) => (callsFunction(call, "route_candidates") ? { code: "57014" } : null) }),
-        // Toute lecture des blocs, d'une face ou de l'autre : celle de la procédure servie comprise.
-        "procedure read failed": await acmeDb("claire", { route, fail: (call) => (touches(call, "blocks") ? { code: "57014" } : null) }),
+        // La relecture de la révision de la procédure décidée (`servedRevision`, 2026-10-27).
+        "procedure read failed": await acmeDb("claire", {
+          route,
+          fail: (call) => (call.kind === "sql" && /select revision from platform\.nodes where id = /.test(call.text) ? { code: "57014" } : null),
+        }),
       }
       for (const [failure, { db }] of Object.entries(failures)) {
         const session = await connectDeps(mcpDeps(db, "claire"))
@@ -474,8 +462,7 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
         expect(text.split("\n\n")[0].split("\n").at(-1), failure).toBe(
           `Request « relance les devis en attente »: no procedure could be matched right now. ${ref.org.prefix}_find can search pages, tables and functions.`,
         )
-        // E03-S08 : « ## Procedures you can run » (procédures utiles) reste servi ; aucune procédure servie.
-        expect(text, failure).not.toContain("## Procedure ")
+        expect(text, failure).not.toContain("(best match;")
         expect(result.structuredContent, failure).toMatchObject({ served: null, candidates: [], data_question: false })
         expect(session.journal.at(-1)?.target, failure).toBe("relance les devis en attente")
         expect(log).toHaveBeenCalledWith(`[platform] context: ${failure}`, expect.anything())

@@ -103,18 +103,15 @@ describe.skipIf(!sqlConfigured || privatePending)(
         select type, text, data from platform.blocks where node_id = ${node} and state = 'published' order by position`
       expect(blocks).toEqual(EXPECTED)
 
-      // Rendus tels que la base les garde : `jsonb` range les clés des arguments (par longueur, puis octets).
+      // 2026-10-27 : `context` met la procédure en tête des proches et dit de la lire ; `read` en sert les étapes, rendues
+      // telles que la base les garde (`jsonb` range les clés des arguments, par longueur, puis octets).
       const served = await lea.call("context", { phrase: "relance les prospects par email" })
-      expect(served.text).toContain(
-        [
-          `## Procedure ${path} (v1): Relancer les prospects par email`,
-          "Follow these steps now. Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.",
-          `A \`\`\`call block holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.`,
-          "",
-          renderBlocks([...blocks], { headingBase: 3 }),
-        ].join("\n"),
-      )
-      expect(served.text).toContain('```call\nmail.send_draft {"id":"<id du brouillon>"}\n```')
+      expect(served.text).toContain(`\n- ${path} — Relancer les prospects par email: `)
+      expect(served.text).toContain(`read ${path} with ${prefix}_read {"path": "${path}"}, then follow its steps in order`)
+      expect(served.text).not.toContain("mail.send_draft")
+      const read = await lea.call("read", { path })
+      expect(read.text).toContain(renderBlocks([...blocks]))
+      expect(read.text).toContain('```call\nmail.send_draft {"id":"<id du brouillon>"}\n```')
 
       const appended = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Étapes", text: '4. Vérifie l\'envoi :\n   ```call\n   mail.send {"id": "<id>"}\n   ```' }], publish: false })
       expect(appended.isError, appended.text).toBe(false)
@@ -141,6 +138,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
           ["context", "Écris une procédure de relance", false],
           ["write", path, false],
           ["context", path, false],
+          ["read", path, false],
           ["write", path, false],
         ],
         [

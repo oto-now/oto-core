@@ -1,7 +1,7 @@
 // Service de `context` (ADR-002, H30) : émet le code `ctx` de la conversation, route la phrase
-// (E03-S02 : procédure servie, ou candidats et consigne) et rend les blocs code et procédure, puis les
-// Contextes de la personne et le contexte dynamique (E03-S08 : P39, nouveautés, procédures utiles,
-// contenus récents), dans le budget. E04-S01 ajoute les connecteurs d'équipe. E05-S12 (D109) : les faits de
+// (E03-S02 : les procédures proches, la décidée en tête, à lire par `read` depuis le 2026-10-27) et rend le bloc code,
+// puis les Contextes de la personne et le contexte dynamique (E03-S08 : P39 ; contenus récents et nouveautés, un seul
+// bloc depuis le 2026-10-27), dans le budget. E04-S01 ajoute les connecteurs d'équipe. E05-S12 (D109) : les faits de
 // la personne, de l'organisation et des équipes ouvrent la partie de leur Contexte, et le bloc code porte les
 // règles de l'espace. `context` et son aperçu (E05-S04) dérivent du même assemblage : un seul rendu.
 //
@@ -13,6 +13,7 @@
 // clé de service, sujets (ADR-011 § 7), notice, readme d'organisation, projets récents (architecture § 10).
 import { ctxChanges, issueCtx, lastCtxAt } from "../ctx"
 import type { PlatformDb } from "../db"
+import { inTransaction } from "../errors"
 import type { Identity } from "../identity"
 import { clip, lastHostSignature, MAX_TARGET_CHARS } from "../journal"
 import {
@@ -30,11 +31,8 @@ import type { ToolOutput } from "../tool-output"
 import { token } from "../pseudonym/token"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
-import { newsBlock, newsItems } from "./blocks/news"
 import { orgAddress, orgFacts } from "./blocks/org"
 import { personFacts } from "./blocks/person"
-import { procedureBlock } from "./blocks/procedure"
-import { proceduresBlock } from "./blocks/procedures"
 import { recentBlock } from "./blocks/recent"
 import { teamFacts } from "./blocks/team"
 import { CONTEXT_BUDGET, daysAgo, renderContext, type BlockReport, type ContextBlock } from "./engine"
@@ -47,21 +45,23 @@ type Routing = {
   served: Candidate | null
   /** Le genre de la phrase (E11-S04, AC-b2) ; `null` sans phrase. */
   kind: RequestKind | null
-  procedure: { block: ContextBlock; revision: number } | null
+  /** La révision de la procédure décidée (`served` en données) ; ses étapes ne sont plus servies (2026-10-27). */
+  revision: number | null
   /** Seuil et écart de l'organisation, dits sans procédure servie (E11-S19, AC-d1) ; `null` sans phrase. */
   settings: RoutingSettings | null
   /** Les pages et tableaux proches de la phrase (`relatedBlock`) ; aucun sans phrase ou en panne. */
   related: Candidate[]
 }
 
-const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, procedure: null, settings: null, related: [] }
+const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision: null, settings: null, related: [] }
 
 /**
  * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
- * routage, la procédure servie, les contenus proches et les procédures utiles passent avant les Contextes, puis les
- * nouveautés et les contenus récents. Sans elle, onze Contextes d'équipe faisaient couper les procédures, affichées après.
+ * routage (les procédures proches de la demande), puis les contenus proches, passent avant les Contextes, puis les
+ * contenus récents et les nouveautés (un seul bloc depuis le 2026-10-27, à la plus basse des deux priorités qu'il
+ * remplace). Sans elle, onze Contextes d'équipe faisaient couper ce qui est affiché après eux.
  */
-const PRIORITY = { code: 0, procedure: 1, related: 2, procedures: 3, contexts: 10, news: 100, recent: 101 } as const
+const PRIORITY = { code: 0, related: 2, contexts: 10, recent: 101 } as const
 
 /** Sans conversation antérieure, les nouveautés remontent à 14 jours (H34). */
 const NEWS_WINDOW_DAYS = 14
@@ -70,10 +70,21 @@ const NEWS_WINDOW_DAYS = 14
 const PREVIEW_CODE = "XXXX-XXXX"
 
 /**
- * Candidats de la phrase, décision au réglage de l'organisation et bloc de la procédure servie. Le
+ * La révision de la procédure décidée (`served` en données), relue par son `id` : `null` quand le nœud a disparu
+ * depuis le routage (N30). Ses étapes ne sont plus lues : `context` dit de la lire par `read` (2026-10-27).
+ */
+async function servedRevision(db: PlatformDb, served: Candidate): Promise<number | null> {
+  const [node] = await inTransaction(db, "context: served procedure", (sql) =>
+    sql<{ revision: number }[]>`select revision from platform.nodes where id = ${served.nodeId}`,
+  )
+  return node?.revision ?? null
+}
+
+/**
+ * Candidats de la phrase, décision au réglage de l'organisation et révision de la procédure décidée. Le
  * routage en panne ne refuse pas `context` (N17) : son `ctx` sert les autres outils, `feedback` compris.
  * Une procédure décidée mais illisible, ou disparue depuis le routage, le laisse de même sans issue :
- * ni étape ni candidat, la ligne de panne (N30), plutôt que des candidats entre lesquels faire choisir.
+ * ni procédure ni candidat, la ligne de panne (N30), plutôt que des candidats entre lesquels faire choisir.
  */
 async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): Promise<Routing> {
   const [candidates, settings, related] = await Promise.all([
@@ -89,21 +100,21 @@ async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): 
     }),
   ])
   const decided = candidates ? decide(candidates, settings) : null
-  const procedure = decided
-    ? await procedureBlock(db, decided, identity).catch((error: unknown) => {
+  const revision = decided
+    ? await servedRevision(db, decided).catch((error: unknown) => {
         console.error("[platform] context: procedure read failed", error)
         return null
       })
     : null
-  if (decided && !procedure) return { candidates: null, served: null, kind: requestKind(phrase), procedure: null, settings, related }
-  return { candidates, served: decided, kind: requestKind(phrase), procedure, settings, related }
+  if (decided && revision === null) return { candidates: null, served: null, kind: requestKind(phrase), revision: null, settings, related }
+  return { candidates, served: decided, kind: requestKind(phrase), revision, settings, related }
 }
 
-/** Données en champs (H26) : la procédure servie, les candidats montrés, scores à deux décimales. */
-function routingData({ candidates, served, kind, procedure }: Routing) {
+/** Données en champs (H26) : la procédure décidée, les candidats montrés, scores à deux décimales. */
+function routingData({ candidates, served, kind, revision }: Routing) {
   const score = (candidate: Candidate) => roundScore(candidate.score)
   return {
-    served: served && procedure ? { path: served.path, revision: procedure.revision, score: score(served) } : null,
+    served: served && revision !== null ? { path: served.path, revision, score: score(served) } : null,
     candidates: (candidates ?? []).map((candidate) => ({ path: candidate.path, title: candidate.title, kind: candidate.kind, score: score(candidate) })),
     // `true` pour une question de données seule (HN-E11S04-8) : ni `how` ni `request`.
     data_question: kind === null ? null : kind === "data",
@@ -150,6 +161,8 @@ function orOmitted(read: () => Promise<ContextBlock | null>, what: string): Prom
 
 type Assembly = {
   phrase?: string
+  /** L'origine de la requête MCP (`orgAddress`) : l'adresse d'Oto, première règle ; absente de l'aperçu. */
+  origin?: string
   /** Le code de la conversation : émis en même temps que les lectures (`context`), ou la forme d'un code (aperçu). */
   code: string | Promise<string>
   /** Borne des nouveautés (`newsSince`) ; `null` : bloc omis. */
@@ -174,18 +187,18 @@ function wholeWeights(blocks: readonly ContextBlock[]): WholeWeights {
 type Assembled = { code: string; text: string; report: BlockReport[]; routing: Routing; phrase: string | undefined; whole: WholeWeights }
 
 /**
- * L'assemblage commun de `context` et de l'aperçu (AC7, AC8, AC11) : en un seul `Promise.all`, le code,
- * le routage (puis le bloc de la procédure servie), les faits des équipes, les Contextes, les nouveautés,
- * les procédures utiles et les contenus récents, chaque branche enchaînant ses propres lectures ; puis les
- * blocs dans l'ordre de P39 — code (et ses règles), procédure, une partie par Contexte (Tout le monde,
- * Privé, équipes, chacune ouverte par sa ligne de faits, E05-S12 D109), nouveautés, procédures utiles,
- * contenus récents —, rendus dans le budget. Contextes illisibles : leurs parties et un pointeur ; bloc
- * dynamique illisible : omis (AC13).
+ * L'assemblage commun de `context` et de l'aperçu (AC7, AC8, AC11) : en un seul `Promise.all`, le code, le routage,
+ * les faits des équipes, les Contextes, et les contenus récents avec les nouveautés, chaque branche enchaînant ses
+ * propres lectures ; puis les blocs dans l'ordre de P39 — code (l'adresse d'Oto, les règles, les procédures proches de la
+ * demande), contenus proches, une partie par Contexte (Tout le monde, Privé, équipes, chacune ouverte par sa ligne de
+ * faits, E05-S12 D109), contenus récents et nouveautés —, rendus dans le budget. Depuis le 2026-10-27 (JB) : ni étapes
+ * d'une procédure, ni procédures utiles ; nouveautés et contenus récents en un bloc. Contextes illisibles : leurs parties
+ * et un pointeur ; bloc dynamique illisible : omis (AC13).
  */
 export async function assembleContext(db: PlatformDb, identity: Identity, assembly: Assembly): Promise<Assembled> {
   const phrase = assembly.phrase?.trim() || undefined
   const { since } = assembly
-  const [code, routing, teams, bodies, news, procedures, recent] = await Promise.all([
+  const [code, routing, teams, bodies, recent] = await Promise.all([
     assembly.code,
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
     teamFacts(db, identity),
@@ -193,21 +206,16 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
       console.error("[platform] context: contexts read failed", error)
       return null
     }),
-    since === null ? null : orOmitted(async () => newsBlock(await newsItems(db, identity, since), since), "news"),
-    orOmitted(() => proceduresBlock(db, identity), "procedures"),
-    orOmitted(() => recentBlock(db, identity), "recent content"),
+    orOmitted(() => recentBlock(db, identity, since), "recent content"),
   ])
-  const { candidates, served, kind, procedure, settings } = routing
+  const { candidates, served, kind, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
   const hints = phrase !== undefined && served === null ? await routingHints(db, identity, phrase) : undefined
   const prefix = identity.org.prefix
   const blocks = [
-    { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints }), priority: PRIORITY.code },
-    ...(procedure ? [{ ...procedure.block, priority: PRIORITY.procedure }] : []),
+    { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
     ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
     ...contextParts(identity, facts, bodies, phrase).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
-    ...withPriority(news, PRIORITY.news),
-    ...withPriority(procedures, PRIORITY.procedures),
     ...withPriority(recent, PRIORITY.recent),
   ]
   return { code, routing, phrase, whole: wholeWeights(blocks), ...renderContext(blocks, assembly.budget, prefix) }
@@ -247,7 +255,7 @@ async function lightContext(
   const { candidates, kind, settings } = routing
   const hints = phrase !== undefined && routing.served === null ? await routingHints(db, identity, phrase) : undefined
   const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed }, hints })
-  const blocks = [code, ...(routing.procedure ? [routing.procedure.block] : []), ...withPriority(relatedBlock(routing.related, identity.org.prefix), PRIORITY.related), ...parts]
+  const blocks = [code, ...withPriority(relatedBlock(routing.related, identity.org.prefix), PRIORITY.related), ...parts]
   return {
     text: renderContext(blocks, CONTEXT_BUDGET, identity.org.prefix).text,
     data: { ctx: issued.code, ...routingData(routing) },
@@ -278,7 +286,7 @@ export const PSEUDONYM_NOTICE =
 
 /**
  * La requête d'un `context` : son agent, `pseudonymized` quand la porte pseudonymise ce qui part (l'avis des jetons), et
- * l'origine de la requête MCP, qui donne l'adresse d'Oto (`orgAddress`).
+ * l'origine de la requête MCP, qui donne l'adresse d'Oto (`orgAddress`, première règle).
  */
 export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean; origin?: string }
 
@@ -304,14 +312,14 @@ async function fullContext(
   const issued = issueWithHost(db, identity, { userAgent: request.userAgent })
   const { code, text, routing, phrase } = await assembleContext(db, identity, {
     phrase: input.phrase,
+    origin: request.origin,
     code: issued.then((ctx) => ctx.code),
     since,
     budget: CONTEXT_BUDGET,
   })
   const { host } = await issued
-  const tail = [orgAddress(request.origin), request.pseudonymized ? PSEUDONYM_NOTICE : null].filter((line) => line !== null)
   return {
-    text: [text, ...tail].join("\n\n"),
+    text: request.pseudonymized ? `${text}\n\n${PSEUDONYM_NOTICE}` : text,
     data: { ctx: code, ...routingData(routing) },
     // La procédure servie, sinon la phrase : ce que relisent l'usage (E08-S09) et le bonus d'usage.
     target: routing.served?.path ?? (phrase === undefined ? null : clip(phrase, MAX_TARGET_CHARS)),

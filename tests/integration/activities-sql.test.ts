@@ -4,13 +4,13 @@
 // administre voit l'organisation ; un membre ses gestes, et ceux des équipes qu'il mène), ne rend jamais
 // `args` entiers, coupe l'espace personnel d'autrui à `private/<handle>` (D44), ne donne titre et lien que
 // d'un contenu que la personne lit, écarte les lignes en erreur et hors période, et dit `truncated` au-delà
-// de 2 000 lignes. Les procédures utiles (AC-18) : celles que la personne lit, publiées, dans l'ordre du bloc
-// servi. Portable : l'organisation O d'E01-S04 par `buildReferenceOrg`, chaque personne par `fx.as`.
+// de 2 000 lignes. Les procédures utiles (AC-18) : celles que la personne lit, publiées, par usage puis par chemin
+// (`context` ne les sert plus depuis le 2026-10-27). Portable : l'organisation O d'E01-S04 par `buildReferenceOrg`, chaque personne par `fx.as`.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { ActivityPage } from "../../packages/plateforme/schemas"
 import { JOURNAL_ROWS_SCANNED } from "../../packages/plateforme/schemas/journal"
 import { listActivities } from "../../packages/plateforme/server/activities"
-import { proceduresBlock, usefulProcedures } from "../../packages/plateforme/server/context/blocks/procedures"
+import { usefulProcedures } from "../../packages/plateforme/server/context/blocks/procedures"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { homeContents } from "../../packages/plateforme/server/home-contents"
 import { resolveIdentity, type Identity } from "../../packages/plateforme/server/identity"
@@ -216,15 +216,12 @@ describe.skipIf(!sqlConfigured)(portable("listActivities on a real base: scope, 
     expect(verdicts).toEqual(Object.fromEntries(reads.map(([name]) => [name, 1])))
   })
 
-  /** Les chemins des procédures listées par le bloc servi à `context`, dans son ordre. */
-  const blockPaths = (text: string) => text.split("\n").flatMap((line) => /^- ([a-z0-9_/]+): /.exec(line)?.[1] ?? [])
-
   it.each<[Who, number, string[]]>([
     // Léa a lancé « Relancer les devis » : l'usage la met devant, puis le chemin ; sa procédure privée est à elle.
     ["lea", 2, ["ventes/relance_devis", "private/lea/ma_procedure"]],
     // Ada n'a rien lancé : l'ordre des chemins ; ni la procédure privée de Léa, ni le brouillon.
     ["ada", 6, ["ventes/a_suivre", "ventes/relance_devis"]],
-  ])("should give %s the first %i useful procedures in the order of the served block, only those she reads and published (AC-18)", async (who, limit, expected) => {
+  ])("should give %s the first %i useful procedures by usage then path, only those she reads and published (AC-18)", async (who, limit, expected) => {
     const person = o.people[who]
     const db = fx.as(person)
     const identity = await resolveIdentity(db, o.host, { userId: person.id, email: person.email })
@@ -232,7 +229,6 @@ describe.skipIf(!sqlConfigured)(portable("listActivities on a real base: scope, 
     const procedures = await usefulProcedures(db, identity, limit)
     expect(procedures.map((procedure) => procedure.path)).toEqual(expected)
     expect(procedures.find((procedure) => procedure.path === "ventes/relance_devis")?.title).toBe("Relancer les devis")
-    expect(blockPaths((await proceduresBlock(db, identity)).text).slice(0, limit)).toEqual(expected)
   })
 })
 

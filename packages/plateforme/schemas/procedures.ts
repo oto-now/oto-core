@@ -8,14 +8,10 @@
 import * as z from "zod/v4"
 
 /**
- * La taille d'une procédure, servie entière par `context` (H30, P24) : son rendu, sans titre ni résumé (N6). Lue par le
- * contrôle à la publication et par le refus que dit l'écran : sans elle ici, l'écran écrivait la borne en chiffres.
+ * Les sept genres d'un refus (colonne « Genre » d'E03-S06), dans l'ordre des cas R2 à R13 ; R1 (`too_long`, une procédure
+ * de plus de 12 000 caractères) retiré le 2026-10-27 : `context` ne sert plus ses étapes, `read` la sert entière.
  */
-export const PROCEDURE_MAX_CHARS = 12_000
-
-/** Les huit genres d'un refus (colonne « Genre » d'E03-S06), dans l'ordre des cas R1 à R13. */
 export const PROCEDURE_REFUSAL_KINDS = [
-  "too_long",
   "invalid_block",
   "unknown_function",
   "function_not_active",

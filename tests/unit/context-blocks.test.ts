@@ -13,11 +13,11 @@ import { candidate } from "../integration/fixtures/acme"
 import { buildContext, previewContext } from "../../packages/plateforme/server/context"
 import { codeBlock, workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextBodies } from "../../packages/plateforme/server/context/blocks/contexts"
-import { newsBlock, newsItems } from "../../packages/plateforme/server/context/blocks/news"
+import { newsItems } from "../../packages/plateforme/server/context/blocks/news"
 import { orgAddress, orgFacts } from "../../packages/plateforme/server/context/blocks/org"
 import { personFacts } from "../../packages/plateforme/server/context/blocks/person"
-import { proceduresBlock } from "../../packages/plateforme/server/context/blocks/procedures"
-import { recentBlock } from "../../packages/plateforme/server/context/blocks/recent"
+import { usefulProcedures } from "../../packages/plateforme/server/context/blocks/procedures"
+import { recentBlock, recentText } from "../../packages/plateforme/server/context/blocks/recent"
 import { teamFacts } from "../../packages/plateforme/server/context/blocks/team"
 import { CONTEXT_BUDGET } from "../../packages/plateforme/server/context/engine"
 import { lastCtxAt } from "../../packages/plateforme/server/ctx"
@@ -60,10 +60,6 @@ vi.mock("../../packages/plateforme/server/context/blocks/contexts", async (impor
 vi.mock("../../packages/plateforme/server/context/blocks/news", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/context/blocks/news")>()
   return { ...original, newsItems: vi.fn(original.newsItems) }
-})
-vi.mock("../../packages/plateforme/server/context/blocks/procedures", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../packages/plateforme/server/context/blocks/procedures")>()
-  return { ...original, proceduresBlock: vi.fn(original.proceduresBlock) }
 })
 vi.mock("../../packages/plateforme/server/context/blocks/recent", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/context/blocks/recent")>()
@@ -191,7 +187,7 @@ describe("codeBlock", () => {
     const prospects = "words in common: prospects"
     // AC-a4 : la règle du routage renvoie aux candidates, au lieu de faire demander.
     expect(workspaceRules("acme")).toContain(
-      "\n- When a request matches a procedure, its steps come right after this part: follow them in order. Otherwise the closest procedures are listed there: use the one that fits, or search; ask the user when nothing fits.\n",
+      "\n- The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with acme_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.\n",
     )
     const question = "Combien de prospects avons-nous à Valbrune, et lesquels ?"
     const cases = [
@@ -236,25 +232,39 @@ describe("codeBlock", () => {
     )
   })
 
-  // E11-S16 (AC-a2) : la procédure servie l'est si la demande porte sur son titre ; les autres candidates, par titre et
-  // résumé, avec la consigne de lire plutôt celle qui correspond ; E11-S04 (AC-b3) : une demande « comment » explique.
-  it("should serve the steps when the request is about their title, list the other candidates to read instead, and explain for a how question", () => {
+  // 2026-10-27 (JB) : plus d'étapes servies ; la procédure décidée en tête des proches, marquée « best match », à lire par
+  // `read` puis à suivre ; E11-S04 (AC-b3) : sur une demande « comment », la lire, l'expliquer, n'exécuter que sur demande.
+  it("should list the decided procedure first as the best match, to read then follow, the others after it, and explain for a how question", () => {
     const served = { ...candidate("todo/creer_un_projet", 0.78), title: "Créer un nouveau projet", summary: "Crée un projet de la todo." }
     const task = { ...candidate("todo/ajouter_une_tache", 0.58), title: "Ajouter une tâche", summary: "Ajoute une tâche à ma todo." }
     const routing = (phrase: string, kind: RequestKind, candidates: Candidate[]) =>
       routingLineOf(codeBlock({ prefix: "demo", code: "7K3Q-M2XA", phrase, served, candidates, kind }).text)
     const how = "Comment je crée un projet ?"
     const asked = "Peux-tu créer un projet ?"
-    const matched = (phrase: string) => `Request « ${phrase} » matches todo/creer_un_projet (score 0.78): its steps follow, if the request is about « Créer un nouveau projet ».`
-    const others = [
-      "Other candidates:",
-      "- todo/ajouter_une_tache — Ajouter une tâche: Ajoute une tâche à ma todo. (0.58; no word in common)",
-      "If the request is about one of them instead, read that one with demo_read and follow it rather than these steps.",
+    const head = (phrase: string, words: string) => [
+      `Request « ${phrase} »: closest procedures, the best match first:`,
+      `- todo/creer_un_projet — Créer un nouveau projet: Crée un projet de la todo. (best match; 0.78; words in common: ${words})`,
     ]
+    const other = "- todo/ajouter_une_tache — Ajouter une tâche: Ajoute une tâche à ma todo. (0.58; no word in common)"
+    const follow =
+      'If the request is about « Créer un nouveau projet », read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, then follow its steps in order (if it is about another one listed, read and follow that one instead). ' +
+      'Each ```call block in it holds <function> <arguments JSON>: run it with demo_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one. ' +
+      "Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for."
 
-    expect(routing(asked, "request", [served, task])).toBe([matched(asked), ...others].join("\n"))
-    expect(routing(how, "how", [served, task])).toBe([matched(how), ...others, "It asks how: explain these steps, and run them only if the user asks."].join("\n"))
-    expect(routing(asked, "action", [served])).toBe(matched(asked))
+    expect(routing(asked, "request", [served, task])).toBe([...head(asked, "créer, projet"), other, follow].join("\n"))
+    expect(routing(how, "how", [served, task])).toBe(
+      [...head(how, "crée, projet"), other, 'It asks how: read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, explain its steps, and run them only if the user asks.'].join("\n"),
+    )
+    expect(routing(asked, "action", [served])).toBe([...head(asked, "créer, projet"), follow].join("\n"))
+  })
+
+  // 2026-10-27 (JB) : l'adresse d'Oto en première règle ; le `context` léger ne redit pas les règles, ni elle.
+  it("should give the address of Oto as the first rule, and not in a light context", () => {
+    const address = orgAddress("https://demo.example.test/api/mcp")
+    const lines = codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase: "Relance les devis", ...unmatched, address }).text.split("\n")
+    expect(lines.slice(2, 4)).toEqual(["## How this workspace works", `- ${address}`])
+    const light = codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase: "Relance les devis", ...unmatched, address, since: { code: "AAAA-BBBB", changed: [] } }).text
+    expect(light).not.toContain("This Oto is at")
   })
 })
 
@@ -491,11 +501,13 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("C
     const ref = await seedO(contextTables())
     const lea = leaOf(ref)
     const { text } = await buildContext(await ref.db("lea"), lea, {}, { userAgent: null, origin: "https://demo.example.test" })
-    expect(text.endsWith(`\n\n${orgAddress("https://demo.example.test")}`)).toBe(true)
+    // 2026-10-27 : l'adresse d'Oto en première règle, plus en fin de texte.
+    expect(text).toContain(`## How this workspace works\n- ${orgAddress("https://demo.example.test")}\n`)
     const start = text.indexOf("## Context: ")
     // E05-S12 (AC-1) : chaque partie s'ouvre par sa ligne de faits ; plus aucun bloc personne, organisation ni équipe.
     expect(text.slice(0, start).endsWith(`${routingLineOf(text)}\n\n`)).toBe(true)
-    expect(text.slice(start, text.indexOf("\n\n## What's new"))).toBe(
+    // Les parties de Contexte finissent le texte : ni nouveauté depuis 14 jours, ni contenu récent de Léa.
+    expect(text.slice(start)).toBe(
       [
         `## Context: everyone (contexte)\n${orgFacts(lea.org)}\n### Mission\n\nAcme Test conçoit des opérations d'autoconsommation collective.\n\n→ page: FAQ support — Réponses types. (support/faq)\n\n### Règles\n\nAucun email n'est envoyé sans accord.`,
         `## Context: you only (private/lea/contexte)\n${personFacts(lea)}\n### Ton\n\nTutoiement, phrases courtes.\n\n###### Détail\n\n###### Précision`,
@@ -528,8 +540,13 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("C
 /** Nœuds de O que Léa lit, un par ligne des nouveautés après « annonces » et « ventes/devis » (E11-S16, AC-b1). */
 const NEWS_NODES = ["guide", "contexte", "ventes", "ventes/contexte", "ventes/devis/modele", "ventes/x", "ventes/x/y"]
 
+/** Le genre d'un nœud de O : un Contexte à son chemin, une page sinon (`contentTables`). */
+const kindOf = (path: string) => (path === "contexte" || path.endsWith("/contexte") ? "context" : "page")
+
+// 2026-10-27 (JB) : les nouveautés sont servies dans le bloc des contenus récents, marquées `new v<rév>`, sous la borne
+// dite dans son titre ; 20 lignes au plus en tout.
 describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { timeout: REAL_BASE_TIMEOUT }, () => {
-  it("should list the last visible version of each node and the activations since the previous ctx in this organisation, most recent first, 10 lines counted after the filter (AC2 ; E11-S16, AC-b1)", async () => {
+  it("should list the last visible version of each node and the activations since the previous ctx in this organisation, most recent first, among the recent content (AC2 ; E11-S16, AC-b1)", async () => {
     const tables = oTables()
     tables.ctx.push(
       { code: "AAAA-0001", org_id: O.id, user_id: PEOPLE.lea.id, created_at: "2026-09-20T10:00:00.000Z" },
@@ -545,7 +562,7 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
       // Sept autres nœuds lus de Léa : les lignes 4 à 10.
       ...NEWS_NODES.map((path, rank) => version(path, 2, `Révision ${rank}`, `2026-09-22T0${8 - rank}:00:00.000Z`)),
       version("annonces", 1, "Annonce 1", "2026-09-21T10:00:00.000Z"),
-      // Onzième nœud : au-delà des 10 lignes.
+      // Onzième nœud : servi, la borne étant de 20 lignes en tout depuis le 2026-10-27.
       version("ventes/tarifs", 2, "Tarifs révisés", "2026-09-21T09:00:00.000Z"),
       version("ventes/tarifs", 1, "Tarifs", "2026-09-19T09:00:00.000Z"),
       // Sur la base réelle, la requête ne se lit plus : une page de versions de P, plus récentes que celles
@@ -564,13 +581,14 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
 
     // La borne est lue avant l'émission du code : lue après, elle serait la date du code émis.
     const { text } = await buildContext(await ref.db("lea"), ref.identityOf("lea"), {}, { userAgent: null })
-    expect(section(text, "## What's new")).toBe(
+    expect(section(text, "## Recent content")).toBe(
       [
-        "## What's new since 2026-09-20",
+        "## Recent content (new: published since 2026-09-20)",
         "- Connector mail activated (2026-09-24)",
-        "- annonces v9 (2026-09-23): Annonce 9",
-        "- ventes/devis v2 (2026-09-22): Devis révisé",
-        ...NEWS_NODES.map((path, rank) => `- ${path} v2 (2026-09-22): Révision ${rank}`),
+        "- annonces (page, new v9, 2026-09-23): Annonce 9",
+        "- ventes/devis (page, new v2, 2026-09-22): Devis révisé",
+        ...NEWS_NODES.map((path, rank) => `- ${path} (${kindOf(path)}, new v2, 2026-09-22): Révision ${rank}`),
+        "- ventes/tarifs (page, new v2, 2026-09-21): Tarifs révisés",
       ].join("\n"),
     )
     // Désactivé après la borne du code émis à l'instant : une activation inactive n'est pas une nouveauté.
@@ -578,16 +596,16 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
     const after = await buildContext(await ref.db("lea"), ref.identityOf("lea"), {}, { userAgent: null })
     expect(after.text).not.toContain("Connector notion")
 
-    // Sans `ctx` antérieur : depuis 14 jours ; rien → « Nothing new. ». La session s'ouvre avant l'horloge figée.
+    // Sans `ctx` antérieur ni contenu récent : depuis 14 jours ; rien → aucun bloc. La session s'ouvre avant l'horloge figée.
     const empty = await seedO(oTables())
     const db = await empty.db("marc")
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date("2026-09-25T08:00:00.000Z"))
     const first = await buildContext(db, empty.identityOf("marc"), {}, { userAgent: null })
-    expect(section(first.text, "## What's new")).toBe("## What's new since 2026-09-11\nNothing new.")
+    expect(section(first.text, "## Recent content")).toBeUndefined()
   })
 
-  it("should serve a page published yesterday at the next conversation, then no more (AC3)", async () => {
+  it("should serve a page published yesterday as new at the next conversation, then no more (AC3)", async () => {
     const yesterday = ago(24)
     const tables = oTables()
     tables.node_versions.push(version("ventes/devis", 2, "Devis révisé", yesterday))
@@ -595,17 +613,54 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
     const db = await ref.db("claire")
 
     const first = await buildContext(db, ref.identityOf("claire"), {}, { userAgent: null })
-    expect(section(first.text, "## What's new")?.split("\n")[1]).toBe(`- ventes/devis v2 (${day(yesterday)}): Devis révisé`)
-    // La conversation suivante, le même jour : rien de nouveau depuis aujourd'hui, aucun bloc (fiche D99, M53).
+    expect(section(first.text, "## Recent content")?.split("\n")[1]).toBe(`- ventes/devis (page, new v2, ${day(yesterday)}): Devis révisé`)
+    // La conversation suivante : plus nouvelle depuis la précédente, ni lue ni écrite par Claire, plus servie.
     const next = await buildContext(db, ref.identityOf("claire"), {}, { userAgent: null })
-    expect(section(next.text, "## What's new")).toBeUndefined()
-    // Une nouveauté de la journée reste servie sous une borne du jour même.
-    const today = new Date().toISOString()
-    expect(newsBlock([{ at: today, line: "- ventes/devis v3" }], today)?.text).toBe(`## What's new since ${day(today)}\n- ventes/devis v3`)
+    expect(next.text).not.toContain("ventes/devis (page")
   })
 })
 
-describe.skipIf(!sqlConfigured)(portable("procedures you can run (E03-S08, AC4)"), { timeout: REAL_BASE_TIMEOUT }, () => {
+// 2026-10-27 (JB) : huit contenus proches de la demande au plus (cinq avant), seuil de pertinence inchangé.
+describe.skipIf(!sqlConfigured)(portable("pages and tables close to the request"), { timeout: REAL_BASE_TIMEOUT }, () => {
+  it("should list eight close pages at most", async () => {
+    const pages = Array.from({ length: 9 }, (_, index): ContentNode => ({ path: `annonces/releve_${index}`, title: `Relevé des compteurs ${index}`, summary: `Relevé des compteurs du site ${index}.` }))
+    const ref = await seedO(oTables(pages))
+    const { text } = await buildContext(await ref.db("lea"), ref.identityOf("lea"), { phrase: "relevé des compteurs" }, { userAgent: null })
+    const lines = section(text, "## Pages and tables close to the request")?.split("\n") ?? []
+    expect(lines.filter((line) => line.startsWith("- annonces/releve_"))).toHaveLength(8)
+  })
+})
+
+// 2026-10-27 (JB) : nouveautés et contenus récents en un bloc, une ligne par contenu, jamais deux fois le même.
+describe("recentText", () => {
+  it("should serve one line per content, the new version winning over the recent read, connectors kept, most recent first, 20 at most", () => {
+    const since = "2026-10-20T09:00:00.000Z"
+    const news = {
+      versions: [{ path: "ventes/devis", kind: "page", revision: 3, title: "Devis 2026", at: "2026-10-26T08:00:00.000Z" }],
+      activations: [{ connector: "mail", at: "2026-10-25T08:00:00.000Z" }],
+    }
+    const documents = [
+      { path: "ventes/devis", kind: "page", title: "Devis 2026", at: "2026-10-27T08:00:00.000Z" },
+      { path: "ventes/suivi", kind: "table", title: "Suivi", at: "2026-10-24T08:00:00.000Z" },
+    ]
+    expect(recentText(documents, news, since)).toEqual({
+      name: "recent content",
+      text: [
+        "## Recent content (new: published since 2026-10-20)",
+        "- ventes/devis (page, new v3, 2026-10-26): Devis 2026",
+        "- Connector mail activated (2026-10-25)",
+        "- ventes/suivi (table, 2026-10-24): Suivi",
+      ].join("\n"),
+    })
+    const many = Array.from({ length: 25 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
+    const lines = recentText(many, null, null)?.text.split("\n") ?? []
+    expect([lines[0], lines.length, lines.at(-1)]).toEqual(["## Recent content", 21, "- ventes/p19 (page, 2026-10-07): P19"])
+    expect(recentText([], { versions: [], activations: [] }, since)).toBeNull()
+  })
+})
+
+// 2026-10-27 (JB) : `context` ne sert plus ces procédures ; l'accueil (« Lancer avec Claude ») les lit dans le même ordre.
+describe.skipIf(!sqlConfigured)(portable("useful procedures of the home (E03-S08, AC4)"), { timeout: REAL_BASE_TIMEOUT }, () => {
   const PROCEDURES: ContentNode[] = [
     { path: "ventes/relance", kind: "procedure", summary: "Relance les devis en attente." },
     { path: "ventes/qualifier", kind: "procedure", summary: "Qualifie les prospects." },
@@ -616,9 +671,8 @@ describe.skipIf(!sqlConfigured)(portable("procedures you can run (E03-S08, AC4)"
   ]
   const lines = (count: number, make: () => Row) => Array.from({ length: count }, make)
 
-  it("should list the visible published procedures by their published summary, by the usage over 90 days the person may count, then by path (AC4)", async () => {
+  it("should list the visible published procedures by the usage over 90 days the person may count, then by path (AC4)", async () => {
     const tables = oTables(PROCEDURES)
-    openDraftRow(tables, "ventes/point", { summary: "Résumé en attente." })
     // Sur la base réelle, Claire membre de P : ses lignes de P lui reviennent sous l'isolation, le service les écarte.
     tables.members.push({ org_id: OTHER_ORG.id, user_id: PEOPLE.claire.id, role: "member", default_team_id: null, profile: { name: PEOPLE.claire.name, handle: "claire" } })
     const ventes = { team_id: TEAMS.ventes.id }
@@ -636,28 +690,16 @@ describe.skipIf(!sqlConfigured)(portable("procedures you can run (E03-S08, AC4)"
       ...lines(2, () => journalLine("ada", "ventes/relance", ago(24))),
     )
     const ref = await seedO(tables)
-    const summaries = {
-      point: "- ventes/point: Fait le point sur le pipeline.",
-      relance: "- ventes/relance: Relance les devis en attente.",
-      qualifier: "- ventes/qualifier: Qualifie les prospects.",
-      lire: "- annonces/lire: Lit les annonces.",
-      ticket: "- support/ticket: Répond à un ticket.",
-    }
+    const paths = async (person: Person, who: Identity) => (await usefulProcedures(await ref.db(person), who, 60)).map((procedure) => procedure.path)
 
     // Claire mène Ventes : ses lignes et celles de Ventes comptent (H74, N3).
-    expect((await proceduresBlock(await ref.db("claire"), ref.identityOf("claire"))).text).toBe(
-      ["## Procedures you can run, most used first (4)", summaries.point, summaries.relance, summaries.qualifier, summaries.lire].join("\n"),
-    )
+    expect(await paths("claire", ref.identityOf("claire"))).toEqual(["ventes/point", "ventes/relance", "ventes/qualifier", "annonces/lire"])
     // Léa, simple membre : ses seules lignes.
-    expect((await proceduresBlock(await ref.db("lea"), ref.identityOf("lea"))).text).toBe(
-      ["## Procedures you can run, most used first (4)", summaries.relance, summaries.qualifier, summaries.lire, summaries.point].join("\n"),
-    )
+    expect(await paths("lea", ref.identityOf("lea"))).toEqual(["ventes/relance", "ventes/qualifier", "annonces/lire", "ventes/point"])
     // Ada, administratrice et simple membre de Ventes : ses lignes et toutes celles de ses équipes (isOrgAdmin).
-    expect((await proceduresBlock(await ref.db("ada"), ref.identityOf("ada", { teams: [ref.teamOf("ventes", "ada")] }))).text).toBe(
-      ["## Procedures you can run, most used first (5)", summaries.relance, summaries.point, summaries.qualifier, summaries.lire, summaries.ticket].join("\n"),
-    )
+    expect(await paths("ada", ref.identityOf("ada", { teams: [ref.teamOf("ventes", "ada")] }))).toEqual(["ventes/relance", "ventes/point", "ventes/qualifier", "annonces/lire", "support/ticket"])
     const empty = await seedO(oTables())
-    expect((await proceduresBlock(await empty.db("marc"), empty.identityOf("marc"))).text).toBe("## Procedures you can run, most used first (0)\nNone published yet.")
+    expect(await usefulProcedures(await empty.db("marc"), empty.identityOf("marc"), 60)).toEqual([])
   })
 })
 
@@ -714,7 +756,7 @@ describe.skipIf(!sqlConfigured)(portable("recent content (E03-S08, AC5 ; E05-S12
     Object.assign(tables.nodes.find((row) => row.id === nodeId("annonces/de_claire")) ?? {}, { updated_by: PEOPLE.claire.id, updated_at: at[1] })
     const ref = await seedO(tables)
 
-    const block = await recentBlock(await ref.db("lea"), ref.identityOf("lea"))
+    const block = await recentBlock(await ref.db("lea"), ref.identityOf("lea"), null)
     expect(block?.text).toBe(
       [
         "## Recent content",
@@ -726,40 +768,13 @@ describe.skipIf(!sqlConfigured)(portable("recent content (E03-S08, AC5 ; E05-S12
       ].join("\n"),
     )
     const empty = await seedO(oTables())
-    expect(await recentBlock(await empty.db("marc"), empty.identityOf("marc"))).toBeNull()
+    expect(await recentBlock(await empty.db("marc"), empty.identityOf("marc"), null)).toBeNull()
   })
 })
 
 // E11-S03 (AC-b1, HN-E11S03-15, fiche D134) : plus de taille par bloc ; les bornes en lignes restent, et un arrêt se dit.
 describe.skipIf(!sqlConfigured)(portable("the dynamic blocks served whole (E03-S08, AC6 ; E11-S03, AC-b1)"), { timeout: REAL_BASE_TIMEOUT }, () => {
-  it("should serve what's new and recent documents whole, and the procedures up to 60 lines, the first 15 by summary, then by title, with a last line counting the others", async () => {
-    const items = Array.from({ length: 10 }, (_, index) => ({
-      at: `2026-09-23T0${9 - index}:00:00.000Z`,
-      line: `- annonces v${10 - index} (2026-09-23): ${"Une annonce au titre long ".repeat(3)}${10 - index}`,
-    }))
-    const news = newsBlock(items, "2026-09-20T10:00:00.000Z")
-    const newsLines = ["## What's new since 2026-09-20", ...items.map((item) => item.line)]
-    // Plus longues que l'ancienne taille de 600 : entières.
-    expect(news).toEqual({ name: "news", text: newsLines.join("\n") })
-    expect(news?.text.length).toBeGreaterThan(600)
-
-    const procedure = (index: number, summary: string): ContentNode => ({ path: `annonces/p${String(index).padStart(2, "0")}`, kind: "procedure", title: `Procédure ${index}`, summary })
-    const long = Array.from({ length: 70 }, (_, index) => procedure(index, `Procédure ${index} : ${"étape détaillée ".repeat(9)}`.trim()))
-    const longRef = await seedO(oTables(long))
-    const procedures = await proceduresBlock(await longRef.db("marc"), longRef.identityOf("marc"))
-    const lines = procedures.text.split("\n")
-    expect(procedures.cut).toBe(true)
-    // 60 lignes, puis celle qui compte les autres ; les 15 premières par leur résumé, les suivantes par leur titre (E11-S16).
-    expect(lines[0]).toBe("## Procedures you can run, most used first (70)")
-    expect(lines.slice(1, -1)).toEqual(long.slice(0, 60).map((node, rank) => `- ${node.path}: ${rank < 15 ? node.summary : node.title}`))
-    expect(lines.at(-1)).toBe(`… and 10 more: find them with ${longRef.org.prefix}_find, type procedure.`)
-    // Plus de procédures qu'une lecture n'en rend (`supabase-patterns.md § Error Handling`) : toutes comptées.
-    const short = Array.from({ length: 1005 }, (_, index) => procedure(index, `Procédure ${index}.`))
-    const shortRef = await seedO(oTables(short))
-    const capped = (await proceduresBlock(await shortRef.db("marc"), shortRef.identityOf("marc"))).text.split("\n")
-    expect(capped.length).toBe(62)
-    expect([capped[0], capped.at(-1)]).toEqual(["## Procedures you can run, most used first (1005)", `… and 945 more: find them with ${shortRef.org.prefix}_find, type procedure.`])
-
+  it("should serve the recent documents whole", async () => {
     const documents = Array.from({ length: 20 }, (_, index): ContentNode => ({ path: `annonces/doc${String(index).padStart(2, "0")}`, title: `${"Un document au titre long ".repeat(4)}${index}` }))
     const updated = documents.map((_, index) => ago(index + 1))
     const tables = oTables(documents)
@@ -767,7 +782,7 @@ describe.skipIf(!sqlConfigured)(portable("the dynamic blocks served whole (E03-S
       Object.assign(tables.nodes.find((row) => row.id === nodeId(document.path)) ?? {}, { updated_by: PEOPLE.marc.id, updated_at: updated[index] })
     })
     const documentsRef = await seedO(tables)
-    const recent = await recentBlock(await documentsRef.db("marc"), documentsRef.identityOf("marc"))
+    const recent = await recentBlock(await documentsRef.db("marc"), documentsRef.identityOf("marc"), null)
     const recentLines = ["## Recent content", ...documents.map((document, index) => `- ${document.path} (page, ${day(updated[index])}): ${document.title}`)]
     // Plus longs que l'ancienne taille de 1 400 : entiers.
     expect(recent).toEqual({ name: "recent content", text: recentLines.join("\n") })
@@ -783,7 +798,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
     ])
     addBlocks(tables, "contexte", "published", [{ type: "paragraph", text: "Acme Test conçoit des opérations." }])
     addBlocks(tables, "ventes/contexte", "published", [{ type: "paragraph", text: `${"Une règle de Ventes. ".repeat(40)}\n${"Une autre règle. ".repeat(40)}` }])
-    // Des étapes plus longues que le plafond (35 000, E11-S03) : la procédure servie cède la place à son pointeur.
+    // Des étapes plus longues que le plafond (35 000, E11-S03) : jamais servies depuis le 2026-10-27, `read` les sert.
     addBlocks(tables, "ventes/relance", "published", [{ type: "paragraph", text: "Étape. ".repeat(6000) }])
     tables.ctx.push({ code: "AAAA-0001", org_id: O.id, user_id: PEOPLE.lea.id, created_at: "2026-09-20T10:00:00.000Z" })
     // Le vrai routage (`route_candidates`) sert la procédure : son résumé porte la demande mot pour mot.
@@ -814,16 +829,17 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
     // E05-S12 (AC-4) : une partie par Contexte, nommée par son chemin, `path` seulement quand son corps est servi.
     expect(preview.blocks.map(({ name, status, path }) => [name, status, path])).toEqual([
       ["code", "full", null],
-      ["procedure", "replaced", null],
       ["related", "full", null],
       ["contexte", "full", "contexte"],
       ["private/lea/contexte", "full", null],
       // Plus de taille par partie (E11-S03, AC-b1) : le Contexte de Ventes, plus long que l'ancienne, entier.
       ["ventes/contexte", "full", "ventes/contexte"],
       ["support/contexte", "full", null],
-      ["news", "full", null],
-      ["procedures", "full", null],
+      // Ni nouveauté depuis la borne, ni contenu récent de Léa : aucun bloc (« Nothing new. » n'est plus servi).
     ])
+    // 2026-10-27 : ni étapes, ni procédures utiles ; la procédure décidée en tête des proches, à lire.
+    expect(preview.text).not.toContain("Étape. ")
+    expect(preview.text).toContain(`(best match; `)
     const included = preview.blocks.filter((block) => block.chars > 0)
     expect(included.reduce((sum, block) => sum + block.chars, 0) + 2 * (included.length - 1)).toBe(preview.text.length)
     const ventes = preview.blocks.find((block) => block.name === "ventes/contexte")
@@ -870,8 +886,7 @@ describe.skipIf(!sqlConfigured)(portable("filtering by the service (E03-S08, AC9
       expect(section(text, "## Context: everyone")).toBe(
         `## Context: everyone (contexte)\n${orgFacts(paul.org)}\nLes pages utiles sont liées ci-dessous.\n\nLinked pages:\n- support/faq — support/faq — Summary of support/faq.`,
       )
-      expect(section(text, "## What's new")?.split("\n").slice(1)).toEqual([`- support/faq v2 (${day(faqAt)}): FAQ révisée`])
-      expect(section(text, "## Procedures you can run, most used first")).toBe("## Procedures you can run, most used first (1)\n- support/ticket: Répond à un ticket.")
+      expect(section(text, "## Recent content")?.split("\n").slice(1)).toEqual([`- support/faq (page, new v2, ${day(faqAt)}): FAQ révisée`])
     }
   })
 })
@@ -994,7 +1009,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("f
     // E05-S12 (AC-3) : l'en-tête, la ligne de faits, puis le pointeur.
     const notLoaded = (header: string, path: string, facts: string) => `## Context: ${header} (${path})\n${facts}\nNot loaded: read it with ${prefix}_read {"path": "${path}"}.`
     const everyoneNotLoaded = notLoaded("everyone", "contexte", orgFacts(lea.org))
-    expect(contexts.text.slice(contexts.text.indexOf("## Context: "), contexts.text.indexOf("\n\n## What's new"))).toBe(
+    expect(contexts.text.slice(contexts.text.indexOf("## Context: "), contexts.text.indexOf("\n\n## Recent content"))).toBe(
       [
         everyoneNotLoaded,
         notLoaded("you only", "private/lea/contexte", personFacts(lea)),
@@ -1005,33 +1020,22 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("f
     expect(log).toHaveBeenCalledWith("[platform] context: contexts read failed", expect.anything())
     expect(contexts.text).not.toContain("statement timeout")
 
-    // Les versions (`news.ts`), l'usage du journal (`procedures.ts`), les blocs écrits par la personne (`recent.ts`).
-    const omitted: [string, () => void][] = [
-      ["## What's new", () => vi.mocked(newsItems).mockImplementationOnce(failure("context: node_versions"))],
-      ["## Procedures you can run, most used first", () => vi.mocked(proceduresBlock).mockImplementationOnce(failure("context: journal usage"))],
-      ["## Recent content", () => vi.mocked(recentBlock).mockImplementationOnce(failure("context: recent blocks"))],
-    ]
-    for (const [heading, fail] of omitted) {
-      fail()
-      const { text, ctx } = await buildContext(db, lea, {}, { userAgent: null })
-      expect(text.startsWith(`ctx: ${ctx}\n`), heading).toBe(true)
-      expect(section(text, heading), heading).toBeUndefined()
-      expect(section(text, "## Context: everyone"), heading).toBe(`## Context: everyone (contexte)\n${orgFacts(lea.org)}\nAcme Test conçoit des opérations.`)
-    }
-    // Sans panne, chacun de ces blocs est servi : aucune de ces omissions n'est vide de sens. Le lendemain des appels
-    // précédents : rien de nouveau depuis le jour même omettrait « What's new » (M53).
-    vi.useFakeTimers({ toFake: ["Date"] })
-    vi.setSystemTime(new Date(Date.now() + 24 * 3600 * 1000))
-    let served: string
-    try {
-      served = (await buildContext(db, lea, {}, { userAgent: null })).text
-    } finally {
-      vi.useRealTimers()
-    }
-    expect(omitted.map(([heading]) => section(served, heading) !== undefined)).toEqual([true, true, true])
-    // La borne des nouveautés illisible (`ctx.ts`) : le bloc est omis, le code est émis ; l'aperçu fait de même.
+    // Les blocs écrits par la personne (`recent.ts`) : le bloc des contenus récents et des nouveautés est omis.
+    const heading = "## Recent content"
+    vi.mocked(recentBlock).mockImplementationOnce(failure("context: recent blocks"))
+    const withoutRecent = await buildContext(db, lea, {}, { userAgent: null })
+    expect(withoutRecent.text.startsWith(`ctx: ${withoutRecent.ctx}\n`)).toBe(true)
+    expect(section(withoutRecent.text, heading)).toBeUndefined()
+    expect(section(withoutRecent.text, "## Context: everyone")).toBe(`## Context: everyone (contexte)\n${orgFacts(lea.org)}\nAcme Test conçoit des opérations.`)
+    // Les versions (`news.ts`) en panne : les contenus récents restent, sans borne ni nouveauté.
+    vi.mocked(newsItems).mockImplementationOnce(failure("context: node_versions"))
+    expect(section((await buildContext(db, lea, {}, { userAgent: null })).text, heading)?.split("\n")[0]).toBe(heading)
+    expect(log).toHaveBeenCalledWith("[platform] context: news read failed", expect.anything())
+    // Sans panne, le bloc est servi avec sa borne : l'omission n'est pas vide de sens.
+    expect(section((await buildContext(db, lea, {}, { userAgent: null })).text, heading)?.split("\n")[0]).toMatch(/^## Recent content \(new: published since \d{4}-\d{2}-\d{2}\)$/)
+    // La borne des nouveautés illisible (`ctx.ts`) : les contenus récents sans borne, le code est émis ; l'aperçu fait de même.
     vi.mocked(lastCtxAt).mockImplementationOnce(failure("lastCtxAt: ctx"))
-    expect(section((await buildContext(db, lea, {}, { userAgent: null })).text, "## What's new")).toBeUndefined()
+    expect(section((await buildContext(db, lea, {}, { userAgent: null })).text, heading)?.split("\n")[0]).toBe(heading)
     vi.mocked(contextBodies).mockImplementationOnce(failure("context: context links"))
     expect(section((await previewContext(db, lea, {})).text, "## Context: everyone")).toBe(everyoneNotLoaded)
     for (const message of log.mock.calls.flat()) expect(String(message)).not.toContain("statement timeout")

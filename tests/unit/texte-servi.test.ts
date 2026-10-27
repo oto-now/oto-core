@@ -13,15 +13,14 @@
 //   parties du serveur (`contextParts`), entière, puis ramenée par le recul du texte.
 // - E05-S13 (retour 8, AC-15, AC-16 ; HN-E05S13-12 à -14) : l'écran relit le texte servi par `context` pour le dire
 //   en français, par les formats de `schemas/context-index.ts`. Chaque bloc est rendu ici par le service même
-//   (`proceduresText`, `newsBlock`, `recentText`, `contextParts`, `renderContext`), puis relu par
+//   (`recentText`, nouveautés comprises depuis le 2026-10-27, `contextParts`, `renderContext`), puis relu par
 //   `ui/contexte/parties-du-contexte.ts` : un format changé d'un côté seulement fait échouer ces tests. Les listes
 //   d'index d'un Contexte sont écrites en toutes lettres (le corps d'un Contexte se lit en base, `contextBody`) : ce
 //   sont celles du contrat, M71. Une ligne non reconnue reste telle que servie.
 import { describe, expect, it } from "vitest"
 import { workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextParts, type ContextBody, type PartFacts } from "../../packages/plateforme/server/context/blocks/contexts"
-import { activationItem, newsBlock, versionItem } from "../../packages/plateforme/server/context/blocks/news"
-import { proceduresText } from "../../packages/plateforme/server/context/blocks/procedures"
+import { orgAddress } from "../../packages/plateforme/server/context/blocks/org"
 import { recentText } from "../../packages/plateforme/server/context/blocks/recent"
 import { CONTEXT_BUDGET, renderContext, type ContextBlock } from "../../packages/plateforme/server/context/engine"
 import type { Identity, IdentityTeam } from "../../packages/plateforme/server/identity"
@@ -180,35 +179,16 @@ describe("contextParts (E05-S12, AC-1 to AC-4)", () => {
 
 // E11-S03 (lot b, fiche D134) : plus de taille par bloc ; seul le plafond de `renderContext` coupe, et toute coupe
 // est dite (le plafond : `context-engine.test.ts`).
-describe("procedures named by their titles at the budget", () => {
-  it("should give the useful procedures a fallback that names each one by its title, under the same header", () => {
-    const procedures = proceduresText(
-      [
-        { path: "ventes/relance", title: "Relancer les devis", summary: "Relance les devis restés sans réponse depuis dix jours, un par client." },
-        { path: "support/ticket", title: "Répondre à un ticket", summary: "Répond à un ticket du support avec la FAQ et le contrat du client." },
-      ],
-      "acme",
-    )
-    expect(procedures.fallback).toBe("## Procedures you can run, most used first (2)\n- ventes/relance: Relancer les devis\n- support/ticket: Répondre à un ticket")
-  })
-})
-
 describe("whole blocks under the cap (E11-S03, AC-b1, AC-b2)", () => {
-  it("should serve a 10,000-character Contexte, 60 useful procedures and 10 news whole, without pointer nor notice, every report line full", () => {
+  it("should serve a 10,000-character Contexte and 20 recent or new contents whole, without pointer nor notice, every report line full", () => {
     const long = Array.from({ length: 200 }, (_, index) => `Règle ${index} de l'organisation, relue chaque trimestre.`).join("\n").slice(0, 10_000)
     expect(long.length).toBe(10_000)
     const parts = contextParts(identity(), FACTS, new Map([["contexte", body(long)]]))
-    const procedures = proceduresText(
-      Array.from({ length: 60 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, title: `Procédure ${index} : ${"étape ".repeat(21)}`.trim(), summary: `Procédure ${index} : ${"étape ".repeat(21)}`.trim() })),
-      "acme",
-    )
-    const news = newsBlock(
-      Array.from({ length: 10 }, (_, index) => ({ at: `2026-09-2${index % 9}T08:00:00.000Z`, line: `- annonces v${index + 1} (2026-09-23): ${"Une annonce ".repeat(6)}${index}` })),
-      "2026-09-20T10:00:00.000Z",
-    )
-    const blocks = [{ name: "code", text: "ctx: XXXX-XXXX" }, ...parts, ...(news ? [news] : []), procedures]
-    // Des tailles qui dépassaient chacune l'ancienne taille nominale (2 400, 8 000, 600), un total sous le plafond.
-    expect([procedures.text.length > 8_000 && procedures.text.length < 10_000, (news?.text.length ?? 0) > 800]).toEqual([true, true])
+    const versions = Array.from({ length: 20 }, (_, index) => ({ path: `annonces/a${index}`, kind: "page", revision: index + 1, title: `${"Une annonce ".repeat(6)}${index}`, at: `2026-09-2${index % 9}T08:00:00.000Z` }))
+    const recent = recentText([], { versions, activations: [] }, "2026-09-20T10:00:00.000Z")
+    const blocks = [{ name: "code", text: "ctx: XXXX-XXXX" }, ...parts, ...(recent ? [recent] : [])]
+    // Plus long que les anciennes tailles nominales des nouveautés et des contenus récents (600, 1 400), un total sous le plafond.
+    expect((recent?.text.length ?? 0) > 1_400).toBe(true)
     const { text, report } = renderContext(blocks, CONTEXT_BUDGET, "acme")
     expect(text).toBe(blocks.map((block) => block.text).join("\n\n"))
     expect(text).toContain(`${HEADS.everyone}\n${long}\n\n`)
@@ -265,6 +245,11 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     // Aucune donnée d'une identité, aucun nom de produit ni de client : seul le préfixe varie.
     expect(workspaceRules("acme").replaceAll("acme_", "abcdefghij_")).toBe(rules)
     for (const word of ["<p>", "Oto", "Claude", "ChatGPT", "Acme", "ventes"]) expect(rules).not.toContain(word)
+    // 2026-10-27 : l'adresse d'Oto, première règle quand l'origine se lit ; une ligne de plus.
+    const address = orgAddress("https://demo.example.test/api/mcp")
+    const withAddress = workspaceRules("abcdefghij", address)
+    expect(withAddress.split("\n")).toEqual([rules.split("\n")[0], `- ${address}`, ...rules.split("\n").slice(1)])
+    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(19)
   })
 })
 
@@ -370,8 +355,6 @@ describe("partiesDuContexte, the head of a part (E05-S12, AC-4, AC-7)", () => {
 describe("ancreDeLaPartie (AC-11, HN-E05S11-9 ; E05-S12, AC-8, HN-E05S12-10 ; E11-S07, AC-c1)", () => {
   it("should anchor each part by its name, at its rank when it has no anchor of its own", () => {
     const ancres: [{ name: string }, string][] = [
-      [{ name: "news" }, "news"],
-      [{ name: "procedures" }, "procedures"],
       [{ name: "recent content" }, "recent-content"],
       // Une partie de Contexte par son nom, servie ou non.
       [{ name: "contexte" }, "everyone-context"],
@@ -384,6 +367,9 @@ describe("ancreDeLaPartie (AC-11, HN-E05S11-9 ; E05-S12, AC-8, HN-E05S12-10 ; E1
       // inconnu, son rang.
       [{ name: "code" }, "part-5"],
       [{ name: "person" }, "part-5"],
+      // Les nouveautés et les procédures utiles, servies à part jusqu'au 2026-10-27.
+      [{ name: "news" }, "part-5"],
+      [{ name: "procedures" }, "part-5"],
       [{ name: "calendar" }, "part-5"],
     ]
     expect(Object.fromEntries(ancres.map(([bloc]) => [bloc.name, ancreDeLaPartie(bloc, 4)]))).toEqual(Object.fromEntries(ancres.map(([bloc, ancre]) => [bloc.name, ancre])))
@@ -406,62 +392,36 @@ describe("cheminDuContexte (E05-S12, AC-7)", () => {
   })
 })
 
-describe("the procedures block read back (AC-16)", () => {
-  it("should read its count, each procedure by its path and summary, the none line and the more line", () => {
-    // Un résumé qui porte lui-même « : » reste entier : le chemin s'arrête au premier séparateur.
-    expect(relu(proceduresText([{ path: "ventes/qualifier", title: "Qualifier un prospect", summary: "Qualifie un prospect : score et suite." }], "demo"))).toEqual([
-      { genre: "liste", legende: { genre: "procedures", nombre: 1 }, lignes: [{ genre: "procedure", chemin: "ventes/qualifier", resume: "Qualifie un prospect : score et suite." }] },
-    ])
-    expect(relu(proceduresText([], "demo"))).toEqual([
-      { genre: "liste", legende: { genre: "procedures", nombre: 0 }, lignes: [] },
-      { genre: "phrase", phrase: "aucune-procedure" },
-    ])
-    // 61 procédures : 60 listées, la dernière ligne compte l'autre.
-    const nombreuses = Array.from({ length: 61 }, (_, rang) => ({ path: `ventes/p${String(rang).padStart(2, "0")}`, title: "Une procédure", summary: "Une procédure." }))
-    const morceaux = relu(proceduresText(nombreuses, "demo"))
-    expect(morceaux.map((morceau) => (morceau.genre === "liste" ? [morceau.genre, morceau.lignes.length] : morceau))).toEqual([
-      ["liste", 60],
-      { genre: "autres-procedures", nombre: 1 },
-    ])
-  })
-})
-
-describe("the news block read back (AC-16)", () => {
-  it("should read its date, a version, a connector, and « Nothing new. »", () => {
-    const depuis = "2026-09-20T10:00:00.000Z"
-    const items = [versionItem({ path: "ventes/devis", revision: 3, title: "Devis (modèle): 2026" }, "2026-09-27T08:00:00.000Z"), activationItem("mail", "2026-09-26T08:00:00.000Z")]
-    expect(relu(newsBlock(items, depuis))).toEqual([
+// 2026-10-27 : nouveautés et contenus récents en un bloc ; l'écran relit la borne, chaque nouveauté et chaque contenu.
+describe("the recent content block read back (AC-16)", () => {
+  it("should read the bound of the news, a new version, a connector and each content by its path, kind, date and title", () => {
+    const news = {
+      versions: [{ path: "ventes/devis", kind: "page", revision: 3, title: "Devis (modèle): 2026", at: "2026-09-28T08:00:00.000Z" }],
+      activations: [{ connector: "mail", at: "2026-09-26T08:00:00.000Z" }],
+    }
+    const bloc = recentText(
+      [
+        { path: "ventes/tarifs", kind: "table", title: "Tarifs (2026): grille", at: "2026-09-27T08:00:00.000Z" },
+        { path: "ventes/faq", kind: "page", title: "FAQ", at: "2026-09-25T08:00:00.000Z" },
+      ],
+      news,
+      "2026-09-20T10:00:00.000Z",
+    )
+    expect(relu(bloc)).toEqual([
       {
         genre: "liste",
         legende: { genre: "nouveautes", depuis: "2026-09-20" },
         lignes: [
-          { genre: "version", chemin: "ventes/devis", revision: 3, date: "2026-09-27", titre: "Devis (modèle): 2026" },
-          { genre: "connecteur", nom: "mail", date: "2026-09-26" },
-        ],
-      },
-    ])
-    expect(relu(newsBlock([], depuis))).toEqual([
-      { genre: "liste", legende: { genre: "nouveautes", depuis: "2026-09-20" }, lignes: [] },
-      { genre: "phrase", phrase: "rien-de-nouveau" },
-    ])
-  })
-})
-
-describe("the recent content block read back (AC-16)", () => {
-  it("should read each content by its path, kind, date and title", () => {
-    const bloc = recentText([
-      { path: "ventes/tarifs", kind: "table", title: "Tarifs (2026): grille", at: "2026-09-27T08:00:00.000Z" },
-      { path: "ventes/faq", kind: "page", title: "FAQ", at: "2026-09-26T08:00:00.000Z" },
-    ])
-    expect(relu(bloc)).toEqual([
-      {
-        genre: "liste",
-        legende: null,
-        lignes: [
+          { genre: "version", chemin: "ventes/devis", nature: "page", revision: 3, date: "2026-09-28", titre: "Devis (modèle): 2026" },
           { genre: "recent", chemin: "ventes/tarifs", nature: "table", date: "2026-09-27", titre: "Tarifs (2026): grille" },
-          { genre: "recent", chemin: "ventes/faq", nature: "page", date: "2026-09-26", titre: "FAQ" },
+          { genre: "connecteur", nom: "mail", date: "2026-09-26" },
+          { genre: "recent", chemin: "ventes/faq", nature: "page", date: "2026-09-25", titre: "FAQ" },
         ],
       },
+    ])
+    // Sans borne (illisible) : les contenus seuls, sans légende.
+    expect(relu(recentText([{ path: "ventes/faq", kind: "page", title: "FAQ", at: "2026-09-25T08:00:00.000Z" }], null, null))).toEqual([
+      { genre: "liste", legende: null, lignes: [{ genre: "recent", chemin: "ventes/faq", nature: "page", date: "2026-09-25", titre: "FAQ" }] },
     ])
   })
 })
@@ -526,33 +486,31 @@ describe("the end of the text read back (AC-14)", () => {
 
   it("should keep as served a block or an end it does not recognize", () => {
     expect(morceauxDuBloc("calendar", "## Calendar\n- demain")).toEqual([{ genre: "brut", texte: "## Calendar\n- demain" }])
-    expect(morceauxDuBloc("procedures", "## Other header\n- a/b: c")).toEqual([{ genre: "brut", texte: "## Other header\n- a/b: c" }])
-    expect(morceauxDuBloc("news", "## What's new since 2026-09-20\n- une ligne libre\n- ventes/devis v3 (2026-09-27): Devis")).toEqual([
+    expect(morceauxDuBloc("recent content", "## Other header\n- a/b (page, 2026-09-27): c")).toEqual([{ genre: "brut", texte: "## Other header\n- a/b (page, 2026-09-27): c" }])
+    expect(morceauxDuBloc("recent content", "## Recent content (new: published since 2026-09-20)\n- une ligne libre\n- ventes/devis (page, new v3, 2026-09-27): Devis")).toEqual([
       { genre: "liste", legende: { genre: "nouveautes", depuis: "2026-09-20" }, lignes: [] },
       { genre: "brut", texte: "- une ligne libre" },
-      { genre: "liste", legende: null, lignes: [{ genre: "version", chemin: "ventes/devis", revision: 3, date: "2026-09-27", titre: "Devis" }] },
+      { genre: "liste", legende: null, lignes: [{ genre: "version", chemin: "ventes/devis", nature: "page", revision: 3, date: "2026-09-27", titre: "Devis" }] },
     ])
     expect(morceauxDeLaFin("Une fin libre.")).toEqual([{ genre: "brut", texte: "Une fin libre." }])
-    // Une ligne presque servie : un chemin hors du format des nœuds, une date qui n'en est pas une.
-    expect(morceauxDuBloc("procedures", "## Procedures you can run, most used first (1)\n- Hors Format: x")).toEqual([
-      { genre: "liste", legende: { genre: "procedures", nombre: 1 }, lignes: [] },
-      { genre: "brut", texte: "- Hors Format: x" },
-    ])
-    expect(morceauxDuBloc("recent content", "## Recent content\n- ventes/faq (page, hier): FAQ")).toEqual([{ genre: "brut", texte: "- ventes/faq (page, hier): FAQ" }])
+    // Une ligne presque servie : un chemin hors du format des nœuds, une date qui n'en est pas une, une marque de version
+    // sans numéro, une précision de trop.
+    const presque = ["- Hors Format (page, 2026-09-27): x", "- ventes/faq (page, hier): FAQ", "- ventes/faq (page, new vX, 2026-09-27): FAQ", "- ventes/faq (page, a, b, 2026-09-27): FAQ"]
+    expect(morceauxDuBloc("recent content", ["## Recent content", ...presque].join("\n"))).toEqual([{ genre: "brut", texte: presque.join("\n") }])
   })
 
   // Les titres et résumés servis viennent des clients (`security-patterns.md § Validation des inputs`).
   it("should read a hostile served text of the budget size in linear time", () => {
     const hostiles = [
       `## Recent content\n${`- a (b, ${"(".repeat(200)}): `.repeat(100)}`,
-      `## What's new since 2026-09-20\n${`- a/a v1 (${" (".repeat(9_990)}`}`,
-      `## Procedures you can run, most used first (1)\n- ${"a/".repeat(9_990)}!: x`,
+      `## Recent content (new: published since 2026-09-20)\n${`- a/a (page, new v1, ${", ".repeat(9_990)}`}`,
+      `## Recent content\n- ${"a/".repeat(9_990)}! (page, 2026-09-27): x`,
       `[Context budget reached. Omitted: ${"a, ".repeat(6_600)}. Use demo_find or demo_read for more.]`,
     ]
     for (const texte of hostiles) {
       const debut = performance.now()
       if (texte.startsWith("[")) morceauxDeLaFin(texte)
-      else morceauxDuBloc(texte.startsWith("## Recent") ? "recent content" : texte.startsWith("## What") ? "news" : "procedures", texte)
+      else morceauxDuBloc("recent content", texte)
       morceauxDuContexte(texte)
       expect(performance.now() - debut).toBeLessThan(1_000)
     }

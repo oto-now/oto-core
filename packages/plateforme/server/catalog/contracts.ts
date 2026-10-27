@@ -10,8 +10,6 @@
 import * as z from "zod/v4"
 import { tableHeaderPatchSchema } from "../../schemas/tables"
 import { UPLOAD_RULE } from "../../schemas/uploads"
-import { formatCount } from "../nodes/document"
-import { PROCEDURE_MAX_CHARS } from "../../schemas/procedures"
 
 /** Le contenu d'un contrat au préfixe de l'organisation (`acme_write`…), dans l'ordre de `renderContract`. */
 type ContractContent = {
@@ -65,7 +63,6 @@ const writeProcedure: Contract = {
     ],
     refusals: [
       "On write: a call fence that is not <function> followed by a JSON object, or that is never closed; nothing is written.",
-      `On publish: steps longer than ${formatCount(PROCEDURE_MAX_CHARS)} characters once rendered; move reference material to a page and link to it.`,
       "On publish: a code block marked call, or a text line starting with a call fence; write a call block.",
       "On publish: a call fence never stands in a table, a toggle or a sub-item; write a call block after it.",
       "On publish: a call block that does not start with a function name such as table.rows.",

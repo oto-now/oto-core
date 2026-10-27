@@ -44,10 +44,9 @@ const TABLE = PILOT_TABLE.path
 const WORKER = "qualification"
 const QUERY = "Boulangerie des Tilleuls"
 
-/** La consigne du bloc procédure de `context` (E03-S02, `server/context/blocks/procedure.ts`). */
-const FOLLOW = "Follow these steps now. Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for."
-const callLine = (prefix: string) =>
-  `A \`\`\`call block holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.`
+/** Comment recopier un bloc `call` lu en appel, dit par `context` avec la procédure décidée (`server/context/blocks/code.ts`). */
+const CALL_LINE = (prefix: string) =>
+  `Each \`\`\`call block in it holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.`
 
 type Person = SqlUser & { name: string; handle: string; token: string }
 type Place = TestOrg & { host: string }
@@ -266,20 +265,21 @@ describe.skipIf(!sqlConfigured || privatePending)(
       const session = await connect(m, agent)
       const prefix = org.prefix
 
-      // AC5 : `context` sert les étapes complètes, blocs `call` compris, sous la consigne du bloc procédure.
+      // AC5 : `context` met la procédure en tête des proches et dit de la lire (2026-10-27) ; `read` en sert les étapes
+      // complètes, blocs `call` compris.
       const opened = await session.openContext("Qualifie les prospects à traiter.")
       const ctx = opened.code
       const call = (fn: string, args: Fields) => session.call("call", { ctx, function: fn, arguments: args })
-      const steps = await admin<{ id: string; type: string; text: string | null; data: unknown; key: string | null; position: number | null }[]>`
-        select id, type, text, data, key, position from platform.blocks where node_id = ${ids.procedure} and state = 'published' order by position`
       expect(opened.isError).toBe(false)
       expect(ctx).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/)
-      // Rendu calculé sur les blocs relus : `jsonb` range les clés des arguments (`testing-strategy.md § Anti-patterns`).
-      expect(opened.text).toContain(
-        [`## Procedure ${PATH} (v1): ${PILOT_PROCEDURE.title}`, FOLLOW, callLine(prefix), "", renderBlocks([...steps], { headingBase: 3 })].join("\n"),
-      )
-      expect(opened.text.match(/```call\ntable\.(schema|claim|write|release) \{/g)).toHaveLength(4)
+      expect(opened.text).toContain(`\n- ${PATH} — ${PILOT_PROCEDURE.title}: `)
+      expect(opened.text).toContain(`read ${PATH} with ${prefix}_read {"path": "${PATH}"}, then follow its steps in order`)
+      expect(opened.text).toContain(CALL_LINE(prefix))
+      expect(opened.text).not.toMatch(/```call\n/)
       expect(isJsonObject(opened.result.structuredContent) ? opened.result.structuredContent.served : null).toMatchObject({ path: PATH, revision: 1 })
+      const read = await session.call("read", { ctx, path: PATH })
+      expect(read.isError).toBe(false)
+      expect(read.text.match(/```call\ntable\.(schema|claim|write|release) \{/g)).toHaveLength(4)
 
       // AC6 : le contrat, puis trois lignes réservées « en cours » au travailleur et à M.
       const schema = await call("table.schema", { table: TABLE })
@@ -449,6 +449,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(lines.map((line) => [line.ctx, tool(line.tool), line.target, line.is_error])).toEqual(
         [
           ["context", PATH, false],
+          ["read", PATH, false],
           ["call", "table.schema", false],
           ["call", "table.claim", false],
           ["call", "table.write", nullWrite.isError],

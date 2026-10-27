@@ -17,7 +17,21 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.6.1 — 2026-10-27
+
+### Assistants
+- `context` no longer serves a procedure's steps: it lists the five closest procedures, the best match first; read it with `read`, then follow its steps.
+- `context` no longer lists « Procedures you can run »: find other procedures with `find`, type procedure.
+- `context` lists up to eight pages and tables close to the request, instead of five.
+- What's new is part of « Recent content »: one line per content, a new version marked `new v<n>`, 20 lines at most.
+- This Oto's address is the first rule of « How this workspace works »; `context` no longer ends with it.
+- A procedure has no size limit: it publishes whatever its length, and `read` serves it whole, without an outline.
+
 ### Hosts
+- Schemas: `PROCEDURE_MAX_CHARS` is removed, and the refusal kind `too_long` with it (`PROCEDURE_REFUSAL_KINDS`); a procedure has no size limit.
+- Schemas: `SERVED_PROCEDURES` and `SERVED_NEWS` are removed; `SERVED_RECENT` describes the one block of recent and new content.
+- UI: the « Contexte » view shows « Contenus récents et nouveautés » (anchor `recent-content`); the sections « Nouveautés » and « Procédures utiles » are gone.
+- MCP: the description of `<p>_context` says it returns the closest procedures, the best match to read, and recent and new content; replay your golden queries.
 - Server: a `hostCredentials` reader gets the calling organisation, `({ org: { id, slug } })`; return `null` to keep your key from it, and its calls and hosted links are refused by name (`not_enabled`, reason `host_closed`). A reader that ignores its argument works as before.
 - Server: a table `request.body` may nest tables of the same form, at any depth (`{ variables: { id: "issue_id", input: { title: "title" } } }`): the body constant, copied, then each given argument at its key path, parents created as needed; an argument not given creates nothing; a key is a key, a dot in it is a character. `registerConnectors` refuses a value that is neither an argument name nor a table, an empty nested table (`body_nested_empty`), a path both constant and argument or one under the other, at the first level too (`body_key_twice`), a nested table beside `files` (`body_nested_multipart`). A pagination cursor is placed wherever its argument is.
 - Install: the pins of `@otomata_tech/connectors` and of this package go up together: a description with a nested body table needs this version; an older package refuses it (`request places [object Object]`), and with it the whole declaration of the host.

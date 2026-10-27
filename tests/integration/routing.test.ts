@@ -233,10 +233,11 @@ describe.skipIf(!sqlConfigured)(
         console.log(`  · ${outcome.kind} « ${outcome.phrase} » → ${outcome.served ?? "rien de servi"} (rang ${rank === -1 ? "absent" : rank + 1})`)
       }
 
-      // AC-a1 : trois candidates montrées au plus, sur une phrase qui en a davantage au-dessus de 0,30.
+      // AC-a1 : cinq candidates montrées au plus depuis le 2026-10-27 (trois avant), sur une phrase qui en a davantage
+      // au-dessus de 0,30.
       const wide = "Peux-tu relancer les clients qui n'ont pas répondu à nos devis ?"
-      expect((await rankCandidates(db, member, { query: wide, limit: 50 })).length).toBeGreaterThan(3)
-      expect(outcomes.find((outcome) => outcome.phrase === wide)?.shown).toHaveLength(3)
+      expect((await rankCandidates(db, member, { query: wide, limit: 50 })).length).toBeGreaterThan(CANDIDATES_SHOWN)
+      expect(outcomes.find((outcome) => outcome.phrase === wide)?.shown).toHaveLength(CANDIDATES_SHOWN)
       expect(formulations.length).toBe(SCALE_FORMULATIONS.length)
       expect(formulations.filter((outcome) => outcome.served === outcome.path).length / formulations.length).toBeGreaterThanOrEqual(0.95)
       const missed = outcomes.filter(

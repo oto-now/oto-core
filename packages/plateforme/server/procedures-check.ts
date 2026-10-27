@@ -1,5 +1,5 @@
 // Contrôle d'une procédure (E03-S06 ; ADR-011, H60, P37, P38) : les problèmes de ses blocs avant sa
-// publication (R1, R2, R4, R7 à R13), et le refus qui les liste tous. Le contrôle lit des blocs (types
+// publication (R2, R4, R7 à R13 ; plus de borne de taille depuis le 2026-10-27), et le refus qui les liste tous. Le contrôle lit des blocs (types
 // `call` et `code`, plus les lignes ```call de ce qu'un bloc rend tel quel), jamais le markdown (N1), et
 // n'écrit rien. Ses textes viennent d'un client : chaque lecture y est en temps linéaire. Sans
 // lui, une procédure se publie avec un appel que `call` refusera à chaque passage (banc E04, D4 : neuf
@@ -15,8 +15,6 @@ import {
   formatCallLocation,
   isPlaceholderValue,
   orderBlocks,
-  PROCEDURE_MAX_CHARS,
-  renderBlocks,
   sectionOfBlock,
   type ProcedureRefusal,
   type ProcedureRefusalKind,
@@ -30,7 +28,7 @@ import type { PlatformDb } from "./db"
 import { boundedList, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { cut } from "./journal"
-import { charCount, formatCount, type DocBlock } from "./nodes/document"
+import { formatCount, type DocBlock } from "./nodes/document"
 
 /** Nom d'une fonction (règle 3) : `table.rows`, `mail.create_draft`, jamais `<p>_call`. */
 const FUNCTION_NAME = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/
@@ -225,7 +223,7 @@ async function callRefusals(scope: Scope, block: StoredBlock): Promise<Procedure
 }
 
 /**
- * Les problèmes d'une procédure (R1, R2, R4, R7 à R13), sans écriture : la taille de son rendu, puis
+ * Les problèmes d'une procédure (R2, R4, R7 à R13 ; R1, sa taille, retirée le 2026-10-27), sans écriture :
  * ses blocs dans l'ordre du document (`position`, `id`), chacun situé par `callLocation` et
  * `formatCallLocation` (M05), ou par `sectionOfBlock` hors d'un bloc `call`. Catalogue en mémoire,
  * connecteurs actifs relus pour l'appel (seulement s'il y a un bloc `call`), `checkArgs` de chaque
@@ -234,11 +232,6 @@ async function callRefusals(scope: Scope, block: StoredBlock): Promise<Procedure
 export async function checkProcedureBlocks(db: PlatformDb, identity: Identity, blocks: readonly DocBlock[]): Promise<ProcedureRefusal[]> {
   const ordered = orderBlocks(blocks.filter(stored))
   const refusals: ProcedureRefusal[] = []
-  const size = charCount(renderBlocks(ordered))
-  if (size > PROCEDURE_MAX_CHARS) {
-    const message = `steps: ${formatCount(size)} characters; a procedure is served whole by ${identity.org.prefix}_context and holds at most ${formatCount(PROCEDURE_MAX_CHARS)}: move reference material to a page and link to it`
-    refusals.push({ kind: "too_long", message })
-  }
   const calls = ordered.some((block) => block.type === "call")
   const active = calls ? await loadActiveConnectors(db, identity.org.id) : new Set<string>()
   const scope: Scope = { db, identity, blocks: ordered, functions: assistantFunctions(), active }

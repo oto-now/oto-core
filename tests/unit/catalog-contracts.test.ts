@@ -31,9 +31,9 @@ describe("write.procedure contract (AC8)", () => {
     expect(lines[rules + 8]).toBe(
       '8. To run a step, copy its call block into acme_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one.',
     )
-    // Une ligne par refus : la clôture mal formée à l'écriture, puis R1, R2, la clôture hors d'un bloc de texte (E10-S04), R4, R7 à R13 à la publication.
+    // Une ligne par refus : la clôture mal formée à l'écriture, puis R2, la clôture hors d'un bloc de texte (E10-S04), R4, R7 à R13 à la publication.
     const listed = lines.slice(refusals + 1)
-    expect(listed.map((line) => line.split(":")[0])).toEqual(["- On write", ...Array.from({ length: 11 }, () => "- On publish")])
+    expect(listed.map((line) => line.split(":")[0])).toEqual(["- On write", ...Array.from({ length: 10 }, () => "- On publish")])
 
     // Chaque exemple est une entrée valide ; ses clôtures ```call deviennent des blocs `call` (E03-S03).
     const examplesOf = (tool: string) => lines.slice(examples + 1, refusals).filter((line) => line.startsWith(`acme_${tool} `)).map((line) => JSON.parse(line.slice(`acme_${tool} `.length)))
