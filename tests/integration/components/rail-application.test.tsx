@@ -370,6 +370,38 @@ describe("RailApplication menus (AC-a4)", () => {
     expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
   })
 
+  // Règle de la racine (28/10) : le « ⋯ » de Tout le monde, pour qui administre seulement, ouvre « Partager » sur la racine,
+  // lu par `GET rules?path=guide&subjects`, sans son partage sur le web ; ouvrir à toute l'organisation pose la règle de la racine.
+  it("should offer « Droits de Tout le monde… » to an administrator only, and open the sharing of the root without the web", async () => {
+    const racine = {
+      path: "guide",
+      title: "Guide de Démo",
+      owner: { kind: "org" },
+      viewerLevel: 3,
+      rules: [],
+      general: null,
+      people: [],
+      team: null,
+      organisation: { level: "read", inherited: "read" },
+      subjects: { organisation: "Démo", teams: [{ id: "t-ventes", name: "Ventes" }], people: [{ id: "u-marc", name: "Marc Dupont" }] },
+    }
+    const appels = simulerLAPI({ data: racine }, { data: racine }, { data: { path: "guide", access: "organisation", level: "write", changed: true } })
+    const rail = monter()
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur Tout le monde" }))
+    expect(itemsDuMenu()).toEqual(["Droits de Tout le monde…"])
+    fireEvent.click(menu().getByRole("menuitem", { name: "Droits de Tout le monde…" }))
+    const droits = within(await screen.findByRole("dialog", { name: "Droits de Tout le monde" }))
+    expect(await droits.findByText("Toute l'organisation Démo")).toBeInTheDocument()
+    expect(droits.queryByText("Sur le web")).toBeNull()
+    choisirDansLaListe(droits.getByRole("combobox", { name: "Niveau de toute l'organisation" }), "Peut modifier")
+    await waitFor(() => expect(hote.rafraichir).toHaveBeenCalledTimes(1))
+    expect(appels.slice(0, 2).map((appel) => appel.url)).toEqual(["/api/platform/rules?path=guide&subjects", "/api/platform/rules?path=guide"])
+    expect(appels[2]).toEqual({ url: "/api/platform/nodes/access", methode: "POST", corps: { path: "guide", access: "organisation", level: "write" } })
+    cleanup()
+    const membre = monter({ administre: false })
+    expect(within(membre).queryByRole("button", { name: "Actions sur Tout le monde" })).toBeNull()
+  })
+
   // 1.4.13 : renommer une équipe depuis son « ⋯ » du rail, par le dialogue de l'écran Équipes ; le rail se relit et l'annonce.
   it("should rename a team from the « ⋯ » of its section, re-read the page and announce the new name", async () => {
     const equipe = { id: "t-ventes", slug: "ventes", name: "Ventes", leadName: null, members: [] }

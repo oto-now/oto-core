@@ -416,6 +416,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      envoyé expiré `outcome_unknown`, en file depuis 24 h `not_started`, résultat effacé 24 h après la fin, ligne retirée
      30 jours après). Clés vers `orgs` et `members` en cascade : une personne retirée, ou oubliée, emporte ses travaux.
      Une table, cinq fonctions, une policy ; rien à relancer avant.
+- `20261028090000_platform_regle_de_la_racine.sql` (règle de la racine, décidée par JB le 28/10 ; droits d'accès,
+  § Règles d'accès) : `node_level_of`, re-versionnée à signature identique, ne compte une règle posée sur la racine
+  (`guide`) que pour les nœuds dont l'organisation est le propriétaire effectif (Tout le monde, son Contexte compris) ;
+  sous une équipe, ou sans propriétaire connu, elle est ignorée, aussi pour le responsable qu'elle nommerait (cas 1 bis) ;
+  dans un espace personnel, elle l'était déjà. `node_level_for` et les policies et fonctions qui l'appellent suivent sans
+  être recréées. Le paquet de la même version calcule pareil (`nodeLevelOf`) : le paquet sans la migration calcule l'ancien
+  droit en base (recherche, policies) et le nouveau dans le service, la migration sans le paquet l'inverse. Une règle déjà
+  posée sur la racine garde sa ligne et cesse de compter sous une équipe. Privilèges redits ; aucune table, colonne,
+  policy ni index ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

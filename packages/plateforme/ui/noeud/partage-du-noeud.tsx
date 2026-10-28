@@ -274,9 +274,11 @@ export type PartageDuNoeudProps = {
   /** L'identifiant de qui regarde : sa ligne dit « (vous) ». */
   moi: string | null
   nomOrganisation: string
+  /** Faux pour la racine (« Droits de Tout le monde… ») : elle ne se partage pas sur le web, le panneau n'en montre que les droits. */
+  surLeWeb?: boolean
 }
 
-export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrganisation }: PartageDuNoeudProps) {
+export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrganisation, surLeWeb = true }: PartageDuNoeudProps) {
   const rafraichir = useRafraichir()
   const [annonce, setAnnonce] = useState("")
   const [erreur, setErreur] = useState("")
@@ -344,7 +346,7 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
       )}
       {lusDesMembres.lecture.etat === "erreur" && <EtatDesNiveaux niveaux={lusDesMembres} />}
       {/* Partie d (ADR-013) : réservé à l'accès complet, comme le service le décide (AC-d1). */}
-      {gere && (
+      {gere && surLeWeb && (
         <SectionDuPartage id={`${ANCRE}-web`} icone={<Globe />} titre={PARTAGE.surLeWeb}>
           <PartageSurLeWeb chemin={noeud.path} annoncer={setAnnonce} signaler={setErreur} />
         </SectionDuPartage>

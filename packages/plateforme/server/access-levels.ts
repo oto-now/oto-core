@@ -159,6 +159,16 @@ function placedOwner(chain: NodeChain, lineage: readonly NodeFact[]): PlacedOwne
   return found
 }
 
+/**
+ * Profondeur minimale d'une règle comptée (D5, H61, N35 ; règle de la racine, décidée par JB le 28/10) : dans un espace
+ * personnel, le nœud qui porte la personne ; sous une équipe, ou sans propriétaire connu, sous la racine, dont les règles
+ * ne valent que pour les contenus de l'organisation (Tout le monde) ; ailleurs, toute la branche.
+ */
+function floorOf(placed: PlacedOwner | null): number {
+  if (placed?.owner.kind === "user") return placed.depth
+  return placed?.owner.kind === "org" ? 0 : 1
+}
+
 /** Propriétaire effectif (H52) : le sien, sinon celui de l'ancêtre le plus proche qui en porte un. */
 export function effectiveOwner(chain: NodeChain): Owner | null {
   return placedOwner(chain, lineageOf(chain))?.owner ?? null
@@ -209,20 +219,21 @@ export function nodeLevelOf(caller: Caller, chain: NodeChain): AccessLevel {
   const placed = placedOwner(chain, lineage)
   const owner = placed?.owner ?? null
   // D5, H61, N35 : dans un espace personnel, seules comptent les règles posées sur le nœud qui porte
-  // la personne comme propriétaire, ou en dessous.
-  const floor = owner?.kind === "user" && placed ? placed.depth : 0
+  // la personne comme propriétaire, ou en dessous ; sous une équipe, une règle de la racine est ignorée.
+  const floor = floorOf(placed)
   // ADR-014 : une règle d'organisation ne compte pas dans un espace personnel (HN-E05S10e-13).
   const orgCounts = owner?.kind !== "user"
   // (1) administrateur, ou staff avec un accès en cours : gestion, sauf dans un espace personnel.
   if (owner && owner.kind !== "user" && caller.isOrgAdmin) return MANAGE
   const depths = new Map(lineage.map((n) => [n.id, nodeDepth(n.path)]))
-  const rules = chain.rules.filter((rule) => depths.has(rule.targetId))
-  // (1 bis) une règle qui le nomme, n'importe où dans la chaîne, lui retire la gestion.
+  // Une règle au-dessus du plancher est ignorée, comme si elle n'existait pas : ni comptée, ni nommant un responsable.
+  const rules = chain.rules.filter((rule) => (depths.get(rule.targetId) ?? -1) >= floor)
+  // (1 bis) une règle qui le nomme, n'importe où dans la chaîne sous le plancher, lui retire la gestion.
   if (leadKeepsManage(caller, owner, rules)) return MANAGE
   // (2) le nœud le plus proche, lui compris et sous le plancher, qui porte une règle visant la
   // personne, ses équipes ou l'organisation ; la règle la plus proche l'emporte, même plus basse, et à
   // ce nœud la personne, puis ses équipes, puis l'organisation (ADR-014).
-  const counted = rules.filter((rule) => aimsAt(caller, rule, orgCounts) && (depths.get(rule.targetId) ?? 0) >= floor)
+  const counted = rules.filter((rule) => aimsAt(caller, rule, orgCounts))
   const nearest = counted.length > 0 ? Math.max(...counted.map((rule) => depths.get(rule.targetId) ?? 0)) : null
   const closest = counted.filter((rule) => depths.get(rule.targetId) === nearest)
   const precise = closest.filter((rule) => rule.org !== true)

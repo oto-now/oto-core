@@ -50,7 +50,18 @@ const SCENARIOS: { name: string; rules: RuleSpec[] }[] = [
       { node: "ventes/devis", user: "claire", level: "read" },
     ],
   },
-  { name: "root", rules: [{ node: "guide", team: "ventes", level: "read" }] },
+  // Règle de la racine (28/10) : comptée pour les contenus de l'organisation, ignorée sous une équipe, responsable compris.
+  {
+    name: "root",
+    rules: [
+      { node: "guide", team: "ventes", level: "read" },
+      { node: "guide", team: "support", level: "none" },
+      { node: "guide", user: "claire", level: "write" },
+      { node: "guide", user: "lea", level: "none" },
+      { node: "guide", org: true, level: "write" },
+      { node: "annonces", org: true, level: "read" },
+    ],
+  },
   {
     name: "personal spaces",
     rules: [

@@ -15,6 +15,18 @@ export const MENU_DE_L_EQUIPE = {
   fermer: "Fermer",
 } as const
 
+/** Le « ⋯ » de la section Tout le monde, pour qui administre : les droits de l'espace, réglés sur sa racine (28/10). */
+export const MENU_DE_TOUT_LE_MONDE = {
+  actions: (nom: string) => `Actions sur ${nom}`,
+  droits: "Droits de Tout le monde…",
+  titre: "Droits de Tout le monde",
+  explication: "Ils valent pour chaque contenu de Tout le monde, sauf celui qui a son propre partage ; jamais pour les équipes ni pour Privé.",
+  chargement: "Lecture des droits…",
+  echec: "Les droits n'ont pas pu être lus",
+  reessayer: "Réessayer",
+  fermer: "Fermer",
+} as const
+
 export const RAIL = {
   accueil: "Accueil",
   arbreEnPanne: "L'arbre n'a pas pu être chargé",

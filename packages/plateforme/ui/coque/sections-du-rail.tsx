@@ -27,6 +27,7 @@ import { aplatir } from "./freres"
 import { useGestesDuRail, type GestesDuRail } from "./gestes-du-rail"
 import { DeposerSurLeRail } from "./import-de-fichier"
 import { MenuDeLEquipe } from "./menu-de-l-equipe"
+import { MenuDeToutLeMonde } from "./menu-de-tout-le-monde"
 import { useAdresseCourante } from "./noeud-ouvert"
 import type { EquipeDuRail } from "./types"
 import { DeplierAuClic, useDepliageDuRail, type DepliageDuRail } from "./use-depliage-du-rail"
@@ -36,6 +37,15 @@ import { useRailFolds, type RailFolds } from "./use-rail-folds"
 function racineDe(section: SectionCle, handle: string | null): string | null {
   if (section.cle !== PERSO) return section.cle
   return handle === null ? null : `${PERSO}/${handle}`
+}
+
+/**
+ * Le « ⋯ » d'une section : une équipe a le sien (ses personnes, et sa suppression pour qui administre) ; Tout le monde, ses
+ * droits, pour qui administre seulement (28/10) ; Perso, aucun.
+ */
+function menuDeLaSection(section: SectionCle, administre: boolean, prefixe: string) {
+  if (section.cle === "") return administre ? <MenuDeToutLeMonde nom={section.titre} /> : undefined
+  return section.cle === PERSO ? undefined : <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} />
 }
 
 type SectionProps = {
@@ -49,7 +59,7 @@ type SectionProps = {
   deplacement: DeplacementDansLeRail
   /** Le genre de chaque nœud visible, par chemin : son téléchargement (E10-S01). */
   genres: ReadonlyMap<string, NodeKind>
-  /** La personne administre l'organisation : le « ⋯ » d'une équipe propose aussi de la supprimer. */
+  /** La personne administre l'organisation : le « ⋯ » d'une équipe propose aussi de la supprimer, Tout le monde a le sien. */
   administre: boolean
 }
 
@@ -83,8 +93,7 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
         onToggle={() => plis.toggle(cleDuPli)}
         controls={idDeLArbre}
         addItems={itemsDeLaRacine}
-        // Une équipe a son « ⋯ » : ses personnes, et sa suppression pour qui administre ; ni Tout le monde ni Perso.
-        end={section.cle !== "" && section.cle !== PERSO ? <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} /> : undefined}
+        end={menuDeLaSection(section, administre, prefixe)}
       />
       {/* La liste porte le nom de sa section, comme le navigateur d'arbre qu'elle remplace. */}
       <RailTree as={LigneDuRail} id={idDeLArbre} hidden={replie} aria-label={section.titre} nodes={lignes} addItems={addItems} moreItems={moreItems} />
@@ -149,7 +158,7 @@ export type SectionsDuRailProps = {
   prefixe: string
   /** L'arbre coupé à 5 000 nœuds (`visibleTree`), dit sous les sections. */
   tronque?: boolean
-  /** `isOrgAdmin` de l'identité : le « ⋯ » d'une équipe propose de la supprimer ; absent, non. */
+  /** `isOrgAdmin` de l'identité : le « ⋯ » d'une équipe propose de la supprimer, Tout le monde règle ses droits ; absent, non. */
   administre?: boolean
 }
 

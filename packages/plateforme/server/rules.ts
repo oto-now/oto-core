@@ -43,7 +43,7 @@ import {
   type Owner,
 } from "./access"
 import type { PlatformDb } from "./db"
-import { leadNames, memberDirectory, teamsWithLeads } from "./directory"
+import { leadNames, memberDirectory, ruleSubjects, teamsWithLeads } from "./directory"
 import { refuseOwnerTeamBelowOrg, teamPeople } from "./team-people"
 import { changedMeanwhile, inTransaction, invalidInput, isPlatformError, PlatformError } from "./errors"
 import type { Identity } from "./identity"
@@ -99,9 +99,10 @@ async function ownerTeam(db: PlatformDb, nodeId: string): Promise<string | null>
  * Le panneau d'un nœud (AC16) : son propriétaire effectif (H52), le niveau de l'appelant, ses
  * règles (les équipes, puis les personnes, par nom), à part celle de toute l'organisation, l'accès
  * général (ADR-014), et, sur demande (`people`), les membres de l'équipe propriétaire avec leur niveau (1.4.12) : un calcul
- * de plus, que l'affichage d'une page ne paie pas.
+ * de plus, que l'affichage d'une page ne paie pas ; sur demande aussi (`subjects`), les équipes et les membres qu'on peut
+ * ajouter, déjà lus pour nommer les règles.
  */
-export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean } = {}): Promise<NodeRulesView> {
+export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
   return inTransaction(db, "listNodeRules", (sql) => nodeRulesIn({ db, sql }, identity, path, options))
 }
 
@@ -109,7 +110,7 @@ export async function listNodeRules(db: PlatformDb, identity: Identity, path: st
  * Le panneau d'un nœud dans la transaction `sql` d'un appelant : celle d'un service qui lit encore autre chose du même
  * nœud (`node.access` et son lien public) sans ouvrir une seconde transaction (`supabase-patterns.md § Couplage à Supabase`).
  */
-export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean } = {}): Promise<NodeRulesView> {
+export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
   const node = await readNode({ db, sql }, identity, path)
   const [owner, [rules, teams], directory] = await Promise.all([
     nodeOwner(db, node.id),
@@ -153,6 +154,7 @@ export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, 
       .sort((a, b) => Number(a.subject.kind === "user") - Number(b.subject.kind === "user") || a.subject.name.localeCompare(b.subject.name, "fr")),
     general: general ? { id: general.id, level: levelName(general.level) } : null,
     ...owned,
+    ...(options.subjects ? { subjects: ruleSubjects(identity.org.name, teams, directory) } : {}),
   }
 }
 

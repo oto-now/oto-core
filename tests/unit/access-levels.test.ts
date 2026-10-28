@@ -122,9 +122,18 @@ describe("nodeLevelOf", () => {
     expect([level("claire", "ventes/devis", named), level("claire", "ventes", named)]).toEqual([1, 0])
   })
 
-  it("should let a rule on the root lower a team on its own folder, its lead aside (AC6)", () => {
-    const rules: RuleSpec[] = [{ node: "guide", team: "ventes", level: "read" }]
-    expect([level("lea", "ventes", rules), level("claire", "ventes", rules)]).toEqual([1, 3])
+  // Règle de la racine (décidée par JB le 28/10) : elle vaut pour les contenus de l'organisation, une règle du contenu
+  // l'emportant ; sous une équipe, elle est ignorée, ni ouverte aux autres, ni baissant ses membres ou son responsable.
+  it("should count a rule on the root for the organisation's contents only, never under a team folder (AC6)", () => {
+    const root: RuleSpec[] = [
+      { node: "guide", org: true, level: "write" },
+      { node: "guide", team: "support", level: "none" },
+      { node: "guide", team: "ventes", level: "read" },
+      { node: "guide", user: "claire", level: "read" },
+    ]
+    expect((["marc", "paul", "lea", "claire"] as const).map((who) => level(who, "annonces", root))).toEqual([2, 0, 1, 1])
+    expect((["marc", "paul", "lea", "claire"] as const).map((who) => level(who, "ventes/devis", root))).toEqual([0, 0, 2, 3])
+    expect(level("marc", "annonces", [...root, { node: "annonces", org: true, level: "read" }])).toBe(1)
   })
 
   it("should count in a personal space only the rules from the node that carries the person down (AC7)", () => {
@@ -166,11 +175,12 @@ describe("nodeLevelOf", () => {
     expect(nodeLevelOf(ada, asAdaReadsIt)).toBe(3)
     const claire = callerOf(identityOf("claire"))
     const gap: RuleSpec[] = [
-      { node: "guide", user: "claire", level: "none" },
-      { node: "ventes", team: "ventes", level: "write" },
+      { node: "ventes", user: "claire", level: "none" },
+      { node: "ventes/devis", team: "ventes", level: "write" },
     ]
-    const asClaireReadsIt = chain("ventes/devis", gap.slice(1), { hidden: ["guide"], owner: ownerAt("ventes") })
-    // HN-E01S07-4 (c) : la règle qui la nomme est sur la racine cachée, le cas 1 bis s'applique à tort.
+    const asClaireReadsIt = chain("ventes/devis", gap.slice(1), { hidden: ["ventes"], owner: ownerAt("ventes") })
+    // HN-E01S07-4 (c) : la règle qui la nomme est sur un ancêtre caché, le cas 1 bis s'applique à tort ; sur la racine,
+    // elle ne compterait plus sous l'équipe (règle de la racine, 28/10).
     expect([nodeLevelOf(claire, asClaireReadsIt), nodeLevelOf(claire, chain("ventes/devis", gap))]).toEqual([3, 2])
   })
 })

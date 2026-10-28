@@ -202,6 +202,28 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect((await refusal(listNodeRules(as("paul").db, as("paul").identity, page.path))).code).toBe("not_found")
       })
 
+      // Règle de la racine (28/10) : « Droits de Tout le monde… » règle la racine ; elle ouvre l'écriture sur un contenu de
+      // Tout le monde sans partage propre, jamais sous une équipe, et la règle d'un contenu l'emporte.
+      it("should open writing on the organisation's contents by a rule on the root, never under a team, a content rule winning", async () => {
+        const annonces = `annonces_${hex(3)}`
+        await fx.createNode(o.org.id, { parentId: o.nodes.root, path: annonces, title: "Annonces" })
+        const ventes = await pageDeVentes()
+        const niveau = async (who: Who, path: string) => (await listNodeRules(as(who).db, as(who).identity, path)).viewerLevel
+        await setGeneralAccess(as("ada").db, as("ada").identity, { path: "guide", access: "organisation", level: "write" })
+        try {
+          expect([await niveau("lea", annonces), (await refusal(listNodeRules(as("paul").db, as("paul").identity, ventes.path))).code]).toEqual([2, "not_found"])
+          expect((await listNodeRules(as("ada").db, as("ada").identity, annonces, { people: true })).organisation).toEqual({ level: "write", inherited: "write" })
+          await setGeneralAccess(as("ada").db, as("ada").identity, { path: annonces, access: "organisation", level: "read" })
+          expect(await niveau("lea", annonces)).toBe(1)
+        } finally {
+          await setGeneralAccess(as("ada").db, as("ada").identity, { path: "guide", access: "restricted" })
+        }
+        // Le panneau de la racine lit, sur demande, les sujets à ajouter : ceux de l'organisation de l'adresse seulement.
+        const { subjects } = await listNodeRules(as("ada").db, as("ada").identity, "guide", { people: true, subjects: true })
+        expect(subjects?.teams.map((equipe) => equipe.id).sort()).toEqual([o.teams.support, o.teams.ventes].sort())
+        expect(subjects?.organisation).toBe(o.org.name)
+      })
+
       it("should describe an organisation node and a personal node", async () => {
         const annonces = `annonces_${hex(3)}`
         await fx.createNode(o.org.id, { parentId: o.nodes.root, path: annonces, title: "Annonces" })

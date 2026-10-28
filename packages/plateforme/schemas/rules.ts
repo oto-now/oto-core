@@ -59,6 +59,11 @@ export type NodeRulesView = {
    * (`level`), et celui qu'il aurait sans la règle d'organisation du nœud même (`inherited`) ; absent ou `null` dans Privé.
    */
   organisation?: { level: AccessLevelName; inherited: AccessLevelName } | null
+  /**
+   * Les sujets qu'on peut ajouter, sur demande (`subjects`) : le nom de l'organisation, ses équipes et ses membres, lus avec
+   * les règles ; « Droits de Tout le monde… » du rail les lit avec la racine, que la page d'un nœud lit à part.
+   */
+  subjects?: { organisation: string; teams: { id: string; name: string }[]; people: { id: string; name: string }[] }
 }
 
 export type RuledNodeView = { path: string; title: string; rulesCount: number }

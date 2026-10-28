@@ -1,7 +1,8 @@
 // Ressource `rules` de l'API du paquet (E05-S03, AC17) : poser ou remplacer une règle sur un nœud,
 // la retirer. Adaptateur mince : la validation, les droits et l'écriture sont dans `server/rules.ts`.
 // `GET rules?path=` (1.4.12) : le panneau d'un nœud, ses règles et le niveau des membres de son équipe, que lit
-// « Les personnes de … » pour le dossier d'une équipe ; lecture sans journal (D138).
+// « Les personnes de … » pour le dossier d'une équipe ; lecture sans journal (D138). `&subjects` y ajoute les équipes et les
+// membres qu'on peut ajouter, que lit « Droits de Tout le monde… » du rail sur la racine.
 import { setNodeRuleSchema } from "../schemas"
 import { listNodeRules, removeRule, setNodeRule } from "../server/rules"
 import type { ResourceRoutes } from "./handler"
@@ -11,7 +12,8 @@ export const rulesRoutes: ResourceRoutes = {
   GET: {
     params: 0,
     async handle({ db, identity, request }) {
-      return { status: 200, data: await listNodeRules(db, identity, new URL(request.url).searchParams.get("path") ?? "", { people: true }) }
+      const params = new URL(request.url).searchParams
+      return { status: 200, data: await listNodeRules(db, identity, params.get("path") ?? "", { people: true, subjects: params.has("subjects") }) }
     },
   },
   POST: {

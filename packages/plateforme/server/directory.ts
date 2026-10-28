@@ -6,7 +6,7 @@
 //
 // Face SQL (E01-S10, partie e1a) : chaque lecture passe par `db.tx`, sous l'appelant de la session ;
 // elle rend toutes ses lignes (aucun `max_rows`, donc aucune page).
-import type { MemberRoleView } from "../schemas"
+import type { MemberRoleView, NodeRulesView } from "../schemas"
 import type { PlatformDb } from "./db"
 import { fromDatabaseError, inTransaction } from "./errors"
 import { memberRole, teamRole } from "./identity"
@@ -106,6 +106,18 @@ export async function teamsWithLeads(sql: Tx, orgId: string, teamId?: string): P
     select t.id, t.name, array(select tm.user_id from platform.team_members tm where tm.team_id = t.id and tm.role = 'lead') as leads
       from platform.teams t
      where t.org_id = ${orgId} and (${teamId ?? null}::uuid is null or t.id = ${teamId ?? null}::uuid)`
+}
+
+/**
+ * Les sujets qu'on peut ajouter à une règle (`NodeRulesView.subjects`) : le nom de l'organisation, ses équipes par nom et
+ * ses membres, tirés des lectures du panneau d'un nœud (règle de la racine, 28/10).
+ */
+export function ruleSubjects(organisation: string, teams: readonly { id: string; name: string }[], directory: readonly DirectoryEntry[]): NonNullable<NodeRulesView["subjects"]> {
+  return {
+    organisation,
+    teams: teams.map((team) => ({ id: team.id, name: team.name })).sort((a, b) => a.name.localeCompare(b.name, "fr")),
+    people: directory.map((person) => ({ id: person.userId, name: person.name })),
+  }
 }
 
 /** « lead » ou « leads » selon le nombre de responsables nommés (E05-S13 : zéro, un ou plusieurs). */
