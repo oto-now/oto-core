@@ -143,7 +143,7 @@ describe("publish workflow (AC9)", () => {
       "fetch-depth: 0",
       "uses: pnpm/action-setup@v4",
       "uses: actions/setup-node@v4",
-      "node-version: 22",
+      "node-version: 24",
       "registry-url: https://registry.npmjs.org",
       "run: pnpm install --frozen-lockfile",
       "run: node scripts/check-public.mjs --secrets-only",
