@@ -17,6 +17,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.6.2 — 2026-10-28
+
 ### Hosts
 - Migrations: apply `20261028090000_platform_regle_de_la_racine.sql` together with the package: a rule on the root (`guide`) now counts only for the organisation's contents (Tout le monde), never under a team folder nor in Privé. The package without it computes the new level in the service and the old one in the base (search, policies); the migration without the package, the reverse. A root rule already set keeps its row and stops counting under teams.
 - UI: the « ⋯ » of the Tout le monde section of the rail, for an administrator only, offers « Droits de Tout le monde… »: the « Partager » panel of the root in a dialog, without « Sur le web ». `PartageDuNoeud` takes `surLeWeb` (default `true`).

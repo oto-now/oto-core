@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-10-28] — Version 1.6.2 du paquet
+**À appliquer :** la migration `20261028090000_platform_regle_de_la_racine.sql`, seule depuis la 1.6.1, avec le paquet de la même version (`oto-platform migrations sync`, puis l'appliquer avant le déploiement) ; ce que dit la section 1.6.2 du `CHANGELOG.md` du paquet.
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.6.2 — 2026-10-28` (les droits de Tout le monde : une règle de la racine ne vaut que pour les contenus de l'organisation, « Droits de Tout le monde… » pour l'administrateur) ; `packages/plateforme/package.json` passe à 1.6.2 ; une section `## Unreleased` vide reste au-dessus. Version corrective malgré la migration, décidée par JB.
+**Problèmes :** les six suites propres au projet Supabase n'ont pas tourné (pas d'IPv6 sur le poste) ; la vérification locale est verte.
+**Fichiers :** `packages/plateforme/CHANGELOG.md`, `packages/plateforme/package.json`.
+
 ## [2026-10-28] — Droits de Tout le monde : la règle de la racine
 **À appliquer :** appliquer la migration `20261028090000_platform_regle_de_la_racine.sql` avec le paquet (`pnpm migrations:sync`, puis `supabase db push`) : sans elle, la base (recherche, policies) compte encore une règle de la racine sous les équipes, que le service ignore. Une règle déjà posée sur la racine garde sa ligne et cesse de compter sous une équipe.
 **Quoi :** une règle posée sur la racine (`guide`) ne compte plus que pour les contenus dont l'organisation est le propriétaire effectif (Tout le monde, son Contexte compris) ; sous une équipe, ou sans propriétaire connu, elle est ignorée, aussi pour le responsable qu'elle nommerait (`floorOf` de `server/access-levels.ts`, `node_level_of` re-versionné). Le « ⋯ » de la section Tout le monde du rail, pour qui administre, offre « Droits de Tout le monde… » : le panneau « Partager » de la racine dans un dialogue, sans « Sur le web » (`MenuDeToutLeMonde`, `PartageDuNoeud` prop `surLeWeb`), lu avec les équipes et les membres à ajouter (`GET rules?path=guide&subjects`, `listNodeRules` option `subjects`, `ruleSubjects` de `server/directory.ts`).
