@@ -133,6 +133,8 @@ const SEGMENTS_ADMIS = [
   'profile',
   'reset-password',
   'share-image',
+  // La supervision de la plateforme (administration et cellule, N9), `/platform/supervision`.
+  'supervision',
   'teams',
   'trash',
   'upload',

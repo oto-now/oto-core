@@ -190,6 +190,9 @@ export { accountOwnerRefSchema, ownerRefSchema, subjectRefSchema } from "./admin
 export type { OwnerRef } from "./admin"
 export { ACCOUNT_LEVEL_NAMES, setAccountRuleSchema } from "./rules"
 export type { AccountLevelName, AccountRuleSubject, AccountShareEventView } from "./rules"
+// La supervision de la plateforme (N9) : la liste des organisations que l'équipe plateforme lit sans accès daté.
+export { SUPERVISION_DAYS } from "./supervision"
+export type { SupervisedAccounts, SupervisedMember, SupervisedOrg } from "./supervision"
 // L'écran « Équipes et droits » (E05-S09, partie d1) : la recherche, le filtre et le tri de ses tableaux,
 // lus dans l'adresse par la page de l'hôte.
 export { equipesListesSchema } from "./team-screen"

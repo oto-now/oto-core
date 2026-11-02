@@ -19,6 +19,7 @@ import { day } from "../../packages/plateforme/mcp/admin/ops"
 import { MAX_RESULT_CHARS } from "../../packages/plateforme/mcp/result"
 import { adminTables, codes, connectAdminMcp, ORGS, PERSONS, TEAMS, type AdminPerson } from "../helpers/mcp-admin"
 import { seedAdminFixture, type AdminFixtureSql } from "../helpers/mcp-admin-sql"
+import { pendingMigrations } from "../helpers/pending-migrations"
 import { hex } from "../helpers/plateforme"
 import type { Row, Tables } from "../helpers/simulated-db"
 import { isoInstants, seedWithAdmin, spyDb, sqlConfigured, type SeededData, type SentQuery, type SpyOptions, portable } from "../helpers/sql"
@@ -32,6 +33,9 @@ const CREATE_SUMMARY =
   "Creates an organisation with its root page, context page, personal spaces, your platform access, its first address and its first administrator (admin_email): your own email makes you a member with the admin role at creation, without email; another email is invited with the admin role, by the invitation email of the web app (Équipes)."
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
+/** La migration de la supervision (N9) : ses opérations se sautent tant que le projet ne l'a pas. */
+const SUPERVISION = "20261102090000"
+const supervisionPending = (await pendingMigrations()).includes(SUPERVISION)
 
 /** Une ligne d'ancrage d'`admin_context`, datée de `age` millisecondes. */
 function anchor(code: string, userId: string, age: number): Row {
@@ -181,7 +185,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       const { session, code } = await opened()
       const acme = admin.orgs.acme.slug
       const unknown = await session.call("admin_org", { ctx: code, op: "delete", org: acme })
-      expect(unknown.text).toBe("Unknown op delete for admin_org. Operations: help, list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin.")
+      expect(unknown.text).toBe("Unknown op delete for admin_org. Operations: help, list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin, overview, members.")
       const extra = await session.call("admin_org", { ctx: code, op: "get", org: acme, name: "Acme" })
       expect(extra.text).toBe('Field name is not used by op get of admin_org. Fields of get: org. Call admin_org {"op": "help"} for details.')
       const invalid = await session.call("admin_org", { ctx: code, op: "create", org: "acme2", name: "Acme Deux", prefix: "2acme", admin_email: "alice@example.com" })
@@ -216,8 +220,8 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           "- conflict: Address <host> already opens another organisation.",
         ].join("\n"),
       )
-      // Décision du 2026-10-14 : l'opération qui nomme un administrateur d'une organisation existante, ajoutée en dernier.
-      expect(text.endsWith(
+      // Décision du 2026-10-14 : l'opération qui nomme un administrateur d'une organisation existante, ajoutée après revoke_access.
+      expect(text).toContain(
         [
           "Op add_admin",
           "Names an administrator of the organisation, by the rule of create: your own email makes you a member with the admin role at once, without email; a member becomes an administrator; another email is invited with the admin role, by the invitation email of the web app (Équipes).",
@@ -227,6 +231,17 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           '- invalid_arguments: Inviting <admin_email> needs an address of <org> to sign in at: add one with admin_org {"op": "add_host"} first.',
           "- conflict: An invitation is already pending for <admin_email>. Revoke it to send another.",
           "- forbidden: op <op> of admin_org is reserved to platform team members who administer <org>.",
+        ].join("\n"),
+      )
+      // La supervision (N9), ajoutée en dernier : members nomme l'organisation sans l'accès daté.
+      expect(text.endsWith(
+        [
+          "Op members",
+          "Reads any organisation of this platform, platform access or not: its members and their role, and its accounts by connector and owner (organisation, team or person), with their state and mode. Never a key, an account label nor any content.",
+          "Required: org. Optional: none.",
+          'Example: admin_org {"op":"members","ctx":"7K3Q-M2XA","org":"acme"}',
+          "Possible refusals:",
+          '- not_found: Unknown organisation <org>. List them all with admin_org {"op": "overview"}.',
         ].join("\n"),
       )).toBe(true)
       expect(text).toContain("Op get\nReads an organisation")
@@ -260,7 +275,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           [demo.slug, `- ${demo.slug} · Démo · admin (member)`],
         ]),
         "Admin tools (pass ctx on every call, and org = the organisation slug):",
-        "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin",
+        "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin, overview, members",
         "- admin_team: list, create, rename, set_lead, add_lead, remove_lead, add_member, remove_member, delete",
         "- admin_node: move, publish, transfer_owner, rules, add_rule, remove_rule",
         "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule",
@@ -415,6 +430,59 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       expect(roles.map((row) => mine.admin.readable(row)).sort((a, b) => String(a.user_id).localeCompare(String(b.user_id)))).toEqual(
         [PERSONS.ada.id, PERSONS.claire.id, PERSONS.sam.id].sort().map((id) => ({ user_id: id, role: "admin" })),
       )
+    })
+  })
+
+  describe("admin_org supervision (N9)", () => {
+    it.skipIf(supervisionPending)("should list every organisation and read the members and accounts of one without a platform access, while get stays refused and list unchanged", async () => {
+      // Théo, de l'équipe plateforme, n'a ni appartenance ni accès à acme : seul un accès en cours à other.
+      const { session, code } = await opened(admin, "theo")
+      const org = (args: Record<string, unknown>) => session.call("admin_org", { ctx: code, ...args })
+      const { acme, other } = admin.orgs
+      const { ada, claire, marc } = admin.persons
+      const overview = await org({ op: "overview" })
+      expect(overview.isError).toBe(false)
+      const [header, ...lines] = overview.text.split("\n")
+      expect(header).toMatch(/^All organisations of this platform \(\d+\), calls over the last 30 days:$/)
+      expect(lines.length).toBeGreaterThan(0)
+      for (const line of lines.filter((text) => !text.startsWith("… and "))) {
+        expect(line).toMatch(/^- \S+ · .+ · prefix [a-z0-9]+ · \d+ members? · \d+ teams? · \d+ calls? in 30 days · \d+ active connectors? · \d+ accounts? · created \d{4}-\d{2}-\d{2}$/)
+      }
+      expect(overview.structured?.next_actions).toEqual(["admin_org members"])
+
+      const [{ calls }] = await seed.admin<{ calls: number }[]>`
+        select count(*)::int as calls from platform.journal where org_id = ${acme.id} and method = 'tools/call' and ts >= now() - interval '30 days'`
+      const members = await org({ op: "members", org: acme.slug })
+      expect(members.text).toBe(
+        [
+          `Organisation ${acme.slug} (Acme Test): 3 members · 3 teams · ${calls} ${calls === 1 ? "call" : "calls"} in 30 days · 1 active connector · 1 account.`,
+          "Members (3):",
+          `- ${ada.email} · admin · since 2026-09-10`,
+          `- ${claire.email} · member · since 2026-09-10`,
+          `- ${marc.email} · member · since 2026-09-10`,
+          "Accounts by connector and owner (1):",
+          "- mail · team Ventes · active · simule · 1 account",
+          'Its content, journal and settings need a platform access: admin_org {"op": "get"} tells whether you have one.',
+        ].join("\n"),
+      )
+      // Ni libellé ni identifiant de compte, ni clé : le compte « Mail Ventes » ne se nomme pas.
+      expect(JSON.stringify(members.structured)).not.toContain("Mail Ventes")
+      expect(members.structured?.next_actions).toEqual(["admin_org overview", "admin_org get"])
+      const unknown = await org({ op: "members", org: `t${hex(4)}` })
+      expect(unknown).toMatchObject({ isError: true, text: expect.stringMatching(/^Unknown organisation t[0-9a-f]+\. List them all with admin_org \{"op": "overview"\}\.$/) })
+
+      // La fiche, le contenu et l'administration restent derrière l'accès daté ; list ne nomme que ses organisations.
+      const sheet = await org({ op: "get", org: acme.slug })
+      expect(sheet).toMatchObject({ isError: true, text: expect.stringContaining(`Unknown organisation ${acme.slug}, or you have no platform access to it.`) })
+      const list = await org({ op: "list" })
+      expect(list.text).toContain(other.slug)
+      expect(list.text).not.toContain(acme.slug)
+      // La ligne de members nomme l'organisation visée, sans la résoudre par l'accès.
+      const journal = session.deps.journal.filter((line) => line.op === "members")
+      expect(journal.map((line) => ({ target: line.target, org_id: line.org_id, is_error: line.is_error ?? false }))).toEqual([
+        { target: `org:${acme.slug}`, org_id: null, is_error: false },
+        { target: expect.stringMatching(/^org:t[0-9a-f]+$/), org_id: null, is_error: true },
+      ])
     })
   })
 

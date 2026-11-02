@@ -12,6 +12,7 @@ import { TOOL_KEYS } from "../../tools"
 import { day, MAX_LIST_LINES, nothingWas, plural, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { NO_ORGANISATION } from "./context"
 import { adminAdded, firstAdminData, firstAdminLine, firstAdminSummary } from "./first-admin"
+import { SUPERVISION_OPS } from "./org-supervision"
 
 const LIST_NEXT = ["admin_org get", "admin_team list"]
 const GET_NEXT = ["admin_org update", "admin_team list"]
@@ -320,4 +321,6 @@ export const ORG_OPS: OpTable = {
     ],
     run: adminAdded,
   },
+  // La supervision (N9), ajoutée en dernier : `overview` et `members` (`org-supervision.ts`).
+  ...SUPERVISION_OPS,
 }

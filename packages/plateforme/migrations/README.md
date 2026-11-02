@@ -425,6 +425,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   droit en base (recherche, policies) et le nouveau dans le service, la migration sans le paquet l'inverse. Une règle déjà
   posée sur la racine garde sa ligne et cesse de compter sous une équipe. Privilèges redits ; aucune table, colonne,
   policy ni index ; rien à relancer avant.
+- `20261102090000_platform_supervision.sql` (supervision de la plateforme, décidée par Alexis le 30/10 et JB le 02/11 ;
+  administration et cellule, N9) : trois fonctions `security definer`, réservées à l'équipe plateforme (`is_staff()`,
+  sinon 42501), exécutables par `authenticated` : `staff_org_overview(since)` (identité et chiffres de chaque
+  organisation : membres, équipes, appels `tools/call` depuis `since`, connecteurs actifs, comptes ; `since` nul refusé,
+  22004), `staff_org_members(org)` (membres, email, nom, rôle, date d'entrée) et `staff_org_accounts(org)` (comptes
+  regroupés par connecteur, titulaire, état et mode) ; `org` nul : toutes les organisations. Ni clé, ni colonne
+  `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
+  table, colonne, policy ni index ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

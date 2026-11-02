@@ -18,8 +18,12 @@ import { clip } from "../../server/journal"
 import type { ToolOutput } from "../../server/tool-output"
 import type { AdminToolKey } from "./tools"
 
-/** L'organisation d'une opération : visée (résolue et gardée, AC10), à créer (son slug), ou aucune (AC9, N4). */
-export type OrgTarget = "target" | "new" | "none"
+/**
+ * L'organisation d'une opération : visée (résolue et gardée, AC10), à créer (son slug), ou aucune (AC9, N4) ; nommée
+ * (supervision, N9) : exigée et journalisée comme une visée, mais jamais résolue par `resolveAdminOrg`, l'opération
+ * décidant elle-même de son droit (`readPlatformOrg`, équipe plateforme sans accès daté).
+ */
+export type OrgTarget = "target" | "new" | "named" | "none"
 
 /**
  * `orgCreation` : le point de création que branche l'hôte (E09-S02), lu par `admin_org create` et son aide. `origin` :
