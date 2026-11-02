@@ -10,11 +10,13 @@ import {
   createPlatformDb,
   isPlatformError,
   rawRequestHost,
+  requireStaff,
   resolveIdentity,
   trustedRequestOrigin,
   type Caller,
   type Identity,
   type PlatformDb,
+  type StaffCaller,
 } from "@otomata_tech/oto_platform/server"
 import { oidcEnabled, type OidcSession } from "@/lib/plateforme/oidc-client"
 import { currentOidcSession } from "@/lib/plateforme/oidc-session"
@@ -137,6 +139,19 @@ export async function getPlatformIdentitySafely(context: string): Promise<Platfo
     unstable_rethrow(error)
     console.error(`${context} : résolution de l'identité impossible`, error)
     return null
+  }
+}
+
+/**
+ * La personne de la session dans l'équipe plateforme (`requireStaff`, décidé par la base), ou `null` hors d'elle : la
+ * page de supervision et le lien qui y mène. Une panne lève.
+ */
+export async function getPlatformStaff(session: PlatformSession): Promise<StaffCaller | null> {
+  try {
+    return await requireStaff(session.db, { email: session.user.email })
+  } catch (error) {
+    if (isPlatformError(error) && error.code === "forbidden") return null
+    throw error
   }
 }
 

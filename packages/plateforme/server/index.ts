@@ -100,6 +100,9 @@ export { createOrg, getOrg, listOrgOverviews, listOrgs, updateOrg } from "./admi
 export { addAdmin } from "./admin/first-admin"
 export type { AdminNamed, AdminSeat, FirstAdminPlan } from "./admin/first-admin"
 export type { AdminOrg, FirstAdminOutcome, OrgChange, OrgDraft, OrgOverview, OrgSheet } from "./admin/orgs"
+// La supervision de la plateforme (N9) : toutes les organisations, à l'équipe plateforme seule, sans accès daté ;
+// leurs types (`SupervisedOrg`…) sortent par `schemas`, que lit aussi l'écran.
+export { listPlatformOrgs, readPlatformOrg } from "./admin/supervision"
 export type { OrgCreationHook } from "./admin/org-creation"
 // E12-S01 (ADR-023) : l'inscription libre, que l'hôte active par l'option `signup` de `handlePlateforme`.
 export { signUp } from "./admin/signup"

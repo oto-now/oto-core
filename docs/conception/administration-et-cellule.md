@@ -1,11 +1,11 @@
 # Administration et cellule
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-19
+- **Dernière révision** : 2026-11-02
 
 ## Résumé
 
-L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. Une organisation créée par l'équipe plateforme a toujours un premier administrateur : le créateur lui-même, membre sans email, ou une personne invitée. Drapeaux, marque, état de la cellule, export-import et suppression d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
+L'équipe plateforme administre une cellule par un MCP admin à part (`/api/mcp-admin`, huit outils `admin_<objet>` à `op`), et l'administrateur d'une organisation par le tableau de bord `/admin/*` ; les deux partagent les mêmes opérations de `server/admin/`. L'équipe plateforme liste toutes les organisations, leurs membres et leurs chiffres sans accès daté (supervision) ; leur contenu exige toujours cet accès. Une organisation créée par l'équipe plateforme a toujours un premier administrateur : le créateur lui-même, membre sans email, ou une personne invitée. Drapeaux, marque, état de la cellule, export-import et suppression d'une organisation complètent l'exploitation ; sous-domaines et appel à l'hébergeur restent chez l'hôte.
 
 ## Contexte
 
@@ -27,19 +27,28 @@ Une cellule est un déploiement de l'application hôte : une base, un émetteur,
 - E08-S02 N2 : sans jeton ou jeton invalide, 401 avec `resource_metadata` vers `…/oauth-protected-resource/api/mcp-admin` ; jeton valide hors équipe plateforme, 401 `invalid_token` sans métadonnées, corps « Unauthorized », rien servi.
 - P29 : le MCP admin évolue par ajout ; `admin_org` est déclaré `openWorldHint: true` quand l'hôte branche un point d'extension de création d'organisation, `false` sinon. E08-S02 N17 : un outil déclaré sans table d'opérations rend `unavailable_in_v1` « Not available yet in this version. » après la garde ; les huit outils ont aujourd'hui leur table, et leurs schémas n'évoluent que par ajout.
 - E08-S02 N40 : le schéma plat de chaque outil est servi (`tools/list`), jamais analysé : la validation est celle de l'opération (opération connue, champ en trop cherché dans les arguments bruts, schéma strict) ; ses bornes viennent des schémas partagés.
-- E08-S02 N4 : `org` n'est requis que par les opérations qui visent une organisation : ni pour `help`, `admin_context`, `admin_org list` et `admin_cell`, et facultatif (filtre) pour `admin_journal admin_log`.
+- E08-S02 N4 : `org` n'est requis que par les opérations qui visent une organisation : ni pour `help`, `admin_context`, `admin_org list`, `admin_org overview` et `admin_cell`, et facultatif (filtre) pour `admin_journal admin_log`.
 - E08-S02 N5 : tout appel d'`admin_context` émet un nouveau code ; sa ligne `admin_journal`, ancrage du code, est écrite et attendue avant la réponse : si elle échoue, aucun code n'est servi.
 - E08-S02 N7 : premier temps admin : résultat normal (pas `isError`) qui finit par « Nothing was <verbe>. Show this to the user and ask for explicit approval, then call again with confirm: true. » ; `confirm: true` exécute ; jamais `needs_confirmation`. E08-S02 N14 : les `next_actions` sont des chaînes `"<outil> <op>"` et ne proposent jamais une opération en deux temps.
 - E08-S02 N15 : ligne `admin_journal` : `target` = `org:<slug>` pour une opération qui nomme une organisation, `team:<slug>` pour une équipe, sinon chemin, ticket ou connecteur ; `host` sur la ligne `initialize` seule ; un refus 401 : un `console.warn` sans donnée.
 
 ### Organisations
 
-- E08-S02 N9 : le staff ne voit et n'administre que les organisations où il est membre ou a un accès en cours, décidé par le service (`listOrgs`, `resolveAdminOrg`) ; une organisation sans accès rend le même `not_found` qu'un slug inconnu.
+- E08-S02 N9 : la liste est ouverte à toute l'équipe plateforme, accès daté ou non : l'identité de chaque organisation, ses membres et leur rôle, ses appels des 30 derniers jours, ses connecteurs actifs et ses comptes par connecteur et titulaire, sans clé, par trois fonctions gardées par `is_staff()` (§ Supervision de la plateforme). Le contenu (pages, fichiers, arguments et cibles du journal), l'administration (toute écriture) et la fiche `admin_org get` restent soumis à l'accès daté et journalisé : le service ne les ouvre que là où le staff est membre ou a un accès en cours (`listOrgs`, `resolveAdminOrg`) ; une organisation sans accès y rend le même `not_found` qu'un slug inconnu.
 - E08-S02 N8 : `admin_org create` est en deux temps : le préfixe nomme les outils pour toujours, et aucune opération ne supprime une organisation (la commande de l'outillage le fait, § Suppression d'une organisation). E08-S02 N18 : slug `^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$` (étiquette DNS de 2 à 40 caractères, pour `<slug>.<base>`) ; nom de 1 à 80 caractères. E08-S02 N24 : la contrainte d'un `23505` de `create_org` (slug, préfixe, adresse) se reconnaît par `uniqueConstraint` de `server/errors.ts`, seul lieu d'une hypothèse sur la forme d'une erreur PostgREST.
 - E08-S02 N10 : `orgs.settings.domains` est une chaîne libre en anglais (domaines de travail cités par `<prefix>_context`, 200 caractères au plus, vide = retirer) ; les adresses sont la table `org_domains` (`host`, `add_host`, `remove_host`).
 - E08-S02 N12 : `orgs.settings.routing {threshold, gap}` (0 à 1, défauts 0,65 et 0,1) se règle par `updateOrg`, que servent `admin_org update` et la page Organisation du tableau de bord (voir [routage et recherche](routage-et-recherche.md)).
 - E08-S02 N19 : `admin_org update` écrit nom et `settings` en une écriture sous garde `updated_at`, puis la marque par `updateBrand`, seul écrivain d'`orgs.brand` (dernière écriture gagnante sur la marque).
 - E08-S02 N23 : avant toute écriture : `updateOrg` sans `isOrgAdmin` → `forbidden` « Changing the settings of <org> is reserved to … » ; `add_host`, `remove_host`, `grant_access` sans `isStaff` et `isOrgAdmin` → `forbidden` « op <op> of admin_org is reserved… ».
+
+### Supervision de la plateforme
+
+Décision d'Alexis du 2026-10-30 et de JB du 2026-11-02 : l'équipe plateforme voit toute la cellule, en liste seulement.
+
+- En base, `staff_org_overview(since)`, `staff_org_members(org)` et `staff_org_accounts(org)` (`security definer`, `search_path` vide, `42501` hors de l'équipe plateforme) : identité et chiffres de chaque organisation (membres, équipes, appels `tools/call` depuis `since`, connecteurs actifs, comptes), ses membres (email, nom, rôle, date d'entrée), ses comptes regroupés par connecteur, titulaire (l'organisation, le nom de l'équipe, l'email de la personne), état et mode ; `org` nul : toutes. Ni clé, ni colonne `secret_*`, ni libellé ou identifiant de compte, ni contenu. Les policies, bornées à `member_orgs()`, n'en rendraient rien à un staff sans accès, et le serveur lit sous le jeton de l'appelant.
+- Une seule brique, `server/admin/supervision.ts` : `listPlatformOrgs` (toutes, avec membres et comptes) et `readPlatformOrg` (par slug, `not_found` inconnu), chacune derrière `requireStaff`, la fenêtre de 30 jours en constante (`SUPERVISION_DAYS`).
+- MCP admin, par ajout : `admin_org overview` (toutes les organisations et leurs chiffres) et `admin_org members {org}` (membres, rôles, comptes). `members` nomme son organisation sans la résoudre par l'accès daté (`org: "named"` : exigée et journalisée en `target`, jamais passée à `resolveAdminOrg`) ; `list` et `get` ne changent pas.
+- Écran `EcranSupervision`, monté par l'hôte de référence à `/platform/supervision` : la page décide l'équipe plateforme avant toute lecture (sinon `notFound`) ; un tableau des espaces, une ligne qui s'ouvre (`<details>`) sur ses membres puis ses comptes. Aucun lien ne la sert depuis `/platform` dans ce lot : l'adresse se donne à l'équipe plateforme.
 
 ### Premier administrateur
 
@@ -138,6 +147,8 @@ Décision du 2026-10-19 (besoin d'un hôte en fin de contrat, RGPD) : `oto-platf
 - **Supprimer la base d'abord, le stockage ensuite** : écarté ; une panne du bucket laisserait des objets sans ligne qui les nomme. Le stockage d'abord garde l'organisation, donc sa clé, jusqu'à la transaction, et la ligne « organisation supprimée » garde son identifiant pour le dernier passage.
 - **`--confirm <slug>` à retaper** : écarté au profit des deux temps (`--yes`), le modèle de `pnpm test:cleanup --delete` et du MCP admin : le premier temps montre ce qui partira.
 - **Rebrancher oto-saas sur Vercel** : écarté par D126 au profit d'un déploiement Scaleway.
+- **La liste des organisations derrière l'accès daté** (N9 d'origine) : écarté par Alexis (2026-10-30) et JB (2026-11-02) ; superviser la cellule ne demande ni contenu ni écriture. L'accès daté reste la porte du contenu et de l'administration.
+- **Ouvrir la liste par la RLS** (une policy `is_staff()` sur chaque table) : écarté ; la policy ouvrirait toutes les colonnes, contenu et clés compris, là où trois fonctions ne rendent que la liste.
 - **Inviter le premier administrateur depuis l'écran Équipes après la création** (le parcours jusqu'au 2026-10-14) : écarté ; une organisation pouvait rester sans membre, et le créateur qui en était le premier administrateur devait s'inviter et accepter son propre email.
 - **Retirer l'accès `creation` quand le créateur devient membre** : écarté ; l'accès trace l'entrée de l'équipe plateforme pour le client (D2) et survit au retrait du membre.
 - **Refuser `add_admin` pour un membre présent** : écarté au profit de la promotion, le geste qu'un administrateur fait à l'écran Équipes ; une invitation de ce membre serait refusée (`already_member`, `invitations_guard`).
@@ -150,6 +161,7 @@ Décision du 2026-10-19 (besoin d'un hôte en fin de contrat, RGPD) : `oto-platf
 - La RLS reprend le rôle des gestes d'administration (`20261019150000` pour les suppressions, `20261020190000` pour les ajouts et modifications, `20261021090000` pour l'exclusion de l'entrée sans invitation) : sous son seul jeton, un membre simple n'exclut personne de l'entrée sans invitation, ne retire, n'ajoute ni ne promeut un membre, ne crée, ne renomme ni ne retire une équipe, ne s'en nomme pas responsable, n'invite pas, ne révoque que ses propres invitations, ne crée ni compte d'organisation ni compte d'équipe, n'active pas de connecteur, ne règle pas l'organisation (`settings.demo` compris) et ne pose de règle que sur un nœud qu'il gère ; un responsable n'ajoute ou ne retire qu'un membre de son équipe et n'y invite qu'au rôle membre ; rattacher ou retirer une adresse et accorder un accès plateforme sont à l'équipe plateforme qui administre ; traiter un retour aussi, et à l'administrateur du client quand « Retours visibles » est allumé.
 - `platform_staff` ne s'écrit par aucune porte du paquet (E08-S02 N21) ; l'export-import passe par la connexion d'administration, jamais importée par l'application.
 - Se nommer administrateur (`claim_org_admin`) est réservé à qui administre déjà l'organisation comme membre de l'équipe plateforme : aucun pouvoir de plus qu'une invitation acceptée. Il ne lève pas une exclusion (`member_exclusions`), que seule une invitation acceptée lève.
+- La supervision ne rend que la liste (identité, membres et rôles, chiffres, comptes par connecteur et titulaire) : aucune des trois fonctions ne rend une clé, une colonne `secret_*`, un libellé de compte, un argument ou une cible du journal ; `admin_org members` est journalisé avec sa cible (`org:<slug>`), sans `org_id`, faute d'accès qui résolve l'organisation.
 - Le journal admin vit à part (`admin_journal`) ; le masquage de l'espace personnel d'autrui s'y applique : [journal et retours](journal-et-retours.md).
 
 ## Écart avec le code
@@ -159,6 +171,7 @@ Décision du 2026-10-19 (besoin d'un hôte en fin de contrat, RGPD) : `oto-platf
 - `org delete` : un envoi signé avant la suppression peut encore arriver dans le bucket pendant sa durée (5 minutes, `UPLOAD_URL_SECONDS`) ; relancer la commande après ce délai le retire.
 - M65 : `RailThemePicker`, les écrans Marque, Drapeaux et Accès plateforme et leurs clés d'adresse restent à retirer.
 - V2 : registre central des versions de plusieurs applications (E08-S10), sondes de santé et alertes des comptes (E08-S08).
+- Supervision : ouvrir une clé de l'hôte depuis l'écran (coût, plafond) : lot suivant.
 - Le déploiement Scaleway d'oto-saas (D126) est une action réservée à JB, pas encore faite.
 
 ## Questions ouvertes
@@ -175,3 +188,4 @@ Aucune à ce jour.
 - 2026-10-19 : une session ne supprime plus une organisation (droit `delete` retiré à `authenticated`, policy `orgs_delete_admin` neutralisée) : la commande de l'outillage est le seul chemin — décidé par Alexis (source : l'écart relevé avec la commande `org delete`).
 - 2026-10-19 : le lien de l'invitation d'un administrateur nommé par l'équipe plateforme est en `https` sans port hors du poste local, sans lire `x-forwarded-proto` ; les policies d'administration exigent le rôle de leur service (`20261019150000`) — décidé par Alexis (source : revue de sécurité des policies qui ne vérifiaient que l'appartenance).
 - 2026-10-20 : les policies d'ajout et de modification exigent aussi le rôle de leur service (`20261020190000`) — décidé par Alexis (source : même revue, un membre simple se promouvait administrateur ou invitait avec son seul jeton).
+- 2026-11-02 : supervision de la plateforme : la liste des organisations (identité, membres et rôles, appels sur 30 jours, connecteurs actifs, comptes par connecteur et titulaire, sans clé) ouverte à toute l'équipe plateforme par trois fonctions gardées par `is_staff()`, `admin_org overview` et `members`, l'écran `/platform/supervision` ; contenu, administration et fiche restent derrière l'accès daté — décidé par Alexis le 2026-10-30 et JB le 2026-11-02 (source : la proposition d'un espace de supervision de la plateforme).
