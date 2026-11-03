@@ -74,10 +74,10 @@ describe.skipIf(!sqlConfigured)(portable("personal space, screens and tree on a 
       await content(base())
       const lea = await write("lea", notes)
       expect(lea.result?.text).toBe(
-        'Draft of private/lea/notes created (revision 0): added « Idées » (24 characters).\nPublish it with acme_write {"path": "private/lea/notes", "base_revision": 0, "publish": true}.',
+        'Draft of private/lea/notes created (revision 0): added « Idées » (24 characters).\nPublish it with acme_write {"path": "private/lea/notes", "base_revision": 0, "publish": true}.\nSpace: your private space: only you see it.',
       )
       const [created] = await seed.admin`select parent_id, owner_kind from platform.nodes where org_id = ${ref.org.id} and path = 'private/lea/notes'`
-      expect(ref.readable({ ...created })).toMatchObject({ parent_id: nodeId("private/lea"), owner_kind: null })
+      expect(ref.readable({ ...created })).toMatchObject({ parent_id: nodeId("private/lea"), owner_kind: "user" })
       await expect(readNode(await ref.db("ada"), who("ada"), { path: "private/lea/notes" })).rejects.toMatchObject({
         code: "not_found",
         message: "Unknown path private/lea/notes. Use acme_find to locate it.",

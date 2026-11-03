@@ -90,10 +90,11 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   }
 
   /** Une page publiée par `author`, en révision 1, à trois sections : son identifiant. */
-  async function page(path: string, author: Person = "claire"): Promise<string> {
+  /** `space` : l'espace d'une page créée hors d'un dossier d'équipe, le Privé de l'auteur sans lui (20261103150000). */
+  async function page(path: string, author: Person = "claire", space?: "everyone"): Promise<string> {
     const writer = await session(author)
     const ops = ["Lundi", "Mardi", "Mercredi"].map((section) => ({ op: "add_section", section, text: `Appel du ${section.toLowerCase()}.` }))
-    const created = await writer.call("write", { path, title: `Page ${path}`, summary: "Page de test.", ops })
+    const created = await writer.call("write", { path, title: `Page ${path}`, summary: "Page de test.", ops, ...(space ? { space } : {}) })
     expect(created.isError, created.text).toBe(false)
     const [row] = await fx.admin<{ id: string }[]>`select id from platform.nodes where org_id = ${o.org.id} and path = ${path}`
     return row.id
@@ -281,7 +282,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
       const first = `ventes/t_source_${hex(3)}`
       const orgPage = `t_note_${hex(3)}`
       await page(first)
-      await page(orgPage, "ada")
+      await page(orgPage, "ada", "everyone")
       const id = await deposit("lea", "source.pdf", bytesOf("%PDF-source"))
       const lea = await session("lea")
       await lea.keep({ file: id, path: first, base_revision: 1 })

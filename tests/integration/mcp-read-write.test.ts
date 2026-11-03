@@ -132,7 +132,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       const created = await lea.call("write", { path, title: "FAQ", summary: "Questions fréquentes.", ops: [{ op: "add_section", section: "Livraison", text: "Sous huit jours." }] })
       expect(created.isError, created.text).toBe(false)
       // E11-S18 (AC-4) : une ligne, la publication et ce que l'écriture a fait.
-      expect(created.text).toBe(`Published ${path} revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.`)
+      expect(created.text).toBe(`Published ${path} revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.`)
       expect(created.result.structuredContent).toMatchObject({ status: "published", revision: 1 })
       const drafted = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Livraison", text: "Hors week-end." }], publish: false })
       expect(drafted.text.split("\n")[1]).toBe(`Publish it with ${ref.org.prefix}_write {"path": "${path}", "base_revision": 1, "publish": true}.`)
@@ -141,7 +141,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       const table = `ventes/salons_${hex(3)}`
       const header = { columns: [{ name: "nom", type: "text" }], key: "nom" }
       const made = await lea.call("write", { path: table, kind: "table", title: "Salons", summary: "Les salons.", header })
-      expect(made.text).toBe(`Published ${table} revision 1: a table with 1 column, key nom. Write rows with ${ref.org.prefix}_call table.write. Next write: base_revision 1.`)
+      expect(made.text).toBe(`Published ${table} revision 1: a table with 1 column, key nom. Write rows with ${ref.org.prefix}_call table.write. Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.`)
       const changed = await lea.call("write", { path: table, base_revision: 1, header: { columns: [{ name: "ville", type: "text" }], closed: true } })
       expect(changed.text).toBe(`Published ${table} revision 2: added ville; closed. Next write: base_revision 2.`)
       expect((await lea.call("read", { path: table })).text).toContain("\naccess: write (write and publish; sharing, moving and deleting are reserved to team Ventes (lead: Claire Morel))\n")

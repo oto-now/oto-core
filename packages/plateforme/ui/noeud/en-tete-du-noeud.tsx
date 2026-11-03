@@ -7,8 +7,8 @@
 // Porté d'oto-frontend (l'en-tête de `routes/n.$nodeId.lazy.tsx`, `components/noeud/meta-modifiee.tsx`,
 // `acces-du-noeud.tsx`) : `ScreenHeader` et ses créneaux, le glyphe de la nature, « modifiée …, par … »
 // calculé au rendu (une moitié inconnue se tait), un seul bouton pour le périmètre et le partage, le détail
-// dans un popover. Changé : le panneau est celui du partage d'un nœud (E05-S10, AC-b5), le périmètre la
-// section du chemin ; le type, l'état, la révision et le propriétaire passent dans une infobulle (AC-a7) ;
+// dans un popover. Changé : le panneau est celui du partage d'un nœud (E05-S10, AC-b5), le périmètre l'espace écrit
+// sur le nœud (son propriétaire, depuis le 03/11 ; la section de son chemin avant) ; le type, l'état, la révision et le propriétaire passent dans une infobulle (AC-a7) ;
 // le champ du titre dans le `<h1>` est celui de la plateforme (`TitreModifiable`, à la place de `TitleField`).
 // Retiré : la pile d'avatars ; « Déplacer » (AC-b4), que le rail porte (E05-S13, AC-20).
 // E11-S05 : « Télécharger en .csv » d'un tableau, « Télécharger en .md » sinon, à gauche de « Partager », pour qui
@@ -25,7 +25,7 @@ import { Tooltip } from "../ds/react/tooltip"
 import { proprietaire } from "../equipes/libelles"
 import { ilYA } from "../format/dates"
 import { ResumeModifiable, TitreModifiable } from "./en-tete-modifiable"
-import { filDuChemin, porteeDeLaSection, sectionDuChemin } from "./fil"
+import { espaceDuNoeud, filDuChemin } from "./fil"
 import { FilDuNoeud } from "./fil-du-noeud"
 import { GlypheDeNature, GlypheDePortee } from "./glyphes"
 import { detailsDuNoeud, ECRAN, genreDuNoeud, INFOBULLE, modifieeDuNoeud, NATURES, resumeMontre } from "./libelles"
@@ -89,7 +89,8 @@ function Telechargement({ vue }: { vue: NodeView }) {
 }
 
 export function EnTeteDuNoeud({ vue, titre, arbre, equipes, handle, prefixeDesPages, modifiable, partage, reglages }: EnTeteDuNoeudProps) {
-  const section = sectionDuChemin(vue.path, equipes, handle)
+  // L'espace écrit sur le nœud, pas la section de son chemin (décidé avec JB le 03/11).
+  const espace = espaceDuNoeud(vue.owner)
   // Un nœud jamais publié n'a rien à télécharger (HN-E11S05-9).
   const telechargeable = vue.status === "published"
   // Dans cet ordre, à l'écran comme au clavier : télécharger, les réglages d'un tableau, puis partager (AC-c1, HN-E11S01-16).
@@ -99,10 +100,10 @@ export function EnTeteDuNoeud({ vue, titre, arbre, equipes, handle, prefixeDesPa
       {reglages}
       {partage && (
         <AccessPanel
-          scope={ECRAN.partager(section.titre)}
-          scopeIcon={section.cle === null ? undefined : <GlypheDePortee portee={porteeDeLaSection(section.cle)} />}
+          scope={ECRAN.partager(espace.titre)}
+          scopeIcon={<GlypheDePortee portee={espace.portee} />}
           panel={partage}
-          panelLabel={ECRAN.panneauDePartage(section.titre)}
+          panelLabel={ECRAN.panneauDePartage(espace.titre)}
         />
       )}
     </>

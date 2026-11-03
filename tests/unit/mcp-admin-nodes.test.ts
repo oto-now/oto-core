@@ -163,7 +163,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
         new_path: "conseil/tarifs",
       })
       expect(moved.text).toBe(
-        "ventes/tarifs moved to conseil/tarifs with its 2 descendants; the old paths stay as aliases (tools called with them answer « moved to conseil/tarifs »). Owner now: team Conseil.",
+        "ventes/tarifs moved to conseil/tarifs with its 2 descendants; the old paths stay as aliases (tools called with them answer « moved to conseil/tarifs »). Owner now: team Ventes (lead: Claire Morel).",
       )
       expect(moved.structured).toMatchObject({ nodes: [{ from: "ventes/tarifs", to: "conseil/tarifs" }, expect.anything(), expect.anything()], next_actions: ["admin_node rules"] })
 
@@ -281,20 +281,28 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       expect(done.text).toBe("ventes/tarifs now belongs to team Support (2 nodes changed owner).")
       const transferred = await nodesOf(mine.admin, mine.seed)
       expect(transferred["ventes/tarifs"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id, owner_user_id: null, updated_by: PERSONS.sam.id })
-      // Le descendant qui hérite suit sans être réécrit ; aucun bloc ni brouillon n'est touché (ADR-011 § 2).
-      expect(transferred["ventes/tarifs/grille"]).toMatchObject({ owner_kind: null })
-      expect(rewritten(before, transferred)).toEqual(["ventes/tarifs"])
+      // Le descendant du même propriétaire le suit, écrit dans la même transaction (20261103150000) ; aucun bloc ni
+      // brouillon n'est touché (ADR-011 § 2).
+      expect(transferred["ventes/tarifs/grille"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id })
+      expect(rewritten(before, transferred).sort()).toEqual(["ventes/tarifs", "ventes/tarifs/grille"])
       expect(await contentOf(mine.admin, mine.seed)).toEqual(blocks)
-      expect(writes(sent)).toEqual([["nodes", "update"]])
+      expect(writes(sent)).toEqual([
+        ["nodes", "update"],
+        ["nodes", "update"],
+      ])
 
       const back = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: "inherit", confirm: true })
       expect(back.text).toBe("ventes/tarifs now belongs to team Ventes (lead: Claire Morel) (2 nodes changed owner).")
       const inherited = await nodesOf(mine.admin, mine.seed)
-      expect(inherited["ventes/tarifs"]).toMatchObject({ owner_kind: null, owner_team_id: null, owner_user_id: null })
+      // `inherit` écrit le propriétaire du parent : aucun nœud ne redevient hérité.
+      expect(inherited["ventes/tarifs"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.ventes.id, owner_user_id: null })
+      expect(inherited["ventes/tarifs/grille"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.ventes.id })
       expect((await node({ op: "transfer_owner", path: "conseil", owner: "team:conseil", confirm: true })).text).toBe("conseil already belongs to team Conseil; nothing changed.")
       expect(rewritten(inherited, await nodesOf(mine.admin, mine.seed))).toEqual([])
       expect(await contentOf(mine.admin, mine.seed)).toEqual(blocks)
       expect(writes(sent)).toEqual([
+        ["nodes", "update"],
+        ["nodes", "update"],
         ["nodes", "update"],
         ["nodes", "update"],
       ])

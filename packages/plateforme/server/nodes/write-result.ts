@@ -2,7 +2,7 @@
 // création d'un nœud, la provenance d'un bloc écrit selon la porte, le texte et les données de la
 // réponse (références des blocs neufs connues après leur écriture). Fichier à part de `write.ts` pour la
 // borne de 300 lignes (`coding-standards.md § Complexité`).
-import type { AccessLevel } from "../access"
+import type { AccessLevel, Owner } from "../access"
 import type { PlatformDb } from "../db"
 import { boundedList, fromDatabaseError, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
@@ -51,8 +51,8 @@ export function provenanceOf(identity: Identity, origin: WriteOrigin): Record<st
 const NODE_SQL_COLUMNS = NODE_COLUMNS.split(", ")
 
 /**
- * Le nœud neuf (AC19) : brouillon à la révision 0, propriétaire hérité (colonnes nulles, H52),
- * `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
+ * Le nœud neuf (AC19) : brouillon à la révision 0, son espace écrit (`owner`, le Privé de son auteur ; `null` : la base
+ * recopie celui du parent, migration 20261103150000), `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
  * encore, ou ancien chemin d'un autre nœud depuis M02) → le refus « not available » (N31) ; `23503` →
  * le parent a disparu. La ligne rendue est celle que rendait PostgREST (`to_json` : dates en texte, à la
  * microseconde), les colonnes de `NODE_COLUMNS`.
@@ -60,8 +60,9 @@ const NODE_SQL_COLUMNS = NODE_COLUMNS.split(", ")
 export async function insertNode(
   db: PlatformDb,
   identity: Identity,
-  spec: { path: string; parent: NodeRow; kind: string; title: string; summary: string },
+  spec: { path: string; parent: NodeRow; kind: string; title: string; summary: string; owner: Owner | null },
 ): Promise<NodeRow> {
+  const owner = spec.owner ? { owner_kind: spec.owner.kind, owner_team_id: spec.owner.teamId, owner_user_id: spec.owner.userId } : {}
   const node = {
     org_id: identity.org.id,
     parent_id: spec.parent.id,
@@ -71,6 +72,7 @@ export async function insertNode(
     summary: spec.summary,
     created_by: identity.user.id,
     updated_by: identity.user.id,
+    ...owner,
   }
   const [inserted] = await db
     .tx((sql) => sql<{ node: NodeRow }[]>`
@@ -100,6 +102,8 @@ type ResultInput = {
   saved: Saved | null
   published: PublishResult | null
   teamId: string | null
+  /** L'espace d'une création et la ligne qui le dit (`write-space.ts`). */
+  space?: { text: string; space: "everyone" | "team" | "private" }
 }
 
 /**
@@ -191,5 +195,8 @@ export function savedResult(input: ResultInput): ToolOutput {
     : { path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
   // Le compte du mode tolérant (E10-S01, AC-a2), pour l'écran seul : en mode strict, les champs de `write` ne changent pas.
   const kept = saved?.keptAsText ? { kept_as_text: saved.keptAsText } : {}
-  return { text: lines.join("\n"), data: { ...data, ...kept }, nextActions: [`${prefix}_read`], target: node.path, teamId: input.teamId }
+  // L'espace d'une création, dit en dernière ligne et en champ (décidé avec JB le 02/11).
+  if (input.space) lines.push(input.space.text)
+  const space = input.space ? { space: input.space.space } : {}
+  return { text: lines.join("\n"), data: { ...data, ...kept, ...space }, nextActions: [`${prefix}_read`], target: node.path, teamId: input.teamId }
 }

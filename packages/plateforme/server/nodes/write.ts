@@ -37,6 +37,7 @@ import { withCurrentLinks } from "./current-links"
 import { insertNode, provenanceOf, savedResult, type Saved, type WriteOrigin } from "./write-result"
 import { attachFiles, refuseFilesOnCreate } from "./write-files"
 import { keepAuthorCtx, writeAtomically, writesAtomically } from "./write-atomic"
+import { ownerAtCreation, rowOwner, spaceLine } from "./write-space"
 
 export type { WriteOrigin } from "./write-result"
 
@@ -107,6 +108,21 @@ function pageInOwnSpace(identity: Identity, node: NodeRow, body: WriteNodeBody):
   return meant ? ` ${node.path} is your personal space itself: to create a page in it, write at ${node.path}/<page>.` : ""
 }
 
+/**
+ * `space` ne range qu'une création : sur un nœud existant d'un autre espace, il serait ignoré sans le dire. Un
+ * déplacement ne change pas l'espace ; un partage, si (décidé avec JB le 03/11).
+ */
+function checkSpace(identity: Identity, node: NodeRow, body: WriteNodeBody): void {
+  if (body.space === undefined) return
+  const owner = rowOwner(node)
+  const same = body.space === "everyone" ? owner?.kind === "org" : owner?.kind === "user" && owner.userId === identity.user.id
+  if (same) return
+  throw new PlatformError(
+    "invalid_arguments",
+    `${node.path} already exists, in another space: space only places a new content. To change who sees it, ${identity.org.prefix}_call node.share.`,
+  )
+}
+
 function checkOneLine(body: WriteNodeBody): void {
   if (/[\r\n]/.test(body.title ?? "") || /[\r\n]/.test(body.summary ?? "")) {
     throw new PlatformError("invalid_arguments", "title and summary hold on one line (no line break).")
@@ -162,6 +178,8 @@ type Edit = {
   origin: WriteOrigin
   patch?: TableHeaderPatch | null
   createdHeader?: TableHeader
+  /** Une création qui n'a nommé aucun espace et que le Privé de son auteur a prise. */
+  defaulted?: boolean
 }
 
 /**
@@ -273,7 +291,9 @@ async function finish(db: PlatformDb, identity: Identity, edit: Edit, created?: 
   const saved = created ?? (writes ? await saveEdits(db, identity, edit) : null)
   const published = body.publish !== false ? await publishAfter(db, identity, edit, saved) : null
   const owner = await ownerOf(db, node.id)
-  const output = savedResult({ identity, edit, saved, published, teamId: teamOf(owner) })
+  // La portée dite après coup (décidé avec JB le 02/11) : une création dit dans quel espace elle est tombée.
+  const space = edit.created ? await spaceLine(db, identity, owner, edit.defaulted === true) : undefined
+  const output = savedResult({ identity, edit, saved, published, teamId: teamOf(owner), space })
   // E05-S10, AC-b12 : l'adresse a suivi le titre publié, pour l'écran comme pour un assistant (HN-E05S10e-5) ; le chemin
   // se choisit ensuite par `node.move` (E11-S18, AC-6).
   const renamed = published?.renamed
@@ -329,14 +349,18 @@ async function create(db: PlatformDb, identity: Identity, body: WriteNodeBody, o
   // Rien n'est écrit tant que les opérations ne sont pas passées (AC22) : elles s'appliquent d'abord à vide.
   const planned = applyOps([], body.ops ?? [], { path, tolerant: tolerantFor(body, origin), wholeFile: uploadedFile(origin) !== undefined, opsMax: opsMaxFor(origin) })
   await refuseFilesOnCreate(db, identity, planned.blocks, { path, tolerant: tolerantFor(body, origin) })
-  const spec = { path, parent: parent.node, kind, title: body.title, summary: body.summary }
+  // L'espace est écrit sur le nœud à sa création : celui du parent quand l'écriture le nomme, sinon le Privé de l'auteur
+  // (`write-space.ts`, décidé avec JB le 03/11).
+  const owner = ownerAtCreation(identity, { parent: parent.node, space: body.space, origin })
+  const spec = { path, parent: parent.node, kind, title: body.title, summary: body.summary, owner }
   // Le nœud, son brouillon et son contenu dans une seule transaction (E01-S10, AC-x4) : une création arrêtée
-  // au milieu ne laisse ni nœud ni brouillon. Un nœud neuf hérite du propriétaire et des règles de son
-  // parent : même niveau (H52, H66).
+  // au milieu ne laisse ni nœud ni brouillon. Un nœud neuf prend l'espace choisi ci-dessus et hérite des règles de son
+  // parent (H66), sauf dans un Privé, qui ne prend que les siennes.
   const made = await inTransaction(db, "nodes: create", async () => {
     const node = await insertNode(db, identity, spec)
     await openDraft(db, node)
-    const created: Edit = { node, level: parent.level, created: true, body, origin, ...table }
+    const defaulted = owner !== null && body.space === undefined
+    const created: Edit = { node, level: parent.level, created: true, body, origin, defaulted, ...table }
     return { edit: created, saved: await saveEdits(db, identity, created) }
   })
   return finish(db, identity, made.edit, made.saved)
@@ -414,6 +438,7 @@ async function edit(
   if (!writes && edits.publish === false) throw new PlatformError("invalid_arguments", "Nothing to write: give ops, title, summary or header.")
   checkKinds(edits, node, identity.org.prefix)
   checkOneLine(edits)
+  checkSpace(identity, node, edits)
   if (level < ACCESS_LEVELS.write) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, writes ? "write" : "publish")
   if (edits.base_revision !== node.revision) throw await staleRevision(db, node, edits.base_revision, pageInOwnSpace(identity, node, edits))
   return finish(db, identity, { node, level, created: false, body: edits, origin, patch })

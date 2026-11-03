@@ -142,9 +142,9 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       await content(base())
       const lea = await write("lea", input)
       expect(lea.result?.text).toBe(
-        'Draft of ventes/cr_test created (revision 0): added « Décisions » (34 characters).\nPublish it with acme_write {"path": "ventes/cr_test", "base_revision": 0, "publish": true}.',
+        'Draft of ventes/cr_test created (revision 0): added « Décisions » (34 characters).\nPublish it with acme_write {"path": "ventes/cr_test", "base_revision": 0, "publish": true}.\nSpace: team Ventes (lead: Claire Morel): its members see it.',
       )
-      // Le nœud inséré, tel que le service l'a écrit : ses colonnes, et celles que la base pose (brouillon, révision 0, propriétaire hérité).
+      // Le nœud inséré, tel que le service l'a écrit : ses colonnes, et celles que la base pose (brouillon, révision 0, propriétaire du parent, recopié).
       const node = await nodeRow("ventes/cr_test")
       expect(ref.readable(node)).toMatchObject({
         org_id: "org-acme",
@@ -157,7 +157,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
         updated_by: "user-lea",
         status: "draft",
         revision: 0,
-        owner_kind: null,
+        owner_kind: "team",
       })
       expect(functionCalls(lea.calls, "open_draft")).toHaveLength(1)
       const drafts = await draftsOfO()
@@ -169,6 +169,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       expect(lea.result?.data).toEqual({
         path: "ventes/cr_test",
         revision: 0,
+        space: "team",
         status: "draft",
         has_draft: true,
         touched: [{ op: "add_section", text: "added « Décisions » (34 characters)", blocks: [first, second].map((row) => ({ id: row.id, ref: String(row.id).slice(0, 8), revision: 1 })) }],
@@ -192,8 +193,8 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       await content(base())
       const lea = await write("lea", input, { asIs: true })
       expect(lea.result?.text).toBe(
-        // Une ligne, sans brouillon (E11-S18, AC-4).
-        "Published ventes/cr_test revision 1 (1 section, 2 blocks): added « Décisions » (34 characters). Next write: base_revision 1.",
+        // Une ligne, sans brouillon (E11-S18, AC-4), puis l'espace où le nœud est créé (20261103150000).
+        "Published ventes/cr_test revision 1 (1 section, 2 blocks): added « Décisions » (34 characters). Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.",
       )
       expect(lea.result?.data).toMatchObject({ path: "ventes/cr_test", revision: 1, status: "published", has_draft: false, draft_stamp: null })
       expect(await nodeRow("ventes/cr_test")).toMatchObject({ status: "published", revision: 1 })
@@ -572,8 +573,8 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       expect(many.text.split("\n")).toEqual([
         "2 of 3 pages written, 1 refused.",
         expect.stringMatching(/^1\. ventes\/absent\/page refused \(not_found\): Cannot create ventes\/absent\/page: its parent ventes\/absent does not exist\./),
-        "2. Published ventes/fiches revision 1 (0 sections, 0 blocks). Next write: base_revision 1.",
-        expect.stringMatching(/^3\. Published ventes\/fiches\/garantie revision 1 \(1 section, 2 blocks\): replaced the whole body \(1 section, [0-9]+ characters\)\. Next write: base_revision 1\.$/),
+        "2. Published ventes/fiches revision 1 (0 sections, 0 blocks). Next write: base_revision 1. Space: team Ventes (lead: Claire Morel): its members see it.",
+        expect.stringMatching(/^3\. Published ventes\/fiches\/garantie revision 1 \(1 section, 2 blocks\): replaced the whole body \(1 section, [0-9]+ characters\)\. Next write: base_revision 1\. Space: team Ventes \(lead: Claire Morel\): its members see it\.$/),
       ])
       expect(many.data?.pages).toEqual([
         { path: "ventes/absent/page", status: "refused", code: "not_found", message: expect.any(String) },

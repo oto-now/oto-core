@@ -150,7 +150,11 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
     it("should delete the team once its folder passed to the organisation, its rules with it, keeping the former Contexte", async () => {
       const logistique = await teamWithPage("logistique")
-      await as("ada").tx((sql) => sql`update platform.nodes set owner_kind = 'org', owner_team_id = null where id = ${logistique.folder} returning id`)
+      // Le dossier et ses nœuds du même propriétaire passent ensemble, comme `admin_node transfer_owner` (20261103150000).
+      await as("ada").tx(
+        (sql) => sql`update platform.nodes set owner_kind = 'org', owner_team_id = null
+                      where org_id = ${o.org.id} and owner_team_id = ${logistique.team} and (id = ${logistique.folder} or starts_with(path, 'logistique/')) returning id`,
+      )
       expect(await deleteTeam(logistique.team)).toHaveLength(1)
       expect(await rulesOfTeam(logistique.team)).toEqual([])
       expect(await paths(o.org.id, "logistique")).toEqual(["logistique", "logistique/contexte", "logistique/faq"])
@@ -159,7 +163,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       )
       expect(contexte.is_context).toBe(false)
       const owner = await as("ada").tx((sql) => sql`select * from platform.node_owner(${logistique.contexte})`)
-      expect(owner[0]).toMatchObject({ owner_kind: "org", owner_node_id: logistique.folder })
+      // Le haut de l'espace Tout le monde, que le dossier rejoint : la racine.
+      expect(owner[0]).toMatchObject({ owner_kind: "org", owner_node_id: o.nodes.root })
     })
 
     it("should delete a team whose folder holds only its Contexte, with both nodes and their rules", async () => {

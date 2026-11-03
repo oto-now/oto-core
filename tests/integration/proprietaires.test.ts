@@ -53,12 +53,15 @@ describe.skipIf(!ready)(ready ? SUITE : `${SUITE} (${skipReason})`, { timeout: N
     return [...(await seed.admin`select owner_kind, owner_team_id, owner_user_id from platform.nodes where id = ${nodeId}`)]
   }
 
-  it("should let a lead who does not administer make a team node personal, by a move or by its owner, hidden then from the administrator (fiche D18 B)", async () => {
+  it("should let a lead who does not administer make a team node personal by its owner, hidden then from the administrator, a move into her space keeping its team (fiche D18 B, 20261103150000)", async () => {
     const claire = ref.people.claire.id
     const [devis, tarifs] = ["ventes/devis", "ventes/tarifs"].map((path) => ref.nodeId(path))
-    // Le service : Claire mène Ventes, sans administrer O ; `ventes/devis` tient Ventes de son dossier.
+    // Le service : Claire mène Ventes, sans administrer O ; déplacée dans son espace, `ventes/devis` garde l'équipe (l'espace
+    // est écrit sur le nœud, décidé avec JB le 03/11).
     const moved = await moveNode(dbOf("claire"), ref.identityOf("claire"), { path: "ventes/devis", new_path: "private/claire/devis" })
     expect(moved.target).toBe("private/claire/devis")
+    expect(await nodeLevel(dbOf("ada"), ref.identityOf("ada"), devis)).toBe(3)
+    await dbOf("claire").tx((sql) => sql`update platform.nodes set owner_kind = 'user', owner_team_id = null, owner_user_id = ${claire} where id = ${devis} returning id`)
     // La base, sous sa session : `ventes/tarifs` porte Ventes pour propriétaire explicite.
     const given = await dbOf("claire").tx(
       (sql) => sql`update platform.nodes set owner_kind = 'user', owner_team_id = null, owner_user_id = ${claire} where id = ${tarifs} returning id`,
@@ -89,7 +92,7 @@ describe.skipIf(!ready)(ready ? SUITE : `${SUITE} (${skipReason})`, { timeout: N
     expect(await ownerOf(space)).toEqual(before)
     // Plus bas dans l'espace, un propriétaire explicite reste permis (H71).
     const given = await dbOf("claire").tx(
-      (sql) => sql`update platform.nodes set owner_kind = 'team', owner_team_id = ${ventes} where id = ${notes} returning id`,
+      (sql) => sql`update platform.nodes set owner_kind = 'team', owner_team_id = ${ventes}, owner_user_id = null where id = ${notes} returning id`,
     )
     expect(given).toHaveLength(1)
   })
