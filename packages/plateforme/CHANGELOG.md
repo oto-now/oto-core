@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- UI: the "your space is getting ready" screen bounds each probe of the new address to 5 s, says the delay after two minutes of clock time, then keeps probing and leaves on its own once the address answers; its "Réessayer" button is gone.
+
 ## 1.6.2 — 2026-10-28
 
 ### Hosts

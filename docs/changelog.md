@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-03] — Écran de préparation de l'espace : la sonde bornée, le retard à l'horloge
+**Quoi :** `adresseRepond` borne chaque sonde à 5 s : une connexion suspendue compte comme un échec, par abandon et par course contre le minuteur. `DepartVersLOrganisation` dit le retard à deux minutes d'horloge (et non après 40 sondes) ; passé ce délai, il montre le lien vers l'espace et continue de sonder, puis part seul dès que l'adresse répond. Le bouton « Réessayer » est retiré, devenu sans objet.
+**Pourquoi :** issue oto-core #89 « Écran de préparation de l'espace : l'arrivée en ligne n'est pas détectée » : une sonde sans délai restait suspendue pendant l'émission du certificat, l'écran restait bloqué sans fin ; après 40 échecs, il ne voyait plus l'adresse répondre.
+**Fichiers :** `packages/plateforme/ui/api/client.ts`, `packages/plateforme/ui/inscription/depart-vers-l-organisation.tsx`, `tests/integration/components/e12s01-inscription.test.tsx`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-28] — Version 1.6.2 du paquet
 **À appliquer :** la migration `20261028090000_platform_regle_de_la_racine.sql`, seule depuis la 1.6.1, avec le paquet de la même version (`oto-platform migrations sync`, puis l'appliquer avant le déploiement) ; ce que dit la section 1.6.2 du `CHANGELOG.md` du paquet.
 **Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.6.2 — 2026-10-28` (les droits de Tout le monde : une règle de la racine ne vaut que pour les contenus de l'organisation, « Droits de Tout le monde… » pour l'administrateur) ; `packages/plateforme/package.json` passe à 1.6.2 ; une section `## Unreleased` vide reste au-dessus. Version corrective malgré la migration, décidée par JB.
