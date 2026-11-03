@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-03] — Contenu privé par défaut : l'espace d'un nœud est écrit à sa création
+**À appliquer :** la migration `20261103150000_platform_espace_ecrit.sql` avec le paquet (`pnpm migrations:sync`, puis `supabase db push`). Elle fige sur chaque nœud le propriétaire qu'il héritait : aucune visibilité ne change.
+**Quoi :** l'espace d'un nœud (Privé d'une personne, une équipe, Tout le monde) est écrit sur lui à sa création (`owner_kind`, `owner_team_id`, `owner_user_id`, désormais toujours posés) ; un `write` d'assistant qui ne nomme aucun espace partagé crée dans le Privé de son auteur, `space: "everyone"` crée dans Tout le monde, et la réponse dit l'espace ; un déplacement ou une copie ne changent plus l'espace ; le transfert écrit le nouveau propriétaire sur les descendants du même espace ; « Partager · <espace> » nomme l'espace écrit ; les règles servies disent la règle de rangement et ce qu'un membre lit et écrit par défaut.
+**Pourquoi :** décidé avec JB le 02/11 et le 03/11 (issue « Proposition : un contenu privé par défaut, comme dans l'ancien oto ») : aucun partage sans geste explicite, et « aucun espace » ne se confond plus avec « Tout le monde ».
+**Fichiers :** `packages/plateforme/migrations/20261103150000_platform_espace_ecrit.sql` (et sa copie `supabase/migrations/`), `server/nodes/write-space.ts`, `server/nodes/write.ts`, `server/nodes/write-result.ts`, `server/access-levels.ts`, `server/admin/nodes.ts`, `server/context/blocks/code.ts`, `server/help.ts`, `schemas/nodes.ts`, `ui/noeud/fil.ts`, `ui/noeud/en-tete-du-noeud.tsx`, `ui/coque/impact-du-deplacement.tsx`, `docs/conception/droits-d-acces.md`, `docs/conception/noeuds-et-arbre.md`, `docs/reference/schema-platform.md`, tests.
+
 ## [2026-10-28] — Version 1.6.2 du paquet
 **À appliquer :** la migration `20261028090000_platform_regle_de_la_racine.sql`, seule depuis la 1.6.1, avec le paquet de la même version (`oto-platform migrations sync`, puis l'appliquer avant le déploiement) ; ce que dit la section 1.6.2 du `CHANGELOG.md` du paquet.
 **Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.6.2 — 2026-10-28` (les droits de Tout le monde : une règle de la racine ne vaut que pour les contenus de l'organisation, « Droits de Tout le monde… » pour l'administrateur) ; `packages/plateforme/package.json` passe à 1.6.2 ; une section `## Unreleased` vide reste au-dessus. Version corrective malgré la migration, décidée par JB.

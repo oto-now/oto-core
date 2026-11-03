@@ -232,8 +232,10 @@ describe.skipIf(!sqlConfigured || privatePending)(
     it("should publish the procedure an administrator writes with no refusal: no header, three sections, the calls of the module and its links (AC3)", async () => {
       // Le brouillon créé, puis publié : aucun refus du contrôle d'E03-S06, aucun avertissement de lien.
       // E11-S18 (AC-4) : une ligne, la publication et ce que l'écriture a fait.
+      // Depuis 20261103150000, une dernière ligne dit l'espace du nœud créé.
       const lines = published.text.split("\n")
-      expect([published.isError, lines.length, lines[0].startsWith(`Published ${PATH} revision 1 (3 sections, 14 blocks): added « `)]).toEqual([false, 1, true])
+      expect(lines.at(-1)).toMatch(/^Space: /)
+      expect([published.isError, lines.length, lines[0].startsWith(`Published ${PATH} revision 1 (3 sections, 14 blocks): added « `)]).toEqual([false, 2, true])
       const node = await admin`select kind, title, summary, meta, revision from platform.nodes where id = ${ids.procedure}`
       expect(node).toEqual([{ kind: "procedure", title: PILOT_PROCEDURE.title, summary: PILOT_PROCEDURE.summary, meta: {}, revision: 1 }])
       const blocks = await admin<{ id: string; type: string; text: string | null; data: unknown }[]>`

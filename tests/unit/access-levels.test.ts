@@ -145,6 +145,21 @@ describe("nodeLevelOf", () => {
     expect(level("lea", "private/claire/notes", [{ node: "private/claire", user: "lea", level: "read" }])).toBe(1)
   })
 
+  // 20261103150000 : l'espace écrit sur chaque nœud ; le plancher d'un Privé reste le haut de l'espace (les ancêtres
+  // contigus qui portent la même personne), et un Privé rangé sous un dossier partagé n'en reçoit aucune règle.
+  it("should count in a personal space whose owner is written on every node the rules from the top of that space down", () => {
+    const lea = { kind: "user" as const, teamId: null, userId: PEOPLE.lea.id }
+    const claire = { kind: "user" as const, teamId: null, userId: PEOPLE.claire.id }
+    const written = (path: string, owner: NodeFact["owner"]): NodeChain => {
+      const ancestors = NODES.filter((node) => node.path !== path).map((node) => (node.path === "ventes/x" || node.path === "ventes/x/y" ? { ...node, owner: lea } : node.path.startsWith("private/claire/") ? { ...node, owner: claire } : node))
+      return { node: { ...fact(path), owner }, ancestors, rules: [] }
+    }
+    const shared = (path: string, owner: NodeFact["owner"], rules: RuleSpec[]) => ({ ...written(path, owner), rules: rules.map(ruleFact) })
+    expect(nodeLevelOf(callerOf(identityOf("lea")), shared("private/claire/notes", claire, [{ node: "private/claire", user: "lea", level: "read" }]))).toBe(1)
+    expect(nodeLevelOf(callerOf(identityOf("claire")), shared("ventes/x/y", lea, [{ node: "ventes", user: "claire", level: "write" }]))).toBe(0)
+    expect(nodeLevelOf(callerOf(identityOf("claire")), shared("ventes/x/y", lea, [{ node: "ventes/x", user: "claire", level: "read" }]))).toBe(1)
+  })
+
   it("should count an organisation rule for every member, after the person's and the teams' rules on the same node (ADR-014)", () => {
     const open: RuleSpec[] = [{ node: "annonces", org: true, level: "write" }]
     expect([level("marc", "annonces", open), level("lea", "annonces", open), level("marc", "annonces")]).toEqual([2, 2, 1])

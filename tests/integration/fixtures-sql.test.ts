@@ -117,13 +117,34 @@ function expectRows(table: string, rows: Row[], seeded: Map<string, Row>): void 
   }
 }
 
+const OWNER_COLUMNS = ["owner_kind", "owner_team_id", "owner_user_id"] as const
+
+/**
+ * Les nœuds simulés, chacun avec le propriétaire que la base écrit à sa création (20261103150000) : la base simulée
+ * laisse hérité (NULL) le propriétaire d'un nœud, la vraie y recopie celui de son plus proche ancêtre qui en porte un.
+ * Un parent que la fixture ne simule pas (elle n'en porte qu'une partie, parfois sans `parent_id`) se lit dans la
+ * base, `seeded`.
+ */
+function writtenOwners(rows: Row[], seeded: Map<string, Row> = new Map()): Row[] {
+  const byId = new Map(rows.map((row) => [String(row.id), row]))
+  const carrier = (row: Row): Row | undefined => {
+    let at: Row | undefined = row
+    while (at && at.owner_kind == null) {
+      const parent: string = String(at.parent_id ?? seeded.get(String(at.id))?.parent_id)
+      at = byId.get(parent) ?? seeded.get(parent)
+    }
+    return at
+  }
+  return rows.map((row) => (row.owner_kind == null ? { ...row, ...Object.fromEntries(OWNER_COLUMNS.map((column) => [column, carrier(row)?.[column] ?? null])) } : row))
+}
+
 /** Chaque table non vide de `simulated` face à ses lignes relues : les mêmes lignes, puis `expectRows`. */
 async function expectSeeded(sql: TestSql, fixture: Readable, simulated: Tables, scope: Scope): Promise<void> {
   for (const [table, rows] of Object.entries(simulated)) {
     if (rows.length === 0 || NOT_WRITTEN.has(table)) continue
     const seeded = await seededRows(sql, fixture, table, scope)
     expect([...seeded.keys()].sort(), table).toEqual(rows.map((row) => keyOf(table, row)).sort())
-    expectRows(table, rows, seeded)
+    expectRows(table, table === "nodes" ? writtenOwners(rows, seeded) : rows, seeded)
   }
 }
 
@@ -229,7 +250,7 @@ describe.skipIf(!sqlConfigured)(
         addBlocks(simulated, NODE.path, "draft", [BLOCK])
         openDraftRow(simulated, NODE.path, HEADER)
         const added: Tables = {
-          nodes: simulated.nodes.filter((row) => row.path === NODE.path),
+          nodes: writtenOwners(simulated.nodes, await seededRows(seed.admin, ref, "nodes", scopeOf(ref))).filter((row) => row.path === NODE.path),
           blocks: simulated.blocks,
           node_drafts: simulated.node_drafts,
           node_aliases: [aliasRow("ventes/relance", NODE.path)],

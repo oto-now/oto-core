@@ -232,9 +232,9 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
       const nodes = await fx.admin<{ path: string; title: string; status: string; revision: number; owner_kind: string | null }[]>`
         select path, title, status, revision, owner_kind from platform.nodes where org_id = ${o.org.id} and starts_with(path, 'ventes/dup_copie') order by path`
       expect([...nodes]).toEqual([
-        { path: "ventes/dup_copie", title: "Dup (copie)", status: "published", revision: 1, owner_kind: null },
-        { path: "ventes/dup_copie/enfant", title: "ventes/dup/enfant", status: "published", revision: 1, owner_kind: null },
-        { path: "ventes/dup_copie/tab", title: "Tab", status: "published", revision: 1, owner_kind: null },
+        { path: "ventes/dup_copie", title: "Dup (copie)", status: "published", revision: 1, owner_kind: "team" },
+        { path: "ventes/dup_copie/enfant", title: "ventes/dup/enfant", status: "published", revision: 1, owner_kind: "team" },
+        { path: "ventes/dup_copie/tab", title: "Tab", status: "published", revision: 1, owner_kind: "team" },
       ])
       const blocks = await fx.admin<{ path: string; type: string; text: string | null; key: string | null }[]>`
         select n.path, b.type, b.text, b.key from platform.blocks b join platform.nodes n on n.id = b.node_id
@@ -264,23 +264,18 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
   })
 
   describe("impact of a move (AC-b7)", () => {
-    it("should say who gains, loses or changes access when a node leaves its team", async () => {
+    // Depuis 20261103150000, l'espace est écrit sur le nœud : le ranger sous un autre dossier ne change ni son
+    // propriétaire ni qui y accède ; seul un partage ou un transfert le fait (`droits-d-acces.md`).
+    it("should say that moving a node under another team's folder changes neither its space nor who reads it", async () => {
       await page("ventes/partant")
       // Ada, administratrice, lit les deux dossiers d'équipe ; Claire ne lit pas celui de Support.
       const ada = as("ada")
       const claire = as("claire")
       await expect(moveImpact(claire.db, claire.identity, { path: "ventes/partant", new_path: "support/partant" })).rejects.toMatchObject({ code: "not_found" })
       const impact = await moveImpact(ada.db, ada.identity, { path: "ventes/partant", new_path: "support/partant" })
-      const ids = (changes: { userId: string; before: number; after: number }[]) => changes.map((change) => [change.userId, change.before, change.after])
-      expect({ changes: impact.changes, before: impact.before.space, after: impact.after.space }).toEqual({ changes: true, before: "team", after: "team" })
-      expect(ids(impact.gained)).toEqual([[o.people.paul.id, 0, 3]])
-      expect(ids(impact.lost).sort()).toEqual(
-        [
-          [o.people.claire.id, 3, 0],
-          [o.people.lea.id, 2, 0],
-        ].sort(),
-      )
-      expect(impact.changed).toEqual([])
+      expect({ changes: impact.changes, before: impact.before.space, after: impact.after.space }).toEqual({ changes: false, before: "team", after: "team" })
+      expect(impact.after.owner).toBe(impact.before.owner)
+      expect([impact.gained, impact.lost, impact.changed]).toEqual([[], [], []])
       // Même place : rien ne change.
       expect((await moveImpact(ada.db, ada.identity, { path: "ventes/partant", new_path: "ventes/devis/partant" })).changes).toBe(false)
     })

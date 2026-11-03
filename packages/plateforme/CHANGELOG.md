@@ -17,6 +17,16 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- `write` creating outside a team folder or your private space puts the content in your private space, unless it passes `space: "everyone"`; the answer says the space.
+- Moving or renaming a content no longer changes who sees it: its space is written on it; only a share or a transfer changes it.
+
+### Hosts
+- Migrations: apply `20261103150000_platform_espace_ecrit.sql` together with the package: every node gets the owner it inherited, written on it (no visibility changes, `updated_at` kept), `owner_kind` becomes required, a node created without owner takes its parent's, and under a session only its parent's or its author's own. The package without it reads an inherited owner as none; the migration without the package writes every new assistant page in the shared space as before, but private pages moved under a shared folder stay private.
+- Schemas: `writeNodeSchema` takes `space` (`"everyone"` or `"private"`), for a creation only.
+- UI: « Partager · <espace> » of a node names the space written on it (its owner), no longer the section of its path.
+- Server: `transferOwner` writes the new owner on the node and on the descendants that share its space; `inherit` writes its parent's.
+
 ## 1.6.2 — 2026-10-28
 
 ### Hosts

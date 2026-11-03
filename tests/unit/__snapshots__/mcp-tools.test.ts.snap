@@ -269,6 +269,14 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "description": "false: save a draft without publishing it (default true: the write is published at once).",
           "type": "boolean",
         },
+        "space": {
+          "description": "Space of a new node: "everyone" puts it in the shared space, read by the whole organisation; "private" keeps it to you. Default: the space of its folder in a team or a private space, your private space anywhere else.",
+          "enum": [
+            "everyone",
+            "private",
+          ],
+          "type": "string",
+        },
         "summary": {
           "description": "One-line summary, 200 characters max; required to create (default: unchanged).",
           "maxLength": 200,

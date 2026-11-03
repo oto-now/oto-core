@@ -231,6 +231,12 @@ export const writeNodeSchema = z.object({
     .optional()
     .describe("One-line summary, 200 characters max; required to create (default: unchanged)."),
   kind: nodeKindSchema.optional().describe("Kind of a new node: page, procedure or table (default page)."),
+  space: z
+    .enum(["everyone", "private"])
+    .optional()
+    .describe(
+      'Space of a new node: "everyone" puts it in the shared space, read by the whole organisation; "private" keeps it to you. Default: the space of its folder in a team or a private space, your private space anywhere else.',
+    ),
   ops: z
     .array(writeOpSchema)
     .optional()

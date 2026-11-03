@@ -29,9 +29,10 @@ const SESSIONS = [undefined, "server"] as const
 
 /**
  * Les colonnes de `nodes` qu'une session insère : celles qu'écrit `insertNode` (`server/nodes/write-result.ts`), seul
- * ajout dans `nodes` sous une session ; le propriétaire est hérité (nul), le reste prend sa valeur par défaut.
+ * ajout dans `nodes` sous une session ; le propriétaire, celui du parent ou le Privé de l'auteur (`20261103150000`), le reste
+ * prend sa valeur par défaut.
  */
-const INSERTED = ["org_id", "parent_id", "path", "kind", "title", "summary", "created_by", "updated_by"]
+const INSERTED = ["org_id", "parent_id", "path", "kind", "title", "summary", "created_by", "updated_by", "owner_kind", "owner_team_id", "owner_user_id"]
 
 /**
  * Les colonnes de `nodes` qu'une session modifie, chacune avec ses services ; le contenu passe par `publish_node`,
@@ -156,15 +157,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(await seed.admin`
       select kind, status, revision, owner_kind, created_by, updated_by, deleted_at, position, meta
         from platform.nodes where parent_id = ${folder.id}`).toEqual([
-      { kind: "page", status: "draft", revision: 0, owner_kind: null, created_by: marc.id, updated_by: marc.id, deleted_at: null, position: null, meta: {} },
+      { kind: "page", status: "draft", revision: 0, owner_kind: "team", created_by: marc.id, updated_by: marc.id, deleted_at: null, position: null, meta: {} },
     ])
   })
 
-  it.each(SESSIONS)("should refuse a writer making herself the owner of the page she creates (session %s)", async (session) => {
+  // 20261103150000 : l'espace est écrit à la création, celui du parent ou le Privé de l'auteur ; jamais un autre espace.
+  it.each(SESSIONS)("should let a writer create a page in her own private space, never in a space other than its parent's (session %s)", async (session) => {
     const folder = await node(root, led)
-    expect(await attempt(marc, create(marc, folder, { owner_kind: "user", owner_user_id: marc.id }), session)).toBe(DENIED)
-    expect(await attempt(marc, create(marc, folder, { owner_kind: "org" }), session)).toBe(DENIED)
-    expect(await seed.admin`select 1 from platform.nodes where parent_id = ${folder.id}`).toHaveLength(0)
+    expect(await attempt(marc, create(marc, folder, { owner_kind: "org" }), session)).toBe(GUARD)
+    expect(await attempt(marc, create(marc, folder, { owner_kind: "user", owner_user_id: lea.id }), session)).toBe(GUARD)
+    expect(await attempt(marc, create(marc, folder, { owner_kind: "user", owner_user_id: marc.id }), session)).toBe(1)
+    expect(await seed.admin`select owner_kind, owner_user_id from platform.nodes where parent_id = ${folder.id}`).toEqual([{ owner_kind: "user", owner_user_id: marc.id }])
   })
 
   it.each(SESSIONS)("should refuse a writer choosing the trash date, the state, the revision, the id, the date, the metadata or the position of the page she creates (session %s)", async (session) => {

@@ -151,17 +151,27 @@ function placedOwner(chain: NodeChain, lineage: readonly NodeFact[]): PlacedOwne
     // la plus proche, que le plancher compte de toute façon (HN-E01S07-4).
     return { owner: { kind, teamId, userId }, depth: holder ? nodeDepth(holder.path) : 0 }
   }
-  let found: PlacedOwner | null = null
-  for (const n of lineage) {
-    const depth = nodeDepth(n.path)
-    if (n.owner && (!found || depth > found.depth)) found = { owner: n.owner, depth }
+  // Le plus proche qui porte un propriétaire (le nœud lui-même depuis que l'espace est écrit, migration 20261103150000),
+  // puis le haut de son espace : les ancêtres contigus qui portent le même propriétaire.
+  const byDepth = [...lineage].sort((a, b) => nodeDepth(b.path) - nodeDepth(a.path))
+  const index = byDepth.findIndex((n) => n.owner !== null)
+  const carrier = byDepth[index]
+  if (!carrier?.owner) return null
+  let depth = nodeDepth(carrier.path)
+  for (const above of byDepth.slice(index + 1)) {
+    if (nodeDepth(above.path) !== depth - 1 || !above.owner || !sameOwner(above.owner, carrier.owner)) break
+    depth -= 1
   }
-  return found
+  return { owner: carrier.owner, depth }
+}
+
+function sameOwner(a: Owner, b: Owner): boolean {
+  return a.kind === b.kind && a.teamId === b.teamId && a.userId === b.userId
 }
 
 /**
  * Profondeur minimale d'une règle comptée (D5, H61, N35 ; règle de la racine, décidée par JB le 28/10) : dans un espace
- * personnel, le nœud qui porte la personne ; sous une équipe, ou sans propriétaire connu, sous la racine, dont les règles
+ * personnel, le haut de cet espace (un contenu Privé rangé sous un dossier partagé n'en reçoit aucune règle) ; sous une équipe, ou sans propriétaire connu, sous la racine, dont les règles
  * ne valent que pour les contenus de l'organisation (Tout le monde) ; ailleurs, toute la branche.
  */
 function floorOf(placed: PlacedOwner | null): number {

@@ -116,7 +116,7 @@ function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer, 
   const pris = useMemo(() => new Set(titresParChemin(arbre).keys()), [arbre])
   const creation = useMenuDeCreation(prefixe, pris, montrer)
   const depliage = useDepliageDuRail(chemin, prefixe)
-  const deplacement = useDeplacementDansLeRail({ arbre, equipes, handle, prefixe, ouverts: depliage.ouverts })
+  const deplacement = useDeplacementDansLeRail({ arbre, equipes, prefixe, ouverts: depliage.ouverts })
   const gestes = useGestesDuRail({ prefixe, sousContenus: deplacement.arbre.sousContenus, precedente: deplacement.arbre.precedente })
   const genres = useMemo(() => new Map(aplatir(arbre).map((noeud) => [noeud.path, noeud.kind])), [arbre])
   const titres = useMemo(() => titresParChemin(arbre), [arbre])

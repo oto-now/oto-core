@@ -193,7 +193,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
       sql`update platform.nodes set owner_kind = 'user', owner_team_id = null, owner_user_id = ${who.id} where id = ${id} returning id`
     expect(await attempt(lea, mine(read.id, lea), session)).toBe(GUARD)
     expect(await attempt(marc, mine(written.id, marc), session)).toBe(GUARD)
-    expect(await seed.admin`select owner_kind from platform.nodes where id in ${seed.admin([read.id, written.id])}`).toEqual([{ owner_kind: null }, { owner_kind: null }])
+    // Chacun garde le propriétaire écrit à sa création, celui de son parent (20261103150000).
+    expect(await seed.admin`select owner_kind from platform.nodes where id in ${seed.admin([read.id, written.id])} order by owner_kind`).toEqual([{ owner_kind: "org" }, { owner_kind: "team" }])
     expect(await attempt(paul, mine(written.id, paul), session)).toBe(1)
     expect(await seed.admin`select owner_kind, owner_user_id from platform.nodes where id = ${written.id}`).toEqual([{ owner_kind: "user", owner_user_id: paul.id }])
   })

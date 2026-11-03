@@ -191,7 +191,7 @@ describe("input schemas (AC8)", () => {
     const schemas = inputSchemas("acme")
     const create = { ctx: "AAAA-BBBB", path: "ventes/x9", title: "T", summary: "S" }
     expect(parseInput(schemas.write, { ...create, text: "Le corps." })).toEqual({
-      issues: "unknown key « text »; keys: ctx, path, base_revision, title, summary, kind, ops, header, publish",
+      issues: "unknown key « text »; keys: ctx, path, base_revision, title, summary, kind, space, ops, header, publish",
     })
     expect(parseInput(schemas.write, create)).toMatchObject({ data: create })
     const valid: Record<string, Record<string, unknown>> = {

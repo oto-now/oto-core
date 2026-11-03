@@ -71,6 +71,7 @@ const SECTIONS: readonly HelpSection[] = [
     stems: ["chemin", "path", "déplac", "move", "renomm", "rename", "espace", "space", "dossier", "folder", "range"],
     lines: [
       "Every content has a path: lowercase letters, digits and _ separated by /. The organisation's contents sit at the root, a team's under its folder (<team>/…), yours under private/<handle>/.",
+      "The path is only an address: who sees a content is its space (everyone, a team, a person's private space), written on it when it is created and kept when it moves. Created in a team's or a private folder, it joins that space; anywhere else it is private to its author, unless written with space \"everyone\" (the top pages of node.import_tree likewise). To open it to others, <p>_call node.share.",
       "A context page is served to assistants: contexte for the organisation, <team>/contexte for a team, your space's for you. Do not create another page named contexte for that purpose: it is not served.",
       "Publishing a new title moves the path to follow it. To move or rename on purpose, <p>_call node.move: the old path keeps leading there. Never recreate a content then trash the old one: its links and history would be lost.",
       "Reserved paths, served by <p>_read: journal (what was done), functions (every function), help (this guide).",

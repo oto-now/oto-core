@@ -231,13 +231,16 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 
 describe("How this workspace works (E05-S12, AC-10)", () => {
   // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB) ;
-  // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus.
-  it("should hold 18 lines and 3,400 characters at most with a 10-character prefix, the same for everyone", () => {
+  // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus ; 03/11 : l'espace d'une création et ce
+  // qu'un membre lit et écrit par défaut (décidé avec JB), 300 de plus.
+  it("should hold 18 lines and 3,700 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
     expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(18)
-    expect(rules.length).toBeLessThanOrEqual(3_400)
+    expect(rules.length).toBeLessThanOrEqual(3_700)
     expect(rules).toContain("A procedure is a page of numbered steps")
+    expect(rules).toContain('anywhere else abcdefghij_write keeps it private to you unless you pass space: "everyone"')
+    expect(rules).toContain("By default a member reads everyone's contents, writes in their teams' and manages their private ones")
     expect(rules).toContain("A good procedure has a part « When to use it »")
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
     expect(rules.split("\n")[0]).toBe("## How this workspace works")

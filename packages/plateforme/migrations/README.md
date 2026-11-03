@@ -425,6 +425,16 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   droit en base (recherche, policies) et le nouveau dans le service, la migration sans le paquet l'inverse. Une règle déjà
   posée sur la racine garde sa ligne et cesse de compter sous une équipe. Privilèges redits ; aucune table, colonne,
   policy ni index ; rien à relancer avant.
+- `20261103150000_platform_espace_ecrit.sql` (l'espace écrit sur le nœud, décidé avec JB le 03/11 ; droits d'accès,
+  § Propriétaires, déplacements, personnel) : chaque nœud reçoit, figé dans `owner_kind`, `owner_team_id` et
+  `owner_user_id`, le propriétaire qu'il héritait (aucune visibilité ne change, `updated_at` gardé) ; contrainte
+  `nodes_owner_written_check` (propriétaire toujours écrit) ; déclencheur `nodes_owner_at_creation` (un ajout sans
+  propriétaire prend celui de son parent ; sous une session, seul celui du parent ou le Privé de
+  l'auteur, sinon `42501`) et ajout des trois colonnes accordé à `authenticated` ; `node_owner` rend le propriétaire du
+  nœud et le haut de son espace ; `node_level_of` re-versionnée à signature identique (le propriétaire lu sur le nœud, le
+  plancher d'un espace personnel au haut de cet espace) ; `duplicate_subtree` re-versionnée (la copie prend l'espace de sa
+  source). Le paquet de la même version calcule pareil (`nodeLevelOf`) et choisit l'espace d'une création (`write`).
+  Privilèges redits ; aucune table, colonne, policy ni index.
 
 ## Installer sur un hôte neuf
 

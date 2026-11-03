@@ -370,7 +370,7 @@ describe.skipIf(!sqlConfigured)(
         (tx) => tx`select id from platform.nodes where id = ${mover.space} for update`,
         (tx) => tx`update platform.nodes set parent_id = ${mover.space}, path = ${`private/${mover.handle}/${segment}`} where id = ${folder}`,
       )
-      const ceded = await forgetDuring(sql, ceder.id, (tx) => tx`update platform.nodes set owner_kind = 'team', owner_team_id = ${team.id} where id = ${prive}`)
+      const ceded = await forgetDuring(sql, ceder.id, (tx) => tx`update platform.nodes set owner_kind = 'team', owner_team_id = ${team.id}, owner_user_id = null where id = ${prive}`)
 
       expect({ moved, ceded }).toEqual({ moved: "23503", ceded: "23503" })
       const [kept] = await sql`select

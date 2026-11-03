@@ -648,7 +648,7 @@ describe("RailApplication, moving from the rail (E05-S10, AC-b7)", () => {
 
     // Ce qui change se dit avant l'envoi, sur l'aperçu du service, avec les mots de « Partager ».
     const dialogue = within(await screen.findByRole("dialog", { name: "Déplacer « Grille tarifaire » ?" }))
-    expect(dialogue.getByText("Il quitte Tout le monde pour Privé.")).toBeInTheDocument()
+    expect(dialogue.queryByText(/^Il quitte/)).toBeNull()
     expect(dialogue.getByText("Perdent l'accès : Ada, Léo et 3 autres.")).toBeInTheDocument()
     expect(dialogue.getByText("Leur accès change : Claire (Peut lire → Accès complet).")).toBeInTheDocument()
     expect(appels).toEqual([{ url: "/api/platform/nodes/impact?path=conseil%2Fgrille&new_path=private%2Fclaire%2Fnotes%2Fgrille", methode: "GET", corps: undefined }])
@@ -723,7 +723,7 @@ describe("RailApplication, moving from the rail (E05-S10, AC-b7)", () => {
     fireEvent.click(choix.getByRole("button", { name: "Déplacer ici" }))
 
     const confirmation = within(await screen.findByRole("dialog", { name: "Déplacer « Conseil » ?" }))
-    expect(confirmation.getByText("Il quitte Tout le monde pour Ventes.")).toBeInTheDocument()
+    expect(confirmation.queryByText(/^Il quitte/)).toBeNull()
     expect(confirmation.getByText("Gagnent l'accès : Bob (Peut modifier).")).toBeInTheDocument()
     expect(confirmation.getByText("Son sous-contenu le suit.")).toBeInTheDocument()
     fireEvent.click(confirmation.getByRole("button", { name: "Déplacer" }))
@@ -1004,7 +1004,7 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
     survoler("drop", lien("Contexte · Ventes"), 2)
 
     const dialogue = within(await screen.findByRole("dialog", { name: "Déplacer « Notes » ?" }))
-    expect(dialogue.getByText("Il quitte Privé pour Ventes.")).toBeInTheDocument()
+    expect(dialogue.queryByText(/^Il quitte/)).toBeNull()
     expect(appels[0].url).toBe("/api/platform/nodes/impact?path=private%2Fclaire%2Fnotes&new_path=ventes%2Fcontexte%2Fnotes")
     fireEvent.click(dialogue.getByRole("button", { name: "Déplacer" }))
     await waitFor(() => expect(hote.naviguer).toHaveBeenCalledWith("/n/ventes/contexte/notes"))

@@ -109,7 +109,6 @@ export const DEPLACEMENT_RAIL = {
   action: "Déplacer",
   titre: (nom: string) => `Déplacer « ${nom} »`,
   confirmer: (nom: string) => `Déplacer « ${nom} » ?`,
-  quitte: (avant: string, apres: string) => `Il quitte ${avant} pour ${apres}.`,
   gagnent: (noms: string) => `Gagnent l'accès : ${noms}.`,
   perdent: (noms: string) => `Perdent l'accès : ${noms}.`,
   changent: (noms: string) => `Leur accès change : ${noms}.`,
