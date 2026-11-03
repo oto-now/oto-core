@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-03] — Invitation : le lien ouvre la création de compte avec l'adresse invitée
+**Quoi :** le lien de l'email d'invitation (`invitationMail`) porte, sous leurs noms OIDC, l'adresse invitée (`login_hint`) et la création de compte en premier écran (`first_screen=register`) ; la phrase dit d'abord « créez votre compte avec l'adresse », puis « ou connectez-vous avec elle si vous en avez déjà un ». Un hôte OIDC transmet ces deux paramètres à son émetteur ; un hôte qui ne les lit pas les ignore.
+**Pourquoi :** issue oto-app #7 « Invitation : ouvrir la création de compte préremplie (code, mot de passe, Google) et corriger "La connexion n'a pas abouti" » : le lien menait à `<origine>/login` sans l'adresse, et l'invité, sans compte, arrivait sur « Se connecter ».
+**Fichiers :** `packages/plateforme/server/mail.ts`, `tests/unit/mail.test.ts`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-10-28] — Version 1.6.2 du paquet
 **À appliquer :** la migration `20261028090000_platform_regle_de_la_racine.sql`, seule depuis la 1.6.1, avec le paquet de la même version (`oto-platform migrations sync`, puis l'appliquer avant le déploiement) ; ce que dit la section 1.6.2 du `CHANGELOG.md` du paquet.
 **Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.6.2 — 2026-10-28` (les droits de Tout le monde : une règle de la racine ne vaut que pour les contenus de l'organisation, « Droits de Tout le monde… » pour l'administrateur) ; `packages/plateforme/package.json` passe à 1.6.2 ; une section `## Unreleased` vide reste au-dessus. Version corrective malgré la migration, décidée par JB.

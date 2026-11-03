@@ -93,22 +93,23 @@ async function relayWithoutStartTls(): Promise<{ port: number; commands: string[
 }
 
 describe("invitationMail (AC-a8)", () => {
-  it("should build a French invitation with the organisation brand, the inviter when known and the <origin>/login link", () => {
+  it("should build a French invitation with the organisation brand, the inviter when known and the <origin>/login link to account creation for the invited address", () => {
     const mail = invitationMail(INPUT)
     expect(mail.to).toBe("camille@example.test")
     expect(mail.subject).toBe("Léa Durand vous invite à rejoindre Atelier Nord")
     for (const body of [mail.text, mail.html]) {
       expect(body).toContain("Bonjour,")
       expect(body).toContain("Léa Durand vous invite à rejoindre Atelier Nord.")
-      expect(body).toContain("connectez-vous avec l'adresse")
+      expect(body).toContain("créez votre compte avec l'adresse")
       expect(body).toContain("camille@example.test")
-      expect(body).toContain("https://atelier.example.test/login")
+      expect(body).toContain("https://atelier.example.test/login?login_hint=camille%40example.test")
       expect(body).toContain("Si vous n'attendiez pas cette invitation, ignorez ce message.")
     }
     expect(mail.html).toContain('<html lang="fr">')
     expect(mail.html).toMatch(/<h1[^>]*>Atelier Nord<\/h1>/)
     expect(mail.html).toContain('<img src="https://cdn.example.test/logo.png" alt=""')
-    expect(mail.html).toContain('<a href="https://atelier.example.test/login"')
+    expect(mail.text).toContain("https://atelier.example.test/login?login_hint=camille%40example.test&first_screen=register")
+    expect(mail.html).toContain('<a href="https://atelier.example.test/login?login_hint=camille%40example.test&amp;first_screen=register"')
 
     // Ni nom de qui invite, ni logo : la phrase et le sujet se passent d'eux, sans rien d'autre à la place.
     const bare = invitationMail({ ...INPUT, inviterName: null, brand: { displayName: "Atelier Nord", logoUrl: null } })
@@ -139,7 +140,7 @@ describe("invitationMail (AC-a8)", () => {
   })
 
   it("should build the link on an http: or https: origin only, refusing any other before a mail exists", () => {
-    expect(invitationMail({ ...INPUT, origin: "http://localhost:3000" }).text).toContain("http://localhost:3000/login")
+    expect(invitationMail({ ...INPUT, origin: "http://localhost:3000" }).text).toContain("http://localhost:3000/login?login_hint=")
 
     // Un protocole pris dans `x-forwarded-proto` passé du client, puis une origine illisible.
     for (const origin of ["javascript://atelier.example.test", "atelier.example.test"]) {

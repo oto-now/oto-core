@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Server: the invitation email links to `<origin>/login?login_hint=<invited address>&first_screen=register`; an OIDC host may forward both parameters to its issuer so the invited person lands on account creation with the address filled in, any other host ignores them.
+
 ## 1.6.2 — 2026-10-28
 
 ### Hosts

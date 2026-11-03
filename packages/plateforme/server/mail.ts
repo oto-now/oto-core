@@ -20,7 +20,7 @@ export type InvitationMailInput = {
   brand: Pick<Brand, "displayName" | "logoUrl">
   /** Nom de qui invite ; `null` quand il n'est pas connu. */
   inviterName: string | null
-  /** Origine `http:` ou `https:` de l'adresse d'où l'on invite (`identityLinkOrigin` de la porte, l'adresse du MCP admin) : le lien mène à `<origine>/login`. */
+  /** Origine `http:` ou `https:` de l'adresse d'où l'on invite (`identityLinkOrigin` de la porte, l'adresse du MCP admin) : le lien mène à `<origine>/login`, avec l'adresse invitée. */
   origin: string
 }
 
@@ -76,7 +76,7 @@ function invitationHtml(input: InvitationMailInput, loginUrl: string): string {
     `<h1 style="margin:0 0 24px;font-size:22px;line-height:1.3">${org}</h1>`,
     '<p style="margin:0 0 16px">Bonjour,</p>',
     `<p style="margin:0 0 16px">${invitedBy(inviter, org)}.</p>`,
-    `<p style="margin:0 0 24px">Pour accepter l'invitation, connectez-vous avec l'adresse <strong>${escapeHtml(input.to)}</strong>, ou créez votre compte avec elle si vous n'en avez pas encore.</p>`,
+    `<p style="margin:0 0 24px">Pour accepter l'invitation, créez votre compte avec l'adresse <strong>${escapeHtml(input.to)}</strong>, ou connectez-vous avec elle si vous en avez déjà un.</p>`,
     `<p style="margin:0 0 24px"><a href="${link}" style="${BUTTON_STYLE}">Accepter l'invitation</a></p>`,
     `<p style="${NOTE_STYLE}">Le bouton ne s'ouvre pas ? Copiez cette adresse dans votre navigateur : ${link}</p>`,
     `<p style="${NOTE_STYLE}">Si vous n'attendiez pas cette invitation, ignorez ce message.</p>`,
@@ -91,7 +91,9 @@ function invitationHtml(input: InvitationMailInput, loginUrl: string): string {
 /**
  * L'email d'invitation, en français : sujet, texte et HTML, au nom affiché et au logo de
  * l'organisation, avec le nom de qui invite s'il est connu et le lien `<origine>/login`, qui mène à la
- * connexion chez l'émetteur de l'hôte (AC-a8). Fonction pure : le HTML échappe tout ce qu'il reçoit,
+ * connexion chez l'émetteur de l'hôte (AC-a8). Le lien porte, sous leurs noms OIDC, l'adresse invitée
+ * (`login_hint`) et la création de compte en premier écran (`first_screen=register`) : l'invité n'a
+ * le plus souvent pas encore de compte ; un hôte OIDC les transmet à son émetteur, un autre les ignore. Fonction pure : le HTML échappe tout ce qu'il reçoit,
  * et une origine que `webUrl` refuse (ni `http:` ni `https:`, illisible, ou à identifiants) lève
  * `internal` avant qu'un lien n'existe : l'origine du MCP admin prend le protocole dans `x-forwarded-proto`,
  * qu'un proxy peut transmettre du client, et un lien n'interpole jamais un autre protocole
@@ -101,13 +103,16 @@ export function invitationMail(input: InvitationMailInput): MailContent {
   const { to, brand, inviterName } = input
   const origin = webUrl(input.origin)
   if (!origin) throw new PlatformError("internal", "The email cannot be sent: the request origin is not a readable http:// or https:// address.")
-  const loginUrl = new URL("/login", origin).href
+  const lien = new URL("/login", origin)
+  lien.searchParams.set("login_hint", to)
+  lien.searchParams.set("first_screen", "register")
+  const loginUrl = lien.href
   const text = [
     "Bonjour,",
     "",
     `${invitedBy(inviterName, brand.displayName)}.`,
     "",
-    `Pour accepter l'invitation, connectez-vous avec l'adresse ${to}, ou créez votre compte avec elle si vous n'en avez pas encore :`,
+    `Pour accepter l'invitation, créez votre compte avec l'adresse ${to}, ou connectez-vous avec elle si vous en avez déjà un :`,
     loginUrl,
     "",
     "Si vous n'attendiez pas cette invitation, ignorez ce message.",
