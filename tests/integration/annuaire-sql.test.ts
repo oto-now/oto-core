@@ -143,11 +143,11 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       select path, kind, owner_user_id from platform.nodes where org_id = ${n.id} and path like ${`private/${handle}%`}`
     expect([...spaces].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual([
       { path: `private/${handle}_2`, kind: "page", owner_user_id: namesake.id },
-      { path: `private/${handle}_2/contexte`, kind: "context", owner_user_id: null },
+      { path: `private/${handle}_2/contexte`, kind: "context", owner_user_id: namesake.id },
       { path: `private/${handle}_3`, kind: "page", owner_user_id: ownerOf(3) },
-      { path: `private/${handle}_3/contexte`, kind: "context", owner_user_id: null },
+      { path: `private/${handle}_3/contexte`, kind: "context", owner_user_id: ownerOf(3) },
       { path: `private/${handle}_4`, kind: "page", owner_user_id: ownerOf(4) },
-      { path: `private/${handle}_4/contexte`, kind: "context", owner_user_id: null },
+      { path: `private/${handle}_4/contexte`, kind: "context", owner_user_id: ownerOf(4) },
     ])
     const alias = await fx.admin`select node_id from platform.node_aliases where org_id = ${n.id} and old_path = ${`private/${handle}`}`
     expect(alias).toEqual([{ node_id: archives }])

@@ -94,7 +94,7 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table through MCP"), {
         header: { columns: [{ name: "nom", type: "text", required: true }, { name: "ville", type: "text" }], key: "nom" },
         publish: true,
       })
-      expect([created.isError, created.text]).toEqual([false, "Published ventes/salons revision 1: a table with 2 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1."])
+      expect([created.isError, created.text]).toEqual([false, "Published ventes/salons revision 1: a table with 2 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it."])
       expect(created.result.structuredContent).toMatchObject({ text: created.text, path: "ventes/salons", revision: 1 })
 
       const added = await claire.write({ path: "ventes/salons", base_revision: 1, header: { columns: [{ name: "stand", type: "text" }] }, publish: true })
