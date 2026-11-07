@@ -257,7 +257,7 @@ export function pageCount(fn: ConnectorFunctionDefinition, args: Record<string, 
  * jusqu'à `max_pages` (borné par `maxPages`). Refus : un contrôle des arguments, rien d'envoyé ; une erreur du tiers
  * traduite par la table ; un contrôle de la réponse ; une adresse saisie qui mène à un hôte interne. Sans secret :
  * `internal` (le compte réel en a un, `runCall` l'a vérifié). Une adresse issue d'une saisie part par le transport gardé
- * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`) rejoue une fois un 401 sur un jeton neuf. État du
+ * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`, `oauth2_jwt_bearer`) rejoue une fois un 401 sur un jeton neuf. État du
  * compte : un refus de la table qui marque le compte pose sa marque, un appel réussi la lève (`credential.mark`), sauf
  * quand l'appelant la décide (`settlesMark`). Fichiers (`request.files`) : lus avant tout envoi, consommés après un
  * appel réussi seulement, jamais après un refus ni un envoi ambigu (délai, panne, 5xx). `read` : la lecture de chaque

@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Server: `registerConnectors` runs `auth.kind: oauth2_jwt_bearer`, a service account (RFC 7523): the one secret credential field holds the whole JSON key file; the package signs an RS256 assertion with `node:crypto` and exchanges it at the fixed `tokenUrl`, without following redirects; the token is kept on the account and renewed like an `oauth2_client_credentials` one. A malformed key or a key naming another `token_uri` is refused before anything is sent (`not_enabled`, `details.refusal`); `invalid_grant` marks the account (`credential_rejected`). A package before this one refuses such a connector, and with it the whole declaration of the host.
+
 ## 1.6.2 — 2026-10-28
 
 ### Hosts

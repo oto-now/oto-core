@@ -142,11 +142,12 @@ export type ConnectorOAuthUser = {
   ConnectorOAuthScopes
 
 /**
- * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials` et
- * `oauth2_user` (le consentement d'une personne) s'exécutent ; toute autre sorte (`none`) se déclare mais est refusée
- * nommément par `registerConnectors`. Chaque valeur qui désigne un secret nomme un champ de `credential`. `basic` :
- * `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans `username`, l'identifiant est vide (une clé
- * seule passée en mot de passe).
+ * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials`,
+ * `oauth2_user` (le consentement d'une personne) et `oauth2_jwt_bearer` (un compte de service) s'exécutent ; toute autre
+ * sorte (`none`) se déclare mais est refusée nommément par `registerConnectors`. Chaque valeur qui désigne un secret
+ * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
+ * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
+ * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`).
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -163,6 +164,7 @@ export type ConnectorAuth =
       readonly expiresInDefault?: number
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
+  | { readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly scopes: readonly string[]; readonly key: string }
   | { readonly kind: string }
 
 /**

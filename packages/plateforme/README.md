@@ -503,7 +503,9 @@ registerFunctions([/* fonctions de l'ERP */])
   d'erreurs, fonctions avec leur JSON Schema d'entrée strict, exemples, requête).
 - **Ce que le moteur exécute** : authentification `api_key` (en en-tête ou en query, la clé alors absente de tout
   log), `bearer`, `basic`, `oauth2_client_credentials` (jeton échangé, rangé chiffré sur la ligne du compte, renouvelé
-  à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
+  à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous), `oauth2_jwt_bearer` (un compte de service : le fichier JSON de
+  sa clé collé dans le seul champ secret, une assertion RS256 échangée à un `tokenUrl` fixe, le jeton rangé et renouvelé
+  comme celui d'un échange) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
   (`https://{domain}.example.net`, `{server}/v1`), une adresse saisie ne joignant jamais un hôte interne ; `GET`, `POST`, `PUT`, `PATCH`, `DELETE` ; en-têtes et constantes ; listes en query ; arguments encodés
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon

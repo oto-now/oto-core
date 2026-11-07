@@ -363,7 +363,7 @@ export type ConnectorOptions = HostOptions & {
  * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
  * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
- * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
+ * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès, `oauth2_jwt_bearer`) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
  * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre (toute clé inconnue d'une
  * fonction refusée), fonction longue (`background`, comme la règle 21 de la fabrique), coût (`cost`) et travail

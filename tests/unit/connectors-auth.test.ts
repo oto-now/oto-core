@@ -2,19 +2,23 @@
 // Comptes à plusieurs champs et réglages (story comptes-a-plusieurs-champs) : le moteur sur un `fetch` simulé, sans
 // réseau ni base. `basic` sur deux champs ; `api_key` en query, la clé absente de tout log, erreur et texte rendu ;
 // adresse par région et par sous-domaine ; `oauth2_client_credentials` : échange, jeton rangé par le compte (pas en
-// mémoire du processus), réutilisé, renouvelé à l'échéance, une fois de plus après un 401 ; une adresse saisie qui
-// mène à un hôte interne, refusée avant tout envoi. Secrets tirés à l'exécution.
+// mémoire du processus), réutilisé, renouvelé à l'échéance, une fois de plus après un 401 ; `oauth2_jwt_bearer` : la
+// même mécanique, la clé refusée qui marque le compte, la déclaration contrôlée ; une adresse saisie qui mène à un hôte
+// interne, refusée avant tout envoi. Secrets tirés à l'exécution, la clé du compte de service construite par les cas
+// communs.
 import { randomBytes } from "crypto"
 import type { LookupAddress } from "node:dns"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
-import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
+import { CatalogRegistrationError } from "../../packages/plateforme/server/catalog/erp"
+import type { AccountCredential, AccountMarker } from "../../packages/plateforme/server/connectors/auth"
 import { guardedFetch, isPublicAddress } from "../../packages/plateforme/server/connectors/address-guard"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
+import { credentialValue, jwtBearerCases } from "../factories/jwt-bearer-cases"
 import { loggedText } from "../helpers/logs"
 
 const secret = () => `s_${randomBytes(12).toString("hex")}`
@@ -166,6 +170,68 @@ describe("oauth2_client_credentials", () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const error = await refusal(getCompany({ fields, settings: {}, tokens: memoryTokens() }))
     expect([error.code, error.message]).toEqual(["upstream_error", "Crm refused the client credentials of this account: check its client id and secret."])
+  })
+})
+
+describe("oauth2_jwt_bearer", () => {
+  const [signed] = jwtBearerCases
+  const serviceAccount = (auth: Record<string, unknown> = {}, credential = signed.credential) =>
+    variant({ auth: { ...signed.auth, ...auth } as ConnectorDefinition["auth"], credential })
+  const keyOf = () => ({ [signed.credential[0].name]: credentialValue(signed) })
+  const form = (body: unknown) => Object.fromEntries(new URLSearchParams(String(body)))
+
+  it("should exchange a signed assertion, keep the token on the account, reuse it, and renew it once after a 401", async () => {
+    registerConnectors([serviceAccount()])
+    const tokens = memoryTokens()
+    const [t1, t2] = [secret(), secret()]
+    const { sent } = stub(json({ access_token: t1, expires_in: 3600 }), json({ scopes: ["a"] }), json({}, 401), json({ access_token: t2, expires_in: 3600 }), json({ scopes: ["a"] }))
+    await getCompany({ fields: keyOf(), settings: {}, tokens })
+    await getCompany({ fields: keyOf(), settings: {}, tokens })
+    const requests = sent()
+    expect(requests.map((request) => [request.url, request.headers.authorization])).toEqual([
+      [signed.tokenRequest.url, undefined],
+      ["https://crm.example.test/v2/me", `Bearer ${t1}`],
+      ["https://crm.example.test/v2/me", `Bearer ${t1}`],
+      [signed.tokenRequest.url, undefined],
+      ["https://crm.example.test/v2/me", `Bearer ${t2}`],
+    ])
+    expect(form(requests[0].body).grant_type).toBe("urn:ietf:params:oauth:grant-type:jwt-bearer")
+    expect(form(requests[0].body).assertion.split(".")).toHaveLength(3)
+    expect(tokens.written.map((written) => written.token)).toEqual([t1, t2])
+  })
+
+  it("should mark the account when the third party refuses the key (invalid_grant)", async () => {
+    registerConnectors([serviceAccount()])
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const set = vi.fn<AccountMarker["set"]>(async () => {})
+    const mark: AccountMarker = { current: null, effect: null, set, remedy: async () => "Ask the manager." }
+    stub(json({ error: "invalid_grant", error_description: "Invalid JWT Signature." }, 400))
+    const error = await refusal(getCompany({ fields: keyOf(), settings: {}, tokens: memoryTokens(), mark }))
+    expect([error.code, set.mock.calls]).toEqual(["credential_rejected", [["credential_rejected"]]])
+  })
+
+  it("should refuse at declaration a token address that is not fixed https, empty scopes, or a key that is not the one secret field", () => {
+    const declared = (definition: ConnectorDefinition) => {
+      try {
+        registerConnectors([definition])
+        return "declared"
+      } catch (error) {
+        if (error instanceof CatalogRegistrationError) return error.message
+        throw error
+      }
+    }
+    const verdicts = [
+      serviceAccount({ tokenUrl: "https://{domain}.example.test/token" }),
+      serviceAccount({ tokenUrl: "https://oauth2.example.test/token?x=1" }),
+      serviceAccount({ tokenUrl: "http://oauth2.example.test/token" }),
+      serviceAccount({ scopes: [] }),
+      serviceAccount({}, [{ ...signed.credential[0], secret: false }]),
+      serviceAccount({}, [...signed.credential, { name: "other", label: "Other", secret: true }]),
+      serviceAccount(),
+    ].map(declared)
+    const address = "crm: auth oauth2_jwt_bearer needs a fixed https tokenUrl (no template, query nor tokenUrls)."
+    const key = "crm: auth oauth2_jwt_bearer: key must name the one credential field, secret (the JSON key file)."
+    expect(verdicts).toEqual([address, address, address, "crm: auth oauth2_jwt_bearer needs scopes, a non-empty list.", key, key, "declared"])
   })
 })
 
