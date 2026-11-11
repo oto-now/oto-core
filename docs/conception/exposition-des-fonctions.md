@@ -1,7 +1,7 @@
 # Exposition des fonctions
 
 - **Statut** : validé avec Alexis le 23/10/2026 (principe et modes) ; la forme reste à revoir avec JB ; le regroupement
-  par famille est proposé (11/11/2026)
+  par famille est validé par Alexis le 11/11/2026, sa forme reste à revoir avec JB
 - **Dernière révision** : 2026-11-11
 
 ## Résumé
@@ -96,7 +96,7 @@ métier (`<espace>.<fonction>`) tient lieu de connecteur.
   et ceux des espaces métier, toujours actifs. Elle suit donc l'activation, sans que le client le voie tout de suite :
   c'est ce que dit le message d'activation.
 
-### Le regroupement par famille (proposé)
+### Le regroupement par famille
 
 Pour un connecteur ou un espace métier de quelques fonctions, `connector` suffit. Pour un ERP, aucun des trois modes ne
 convient : `function` expose des dizaines d'outils, et `connector` n'en expose qu'un, dont le paramètre `function` prend
@@ -181,8 +181,7 @@ Rien n'est réalisé. Les points d'accroche :
 ## Questions ouvertes
 
 - La forme de l'option, les noms des modes et la forme de l'outil en mode `connector` : à revoir avec JB.
-- Le regroupement par famille (`group`) : à valider par Alexis, puis la forme à revoir avec JB. La famille se
-  déclare-t-elle sur la fonction, comme proposé, ou dans l'option de l'hôte ?
+- Le regroupement par famille (`group`) : la forme à revoir avec JB (nom du mode, nom de l'outil).
 - Une description de connecteur peut-elle imposer son mode (le bloc `exposure` existant) ? Ou bien le choix
   reste-t-il seulement à l'hôte ?
 - Quels services porter aux fonctions métier, et pour quel hôte : fichier rendu, fonction longue ?
@@ -195,3 +194,5 @@ Rien n'est réalisé. Les points d'accroche :
   réponse à la note).
 - 2026-11-11 : regroupement par famille (`group`), entre l'outil unique et l'outil par fonction, pour un ERP ;
   lien avec le bloc `exposure` des descriptions de connecteurs — proposé (source : demande d'Alexis).
+- 2026-11-11 : regroupement par famille, la famille déclarée sur la fonction — validé par Alexis (source : réponse
+  à la PR de la note) ; la forme reste à revoir avec JB.
