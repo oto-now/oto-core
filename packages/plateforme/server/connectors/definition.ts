@@ -234,6 +234,12 @@ export type ConnectorRequest = {
    * de la fabrique de `connectors`).
    */
   readonly body: ConnectorBodyMap | string
+  /**
+   * `true` : le corps construit (table, emboîtée ou non, constante comprise, ou argument entier) part seul élément d'une
+   * liste JSON, pour un tiers dont le corps est un tableau nu d'un objet (`body-list.ts`, règle 23 de la fabrique de
+   * `connectors`). Exige un corps ; jamais en `GET` ni avec `files`.
+   */
+  readonly bodyList?: true
   readonly headers: ConnectorArgumentMap
   /**
    * Nom de partie → argument qui porte l'identifiant d'un fichier en transit de l'appelant. Présent, le corps part en
@@ -301,7 +307,14 @@ export type ConnectorCheck = {
 export type ConnectorExpectation = { readonly kind: string; readonly refusal: string; readonly path: string }
 
 /** Où lire la quantité réelle d'un appel : un nombre JSON fini, positif ou nul, au chemin pointé `path` de sa réponse. */
-export type ConnectorCostSettle = { readonly path: string }
+export type ConnectorCostSettle = {
+  readonly path: string
+  /**
+   * Le facteur de la valeur lue à `unit`, un entier de deux ou plus : la quantité réglée est la valeur fois `scale`,
+   * arrondie à six décimales puis à l'entier supérieur (un coût lu en dollars, réglé en microdollars).
+   */
+  readonly scale?: number
+}
 
 /**
  * Le poids d'une valeur, à la place de `times` : chaque élément de la liste `items` compte la somme des poids des valeurs

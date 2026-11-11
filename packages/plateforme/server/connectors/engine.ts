@@ -222,15 +222,36 @@ function buildRequest(prepared: PreparedFunction, args: Record<string, unknown>,
   }
   query.push(...signature.query)
   if (upload) return { method: spec.method, path, query, headers, raw: upload.body, pacingKey: accountId }
-  // Le corps entier (`body-argument.ts`) : l'objet validé, tel quel ; la déclaration l'exige requis et objet strict.
+  return { method: spec.method, path, query, headers, body: listed(fn, builtBody(fn, args, placed)), pacingKey: accountId }
+}
+
+/**
+ * Le corps JSON construit : l'argument entier (`body-argument.ts`), l'objet validé tel quel, que la déclaration exige
+ * requis et objet strict ; sinon la table (`body-table.ts`), la constante puis chaque argument donné à son chemin,
+ * emboîté ou non ; `undefined` sans corps.
+ */
+function builtBody(fn: ConnectorFunctionDefinition, args: Record<string, unknown>, placed: (argument: string) => unknown): unknown {
+  const spec = fn.request
   const whole = bodyArgument(spec)
   if (whole !== null) {
     if (!isJsonObject(args[whole])) throw new PlatformError("invalid_arguments", `${fn.name}: argument ${whole} is required.`)
-    return { method: spec.method, path, query, headers, body: args[whole], pacingKey: accountId }
+    return args[whole]
   }
-  // Le corps en table (`body-table.ts`) : la constante, puis chaque argument donné à son chemin, emboîté ou non.
   const withBody = Object.keys(bodyTable(spec)).length > 0 || spec.constants?.body !== undefined
-  return { method: spec.method, path, query, headers, body: withBody ? tableBody(spec, args, placed) : undefined, pacingKey: accountId }
+  return withBody ? tableBody(spec, args, placed) : undefined
+}
+
+/**
+ * Le corps construit, seul élément d'une liste quand `bodyList` le dit (`body-list.ts`). La déclaration refuse le
+ * drapeau sans corps : le contraire est un câblage fautif, jamais une liste vide envoyée en silence.
+ */
+function listed(fn: ConnectorFunctionDefinition, body: unknown): unknown {
+  if (fn.request.bodyList !== true) return body
+  if (body === undefined) {
+    console.error(`[platform] request body: ${fn.name} sends its body as a list, and has none`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return [body]
 }
 
 /** Le curseur de la page suivante, `null` à la dernière page (`more` faux, ou `next` absent ou vide). */

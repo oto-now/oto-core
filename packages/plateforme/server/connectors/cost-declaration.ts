@@ -58,7 +58,8 @@ function weightsProblem(fn: ConnectorFunctionDefinition, items: string, weights:
  * Le problème du coût d'une fonction (`cost`), comme la règle 12 de la fabrique et son schéma : `per` `request`, `page`
  * ou `item` ; `quantity`, un entier de deux ou plus, sur `request` et `page` seulement ; `items` (exigé) et `times` ou
  * `weights` sur `item` seulement, `times` une liste distincte, les deux listes requises et non vides, `weights` exclusif
- * de `times` ; `unit` non vide, exigée par `item`, `settle` et `quantity` ; `settle` un chemin pointé ; ni `item` ni
+ * de `times` ; `unit` non vide, exigée par `item`, `settle` et `quantity` ; `settle` un chemin pointé, et son `scale` un
+ * entier de deux ou plus ; ni `item` ni
  * `settle` sur une fonction paginée.
  */
 export function costProblem(fn: ConnectorFunctionDefinition): string | null {
@@ -71,8 +72,11 @@ export function costProblem(fn: ConnectorFunctionDefinition): string | null {
   if (quantity !== undefined && cost.per === "item") return `${fn.name}: cost.quantity goes with per request or page only: per item counts its items.`
   if (quantity !== undefined && !(Number.isInteger(quantity) && Number(quantity) >= 2)) return `${fn.name}: cost.quantity must be an integer of 2 or more (absent, a request costs one).`
   const settle = cost.settle
-  if (settle !== undefined && !(onlyKeys(settle, ["path"]) && typeof settle.path === "string" && DOTTED_PATH.test(settle.path))) {
-    return `${fn.name}: cost.settle must be {path}, a dotted path.`
+  if (settle !== undefined && !(onlyKeys(settle, ["path", "scale"]) && typeof settle.path === "string" && DOTTED_PATH.test(settle.path))) {
+    return `${fn.name}: cost.settle must be {path, scale?}, a dotted path.`
+  }
+  if (settle !== undefined && settle.scale !== undefined && !(Number.isInteger(settle.scale) && Number(settle.scale) >= 2)) {
+    return `${fn.name}: cost.settle.scale must be an integer of 2 or more.`
   }
   const needsUnit = cost.per === "item" || settle !== undefined || quantity !== undefined
   if (cost.unit !== undefined ? typeof cost.unit !== "string" || cost.unit === "" : needsUnit) return `${fn.name}: cost.unit must be non-empty, and is required per item, with settle or with quantity.`

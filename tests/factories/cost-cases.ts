@@ -1,7 +1,8 @@
 // Les cas communs du coût, copiés tels quels de la sortie de la fabrique de `connectors` (`connectors/_cases/cost.yaml`,
-// `ts/src/cost-cases.ts`, commit 0577c14), typés par la définition du paquet : ceux de l'épingle de développement, plus
-// les cas `quantity_*`, que le paquet joue d'ici (`connectors-cost-cases.test.ts`). Ils seront lus de
-// `@otomata_tech/connectors/cost-cases` quand l'épingle de développement les apportera : ce fichier sera alors retiré.
+// `ts/src/cost-cases.ts`, commit « feat(format) : le corps en liste et l'échelle de la quantité relue »), typés par la
+// définition du paquet : ceux de l'épingle de développement, plus les cas `quantity_*` et `scale_*`, que le paquet joue
+// d'ici (`connectors-cost-cases.test.ts`). Ils seront lus de `@otomata_tech/connectors/cost-cases` quand l'épingle de
+// développement les apportera : ce fichier sera alors retiré.
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
 
 export const getRecord: ConnectorFunctionDefinition = {
@@ -402,6 +403,33 @@ export const tagRecords: ConnectorFunctionDefinition = {
   cost: { per: "item", items: "records", unit: "tags", settle: { path: "results.0.billed" } },
 }
 
+export const searchSerp: ConnectorFunctionDefinition = {
+  name: "cases.search_serp",
+  connector: "cases",
+  class: "read",
+  act: false,
+  description: "Search one results page, billed in dollars, the dollars billed in each answer.",
+  schema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["q"],
+    "properties": {"q": {"type": "string"}}
+  },
+  examples: [
+    { title: "By text", input: {"q": "alpha"} },
+  ],
+  refusals: [],
+  request: {
+    method: "POST",
+    path: "/serp",
+    pathParams: [],
+    query: {},
+    body: {"q": "q"},
+    headers: {},
+  },
+  cost: { per: "request", quantity: 2000, unit: "microdollars", settle: { path: "tasks.0.cost", scale: 1000000 } },
+}
+
 export const verifyPeople: ConnectorFunctionDefinition = {
   name: "cases.verify_people",
   connector: "cases",
@@ -729,6 +757,7 @@ export const connector = described({
     scorePeople,
     enrichPeople,
     tagRecords,
+    searchSerp,
     verifyPeople,
     submitBatch,
     getBatch,
@@ -1115,6 +1144,60 @@ export const costCases: readonly CostCase[] = [
     answers: [{"results": [{"billed": 1}, {"billed": 7}]}],
     worstCase: {"quantity": 2, "unit": "tags"},
     settled: {"quantity": 1, "unit": "tags", "from": "response", "exceeded": false},
+    collection: null,
+  },
+  {
+    name: "scale_settles_in_the_sub_unit",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": 0.0006}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 600, "unit": "microdollars", "from": "response", "exceeded": false},
+    collection: null,
+  },
+  {
+    name: "scale_float_noise_is_rounded_away",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": 1.0000000000000003e-05}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 10, "unit": "microdollars", "from": "response", "exceeded": false},
+    collection: null,
+  },
+  {
+    name: "scale_rounds_up_to_an_integer",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": 0.0012345678}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 1235, "unit": "microdollars", "from": "response", "exceeded": false},
+    collection: null,
+  },
+  {
+    name: "scale_zero_is_zero",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": 0}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 0, "unit": "microdollars", "from": "response", "exceeded": false},
+    collection: null,
+  },
+  {
+    name: "scale_above_worst_case",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": 0.0025}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 2500, "unit": "microdollars", "from": "response", "exceeded": true},
+    collection: null,
+  },
+  {
+    name: "scale_unreadable_settles_the_worst_case",
+    function: searchSerp,
+    args: {"q": "alpha"},
+    answers: [{"tasks": [{"cost": "0.0006"}]}],
+    worstCase: {"quantity": 2000, "unit": "microdollars"},
+    settled: {"quantity": 2000, "unit": "microdollars", "from": "unreadable", "exceeded": false},
     collection: null,
   },
   {

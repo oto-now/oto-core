@@ -16,6 +16,7 @@ import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import { bodyArgumentProblem } from "./body-argument"
+import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
@@ -109,14 +110,14 @@ function typesOf(property: unknown): unknown[] {
   return Array.isArray(property.type) ? property.type : [property.type]
 }
 
-/** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`) ou emboîté (`body-table.ts`) compris ; `null` : aucun. */
+/** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`), emboîté (`body-table.ts`) ou en liste (`body-list.ts`) compris ; `null` : aucun. */
 function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
   const spec = fn.request
   if (!isJsonObject(spec) || !METHODS.includes(spec.method) || typeof spec.path !== "string" || !spec.path.startsWith("/")) {
     return `${fn.name}: request needs a method (GET, POST, PUT, PATCH, DELETE) and a path starting with /.`
   }
   const shaped = isJsonObject(spec.query) && (bodyTableShaped(spec.body) || typeof spec.body === "string") && isJsonObject(spec.headers) && Array.isArray(spec.pathParams)
-  const shape = shaped ? (bodyArgumentProblem(fn) ?? bodyTableProblem(fn)) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
+  const shape = shaped ? (bodyArgumentProblem(fn) ?? bodyTableProblem(fn) ?? bodyListProblem(fn)) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
   if (shape) return shape
   const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
   const inPath = [...spec.path.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1])

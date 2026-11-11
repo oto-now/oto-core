@@ -93,9 +93,19 @@ export function costOf(fn: ConnectorFunctionDefinition, args: Record<string, unk
 }
 
 /**
+ * La valeur lue dans l'unité du coût : telle quelle sans `scale` ; avec, la valeur fois `scale` arrondie à six
+ * décimales (le bruit d'un double : `0.0006 × 1e6` se lit 600, pas 600.0000000000001), puis à l'entier supérieur.
+ */
+export function scaled(value: number, scale: number | undefined): number {
+  if (scale === undefined) return value
+  return Math.ceil(Number((value * scale).toFixed(6)))
+}
+
+/**
  * La quantité à régler après un appel réussi, sur ses arguments et `answers`, les réponses JSON du tiers telles qu'il
  * les a envoyées : celles de l'appel, une par page ; pour un travail asynchrone qui se règle, celles de sa relève reçues
- * jusqu'ici. Avec `settle`, la première valeur lisible au chemin (un nombre JSON fini, positif ou nul), sinon le pire
+ * jusqu'ici. Avec `settle`, la première valeur lisible au chemin (un nombre JSON fini, positif ou nul, fois `scale`
+ * quand il est déclaré : `scaled`), sinon le pire
  * cas (`unreadable`) ; sans `settle`, les requêtes envoyées fois `quantity` (`request`, `page`) ou le pire cas (`item`).
  * `exceeded`, une valeur lue au-dessus du pire cas. `null` pour une fonction sans coût.
  */
@@ -105,8 +115,10 @@ export function settledQuantity(fn: ConnectorFunctionDefinition, args: Record<st
   if (worst === null || cost === undefined) return null
   if (cost.settle !== undefined) {
     const path = cost.settle.path
-    const read = answers.map((answer) => valueAt(answer, path)).find((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
-    return read === undefined ? { ...worst, from: "unreadable", exceeded: false } : { quantity: read, unit: worst.unit, from: "response", exceeded: read > worst.quantity }
+    const found = answers.map((answer) => valueAt(answer, path)).find((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
+    if (found === undefined) return { ...worst, from: "unreadable", exceeded: false }
+    const read = scaled(found, cost.settle.scale)
+    return { quantity: read, unit: worst.unit, from: "response", exceeded: read > worst.quantity }
   }
   if (cost.per === "item") return { ...worst, from: "worst_case", exceeded: false }
   if (answers.length === 0) throw new ConnectorCostError(`${fn.name}: a settled call has at least one response.`)
