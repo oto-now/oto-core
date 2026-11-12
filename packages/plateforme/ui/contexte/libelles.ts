@@ -147,6 +147,10 @@ export const LIGNES_SERVIES = {
   version: (nature: string, revision: number, date: string) => `${NATURES[nature] ?? nature}, nouveau : version ${revision}, publiée le ${date}`,
   connecteur: (nom: string, date: string) => `Connecteur ${nom} activé le ${date}`,
   recent: (nature: string, date: string) => `${NATURES[nature] ?? nature}, ${date}`,
+  /** Les commentaires d'un autre arrivés depuis la conversation précédente, dans des fils destinés à la personne. */
+  nouveauxCommentaires: (nombre: number) => accorde(nombre, "nouveau commentaire", "nouveaux commentaires"),
+  /** Les fils du contenu qui attendent un assistant. */
+  pourLAssistant: (nombre: number) => `${accorde(nombre, "fil", "fils")} en attente d'un assistant`,
   children: "Rangés sous ce contexte",
   linked: "Pages citées",
   suite: "La suite de ce contexte est lue à la demande.",

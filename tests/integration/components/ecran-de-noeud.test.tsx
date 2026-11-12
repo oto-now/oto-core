@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NodeView, TreeNode } from "@otomata_tech/oto_platform/schemas"
 import { ContexteDeLHote, EcranDeNoeud, EcranDeNoeudChargement } from "@otomata_tech/oto_platform/ui"
 import { cheminsCites } from "../../../packages/plateforme/ui/noeud/corps-du-noeud"
@@ -17,6 +17,21 @@ import { avecCle, bloc, ID, PAGE, simulerLAPI, vueDuNoeud } from "../../helpers/
 type EcranDeNoeudProps = ComponentProps<typeof EcranDeNoeud>
 
 const naviguer = vi.fn()
+
+/** Les fils de commentaires du nœud, que l'encart « Commentaires » lit une fois l'écran monté : aucun, ici. */
+const sansFil = () => new Response(JSON.stringify({ data: { path: "ventes/modele_relance", threads: [], readers: [], mailEnabled: false } }), { status: 200 })
+const lectureDesFils = (adresse: unknown) => String(adresse).includes("/comments?path=")
+
+// Seule la lecture des fils répond ; toute autre requête échoue comme sans serveur, sauf dans un cas qui simule l'API.
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(async (adresse) => {
+      if (lectureDesFils(adresse)) return sansFil()
+      throw new TypeError("fetch failed")
+    }),
+  )
+})
 
 afterEach(() => {
   cleanup()
@@ -187,10 +202,11 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
     await act(async () => {
       rendre({ noeud: { data: vueDuNoeud({ children: [ENFANT, NOTE], childrenTotal: 2 }) }, liens: Promise.resolve({ data: LIENS }) })
     })
-    await waitFor(() => expect(encarts()).toEqual(["Cité dans1", "Cite3", "Sous-pages2"]))
+    // « Commentaires » en tête, toujours présent, même sans fil (parcours 5.4, AC12).
+    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1", "Cite3", "Sous-pages2"]))
     const colonne = document.querySelector(".oto-two-columns-aside")
     if (!colonne) throw new Error("colonne de droite absente")
-    expect(encarts(colonne)).toHaveLength(3)
+    expect(encarts(colonne)).toHaveLength(4)
     expect(Array.from(colonne.querySelectorAll("details")).some((repli) => repli.hasAttribute("open"))).toBe(false)
     // Le document est dans la colonne principale d'un `TwoColumns main="document"`.
     expect(screen.getByRole("region", { name: "Modèle de relance" }).closest(".oto-two-columns-main")?.parentElement).toHaveAttribute("data-main", "document")
@@ -219,12 +235,12 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
     await act(async () => {
       rendre({ liens: Promise.resolve({ data: { links_out: [], links_out_total: 0, links_in: [{ path: "conseil/guide", title: "Guide du conseil" }], links_in_total: 1 } }) })
     })
-    await waitFor(() => expect(encarts()).toEqual(["Cité dans1"]))
+    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1"]))
     cleanup()
 
     // Le service ne sert que les premiers nœuds dessous : le nombre est le total.
     rendre({ noeud: { data: vueDuNoeud({ children: [ENFANT], childrenTotal: 60 }) } })
-    expect(encarts()).toEqual(["Sous-pages60"])
+    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Sous-pages60"]))
     expect(within(encart("Sous-pages")).getByText("et 59 autres")).toBeInTheDocument()
     cleanup()
 
@@ -232,7 +248,7 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
       rendre({ liens: Promise.resolve({ data: { links_out: [], links_out_total: 0, links_in: [], links_in_total: 0 } }) })
     })
     expect(screen.getByRole("region", { name: "Modèle de relance" })).toBeInTheDocument()
-    expect(encarts()).toEqual([])
+    await waitFor(() => expect(encarts()).toEqual(["Commentaires"]))
     // La colonne garde sa piste : le document ne bouge pas quand les liens arrivent.
     expect(document.querySelector(".oto-two-columns-aside")).not.toBeNull()
   })
@@ -261,10 +277,12 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
         complement: <p>La grille du tableau</p>,
       })
     })
-    await waitFor(() => expect(encarts()).toEqual(["Cité dans1", "Cite3", "Sous-pages1"]))
+    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1", "Cite3", "Sous-pages1"]))
     expect(document.querySelector(".oto-two-columns")).toBeNull()
     const ligne = encart("Cité dans").parentElement
     expect(ligne).toBe(encart("Sous-pages").parentElement)
+    // « Commentaires » est sur la ligne des autres encarts (parcours 5.4, AC12).
+    expect(ligne).toBe(encart("Commentaires").parentElement)
     expect(ligne?.compareDocumentPosition(screen.getByText("La grille du tableau")) ?? 0).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     const cadre = screen.getByText("La grille du tableau").closest(".oto-content-max")
     expect(cadre).not.toHaveAttribute("data-width")
@@ -701,7 +719,7 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
 
   it("should download the published file of the export route, the button disabled meanwhile, and say a refusal in an alert without any file (AC-c2, AC-c3)", async () => {
     let repondre: (reponse: Response) => void = () => {}
-    const requetes = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => (repondre = resolve)))
+    const requetes = vi.fn<typeof fetch>((adresse) => (lectureDesFils(adresse) ? Promise.resolve(sansFil()) : new Promise<Response>((resolve) => (repondre = resolve))))
     vi.stubGlobal("fetch", requetes)
     const creer = vi.fn(() => "blob:fichier")
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: creer, revokeObjectURL: vi.fn() }))
@@ -721,7 +739,9 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
     cleanup()
 
     // Un refus : sa phrase sous l'en-tête, aucun fichier.
-    requetes.mockResolvedValue(new Response(JSON.stringify({ error: { code: "too_large", message: "Too many rows." } }), { status: 422 }))
+    requetes.mockImplementation(async (adresse) =>
+      lectureDesFils(adresse) ? sansFil() : new Response(JSON.stringify({ error: { code: "too_large", message: "Too many rows." } }), { status: 422 }),
+    )
     rendre()
     fireEvent.click(screen.getByRole("button", { name: "Télécharger en .md" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Ce tableau a trop de lignes pour un export : filtrez-le, ou demandez à un assistant de le lire par pages.")

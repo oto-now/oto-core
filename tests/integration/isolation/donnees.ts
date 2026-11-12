@@ -310,6 +310,18 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`insert into platform.node_shares (org_id, node_id, created_by) values (${b.id}, ${table}, ${people.b.id})`
   // Une vue du tableau de B à l'écran (1.4.13) : une ligne par page, personne et jour.
   await admin`insert into platform.node_views (org_id, node_id, user_id) values (${b.id}, ${table}, ${people.b.id})`
+  // Un fil de commentaires de B sur son tableau et son premier commentaire (`20261112090000`).
+  const thread = await one(
+    admin<{ id: string }[]>`insert into platform.comment_threads (org_id, node_id, created_by) values (${b.id}, ${table}, ${people.b.id}) returning id`,
+    "comment thread of B insert",
+  )
+  const comment = await one(
+    admin<{ id: string }[]>`insert into platform.comments (org_id, thread_id, author, text) values (${b.id}, ${thread.id}, ${people.b.id}, 'Tournée du lundi à revoir.') returning id`,
+    "comment of B insert",
+  )
+  // L'état de l'email groupé des commentaires de B (`20261112090000`) : écrit par la commande de l'hôte, jamais sous une session.
+  await admin`insert into platform.comment_mails (org_id, user_id, sent_at) values (${b.id}, ${people.b.id}, now())`
+  await admin`insert into platform.comment_mail_items (comment_id, user_id, org_id, sent_at) values (${comment.id}, ${people.b.id}, ${b.id}, now())`
   // Un fichier joint de B (E10-S02, ADR-016) : sa ligne seule, aucun objet dans un bucket.
   await admin`
     insert into platform.files (org_id, node_id, name, mime, size, status, created_by)

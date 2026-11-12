@@ -5,10 +5,14 @@
 // `PLATFORM_MAIL_FROM`. `invitations.ts` s'y branche ensuite (partie a2-wire) ; sur Supabase, Supabase
 // envoie toujours son propre email.
 //
+// Le relais lui-même (variables, TLS, délais, code d'un échec) et l'habillage du HTML vivent dans
+// `cli/mail.mjs` : la commande `oto-platform comments notify` envoie l'email groupé des commentaires
+// par le même relais, dans les deux modes, et ne charge pas ce module.
+//
 // Textes repris des modèles Supabase d'E02-S01 (`pnpm auth:settings`) : « Vous êtes invité·e à
 // rejoindre… », « Si vous n'attendiez pas cette invitation, ignorez ce message. » Retiré : « Ce lien
 // ne sert qu'une fois » : le lien mène ici à la page de connexion, pas à un jeton.
-import { createTransport } from "nodemailer"
+import { escapeHtml, failureCode, MAIL_STYLES, relaySettings as readRelaySettings, smtpTransport } from "../cli/mail.mjs"
 import { webUrl } from "../schemas/oauth"
 import type { Brand } from "./brand"
 import { PlatformError } from "./errors"
@@ -30,33 +34,12 @@ export type MailContent = { to: string; subject: string; text: string; html: str
 /** Ce qu'il faut d'un transport : le `sendMail` de nodemailer, ou un transport de capture dans les tests. */
 export type MailTransport = { sendMail(message: MailContent & { from: string }): Promise<unknown> }
 
-/**
- * Délais du relais. Ceux de nodemailer (2 minutes pour la connexion, 30 s pour l'accueil, 10 minutes
- * d'inactivité) visent l'envoi en lot ; ici, l'admin attend la réponse de sa requête, et un relais
- * qui ne répond pas doit la faire échouer sous la minute, celle d'une fonction de l'hôte ou d'un
- * proxy devant lui, pour que l'invitation soit retirée et le refus servi (AC-a8b). Passés à côté de
- * `url`, ils ne s'appliquent que depuis nodemailer 10.0.0 : avant, ils seraient perdus sans bruit.
- */
-const RELAY_LIMITS = { dnsTimeout: 5_000, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 15_000 }
-
-const HTML_ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }
-
-/** Un texte de l'organisation, de la personne ou de l'hôte posé dans le HTML : ni balise, ni sortie d'attribut. */
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (character) => HTML_ENTITIES[character])
-}
-
 /** La phrase d'invitation, sans point final ; pour le HTML, ses deux noms arrivent échappés. */
 function invitedBy(inviterName: string | null, orgName: string): string {
   return inviterName ? `${inviterName} vous invite à rejoindre ${orgName}` : `Vous êtes invité·e à rejoindre ${orgName}`
 }
 
-const BODY_STYLE =
-  "margin:0;padding:24px 12px;background-color:#f4f4f5;color:#18181b;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5"
-const CARD_STYLE = "max-width:560px;margin:0 auto;padding:32px;background-color:#ffffff;border-radius:8px"
-const BUTTON_STYLE =
-  "display:inline-block;padding:12px 24px;background-color:#18181b;color:#ffffff;border-radius:6px;text-decoration:none;font-weight:bold"
-const NOTE_STYLE = "margin:0 0 16px;font-size:14px;color:#52525b"
+const { body: BODY_STYLE, card: CARD_STYLE, button: BUTTON_STYLE, note: NOTE_STYLE } = MAIL_STYLES
 
 function invitationHtml(input: InvitationMailInput, loginUrl: string): string {
   const org = escapeHtml(input.brand.displayName)
@@ -128,55 +111,29 @@ function configurationError(problem: string): PlatformError {
 
 const UNREADABLE_RELAY = "PLATFORM_SMTP_URL is not a readable smtp:// or smtps:// address"
 
-/**
- * Une adresse de relais `smtp:` ou `smtps:` que l'analyseur d'URL lit. Contrôlée avant nodemailer, qui
- * la relit par l'analyseur ancien de Node : un port illisible y fait écrire à Node un avertissement
- * qui recopie l'adresse entière, mot de passe compris (DEP0170) ; une autre adresse que `smtp:` ou
- * `smtps:` partirait sans bruit vers un autre relais (localhost pour une adresse sans protocole).
- */
-function isRelayAddress(value: string): boolean {
-  try {
-    const { protocol } = new URL(value)
-    return protocol === "smtp:" || protocol === "smtps:"
-  } catch {
-    return false
-  }
-}
-
 function relaySettings(): { url: string; from: string } {
-  const url = process.env.PLATFORM_SMTP_URL?.trim()
-  const from = process.env.PLATFORM_MAIL_FROM?.trim()
-  if (!url || !from) {
-    const missing = [url ? null : "PLATFORM_SMTP_URL", from ? null : "PLATFORM_MAIL_FROM"].filter((name) => name !== null)
+  const settings = readRelaySettings(process.env)
+  if ("missing" in settings) {
+    const { missing } = settings
     throw configurationError(`${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not set in the host environment`)
   }
-  if (!isRelayAddress(url)) throw configurationError(UNREADABLE_RELAY)
-  return { url, from }
+  if ("unreadable" in settings) throw configurationError(UNREADABLE_RELAY)
+  return settings
+}
+
+/** Le transport du relais (`smtpTransport`, TLS exigé) ; une adresse que nodemailer refuse : la même réponse qu'une adresse illisible. */
+function smtpRelay(url: string): MailTransport {
+  const relay = smtpTransport(url)
+  if (!relay) throw configurationError(UNREADABLE_RELAY)
+  return relay
 }
 
 /**
- * Le transport SMTP de nodemailer, créé sans se connecter : la connexion s'ouvre à l'envoi. TLS exigé :
- * en `smtp://`, nodemailer ne passe en STARTTLS que si le relais l'annonce, et qui retire l'annonce sur
- * le chemin lirait en clair le mot de passe du relais, puis le message ; exigé, STARTTLS est demandé
- * même sans annonce et l'envoi refusé sans lui, avant AUTH. Un relais de développement sans TLS
- * l'annule par `?requireTLS=false` dans l'adresse, dont nodemailer fait passer les options devant
- * celles d'ici (depuis sa version 10.0.0, comme les délais).
+ * L'hôte a un relais d'envoi : les deux variables posées, l'adresse du relais lisible. Ce que l'écran des commentaires
+ * lit pour annoncer l'email groupé (`NodeCommentsView.mailEnabled`) ; sans relais, aucun email ne part et rien ne l'annonce.
  */
-function smtpRelay(url: string): MailTransport {
-  try {
-    return createTransport({ url, requireTLS: true, ...RELAY_LIMITS })
-  } catch {
-    // L'analyseur ancien refuse des hôtes que `new URL` accepte (`smtp://ho%20st`), et son erreur
-    // porte l'adresse entière (`ERR_INVALID_URL`, champ `input`) : elle ne remonte ni ne part au log.
-    throw configurationError(UNREADABLE_RELAY)
-  }
-}
-
-/** Ce que le log garde d'un échec du relais : le code de nodemailer et la réponse SMTP, jamais le message. */
-function failureCode(error: unknown): string {
-  if (typeof error !== "object" || error === null) return "unknown"
-  const code = "code" in error && typeof error.code === "string" ? error.code : "unknown"
-  return "responseCode" in error && typeof error.responseCode === "number" ? `${code} ${error.responseCode}` : code
+export function mailRelayConfigured(): boolean {
+  return "url" in readRelaySettings(process.env)
 }
 
 /**

@@ -355,6 +355,19 @@ export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeI
 }
 
 /**
+ * Les membres de l'organisation qui lisent un nœud (niveau 1 au moins), par identifiant : ceux qu'un commentaire de la
+ * page peut mentionner. Chacun tel que le calcul le décide (`nodeLevelOf`, sur les faits de chaque membre, comme
+ * `teamMemberLevels`) ; vide quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.
+ */
+export async function nodeReaders(db: PlatformDb, identity: Identity, nodeId: string): Promise<Set<string>> {
+  const [chains, callers] = await Promise.all([readNodeChains(db, identity.org.id, [nodeId]), readMemberCallers(db, identity.org.id)])
+  const read = chains.get(nodeId)
+  if (!read) return new Set()
+  const chain = await completedChain(db, nodeId, read)
+  return new Set(callers.filter((caller) => nodeLevelOf(caller, chain) >= ACCESS_LEVELS.read).map((caller) => caller.userId))
+}
+
+/**
  * L'accès de toute l'organisation sur un nœud (1.4.13) : le niveau d'un membre qu'aucune règle ne nomme, ni lui ni une
  * équipe, donc la règle d'organisation la plus proche, posée sur le nœud ou héritée d'un dossier, ou le défaut du
  * propriétaire (Tout le monde lit) ; et celui qu'il aurait sans la règle d'organisation du nœud même (`inherited`).

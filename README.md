@@ -93,8 +93,8 @@ affichée, jamais commitée.
 | `PLATFORM_OIDC_AUDIENCE` | OIDC | paquet et hôte | Audience exigée dans `aud` de chaque jeton ; une par hôte | non |
 | `PLATFORM_OIDC_CLIENT_ID`, `PLATFORM_OIDC_CLIENT_SECRET` | OIDC | hôte | Client web confidentiel de l'hôte chez l'émetteur | le secret |
 | `PLATFORM_SESSION_SECRET` | OIDC | hôte | Clé du cookie de session (AES-GCM, 32 caractères au moins) ; la changer ferme toutes les sessions | oui |
-| `PLATFORM_SMTP_URL` | OIDC | `server/mail.ts` | Relais des invitations, `smtps://…:465` ou `smtp://…:587`, TLS exigé | oui |
-| `PLATFORM_MAIL_FROM` | OIDC | `server/mail.ts` | Expéditeur, `Nom <adresse>`, domaine à SPF et DKIM | non |
+| `PLATFORM_SMTP_URL` | les deux | `cli/mail.mjs` | Relais des emails, `smtps://…:465` ou `smtp://…:587`, TLS exigé : l'email groupé des commentaires (`oto-platform comments notify`), et l'invitation en mode OIDC | oui |
+| `PLATFORM_MAIL_FROM` | les deux | `cli/mail.mjs` | Expéditeur, `Nom <adresse>`, domaine à SPF et DKIM | non |
 
 Jamais dans l'environnement de l'application déployée : `PLATFORM_ADMIN_DATABASE_URL` (connexion
 d'administration), `PLATFORM_APP_PASSWORD`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`,

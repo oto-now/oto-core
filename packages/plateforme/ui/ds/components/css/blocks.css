@@ -9,7 +9,7 @@
   --block-slot: var(--space-6);
   /* Deux cellules côte à côte, le « + » puis la poignée, un nom dérivé de l'autre : une largeur écrite deux fois sortirait la poignée de sa gouttière. */
   --block-gutter: calc(var(--block-slot) * 2);
-  /* La gouttière est prise sur la marge de gauche, le « + » et la poignée ; à droite, rien (E05-S11, AC-30) : le menu vit dans la poignée, le texte prend la largeur. */
+  /* La gouttière est prise sur la marge de gauche, le « + » et la poignée ; à droite, aucune marge (E05-S11, AC-30) : le menu vit dans la poignée, le texte prend la largeur, et la bulle de commentaire se pose dans le rembourrage de l'îlot (plus bas). */
   margin-inline: var(--block-gutter) 0;
   /* Pleine largeur : plus de `max-inline-size: var(--reader-measure)` ici, le lecteur seul garde sa mesure. */
   /* La taille de texte de la lecture, conservée : la largeur change, pas le corps. */
@@ -94,9 +94,13 @@ h6 .oto-block-field[data-kind="heading"] { font-size: var(--fs-xs); text-transfo
   padding-block-start: var(--space-1);
 }
 
+/* La cellule de la bulle de commentaire, à droite du bloc, écrit (`.oto-block-row`) ou lu (`.oto-bloc-lu`) : large d'un `IconButton` `sm` et de son air, hors de la colonne de texte, dans le rembourrage de droite du corps de l'îlot, élargi d'autant (plus bas) ; un débord au-delà ferait défiler l'îlot de côté. */
 .oto-block-menu {
-  inset-inline-end: calc(var(--block-gutter) * -1);
+  --block-comment: var(--space-8);
+  inset-inline-end: calc(var(--block-comment) * -1);
   inset-block-start: 0;
+  inline-size: var(--block-comment);
+  justify-content: center;
   padding-block-start: var(--space-1);
 }
 
@@ -116,7 +120,9 @@ h6 .oto-block-field[data-kind="heading"] { font-size: var(--fs-xs); text-transfo
 .oto-block-row:hover > .oto-block-gutter,
 .oto-block-row:hover > .oto-block-menu,
 .oto-block-row:focus-within > .oto-block-gutter,
-.oto-block-row:focus-within > .oto-block-menu {
+.oto-block-row:focus-within > .oto-block-menu,
+.oto-bloc-lu:hover > .oto-block-menu,
+.oto-bloc-lu:focus-within > .oto-block-menu {
   opacity: 1;
   pointer-events: auto;
 }
@@ -153,3 +159,70 @@ ol.oto-block-steps {
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── LES COMMENTAIRES D'UN BLOC (`ui/noeud/commentaires/bulle-de-bloc.tsx`) */
+
+/* Un bloc lu dans sa boîte : la bulle se pose par rapport à elle ; ni rembourrage ni bordure, les marges du bloc la traversent et le rythme de la lecture ne change pas (`content.css`). */
+.oto-bloc-lu { position: relative; }
+
+/* Le corps d'un îlot dont un bloc porte une bulle garde à droite sa place, au moins `--space-8` ; sans bulle (l'éditeur d'un Contexte servi, une page jamais publiée), son rembourrage ne change pas. */
+.oto-island-body:has(.oto-bulle, .oto-bulle-compte) { padding-inline-end: max(var(--island-pad), var(--space-8)); }
+/* En édition, la gouttière (« + » et poignée) tient déjà le texte à distance du bord : le rembourrage de gauche de l'îlot se réduit, pour que le « + » ne flotte pas loin du bord. */
+.oto-island-body:has(.oto-block-row) { padding-inline-start: var(--space-1); }
+
+/* Un bloc qui a des fils ouverts garde sa pastille, et le bloc du fil ouvert sa bulle : une présence, hors du survol. */
+.oto-block-menu:has(.oto-bulle-compte, [data-actif]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Sans survol (écran tactile), aucune bulle ne se révèle : elles restent montrées. */
+@media (hover: none) {
+  .oto-block-menu {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* La pastille des fils ouverts d'un bloc : le glyphe et leur nombre, à la couleur du thème ; la paire `--btn-fg` sur `--btn-bg` est celle du bouton primaire (`button.css`). */
+.oto-bulle-compte {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-0-5);
+  min-inline-size: var(--space-6);
+  block-size: var(--space-6);
+  padding-inline: var(--space-1);
+  border-radius: var(--r-pill);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Le bloc du fil ouvert, ou du nouveau fil : une teinte du thème et un filet à gauche, jamais la couleur seule (la carte du fil est bordée aussi, et sa citation surlignée) ; le texte reste en `--ink` sur la teinte de la pastille d'encart (`content.css`, `.oto-linked > summary`). */
+.oto-block-row:has(> .oto-block-menu [data-actif]),
+.oto-bloc-lu:has(> .oto-block-menu [data-actif]) {
+  border-radius: var(--r-ctrl);
+  background-color: color-mix(in oklab, var(--primary) 9%, var(--island));
+  box-shadow: calc(var(--space-0-5) * -1) 0 0 var(--primary);
+}
+
+
+/* « Commenter ce passage », au-dessus du texte sélectionné (`selection.tsx`) : posé par rapport à la fenêtre, à la place mesurée de la sélection ; la paire de l'infobulle (`overlay.css`, `--island` sur `--ink`). */
+.oto-commenter-selection {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  inline-size: max-content;
+  /* `left` porte le milieu du passage : le bouton s'y centre. */
+  translate: -50% 0;
+  padding: var(--space-0-5);
+  border: 1px solid var(--island-bd);
+  /* La pilule du bouton qu'il contient. */
+  border-radius: var(--r-pill);
+  background: var(--island);
+  color: var(--mute);
+  box-shadow: var(--sh-pop);
+}
+.oto-commenter-selection .oto-btn > span { display: inline-flex; align-items: center; gap: var(--space-1-5); }

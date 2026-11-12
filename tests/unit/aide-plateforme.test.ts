@@ -22,7 +22,7 @@ describe("helpGuide", () => {
     const procedures = helpGuide("procedures", "acme").text
     expect(procedures).not.toMatch(/characters at most/)
     expect(procedures).toContain("never a procedure under a procedure")
-    expect(() => helpGuide("nowhere", "acme")).toThrow(/Unknown section nowhere of help\. Sections: pages, tables, procedures, paths, transfer, pitfalls\./)
+    expect(() => helpGuide("nowhere", "acme")).toThrow(/Unknown section nowhere of help\. Sections: pages, tables, procedures, paths, transfer, comments, pitfalls\./)
   })
 })
 

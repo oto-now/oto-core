@@ -96,6 +96,14 @@ async function montrer(arbre: ReactNode) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // L'encart « Commentaires » lit les fils du nœud une fois l'écran monté : aucun, ici ; toute autre requête échoue comme sans serveur.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(async (adresse) => {
+      if (String(adresse).includes("/comments?path=")) return new Response(JSON.stringify({ data: { path: TABLEAU, threads: [], readers: [], mailEnabled: false } }), { status: 200 })
+      throw new TypeError("fetch failed")
+    }),
+  )
   vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ data: { identity: IDENTITE, session: SESSION } })
   vi.mocked(loadNode).mockResolvedValue(tableau())
   // Les liens du nœud (« Cité dans », « Cite » ; E05-S10 AC-b6, E11-S05 AC-e3), lus par `nodeLinks` : aucun.
@@ -112,6 +120,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("/n/[...chemin] page of a table (AC1, AC4 à AC8, AC10)", () => {

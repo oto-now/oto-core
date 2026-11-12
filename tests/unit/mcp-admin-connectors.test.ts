@@ -202,6 +202,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
           "- upload (built in): always active — upload.link (write)",
           "- file (built in): always active — file.keep (write)",
           "- job (built in): always active — job.read (read)",
+          "- comment (built in): always active — comment.list (read), comment.add (write), comment.edit (write), comment.delete (sensitive), comment.resolve (write)",
           "- application functions: always active — erp.lookup_customer (read)",
         ].join("\n"),
       )
@@ -223,6 +224,20 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         { name: "upload", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "upload.link", class: "write" }] },
         { name: "file", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "file.keep", class: "write" }] },
         { name: "job", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "job.read", class: "read" }] },
+        {
+          name: "comment",
+          kind: "built_in",
+          activable: false,
+          state: "always_active",
+          since: null,
+          functions: [
+            { name: "comment.list", class: "read" },
+            { name: "comment.add", class: "write" },
+            { name: "comment.edit", class: "write" },
+            { name: "comment.delete", class: "sensitive" },
+            { name: "comment.resolve", class: "write" },
+          ],
+        },
         { name: "application", kind: "application", activable: false, state: "always_active", since: null, functions: [{ name: "erp.lookup_customer", class: "read" }] },
       ])
       // Sans activation, le connecteur activable est dit inactif (HN-E08S06-9).

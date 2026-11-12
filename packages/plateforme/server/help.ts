@@ -1,6 +1,6 @@
 // Le guide de la plateforme (`read {"path": "help"}`), servi par le paquet, le même dans toutes les organisations, comme
 // `functions` et `journal` : son plan, puis une section par appel. Il dit ce qu'un assistant doit savoir pour écrire du
-// premier coup une page, un tableau ou une procédure, ranger des contenus et copier une arborescence ; il renvoie aux
+// premier coup une page, un tableau ou une procédure, ranger des contenus, copier une arborescence et traiter les commentaires ; il renvoie aux
 // contrats (`write.procedure`, `write.table`) au lieu de les recopier. Sans lui, ces règles ne se lisent que dispersées
 // dans les descriptions des outils, et un assistant les apprend par ses erreurs. Texte servi en anglais (ADR-020).
 import { PlatformError } from "./errors"
@@ -87,6 +87,20 @@ const SECTIONS: readonly HelpSection[] = [
       "node.import_tree reads that address (or a zip, a .md, a .csv, a file attached to a page) under an existing page. Rewritten on the way: links, reference blocks, the arguments of call blocks and the table cells that name an imported path; the tools named with the source organisation's prefix take this one's.",
       "A path taken: skip (default) keeps it unless it is empty, overwrite updates it, suffix puts the imported root next to it. A context page at the arrival is never replaced: the imported node goes next to it. A long import answers continue_from: call again with it.",
       "The report counts every node of the source: created, updated, kept or left out, refused (with the whole refusal), kept as drafts (a procedure whose publication is refused). Then run node.check on the imported root: broken links, invalid calls, cells naming a missing path.",
+    ],
+  },
+  {
+    id: "comments",
+    title: "Comments",
+    summary: "threads on a page, @assistant, replying, resolving",
+    stems: ["commentaire", "comments", "commenté", "remarque", "relecture"],
+    lines: [
+      "People comment a page, a procedure or a table without editing it: a thread sits on one published block (with an optional quote) or on the whole page; reading is enough to comment and to reply.",
+      "<p>_read of a page serves its open threads after the body, with a header line « comments: n open (m for the assistant) »; with section, outline or since_revision, the header line only: <p>_call comment.list serves them.",
+      "A comment that says @assistant asks the next assistant of a person who can edit the page; no assistant runs in between. Such a thread shows « waiting for an assistant » until an assistant replies or the thread is resolved.",
+      "Handling a thread that waits for an assistant: tell the user what it asks and who asks, and only once they agree do it (<p>_write on the page), reply with comment.add (thread, text), then comment.resolve. A user who only reads the page: reply, and say who can edit it.",
+      "comment.add writes in the user's name, signed « Assistant of <name> »; @Full Name mentions a member who reads the page. A new thread on a block takes its short reference (<p>_read with refs: true).",
+      "comment.edit and comment.delete touch the user's own comments only (ids from comment.list); deleting the first comment of a thread deletes the whole thread, in two steps (confirm: true after the user agreed). Resolving belongs to the author of the thread and to those who can edit the page.",
     ],
   },
   {

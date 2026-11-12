@@ -100,7 +100,8 @@ export function FileDeRevue({ chemin, entete, revue, redacteur, Lien, ici }: Fil
   // Aucune pastille quand il n'y a rien : un « 0 » se lirait comme un compteur en panne, pas comme le calme.
   const pastille = file && file.count > 0 ? nombreLisible(file.count) : undefined
   return (
-    <WaitList id={ANCRE_DE_LA_REVUE} tabIndex={-1} label={REVUE.titre} count={pastille}>
+    // Une file vide ne se montre pas (`data-vide`, `home.css`), sauf après une revue faite dans la session : son résumé reste à copier.
+    <WaitList id={ANCRE_DE_LA_REVUE} tabIndex={-1} label={REVUE.titre} count={pastille} data-vide={file && file.count === 0 ? "" : undefined}>
       {/* Le cycle des états, pour qui lit comme pour qui décide (E11-S05, AC-a5). */}
       <p className="oto-caption px-2 pt-1">{REVUE.cycle({ ...cycle, review: etats })}</p>
       {revue.error !== undefined && <ErreurDeLecture titre={REVUE.enEchec} message={revue.error} href={ici} Lien={Lien} />}

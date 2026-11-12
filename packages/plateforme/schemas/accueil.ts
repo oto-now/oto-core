@@ -69,3 +69,28 @@ export type HomeContent = {
 /** Une page de la carte ; `hasMore` : « Voir plus » en trouvera d'autres. */
 export type HomeContentsPage = { items: HomeContent[]; hasMore: boolean }
 
+
+/** Fils du bloc « Commentaires » de l'accueil : au-delà, une ligne dit combien restent. */
+export const HOME_COMMENTS_SHOWN = 10
+
+/** Longueur de l'extrait d'un commentaire sur l'accueil, « … » compris. */
+export const HOME_COMMENT_EXCERPT_CHARS = 120
+
+/**
+ * Un fil ouvert destiné à la personne, sur l'accueil : sa page (chemin courant, qui l'ouvre ; titre), le dernier
+ * commentaire d'un autre (le nom de son auteur, nul quand il n'est plus membre ; écrit par son assistant ou non ; son
+ * extrait ; sa date), et s'il est non lu : un commentaire d'un autre suit la dernière visite de la page à l'écran.
+ */
+export type HomeCommentThread = {
+  id: string
+  path: string
+  title: string
+  author: string | null
+  viaAssistant: boolean
+  excerpt: string
+  at: string
+  unread: boolean
+}
+
+/** Le bloc « Commentaires » de l'accueil : `HOME_COMMENTS_SHOWN` fils au plus, non lus d'abord ; `more` : ceux qui restent. */
+export type HomeComments = { threads: HomeCommentThread[]; more: number }

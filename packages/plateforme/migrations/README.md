@@ -425,6 +425,17 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   droit en base (recherche, policies) et le nouveau dans le service, la migration sans le paquet l'inverse. Une règle déjà
   posée sur la racine garde sa ligne et cesse de compter sous une équipe. Privilèges redits ; aucune table, colonne,
   policy ni index ; rien à relancer avant.
+- `20261112090000_platform_commentaires.sql` (commentaires d'une page) : les tables `comment_threads` (un fil sur un
+  nœud, ou sur un bloc publié avec un passage cité et la révision du bloc ; `open` ou `resolved`) et `comments` (auteur,
+  texte de 1 à 4 000 caractères, membres mentionnés, date de modification). RLS au rôle de leur service : lus au niveau
+  lecture du nœud, hors corbeille ; écrits par l'appelant pour lui-même sur un nœud qu'il lit ; l'état d'un fil par son
+  auteur ou au niveau écriture ; le texte et la suppression d'un commentaire par son auteur seul ; un fil supprimé par
+  son auteur, ses réponses avec lui. Clés vers `orgs` et `nodes` en cascade (une page purgée emporte ses fils).
+  `forget_user`, re-versionnée à signature identique, laisse les commentaires et les fils de la personne sans elle et la
+  sort des mentions. L'état de l'email groupé (`oto-platform comments notify`) : `comment_mails` (le dernier email d'une
+  personne dans une organisation) et `comment_mail_items` (les commentaires déjà envoyés à une personne), écrites par la
+  seule connexion d'administration, lues par la personne seule, en cascade depuis `members` et `comments`. Quatre
+  tables, cinq index, dix policies ; additive ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

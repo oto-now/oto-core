@@ -185,6 +185,26 @@ function contentTables(ids: Ids): Record<string, Row[]> {
       { org_id: ids.org, source_node_id: ids.liens, source_block_id: ids.lien, target_path: "ventes/devis", target_key: "intro", target_node_id: ids.devis },
       { org_id: ids.org, source_node_id: ids.bobNotes, source_block_id: ids.noteBob, target_path: "ventes/devis", target_key: null, target_node_id: ids.devis },
     ],
+    ...commentTables(ids),
+  }
+}
+
+/** Un fil résolu par Bob sur un bloc publié du devis, dont le commentaire d'Alice le mentionne ; un fil d'Alice sur les notes de Bob. */
+function commentTables(ids: Ids): Record<string, Row[]> {
+  const thread = (id: string, node: string, extra: Row = {}) => ({
+    id, org_id: ids.org, node_id: node, block_id: null, quote: null, block_revision: null, status: "open", resolved_by: null, resolved_at: null,
+    created_by: ids.alice, created_at: AT, ...extra,
+  })
+  const comment = (threadId: string, extra: Row = {}) => ({
+    id: randomUUID(), org_id: ids.org, thread_id: threadId, author: ids.alice, text: "À relire.", mentions: [], created_at: AT, edited_at: null, ...extra,
+  })
+  const [onDevis, onNotes] = [randomUUID(), randomUUID()]
+  return {
+    comment_threads: [
+      thread(onDevis, ids.devis, { block_id: ids.corps, quote: "Corps", block_revision: 1, status: "resolved", resolved_by: ids.bob, resolved_at: LATER }),
+      thread(onNotes, ids.bobNotes, { created_at: LATER }),
+    ],
+    comments: [comment(onDevis, { text: "À relire, @bob.", mentions: [ids.bob] }), comment(onNotes, { created_at: LATER })],
   }
 }
 
@@ -500,7 +520,8 @@ describe("planImport, one person absent from the target (AC9, AC10)", () => {
     expect(plan.absent).toEqual(["bob@example.test"])
     expect(plan.skipped).toEqual({
       orgs: 0, teams: 0, members: 1, team_members: 2, accounts: 1, nodes: 3, node_drafts: 1, blocks: 2, node_versions: 1,
-      node_aliases: 1, links: 1, access_rules: 3, connector_activations: 0, invitations: 0, platform_grants: 1, ctx: 1,
+      // Le fil posé sur les notes de Bob part avec leur nœud, et son commentaire avec lui.
+      node_aliases: 1, links: 1, comment_threads: 1, comments: 1, access_rules: 3, connector_activations: 0, invitations: 0, platform_grants: 1, ctx: 1,
       journal: 0, admin_journal: 0, feedback: 1, sim_outbox: 1,
     })
     expect(plan.rows.nodes.map((row) => row.path).filter((nodePath) => String(nodePath).startsWith("private/bob"))).toEqual([])
@@ -517,6 +538,15 @@ describe("planImport, one person absent from the target (AC9, AC10)", () => {
     const corps = plan.rows.blocks.filter((row) => row.text === "Corps." || row.text === "Corps modifié.")
     expect(corps.map((row) => row.provenance)).toEqual([expect.objectContaining({ by: ids.bob }), expect.objectContaining({ by: ids.bob })])
     expect(plan.rows.journal[1]).toMatchObject({ user_id: null, account_id: null, ctx: expect.stringMatching(CROCKFORD) })
+  })
+
+  it("should carry a comment thread under the new identifiers of its node and block, without the absent person who resolved it", () => {
+    const corps = plan.rows.blocks.find((row) => row.text === "Corps.")
+    expect(plan.rows.comment_threads).toEqual([
+      expect.objectContaining({ node_id: plan.rows.nodes.find((row) => row.path === "ventes/devis")?.id, block_id: corps?.id, quote: "Corps", status: "resolved", resolved_by: null, created_by: ids.alice }),
+    ])
+    expect(plan.rows.comment_threads[0].id).not.toBe(doc.tables.comment_threads[0].id)
+    expect(plan.rows.comments).toEqual([expect.objectContaining({ thread_id: plan.rows.comment_threads[0].id, author: ids.alice, text: "À relire, @bob." })])
   })
 
   it("should count the rows whose author is absent, then give them the default author (AC10)", () => {

@@ -90,6 +90,8 @@ export { listActivities } from "./activities"
 export { usefulProcedures } from "./context/blocks/procedures"
 // 1.4.13 : la carte « Reprendre » de l'accueil, et la vue d'une page que l'hôte enregistre.
 export { homeContents } from "./home-contents"
+// Le bloc « Commentaires » de l'accueil : les fils ouverts destinés à la personne.
+export { homeComments } from "./comments/followed"
 export { recordNodeView } from "./node-views"
 export { describeTeamDeletion } from "./teams"
 export type { TeamDeletion } from "./teams"

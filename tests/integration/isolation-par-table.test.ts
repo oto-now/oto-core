@@ -29,8 +29,8 @@ const SETUP_TIMEOUT = 240_000
 const WRITES_TIMEOUT = 120_000
 const SUITE = "isolation between organisations, table by table"
 
-/** Les tables du contenu d'un nœud, que la base ne rend qu'à qui lit le nœud (`20261021130000`). */
-const CONTENT = ["blocks", "files", "links", "node_drafts", "node_shares", "node_versions"]
+/** Les tables du contenu d'un nœud, que la base ne rend qu'à qui lit le nœud (`20261021130000` ; ses commentaires, `20261112090000`). */
+const CONTENT = ["blocks", "comment_threads", "comments", "files", "links", "node_drafts", "node_shares", "node_versions"]
 
 /** Tables sans écriture accordée à `authenticated` : rien à tenter (AC4). */
 const SELECT_ONLY = ["links", "node_aliases", "node_versions"]
@@ -102,6 +102,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     ruleA: "",
     shareA: "",
     fileA: "",
+    threadA: "",
+    commentA: "",
     accountA: "",
     grantA: "",
     invitationToBea: "",
@@ -234,6 +236,17 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     await fx.admin`
       insert into platform.files (org_id, node_id, name, mime, size, status, created_by)
       values (${b.id}, ${ids.pageB}, 'offre.pdf', 'application/pdf', 3, 'ready', ${people.bea.id})`
+    // Un fil de commentaires et son commentaire dans A et dans B (`20261112090000`).
+    const comment = async (org: string, page: string, author: string) => {
+      const [thread] = await fx.admin<{ id: string }[]>`insert into platform.comment_threads (org_id, node_id, created_by) values (${org}, ${page}, ${author}) returning id`
+      const [written] = await fx.admin<{ id: string }[]>`
+        insert into platform.comments (org_id, thread_id, author, text) values (${org}, ${thread.id}, ${author}, 'Un commentaire.') returning id`
+      return { thread: thread.id, comment: written.id }
+    }
+    const commentA = await comment(a.org.id, ids.pageA, a.people.claire.id)
+    ids.threadA = commentA.thread
+    ids.commentA = commentA.comment
+    await comment(b.id, ids.pageB, people.bea.id)
     ids.accountA = await fx.createAccount(a.org.id, { ownerKind: "team", ownerTeamId: a.teams.ventes, label: "Mail Ventes" })
     await fx.createAccount(a.org.id, { ownerKind: "user", ownerUserId: a.people.claire.id, label: "Mail Claire" })
     ids.accountB = await fx.createAccount(b.id, { ownerKind: "org", label: "Mail B" })
@@ -393,6 +406,12 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         ["files update", "42501", () => bea((sql) => sql`update platform.files set status = 'pending' where id = ${ids.fileA} returning id`)],
         ["files ready by the server", "42501", () => countedByServer("bea", (sql) => sql`select id from platform.mark_files_ready(${org}, ${[ids.fileA]}::uuid[]) as id`)],
         ["files delete", "0 rows", () => bea((sql) => sql`delete from platform.files where id = ${ids.fileA} returning id`)],
+        ["comment_threads insert", "42501", () => insert("bea", "comment_threads", { org_id: org, node_id: ids.pageA, created_by: people.bea.id })],
+        ["comment_threads update", "0 rows", () => bea((sql) => sql`update platform.comment_threads set status = 'resolved', resolved_by = ${people.bea.id}, resolved_at = ${now} where id = ${ids.threadA} returning id`)],
+        ["comment_threads delete", "0 rows", () => bea((sql) => sql`delete from platform.comment_threads where id = ${ids.threadA} returning id`)],
+        ["comments insert", "42501", () => insert("bea", "comments", { org_id: org, thread_id: ids.threadA, author: people.bea.id, text: "Intrus." })],
+        ["comments update", "0 rows", () => bea((sql) => sql`update platform.comments set text = 'Intrus.' where id = ${ids.commentA} returning id`)],
+        ["comments delete", "0 rows", () => bea((sql) => sql`delete from platform.comments where id = ${ids.commentA} returning id`)],
         // Une ligne de B, que Bea administre le temps de la boucle, qu'une mise à jour déplacerait dans A : refusée par le
         // `with check`.
         ["members move", "42501", () => bea((sql) => sql`update platform.members set org_id = ${org} where org_id = ${b.id} and user_id = ${people.bea.id} returning user_id`)],

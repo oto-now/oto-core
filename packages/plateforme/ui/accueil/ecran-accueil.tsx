@@ -18,6 +18,9 @@
 // 1.4.13 : à gauche, la carte « Reprendre » (Récents, Les plus consultés, Fil) ; à droite, « Brancher votre
 // assistant », « Lancer » (les procédures les plus utilisées, la demande à copier), puis « Nouveautés depuis votre
 // dernière visite ». La recherche de l'accueil part : celle du rail suffit.
+//
+// Suivi des commentaires : dans la colonne de droite, au-dessus de « Lancer », l'îlot « Commentaires » (les fils
+// ouverts destinés à la personne), absent sans fil ; le premier jour ne le retire pas.
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
@@ -27,6 +30,7 @@ import { Island, IslandBody } from "../ds/react/island"
 import { ScreenHeader } from "../ds/react/screen-header"
 import { Skeleton } from "../ds/react/skeleton"
 import { BranchementIA } from "./branchement-ia"
+import { CommentairesSuivis } from "./commentaires-suivis"
 import { FirstDay } from "./first-day"
 import { ACCUEIL } from "./libelles"
 import { Lancer } from "./lancer"
@@ -108,6 +112,8 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
         cards={
           <>
             <BranchementIA adresse={lu.adresse} exemples={exemplesDe(lu.procedures)} connexions={lu.connexions} />
+            {/* Les fils qui attendent la personne, juste au-dessus de « Lancer avec Claude ». */}
+            <CommentairesSuivis commentaires={lu.commentaires} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />
             {/* Le premier jour retire les procédures : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}
             {!premierJour && <Lancer procedures={lu.procedures} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />}
           </>

@@ -88,6 +88,9 @@ const RESERVED: Record<string, string> = {
 const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   access_rules: ["level"],
   blocks: ["position", "type", "text", "data", "key", "provenance", "revision", "claimed_by", "claimed_by_user", "lease_until", "updated_by"],
+  // Les commentaires d'une page (`20261112090000`) : l'état d'un fil, le texte d'un commentaire par son auteur.
+  comment_threads: ["status", "resolved_by", "resolved_at"],
+  comments: ["text", "mentions", "edited_at", "to_assistant"],
   connector_activations: ["org_id", "connector", "state", "activated_by", "created_at", "updated_at"],
   ctx: ["contexts"],
   feedback: ["state", "resolution", "handled_by", "handled_at"],
@@ -119,6 +122,8 @@ const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
 const DELETED_BY_AUTHENTICATED: Record<string, string> = {
   access_rules: "removeRule, removeAccountRule, setGeneralAccess (server/rules.ts, server/general-access.ts): the person who manages the node or the account; the policy requires the management of the node (node_level_for >= 3, 20261020190000), an account rule membership only",
   blocks: "draft blocks dropped on a save (server/nodes/store.ts), table rows by delete_rows (server/tables/delete-rows.ts)",
+  comment_threads: "deleteComment (server/comments/comments.ts): the author of a thread deletes its first comment, the thread and its replies leave; the policy requires its author (20261112090000)",
+  comments: "deleteComment (server/comments/comments.ts): the author of a comment; the policy requires its author (20261112090000)",
   connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
   files: "undone upload, size mismatch (server/uploads-write.ts, server/files/service.ts): the policy requires the write level of the node (node_level_for >= 2, 20261021170000); the caller's transit file (server/files/transit.ts), its author; the abandoned uploads go through purge_pending_files (20261021170000), the trash purge through purge_trash and erase_team_trash (20261021140000)",
   hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",

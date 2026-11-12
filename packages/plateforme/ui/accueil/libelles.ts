@@ -30,6 +30,19 @@ export const REPRENDRE = {
   consultations: (total: number) => `${total} consultation${total > 1 ? "s" : ""}`,
 } as const
 
+/** L'îlot « Commentaires » : les fils ouverts destinés à la personne, lus ou non. */
+export const SUIVI = {
+  titre: "Commentaires",
+  nonLu: "Non lu",
+  ancienMembre: "Ancien membre",
+  assistantDe: (nom: string) => `Assistant de ${nom}`,
+  assistantDUnAncienMembre: "Assistant d'un ancien membre",
+  /** Sous le titre de la page : qui a écrit le dernier commentaire, et son extrait. */
+  extrait: (auteur: string, extrait: string) => `${auteur} : ${extrait}`,
+  /** Les fils au-delà de ceux montrés. */
+  autres: (nombre: number) => (nombre > 1 ? `Et ${nombre} autres fils, sur leurs pages.` : "Et 1 autre fil, sur sa page."),
+} as const
+
 /** L'îlot « Activités » : ce qui est arrivé aux contenus, lu au journal (E05-S12, AC-13). */
 export const ACTIVITES = {
   toutLeJournal: "Tout le journal",

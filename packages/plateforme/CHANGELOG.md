@@ -17,7 +17,23 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- People comment a page without editing it; `read` of a page now ends with its open comment threads, counted in the header (« comments: n open »).
+- `comment.list`, `comment.add`, `comment.edit`, `comment.delete` and `comment.resolve`, behind `call`: read threads, reply, correct, resolve, as the user.
+- A thread that says `@assistant` waits for the next assistant of a person who can edit the page: tell the user what it asks and who asks, and act only once they agree.
+- The rules served by `context` say that a content you can read can be commented without editing it (`comment.add`), and that `read` of a page serves its open threads.
+- « Recent content » of `context` marks pages with new comments for the user, and pages whose threads wait for an assistant.
+- A resolved thread is frozen: reopen it with `comment.resolve` (`status: open`) before replying, editing or deleting.
+
 ### Hosts
+- Migrations: apply `20261112090000_platform_commentaires.sql` together with the package (`oto-platform migrations sync|check`): tables `comment_threads`, `comments`, `comment_mails`, `comment_mail_items`, their policies, and `forget_user` re-versioned. Without it, the comments inset, the home screen block and `read` of a page fail to read threads. Additive; nothing to rerun.
+- CLI: `oto-platform comments notify` sends the grouped email of comments: one email per person and per hour at most, for every organisation. Run it every hour from the host's scheduler, on the admin connection, with `PLATFORM_SMTP_URL` and `PLATFORM_MAIL_FROM` in its environment (both modes, Supabase and OIDC). Without them it says so, sends nothing and exits 0, and the screen announces no email; a failed send exits 1 and leaves its comments to the next run.
+- UI: the screen of a page, procedure, Contexte or table shows the « Commentaires » inset, a comment bubble on each published block and « Commenter ce passage » on a selection; nothing to mount, `EcranDeNoeud` carries them. The public page (`/p`) shows none.
+- UI: `DonneesDeLAccueil` takes `commentaires` (`Resultat<HomeComments>`): pass `homeComments(db, identity)` to the home screen, as the reference host does; the « Commentaires » block lists the open threads meant for the person.
+- API: `GET comments?path=`, `POST comments`, `PATCH comments/<id>`, `DELETE comments/<id>` and `PATCH comment-threads/<id>` under `/api/platform/*`, served by the same route; each mutation writes a journal line whose target is the page path.
+- Server: `homeComments` (`Schemas:` `HomeComments`, `HomeCommentThread`); five functions join the catalogue under the connector `comment`.
+- Schemas: `createCommentSchema`, `editCommentSchema`, `threadStatusSchema`, the `comment*ArgsSchema` of the five functions, the views `NodeCommentsView`, `CommentThreadView`, `CommentView`, and the bounds `COMMENT_MAX_CHARS`, `COMMENT_QUOTE_MAX_CHARS`, `COMMENT_MENTIONS_MAX`; `readMentions`, `mentionPlaces` and `addressesAssistant` read the mentions of a text, for the service and the screen; `SERVED_RECENT` gains the comment marks and `commentsHint`.
+- UI: on the home screen the right column takes 40 % of the width; on « Brancher votre assistant » the state sits on the line of the assistants; the « À revoir » panel of a table is hidden while its queue is empty (it stays after a review made in the session); in edit mode the left padding of the document island shrinks.
 - Server: `registerConnectors` runs `auth.kind: oauth2_jwt_bearer`, a service account (RFC 7523): the one secret credential field holds the whole JSON key file; the package signs an RS256 assertion with `node:crypto` and exchanges it at the fixed `tokenUrl`, without following redirects; the token is kept on the account and renewed like an `oauth2_client_credentials` one. A malformed key or a key naming another `token_uri` is refused before anything is sent (`not_enabled`, `details.refusal`); `invalid_grant` marks the account (`credential_rejected`). A package before this one refuses such a connector, and with it the whole declaration of the host.
 
 ## 1.6.2 — 2026-10-28

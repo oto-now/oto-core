@@ -122,6 +122,12 @@ describe("catalog (AC23)", () => {
       "file.keep",
       // Les fonctions longues : relever un travail en tâche de fond.
       "job.read",
+      // Les commentaires d'une page : lire les fils, répondre, corriger, supprimer, résoudre.
+      "comment.list",
+      "comment.add",
+      "comment.edit",
+      "comment.delete",
+      "comment.resolve",
     ])
     expect(callExamples(catalogFunctions(), NONE)).toEqual(["table.rows"])
   })

@@ -1,6 +1,6 @@
 // Les formes de l'accueil (E05-S09, partie b), redéfinies ici : `ui/` ne lit pas `server/`, la page de
 // l'hôte adapte les noms anglais des services et lit chaque donnée sous le jeton de la session.
-import type { ActivityPage, HomeContentsPage, UsefulProcedure } from "../../schemas"
+import type { ActivityPage, HomeComments, HomeContentsPage, UsefulProcedure } from "../../schemas"
 import type { Resultat } from "../api/resultat"
 import type { AdresseDeConnexion, DerniereConnexion } from "../connexion/types"
 
@@ -21,6 +21,8 @@ export type DonneesDeLAccueil = {
   activites: Resultat<ActivityPage>
   /** La première page de « Reprendre » (1.4.13) : les contenus récents de ses équipes ; les autres pages et filtres se lisent par l'API. */
   reprendre: Resultat<HomeContentsPage>
+  /** Les fils de commentaires ouverts destinés à la personne, non lus d'abord : l'îlot « Commentaires », absent sans fil. */
+  commentaires: Resultat<HomeComments>
   /** Ce que le guide de « Brancher » fait copier, pour l'organisation de l'adresse (E11-S09, AC-11). */
   adresse: AdresseDeConnexion
   /** La dernière connexion de chaque assistant de la personne, la plus récente d'abord (E02-S04). */

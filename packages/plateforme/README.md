@@ -16,7 +16,7 @@ sans étape de build, sous licence MIT.
 | `api/` | `@otomata_tech/oto_platform/api` | Route handlers `/api/platform/*` : adaptateurs des services |
 | `server/` | `@otomata_tech/oto_platform/server` | Services : la seule porte d'écriture (Zod → droits → écriture → journal) |
 | `migrations/` | `@otomata_tech/oto_platform/migrations/*` | SQL du schéma `platform`, additif, copié par l'application hôte |
-| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) ; suppression d'une organisation (`org delete`) |
+| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) ; email groupé des commentaires (`comments notify`) ; suppression d'une organisation (`org delete`) |
 | `widgets/` | `@otomata_tech/oto_platform/widgets` | Widget routeur dans la conversation (sources construites par Vite) ; l'export ne porte que les types d'une vue de l'ERP (`ErpView`, `ErpViewProps`) |
 
 ## Règle de dépendance entre faces
@@ -592,6 +592,11 @@ registerConnectors([messagerie.connector], {
 - **Rétention** : migration `20261019100000_platform_retention.sql`, puis, de votre tâche planifiée, sur la connexion
   d'administration : `pnpm exec oto-platform journal purge --journal-days 365 --feedback-days 730`,
   l'URL dans `PLATFORM_ADMIN_DATABASE_URL` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
+- **Email groupé des commentaires** : de votre tâche planifiée, chaque heure, sur la connexion d'administration :
+  `pnpm exec oto-platform comments notify`, avec `PLATFORM_ADMIN_DATABASE_URL`, `PLATFORM_SMTP_URL` et
+  `PLATFORM_MAIL_FROM` dans son environnement, dans les deux modes (Supabase et OIDC). Une personne reçoit au plus un
+  email par heure, qui réunit les commentaires qui la concernent sur les pages qu'elle lit. Sans relais, la commande le
+  dit et sort à 0, et l'écran n'annonce aucun email.
 - **Suppression d'une organisation** : `pnpm exec oto-platform org delete --org <slug>` (URL dans
   `PLATFORM_ADMIN_DATABASE_URL`) compte ce qui partirait ; `--yes --by <email>` (un membre de l'équipe plateforme) supprime ses objets du stockage
   (les cinq variables `PLATFORM_STORAGE_*`, ou `--without-storage`), puis toutes ses lignes ; ses lignes du journal de

@@ -3,7 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Suspense, use } from "react"
 import { journalFiltersSchema, LAUNCH_PROCEDURES_SHOWN } from "@otomata_tech/oto_platform/schemas"
-import { connectAddress, homeContents, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
+import { connectAddress, homeComments, homeContents, lastConnections, listActivities, usefulProcedures, type Identity, type LastConnection } from "@otomata_tech/oto_platform/server"
 import {
   EcranDAccueil,
   EcranDAccueilChargement,
@@ -29,6 +29,8 @@ import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } fro
 //
 // 1.4.13 : la première page de « Reprendre » (contenus récents de ses équipes, `homeContents`) et les dix procédures de
 // « Lancer avec Claude » ; les autres pages de « Reprendre » passent par l'API.
+//
+// Suivi des commentaires : les fils ouverts destinés à la personne (`homeComments`), pour l'îlot « Commentaires ».
 export const metadata: Metadata = {
   title: "Accueil",
   robots: { index: false },
@@ -53,10 +55,11 @@ function connexionsDe(connexions: LastConnection[]): DerniereConnexion[] {
 }
 
 async function lire({ identity, session }: { identity: Identity; session: PlatformSession }, origine: string): Promise<DonneesDeLAccueil> {
-  const [activites, reprendre, connexions, procedures] = await Promise.all([
+  const [activites, reprendre, commentaires, connexions, procedures] = await Promise.all([
     // Le fil s'ouvre sur « Mes équipes », le filtre par défaut de la carte ; ses autres filtres passent par l'API.
     resultatDe(listActivities(session.db, identity, { periodDays: PERIODE, scope: "teams" })),
     resultatDe(homeContents(session.db, identity, { tab: "recent", scope: "teams" })),
+    resultatDe(homeComments(session.db, identity)),
     resultatDe(lastConnections(session.db, identity).then(connexionsDe)),
     resultatDe(usefulProcedures(session.db, identity, LAUNCH_PROCEDURES_SHOWN)),
   ])
@@ -65,6 +68,7 @@ async function lire({ identity, session }: { identity: Identity; session: Platfo
     moi: identity.user.id,
     activites,
     reprendre,
+    commentaires,
     adresse: adresseDe(connectAddress(identity, origine)),
     connexions,
     procedures,

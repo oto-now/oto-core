@@ -13,7 +13,7 @@
 import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { Activity, ActivityPage, UsefulProcedure } from "@otomata_tech/oto_platform/schemas"
+import type { Activity, ActivityPage, HomeCommentThread, UsefulProcedure } from "@otomata_tech/oto_platform/schemas"
 import {
   ContexteDeLHote,
   ContexteDeRafraichissement,
@@ -55,6 +55,7 @@ const DONNEES: DonneesDeLAccueil = {
   moi: MOI,
   activites: { data: pageDe([activite(1, "2026-09-26T08:10:00Z")]) },
   reprendre: { data: { items: [], hasMore: false } },
+  commentaires: { data: { threads: [], more: 0 } },
   adresse: ADRESSE,
   connexions: { data: [] },
   procedures: { data: [] },
@@ -257,6 +258,7 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
 describe("home screen failed reads (portage-ecrans.md § 4 ; E05-S12, AC-16, AC-18)", () => {
   it.each<[string, Partial<DonneesDeLAccueil>]>([
     ["Reprendre", { activites: { error: ECHEC } }],
+    ["Commentaires", { commentaires: { error: ECHEC } }],
     [BRANCHER, { connexions: { error: ECHEC } }],
     ["Lancer avec Claude", { procedures: { error: ECHEC } }],
   ])("should say a failed read in « %s » with « Réessayer », which reads the page again", (nom, surcharge) => {
@@ -287,6 +289,73 @@ describe("home screen failed reads (portage-ecrans.md § 4 ; E05-S12, AC-16, AC-
   })
 })
 
+// L'îlot « Commentaires » : les fils ouverts destinés à la personne, tels que le service les rend (non lus d'abord).
+describe("home comments", () => {
+  const fil = (id: string, surcharge: Partial<HomeCommentThread>): HomeCommentThread => ({
+    id,
+    path: `ventes/page_${id}`,
+    title: `Page ${id}`,
+    author: "Marc Petit",
+    viaAssistant: false,
+    excerpt: "Le tarif de base est-il à jour ?",
+    at: "2026-09-26T08:00:00Z",
+    unread: false,
+    ...surcharge,
+  })
+
+  const FILS = [
+    fil("a", { title: "Grille tarifaire", path: "ventes/grille", unread: true }),
+    fil("b", { title: "Devis type", author: "Léa Roux", viaAssistant: true, excerpt: "Corrigé.", at: "2026-09-25T10:00:00Z" }),
+    fil("c", { author: null, excerpt: "À revoir." }),
+    fil("d", { author: null, viaAssistant: true, excerpt: "Relu." }),
+  ]
+
+  it("should list the threads in the order served, each a link to its page, the unread one marked in words, in the right column", () => {
+    monter({ data: { ...DONNEES, commentaires: { data: { threads: FILS, more: 0 } } } })
+
+    const ilotDesCommentaires = screen.getByRole("region", { name: "Commentaires" })
+    const liens = within(ilotDesCommentaires).getAllByRole("link")
+    expect(liens.map((lien) => [lien.getAttribute("href"), lien.dataset.lien, lien.textContent])).toEqual([
+      ["/n/ventes/grille", "hote", "Grille tarifaire Non luMarc Petit : Le tarif de base est-il à jour ?il y a 2 heures"],
+      ["/n/ventes/page_b", "hote", "Devis typeAssistant de Léa Roux : Corrigé.hier"],
+      ["/n/ventes/page_c", "hote", "Page cAncien membre : À revoir.il y a 2 heures"],
+      ["/n/ventes/page_d", "hote", "Page dAssistant d'un ancien membre : Relu.il y a 2 heures"],
+    ])
+    expect(within(ilotDesCommentaires).getAllByRole("listitem")).toHaveLength(4)
+    expect(within(ilotDesCommentaires).getByRole("heading", { level: 2, name: "Commentaires" })).toBeInTheDocument()
+    expect(within(ilotDesCommentaires).queryByText(/autres? fil/)).toBeNull()
+    // Dans la colonne de droite, hors de celle de « Reprendre » : juste au-dessus de « Lancer avec Claude » quand il est là.
+    const principal = screen.getByRole("region", { name: "Reprendre" })
+    const [gauche, droite] = [...document.querySelectorAll(".oto-home-col")]
+    expect(gauche).toContainElement(principal)
+    expect(gauche).not.toContainElement(ilotDesCommentaires)
+    expect(droite).toContainElement(ilotDesCommentaires)
+  })
+
+  it.each([
+    [1, "Et 1 autre fil, sur sa page."],
+    [3, "Et 3 autres fils, sur leurs pages."],
+  ])("should say that %i more thread(s) remain beyond those shown", (more, phrase) => {
+    monter({ data: { ...DONNEES, commentaires: { data: { threads: FILS, more } } } })
+
+    expect(within(screen.getByRole("region", { name: "Commentaires" })).getByText(phrase)).toBeInTheDocument()
+  })
+
+  it("should not render the island without a thread, the first day included", () => {
+    monter({ data: { ...DONNEES, activites: { data: pageDe([]) } } })
+
+    expect(screen.queryByRole("region", { name: "Commentaires" })).toBeNull()
+    expect(screen.queryByText("Non lu")).toBeNull()
+  })
+
+  it("should keep the island on the first day when a thread waits", () => {
+    monter({ data: { ...DONNEES, activites: { data: pageDe([]) }, commentaires: { data: { threads: [FILS[0]], more: 0 } } } })
+
+    expect(screen.getByText("Rien n'a encore tourné")).toBeInTheDocument()
+    expect(within(screen.getByRole("region", { name: "Commentaires" })).getByRole("link")).toHaveAttribute("href", "/n/ventes/grille")
+  })
+})
+
 // L'accueil en activités (E05-S12, lot B) : une activité par ligne, sa phrase écrite par l'écran depuis le verbe
 // classé par le service, le nombre de gestes regroupés, l'heure (AC-13) ; ce qu'ouvre une ligne (AC-15) ; à
 // droite « Brancher un assistant » et « Procédures les plus utilisées » (AC-18). 1.4.13 : le fil est l'onglet « Fil »
@@ -314,6 +383,7 @@ describe("home activities and right column (E05-S12, lot B)", () => {
     moi: MOI,
     activites: { data: { activities: [], truncated: false } },
     reprendre: { data: { items: [], hasMore: false } },
+    commentaires: { data: { threads: [], more: 0 } },
     adresse: ADRESSE,
     connexions: { data: [CLAUDE] },
     procedures: { data: [] },

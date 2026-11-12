@@ -157,7 +157,9 @@ test.describe("tableau, vue et revue", () => {
       await expect(page.getByText(attendu.somme, { exact: true })).toBeVisible()
       const file = page.getByRole("region", { name: "À revoir" })
       const [premiere] = attendu.aRevoir
-      await expect(file.getByText(premiere ? compte(attendu.aRevoir.length, "ligne à revoir", "lignes à revoir") : "Rien à revoir.", { exact: true })).toBeVisible()
+      // Une file vide ne se montre pas à l'arrivée : elle ne paraît qu'avec des lignes, ou après une revue de la session.
+      if (premiere) await expect(file.getByText(compte(attendu.aRevoir.length, "ligne à revoir", "lignes à revoir"), { exact: true })).toBeVisible()
+      else await expect(page.locator("#tableau-revue")).toBeHidden()
       if (premiere) await expect(file.locator(".oto-wait-item-demand")).toHaveText(premiere)
       // E11-S05 (AC-a4, AC-a5) : les lignes à revoir de la page sont marquées, et elles seules ; le cycle se lit sous le titre.
       const aRevoirAffichees = (await clesAffichees(grille)).filter((cle) => attendu.aRevoir.includes(cle))

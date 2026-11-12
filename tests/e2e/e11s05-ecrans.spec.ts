@@ -109,7 +109,7 @@ test.describe("écrans d'un contenu (E11-S05)", () => {
           const colonne = page.locator(".oto-two-columns-aside")
           await attendre(colonne.locator("details.oto-linked").first()).toBeVisible()
           await attendre(page.getByText("Lecture des liens…")).toHaveCount(0)
-          expect((await encarts(colonne)).map((texte) => texte.replace(/\d+$/, "").trim())).toEqual(["Cité dans", "Sous-pages"])
+          expect((await encarts(colonne)).map((texte) => texte.replace(/\d+$/, "").trim())).toEqual(["Commentaires", "Cité dans", "Sous-pages"])
           const carte = page.locator(".oto-two-columns-main .oto-island").first()
           const [enCarte, enColonne] = [await boite(carte), await boite(colonne.locator("details.oto-linked").first())]
           if (largeur === 1_280) expect(Math.abs(enColonne.y - enCarte.y)).toBeLessThanOrEqual(1)

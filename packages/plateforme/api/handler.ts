@@ -13,6 +13,7 @@ import type { Identity } from "../server/identity"
 import { journalError, loggedArgs, wellFormed, withheldValues, withoutWithheld, writeJournal } from "../server/journal"
 import { brandRoutes } from "./brand"
 import { cellRoutes } from "./cell"
+import { commentsRoutes, commentThreadsRoutes } from "./comments"
 import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
 import { fileAddressRoute, filesRoutes } from "./files"
@@ -145,6 +146,9 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   "connector-consent": connectorConsentRoutes,
   // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ, et l'adresse de retour du tiers.
   "hosted-link": hostedLinkRoutes,
+  // Les commentaires d'une page (parcours 5.4) : les fils d'un nœud et leurs commentaires, puis l'état d'un fil.
+  comments: commentsRoutes,
+  "comment-threads": commentThreadsRoutes,
 }
 
 type PlatformRequestOptions = {

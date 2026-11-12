@@ -1,7 +1,7 @@
 # Outils MCP
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-02 (ADR-009 § 3 révisé au statut proposé, en attente de la mesure du banc)
+- **Dernière révision** : 2026-11-12 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
 
 ## Résumé
 
@@ -30,6 +30,7 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - D8 : le contrat MCP des six outils (noms, titres, descriptions, schémas) part tel qu'écrit, sans relecture préalable ; il ne change plus que par ajout (ADR-002), et un test le fige.
 - H22 : les schémas d'entrée des six outils sont figés et ne changent que par ajout (ADR-002) ; chaque champ porte `.describe()` avec un exemple ; `team` et `account` de `call` sont facultatifs.
 - Pas d'outil par famille d'objets (ADR-002 § 6) : tableaux, journal et contrats passent par `call` et `read`.
+- Les commentaires d'un contenu ne changent rien à la surface : cinq fonctions de `call` (`comment.list`, `comment.add`, `comment.edit`, `comment.delete`, `comment.resolve`), les fils ouverts servis par `read` après le corps d'une page, et une marque de `context` ([commentaires](commentaires.md)).
 - Le connecteur admin (`/api/mcp-admin`) n'est pas soumis au gel ([administration et cellule](administration-et-cellule.md)).
 
 ### Lire et engager : la paire `<connecteur>` / `<connecteur>_act`
@@ -156,3 +157,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-19 : la description de `context` et la règle servie disent de le rappeler avec `since_ctx` à chaque nouvelle demande, au lieu de « once per conversation » — décidé par JB (source : retours d'usage du MCP Démo, session du 19/10/2026).
 - 2026-10-19 : la porte pseudonymise résultats, refus et prompts quand l'hôte déclare des personnes — écrit (pseudonymisation, J2).
 - 2026-10-19 : les jetons des arguments se résolvent avant le schéma de l'outil (chemin, requête, phrase ; `call` selon l'origine de la fonction) — écrit (pseudonymisation, J2).
+- 2026-11-12 : les commentaires d'un contenu passent par cinq fonctions de `call`, par `read` et par `context`, sans rien changer aux six outils ; renvoi vers leur document — décidé par le responsable du produit (source : décisions du 12/11/2026 sur les commentaires).

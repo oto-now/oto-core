@@ -88,8 +88,11 @@ export function BranchementIA({ adresse, exemples, connexions }: BranchementIAPr
         </span>
       </IslandHead>
       <IslandBody>
-        <Assistants />
-        <EtatDuBranchement connexions={connexions} />
+        {/* Les assistants et l'état sur une ligne quand elle les tient ; une liste de connexions passe dessous. */}
+        <div className="oto-branchement-ligne">
+          <Assistants />
+          <EtatDuBranchement connexions={connexions} />
+        </div>
       </IslandBody>
       <Dialog
         open={ouverte}

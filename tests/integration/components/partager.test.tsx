@@ -103,13 +103,18 @@ const estLaLectureDuLien = (url: unknown) => String(url).startsWith(LECTURE_DU_L
 /** La lecture des membres et du niveau de l'équipe (1.4.12, 1.4.13), faite à l'ouverture du panneau : hors des gestes comptés. */
 const LECTURE_DES_MEMBRES = "/api/platform/rules?"
 const servis: { people: NonNullable<NodeRulesView["people"]>; team: NodeRulesView["team"] } = { people: [], team: EQUIPE }
-const estUneLecture = (url: unknown) => estLaLectureDuLien(url) || String(url).startsWith(LECTURE_DES_MEMBRES)
+/** La lecture des fils de commentaires, faite par l'encart « Commentaires » une fois l'écran monté : aucun fil, hors des gestes comptés. */
+const LECTURE_DES_FILS = "/api/platform/comments?"
+const estLaLectureDesFils = (url: unknown) => String(url).startsWith(LECTURE_DES_FILS)
+const sansFil = () => reponse(200, { data: { path: "ventes/modele_relance", threads: [], readers: [], mailEnabled: false } })
+const estUneLecture = (url: unknown) => estLaLectureDuLien(url) || estLaLectureDesFils(url) || String(url).startsWith(LECTURE_DES_MEMBRES)
 
 /** L'API simulée : la lecture du lien public rend « aucun lien », tout autre appel la réponse du cas. */
 function repondre(reponseDuGeste: () => Response) {
-  fetchMock.mockImplementation(async (url) =>
-    estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : String(url).startsWith(LECTURE_DES_MEMBRES) ? reponse(200, { data: { ...REGLES, ...servis } }) : reponseDuGeste(),
-  )
+  fetchMock.mockImplementation(async (url) => {
+    if (estLaLectureDesFils(url)) return sansFil()
+    return estLaLectureDuLien(url) ? reponse(200, { data: { share: null } }) : String(url).startsWith(LECTURE_DES_MEMBRES) ? reponse(200, { data: { ...REGLES, ...servis } }) : reponseDuGeste()
+  })
 }
 
 const envoye = (rang = 0) => {
@@ -139,11 +144,13 @@ type Appel = { url: string; methode: string; corps: unknown }
 
 /** L'API simulée, appel par appel : `reponseA` reçoit l'URL, la méthode et le corps lu. */
 function api(reponseA: (appel: Appel) => Response) {
-  fetchMock.mockImplementation(async (url, init) => reponseA({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
+  fetchMock.mockImplementation(async (url, init) =>
+    estLaLectureDesFils(url) ? sansFil() : reponseA({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }),
+  )
 }
 
 // La lecture des membres de l'équipe propriétaire (1.4.12), faite par « Partager » à l'ouverture : hors des appels comptés.
-const appels = (): Appel[] => fetchMock.mock.calls.filter(([url]) => !String(url).startsWith(LECTURE_DES_MEMBRES)).map(([url, init]) => ({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
+const appels = (): Appel[] => fetchMock.mock.calls.filter(([url]) => !String(url).startsWith(LECTURE_DES_MEMBRES) && !estLaLectureDesFils(url)).map(([url, init]) => ({ url: String(url), methode: init?.method ?? "GET", corps: init?.body ? JSON.parse(String(init.body)) : undefined }))
 
 const LECTURE = `/api/platform/shares?path=${encodeURIComponent(CHEMIN)}`
 

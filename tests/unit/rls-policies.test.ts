@@ -5,7 +5,7 @@
 // fait foi, un `drop policy` qui la suit la retire (E01-S12 partie c). Une migration future qui remettrait un niveau ou un rôle dans une policy fait échouer ce
 // test : les droits sont décidés par les services (`security-patterns.md § Droits dans le service`),
 // la RLS ne garde que la frontière entre organisations et les invariants, sauf la liste fermée des policies qui
-// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000`, `20261021140000`, `20261021150000` et `20261021170000`, lectures comprises). Depuis E01-S09, la ligne de
+// reprennent le rôle exigé par leur service (`ROLE_REQUIRED`, migrations `20261019150000`, `20261020190000`, `20261021090000`, `20261021120000`, `20261021130000`, `20261021140000`, `20261021150000`, `20261021170000` et `20261112090000`, lectures comprises). Depuis E01-S09, la ligne de
 // base porte les 70 policies que la chaîne laissait (la migration d'isolation qui en recréait 51 est
 // dans git) : ce test lit les définitions finales, sans l'histoire des fichiers. Il garde aussi les fonctions
 // `security definer` qu'une session exécute et qui écrivent un nœud (`LEVEL_REQUIRED_FUNCTIONS`, migration `20261021100000` ;
@@ -135,6 +135,13 @@ ADDED.push("erased_files_select_own")
 // Les travaux en tâche de fond des fonctions longues (`20261022230000`) : lus par leur seul auteur, jamais écrits par une
 // session (`enqueue_job`, `claim_jobs`, `mark_job_sent`, `finish_job`, `sweep_jobs`, `security definer`, au rôle du serveur).
 ADDED.push("jobs_select_own")
+// Les commentaires d'une page (`20261112090000`) : un fil lu, ouvert et résolu au rôle de son service (`ROLE_REQUIRED`), supprimé
+// par son auteur ; un commentaire lu quand son fil se lit, écrit par l'appelant pour lui-même, modifié et supprimé par son auteur.
+ADDED.push("comment_threads_select_reader", "comment_threads_insert_reader", "comment_threads_update_resolver", "comment_threads_delete_author")
+ADDED.push("comments_select_reader", "comments_insert_reader", "comments_update_author", "comments_delete_author")
+// L'état de l'email groupé des commentaires (`20261112090000`) : chacun lit ses propres lignes, jamais écrites par une session
+// (`oto-platform comments notify`, sur la connexion d'administration).
+ADDED.push("comment_mails_select_own", "comment_mail_items_select_own")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [
@@ -202,6 +209,10 @@ const ROLE_REQUIRED: Record<string, string> = {
   // Les vues des pages (migration `20261021150000`) ; les comptes de l'organisation passent par `node_view_counts`.
   node_views_insert_own: "recordNodeView (server/node-views.ts): findNode, node_level_for >= 1, for the caller herself",
   node_views_update_own: "recordNodeView (server/node-views.ts), on conflict do update: her own row, node_level_for >= 1",
+  // Les commentaires d'une page (migration `20261112090000`) ; un commentaire se lit et s'écrit quand son fil se lit.
+  comment_threads_select_reader: "listComments, reachedThread (server/comments/threads.ts): findNode or nodeLevel, node_level_for >= 1, out of the trash",
+  comment_threads_insert_reader: "postComment (server/comments/threads.ts): findNode, node_level_for >= 1, for the caller herself",
+  comment_threads_update_resolver: "setThreadStatus (server/comments/threads.ts): the author of the thread, or the write level of the node (node_level_for >= 2)",
 }
 
 /** Les policies du rôle exigé qui lisent l'équipe plateforme, hors de la portée plateforme. */

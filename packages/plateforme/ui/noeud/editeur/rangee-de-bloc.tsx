@@ -40,6 +40,9 @@
 //
 // Trois titres au menu « Style » ; le chevron de chaque titre replie sa section, dont les rangées restent montées sans
 // se montrer.
+//
+// Commentaires (parcours 5.4, AC14) : l'emplacement `menu`, à droite du bloc, porte sa bulle de commentaire ; elle ne
+// rend rien pour un bloc jamais publié.
 import { memo, useId, useState, type DragEvent, type ReactNode } from "react"
 import { ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown"
 import { ArrowUp } from "@phosphor-icons/react/dist/csr/ArrowUp"
@@ -56,6 +59,7 @@ import { AnimatedIcon } from "../../ds/react/icon"
 import { DropdownMenu, type MenuItem } from "../../ds/react/overlays"
 import { Button, IconButton } from "../../ds/react/primitives"
 import { hauteurDe } from "../cadre-integre"
+import { BulleDeBloc } from "../commentaires/bulle-de-bloc"
 import { texteLu } from "../en-ligne"
 import { CHOIX_DE_BLOC, EDITEUR, FORMES, INTEGRATION, MENU_DU_BLOC, SELECTION } from "../libelles"
 import { FICHIERS } from "../libelles-des-fichiers"
@@ -361,6 +365,9 @@ export const RangeeDeBloc = memo(function RangeeDeBloc(props: RangeeDeBlocProps)
   return (
     <BlockRow
       data-cle={cle}
+      // Le bloc que ses fils de commentaires désignent (`passage.ts`) ; absent tant que le serveur ne le connaît pas.
+      data-bloc={bloc.id}
+      menu={<BulleDeBloc bloc={bloc.id} mots={mots} />}
       // Dans la section d'un titre replié : la rangée reste montée, son état gardé, sans se montrer (`editeur.css`).
       hidden={props.cachee}
       {...depot}

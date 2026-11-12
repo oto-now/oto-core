@@ -12,10 +12,10 @@
 // autre, ou « Déplacer » de son « ⋯ » (AC-b7). Retiré : sections de partages reçus, badges d'exécutions.
 // E10-S01 : le « ⋯ » d'une ligne télécharge son contenu (`.md` ou `.csv` selon son genre), un Contexte compris, qui
 // n'a que ce geste (AC-a5, AC-b6) ; un fichier lâché sur une ligne ouvre l'import sous elle (AC-a3, AC-b1).
-import { useId, useMemo } from "react"
+import { useEffect, useId, useMemo } from "react"
 import type { NodeKind, TreeNode } from "../../schemas"
 import { ARBRE_VIDE, PERSO, sectionsDeLArbre, titresParChemin } from "../arbre/depuis-l-arbre"
-import type { SectionCle } from "../arbre/types"
+import type { NoeudDArbre, SectionCle } from "../arbre/types"
 import { Alert } from "../ds/react/primitives"
 import { RailSection } from "../ds/react/rail"
 import { RailTree, type RailTreeNode } from "../ds/react/rail-tree"
@@ -48,6 +48,16 @@ function menuDeLaSection(section: SectionCle, administre: boolean, prefixe: stri
   return section.cle === PERSO ? undefined : <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} />
 }
 
+/** La clé du pli d'une section dans ce navigateur : sa clé, « org » pour Tout le monde (dont la clé est vide). */
+const cleDuPliDe = (section: SectionCle) => section.cle || "org"
+
+/** Le pli de la section qui porte la ligne de cette adresse, celle que le rail marque courante ; `null` hors de l'arbre. */
+function pliDeLAdresse(sections: readonly SectionCle[], prefixe: string, adresse: string): string | null {
+  const porte = (noeuds: readonly NoeudDArbre[]): boolean => noeuds.some((noeud) => `${prefixe}${noeud.chemin}` === adresse || porte(noeud.enfants ?? []))
+  const section = sections.find((une) => porte(une.noeuds))
+  return section ? cleDuPliDe(section) : null
+}
+
 type SectionProps = {
   section: SectionCle
   handle: string | null
@@ -66,7 +76,7 @@ type SectionProps = {
 function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depliage, deplacement, genres, administre }: SectionProps) {
   const chemin = useAdresseCourante(prefixe)
   const idDeLArbre = useId()
-  const cleDuPli = section.cle || "org"
+  const cleDuPli = cleDuPliDe(section)
   const replie = plis.isFolded(cleDuPli)
   const racine = racineDe(section, handle)
   const alaRacine: CibleDeCreation | null = racine === null ? null : { nom: section.titre, parent: racine }
@@ -112,6 +122,14 @@ type ListeProps = Omit<SectionProps, "section" | "plis" | "creation" | "gestes" 
 function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer, administre }: ListeProps) {
   const chemin = useAdresseCourante(prefixe)
   const plis = useRailFolds()
+  // La section de la page ouverte se déplie à chaque navigation, d'où qu'elle vienne (adresse ouverte, rechargement,
+  // lien, retour arrière), comme ses ancêtres (`useDepliageDuRail`) : repliée, la ligne courante ne se voyait pas.
+  // Repliée à la main ensuite, elle le reste jusqu'à la navigation suivante : l'effet ne suit que l'adresse et sa section.
+  const pliCourant = pliDeLAdresse(sections, prefixe, chemin)
+  const { unfold } = plis
+  useEffect(() => {
+    if (pliCourant !== null) unfold(pliCourant)
+  }, [pliCourant, chemin, unfold])
   // Les chemins visibles, qu'une création n'essaie pas (AC-b3) ; relus avec l'arbre seulement.
   const pris = useMemo(() => new Set(titresParChemin(arbre).keys()), [arbre])
   const creation = useMenuDeCreation(prefixe, pris, montrer)
@@ -127,7 +145,7 @@ function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer, 
         <GlisserDansLeRail.Provider value={deplacement.glisser}>
           {sections.map((section) => (
             <SectionDuRail
-              key={section.cle || "org"}
+              key={cleDuPliDe(section)}
               section={section}
               handle={handle}
               prefixe={prefixe}

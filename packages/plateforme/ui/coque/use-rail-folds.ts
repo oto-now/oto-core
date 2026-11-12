@@ -17,6 +17,8 @@ export type RailFolds = {
   isFolded: (section: string) => boolean
   /** Replie ce qui est déplié, déplie ce qui est replié, et l'écrit. */
   toggle: (section: string) => void
+  /** Déplie une section repliée, et l'écrit ; dépliée, rien : la section de la page ouverte, à chaque navigation. */
+  unfold: (section: string) => void
 }
 
 export function useRailFolds(): RailFolds {
@@ -34,5 +36,14 @@ export function useRailFolds(): RailFolds {
     })
   }, [])
 
-  return { isFolded: (section) => repliees.includes(section), toggle }
+  const unfold = useCallback((section: string) => {
+    setRepliees((avant) => {
+      if (!avant.includes(section)) return avant
+      const suivantes = avant.filter((une) => une !== section)
+      ecrire(suivantes)
+      return suivantes
+    })
+  }, [])
+
+  return { isFolded: (section) => repliees.includes(section), toggle, unfold }
 }
