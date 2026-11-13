@@ -18,7 +18,7 @@ export type PartagesDuCompte = {
 
 const FILTRES = ["all", "mine", "shared"] as const
 
-export type FiltreDesConnecteurs = (typeof FILTRES)[number]
+type FiltreDesConnecteurs = (typeof FILTRES)[number]
 
 /** Ce que l'adresse de l'écran demande : le filtre, la recherche, et le compte dont le détail est ouvert. */
 export type VueDesConnecteurs = { filtre: FiltreDesConnecteurs; q: string; compte: string | null }
@@ -61,7 +61,7 @@ export function libelleDuConnecteur(connecteur: string, formulaires: readonly Co
 }
 
 /** Le geste d'une ligne : un lien vers le détail, où se saisit la clé, ou la connexion chez le tiers. */
-export type GesteDeLigne =
+type GesteDeLigne =
   | { genre: "detail"; libelle: string }
   | { genre: "connexion"; libelle: string; ressource: "connector-consent" | "hosted-link"; connecteur: string }
 

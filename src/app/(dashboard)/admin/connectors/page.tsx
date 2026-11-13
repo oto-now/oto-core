@@ -28,9 +28,9 @@ import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { ADRESSES } from "../adresses"
 
 // « Connecteurs » : une seule vue pour tout membre. La page lit les comptes que la personne voit (`listOrgAccounts` :
-// les siens, ceux de ses équipes, de l'organisation, ceux qu'un autre partage avec elle), le catalogue, les équipes et
-// les personnes à qui partager, le formulaire de compte de chaque connecteur réel déclaré, puis les partages de ses
-// propres comptes et du compte que l'adresse ouvre (`comptesAuxPartagesLus`, `listAccountRules`). Qui administre
+// les siens, ceux de ses équipes, de l'organisation, ceux qu'un autre partage avec elle), le catalogue, les équipes,
+// le formulaire de compte de chaque connecteur réel déclaré, puis les partages de ses propres comptes et du compte que
+// l'adresse ouvre (`comptesAuxPartagesLus`, `listAccountRules`), avec les personnes à qui le partager. Qui administre
 // l'organisation de l'adresse, décidé ici par `isOrgAdmin`, y lit en plus l'impact de la désactivation de chaque
 // connecteur actif et les capacités. Chaque service redécide son droit ; tout se lit avec le jeton de la session.
 // L'écran écrit par `/api/platform/admin/*`, partages compris (`admin/account-rules`), et connecte un compte à
@@ -60,15 +60,13 @@ async function administration(db: PlatformDb, identity: Identity, connectors: Do
 }
 
 async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {
-  // Quatre lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
-  const [accounts, connectors, teams, members] = await Promise.all([
-    listOrgAccounts(db, identity),
-    listConnectorsForOrg(db, identity),
-    listTeams(db, identity),
-    listMembers(db, identity),
-  ])
-  const [partages, reserve] = await Promise.all([
+  // Trois lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
+  const [accounts, connectors, teams] = await Promise.all([listOrgAccounts(db, identity), listConnectorsForOrg(db, identity), listTeams(db, identity)])
+  // L'annuaire ne sert qu'au partage du compte ouvert, pour qui le gère : hors de là, il ne se lit pas.
+  const partageOuvert = accounts.some((compte) => compte.id === ouvert && compte.viewerLevel === "manage")
+  const [partages, members, reserve] = await Promise.all([
     partagesDe(db, identity, accounts, ouvert),
+    partageOuvert ? listMembers(db, identity) : [],
     isOrgAdmin(identity) ? administration(db, identity, connectors) : undefined,
   ])
   return {

@@ -173,7 +173,9 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
       render(await ConnecteursPage({}))
     })
 
-    for (const service of [listOrgAccounts, listConnectorsForOrg, listTeams, listMembers]) expect(service).toHaveBeenCalledWith(SESSION.db, identite("member"))
+    for (const service of [listOrgAccounts, listConnectorsForOrg, listTeams]) expect(service).toHaveBeenCalledWith(SESSION.db, identite("member"))
+    // Aucun compte ouvert : l'annuaire, qui ne sert qu'au partage, ne se lit pas.
+    expect(listMembers).not.toHaveBeenCalled()
     // Les partages de son seul compte personnel : ni ceux d'un compte commun fermé, ni ceux du compte d'un autre.
     expect(vi.mocked(listAccountRules).mock.calls).toEqual([[SESSION.db, identite("member"), MON_COMPTE.id]])
     expect(deactivationImpact).not.toHaveBeenCalled()
@@ -199,8 +201,17 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     })
 
     expect(vi.mocked(listAccountRules).mock.calls.map((appel) => appel[2])).toEqual([MON_COMPTE.id, COMPTE_COMMUN.id])
+    expect(listMembers).toHaveBeenCalledWith(SESSION.db, identite("admin"))
     expect(within(screen.getByRole("dialog", { name: "Mail commun" })).getByRole("button", { name: "Partager Mail commun" })).toBeInTheDocument()
     expect(screen.getByRole("region", { name: "Outils de l'organisation" })).toBeInTheDocument()
+
+    // Un compte ouvert que la personne ne gère pas : l'annuaire ne se lit pas.
+    vi.mocked(listMembers).mockClear()
+    cleanup()
+    await act(async () => {
+      render(await ConnecteursPage({ searchParams: Promise.resolve({ connector: COMPTE_DE_PAUL.id }) }))
+    })
+    expect(listMembers).not.toHaveBeenCalled()
   })
 
   it("should give an administrator of /admin/organization the brand of the identity, and say it was saved on ?saved=1 (E05-S11, AC-22 ; E11-S07, AC-b6)", async () => {

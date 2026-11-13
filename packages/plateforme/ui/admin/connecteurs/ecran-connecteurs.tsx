@@ -58,8 +58,8 @@ export type EcranConnecteursProps = {
   resultat: Resultat<DonneesDesConnecteurs>
   /** L'identifiant de qui regarde : ses comptes personnels sont « À moi ». */
   moi: string
-  /** Ce que l'adresse demande (`vueDesConnecteurs`) ; absente : toute la liste, aucun détail ouvert. */
-  vue?: VueDesConnecteurs
+  /** Ce que l'adresse demande : le filtre, la recherche et le détail ouvert (`vueDesConnecteurs(query)`). */
+  vue: VueDesConnecteurs
   Lien: LienDeLAdministration
   /** L'adresse de l'écran dans l'hôte : « Réessayer » d'une lecture en échec y ramène, un consentement y revient. */
   ici: string
@@ -196,8 +196,6 @@ function Ajout({ donnees, ici }: { donnees: DonneesDesConnecteurs; ici: string }
   return <AjoutDUnConnecteur aConnecter={servicesAConnecter(donnees.formulaires ?? [])} creation={creationPossible(donnees)} ici={ici} />
 }
 
-const SANS_VUE: VueDesConnecteurs = { filtre: "all", q: "", compte: null }
-
 type VueProps = { donnees: DonneesDesConnecteurs; moi: string; vue: VueDesConnecteurs; ici: string }
 
 /** L'adresse de la recherche, sans `q` : le filtre de la vue y reste. */
@@ -266,7 +264,7 @@ function Donnees(props: VueProps) {
 
 const SOUS_TITRE = "Les outils que votre assistant peut utiliser pour vous."
 
-export function EcranConnecteurs({ resultat, moi, vue = SANS_VUE, Lien, ici, fil, consentement }: EcranConnecteursProps) {
+export function EcranConnecteurs({ resultat, moi, vue, Lien, ici, fil, consentement }: EcranConnecteursProps) {
   // Une lecture nourrit tout l'écran : son échec se dit une fois, sans « Ajouter », qui a besoin d'elle.
   const lu = resultat.error === undefined ? resultat.data : null
   // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans la page vide sinon, jamais deux fois.

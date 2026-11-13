@@ -18,7 +18,7 @@ export const TON_DU_NIVEAU: Record<AccountLevelName, string> = { none: "none", r
 /** Les niveaux qu'on partage, du plus ouvert au plus fermé : la gestion ne s'accorde que par un administrateur (`setAccountRule`). */
 export const NIVEAUX_PARTAGES = ["sensitive", "write", "read"] as const satisfies readonly AccountLevelName[]
 
-export type NiveauPartage = (typeof NIVEAUX_PARTAGES)[number]
+type NiveauPartage = (typeof NIVEAUX_PARTAGES)[number]
 
 /** Les fonctions d'un connecteur comptées par classe : ce que chaque niveau ouvre de plus. */
 export type ActionsParClasse = Record<OrgConnector["functions"][number]["class"], number>
@@ -35,7 +35,7 @@ const actions = (nombre: number) => `${nombre} ${nombre > 1 ? "actions" : "actio
  * connecteur que le catalogue ne décrit plus).
  */
 export function detailDuNiveau(niveau: NiveauPartage, parClasse: ActionsParClasse | null): string {
-  if (niveau === "read") return `Son assistant consulte, sans rien changer.${parClasse ? ` ${actions(parClasse.read)}.` : ""}`
+  if (niveau === "read") return `L'assistant consulte, sans rien changer.${parClasse ? ` ${actions(parClasse.read)}.` : ""}`
   if (niveau === "write") return `Il peut aussi créer et modifier.${parClasse ? ` ${actions(parClasse.write)} de plus.` : ""}`
   return `Y compris les actions sensibles, comme envoyer ou supprimer.${parClasse ? ` ${actions(parClasse.sensitive)} de plus.` : ""}`
 }

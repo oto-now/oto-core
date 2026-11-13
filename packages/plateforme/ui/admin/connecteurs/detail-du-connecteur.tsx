@@ -208,7 +208,7 @@ function Connexion({ compte, formulaire, etat }: Omit<Detail, "ici">) {
   )
 }
 
-export type DetailDuConnecteurProps = {
+type DetailDuConnecteurProps = {
   compte: AccountView
   /** Le formulaire de son connecteur, quand l'hôte le déclare réel. */
   formulaire: ConnectorAccountForm | undefined

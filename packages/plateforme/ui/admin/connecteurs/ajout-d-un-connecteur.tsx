@@ -22,7 +22,7 @@ export type ServiceAConnecter = { connecteur: string; libelle: string; ressource
 /** Ce qu'un administrateur crée : un compte d'un de ces connecteurs, pour l'organisation ou une de ces équipes. */
 export type CreationPossible = { connecteurs: string[]; equipes: { id: string; name: string }[]; formulaires: ConnectorAccountForm[] }
 
-export type AjoutDUnConnecteurProps = {
+type AjoutDUnConnecteurProps = {
   aConnecter: ServiceAConnecter[]
   /** `null` : la personne n'administre pas l'organisation. */
   creation: CreationPossible | null

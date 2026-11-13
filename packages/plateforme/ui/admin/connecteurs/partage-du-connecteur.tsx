@@ -217,7 +217,7 @@ function Pied({ personnel }: { personnel: boolean }) {
   )
 }
 
-export type PartageDuConnecteurProps = {
+type PartageDuConnecteurProps = {
   compte: Pick<AccountView, "id" | "label" | "owner">
   partages: PartagesDuCompte
   sujets: SujetsDeRegle

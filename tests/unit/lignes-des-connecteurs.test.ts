@@ -38,6 +38,10 @@ describe("etatDuCompte", () => {
       ["à reconnecter, rattaché sans port", compte({ connector: "reseau", owner: A_MOI, status: "error" }), { ...RATTACHE, hosted: { ready: false } }],
       ["clé refusée, géré", compte({ mark: marque }), CLE],
       ["clé refusée, lu", compte({ mark: marque, viewerLevel: "sensitive" }), CLE],
+      ["refusé, à consentement", compte({ connector: "microsoft", owner: A_MOI, mark: marque }), CONSENTEMENT],
+      ["refusé puis reconnecté", compte({ connector: "microsoft", owner: A_MOI, mark: marque, secret: { fields: [], updatedAt: "2026-11-05T09:00:01.000Z" } }), CONSENTEMENT],
+      ["clé refusée puis remplacée", compte({ mark: marque, secret: { fields: ["api_key"], updatedAt: "2026-11-05T09:00:01.000Z" } }), CLE],
+      ["clé refusée à l'instant de sa saisie", compte({ mark: marque, secret: { fields: ["api_key"], updatedAt: marque.at } }), CLE],
       ["crédits épuisés", compte({ mark: { reason: "quota_exhausted", at: "2026-11-05T09:00:00.000Z" } }), CLE],
       ["désactivé", compte({ status: "disabled", mark: marque }), CLE],
     ]
@@ -58,6 +62,10 @@ describe("etatDuCompte", () => {
       ["à reconnecter, rattaché sans port", "À reconnecter", "La connexion au service est à refaire.", null, true],
       ["clé refusée, géré", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["clé refusée, lu", "Clé refusée", "Refusée par le service le 5 novembre 2026.", null, true],
+      ["refusé, à consentement", "À reconnecter", "La connexion au service est à refaire.", "reconnecter", true],
+      ["refusé puis reconnecté", "Non testé", null, null, false],
+      ["clé refusée puis remplacée", "Non testé", null, null, false],
+      ["clé refusée à l'instant de sa saisie", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["crédits épuisés", "Crédits épuisés", "Depuis le 5 novembre 2026. La clé reste bonne.", null, true],
       ["désactivé", "Désactivé", null, null, false],
     ])

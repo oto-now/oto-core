@@ -12,7 +12,7 @@ export const connexionDe = (formulaire: ConnectorAccountForm | undefined): Conne
   formulaire?.consent === true ? "consentement" : formulaire?.hosted ? "branchement" : "saisie"
 
 /** Le geste qui répare un état : saisir ou remplacer la clé (dans le détail), connecter ou reconnecter chez le tiers. */
-export type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
+type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
 
 export type EtatDuCompte = {
   code: "non_teste" | "a_terminer" | "a_reconnecter" | "cle_refusee" | "credits_epuises" | "desactive"
@@ -53,13 +53,24 @@ function aReconnecter(compte: AccountView, formulaire: ConnectorAccountForm | un
   }
 }
 
-function marque(compte: AccountView, formulaire: ConnectorAccountForm | undefined, gere: boolean): EtatDuCompte | null {
-  if (!compte.mark) return null
+/**
+ * Un refus plus ancien que la dernière clé saisie ou la dernière connexion : le moteur ne lève la marque qu'au premier
+ * appel réussi, l'écran ne la dit plus, sinon qui vient de réparer lirait que rien n'a changé.
+ */
+function refusPerime(compte: AccountView): boolean {
+  if (compte.mark?.reason !== "credential_rejected" || !compte.secret?.updatedAt) return false
+  return Date.parse(compte.secret.updatedAt) > Date.parse(compte.mark.at)
+}
+
+function marque(compte: AccountView, formulaire: ConnectorAccountForm | undefined, droits: { gere: boolean; aMoi: boolean }): EtatDuCompte | null {
+  if (!compte.mark || refusPerime(compte)) return null
   const date = dateLisible(compte.mark.at)
   if (compte.mark.reason === "quota_exhausted") {
     return { code: "credits_epuises", mot: "Crédits épuisés", precision: `${date ? `Depuis le ${date}. ` : ""}La clé reste bonne.`, point: "review", demandeUnGeste: true, geste: null }
   }
-  const remplacable = gere && compte.mode === "reel" && formulaire !== undefined && connexionDe(formulaire) === "saisie"
+  // Un compte connecté chez le tiers n'a pas de clé : un refus du service s'y répare en reconnectant.
+  if (connexionDe(formulaire) !== "saisie") return aReconnecter(compte, formulaire, droits.aMoi)
+  const remplacable = droits.gere && compte.mode === "reel" && formulaire !== undefined
   return { code: "cle_refusee", mot: "Clé refusée", precision: date ? `Refusée par le service le ${date}.` : "Refusée par le service.", point: "failed", demandeUnGeste: true, geste: remplacable ? "remplacer" : null }
 }
 
@@ -76,7 +87,8 @@ function aTerminer(compte: AccountView, formulaire: ConnectorAccountForm | undef
 }
 
 /**
- * L'état d'un compte pour la personne `moi` : désactivé, à reconnecter, marqué (clé refusée, crédits épuisés), à
+ * L'état d'un compte pour la personne `moi` : désactivé, à reconnecter (en erreur, ou refusé par un service où il
+ * se connecte chez le tiers), marqué (clé refusée, crédits épuisés), à
  * terminer, sinon sain. L'état sain se dit « Non testé » : aucun test de connexion n'est encore gardé sur le compte.
  */
 export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string): EtatDuCompte {
@@ -85,7 +97,7 @@ export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountFo
   const aMoi = estAMoi(compte, moi)
   if (compte.status === "error") return aReconnecter(compte, formulaire, aMoi)
   return (
-    marque(compte, formulaire, gere) ??
+    marque(compte, formulaire, { gere, aMoi }) ??
     aTerminer(compte, formulaire, { gere, aMoi }) ?? {
       code: "non_teste",
       mot: "Non testé",

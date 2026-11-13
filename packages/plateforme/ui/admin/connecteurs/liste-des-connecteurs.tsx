@@ -35,7 +35,7 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
 function Acces({ ligne }: { ligne: LigneDeConnecteur }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span>{ligne.acces}</span>
+      <span className={ligne.desactive ? "text-mute" : undefined}>{ligne.acces}</span>
       <span className="oto-caption">{ligne.niveau}</span>
     </span>
   )
@@ -45,7 +45,7 @@ function Acces({ ligne }: { ligne: LigneDeConnecteur }) {
 function Etat({ ligne }: { ligne: LigneDeConnecteur }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="flex items-center gap-2">
+      <span className={`flex items-center gap-2${ligne.desactive ? " text-mute" : ""}`}>
         <span className="oto-dot" data-state={ligne.etat.point} aria-hidden="true" />
         {ligne.etat.mot}
       </span>
