@@ -176,6 +176,9 @@ export type { RunJobsOptions, RunJobsReport } from "./jobs/runner"
 export type { BackgroundRunner } from "./jobs/trigger"
 export { CatalogRegistrationError, defineErpFunction, registerFunctions, registerWidgetViews } from "./catalog/erp"
 export type { ErpFunction, ErpFunctionContext } from "./catalog/erp"
+// Ce que l'hôte sert à un assistant, en liste fermée : fonctions du paquet, capacités MCP, adresses fournies.
+export { registerHostSurface } from "./catalog/surface"
+export type { HostSurface, OptionalCapability } from "./catalog/surface-source"
 // E07-S03 : la grille, son résumé et la file de revue d'un tableau, la décision de la revue, les blocs
 // `reference` rendus en place.
 export { tableGridRows, tableGridSummary, tableReviewQueue } from "./tables/screen"

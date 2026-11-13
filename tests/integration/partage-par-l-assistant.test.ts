@@ -104,6 +104,26 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "sharing through call" : `sharin
     expect(vague.writes).toEqual([])
   })
 
+  // Le droit avant l'annuaire : sans la gestion du nœud, la réponse ne dit rien d'une personne, membre ou non.
+  it("should refuse someone who does not manage the node with the same answer for a member, her email, a vague name and a stranger", async () => {
+    const page = await pageDeVentes()
+    const answers: { message: string | null; writes: unknown[] }[] = []
+    for (const name of ["Marc Petit", o.people.marc.email, "a", "Personne Inconnue"]) {
+      const refused = await call("lea", { function: "node.share", arguments: { path: page.path, subject: "person", name, level: "read" } })
+      answers.push({ message: refused.error instanceof Error ? refused.error.message : null, writes: refused.writes })
+    }
+    expect(answers[0].message).toContain("Claire Morel")
+    expect(answers.every((answer) => answer.message === answers[0].message && answer.writes.length === 0)).toBe(true)
+    expect(answers[0].message).not.toMatch(/@|Marc/)
+
+    // Qui gère le nœud : un inconnu ne fait lister personne, et aucun email ne revient.
+    const unknown = await call("claire", { function: "node.share", arguments: { path: page.path, subject: "person", name: "Personne Inconnue", level: "read" } })
+    expect(unknown.error).toMatchObject({ code: "not_found", message: expect.stringMatching(/^No member of .+ named Personne Inconnue\. Ask the user for the full name or the email of the member\.$/) })
+    const vague = await call("claire", { function: "node.share", arguments: { path: page.path, subject: "person", name: "a", level: "read" } })
+    expect(JSON.stringify(vague.result?.data)).not.toContain("@")
+    expect(vague.writes).toEqual([])
+  })
+
   // Décision de JB du 20/10 : dans une organisation pseudonymisée, la personne se désigne par le jeton que son nom a reçu.
   it("should find a person by the token a pseudonymised workspace served for her name, and refuse an unknown token", async () => {
     const page = await pageDeVentes()

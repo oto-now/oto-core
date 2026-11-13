@@ -235,18 +235,17 @@ hors de la sienne ; une entrée ajoutée à l'une de ces listes dit pourquoi ell
 
 **Exception écrite — fonctions d'accueil.** Une fonction que l'architecture ouvre à qui n'est pas
 membre ne compare pas `auth.uid()` à son paramètre : ce qu'elle rend est son contrôle d'accès.
-Deux existent (`docs/reference/schema-platform.md`) : `org_by_host` (l'organisation d'une adresse,
+Une existe (`docs/reference/schema-platform.md`) : `org_by_host` (l'organisation d'une adresse,
 exécutable par `anon`) rend `id`, `slug`, `name`, `prefix`, `brand` et `domains`
-(les domaines de travail de `settings`, chaîne libre que cite la description de `context`) ;
-`org_contact` (l'admin le plus ancien, à qui demander d'entrer, exécutable par toute personne
-connectée — donc aussi par un membre d'une autre organisation qui en connaît l'adresse) rend
-`name` et `email`. Une telle fonction rend seulement les colonnes listées ici, jamais une ligne
+(les domaines de travail de `settings`, chaîne libre que cite la description de `context`).
+Une donnée d'une personne (nom, email) n'entre jamais dans une fonction d'accueil : `org_contact`
+contrôle l'appartenance (`member_orgs`, ou `is_staff`). Une telle fonction rend seulement les colonnes listées ici, jamais une ligne
 entière : une colonne de plus s'inscrit d'abord dans cette liste et dans
 `docs/reference/schema-platform.md`. Elle garde `search_path` vide et un `GRANT` au rôle le plus étroit.
 Une fonction que seul un rôle de service exécute (`hook_before_user_created` :
 `supabase_auth_admin`) n'a pas d'`auth.uid()` à comparer : son `GRANT` est son
 contrôle. **Vérifiable :** un `SECURITY DEFINER` exécutable par `anon` ou `authenticated` sans
-contrôle de `auth.uid()` est l'une de ces deux fonctions, qui rend les colonnes listées ici et
+contrôle de `auth.uid()` est `org_by_host`, qui rend les colonnes listées ici et
 rien d'autre, ou une fonction qu'`docs/reference/schema-platform.md` ou un document de `docs/conception/` ouvre
 explicitement ; sinon, défaut HAUTE.
 

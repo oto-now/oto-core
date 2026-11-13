@@ -111,7 +111,7 @@ ci-dessous) ; les autres, à `authenticated` (ou `anon`), sont la liste fermée 
 | `leads_team(team)` | L'appelant est l'un des responsables de l'équipe (`team_members.role`) : `team_members_delete_admin` (`20261019150000`), `team_members_insert_admin`, `invitations_insert_admin`, `accounts_insert_admin` (`20261020190000`) ; `security definer`, une sous-requête sur `team_members` depuis sa propre policy bouclant (`42P17`) |
 | `identity_for_caller()` | Traduit l'appelant vérifié (claims `iss`, `ext_sub`, `issuer_kind`, `email` vérifié) en identifiant interne : sujet connu, sinon `sub` de Supabase Auth, sinon la ligne `platform_staff` la plus ancienne de l'email vérifié, sinon un identifiant neuf sur invitation ouverte, sinon null ; un identifiant déjà lié chez l'émetteur à un autre sujet n'est pas relié. Seule écriture d'`identities` ; appelée avant que `sub` soit posé |
 | `org_by_host(host)` | Organisation d'une adresse : id, slug, nom, préfixe, marque, domaines de travail (`anon` et `authenticated`) |
-| `org_contact(org)` | Nom et email de l'admin le plus ancien, pour « aucune organisation » |
+| `org_contact(org)` | Nom et email de l'admin le plus ancien, pour un membre de l'organisation ou l'équipe plateforme ; aucune ligne pour tout autre (`20261113090000`) |
 | `accept_invitations()` | Au retour de connexion : crée `members` et `team_members` depuis les invitations de l'email vérifié, et recopie email, nom et date de connexion dans chaque ligne `members` de la personne |
 | `hook_before_user_created(event)` | Mode Supabase : n'accepte une création de compte que sur invitation en attente |
 | `unique_handle(org, email)` | `handle` de l'espace personnel : partie locale de l'email, ASCII, unique dans l'organisation (outillage) |

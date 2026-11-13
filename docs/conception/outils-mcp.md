@@ -1,7 +1,7 @@
 # Outils MCP
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-12 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
+- **Dernière révision** : 2026-11-13 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
 
 ## Résumé
 
@@ -110,7 +110,19 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - HN-E11S19-10 : `find` rend la révision dans la ligne « To edit: <p>_write {"path": …, "base_revision": <révision>, "ops": [...]} » : sans elle, `write` exige de relire pour `base_revision` ; seulement pour un nœud hors tableau dont des blocs sont montrés et que la personne écrit.
 - HN-E11S19-11 : avec `match: "any"` de `table.rows`, le nombre de mots trouvés prime sur `sort`, qui départage ; `match: "any"` entre dans l'empreinte du curseur.
 
+### La surface déclarée par l'hôte
+
+- Par défaut, tout ce que le paquet apporte est servi : une fonction ou une capacité MCP qu'une mise à jour ajoute arrive d'office chez l'hôte.
+- Un hôte qui doit classer chaque sortie avant de l'ouvrir déclare sa surface en liste fermée, une fois, comme `registerFunctions` : `registerHostSurface({ functions, capabilities, fetchCallerUrls })` de `/server`. Les trois champs sont requis : ce qui n'est pas nommé est fermé.
+- `functions` : les fonctions du paquet servies à un assistant, par nom. Une fonction absente n'est ni trouvée (`find`), ni décrite (`read`), ni exécutée (`call`), ni proposée (`context`, suites `next`, exemples et descriptions des outils, description d'un tableau). Les fonctions que l'hôte inscrit lui-même (ERP, connecteurs décrits) ne sont pas concernées ; `callFunction`, les écrans et l'activation gardent tout le catalogue. Un nom qui n'est pas une fonction du paquet lève `CatalogRegistrationError`, rien n'est déclaré.
+- `capabilities` : les capacités MCP facultatives servies, `prompts` et `resources`. Fermée, une capacité n'est ni annoncée ni installée ; sans `resources`, le widget routeur est éteint et le texte seul est servi.
+- `fetchCallerUrls` : à `false`, le serveur ne télécharge aucune adresse fournie par un appelant (`fetchSource` : `source_url` d'`upload.link` et de `node.import_tree`, fichiers d'un arbre importé, logo de l'image de partage). `upload.link` rend alors le lien du formulaire, `node.import_tree` dit de joindre le fichier à une page.
+- L'état vit dans chaque bundle : chaque route qui monte une porte du paquet importe la déclaration, comme les fonctions de l'ERP.
+
 ## Décisions et alternatives écartées
+
+- **Une liste de fonctions refusées par l'hôte** : une fonction ajoutée par une mise à jour resterait servie tant que l'hôte ne l'a pas vue. Écartée pour la liste fermée (retour d'un hôte, 13/11/2026).
+- **Filtrer les portes dans l'application de l'hôte** : possible sans le paquet, mais le paquet continue de citer les fonctions fermées (suites, descriptions). Écartée.
 
 - **Un outil par capacité** (le modèle d'Oto) : une centaine d'outils listés, routage par l'host, geste de chaque utilisateur à chaque évolution. Contredit par le banc.
 - **Un readme et un accusé de lecture, sans code par conversation** : le levier mesuré 9 fois sur 9 est le champ requis ; l'accusé seul prouve l'appel, pas la lecture.
@@ -158,3 +170,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-19 : la porte pseudonymise résultats, refus et prompts quand l'hôte déclare des personnes — écrit (pseudonymisation, J2).
 - 2026-10-19 : les jetons des arguments se résolvent avant le schéma de l'outil (chemin, requête, phrase ; `call` selon l'origine de la fonction) — écrit (pseudonymisation, J2).
 - 2026-11-12 : les commentaires d'un contenu passent par cinq fonctions de `call`, par `read` et par `context`, sans rien changer aux six outils ; renvoi vers leur document — décidé par le responsable du produit (source : décisions du 12/11/2026 sur les commentaires).
+- 2026-11-13 : un hôte déclare en liste fermée ce qu'un assistant reçoit (`registerHostSurface` : fonctions du paquet, capacités MCP facultatives, téléchargement d'une adresse fournie) ; suites et descriptions des outils suivent ce qui est servi — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).

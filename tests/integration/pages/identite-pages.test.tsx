@@ -4,7 +4,7 @@
 // « Membres » de `/teams` (`tests/integration/components/ecran-equipes.test.tsx`).
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { orgContact, resolveOrg, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { resolveOrg, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { useRafraichir } from "@otomata_tech/oto_platform/ui"
 import DashboardLayout from "@/app/(dashboard)/layout"
 import AucuneOrganisationPage, { metadata as aucuneOrganisationMetadata } from "@/app/no-organization/page"
@@ -34,7 +34,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   resolveOrg: vi.fn(),
-  orgContact: vi.fn(),
   visibleTree: vi.fn(async () => ({ tree: [], truncated: false })),
   listTeams: vi.fn(async () => []),
 }))
@@ -217,17 +216,16 @@ describe("/no-organization page (AC26)", () => {
     await expect(AucuneOrganisationPage()).rejects.toThrow("NEXT_REDIRECT:/login")
   })
 
-  it("should name the organisation of the address and its contact for a non-member", async () => {
+  it("should name the organisation of the address, and no contact, for a non-member", async () => {
     vi.mocked(getPlatformSession).mockResolvedValue(SESSION)
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code: "not_member" } })
     vi.mocked(resolveOrg).mockResolvedValue(ORG)
-    vi.mocked(orgContact).mockResolvedValue({ name: "Paul Martin", email: "paul@acme.test" })
 
     render(await AucuneOrganisationPage())
 
     // Le titre de l'état est le `h2` de l'îlot ; le `h1` est le produit (E05-S07, AC10).
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("Vous n'êtes pas membre de Acme Énergies")
-    expect(screen.getByText("Pour y entrer, demandez à Paul Martin (paul@acme.test) de vous inviter.")).toBeInTheDocument()
+    expect(screen.getByText("Demandez à un administrateur de Acme Énergies de vous inviter.")).toBeInTheDocument()
   })
 
   it("should not be indexed", () => {

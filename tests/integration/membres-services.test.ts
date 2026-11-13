@@ -27,7 +27,7 @@ const privatePending = await privateFolderPending()
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 240_000
 
-type Who = "ada" | "lea" | "staff"
+type Who = "ada" | "claire" | "lea" | "staff"
 
 async function refusal(promise: Promise<unknown>): Promise<PlatformError> {
   const error = await promise.then(
@@ -103,6 +103,18 @@ describe.skipIf(!sqlConfigured || privatePending)(
         })
         expect(members.find((member) => member.userId === o.people.claire.id)?.teams).toEqual([{ id: o.teams.ventes, name: "Ventes", role: "lead" }])
         expect(members.find((member) => member.userId === o.people.ada.id)).toMatchObject({ role: "admin", teams: [], isSelf: false })
+      })
+
+      it("should give an email to the person herself, to a lead of one of her teams and to an administrator only", async () => {
+        await setRole(o, o.people.marc.id, "member")
+        const reference = new Set(Object.values(o.people).map((person) => person.id))
+        const emailsSeenBy = async (who: "ada" | "claire" | "lea") => {
+          const members = await listMembers(db(who), await identity(who, o))
+          return Object.fromEntries(members.filter((member) => reference.has(member.userId)).map((member) => [member.name, member.email]))
+        }
+        expect(await emailsSeenBy("lea")).toEqual({ "Ada Martin": "", "Claire Morel": "", "Léa Roux": o.people.lea.email, "Marc Petit": "", "Paul Girard": "" })
+        expect(await emailsSeenBy("claire")).toMatchObject({ "Ada Martin": "", "Claire Morel": o.people.claire.email, "Léa Roux": o.people.lea.email, "Marc Petit": "" })
+        expect(await emailsSeenBy("ada")).toMatchObject({ "Ada Martin": o.people.ada.email, "Léa Roux": o.people.lea.email, "Marc Petit": o.people.marc.email })
       })
 
       // E05-S13 (fiche D128) : l'équipe par défaut n'est plus lue, même posée hors du service.

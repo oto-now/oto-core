@@ -21,6 +21,7 @@ import { loadRows, toReadRow } from "../../packages/plateforme/server/tables/row
 import { tableWrite } from "../../packages/plateforme/server/tables/write"
 import { purgeExpiredExports } from "../../packages/plateforme/server/transfer/files"
 import { importPlan } from "../../packages/plateforme/server/transfer/formats"
+import { registerHostSurface } from "../../packages/plateforme/server/catalog/surface"
 import { nodeExportTree, nodeImportTree, setTreeFetchDeps } from "../../packages/plateforme/server/transfer/functions"
 import { runImport } from "../../packages/plateforme/server/transfer/import"
 import { nodeCheck, nodeTree } from "../../packages/plateforme/server/transfer/inspect"
@@ -135,6 +136,20 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       { key: "D2", set: { dossier: "D2", statut: "en cours", note: "En attente" }, proofs: { note: { link: "https://exemple.test/d2" } } },
     ])
     expect(await answer.headers.get("content-disposition")).toContain(`${root}.json`)
+  })
+
+  it("should not download a source once the host closed the addresses a caller gives, and say to attach the file", async () => {
+    const marc = o.people.marc
+    const asMarc = { db: fx.as(marc), identity: await resolveIdentity(fx.as(marc), o.host, { userId: marc.id, email: marc.email }), ctx: null, origin: `https://${o.host}` }
+    registerHostSurface({ functions: [], capabilities: [], fetchCallerUrls: false })
+    try {
+      await expect(nodeImportTree.run(asMarc, treeImportArgsSchema.parse({ source_url: "https://files.example.org/arbre.json", parent: "private/marc" }) as never)).rejects.toMatchObject({
+        code: "invalid_arguments",
+        message: "This platform does not download from an address. Attach the file to a page, then give the address of that attached file as source_url.",
+      })
+    } finally {
+      registerHostSurface(null)
+    }
   })
 
   it("should leave out what the person cannot read, and refuse to import under a page she cannot read, writing nothing", async () => {

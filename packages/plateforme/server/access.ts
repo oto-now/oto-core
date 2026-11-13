@@ -31,7 +31,7 @@ import { leadNames, leadWord, memberDirectory, teamsWithLeads, type DirectoryEnt
 import { fromDatabaseError, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 
-export { ACCESS_LEVELS, ACCOUNT_LEVELS, isOrgAdmin, isStaffWithGrant, leadsTeam, requiredAccountLevel } from "./access-levels"
+export { ACCESS_LEVELS, ACCOUNT_LEVELS, emailFor, isOrgAdmin, isStaffWithGrant, leadsTeam, requiredAccountLevel } from "./access-levels"
 export type { AccessLevel, AccountLevel, NodeOwner, Owner } from "./access-levels"
 export { nodeOwner } from "./access-facts"
 // Chemins de l'arbre (H50, H51), sans décision : `server/nodes/` les lit ici, `access-levels.ts` lui

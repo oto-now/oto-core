@@ -98,7 +98,7 @@ export async function listTeams(db: PlatformDb, identity: Identity): Promise<Tea
   const [roster, directory] = await inTransaction(db, "listTeams", () =>
     Promise.all([teamRoster(db, identity.org.id), memberDirectory(db, identity.org.id)]),
   )
-  return teamViews(roster, directory)
+  return teamViews(identity, roster, directory)
 }
 
 /**

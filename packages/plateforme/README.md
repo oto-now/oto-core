@@ -723,6 +723,31 @@ fiche, une page, ou une vue de l'ERP. Éteint par défaut, le MCP reste en texte
 - **Actions** : « Lignes suivantes » d'un tableau et `call` d'une vue de l'ERP passent par l'host vers l'outil
   `call`, sous le `ctx` de la conversation ; une suite proposée part en message à l'assistant.
 
+## Servir en liste fermée
+
+Par défaut, un assistant reçoit tout ce que le paquet apporte, y compris ce qu'une mise à jour ajoute. Un hôte qui
+doit classer chaque sortie avant de l'ouvrir déclare sa surface, une fois, dans le module que chaque route du paquet
+importe (comme `registerFunctions`) :
+
+```ts
+import { registerHostSurface } from "@otomata_tech/oto_platform/server"
+
+registerHostSurface({
+  functions: ["table.schema", "table.rows", "node.access"],
+  capabilities: ["prompts"],
+  fetchCallerUrls: false,
+})
+```
+
+- **`functions`** : les fonctions du paquet servies à un assistant, par nom. Une fonction absente est inconnue de
+  l'assistant (`find`, `read`, `call`, `context`), et le paquet ne la cite plus (suites, descriptions des outils). Vos
+  fonctions (`registerFunctions`, `registerConnectors`) ne sont pas concernées. Un nom inconnu du paquet lève
+  `CatalogRegistrationError` : après une montée de version, la liste des fonctions du paquet est dans le message.
+- **`capabilities`** : les capacités MCP facultatives servies, parmi `prompts` et `resources` (le widget).
+- **`fetchCallerUrls`** : `false` coupe tout téléchargement d'une adresse fournie par un appelant (`source_url`).
+- `registerHostSurface(null)` retire la déclaration. Le MCP d'administration et les routes de l'API ne sont pas
+  couverts : vous montez ces routes vous-même.
+
 ## Capacités par organisation
 
 Un hôte qui vend le paquet par offres borne certaines écritures de chaque organisation (ADR-022) ; le

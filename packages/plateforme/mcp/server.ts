@@ -21,7 +21,8 @@ import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
-import { assistantFunctions, callExamples, findFunction } from "../server/catalog/registry"
+import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
+import { servesCapability } from "../server/catalog/surface-source"
 import { buildContext } from "../server/context"
 import { changedCtxMessage, requireCtx, type CallOutcome, type CtxChange } from "../server/ctx"
 import type { PlatformDb } from "../server/db"
@@ -133,7 +134,8 @@ export function serverOptions(org: ToolOrg, options: { widgets?: boolean } = {})
     serverInfo: { name: "oto-platform", title: displayOrg(org).name, version: PLATFORM_MCP_VERSION },
     instructions: serverInstructions(org),
     // `resources` : les deux variantes du bundle du widget, déclarées seulement quand il est allumé.
-    capabilities: { tools: {}, prompts: {}, ...(options.widgets ? { resources: {} } : {}) },
+    // `prompts` : fermées par un hôte qui ne les sert pas (`registerHostSurface`).
+    capabilities: { tools: {}, ...(servesCapability("prompts") ? { prompts: {} } : {}), ...(options.widgets ? { resources: {} } : {}) },
   }
 }
 
@@ -291,7 +293,7 @@ export function installPlatformMcp(server: McpServer, deps: McpDeps): void {
   // Servie à tout jeton valide, membre ou non (banc E03) : la connexion passe, les appels sont refusés.
   server.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     const started = Date.now()
-    const tools = buildTools(deps.org, callExamples(functions, await exampleConnectors(deps)), { widgets: deps.widgets })
+    const tools = buildTools(deps.org, callExamples(functions, await exampleConnectors(deps)), { widgets: deps.widgets, served: catalogNames() })
     record(deps, { method: "tools/list", params: request.params, started }, { result_chars: JSON.stringify(tools).length })
     return { tools }
   })
@@ -301,8 +303,11 @@ export function installPlatformMcp(server: McpServer, deps: McpDeps): void {
   )
 
   if (deps.widgets) installWidgetResources(server, deps)
+  if (servesCapability("prompts")) installPrompts(server, deps)
+}
 
-  // Les procédures publiées lisibles (P37, E03-S05) : Claude Code lit `prompts/list` à chaque session.
+/** Les procédures publiées lisibles (P37, E03-S05) : Claude Code lit `prompts/list` à chaque session. */
+function installPrompts(server: McpServer, deps: McpDeps): void {
   server.server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
     const handled = { method: "prompts/list", params: request.params, started: Date.now() }
     try {

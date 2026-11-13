@@ -436,6 +436,9 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   personne dans une organisation) et `comment_mail_items` (les commentaires déjà envoyés à une personne), écrites par la
   seule connexion d'administration, lues par la personne seule, en cascade depuis `members` et `comments`. Quatre
   tables, cinq index, dix policies ; additive ; rien à relancer avant.
+- `20261113090000_platform_contact_reserve.sql` (contact d'une organisation) : `org_contact`, re-versionnée à signature
+  identique, ne rend plus de ligne qu'à un membre de l'organisation ou à l'équipe plateforme ; un non-membre n'en reçoit
+  aucune. Privilèges redits ; aucune table, colonne, policy ni index ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

@@ -24,6 +24,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - The rules served by `context` say that a content you can read can be commented without editing it (`comment.add`), and that `read` of a page serves its open threads.
 - « Recent content » of `context` marks pages with new comments for the user, and pages whose threads wait for an assistant.
 - A resolved thread is frozen: reopen it with `comment.resolve` (`status: open`) before replying, editing or deleting.
+- `node.share` decides the right to share before looking anyone up, and returns no email nor list of members; members of the same name are told apart by their email.
 
 ### Hosts
 - Migrations: apply `20261112090000_platform_commentaires.sql` together with the package (`oto-platform migrations sync|check`): tables `comment_threads`, `comments`, `comment_mails`, `comment_mail_items`, their policies, and `forget_user` re-versioned. Without it, the comments inset, the home screen block and `read` of a page fail to read threads. Additive; nothing to rerun.
@@ -35,6 +36,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Schemas: `createCommentSchema`, `editCommentSchema`, `threadStatusSchema`, the `comment*ArgsSchema` of the five functions, the views `NodeCommentsView`, `CommentThreadView`, `CommentView`, and the bounds `COMMENT_MAX_CHARS`, `COMMENT_QUOTE_MAX_CHARS`, `COMMENT_MENTIONS_MAX`; `readMentions`, `mentionPlaces` and `addressesAssistant` read the mentions of a text, for the service and the screen; `SERVED_RECENT` gains the comment marks and `commentsHint`.
 - UI: on the home screen the right column takes 40 % of the width; on « Brancher votre assistant » the state sits on the line of the assistants; the « À revoir » panel of a table is hidden while its queue is empty (it stays after a review made in the session); in edit mode the left padding of the document island shrinks.
 - Server: `registerConnectors` runs `auth.kind: oauth2_jwt_bearer`, a service account (RFC 7523): the one secret credential field holds the whole JSON key file; the package signs an RS256 assertion with `node:crypto` and exchanges it at the fixed `tokenUrl`, without following redirects; the token is kept on the account and renewed like an `oauth2_client_credentials` one. A malformed key or a key naming another `token_uri` is refused before anything is sent (`not_enabled`, `details.refusal`); `invalid_grant` marks the account (`credential_rejected`). A package before this one refuses such a connector, and with it the whole declaration of the host.
+- Server: `registerHostSurface({ functions, capabilities, fetchCallerUrls })` declares, as a closed list, what an assistant is served: the functions of the package by name, the optional MCP capabilities (`prompts`, `resources`), and whether the server downloads an address a caller gives (`source_url`). Without it nothing changes; with it, what a later version adds is closed until named.
+- MCP: the descriptions of `call` and `write` cite `upload.link`, `node.move` and `node.write_many` only when they are served.
+- Migrations: apply `20261113090000_platform_contact_reserve.sql` together with the package: `org_contact` answers a member of the organisation or the platform team only. `orgContact` now returns `null` for a non-member: a « no organisation » screen no longer names the contact.
+- API: `GET teams/<slug>` returns `people` without email, and only to who composes the team. `listMembers`, `listTeams` and the team panel give an email (empty string otherwise) only to an administrator, to the person herself and to a lead of one of her teams.
 
 ## 1.6.2 — 2026-10-28
 

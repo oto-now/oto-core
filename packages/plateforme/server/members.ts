@@ -27,7 +27,7 @@ import {
   type ProfileView,
   type StaffAddedMemberView,
 } from "../schemas"
-import { isOrgAdmin } from "./access"
+import { emailFor, isOrgAdmin } from "./access"
 import { readBrand } from "./brand"
 import type { PlatformDb } from "./db"
 import { memberDirectory, teamRoster, type DirectoryEntry } from "./directory"
@@ -94,7 +94,7 @@ export async function listMembers(db: PlatformDb, identity: Identity): Promise<M
       .sort((a, b) => a.name.localeCompare(b.name, "fr"))
     return {
       userId: person.userId,
-      email: person.email,
+      email: emailFor(identity, person, teams.map((team) => team.id)),
       name: person.name,
       role: person.role,
       teams,

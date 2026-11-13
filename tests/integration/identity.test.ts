@@ -157,7 +157,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
     await expect(resolveAtO(consultant)).rejects.toMatchObject({ code: "not_member" })
   })
 
-  it("should name the oldest administrator to ask for access, and nobody for an organisation without one (orgContact)", async () => {
+  it("should name the oldest administrator to a member, and nobody for an organisation she is not a member of (orgContact)", async () => {
     const lea = dbOf(named("lea"))
     expect(await orgContact(lea, ref.org.id)).toEqual({ name: "Ada Martin", email: named("ada").email })
     expect(await orgContact(lea, ref.other.id)).toBeNull()

@@ -30,6 +30,7 @@ import { argumentsJsonSchema } from "./arguments"
 import { declaredConnectors } from "./connector-source"
 import type { CatalogFunction } from "./define"
 import { erpFunctions } from "./erp-source"
+import { hostSurface } from "./surface-source"
 import { uploadLink } from "./upload-link"
 
 /** Le connecteur natif du paquet (H80) : toujours actif et sans compte, même avant ses fonctions (E07-S01). */
@@ -43,6 +44,16 @@ export const NATIVE_CONNECTOR = "table"
  * décrits que l'hôte déclare (`registerConnectors`).
  */
 export function catalogFunctions(): CatalogFunction[] {
+  return [...packageFunctions(), ...hostFunctions()]
+}
+
+/** Les fonctions que l'hôte inscrit lui-même : celles de l'ERP et celles de ses connecteurs décrits. */
+function hostFunctions(): CatalogFunction[] {
+  return [...erpFunctions(), ...declaredConnectors().flatMap((connector) => connector.functions)]
+}
+
+/** Les fonctions que le paquet apporte : celles qu'une déclaration d'hôte (`registerHostSurface`) nomme une à une. */
+export function packageFunctions(): CatalogFunction[] {
   return [
     mailCreateDraft,
     mailSendDraft,
@@ -73,26 +84,29 @@ export function catalogFunctions(): CatalogFunction[] {
     commentEdit,
     commentDelete,
     commentResolve,
-    ...erpFunctions(),
-    ...declaredConnectors().flatMap((connector) => connector.functions),
   ]
 }
 
 /**
  * Le catalogue que voit l'assistant : sans les fonctions réservées au serveur de l'hôte (`serverOnly`), que seul
  * `callFunction` court. Toute porte qui sert un assistant (`find`, `read`, `call`, exemples de `call`, procédures) lit
- * celui-ci ; les écrans et l'activation lisent `catalogFunctions()`.
+ * celui-ci ; les écrans et l'activation lisent `catalogFunctions()`. Quand l'hôte a déclaré sa surface
+ * (`registerHostSurface`), une fonction du paquet qu'il n'a pas nommée n'y est pas : elle n'est ni trouvée, ni décrite,
+ * ni exécutée, ni citée en suite.
  */
 export function assistantFunctions(): CatalogFunction[] {
-  return catalogFunctions().filter((fn) => fn.serverOnly !== true)
+  const surface = hostSurface()
+  const own = surface ? packageFunctions().filter((fn) => surface.functions.includes(fn.name)) : packageFunctions()
+  return [...own, ...hostFunctions()].filter((fn) => fn.serverOnly !== true)
 }
 
 /**
- * Les noms des fonctions du catalogue : la description d'un tableau (`read`, `table.schema`) ne cite
- * `table.write`, `table.claim` ou `table.release` que s'ils y sont (E07-S01, N15).
+ * Les noms des fonctions servies à un assistant : la description d'un tableau (`read`, `table.schema`) ne cite
+ * `table.write`, `table.claim` ou `table.release` que s'ils y sont (E07-S01, N15), celle d'un outil ne cite que
+ * celles-là.
  */
 export function catalogNames(): ReadonlySet<string> {
-  return new Set(catalogFunctions().map((fn) => fn.name))
+  return new Set(assistantFunctions().map((fn) => fn.name))
 }
 
 export function findFunction(functions: readonly CatalogFunction[], name: string): CatalogFunction | null {

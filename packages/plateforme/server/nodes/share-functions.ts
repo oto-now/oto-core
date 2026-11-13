@@ -113,7 +113,7 @@ class Ambiguous {
 
 function ambiguous(what: string, name: string, candidates: string[]): Ambiguous {
   return new Ambiguous({
-    text: `Several ${what} match « ${name} »: ${boundedList(candidates, "; ")}. Nothing changed: ask the user which one, then call again with that exact name${what === "members" ? " or email" : ""}.`,
+    text: `Several ${what} match « ${name} »: ${boundedList(candidates, "; ")}. Nothing changed: ask the user which one, then call again with ${what === "members" ? "the email of that member" : "that exact name"}.`,
     data: { changed: false, candidates },
   })
 }
@@ -142,9 +142,10 @@ async function resolvePerson(context: FunctionContext, name: string): Promise<Su
   const tokened = byToken(context, directory, name)
   const byEmail = tokened.length > 0 ? tokened : directory.filter((person) => sameEmail(person.email, name.toLowerCase()))
   const found = byEmail.length > 0 ? byEmail : matching(directory, name, (person) => person.name)
-  if (found.length > 1) return ambiguous("members", name, found.map((person) => `${person.name} <${person.email}>`).sort())
+  // Ni email ni annuaire dans la réponse : des homonymes se départagent par l'email que la personne donne.
+  if (found.length > 1) return ambiguous("members", name, [...new Set(found.map((person) => person.name))].sort())
   const [person] = found
-  if (!person) throw new PlatformError("not_found", `No member of ${context.identity.org.name} named ${name}. Members: ${boundedList(directory.map((entry) => entry.name))}.`)
+  if (!person) throw new PlatformError("not_found", `No member of ${context.identity.org.name} named ${name}. Ask the user for the full name or the email of the member.`)
   return { kind: "user", id: person.userId, text: `person ${person.name}` }
 }
 
@@ -196,7 +197,9 @@ async function shareWithOrganisation(context: FunctionContext, view: NodeRulesVi
 }
 
 async function share(context: FunctionContext, args: NodeShareArgs): Promise<FunctionOutput> {
-  const view = await listNodeRules(context.db, context.identity, args.path, { people: true })
+  // Le droit de partager d'abord (`security-patterns.md § Droits dans le service`) : qui ne gère pas le nœud reçoit le
+  // refus du service avant toute lecture de l'annuaire, qu'il nomme une personne connue ou non.
+  const view = await listNodeRules(context.db, context.identity, args.path, { people: true, action: "share" })
   let done: { change: string; changed: boolean; teamId: string | null }
   if (args.subject === "organisation") done = await shareWithOrganisation(context, view, args.level)
   else {
@@ -223,7 +226,7 @@ export const nodeShareFunction = defineFunction({
   refusals: [
     "Unknown path: not a node you can read.",
     "Sharing is reserved to those who manage the node; manage is granted by an administrator only: the refusal says whom to ask.",
-    "A person or a team that does not exist, or several that match: the answer lists them, nothing changes.",
+    "A person or a team that does not exist, or several that match: nothing changes; members of the same name are told apart by their email.",
     "owner_team on a node that no team owns; organisation on a private space.",
     "The owner team below the whole organisation on the same node: lower the organisation first.",
     "The rules changed meanwhile: read node.access again, then retry.",

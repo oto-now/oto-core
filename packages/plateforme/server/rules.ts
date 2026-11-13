@@ -102,16 +102,18 @@ async function ownerTeam(db: PlatformDb, nodeId: string): Promise<string | null>
  * de plus, que l'affichage d'une page ne paie pas ; sur demande aussi (`subjects`), les équipes et les membres qu'on peut
  * ajouter, déjà lus pour nommer les règles.
  */
-export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
+export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean; action?: NodeAction } = {}): Promise<NodeRulesView> {
   return inTransaction(db, "listNodeRules", (sql) => nodeRulesIn({ db, sql }, identity, path, options))
 }
 
 /**
  * Le panneau d'un nœud dans la transaction `sql` d'un appelant : celle d'un service qui lit encore autre chose du même
  * nœud (`node.access` et son lien public) sans ouvrir une seconde transaction (`supabase-patterns.md § Couplage à Supabase`).
+ * `action` : le geste que l'appelant s'apprête à faire, exigé avant toute autre lecture (`node.share` : le refus précède
+ * la résolution d'une personne dans l'annuaire).
  */
-export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
-  const node = await readNode({ db, sql }, identity, path)
+export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean; action?: NodeAction } = {}): Promise<NodeRulesView> {
+  const node = await readNode({ db, sql }, identity, path, options.action)
   const [owner, [rules, teams], directory] = await Promise.all([
     nodeOwner(db, node.id),
     Promise.all([
