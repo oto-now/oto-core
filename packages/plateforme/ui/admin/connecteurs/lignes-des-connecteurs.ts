@@ -3,7 +3,7 @@
 // « use client » : l'écran, rendu par le serveur, le calcule et ne passe à ses îlots que des données (comme
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
-import type { AccountLevelName, AccountView, ConnectorAccountForm, OrgConnector } from "../../../schemas"
+import { normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
 import { connexionDe, estAMoi, etatDuCompte, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
@@ -101,9 +101,6 @@ function accesDe(compte: AccountView, moi: string, partages: PartagesDuCompte | 
   return { acces: sujets.length === 1 ? sujets[0] : `${sujets[0]} +${sujets.length - 1}`, niveau: "Partagé par vous" }
 }
 
-// Minuscules et sans accents : « Écritures » se trouve en tapant « ecritures ».
-export const normaliser = (texte: string) => texte.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
-
 /** Ceux qui attendent un geste d'abord, les désactivés en dernier, et par libellé dans chaque rang. */
 const rang = (etat: EtatDuCompte) => (etat.code === "desactive" ? 2 : etat.demandeUnGeste ? 0 : 1)
 
@@ -122,7 +119,8 @@ type Sources = {
 export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici }: Sources, vue: VueDesConnecteurs) {
   const miens = comptes.filter((compte) => estAMoi(compte, moi))
   const retenus = vue.filtre === "mine" ? miens : vue.filtre === "shared" ? comptes.filter((compte) => !estAMoi(compte, moi)) : comptes
-  const cherche = normaliser(vue.q)
+  // Sans casse ni accent : « Écritures » se trouve en tapant « ecritures ».
+  const cherche = normalizeTitle(vue.q)
   const lignes = retenus
     .map((compte) => {
       const formulaire = formulaires.find((candidat) => candidat.connector === compte.connector)
@@ -139,7 +137,7 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
       }
       return { ligne, rang: rang(etat) }
     })
-    .filter(({ ligne }) => cherche === "" || normaliser(ligne.libelle).includes(cherche) || normaliser(ligne.outil).includes(cherche))
+    .filter(({ ligne }) => cherche === "" || normalizeTitle(ligne.libelle).includes(cherche) || normalizeTitle(ligne.outil).includes(cherche))
     .sort((a, b) => a.rang - b.rang || a.ligne.libelle.localeCompare(b.ligne.libelle, "fr"))
     .map(({ ligne }) => ligne)
   return { lignes, comptes: { tous: comptes.length, moi: miens.length, partages: comptes.length - miens.length } }

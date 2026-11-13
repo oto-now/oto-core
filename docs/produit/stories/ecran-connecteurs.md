@@ -236,7 +236,7 @@ Hôte
   `PartageDuNoeud` et `ChoixDuNiveau`, câblés sur le chemin d'un nœud, ses règles et son échelle de niveaux
 - Le tiroir : `Drawer` (`ui/ds/react/drawer.tsx`), déjà utilisé par le journal. Verdict : réutiliser
 - La recherche d'une liste : `ListTools`. Verdict : réutiliser
-- Le champ « Ajouter une personne ou une équipe » — `rg -l "PARTAGE\.ajouter" packages src tests scripts` → 2 fichiers : `noeud/partage-du-noeud.tsx` (`AjoutDAcces`, câblé sur la règle d'un nœud) et le `ChampDAjoutDAcces` de cette story, écrit générique (`candidats`, `ajouter`). Verdict : **laisser** les deux pour l'instant ; les fusionner ferait monter le nouveau champ par le partage des pages, hors de la demande : question posée au responsable du produit
+- Le champ « Ajouter une personne ou une équipe » — `rg -l "PARTAGE\.ajouter" packages src tests scripts` → 1 fichier : `ui/noeud/champ-d-ajout-d-acces.tsx`. Verdict : **fusionner**, décidé par le responsable du produit le 2026-11-13 : le champ du partage d'une page (`AjoutDAcces` de `partage-du-noeud.tsx`) est sorti dans `ChampDAjoutDAcces`, générique (`candidats`, `ajouter`), que montent le partage d'une page et celui d'un connecteur ; les tests du partage d'une page passent inchangés
 
 ### Effet produit
 
@@ -248,6 +248,8 @@ Hôte
 - Le journal des partages change de mots (« en lecture » devient « Lecture seule »)
 
 ### Refacto
+
+- **Fait, sur décision du responsable du produit du 2026-11-13** : le champ « Ajouter une personne ou une équipe » mis en commun (`ui/noeud/champ-d-ajout-d-acces.tsx`). Appelants : `rg -l "ChampDAjoutDAcces" packages src tests scripts` → `noeud/champ-d-ajout-d-acces.tsx`, `noeud/partage-du-noeud.tsx`, `admin/connecteurs/partage-du-connecteur.tsx`. Le partage d'une page ne change ni de geste ni de mot ; ses tests sont lus avant et rejoués inchangés
 
 - **Écarté** : rendre `ChoixDuNiveau` et `PartageDuNoeud` génériques sur l'échelle de niveaux. Ils serviraient les deux
   partages, mais la modification toucherait le partage des pages, hors de la demande ; le panneau des comptes compose
@@ -297,10 +299,10 @@ Prises pendant l'implémentation, sous l'option la plus proche des décisions du
 ## Post-implémentation
 
 - **Livré** : tous les critères d'acceptation. « Ajouter » : la fenêtre s'ouvre ; après la création d'un compte par un administrateur, elle se ferme et le détail du compte s'ouvre ; au retour d'un consentement, la liste montre la ligne et l'annonce nomme le compte, sans ouvrir son détail (le retour ne porte que son libellé : à reprendre avec `ajout-d-un-connecteur.md`).
-- **Fichiers en plus de ceux prévus** : `lignes-des-connecteurs.ts` (les lignes, les filtres, le tri et la lecture de l'adresse, calculés par l'écran rendu par le serveur, qui ne peut pas appeler une fonction d'un îlot client), `champ-d-ajout-d-acces.tsx` (le champ de recherche du panneau, sorti du panneau pour tenir la borne de 300 lignes), `ajout-d-un-connecteur.tsx` (la fenêtre, prévue par l'autre story).
+- **Fichiers en plus de ceux prévus** : `lignes-des-connecteurs.ts` (les lignes, les filtres, le tri et la lecture de l'adresse, calculés par l'écran rendu par le serveur, qui ne peut pas appeler une fonction d'un îlot client), `ui/noeud/champ-d-ajout-d-acces.tsx` (le champ de recherche, commun aux deux panneaux de partage), `ajout-d-un-connecteur.tsx` (la fenêtre, prévue par l'autre story).
 - **Fichiers prévus non touchés** : `loading.tsx` (le squelette existant convient).
 - **Code mort** : `listOwnAccounts` n'a plus d'appelant dans l'hôte de référence ; il reste exporté.
-- **Doublon assumé** : `ChampDAjoutDAcces` reprend le champ du partage d'une page (`AjoutDAcces` de `partage-du-noeud.tsx`). Les mettre en commun toucherait le partage des pages : à décider.
+- **Champ commun** : `ui/noeud/champ-d-ajout-d-acces.tsx` sert le partage d'une page et celui d'un connecteur ; `partage-du-noeud.tsx` le monte, sans changement de geste ni de mot, ses tests inchangés (`tests/integration/components/partager.test.tsx`). La comparaison sans casse ni accent passe par `normalizeTitle` de `schemas/`.
 - **Tests** : `tests/unit/lignes-des-connecteurs.test.ts`, `tests/integration/components/ecran-connecteurs.test.tsx` (réécrit), `tests/integration/pages/admin-config-pages.test.tsx`, `tests/integration/partage-des-comptes.test.ts` (un cas sur base réelle). Le retour du focus à la ligne à la fermeture du tiroir tient au `<dialog>` natif : il ne se joue pas sous jsdom, à contrôler à l'œil.
 - **Revue** : une revue isolée a demandé six corrections, faites (mots « compte » encore montrés, `normaliser` et `estAMoi` en double, un type exporté sans lecteur, le focus après « Désactiver » et après une gestion perdue, le détail ouvert après une création). Restent signalés, non appliqués : sur un compte d'équipe ou d'organisation en erreur, qui le gère lit « Demandez à qui le gère de le reconnecter » ; « Clé refusée » se dit aussi d'un compte à consentement ; « Son assistant consulte… » se lit aussi sur la ligne de toute l'organisation ; `vue` reste facultative ; la ligne d'un compte désactivé n'atténue que son nom ; `listMembers` est lu à chaque visite ; des types exportés sans lecteur hors de leur fichier.
 - **Contrôle visuel** : non fait.

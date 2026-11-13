@@ -1,20 +1,21 @@
 "use client"
 
-// « Ajouter une personne ou une équipe » du panneau de partage d'un connecteur : un champ qui cherche, sans casse ni
-// accent, parmi les équipes et les personnes qu'on lui donne, et propose jusqu'à huit réponses ; les flèches les
-// parcourent, Entrée ou un clic choisit, Échap efface la saisie avant de laisser le dialogue se fermer. Ce que fait le
-// choix (la règle posée) appartient au panneau, qui passe `ajouter`.
+// « Ajouter une personne ou une équipe », le champ commun au partage d'une page (`partage-du-noeud.tsx`) et au partage
+// d'un connecteur (`admin/connecteurs/partage-du-connecteur.tsx`) : il cherche, sans casse ni accent, parmi les équipes et
+// les personnes qu'on lui donne, et propose jusqu'à huit réponses ; les flèches les parcourent, Entrée ou un clic choisit,
+// Échap efface la saisie avant de laisser le panneau se fermer. Ce que fait le choix (la règle posée, sur un nœud ou sur
+// un compte) appartient au panneau, qui passe `ajouter`. Sans lui, chaque panneau de partage recopiait le champ.
 //
-// Repris du champ du partage d'une page (`noeud/partage-du-noeud.tsx`, `AjoutDAcces`), qui reste câblé sur la règle d'un
-// nœud : mêmes gestes, mêmes mots (`PARTAGE`).
-import { useId, useState, type ChangeEvent, type KeyboardEvent } from "react"
+// Sorti de `partage-du-noeud.tsx` (`AjoutDAcces`, `Suggestions`), sans changement de geste ni de mot (`PARTAGE`) ; la ref
+// est celle du champ de saisie, pour le panneau qui replie le focus quand la relecture l'emporte.
+import { forwardRef, useId, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
-import { AnimatedIcon } from "../../ds/react/icon"
-import { InputAffix } from "../../ds/react/input-affix"
-import { Avatar } from "../../ds/react/primitives"
-import { PARTAGE } from "../../noeud/libelles"
-import { normaliser } from "./lignes-des-connecteurs"
+import { normalizeTitle } from "../../schemas"
+import { AnimatedIcon } from "../ds/react/icon"
+import { InputAffix } from "../ds/react/input-affix"
+import { Avatar } from "../ds/react/primitives"
+import { PARTAGE } from "./libelles"
 
 /** Ce qu'on ajoute : une équipe ou une personne de l'organisation. */
 export type Candidat = { kind: "team" | "user"; id: string; nom: string }
@@ -56,12 +57,12 @@ type ChampDAjoutDAccesProps = {
   enCours: boolean
 }
 
-export function ChampDAjoutDAcces({ candidats, ajouter, enCours }: ChampDAjoutDAccesProps) {
+export const ChampDAjoutDAcces = forwardRef<HTMLInputElement, ChampDAjoutDAccesProps>(function ChampDAjoutDAcces({ candidats, ajouter, enCours }, ref) {
   const id = useId()
   const [saisie, setSaisie] = useState("")
   const [rang, setRang] = useState(-1)
-  const cherche = normaliser(saisie.trim())
-  const trouves = cherche ? candidats.filter((candidat) => normaliser(candidat.nom).includes(cherche)).slice(0, 8) : []
+  const cherche = normalizeTitle(saisie)
+  const trouves = cherche ? candidats.filter((candidat) => normalizeTitle(candidat.nom).includes(cherche)).slice(0, 8) : []
 
   async function choisir(candidat: Candidat) {
     if (enCours || !(await ajouter(candidat))) return
@@ -77,7 +78,7 @@ export function ChampDAjoutDAcces({ candidats, ajouter, enCours }: ChampDAjoutDA
         const choisi = trouves[rang] ?? (trouves.length === 1 ? trouves[0] : undefined)
         if (choisi) void choisir(choisi)
       },
-      // Une saisie en cours s'efface d'abord ; le dialogue ne se referme qu'au second Échap.
+      // Une saisie en cours s'efface d'abord ; le panneau ne se referme qu'au second Échap.
       Escape: () => {
         setSaisie("")
         setRang(-1)
@@ -93,6 +94,7 @@ export function ChampDAjoutDAcces({ candidats, ajouter, enCours }: ChampDAjoutDA
   return (
     <div className="flex flex-col gap-1">
       <InputAffix
+        ref={ref}
         type="text"
         role="combobox"
         aria-label={PARTAGE.ajouter}
@@ -113,4 +115,4 @@ export function ChampDAjoutDAcces({ candidats, ajouter, enCours }: ChampDAjoutDA
       {ouverte && (trouves.length > 0 ? <Suggestions id={`${id}-liste`} trouves={trouves} rang={rang} choisir={(candidat) => void choisir(candidat)} /> : <p className="oto-caption">{PARTAGE.rienTrouve}</p>)}
     </div>
   )
-}
+})

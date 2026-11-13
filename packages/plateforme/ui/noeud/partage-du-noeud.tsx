@@ -21,9 +21,8 @@
 // 1.4.13 : quatre sections titrées en étiquettes (accès par défaut, ajoutés, membres de l'équipe, sur le web), les niveaux
 // en pastilles de couleur (`partage-visuel.tsx`), l'équipe propriétaire réglée sur sa propre ligne et non plus parmi les
 // ajoutés.
-import { useId, useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { Globe } from "@phosphor-icons/react/dist/csr/Globe"
-import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { ShieldCheck } from "@phosphor-icons/react/dist/csr/ShieldCheck"
 import { UserPlus } from "@phosphor-icons/react/dist/csr/UserPlus"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
@@ -32,13 +31,13 @@ import { appelerPlateforme } from "../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../api/messages"
 import { replierLeFocusSur } from "../components/focus"
 import { AnimatedIcon } from "../ds/react/icon"
-import { InputAffix } from "../ds/react/input-affix"
 import { Avatar } from "../ds/react/primitives"
 import type { SelectOption } from "../ds/react/select"
 import type { SujetsDeRegle } from "../equipes/types"
 import { useRafraichir } from "../hote/rafraichir"
 import { PartageSurLeWeb } from "../public/partage-sur-le-web"
 import { AccesParDefaut } from "./acces-general"
+import { ChampDAjoutDAcces, nomDuCandidat, type Candidat } from "./champ-d-ajout-d-acces"
 import { NIVEAUX_D_ACCES, PARTAGE } from "./libelles"
 import { EtatDesNiveaux, MembresDeLEquipe, useNiveauxDesMembres } from "./niveau-d-un-membre"
 import { ChoixDuNiveau, EtiquetteDeLigne, NiveauLu, optionDuNiveau, SectionDuPartage } from "./partage-visuel"
@@ -53,9 +52,6 @@ const ANCRE = "partage-du-noeud"
 /** La valeur de « Retirer » dans le menu d'une ligne : aucun niveau ne s'écrit ainsi. */
 const RETIRER = "retirer"
 
-/** Ce qu'on ajoute : une équipe ou une personne de l'organisation. */
-type Candidat = { kind: "team" | "user"; id: string; nom: string }
-
 type Regle = NodeRulesView["rules"][number]
 
 type Envoi = { methode: "POST" | "DELETE"; ressource: string; corps?: unknown }
@@ -65,9 +61,6 @@ type Envoi = { methode: "POST" | "DELETE"; ressource: string; corps?: unknown }
  * geste, avant la table commune), la page relue ; `true` s'il a abouti.
  */
 type Envoyer = (envoi: Envoi, annonce: string, refus?: MessagesDuGeste) => Promise<boolean>
-
-/** Sans accent ni capitale : « équipe » se trouve en tapant « equipe ». */
-const normaliser = (texte: string) => texte.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
 
 /**
  * Le focus d'un contrôle que la relecture peut emporter (`accessibility-patterns.md § Après une action`) : à
@@ -90,97 +83,20 @@ function useRepliApresSucces<T extends HTMLElement>() {
   return { geste, apresUnSucces }
 }
 
-/** Les suggestions du champ : l'équipe ou la personne, et ce qu'elle est. */
-function Suggestions({ id, trouves, rang, choisir }: { id: string; trouves: Candidat[]; rang: number; choisir: (candidat: Candidat) => void }) {
-  return (
-    <div id={id} role="listbox" aria-label={PARTAGE.suggestions} className="oto-share-suggestions">
-      {trouves.map((candidat, index) => (
-        <button
-          key={`${candidat.kind}:${candidat.id}`}
-          id={`${id}-${index}`}
-          type="button"
-          role="option"
-          tabIndex={-1}
-          aria-selected={index === rang}
-          data-highlighted={index === rang ? "" : undefined}
-          className="oto-menu-item"
-          // Le focus reste dans le champ : le choix se fait au clic, sans le lui retirer.
-          onMouseDown={(evenement) => evenement.preventDefault()}
-          onClick={() => choisir(candidat)}
-        >
-          {candidat.kind === "team" ? <AnimatedIcon as={UsersThree} size="xs" /> : <Avatar name={candidat.nom} size="sm" aria-hidden="true" />}
-          <span>{candidat.kind === "team" ? PARTAGE.equipe(candidat.nom) : candidat.nom}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/** « Ajouter une personne ou une équipe » : la saisie cherche parmi celles qui n'ont pas d'accès propre. */
+/** « Ajouter une personne ou une équipe » : le champ commun, qui pose ici la règle d'un nœud, en lecture. */
 function AjoutDAcces({ chemin, candidats, envoyer, enCours }: { chemin: string; candidats: Candidat[]; envoyer: Envoyer; enCours: boolean }) {
-  const id = useId()
-  const [saisie, setSaisie] = useState("")
-  const [rang, setRang] = useState(-1)
   const { geste, apresUnSucces } = useRepliApresSucces<HTMLInputElement>()
-  const cherche = normaliser(saisie.trim())
-  const trouves = cherche ? candidats.filter((candidat) => normaliser(candidat.nom).includes(cherche)).slice(0, 8) : []
 
-  async function choisir(candidat: Candidat) {
+  async function ajouter(candidat: Candidat) {
     const corps = setNodeRuleSchema.safeParse({ path: chemin, subject: { kind: candidat.kind, id: candidat.id }, level: "read" })
-    if (!corps.success || enCours) return
+    if (!corps.success) return false
     apresUnSucces.current = false
-    const nom = candidat.kind === "team" ? PARTAGE.equipe(candidat.nom) : candidat.nom
-    if (!(await envoyer({ methode: "POST", ressource: "rules", corps: corps.data }, PARTAGE.ajoute(nom)))) return
-    apresUnSucces.current = true
-    setSaisie("")
-    setRang(-1)
+    const abouti = await envoyer({ methode: "POST", ressource: "rules", corps: corps.data }, PARTAGE.ajoute(nomDuCandidat(candidat)))
+    apresUnSucces.current = abouti
+    return abouti
   }
 
-  function clavier(evenement: KeyboardEvent<HTMLInputElement>) {
-    const gestes: Record<string, () => void> = {
-      ArrowDown: () => setRang((courant) => (trouves.length === 0 ? -1 : (courant + 1) % trouves.length)),
-      ArrowUp: () => setRang((courant) => (trouves.length === 0 ? -1 : (courant - 1 + trouves.length) % trouves.length)),
-      Enter: () => {
-        const choisi = trouves[rang] ?? (trouves.length === 1 ? trouves[0] : undefined)
-        if (choisi) void choisir(choisi)
-      },
-      // Une saisie en cours s'efface d'abord ; le panneau ne se referme qu'au second Échap (`AccessPanel`).
-      Escape: () => {
-        setSaisie("")
-        setRang(-1)
-      },
-    }
-    const touche = gestes[evenement.key]
-    if (!touche || (evenement.key === "Escape" && saisie === "")) return
-    evenement.preventDefault()
-    touche()
-  }
-
-  const ouverte = cherche !== ""
-  return (
-    <div className="flex flex-col gap-1">
-      <InputAffix
-        ref={geste}
-        type="text"
-        role="combobox"
-        aria-label={PARTAGE.ajouter}
-        placeholder={PARTAGE.ajouter}
-        aria-autocomplete="list"
-        aria-expanded={ouverte}
-        aria-controls={ouverte ? `${id}-liste` : undefined}
-        aria-activedescendant={rang >= 0 && trouves[rang] ? `${id}-liste-${rang}` : undefined}
-        aria-busy={enCours}
-        value={saisie}
-        onChange={(evenement: ChangeEvent<HTMLInputElement>) => {
-          setSaisie(evenement.target.value)
-          setRang(-1)
-        }}
-        onKeyDown={clavier}
-        start={<AnimatedIcon as={MagnifyingGlass} anim="magnify" size="xs" />}
-      />
-      {ouverte && (trouves.length > 0 ? <Suggestions id={`${id}-liste`} trouves={trouves} rang={rang} choisir={(candidat) => void choisir(candidat)} /> : <p className="oto-caption">{PARTAGE.rienTrouve}</p>)}
-    </div>
-  )
+  return <ChampDAjoutDAcces ref={geste} candidats={candidats} ajouter={ajouter} enCours={enCours} />
 }
 
 /** Les niveaux du menu d'une ligne : ceux que la personne peut accorder, et toujours celui de la ligne. */

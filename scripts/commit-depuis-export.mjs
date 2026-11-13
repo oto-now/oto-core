@@ -2,7 +2,7 @@
 /**
  * commit-depuis-export — construit le commit d'un export vérifié, avec son reçu en trailers.
  *
- *   node scripts/commit-depuis-export.mjs --depot <checkout> --base <sha> --message <fichier>
+ *   node scripts/commit-depuis-export.mjs --depot <checkout> --base <sha> --message <fichier> [--branche <nom>]
  *
  * Se lance depuis l'export (`git archive origin/main` dans un dossier temporaire, `CLAUDE.md § Vérifier,
  * commiter, pousser`), après un `pnpm verify` vert DANS cet export. Le commit a pour parent `--base`, pour
@@ -25,6 +25,16 @@
  * - l'arbre de code du commit n'est pas celui du reçu : le code a bougé depuis `pnpm verify`, ou un fichier
  *   non ignoré est apparu ;
  * - le commit ne changerait rien.
+ *
+ * Sur une branche de travail : `--branche <nom>` empile le commit sur la tête d'`origin/<nom>`, que `--base` doit
+ * nommer (l'export est alors celui de cette tête, plus le travail). Tant qu'`origin/main` n'a pas avancé depuis la
+ * branche, le commit n'a qu'elle pour parent. Sinon il prend aussi la tête d'`origin/main` pour second parent, et
+ * l'export doit porter ce que `main` a changé : tout fichier que `main` a changé depuis la branche, et que la branche
+ * n'a pas changé, y est celui de `main` ; refusé sinon, car le commit reviendrait en silence sur le travail de `main`.
+ * Les fichiers changés des deux côtés sont fusionnés par qui prépare l'export, et vérifiés par `pnpm verify`. Le
+ * premier commit d'une branche se construit sans `--branche`, sur `origin/main`, et se pousse sur
+ * `refs/heads/<nom>`. Sans cette option, une branche de travail ne pouvait recevoir qu'un seul commit.
+ *
  * Ce qui reste possible, et assumé : écrire le reçu ou les trailers à la main. C'est une garde contre
  * l'erreur, pas contre la malveillance (même principe que le gate de commit).
  */
@@ -123,16 +133,70 @@ function arbreDuCommit(depot, base) {
   }
 }
 
+/** Vrai si `ancetre` est dans l'histoire de `commit` (ou lui est égal). */
+function estAncetre(depot, ancetre, commit) {
+  try {
+    git(depot, ['merge-base', '--is-ancestor', ancetre, commit])
+    return true
+  } catch (erreur) {
+    if (erreur.status === 1) return false
+    throw erreur
+  }
+}
+
+/**
+ * Les parents d'un commit empilé sur la branche de travail `branche` : sa tête, que `base` doit nommer, puis la tête
+ * d'`origin/main` quand la branche ne la contient pas encore.
+ */
+function parentsSurUneBranche(depot, { branche, base, main }) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(branche) || branche === 'main') throw new Refus(`--branche nomme une branche de travail, pas « ${branche} »`)
+  let tete
+  try {
+    tete = git(depot, ['rev-parse', '--verify', '--quiet', `origin/${branche}^{commit}`]).trim()
+  } catch {
+    throw new Refus(`origin/${branche} n'existe pas : son premier commit se construit sans --branche, sur origin/main, puis se pousse sur refs/heads/${branche}`)
+  }
+  if (base !== tete) throw new Refus(`origin/${branche} est ${tete.slice(0, 7)}, pas ${base.slice(0, 7)} : refaire l'export sur sa tête, puis \`pnpm verify\``)
+  return estAncetre(depot, main, tete) ? [tete] : [tete, main]
+}
+
+/**
+ * Le commit qui prend `main` pour second parent porte ce que `main` a changé : chaque fichier changé sur `main` depuis
+ * la souche commune, et pas sur la branche, a dans `arbre` le contenu de `main`. Sans cette garde, un export resté sur
+ * l'ancienne tête de `main` effacerait, à la fusion de la branche, ce que `main` a reçu entre-temps.
+ */
+function garderCeQueMainAChange(depot, { arbre, branche, main }) {
+  const souche = git(depot, ['merge-base', branche, main]).trim()
+  const changes = (jusqua) => git(depot, ['diff', '--name-only', '-z', souche, jusqua]).split('\0').filter(Boolean)
+  const blob = (revision, chemin) => {
+    try {
+      return git(depot, ['rev-parse', '--verify', '--quiet', `${revision}:${chemin}`]).trim()
+    } catch {
+      return null
+    }
+  }
+  const surLaBranche = new Set(changes(branche))
+  const perdus = changes(main).filter((chemin) => !surLaBranche.has(chemin) && blob(arbre, chemin) !== blob(main, chemin))
+  if (perdus.length === 0) return
+  const nommes = perdus.slice(0, 5).join(', ') + (perdus.length > 5 ? ', …' : '')
+  throw new Refus(
+    `l'export ne porte pas ce qu'origin/main (${main.slice(0, 7)}) a changé depuis la branche : ${nommes} ; ` +
+      'reprendre ces fichiers de la tête de main dans l\'export, puis `pnpm verify`'
+  )
+}
+
 /** Construit le commit et rend son SHA ; lève `Refus` sans rien écrire dans `depot` qu'un arbre et un commit. */
-export function commitDepuisExport({ depot, base, message }) {
+export function commitDepuisExport({ depot, base, message, branche }) {
   git(depot, ['fetch', '--quiet', 'origin'])
   const tete = git(depot, ['rev-parse', 'origin/main']).trim()
   const parent = git(depot, ['rev-parse', '--verify', `${base}^{commit}`]).trim()
-  if (parent !== tete) throw new Refus(`origin/main est ${tete.slice(0, 7)}, pas ${parent.slice(0, 7)} : refaire l'export sur la tête, puis \`pnpm verify\``)
+  const parents = branche ? parentsSurUneBranche(depot, { branche, base: parent, main: tete }) : [parent]
+  if (!branche && parent !== tete) throw new Refus(`origin/main est ${tete.slice(0, 7)}, pas ${parent.slice(0, 7)} : refaire l'export sur la tête, puis \`pnpm verify\``)
 
   const recu = lireLeRecu(RECU, sautsToleres(depot, parent))
   const arbre = arbreDuCommit(depot, parent)
   if (arbre === git(depot, ['rev-parse', `${parent}^{tree}`]).trim()) throw new Refus('le commit ne changerait rien')
+  if (parents.length > 1) garderCeQueMainAChange(depot, { arbre, branche: parent, main: tete })
   const verifie = arbreDeCodeDuCommit(depot, arbre)
   if (verifie !== recu.tree) {
     throw new Refus(
@@ -153,14 +217,14 @@ export function commitDepuisExport({ depot, base, message }) {
   const avecTrailers = git(depot, ['interpret-trailers', '--trailer', `Verified-tree: ${recu.tree}`, '--trailer', `Verified: ${ligneVerified(recu)}`], {
     input: texte,
   })
-  return git(depot, ['commit-tree', arbre, '-p', parent], { input: avecTrailers }).trim()
+  return git(depot, ['commit-tree', arbre, ...parents.flatMap((un) => ['-p', un])], { input: avecTrailers }).trim()
 }
 
 function options(argv) {
   const valeurs = {}
   for (let i = 0; i < argv.length; i += 2) {
     const nom = argv[i]?.replace(/^--/, '')
-    if (!['depot', 'base', 'message'].includes(nom) || argv[i + 1] === undefined) return null
+    if (!['depot', 'base', 'message', 'branche'].includes(nom) || argv[i + 1] === undefined) return null
     valeurs[nom] = argv[i + 1]
   }
   return valeurs.depot && valeurs.base && valeurs.message ? valeurs : null
@@ -169,13 +233,13 @@ function options(argv) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const lus = options(process.argv.slice(2))
   if (!lus) {
-    console.error('usage : node scripts/commit-depuis-export.mjs --depot <checkout> --base <sha> --message <fichier>')
+    console.error('usage : node scripts/commit-depuis-export.mjs --depot <checkout> --base <sha> --message <fichier> [--branche <nom>]')
     process.exit(2)
   }
   try {
     const sha = commitDepuisExport(lus)
     console.log(git(lus.depot, ['show', '--stat', '--format=%H%n%n%B', sha]))
-    console.log(`Commit ${sha}, non poussé. Pousser : git -C ${lus.depot} push origin ${sha}:refs/heads/main`)
+    console.log(`Commit ${sha}, non poussé. Pousser : git -C ${lus.depot} push origin ${sha}:refs/heads/${lus.branche ?? 'main'}`)
   } catch (erreur) {
     if (!(erreur instanceof Refus)) throw erreur
     console.error(`Refusé : ${erreur.message}.`)
