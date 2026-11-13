@@ -425,20 +425,26 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   droit en base (recherche, policies) et le nouveau dans le service, la migration sans le paquet l'inverse. Une règle déjà
   posée sur la racine garde sa ligne et cesse de compter sous une équipe. Privilèges redits ; aucune table, colonne,
   policy ni index ; rien à relancer avant.
-- `20261112090000_platform_commentaires.sql` (commentaires d'une page) : les tables `comment_threads` (un fil sur un
-  nœud, ou sur un bloc publié avec un passage cité et la révision du bloc ; `open` ou `resolved`) et `comments` (auteur,
-  texte de 1 à 4 000 caractères, membres mentionnés, date de modification). RLS au rôle de leur service : lus au niveau
-  lecture du nœud, hors corbeille ; écrits par l'appelant pour lui-même sur un nœud qu'il lit ; l'état d'un fil par son
-  auteur ou au niveau écriture ; le texte et la suppression d'un commentaire par son auteur seul ; un fil supprimé par
-  son auteur, ses réponses avec lui. Clés vers `orgs` et `nodes` en cascade (une page purgée emporte ses fils).
-  `forget_user`, re-versionnée à signature identique, laisse les commentaires et les fils de la personne sans elle et la
-  sort des mentions. L'état de l'email groupé (`oto-platform comments notify`) : `comment_mails` (le dernier email d'une
-  personne dans une organisation) et `comment_mail_items` (les commentaires déjà envoyés à une personne), écrites par la
-  seule connexion d'administration, lues par la personne seule, en cascade depuis `members` et `comments`. Quatre
-  tables, cinq index, dix policies ; additive ; rien à relancer avant.
-- `20261113090000_platform_contact_reserve.sql` (contact d'une organisation) : `org_contact`, re-versionnée à signature
-  identique, ne rend plus de ligne qu'à un membre de l'organisation ou à l'équipe plateforme ; un non-membre n'en reçoit
-  aucune. Privilèges redits ; aucune table, colonne, policy ni index ; rien à relancer avant.
+- `20261113180000_v1_7_0.sql` (version 1.7.0 ; un seul fichier de migration par version publiée, fiche D124) : les
+  deux migrations ajoutées depuis 1.6.2, écrites une par chantier pendant le développement puis réunies avant le tag,
+  au contenu identique, dans l'ordre de leurs horodatages ; une bannière nomme le sujet et le fichier d'origine de
+  chaque partie, et chaque partie garde son bloc `-- ROLLBACK:` à sa fin (aucune ligne changée) : pour défaire, les
+  parties dans l'ordre inverse. Aucune version publiée ne portait les deux fichiers d'origine (§ « Hôtes qui avaient
+  appliqué une migration de la 1.7.0 »).
+  1. `20261112090000_platform_commentaires.sql` (commentaires d'une page) : les tables `comment_threads` (un fil sur un
+     nœud, ou sur un bloc publié avec un passage cité et la révision du bloc ; `open` ou `resolved`) et `comments`
+     (auteur, texte de 1 à 4 000 caractères, membres mentionnés, date de modification). RLS au rôle de leur service :
+     lus au niveau lecture du nœud, hors corbeille ; écrits par l'appelant pour lui-même sur un nœud qu'il lit ; l'état
+     d'un fil par son auteur ou au niveau écriture ; le texte et la suppression d'un commentaire par son auteur seul ;
+     un fil supprimé par son auteur, ses réponses avec lui. Clés vers `orgs` et `nodes` en cascade (une page purgée
+     emporte ses fils). `forget_user`, re-versionnée à signature identique, laisse les commentaires et les fils de la
+     personne sans elle et la sort des mentions. L'état de l'email groupé (`oto-platform comments notify`) :
+     `comment_mails` (le dernier email d'une personne dans une organisation) et `comment_mail_items` (les commentaires
+     déjà envoyés à une personne), écrites par la seule connexion d'administration, lues par la personne seule, en
+     cascade depuis `members` et `comments`. Quatre tables, cinq index, dix policies ; additive ; rien à relancer avant.
+  2. `20261113090000_platform_contact_reserve.sql` (contact d'une organisation) : `org_contact`, re-versionnée à
+     signature identique, ne rend plus de ligne qu'à un membre de l'organisation ou à l'équipe plateforme ; un
+     non-membre n'en reçoit aucune. Privilèges redits ; aucune table, colonne, policy ni index ; rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -636,6 +642,29 @@ appliquée » :
   sauté une se recrée.
 
 Les copies des sept dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
+
+## Hôtes qui avaient appliqué une migration de la 1.7.0
+
+Les deux fichiers d'origine de `20261113180000_v1_7_0.sql` (`20261112090000`, `20261113090000`) n'ont été publiés par
+aucune version : seule une base de développement, une base d'essai d'un hôte, ou le projet de test de ce dépôt, a pu en
+appliquer. Comme pour la 1.6.0 (§ précédent), par qui exploite la base, jamais par la CI, à la racine d'un dépôt dont
+`supabase/migrations/` porte `20261113180000_v1_7_0.sql` et plus aucun des deux fichiers, `DB_URL` posée comme au
+§ « marquer la ligne de base V1 appliquée » :
+
+- **Base locale de test** : `pnpm db:local --reset` la recrée, rien d'autre.
+- **Les deux appliquées** (`supabase migration list` les montre côté base) : seul l'historique change.
+
+  ```bash
+  npx supabase migration repair --db-url "$DB_URL" --status reverted 20261112090000 20261113090000
+  npx supabase migration repair --db-url "$DB_URL" --status applied 20261113180000
+  npx supabase migration list --db-url "$DB_URL"
+  npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
+  ```
+
+- **La première seulement** : appliquer d'abord, à la main, la partie 2 du fichier de version (sa bannière nomme son
+  fichier d'origine), puis le cas précédent.
+
+Les copies des deux dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
 
 ## Supprimer une personne
 

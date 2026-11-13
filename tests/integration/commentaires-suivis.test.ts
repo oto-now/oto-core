@@ -18,7 +18,7 @@ import { hex } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
 import { spyDb, SQL_SKIP_REASON, sqlConfigured, type SqlReferenceOrg } from "../helpers/sql"
 
-const VERSION = "20261112090000"
+const VERSION = "20261113180000"
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const NETWORK_TIMEOUT = 60_000

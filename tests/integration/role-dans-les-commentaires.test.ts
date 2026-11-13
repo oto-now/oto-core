@@ -11,7 +11,7 @@ import type { Tx } from "../../packages/plateforme/server/sql"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { asCaller, failureOf, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededOrg, type SeededPerson } from "../helpers/sql"
 
-const VERSION = "20261112090000"
+const VERSION = "20261113180000"
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const suite = !sqlConfigured

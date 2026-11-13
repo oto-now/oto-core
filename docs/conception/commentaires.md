@@ -34,7 +34,7 @@ Les tables et leurs colonnes sont dans [`../reference/schema-platform.md`](../re
 
 ### Le fil et son ancrage
 
-- **Deux tables** (`20261112090000_platform_commentaires.sql`) : `comment_threads`, un fil sur un nœud, et `comments`, ses commentaires dans l'ordre. On résout un fil (`open`, `resolved`, avec qui et quand), jamais un commentaire.
+- **Deux tables** (partie 1 de `20261113180000_v1_7_0.sql`, écrite en `20261112090000_platform_commentaires.sql`) : `comment_threads`, un fil sur un nœud, et `comments`, ses commentaires dans l'ordre. On résout un fil (`open`, `resolved`, avec qui et quand), jamais un commentaire.
 - **Un fil s'ancre sur un bloc publié**, par son identifiant (`block_id`, stable d'une écriture à l'autre, [lecture et écriture des pages](lecture-et-ecriture-des-pages.md)), avec en option un **passage cité** en texte (500 caractères au plus) et la révision du bloc au moment du commentaire (`block_revision`). Aucune position dans le texte. Sans bloc, le fil commente la page entière. `block_id` n'a pas de clé étrangère, la clé de `blocks` étant `(id, state)`.
 - **Ce que le service refuse à l'ouverture** (`invalid_arguments`, rien n'est écrit) : un bloc qui n'est pas un bloc publié de ce nœud, une ligne de tableau (un tableau ne se commente qu'en entier), une citation absente du texte du bloc tel que `read` le rend, blancs réduits.
 - **Deux états se calculent à la lecture, jamais écrits** (`anchorOf`) : « passage modifié depuis » quand la révision du bloc publié dépasse celle du fil ; « passage supprimé » quand le bloc n'est plus publié, le fil se lisant alors sur la page, sa citation gardée.
@@ -145,8 +145,6 @@ Canaux qui restent ouverts, voulus ou acceptés :
 - La pseudonymisation des noms d'auteurs et des mentions servis à un assistant n'a pas de test propre : elle repose sur la règle générale de la porte ([pseudonymisation](pseudonymisation.md)).
 - Hors V1, non faits : commenter une ligne de tableau ; `find` dans les commentaires ; un état lu par fil ; l'export des fils avec une page et leur copie à la duplication ; un réglage de notification par personne ; un lien de l'email qui ouvre la page sur le fil.
 - Une résolution encore non validée pendant qu'une réponse s'écrit ne la retient pas : la réponse entre, écrite sur un fil lu ouvert, et la résolution suit. Aucun verrou n'est pris sur le fil : la policy de modification de `comment_threads` cacherait la ligne verrouillée à un simple lecteur.
-- La migration `20261112090000` est à fusionner avec les autres migrations de la version avant son tag (`database-patterns.md § Règles`).
-
 ## Questions ouvertes
 
 - Le texte d'un commentaire doit-il sortir des arguments gardés au journal, comme une donnée personnelle ?
