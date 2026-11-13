@@ -1,17 +1,26 @@
 // @vitest-environment node
 // Les cas communs du compte de service (`connectors/_cases/jwt_bearer.yaml`), partagés avec la référence du dépôt
-// `connectors`, copiés (`tests/factories/jwt-bearer-cases.ts`) en attendant `@otomata_tech/connectors/jwt-bearer-cases` :
+// `connectors`, lus de `@otomata_tech/connectors/jwt-bearer-cases` (dépendance de développement épinglée à un commit) :
 // chaque cas joué contre la signature du paquet (`prepareAuth`, puis `sign`) sur un `fetch` simulé et une horloge
-// posée : la requête de jeton exacte (l'assertion signée comprise), puis l'en-tête et l'échéance du jeton, ou le refus
-// nommé ; chaque clé refusée l'est avant tout envoi, sans qu'un morceau de la clé ne sorte. Un écart est un désalignement
+// posée, au niveau d'accès du compte qu'il dit (sinon celui de la description) : la requête de jeton exacte
+// (l'assertion signée comprise, ses droits ceux du niveau, `levelScopes`), puis l'en-tête et l'échéance du jeton, ou le
+// refus nommé ; chaque clé refusée l'est avant tout envoi, sans qu'un morceau de la clé ne sorte. Un écart est un désalignement
 // à corriger du côté qui s'écarte du format, jamais un cas à retirer.
 import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  credentialValue,
+  jwtBearerCases,
+  jwtBearerRefusedKeys,
+  levelScopes,
+  testKeyPkcs8,
+  type JwtBearerCase,
+  type JwtBearerRefusedKey,
+} from "@otomata_tech/connectors/jwt-bearer-cases"
 import { prepareAuth, sign, type Signer } from "../../packages/plateforme/server/connectors/auth"
 import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
-import { credentialValue, jwtBearerCases, jwtBearerRefusedKeys, testKeyPkcs8, type JwtBearerCase, type JwtBearerRefusedKey } from "../factories/jwt-bearer-cases"
 import { loggedText } from "../helpers/logs"
 
 afterEach(() => {
@@ -24,13 +33,18 @@ const segment = (value: object) => Buffer.from(JSON.stringify(value), "utf8").to
 /** L'assertion attendue d'un cas : en-tête et revendications sérialisés dans l'ordre du cas, puis sa signature. */
 const assertionOf = (c: JwtBearerCase) => `${segment(c.assertion.header)}.${segment(c.assertion.claims)}.${c.assertion.signature}`
 
-/** La signature du paquet sous l'authentification et le credential du cas, la clé du cas dans son seul champ. */
+/**
+ * La signature du paquet sous l'authentification et le credential du cas, la clé du cas dans son seul champ, le niveau
+ * d'accès du compte s'il en dit un.
+ */
 function signerOf(c: JwtBearerCase | JwtBearerRefusedKey, fetcher: Fetch) {
   const definition: ConnectorDefinition = { ...describedConnector(), auth: c.auth, credential: c.credential }
   const auth = prepareAuth(definition)
   if (typeof auth === "string") throw new Error(auth)
   const tokens = memoryTokens()
-  const signer: Signer = { auth, definition, credential: { fields: { [c.credential[0].name]: credentialValue(c) }, settings: {}, tokens }, accountId: "account-1", fetcherFor: () => fetcher }
+  const level = "accessLevel" in c && c.accessLevel !== undefined ? { accessLevel: c.accessLevel } : {}
+  const credential = { fields: { [c.credential[0].name]: credentialValue(c) }, settings: {}, tokens, ...level }
+  const signer: Signer = { auth, definition, credential, accountId: "account-1", fetcherFor: () => fetcher }
   return { signer, tokens }
 }
 
@@ -66,6 +80,7 @@ describe("common service account cases", () => {
         ? { headers: result.value.headers, expiresAt: (tokens.written[0]?.expiresAt?.getTime() ?? Number.NaN) / 1000 }
         : { refusal: result.error.code }
     expect(outcome).toEqual(c.outcome)
+    expect(c.assertion.claims.scope).toBe(levelScopes(c.auth, c.accessLevel).join(" "))
   })
 
   it.each(jwtBearerRefusedKeys.map((c) => [c.name, c] as const))("%s: refused before anything is sent, naming the refusal", async (_name, c) => {
@@ -78,6 +93,4 @@ describe("common service account cases", () => {
     const served = [result.error.message, loggedText(errors)].join("\n")
     expect(testKeyPkcs8.split("\n").some((line) => line !== "" && served.includes(line))).toBe(false)
   })
-
-  it.todo("should play the service account cases of @otomata_tech/connectors/jwt-bearer-cases once the connectors pin brings them")
 })

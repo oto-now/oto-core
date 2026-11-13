@@ -40,10 +40,13 @@ export type PreparedAuth =
   | UserConsentAuth
   | ServiceAccountAuth
 
-/** Le jeton d'un échange tel que le garde un compte. */
-export type StoredToken = { token: string; expiresAt: Date | null }
+/**
+ * Le jeton d'un échange tel que le garde un compte ; `scopes` : les droits qu'il porte, rangés avec lui par un compte de
+ * service à niveaux d'accès (`granted_scopes`), absents sinon.
+ */
+export type StoredToken = { token: string; expiresAt: Date | null; scopes?: string[] }
 
-/** Où le jeton d'un échange se lit et s'écrit : la ligne du compte, chiffré (`token_ciphertext`). */
+/** Où le jeton d'un échange se lit et s'écrit : la ligne du compte, chiffré (`token_ciphertext`), et ses droits. */
 export type TokenStore = { read: () => Promise<StoredToken | null>; write: (token: StoredToken) => Promise<void> }
 
 /**
@@ -79,10 +82,12 @@ export type AccountMarker = {
  * Le compte d'un appel : ses champs déchiffrés, ceux de l'hôte (`holder: host`) compris, ses réglages, son jeton ; son
  * consentement pour `oauth2_user` ; l'identifiant du compte chez le tiers (`linkedId`, `accounts.linked_id`) pour un
  * connecteur à `accountIdentity` ; sa marque (`mark`), absente seulement pour l'identité lue au consentement, avant
- * que le compte existe.
+ * que le compte existe ; son niveau d'accès (`accessLevel`), pour un compte de service à niveaux, absent tant que l'hôte
+ * n'en garde pas par compte : le niveau par défaut de la description s'applique (`levels.ts`).
  */
 export type AccountCredential = {
   fields: Readonly<Record<string, string>>
+  accessLevel?: string
   settings: AccountSettings
   tokens: TokenStore
   consent?: ConsentCredential

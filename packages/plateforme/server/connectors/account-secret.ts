@@ -183,15 +183,18 @@ export function connectorAccountForms(): ConnectorAccountForm[] {
 export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
   return {
     async read() {
-      const [row] = await inTransaction(db, "tokenStore: account_token", (sql) => sql<{ token: string | null; expires_at: string | null }[]>`
-        select platform.account_token(${accountId}) as token, to_json(a.token_expires_at) #>> '{}' as expires_at
+      const [row] = await inTransaction(db, "tokenStore: account_token", (sql) => sql<{ token: string | null; expires_at: string | null; scopes: string[] | null }[]>`
+        select platform.account_token(${accountId}) as token, to_json(a.token_expires_at) #>> '{}' as expires_at, a.granted_scopes as scopes
           from platform.accounts a where a.id = ${accountId}`)
-      return row?.token ? { token: decryptToken(accountId, row.token), expiresAt: row.expires_at ? new Date(row.expires_at) : null } : null
+      if (!row?.token) return null
+      return { token: decryptToken(accountId, row.token), expiresAt: row.expires_at ? new Date(row.expires_at) : null, ...(row.scopes ? { scopes: row.scopes } : {}) }
     },
-    async write({ token, expiresAt }: StoredToken) {
+    async write({ token, expiresAt, scopes }: StoredToken) {
       const ciphertext = encryptToken(accountId, token)
+      // Des droits dits remplacent ceux du compte ; sans eux (un échange, un compte de service sans niveaux), rien n'y touche.
       await inTransaction(db, "tokenStore: accounts update", (sql) => sql`
-        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt} where id = ${accountId}`, "server")
+        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt}, granted_scopes = coalesce(${scopes ?? null}::text[], granted_scopes)
+         where id = ${accountId}`, "server")
     },
   }
 }

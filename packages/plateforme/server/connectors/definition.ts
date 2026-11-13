@@ -114,6 +114,20 @@ export type ConnectorOAuthScopes =
     }
 
 /**
+ * Les droits d'un compte de service : `scopes` (le niveau `full`), ou des niveaux d'accès comme ceux d'un consentement,
+ * et `defaultLevel`, le niveau d'un compte qui n'en dit pas, un niveau déclaré (`full` sans lui). L'assertion demande
+ * les droits du niveau du compte ; une fonction que le niveau n'accorde pas est refusée avant tout envoi (`levels.ts`).
+ */
+export type ConnectorServiceAccountScopes =
+  | { readonly scopes: readonly string[]; readonly accessLevels?: never; readonly scopeImplies?: never; readonly defaultLevel?: never }
+  | {
+      readonly accessLevels: { readonly full: ConnectorAccessLevel; readonly [level: string]: ConnectorAccessLevel }
+      readonly scopeImplies?: { readonly [scope: string]: readonly string[] }
+      readonly defaultLevel?: string
+      readonly scopes?: never
+    }
+
+/**
  * Qui a consenti, lu juste après le consentement : la valeur non vide au chemin `path` de la réponse nomme le compte.
  * Soit `function`, une lecture du connecteur sans argument requis, appelée avec `{}` ; soit `url`, une adresse complète
  * `https` fixe (le service d'identité commun d'un fournisseur), lue en `GET` avec le jeton d'accès, et `scopes`, les
@@ -147,7 +161,8 @@ export type ConnectorOAuthUser = {
  * sorte (`none`) se déclare mais est refusée nommément par `registerConnectors`. Chaque valeur qui désigne un secret
  * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
  * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
- * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`).
+ * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`),
+ * contre les droits de `scopes` ou du niveau du compte.
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -164,7 +179,7 @@ export type ConnectorAuth =
       readonly expiresInDefault?: number
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
-  | { readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly scopes: readonly string[]; readonly key: string }
+  | ({ readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly key: string } & ConnectorServiceAccountScopes)
   | { readonly kind: string }
 
 /**
@@ -364,7 +379,10 @@ export type ConnectorFunctionDefinition = {
    * les autres sous `<connecteur>.<fonction>`. Jamais `true` pour `read`, jamais `false` pour `sensitive`.
    */
   readonly act: boolean
-  /** Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès. */
+  /**
+   * Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès
+   * (consentement ou compte de service), et accordés par l'un d'eux au moins.
+   */
   readonly scopes?: readonly string[]
   readonly description: string
   /** Racine `type: object`, `additionalProperties: false`. */

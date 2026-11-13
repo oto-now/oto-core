@@ -26,7 +26,8 @@ import { errorTable } from "./error-table"
 import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedApplications, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { callerTransitFiles, filesProblem } from "./multipart"
-import { isScopeList, type UserConsentAuth } from "./oauth-user"
+import { declaredLevels, functionScopesProblem, type AccessLevels } from "./levels"
+import type { UserConsentAuth } from "./oauth-user"
 import { stripProblem } from "./output"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
@@ -274,15 +275,8 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
   }
 }
 
-/**
- * Les droits qu'une fonction exige (`scopes`) : exigés dans un connecteur à niveaux d'accès, refusés ailleurs, comme le
- * format le dit. Gardés sans être appliqués (issue oto-now/oto-core#71).
- */
-function functionScopesProblem(fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
-  const levels = auth.kind === "user_consent" ? auth.accessLevels : null
-  if (levels === null) return fn.scopes === undefined ? null : `${fn.name}: scopes need the connector's accessLevels.`
-  return isScopeList(fn.scopes, true) ? null : `${fn.name}: scopes must list the scopes the function needs, in a connector with access levels.`
-}
+/** Les niveaux d'accès d'une authentification : ceux d'un consentement ou d'un compte de service ; `null` ailleurs. */
+const levelsOf = (auth: PreparedAuth): AccessLevels | null => (auth.kind === "user_consent" || auth.kind === "service_account" ? declaredLevels(auth) : null)
 
 /**
  * L'identité lue à une adresse complète, préparée comme une lecture sans argument : un `GET` sur l'adresse, avec le
@@ -324,7 +318,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
+    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, levelsOf(auth)) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -364,9 +358,9 @@ export type ConnectorOptions = HostOptions & {
  * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
  * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
- * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès, `oauth2_jwt_bearer`) ; puis chaque fonction : nom,
+ * `oauth2_client_credentials`, `oauth2_user` et `oauth2_jwt_bearer`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre (toute clé inconnue d'une
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux (accordés par un niveau au moins), délai propre (toute clé inconnue d'une
  * fonction refusée), fonction longue (`background`, comme la règle 21 de la fabrique), coût (`cost`) et travail
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
  * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,

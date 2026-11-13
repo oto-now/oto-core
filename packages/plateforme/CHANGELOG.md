@@ -17,6 +17,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Server: `registerConnectors` accepts access levels on an `oauth2_jwt_bearer` service account (`accessLevels`, `scopeImplies`, `defaultLevel`, a declared level, `full` without it; `scopes` on each function), the form of `connectors` v1.226.0 (`google_search_console` 1.1.0), which 1.7.0 refuses. The assertion asks the scopes of the account's level (`AccountCredential.accessLevel`, not kept per account yet: `defaultLevel`); a function the level does not grant is refused before anything is sent (`not_enabled`, `details.refusal: "access_level_denied"`, `details.level`); the kept token carries its scopes (`granted_scopes`) and another level signs a new assertion. A service account without levels is unchanged. No migration.
+- Server: `registerConnectors` refuses a function whose `scopes` no access level grants (directly or through `scopeImplies`), for `oauth2_user` too.
+
 ## 1.7.0 — 2026-11-13
 
 ### Assistants

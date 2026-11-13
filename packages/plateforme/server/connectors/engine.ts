@@ -21,8 +21,10 @@ import { bodyEntries, tableBody } from "./body-table"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { runFileOutput } from "./file-output"
 import { requestJson, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
+import { declaredLevels, refuseUnserved } from "./levels"
 import { consumeSent, uploadOf, type TransitFiles, type Upload } from "./multipart"
 import { shaped } from "./output"
+import { serviceAccountLevel } from "./service-account"
 import { resolveAddress, type AddressSpec } from "./settings"
 
 /** Une fonction décrite prête à courir, préparée une fois à la déclaration (`declaration.ts`). */
@@ -275,7 +277,8 @@ export function pageCount(fn: ConnectorFunctionDefinition, args: Record<string, 
 
 /**
  * Exécute la fonction et rend ses réponses, une par page, et le curseur de la suite. Sans `all_pages`, une page ; avec,
- * jusqu'à `max_pages` (borné par `maxPages`). Refus : un contrôle des arguments, rien d'envoyé ; une erreur du tiers
+ * jusqu'à `max_pages` (borné par `maxPages`). Refus : une fonction que le niveau d'un compte de service n'accorde pas
+ * (`access_level_denied`, `levels.ts`), puis un contrôle des arguments, rien d'envoyé ; une erreur du tiers
  * traduite par la table ; un contrôle de la réponse ; une adresse saisie qui mène à un hôte interne. Sans secret :
  * `internal` (le compte réel en a un, `runCall` l'a vérifié). Une adresse issue d'une saisie part par le transport gardé
  * (`address-guard.ts`) ; un échange (`oauth2_client_credentials`, `oauth2_jwt_bearer`) rejoue une fois un 401 sur un jeton neuf. État du
@@ -295,6 +298,9 @@ export async function executeDescribed(
   if (!credential) {
     console.error(`[platform] connector ${connector.name}: ${fn.name} called without the secret of a live account`)
     throw new PlatformError("internal", "Internal error.")
+  }
+  if (prepared.auth.kind === "service_account") {
+    refuseUnserved(connector.label, fn, declaredLevels(prepared.auth), serviceAccountLevel(connector, prepared.auth, credential.accessLevel))
   }
   runChecks(fn, args)
   const upload = await uploadFor(fn, call, args)
