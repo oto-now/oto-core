@@ -37,9 +37,9 @@ export function questionDeDesactivation(connecteur: string, impact: Deactivation
   return impact ? `${question} ${procedures(impact.procedures)} ${comptes(impact.accounts)}` : question
 }
 
-/** La question de la désactivation d'un compte (AC7). */
+/** La question de la désactivation d'un compte de connecteur, dans les mots de l'écran : « connecteur », jamais « compte ». */
 export function questionDeDesactivationDuCompte(libelle: string): string {
-  return `Désactiver le compte « ${libelle} » ? Les appels qui le résolvent échoueront dès maintenant. Un compte désactivé ne se réactive pas : il faudra en créer un autre.`
+  return `Désactiver « ${libelle} » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Un connecteur désactivé ne se réactive pas : il faudra en ajouter un autre.`
 }
 
 /** Un libellé de compte déjà pris dans l'organisation, sans casse (AC6) : sous le champ Libellé. */

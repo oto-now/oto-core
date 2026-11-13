@@ -1,7 +1,8 @@
 "use client"
 
-// « Secret et réglages » d'un compte réel (comptes à plusieurs champs) : le formulaire tiré de la déclaration de son
-// connecteur, replié sous la ligne du compte, envoyé à `POST /api/platform/admin/accounts/<id>/secret`. Le secret ne
+// La clé et les réglages d'un compte réel (comptes à plusieurs champs) : le formulaire tiré de la déclaration de son
+// connecteur, replié dans le détail du compte sous « Saisir la clé » ou « Remplacer la clé », envoyé à
+// `POST /api/platform/admin/accounts/<id>/secret`. Le secret ne
 // revient jamais : un champ posé le dit, laissé vide il est gardé, coché « Effacer » il est effacé ; un réglage vidé
 // est effacé. La validation est celle de l'API (`accountSecretInputSchema`), le refus du service dit le champ en
 // cause. Après un succès, la saisie se vide et la page se relit.
@@ -34,13 +35,13 @@ function Formulaire({ compte, formulaire, fermer }: SaisieProps & { fermer: (ann
       form.setError("root", { type: "server", message: messageDErreur(reponse.erreur) })
       return
     }
-    fermer(`Secret et réglages de « ${compte.label} » enregistrés.`)
+    fermer(`Clé et réglages de « ${compte.label} » enregistrés.`)
     rafraichir()
   }
 
   return (
     <FormProvider {...form}>
-      <form noValidate aria-label={`Secret et réglages de ${compte.label}`} onSubmit={(evenement) => void form.handleSubmit(enregistrer)(evenement)} className="flex w-full flex-col gap-3">
+      <form noValidate aria-label={`Clé et réglages de ${compte.label}`} onSubmit={(evenement) => void form.handleSubmit(enregistrer)(evenement)} className="flex w-full flex-col gap-3">
         <ChampsDuCompte formulaire={formulaire} compte={compte} />
         {errors.root?.message && <Alert tone="fail" title={errors.root.message} />}
         <div className="flex items-center gap-3">
@@ -56,9 +57,16 @@ function Formulaire({ compte, formulaire, fermer }: SaisieProps & { fermer: (ann
   )
 }
 
+type SaisieDuCompteProps = SaisieProps & {
+  /** Le mot du bouton : « Saisir la clé » tant qu'aucune n'est posée, « Remplacer la clé » ensuite. */
+  libelle: string
+  /** Vrai quand l'état du compte attend la clé : la saisie s'offre ouverte. */
+  ouverte: boolean
+}
+
 /** Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. */
-export function SaisieDuCompte({ compte, formulaire }: SaisieProps) {
-  const [ouvert, setOuvert] = useState(false)
+export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieDuCompteProps) {
+  const [ouvert, setOuvert] = useState(ouverte)
   const [annonce, setAnnonce] = useState("")
   const fermer = (texte: string) => {
     setAnnonce(texte)
@@ -68,7 +76,8 @@ export function SaisieDuCompte({ compte, formulaire }: SaisieProps) {
     <div className="flex w-full flex-col gap-3">
       <div className="flex items-center gap-3">
         <Button type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
-          {`Secret et réglages de ${compte.label}`}
+          {libelle}
+          <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>
         {/* Montée d'emblée, vide : une région montée avec son message n'est pas annoncée. */}
         <p role="status" className="oto-caption">

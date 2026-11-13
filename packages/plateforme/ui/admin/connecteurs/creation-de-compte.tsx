@@ -38,6 +38,8 @@ type CreationDeCompteProps = {
   equipes: Equipe[]
   /** Les formulaires des connecteurs réels déclarés ; un connecteur sans formulaire prend des comptes simulés. */
   formulaires?: ConnectorAccountForm[]
+  /** Appelé quand le compte est créé, secret posé compris : la fenêtre d'ajout s'y ferme et ouvre son détail. */
+  apresCreation?: (compte: { id: string; label: string }) => void
 }
 
 /** Le connecteur du compte, parmi les connecteurs activables ; relié au formulaire par son contexte. */
@@ -103,7 +105,7 @@ function MentionDuMode({ reel }: { reel: boolean }) {
   )
 }
 
-export function CreationDeCompte({ connecteurs, equipes, formulaires = [] }: CreationDeCompteProps) {
+export function CreationDeCompte({ connecteurs, equipes, formulaires = [], apresCreation }: CreationDeCompteProps) {
   const rafraichir = useRafraichir()
   const [annonce, setAnnonce] = useState("")
   const formulaireDe = (connecteur: string) => formulaires.find((candidat) => candidat.connector === connecteur)
@@ -142,6 +144,7 @@ export function CreationDeCompte({ connecteurs, equipes, formulaires = [] }: Cre
     setAnnonce(`Compte « ${label} » créé.`)
     form.reset()
     rafraichir()
+    apresCreation?.({ id, label })
   }
 
   return (

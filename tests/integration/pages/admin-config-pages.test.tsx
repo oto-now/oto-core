@@ -1,6 +1,7 @@
 // Les pages `/admin/*` du tableau de bord (E08-S03, AC1) : l'accès décidé par `isOrgAdmin` de
 // l'identité, avant tout appel de service ; le même droit pose le fil de l'en-tête (E05-S09 partie d2). « Connecteurs »
-// s'ouvre aux membres : à qui n'administre pas, ses seuls comptes personnels et leurs partages.
+// sert la même vue à tout membre : les comptes qu'il voit, les partages des siens et du compte ouvert ; à qui administre,
+// en plus, l'impact de chaque désactivation.
 // « Organisation » porte aussi la marque et le Contexte de Tout le monde (E05-S11, AC-22, AC-24) ; « Drapeaux »
 // et « Accès plateforme » n'ont plus d'adresse : 404 (E11-S07, `tests/e2e/e11s07-adresses.spec.ts`).
 // Session de l'hôte et services du paquet simulés ; `isOrgAdmin`, `readBrand` et les écrans sont les vrais.
@@ -13,8 +14,8 @@ import {
   deactivationImpact,
   listAccountRules,
   listConnectorsForOrg,
+  listMembers,
   listOrgAccounts,
-  listOwnAccounts,
   listShares,
   listTeams,
   loadNode,
@@ -26,6 +27,7 @@ import ConnecteursPage, { metadata as connecteursMetadata } from "@/app/(dashboa
 import OrganisationPage, { metadata as organisationMetadata } from "@/app/(dashboard)/admin/organization/page"
 import AdminPage from "@/app/(dashboard)/admin/page"
 import { getPlatformIdentitySafely, type PlatformSession } from "@/lib/plateforme/session"
+import { simulerLesDialogues } from "../../helpers/dialogue"
 
 vi.mock("@/lib/plateforme/session", () => ({ getPlatformIdentitySafely: vi.fn() }))
 
@@ -46,7 +48,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   listConnectorsForOrg: vi.fn(),
   listOrgAccounts: vi.fn(),
-  listOwnAccounts: vi.fn(),
+  listMembers: vi.fn(),
   listAccountRules: vi.fn(),
   listTeams: vi.fn(),
   deactivationImpact: vi.fn(),
@@ -102,7 +104,10 @@ const PAGES = [
 const [PAGE_ORGANISATION] = PAGES
 
 /** Un compte personnel de qui regarde, qu'il gère : la page en lit les partages. */
-const MON_COMPTE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", label: "Mail Claire", connector: "mail", owner: { kind: "user" }, mode: "simule", status: "active", viewerLevel: "manage" }
+const MON_COMPTE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", label: "Mail Claire", connector: "mail", owner: { kind: "user", userId: "user-1", userName: "Claire Morel" }, mode: "simule", status: "active", viewerLevel: "manage" }
+/** Un compte de l'organisation que qui regarde gère, et celui qu'un autre partage avec lui. */
+const COMPTE_COMMUN: AccountView = { ...MON_COMPTE, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Mail commun", owner: { kind: "org" } }
+const COMPTE_DE_PAUL: AccountView = { ...MON_COMPTE, id: "8d4b5e3f-6a7c-4d8e-8f9a-1b2c3d4e5f6a", label: "Mail Paul", owner: { kind: "user", userId: "user-2", userName: "Paul Durand" }, viewerLevel: "read" }
 const PARTAGES = { id: MON_COMPTE.id, label: MON_COMPTE.label, owner: { kind: "user" as const, teamId: null, userId: "user-1" }, viewerLevel: 4 as const, rules: [], general: { id: "regle-1", level: "write" as const } }
 
 beforeEach(() => {
@@ -121,7 +126,7 @@ beforeEach(() => {
     { connector: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [] },
   ])
   vi.mocked(listOrgAccounts).mockResolvedValue([])
-  vi.mocked(listOwnAccounts).mockResolvedValue([])
+  vi.mocked(listMembers).mockResolvedValue([])
   vi.mocked(listTeams).mockResolvedValue([])
   vi.mocked(deactivationImpact).mockResolvedValue({ functions: [], procedures: [], accounts: 0 })
   vi.mocked(listShares).mockResolvedValue([])
@@ -159,24 +164,43 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     expect(fil() !== null).toBe(avecFil)
   })
 
-  it("should show a member who does not administer only their own accounts on /admin/connectors, with the shares of those they manage", async () => {
+  it("should serve a member who does not administer the same list on /admin/connectors: the accounts they see, the shares of their own, neither the impacts nor the tools of the organisation", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("member"))
-    vi.mocked(listOwnAccounts).mockResolvedValue([MON_COMPTE, { ...MON_COMPTE, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Mail restreint", viewerLevel: "write" }])
+    vi.mocked(listOrgAccounts).mockResolvedValue([MON_COMPTE, COMPTE_COMMUN, COMPTE_DE_PAUL])
     vi.mocked(listAccountRules).mockResolvedValue(PARTAGES)
 
     await act(async () => {
       render(await ConnecteursPage({}))
     })
 
-    expect(listOwnAccounts).toHaveBeenCalledWith(SESSION.db, identite("member"))
-    // Les partages du seul compte qu'il gère ; ni le catalogue, ni les comptes de l'organisation.
+    for (const service of [listOrgAccounts, listConnectorsForOrg, listTeams, listMembers]) expect(service).toHaveBeenCalledWith(SESSION.db, identite("member"))
+    // Les partages de son seul compte personnel : ni ceux d'un compte commun fermé, ni ceux du compte d'un autre.
     expect(vi.mocked(listAccountRules).mock.calls).toEqual([[SESSION.db, identite("member"), MON_COMPTE.id]])
-    for (const service of [listConnectorsForOrg, listOrgAccounts, deactivationImpact]) expect(service).not.toHaveBeenCalled()
+    expect(deactivationImpact).not.toHaveBeenCalled()
     expect(screen.queryByRole("alert")).toBeNull()
-    expect(screen.queryByRole("region", { name: "Connecteurs" })).toBeNull()
-    const comptes = within(screen.getByRole("region", { name: "Mes comptes" }))
-    expect(within(comptes.getByRole("list", { name: "Partages de Mail Claire" })).getByText("toute l'organisation · en écriture")).toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Outils de l'organisation" })).toBeNull()
+    const ligne = (libelle: string) => within(screen.getByRole("link", { name: libelle }).closest("tr") ?? document.body)
+    // « À moi » se décide sur l'identité de la session : son compte dit ses partages, celui de Paul qui le partage.
+    expect(ligne("Mail Claire").getByText("Toute l'organisation")).toBeInTheDocument()
+    expect(ligne("Mail Claire").getByText("Partagé par vous")).toBeInTheDocument()
+    expect(ligne("Mail Paul").getByText("Partagé par Paul Durand")).toBeInTheDocument()
+    expect(within(screen.getByRole("radiogroup", { name: "Filtrer les connecteurs" })).getByRole("radio", { name: "À moi · 1" })).toBeInTheDocument()
     expect(fil()).toBeNull()
+  })
+
+  it("should read the shares of the account the address opens when the person manages it, and open its detail", async () => {
+    simulerLesDialogues()
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
+    vi.mocked(listOrgAccounts).mockResolvedValue([MON_COMPTE, COMPTE_COMMUN, COMPTE_DE_PAUL])
+    vi.mocked(listAccountRules).mockResolvedValue(PARTAGES)
+
+    await act(async () => {
+      render(await ConnecteursPage({ searchParams: Promise.resolve({ connector: COMPTE_COMMUN.id }) }))
+    })
+
+    expect(vi.mocked(listAccountRules).mock.calls.map((appel) => appel[2])).toEqual([MON_COMPTE.id, COMPTE_COMMUN.id])
+    expect(within(screen.getByRole("dialog", { name: "Mail commun" })).getByRole("button", { name: "Partager Mail commun" })).toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Outils de l'organisation" })).toBeInTheDocument()
   })
 
   it("should give an administrator of /admin/organization the brand of the identity, and say it was saved on ?saved=1 (E05-S11, AC-22 ; E11-S07, AC-b6)", async () => {

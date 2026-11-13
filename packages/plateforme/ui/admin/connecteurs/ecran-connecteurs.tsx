@@ -1,73 +1,65 @@
-// « Connecteurs » du tableau de bord (E08-S03, AC4 à AC7, AC12 ; comptes à plusieurs champs ; consentement d'une
-// personne) : les connecteurs activables et leur état, qu'on active ou désactive ; les comptes de l'organisation,
-// simulés ou réels, qu'on crée ou désactive, et le secret et les réglages d'un compte réel, saisis sous sa ligne ; pour
-// un connecteur à consentement (`oauth2_user`) ou à compte rattaché (`accountIdentity`), « Connecter mon compte » (ou
-// « Reconnecter » sous un compte à reconnecter), l'issue du retour du tiers, et la marque d'un compte (clé refusée,
-// crédits épuisés) avec sa date. Server Component : les gestes sont les `ActionPlateforme` d'E05-S03,
-// la question d'une désactivation composée ici depuis son impact ; le formulaire de création, la saisie d'un compte et
-// la connexion par consentement sont des îlots clients.
+// « Connecteurs » du tableau de bord : les outils que l'assistant de la personne peut utiliser. Une seule vue, la même
+// pour un administrateur et pour un membre : chaque compte que la personne voit (les siens, ceux de ses équipes, de
+// l'organisation, ceux qu'un autre partage avec elle), dit « connecteur », avec son accès, son état en un mot et le geste
+// qui le répare ; des filtres et une recherche tenus par l'adresse ; le détail d'un connecteur dans un tiroir, ouvert par
+// l'adresse (`detail-du-connecteur.tsx`), où qui le gère le partage comme une page, remplace sa clé, lit le journal de
+// ses partages et le désactive ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ; l'issue du retour d'un
+// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les connecteurs qu'il active ou
+// désactive pour l'organisation, tant que l'activation reste une étape du moteur. Server Component : il calcule les
+// lignes (`lignes-des-connecteurs.ts`) et ne passe à ses îlots clients que des données.
 //
-// Ouvert aux membres (`connecteurs-et-comptes.md` § Écran Connecteurs) : à qui n'administre pas, la page de l'hôte donne
-// ses seuls comptes personnels (`DonneesDeMesComptes`), sans le catalogue ni la création d'un compte ; il y connecte le
-// sien, et sous chaque compte personnel qu'il gère, le partage à toute l'organisation ou à une équipe, retire un partage
-// et lit le journal des partages. L'administrateur garde sa vue, ces partages en plus sous ses propres comptes personnels.
-//
-// Porté d'oto-frontend (`components/connecteurs/liste-connecteurs.tsx` l. 196-234, 405-432, 480-511, et la
-// capture de `/connectors`), E05-S09 partie d2. Repris : l'en-tête, deux colonnes, l'îlot des connecteurs au
-// compte dans son en-tête, une ligne par connecteur (`RowList`, `Row`) sous le glyphe de prise, l'état au
-// bout de la ligne, en texte et jamais par la couleur seule, des états vides qui disent la vérité ; en annexe, l'îlot où
-// l'on ajoute. Retiré : replis des connexions, pagination, compteurs, états des sondes (`broken`, `noKey`,
-// `overQuota`, `stepLeft` : V2), marques d'outils, liens vers une page de connecteur, pile de clés, toolbox
-// (architecture § 10).
+// Les mots « activation », « compte » et « secret » ne s'écrivent plus pour un membre (`connecteurs-et-comptes.md`
+// § Écran Connecteurs). L'écran masque un geste, le service le décide.
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
-import { limitReached, type AccountMarkReason, type AccountMode, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
+import { limitReached, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Alert } from "../../ds/react/primitives"
 import { EmptyState } from "../../ds/react/empty-state"
 import { Icon } from "../../ds/react/icon"
 import { Row, RowList } from "../../ds/react/row-list"
-import { TwoColumns } from "../../ds/react/two-columns"
+import type { SujetsDeRegle } from "../../equipes/types"
 import { dateLisible } from "../../format/dates"
 import { LimiteAtteinte } from "../../limites/limite-atteinte"
 import { EnTeteDAdministration } from "../en-tete"
 import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
-import { questionDeDesactivation, questionDeDesactivationDuCompte } from "../textes"
+import { questionDeDesactivation } from "../textes"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
-import { ConnexionParConsentement } from "./connexion-par-consentement"
-import { CreationDeCompte } from "./creation-de-compte"
-import { JournalDesPartages } from "./journal-des-partages"
-import { ListeDesPartages, partageable, type PartagesDuCompte } from "./partages-du-compte"
-import { SaisieDuCompte } from "./saisie-du-compte"
+import { AjoutDUnConnecteur, type CreationPossible, type ServiceAConnecter } from "./ajout-d-un-connecteur"
+import { DetailDuConnecteur } from "./detail-du-connecteur"
+import { connexionDe } from "./etat-du-compte"
+import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, SEUIL_DE_RECHERCHE, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
+import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 
-/** Ce que la page lit pour l'écran : le catalogue et son état, l'impact de chaque désactivation possible, les comptes, les équipes. */
+/** Ce que la page lit pour l'écran : les comptes que la personne voit, le catalogue, leurs partages, et à qui partager. */
 export type DonneesDesConnecteurs = {
-  connectors: OrgConnector[]
-  /** Par connecteur actif : ce que sa désactivation arrête (AC5). */
-  impacts: Partial<Record<string, DeactivationImpact>>
+  /** Chaque compte que la personne voit au niveau lecture au moins (`listOrgAccounts`). */
   accounts: AccountView[]
-  options: { teams: { id: string; name: string }[] }
-  /** Les capacités de l'organisation (`orgLimitsView`, E12-S02) ; absentes : aucune activation grisée. */
-  limites?: OrgLimitsView
+  /** Le catalogue et son état dans l'organisation : les fonctions de chaque connecteur (`listConnectorsForOrg`). */
+  connectors: OrgConnector[]
   /** Le formulaire de compte de chaque connecteur réel déclaré (`connectorAccountForms`) ; absents : comptes simulés seuls. */
   formulaires?: ConnectorAccountForm[]
-  /** Par compte personnel que la personne gère (`partageable`) : ses partages (`listAccountRules`). */
+  /** Par compte dont la page a lu les règles (`comptesAuxPartagesLus`, `listAccountRules`) : ses partages. */
   partages: Partial<Record<string, PartagesDuCompte>>
+  /** Les équipes et les personnes de l'organisation, à qui partager un connecteur. */
+  sujets: SujetsDeRegle
+  /**
+   * Pour qui administre l'organisation : ce que la désactivation de chaque connecteur actif arrête (AC5), et ses
+   * capacités (`orgLimitsView`, E12-S02 ; absentes : aucune activation grisée). Absent pour un membre.
+   */
+  administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
 }
-
-/**
- * Ce que la page lit pour un membre qui n'administre pas : ses comptes personnels (`listOwnAccounts`), leurs partages,
- * les équipes à qui partager, et les formulaires (« Connecter mon compte »). Ni le catalogue, ni la création d'un compte.
- */
-export type DonneesDeMesComptes = Pick<DonneesDesConnecteurs, "accounts" | "options" | "formulaires" | "partages">
 
 /** L'issue d'un consentement, lue dans l'adresse où le tiers ramène la personne (`issueDuConsentement`). */
 export type IssueDuConsentement = { issue: "connected"; compte: string } | { issue: "failed"; raison: string }
 
 export type EcranConnecteursProps = {
-  /** La vue de l'administrateur, ou celle d'un membre (ses comptes) : la page de l'hôte choisit par `isOrgAdmin`. */
-  resultat: Resultat<DonneesDesConnecteurs | DonneesDeMesComptes>
+  resultat: Resultat<DonneesDesConnecteurs>
+  /** L'identifiant de qui regarde : ses comptes personnels sont « À moi ». */
+  moi: string
+  /** Ce que l'adresse demande (`vueDesConnecteurs`) ; absente : toute la liste, aucun détail ouvert. */
+  vue?: VueDesConnecteurs
   Lien: LienDeLAdministration
   /** L'adresse de l'écran dans l'hôte : « Réessayer » d'une lecture en échec y ramène, un consentement y revient. */
   ici: string
@@ -98,32 +90,22 @@ const ECHECS_DU_CONSENTEMENT: Readonly<Record<string, string>> = {
   invalid_arguments: "La connexion n'a pas abouti : refusée, annulée, expirée ou déjà servie. Recommencez.",
   upstream_error: "Le service tiers n'a pas pu terminer la connexion. Réessayez plus tard.",
   not_enabled: "La connexion à ce service n'est pas configurée sur cette application.",
-  conflict: "Un autre compte de l'organisation porte déjà ce nom.",
+  conflict: "Un autre connecteur de l'organisation porte déjà ce nom.",
   not_found: "Cette demande de connexion est inconnue ou déjà servie. Recommencez.",
   expired: "Cette demande de connexion a expiré. Recommencez.",
   no_candidate: "Aucun compte connecté pendant cette demande n'a été trouvé. Recommencez.",
   candidates_dead: "La session de ce compte chez le service tiers est déconnectée. Recommencez.",
   ambiguous_candidates: "Plusieurs comptes pourraient correspondre à cette demande ; rien n'a été rangé. Recommencez dans quelques minutes.",
-  forbidden: "Ce compte ne peut pas être connecté par vous.",
+  forbidden: "Ce connecteur ne peut pas être connecté par vous.",
 }
 
 function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsentement }) {
-  if (consentement.issue === "connected") return <Alert tone="ok" title={`Compte « ${consentement.compte} » connecté.`} />
-  return <Alert tone="fail" title={ECHECS_DU_CONSENTEMENT[consentement.raison] ?? "La connexion du compte a échoué. Réessayez."} />
+  if (consentement.issue === "connected") return <Alert tone="ok" title={`« ${consentement.compte} » est connecté.`} />
+  return <Alert tone="fail" title={ECHECS_DU_CONSENTEMENT[consentement.raison] ?? "La connexion a échoué. Réessayez."} />
 }
 
-/** Les titres des deux listes : le focus y va quand un geste emporte sa ligne. */
+/** Le titre de l'îlot de l'administrateur : le focus y va quand un geste emporte sa ligne. */
 const ANCRE_DES_CONNECTEURS = "admin-connecteurs"
-const ANCRE_DES_COMPTES = "admin-comptes"
-
-const MODES: Record<AccountMode, string> = { simule: "simulé", sandbox: "bac à sable", reel: "réel" }
-const ETATS: Record<AccountView["status"], string> = { active: "actif", disabled: "désactivé", error: "en erreur" }
-const MARQUES: Record<AccountMarkReason, string> = { credential_rejected: "clé refusée", quota_exhausted: "crédits épuisés" }
-
-/** La marque d'un compte, sa raison et sa date : le compte reste appelé, le premier appel réussi la lève. */
-function marque(compte: AccountView): string | null {
-  return compte.mark ? `${MARQUES[compte.mark.reason]} le ${dateLisible(compte.mark.at)}` : null
-}
 
 function pluriel(nombre: number, singulier: string, pluriel: string): string {
   return `${nombre} ${nombre > 1 ? pluriel : singulier}`
@@ -135,7 +117,7 @@ function etat(connecteur: OrgConnector): string {
   return `Actif depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
 }
 
-/** L'activation d'un connecteur inactif : grisée au plafond de `connectors_max` (E12-S02), avec le lien de l'hôte (écran réservé aux administrateurs). */
+/** L'activation d'un connecteur inactif : grisée au plafond de `connectors_max` (E12-S02), avec le lien de l'hôte (îlot réservé aux administrateurs). */
 function Activation({ nom, ressource, limites }: { nom: string; ressource: string; limites: OrgLimitsView | undefined }) {
   if (limites?.connectors && limitReached(limites.connectors)) {
     return <LimiteAtteinte libelle="Activer" nom="connectors_max" etat={limites.connectors} lien={limites.raiseUrl} />
@@ -173,11 +155,12 @@ function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurPro
   )
 }
 
-type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: DonneesDesConnecteurs["impacts"]; limites: OrgLimitsView | undefined }
+type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: Partial<Record<string, DeactivationImpact>>; limites: OrgLimitsView | undefined }
 
+/** « Outils de l'organisation », pour un administrateur : les connecteurs du catalogue, qu'il active ou désactive pour toute l'organisation. */
 function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
   return (
-    <Ilot id={ANCRE_DES_CONNECTEURS} titre="Connecteurs" compte={pluriel(connecteurs.length, "connecteur activable", "connecteurs activables")}>
+    <Ilot id={ANCRE_DES_CONNECTEURS} titre="Outils de l'organisation" compte={pluriel(connecteurs.length, "connecteur activable", "connecteurs activables")}>
       <div className="flex flex-col gap-3">
         <p className="oto-caption">Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours actives : elles ne s&apos;activent pas.</p>
         <RowList rules empty={<EmptyState compact title="Aucun connecteur à activer dans cette version de la plateforme." />}>
@@ -190,207 +173,109 @@ function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
   )
 }
 
-/** Le propriétaire décrit en français (H05) : l'organisation, l'équipe nommée, ou un compte personnel. */
-function proprietaire(owner: AccountView["owner"]): string {
-  if (owner.kind === "team") return `équipe ${owner.teamName ?? "inconnue"}`
-  return owner.kind === "org" ? "organisation" : "personnel"
+/** Les services que la personne connecte d'ici : l'hôte a fourni le port du consentement ou du branchement. */
+function servicesAConnecter(formulaires: readonly ConnectorAccountForm[]): ServiceAConnecter[] {
+  return formulaires
+    .filter((formulaire) => formulaire.consent === true || formulaire.hosted?.ready === true)
+    .map((formulaire) => ({ connecteur: formulaire.connector, libelle: formulaire.label, ressource: formulaire.consent === true ? "connector-consent" : "hosted-link" }))
 }
 
-/** Comment se connecte un compte d'un connecteur : saisi à la main, par consentement, ou branché chez le tiers. */
-type Connexion = "saisie" | "consentement" | "branchement"
-
-const connexionDe = (formulaire: ConnectorAccountForm | undefined): Connexion =>
-  formulaire?.consent === true ? "consentement" : formulaire?.hosted ? "branchement" : "saisie"
-
-/** La porte du bouton « Connecter mon compte » d'un connecteur à consentement ou à compte rattaché. */
-const PORTES = { consentement: "connector-consent", branchement: "hosted-link" } as const
-
-/**
- * Ce que la ligne dit du secret d'un compte réel, jamais sa valeur ; d'un consentement, ses jetons ou sa raison ; d'un
- * compte branché, sa raison quand il est à reconnecter.
- */
-function etatDuSecret(compte: AccountView, connexion: Connexion): string | null {
-  if (compte.mode !== "reel") return null
-  const date = compte.secret?.updatedAt ? dateLisible(compte.secret.updatedAt) : null
-  if (connexion === "branchement") return compte.status === "error" ? `à reconnecter${compte.statusReason ? ` : ${compte.statusReason}` : ""}` : null
-  if (connexion === "consentement") {
-    if (compte.status === "error") return `à reconnecter${compte.statusReason ? ` : ${compte.statusReason}` : ""}`
-    return date ? `jetons du ${date}` : "pas encore connecté"
-  }
-  return date ? `secret posé le ${date}` : "sans secret"
-}
-
-type LigneDeCompteProps = {
-  compte: AccountView
-  formulaire: ConnectorAccountForm | undefined
-  partages: PartagesDuCompte | undefined
-  equipes: DonneesDesConnecteurs["options"]["teams"]
-  ici: string
-}
-
-function LigneDeCompte({ compte, formulaire, partages, equipes, ici }: LigneDeCompteProps) {
-  const connexion = connexionDe(formulaire)
-  const parties = [compte.label, compte.connector, proprietaire(compte.owner), MODES[compte.mode], ETATS[compte.status], marque(compte), etatDuSecret(compte, connexion)]
-  const reconnectable = formulaire && compte.status === "error" && (connexion === "consentement" || (connexion === "branchement" && formulaire.hosted?.ready === true))
-  return (
-    <Row className="flex-wrap gap-3">
-      <span className="min-w-0 flex-1">{parties.filter((partie) => partie !== null).join(" · ")}</span>
-      {compte.status !== "disabled" && (
-        <ActionPlateforme
-          libelle="Désactiver"
-          nomAccessible={`Désactiver le compte ${compte.label}`}
-          requete={{ methode: "POST", ressource: `admin/accounts/${encodeURIComponent(compte.id)}/disable`, corps: {} }}
-          confirmation={{ question: questionDeDesactivationDuCompte(compte.label), libelleConfirmer: "Désactiver" }}
-          ancre={ANCRE_DES_COMPTES}
-        />
-      )}
-      {compte.mode === "reel" && compte.status !== "disabled" && formulaire && connexion === "saisie" && <SaisieDuCompte compte={compte} formulaire={formulaire} />}
-      {reconnectable && (
-        <ConnexionParConsentement
-          ressource={PORTES[connexion]}
-          connecteur={formulaire.connector}
-          libelle="Reconnecter"
-          nomAccessible={`Reconnecter le compte ${compte.label}`}
-          retour={ici}
-        />
-      )}
-      {partageable(compte) && partages && <ListeDesPartages compte={compte} partages={partages} equipes={equipes} ancre={ANCRE_DES_COMPTES} />}
-      {compte.viewerLevel === "manage" && <JournalDesPartages compte={compte} />}
-    </Row>
-  )
-}
-
-type ListeDesComptesProps = {
-  titre: string
-  vide: string
-  comptes: AccountView[]
-  formulaires: ConnectorAccountForm[]
-  partages: DonneesDesConnecteurs["partages"]
-  equipes: DonneesDesConnecteurs["options"]["teams"]
-  ici: string
-}
-
-/** Les comptes, un par ligne, avec leurs gestes ; sous un compte personnel que la personne gère, ses partages. */
-function ListeDesComptes({ titre, vide, comptes, formulaires, partages, equipes, ici }: ListeDesComptesProps) {
-  return (
-    <Ilot id={ANCRE_DES_COMPTES} titre={titre} compte={pluriel(comptes.length, "compte", "comptes")}>
-      <RowList rules empty={<EmptyState compact>{vide}</EmptyState>}>
-        {comptes.map((compte) => (
-          <LigneDeCompte
-            key={compte.id}
-            compte={compte}
-            formulaire={formulaires.find((formulaire) => formulaire.connector === compte.connector)}
-            partages={partages[compte.id]}
-            equipes={equipes}
-            ici={ici}
-          />
-        ))}
-      </RowList>
-    </Ilot>
-  )
-}
-
-/** Les connecteurs dont chaque personne connecte son propre compte : par consentement ou par branchement chez le tiers. */
-const personnels = (formulaires: ConnectorAccountForm[]) => formulaires.filter((formulaire) => connexionDe(formulaire) !== "saisie")
-
-/** Ceux qu'on connecte d'ici : l'hôte a fourni le port du consentement ou du branchement. */
-const aConnecter = (formulaires: ConnectorAccountForm[]) => personnels(formulaires).filter((formulaire) => formulaire.consent === true || formulaire.hosted?.ready === true)
-
-/** « Connecter mon compte », un bouton par connecteur que la personne connecte d'ici (`aConnecter`, non vide). */
-function ConnecterMonCompte({ parConsentement, ici }: { parConsentement: ConnectorAccountForm[]; ici: string }) {
-  return (
-    <Ilot id="admin-connecter-mon-compte" titre="Connecter mon compte">
-      <div className="flex flex-col gap-3">
-        <p className="oto-caption">Ces services se connectent personne par personne : chacun y connecte son propre compte, qui devient l&apos;un de ses comptes personnels.</p>
-        {parConsentement.map((formulaire) => (
-          <ConnexionParConsentement
-            key={formulaire.connector}
-            ressource={formulaire.consent === true ? PORTES.consentement : PORTES.branchement}
-            connecteur={formulaire.connector}
-            libelle={`Connecter mon compte ${formulaire.label}`}
-            retour={ici}
-          />
-        ))}
-      </div>
-    </Ilot>
-  )
-}
-
-type ComptesProps = { donnees: DonneesDesConnecteurs; ici: string }
-
-/**
- * Les annexes de l'administrateur : les comptes, la connexion de son propre compte à un connecteur à consentement ou à
- * compte rattaché (quand l'hôte a fourni son port), puis l'îlot où l'on crée un compte (jamais de ces connecteurs :
- * chacun y connecte le sien).
- */
-function Comptes({ donnees, ici }: ComptesProps) {
+/** Ce qu'un administrateur crée à la main : un compte de tout connecteur du catalogue que chacun ne connecte pas lui-même. */
+function creationPossible(donnees: DonneesDesConnecteurs): CreationPossible | null {
+  if (!donnees.administration) return null
   const formulaires = donnees.formulaires ?? []
-  const parConsentement = aConnecter(formulaires)
-  const aCreer = donnees.connectors.map((connecteur) => connecteur.connector).filter((connecteur) => !personnels(formulaires).some((formulaire) => formulaire.connector === connecteur))
+  const personnels = formulaires.filter((formulaire) => connexionDe(formulaire) !== "saisie").map((formulaire) => formulaire.connector)
+  return {
+    connecteurs: donnees.connectors.map((connecteur) => connecteur.connector).filter((connecteur) => !personnels.includes(connecteur)),
+    equipes: donnees.sujets.equipes.map((equipe) => ({ id: equipe.id, name: equipe.nom })),
+    formulaires,
+  }
+}
+
+function Ajout({ donnees, ici }: { donnees: DonneesDesConnecteurs; ici: string }) {
+  return <AjoutDUnConnecteur aConnecter={servicesAConnecter(donnees.formulaires ?? [])} creation={creationPossible(donnees)} ici={ici} />
+}
+
+const SANS_VUE: VueDesConnecteurs = { filtre: "all", q: "", compte: null }
+
+type VueProps = { donnees: DonneesDesConnecteurs; moi: string; vue: VueDesConnecteurs; ici: string }
+
+/** L'adresse de la recherche, sans `q` : le filtre de la vue y reste. */
+function recherche(vue: VueDesConnecteurs, ici: string): { chemin: string; parametres: [string, string][] } {
+  return { chemin: ici, parametres: vue.filtre === "all" ? [] : [["filter", vue.filtre]] }
+}
+
+/** La liste, ses filtres et sa recherche ; sans aucun compte visible, la page vide. */
+function Liste({ donnees, moi, vue, ici }: VueProps) {
+  if (donnees.accounts.length === 0) {
+    return (
+      <EmptyState icon={<Icon as={Plug} />} title="Aucun connecteur pour l'instant" action={<Ajout donnees={donnees} ici={ici} />}>
+        Branchez un outil pour que votre assistant puisse y lire et y agir. Il reste privé tant que vous ne le partagez pas.
+      </EmptyState>
+    )
+  }
+  const sources = { comptes: donnees.accounts, formulaires: donnees.formulaires ?? [], partages: donnees.partages, moi, ici }
+  const { lignes, comptes } = lignesDesConnecteurs(sources, vue)
+  const filtres = [
+    { valeur: "all", libelle: `Tous · ${comptes.tous}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "all", compte: null }) },
+    { valeur: "mine", libelle: `À moi · ${comptes.moi}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "mine", compte: null }) },
+    { valeur: "shared", libelle: `Partagés avec moi · ${comptes.partages}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "shared", compte: null }) },
+  ]
+  // La recherche ne s'offre qu'à une liste longue ; une recherche en cours reste visible, pour s'effacer.
+  const cherchable = comptes.tous > SEUIL_DE_RECHERCHE || vue.q !== ""
   return (
     <>
-      <ListeDesComptes
-        titre="Comptes"
-        vide="Aucun compte. Créez un compte pour qu'une procédure puisse appeler un connecteur."
-        comptes={donnees.accounts}
-        formulaires={formulaires}
-        partages={donnees.partages}
-        equipes={donnees.options.teams}
-        ici={ici}
-      />
-      {parConsentement.length > 0 && <ConnecterMonCompte parConsentement={parConsentement} ici={ici} />}
-      <Ilot id="admin-creer-un-compte" titre="Créer un compte">
-        {aCreer.length === 0 ? (
-          <p>Aucun connecteur ne demande de compte dans cette version de la plateforme.</p>
-        ) : (
-          <CreationDeCompte connecteurs={aCreer} equipes={donnees.options.teams} formulaires={formulaires} />
-        )}
-      </Ilot>
+      <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={cherchable ? recherche(vue, ici) : null} ici={ici} />
+      <p className="oto-caption">Un connecteur est privé tant que vous ne le partagez pas.</p>
     </>
   )
 }
 
-function Donnees({ donnees, ici }: { donnees: DonneesDesConnecteurs; ici: string }) {
-  return (
-    <TwoColumns aside={<Comptes donnees={donnees} ici={ici} />}>
-      <Connecteurs connecteurs={donnees.connectors} impacts={donnees.impacts} limites={donnees.limites} />
-    </TwoColumns>
-  )
-}
-
-/** La vue d'un membre : ses comptes personnels, et à côté, la connexion de son propre compte. */
-function MesComptes({ donnees, ici }: { donnees: DonneesDeMesComptes; ici: string }) {
+/** Le détail du compte que l'adresse ouvre, s'il est de ceux que la personne voit ; sinon rien. */
+function Detail({ donnees, moi, vue, ici }: VueProps) {
+  const compte = donnees.accounts.find((candidat) => candidat.id === vue.compte)
+  if (!compte) return null
   const formulaires = donnees.formulaires ?? []
-  const parConsentement = aConnecter(formulaires)
   return (
-    <TwoColumns aside={parConsentement.length > 0 ? <ConnecterMonCompte parConsentement={parConsentement} ici={ici} /> : undefined}>
-      <ListeDesComptes
-        titre="Mes comptes"
-        vide="Vous n'avez aucun compte personnel."
-        comptes={donnees.accounts}
-        formulaires={formulaires}
-        partages={donnees.partages}
-        equipes={donnees.options.teams}
-        ici={ici}
-      />
-    </TwoColumns>
+    <DetailDuConnecteur
+      // Une instance par compte : le tiroir refermé d'un compte ne sert jamais, encore fermé, à un autre.
+      key={compte.id}
+      compte={compte}
+      formulaire={formulaires.find((formulaire) => formulaire.connector === compte.connector)}
+      outil={libelleDuConnecteur(compte.connector, formulaires)}
+      fonctions={fonctionsDe(compte.connector, donnees.connectors)}
+      partages={donnees.partages[compte.id]}
+      sujets={donnees.sujets}
+      moi={moi}
+      ici={ici}
+      fermer={adresseDeLaVue(ici, { ...vue, compte: null })}
+    />
   )
 }
 
-export function EcranConnecteurs({ resultat, Lien, ici, fil, consentement }: EcranConnecteursProps) {
-  // Une lecture nourrit les îlots : son échec se dit une fois. La vue de l'administrateur porte le catalogue ; celle
-  // d'un membre, ses seuls comptes.
+function Donnees(props: VueProps) {
+  const { administration, connectors } = props.donnees
+  return (
+    <div className="flex flex-col gap-6">
+      <Liste {...props} />
+      {administration && <Connecteurs connecteurs={connectors} impacts={administration.impacts} limites={administration.limites} />}
+      <Detail {...props} />
+    </div>
+  )
+}
+
+const SOUS_TITRE = "Les outils que votre assistant peut utiliser pour vous."
+
+export function EcranConnecteurs({ resultat, moi, vue = SANS_VUE, Lien, ici, fil, consentement }: EcranConnecteursProps) {
+  // Une lecture nourrit tout l'écran : son échec se dit une fois, sans « Ajouter », qui a besoin d'elle.
+  const lu = resultat.error === undefined ? resultat.data : null
+  // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans la page vide sinon, jamais deux fois.
+  const ajout = lu && lu.accounts.length > 0 ? <Ajout donnees={lu} ici={ici} /> : undefined
   return (
     <>
-      <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} />
+      <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} meta={SOUS_TITRE} actions={ajout} />
       {consentement && <AnnonceDuConsentement consentement={consentement} />}
-      {resultat.error !== undefined ? (
-        <ErreurDeLecture message={resultat.error} href={ici} Lien={Lien} />
-      ) : "connectors" in resultat.data ? (
-        <Donnees donnees={resultat.data} ici={ici} />
-      ) : (
-        <MesComptes donnees={resultat.data} ici={ici} />
-      )}
+      {lu ? <Donnees donnees={lu} moi={moi} vue={vue} ici={ici} /> : <ErreurDeLecture message={resultat.error ?? ""} href={ici} Lien={Lien} />}
     </>
   )
 }

@@ -85,7 +85,8 @@ async function connecteurs({ page, capturer }: Parcours) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connecteurs", { timeout: 20_000 })
   await expect(ligne).toHaveAttribute("aria-current", "page")
   await expect(page.getByText(/^Actif depuis le /)).toBeVisible()
-  await expect(page.getByText(new RegExp(`^Mail ${EQUIPE.nom} · mail · équipe ${EQUIPE.nom} · simulé · `))).toBeVisible()
+  // La liste : le compte de l'équipe, sur sa ligne, dit à qui il est.
+  await expect(page.getByRole("row").filter({ has: page.getByRole("link", { name: `Mail ${EQUIPE.nom}`, exact: true }) }).getByText(`Équipe ${EQUIPE.nom}`)).toBeVisible()
   await page.getByRole("button", { name: "Désactiver mail" }).click()
   await expect(page.getByText(/^Désactiver « mail » \? Ses fonctions cesseront aussitôt de répondre/)).toBeVisible()
   await capturer("connecteurs")

@@ -13,14 +13,14 @@ import { Alert, Button } from "../../ds/react/primitives"
 import { dateEtHeureLisibles } from "../../format/dates"
 import { NIVEAUX_DU_COMPTE as NIVEAUX, sujetDuPartage } from "./libelles-des-partages"
 
-/** « 17 octobre 2026 à 09:12 · Claire Morel a partagé à l'équipe Ventes en écriture (avant : en lecture) ». */
+/** « 17 octobre 2026 à 09:12 · Claire Morel a partagé à l'équipe Ventes (Lecture et écriture, avant : Lecture seule) ». */
 export function ligneDuJournal(evenement: AccountShareEventView): string {
   const quand = dateEtHeureLisibles(evenement.at) ?? evenement.at
   const qui = evenement.by === null ? "Hors session" : (evenement.by.name ?? "Une personne qui n'est plus membre")
   const geste =
     evenement.action === "removed"
       ? `a retiré le partage à ${sujetDuPartage(evenement.subject)} (${NIVEAUX[evenement.level]})`
-      : `a partagé à ${sujetDuPartage(evenement.subject)} ${NIVEAUX[evenement.level]}${evenement.previous ? ` (avant : ${NIVEAUX[evenement.previous]})` : ""}`
+      : `a partagé à ${sujetDuPartage(evenement.subject)} (${NIVEAUX[evenement.level]}${evenement.previous ? `, avant : ${NIVEAUX[evenement.previous]}` : ""})`
   return `${quand} · ${qui} ${geste}`
 }
 
@@ -45,14 +45,15 @@ export function JournalDesPartages({ compte }: { compte: Pick<AccountView, "id" 
     <div className="flex w-full flex-col gap-3">
       <div className="flex items-center gap-3">
         <Button type="button" variant="ghost" aria-expanded={ouvert} onClick={() => void ouvrir()}>
-          {`Journal des partages de ${compte.label}`}
+          Journal des partages
+          <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>
       </div>
       {ouvert && !etat.lu && <p className="oto-caption">Lecture du journal…</p>}
       {ouvert && etat.lu && "erreur" in etat && <Alert tone="fail" title={etat.erreur} />}
       {ouvert && etat.lu && "evenements" in etat && (
         etat.evenements.length === 0 ? (
-          <p className="oto-caption">Aucun partage posé ni retiré sur ce compte.</p>
+          <p className="oto-caption">Aucun partage posé ni retiré sur ce connecteur.</p>
         ) : (
           <ul className="flex flex-col gap-1" aria-label={`Journal des partages de ${compte.label}`}>
             {etat.evenements.map((evenement, rang) => (

@@ -299,13 +299,20 @@ function accountStatus(value: string): AccountView["status"] {
   return value === "active" || value === "disabled" ? value : "error"
 }
 
-function accountView(row: AccountRow, level: AccountLevel): AccountView {
+/** Le propriétaire tel que l'écran le lit : l'équipe nommée, ou la personne d'un compte personnel et son nom dans l'annuaire. */
+function ownerView(row: AccountRow, names: ReadonlyMap<string, string>): AccountView["owner"] {
   const { kind } = accountOwner(row)
+  if (kind === "team" && row.team_name !== null) return { kind, teamName: row.team_name }
+  if (kind === "user" && row.owner_user_id !== null) return { kind, userId: row.owner_user_id, userName: names.get(row.owner_user_id) ?? null }
+  return { kind }
+}
+
+function accountView(row: AccountRow, level: AccountLevel, names: ReadonlyMap<string, string>): AccountView {
   return {
     id: row.id,
     label: row.label,
     connector: row.connector,
-    owner: kind === "team" && row.team_name !== null ? { kind, teamName: row.team_name } : { kind },
+    owner: ownerView(row, names),
     mode: accountMode(row.mode),
     status: accountStatus(row.status),
     secret: { fields: row.secret_fields, updatedAt: row.secret_updated_at },
@@ -337,15 +344,19 @@ export async function listOwnAccounts(db: PlatformDb, identity: Identity): Promi
   return visibleViews(db, identity, rows)
 }
 
-/** La vue des comptes lus que l'appelant voit (niveau 1 au moins, `accountLevels` en un lot), triée par libellé. */
+/**
+ * La vue des comptes lus que l'appelant voit (niveau 1 au moins, `accountLevels` en un lot), triée par libellé. L'annuaire
+ * ne se lit que si un compte personnel est visible : il nomme sa personne.
+ */
 async function visibleViews(db: PlatformDb, identity: Identity, rows: AccountRow[]): Promise<AccountView[]> {
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
-  return rows
-    .flatMap((row) => {
-      const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
-      return level >= ACCOUNT_LEVELS.read ? [accountView(row, level)] : []
-    })
-    .sort((a, b) => a.label.localeCompare(b.label, "fr"))
+  const visible = rows.flatMap((row) => {
+    const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
+    return level >= ACCOUNT_LEVELS.read ? [{ row, level }] : []
+  })
+  const directory = visible.some(({ row }) => row.owner_kind === "user") ? await memberDirectory(db, identity.org.id) : []
+  const names = new Map(directory.map((person) => [person.userId, person.name]))
+  return visible.map(({ row, level }) => accountView(row, level, names)).sort((a, b) => a.label.localeCompare(b.label, "fr"))
 }
 
 /**

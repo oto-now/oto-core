@@ -1,25 +1,31 @@
 import type { AnchorHTMLAttributes } from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
 import {
+  ContexteDeLHote,
   ContexteDeRafraichissement,
   EcranConnecteurs,
   EcranConnecteursChargement,
   issueDuConsentement,
-  type DonneesDeMesComptes,
   type DonneesDesConnecteurs,
+  type EcranConnecteursProps,
 } from "@otomata_tech/oto_platform/ui"
+import { simulerLesDialogues } from "../../helpers/dialogue"
 import { choisirDansLaListe, libellesDesChoix } from "../../helpers/liste-de-choix"
 
-// L'écran « Connecteurs » du tableau de bord (E08-S03 : AC4 à AC7, AC12 ; comptes-a-plusieurs-champs : saisie du
-// secret et des réglages d'un compte réel), sur le design system d'oto-frontend (E05-S09 partie d2) : `fetch` simulé
-// pour l'API, relecture fournie par un contexte de test.
+// L'écran « Connecteurs » : une seule liste pour un administrateur et pour un membre, le détail d'un connecteur dans un
+// tiroir ouvert par l'adresse, son partage dans le panneau des pages, « Ajouter un connecteur », et pour un
+// administrateur « Outils de l'organisation ». `fetch` simulé pour l'API, relecture et navigation fournies par des
+// contextes de test.
 
+const ICI = "/admin/connectors"
+const LEA = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c01"
+const PAUL = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c02"
 const VENTES = "0e8e5a3c-7f10-4a5b-8d3b-2b1c4d5e6f70"
-const COMPTE = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e"
+const FINANCE = "0e8e5a3c-7f10-4a5b-8d3b-2b1c4d5e6f71"
 
-const MAIL_ACTIF: OrgConnector = {
+const MAIL: OrgConnector = {
   connector: "mail",
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
@@ -29,20 +35,62 @@ const MAIL_ACTIF: OrgConnector = {
     { name: "mail.send_draft", class: "sensitive" },
   ],
 }
-const MAIL_INACTIF: OrgConnector = { ...MAIL_ACTIF, state: "inactive", activatedAt: null, activatedBy: null }
+const CRM: OrgConnector = {
+  connector: "crm",
+  state: "active",
+  activatedAt: "2026-09-24T10:00:00.000Z",
+  activatedBy: null,
+  functions: [
+    { name: "crm.find", class: "read" },
+    { name: "crm.get", class: "read" },
+    { name: "crm.update", class: "write" },
+    { name: "crm.delete", class: "sensitive" },
+  ],
+}
+const FORMULAIRE_CRM: ConnectorAccountForm = {
+  connector: "crm",
+  label: "Crm Pro",
+  fields: [{ name: "api_key", label: "Clé d'API", secret: true }],
+  settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
+}
+const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
 
-const MAIL_VENTES: AccountView = { id: COMPTE, label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "manage" }
+const A_LEA: AccountView["owner"] = { kind: "user", userId: LEA, userName: "Léa Bernard" }
+const A_PAUL: AccountView["owner"] = { kind: "user", userId: PAUL, userName: "Paul Durand" }
+
+const BANQUE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d41", label: "Banque", connector: "crm", owner: A_LEA, mode: "reel", status: "active", secret: { fields: ["api_key"], updatedAt: "2026-11-02T09:00:00.000Z" }, settings: { region: "us" }, viewerLevel: "manage" }
+const AGENDA: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d42", label: "Agenda de Paul", connector: "microsoft", owner: A_PAUL, mode: "reel", status: "active", secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" }, viewerLevel: "read" }
+const MAIL_VENTES: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d43", label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "write" }
+
+const PARTAGES_DE_BANQUE = {
+  general: null,
+  rules: [
+    { id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c01", subject: { kind: "team" as const, id: FINANCE, name: "Finance" }, level: "read" as const },
+    { id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c02", subject: { kind: "user" as const, id: PAUL, name: "Paul Durand" }, level: "write" as const },
+  ],
+}
 
 const DONNEES: DonneesDesConnecteurs = {
-  connectors: [MAIL_ACTIF],
-  impacts: { mail: { functions: ["mail.create_draft", "mail.send_draft"], procedures: ["ventes/qualifier_prospects"], accounts: 1 } },
-  accounts: [MAIL_VENTES, { ...MAIL_VENTES, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Mail Ancien", owner: { kind: "org" }, status: "disabled" }],
-  options: { teams: [{ id: VENTES, name: "Ventes" }] },
-  partages: {},
+  accounts: [BANQUE, AGENDA, MAIL_VENTES],
+  connectors: [MAIL, CRM],
+  formulaires: [FORMULAIRE_CRM, FORMULAIRE_MS],
+  partages: { [BANQUE.id]: PARTAGES_DE_BANQUE },
+  sujets: {
+    equipes: [
+      { id: VENTES, nom: "Ventes" },
+      { id: FINANCE, nom: "Finance" },
+    ],
+    personnes: [
+      { id: LEA, nom: "Léa Bernard" },
+      { id: PAUL, nom: "Paul Durand" },
+      { id: "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c03", nom: "Nadia Finet" },
+    ],
+  },
 }
 
 const fetchMock = vi.fn<typeof fetch>()
 const rafraichir = vi.fn()
+const naviguer = vi.fn()
 
 function reponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
@@ -52,23 +100,39 @@ function Lien({ children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & 
   return <a {...props}>{children}</a>
 }
 
-function rendre(donnees: Partial<DonneesDesConnecteurs> | { error: string } = {}) {
+type Rendu = { vue?: Partial<NonNullable<EcranConnecteursProps["vue"]>>; moi?: string; consentement?: EcranConnecteursProps["consentement"] }
+
+function ecran(donnees: Partial<DonneesDesConnecteurs> | { error: string }, { vue, moi = LEA, consentement }: Rendu) {
   const resultat = "error" in donnees ? donnees : { data: { ...DONNEES, ...donnees } }
-  return render(
-    <ContexteDeRafraichissement.Provider value={rafraichir}>
-      <EcranConnecteurs resultat={resultat} Lien={Lien} ici="/admin/connectors" />
-    </ContexteDeRafraichissement.Provider>,
+  return (
+    <ContexteDeLHote.Provider value={{ Lien, chemin: ICI, naviguer }}>
+      <ContexteDeRafraichissement.Provider value={rafraichir}>
+        <EcranConnecteurs resultat={resultat} moi={moi} vue={{ filtre: "all", q: "", compte: null, ...vue }} Lien={Lien} ici={ICI} consentement={consentement} />
+      </ContexteDeRafraichissement.Provider>
+    </ContexteDeLHote.Provider>
   )
 }
 
-const envoi = () => {
-  const [url, init] = fetchMock.mock.calls[0]
-  return { url, methode: init?.method, corps: init?.body === undefined ? undefined : JSON.parse(String(init.body)) }
+const rendre = (donnees: Partial<DonneesDesConnecteurs> | { error: string } = {}, rendu: Rendu = {}) => render(ecran(donnees, rendu))
+
+/** Les envois partis vers l'API, dans l'ordre : l'adresse, la méthode et le corps. */
+const envois = () =>
+  fetchMock.mock.calls.map(([url, init]) => ({ url, methode: init?.method, corps: init?.body === undefined ? undefined : JSON.parse(String(init.body)) }))
+
+const ligneDe = (libelle: string) => {
+  const ligne = screen.getByRole("link", { name: libelle }).closest("tr")
+  if (!ligne) throw new Error(`ligne « ${libelle} » introuvable`)
+  return within(ligne)
 }
+
+const detailDe = (compte: AccountView) => within(screen.getByRole("dialog", { name: compte.label }))
+
+beforeAll(simulerLesDialogues)
 
 beforeEach(() => {
   fetchMock.mockReset()
   rafraichir.mockReset()
+  naviguer.mockReset()
   vi.stubGlobal("fetch", fetchMock)
 })
 
@@ -77,334 +141,190 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("EcranConnecteurs, connectors (AC4, AC5)", () => {
-  it("should list each connector that can be activated, its functions and its state in text, under the count and the always-active sentence", () => {
+describe("EcranConnecteurs, the list", () => {
+  it("should show a member one list: their own account, the one another shares with them and their team's, each with its tool, its access, its state in a word and one gesture at most", () => {
     rendre()
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Connecteurs")
-    const ilot = within(screen.getByRole("region", { name: "Connecteurs" }))
-    expect(ilot.getByText("1 connecteur activable")).toBeInTheDocument()
-    expect(ilot.getByText("Les fonctions de tableau (table.*) et celles de l'application sont toujours actives : elles ne s'activent pas.")).toBeInTheDocument()
-    expect(ilot.getByText("2 fonctions : mail.create_draft, mail.send_draft")).toBeInTheDocument()
-    expect(ilot.getByText("Actif depuis le 24 septembre 2026 (Claire Morel)")).toBeInTheDocument()
+    expect(screen.getByText("Les outils que votre assistant peut utiliser pour vous.")).toBeInTheDocument()
+
+    const banque = ligneDe("Banque")
+    expect(banque.getByText("Crm Pro", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(banque.getByText("Équipe Finance +1")).toBeInTheDocument()
+    expect(banque.getByText("Non testé")).toBeInTheDocument()
+    expect(banque.queryByRole("button")).toBeNull()
+
+    const agenda = ligneDe("Agenda de Paul")
+    expect(agenda.getByText("Microsoft 365", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(agenda.getByText("Partagé par Paul Durand")).toBeInTheDocument()
+    expect(agenda.getByText("Lecture seule")).toBeInTheDocument()
+
+    const ventes = ligneDe("Mail Ventes")
+    expect(ventes.getByText("mail", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(ventes.getByText("Équipe Ventes")).toBeInTheDocument()
+    expect(ventes.getByText("Lecture et écriture")).toBeInTheDocument()
+
+    expect(screen.getByText("Un connecteur est privé tant que vous ne le partagez pas.")).toBeInTheDocument()
+    // Ni l'îlot de l'administrateur, ni les mots du moteur.
+    expect(screen.queryByRole("region", { name: "Outils de l'organisation" })).toBeNull()
+    expect(screen.queryByText(/secret|activ/i)).toBeNull()
   })
 
-  it("should activate without a question, then have the page re-read", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { connector: MAIL_ACTIF } }))
-    rendre({ connectors: [MAIL_INACTIF], impacts: {} })
-
-    expect(screen.getByText("Inactif")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Activer mail" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({ url: "/api/platform/admin/connectors/mail/activation", methode: "POST", corps: {} })
-    expect(screen.getByRole("heading", { level: 2, name: "Connecteurs" })).toHaveFocus()
+  it("should say « Privé » for an own account nobody shares, and open the detail of a line by its address, the view kept", () => {
+    rendre({ partages: {} }, { vue: { filtre: "mine" } })
+    expect(ligneDe("Banque").getByText("Privé")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Banque" })).toHaveAttribute("href", `${ICI}?filter=mine&connector=${BANQUE.id}`)
   })
 
-  it("should ask before deactivating, naming ten of the procedures and the accounts it touches; Escape keeps it, the confirmation sends DELETE", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { connector: MAIL_INACTIF } }))
-    // Onze procédures publiées le citent : la question en nomme dix, puis « , … » (AC5, N18).
-    const onze = Array.from({ length: 11 }, (_, rang) => `ventes/p${String(rang + 1).padStart(2, "0")}`)
-    rendre({ impacts: { mail: { functions: ["mail.create_draft", "mail.send_draft"], procedures: onze, accounts: 1 } } })
+  it("should count each filter on its pill and write the chosen one in the address; the search shows only above eight lines and keeps the filter", () => {
+    const { unmount } = rendre()
+    const filtres = within(screen.getByRole("radiogroup", { name: "Filtrer les connecteurs" }))
+    expect(filtres.getAllByRole("radio").map((filtre) => filtre.textContent)).toEqual(["Tous · 3", "À moi · 1", "Partagés avec moi · 2"])
+    fireEvent.click(filtres.getByRole("radio", { name: "À moi · 1" }))
+    expect(naviguer).toHaveBeenCalledWith(`${ICI}?filter=mine`)
+    expect(screen.queryByRole("searchbox")).toBeNull()
+    unmount()
 
-    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
-    const question =
-      "Désactiver « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde. 11 procédures publiées le citent dans leurs blocs d'appel : " +
-      "ventes/p01, ventes/p02, ventes/p03, ventes/p04, ventes/p05, ventes/p06, ventes/p07, ventes/p08, ventes/p09, ventes/p10, …. Son compte est conservé."
-    expect(screen.getByText(question)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Garder" })).toHaveFocus()
-    fireEvent.keyDown(screen.getByRole("group", { name: question }), { key: "Escape" })
-    expect(screen.queryByText(question)).toBeNull()
-
-    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
-    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toMatchObject({ url: "/api/platform/admin/connectors/mail/activation", methode: "DELETE" })
-    expect(screen.getByRole("heading", { level: 2, name: "Connecteurs" })).toHaveFocus()
+    const neuf = Array.from({ length: 9 }, (_, rang) => ({ ...MAIL_VENTES, id: `6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d5${rang}`, label: `Mail ${rang}` }))
+    rendre({ accounts: neuf }, { vue: { filtre: "shared" } })
+    const champ = screen.getByRole("searchbox", { name: "Rechercher un connecteur" })
+    fireEvent.change(champ, { target: { value: "mail 3" } })
+    fireEvent.submit(champ)
+    expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?filter=shared&q=mail+3`)
   })
 
-  it("should say no published procedure cites it, and count the accounts, when none does", () => {
-    rendre({ impacts: { mail: { functions: [], procedures: [], accounts: 3 } } })
-    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
-    expect(
-      screen.getByText("Désactiver « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde. Aucune procédure publiée ne le cite. Ses 3 comptes sont conservés."),
-    ).toBeInTheDocument()
+  it("should say a search without answer, and keep the field to clear it", () => {
+    rendre({}, { vue: { q: "introuvable" } })
+    expect(screen.getByText("Aucun connecteur ne correspond à « introuvable ».")).toBeInTheDocument()
+    expect(screen.getByRole("searchbox", { name: "Rechercher un connecteur" })).toHaveValue("introuvable")
   })
 
-  it("should say an empty catalog, in both islands (AC4, AC6)", () => {
-    rendre({ connectors: [], impacts: {}, accounts: [] })
-    expect(screen.getByText("Aucun connecteur à activer dans cette version de la plateforme.")).toBeInTheDocument()
-    expect(screen.getByText("Aucun compte. Créez un compte pour qu'une procédure puisse appeler un connecteur.")).toBeInTheDocument()
-    expect(screen.getByText("Aucun connecteur ne demande de compte dans cette version de la plateforme.")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Créer le compte" })).toBeNull()
-  })
-})
-
-describe("EcranConnecteurs, accounts (AC6, AC7)", () => {
-  it("should list each account with its owner, mode and state, and disable an active one after the question", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { account: { id: COMPTE, status: "disabled" } } }))
-    rendre()
-
-    const comptes = within(screen.getByRole("region", { name: "Comptes" }))
-    expect(comptes.getByText("Mail Ventes · mail · équipe Ventes · simulé · actif")).toBeInTheDocument()
-    expect(comptes.getByText("Mail Ancien · mail · organisation · simulé · désactivé")).toBeInTheDocument()
-    expect(comptes.queryByRole("button", { name: "Désactiver le compte Mail Ancien" })).toBeNull()
-
-    fireEvent.click(comptes.getByRole("button", { name: "Désactiver le compte Mail Ventes" }))
-    const question =
-      "Désactiver le compte « Mail Ventes » ? Les appels qui le résolvent échoueront dès maintenant. Un compte désactivé ne se réactive pas : il faudra en créer un autre."
-    fireEvent.click(within(comptes.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({ url: `/api/platform/admin/accounts/${COMPTE}/disable`, methode: "POST", corps: {} })
-    // Le geste part avec la relecture (un compte désactivé n'en a plus) : le focus l'attend au titre de la liste.
-    expect(screen.getByRole("heading", { level: 2, name: "Comptes" })).toHaveFocus()
-  })
-
-  it("should create an account for a team, then have the page re-read", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { account: { label: "Mail Support" } } }))
-    rendre()
-
-    expect(screen.getByText(/^Mode : simulé\. Rien ne sort du serveur/)).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText("Libellé"), { target: { value: "Mail Support" } })
-    fireEvent.click(screen.getByLabelText("Une équipe"))
-    choisirDansLaListe(screen.getByLabelText("Équipe"), "Ventes")
-    fireEvent.click(screen.getByRole("button", { name: "Créer le compte" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({
-      url: "/api/platform/admin/accounts",
-      methode: "POST",
-      corps: { connector: "mail", owner_kind: "team", team_id: VENTES, label: "Mail Support", mode: "simule" },
-    })
-    expect(screen.getByRole("status")).toHaveTextContent("Compte « Mail Support » créé.")
-  })
-
-  it("should create an account for the organisation, for a connector not active yet, and say a label already taken under the field", async () => {
-    fetchMock.mockResolvedValue(reponse(409, { error: { code: "conflict", message: "server text" } }))
-    // Un compte se prépare avant l'activation (AC6, E04-S01) : le formulaire offre les connecteurs inactifs.
-    rendre({ connectors: [MAIL_INACTIF], impacts: {} })
-
-    expect(screen.getByLabelText("Connecteur")).toHaveValue("mail")
-    fireEvent.change(screen.getByLabelText("Libellé"), { target: { value: "mail ventes" } })
-    fireEvent.click(screen.getByRole("button", { name: "Créer le compte" }))
-
-    expect(await screen.findByText("Un compte porte déjà ce libellé dans l'organisation.")).toBeInTheDocument()
-    expect(screen.getByLabelText("Libellé")).toHaveAttribute("aria-invalid", "true")
-    expect(envoi().corps).toEqual({ connector: "mail", owner_kind: "org", label: "mail ventes", mode: "simule" })
-    expect(rafraichir).not.toHaveBeenCalled()
-  })
-})
-
-const CRM: OrgConnector = { connector: "crm", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "crm.get_company", class: "read" }] }
-const FORMULAIRE_CRM: ConnectorAccountForm = {
-  connector: "crm",
-  label: "Crm",
-  fields: [
-    { name: "client_id", label: "Client ID", secret: false },
-    { name: "client_secret", label: "Client secret", secret: true },
-  ],
-  settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
-}
-const CRM_VENTES: AccountView = { id: COMPTE, label: "Crm Ventes", connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: [], updatedAt: null }, settings: {}, viewerLevel: "manage" }
-const VIVANTS: Partial<DonneesDesConnecteurs> = { connectors: [CRM], impacts: {}, accounts: [CRM_VENTES], formulaires: [FORMULAIRE_CRM] }
-
-describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-champs)", () => {
-  it("should enter the secret fields masked and a setting, sending only what changed, the secret never shown again", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { account: { id: COMPTE } } }))
-    rendre(VIVANTS)
-    const comptes = within(screen.getByRole("region", { name: "Comptes" }))
-    expect(comptes.getByText("Crm Ventes · crm · organisation · réel · actif · sans secret")).toBeInTheDocument()
-
-    fireEvent.click(comptes.getByRole("button", { name: "Secret et réglages de Crm Ventes" }))
-    const formulaire = within(screen.getByRole("form", { name: "Secret et réglages de Crm Ventes" }))
-    expect(formulaire.getByLabelText("Client secret")).toHaveAttribute("type", "password")
-    expect(formulaire.getByLabelText("Client secret")).toHaveValue("")
-    fireEvent.change(formulaire.getByLabelText("Client secret"), { target: { value: "s3cr3t" } })
-    choisirDansLaListe(formulaire.getByLabelText("Région"), "eu")
-    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({ url: `/api/platform/admin/accounts/${COMPTE}/secret`, methode: "POST", corps: { secret: { client_secret: "s3cr3t" }, settings: { region: "eu" } } })
-    expect(screen.queryByDisplayValue("s3cr3t")).toBeNull()
-    expect(comptes.getByRole("status")).toHaveTextContent("Secret et réglages de « Crm Ventes » enregistrés.")
-  })
-
-  it("should say a field set, keep it when left empty, erase it when ticked, and send nothing when nothing changed", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { account: { id: COMPTE } } }))
-    const pose = { ...CRM_VENTES, secret: { fields: ["client_id", "client_secret"], updatedAt: "2026-10-08T09:00:00.000Z" }, settings: { region: "eu" } }
-    rendre({ ...VIVANTS, accounts: [pose] })
-    expect(screen.getByText("Crm Ventes · crm · organisation · réel · actif · secret posé le 8 octobre 2026")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Secret et réglages de Crm Ventes" }))
-    const formulaire = within(screen.getByRole("form", { name: "Secret et réglages de Crm Ventes" }))
-    expect(formulaire.getAllByText("Posé. Laissez vide pour le garder.")).toHaveLength(2)
-
-    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
-    expect(await formulaire.findByText("Rien à enregistrer : saisissez un champ, cochez « Effacer » ou changez un réglage.")).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalled()
-
-    fireEvent.click(formulaire.getByLabelText("Effacer Client ID"))
-    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi().corps).toEqual({ secret: { client_id: null } })
-  })
-
-  it("should say the mark of an account, its reason and its date, the account still active (oto-core#69)", () => {
-    const pose = { ...CRM_VENTES, secret: { fields: ["client_id", "client_secret"], updatedAt: "2026-10-08T09:00:00.000Z" } }
-    const refuse: AccountView = { ...pose, mark: { reason: "credential_rejected", at: "2026-10-17T09:12:00.000Z" } }
-    const epuise: AccountView = { ...pose, id: "7c3a4d2e-5f6b-4c7d-9e8f-0a1b2c3d4e5f", label: "Crm Support", mark: { reason: "quota_exhausted", at: "2026-10-16T10:00:00.000Z" } }
-    rendre({ ...VIVANTS, accounts: [refuse, epuise] })
-    const comptes = within(screen.getByRole("region", { name: "Comptes" }))
-    expect(comptes.getByText("Crm Ventes · crm · organisation · réel · actif · clé refusée le 17 octobre 2026 · secret posé le 8 octobre 2026")).toBeInTheDocument()
-    expect(comptes.getByText("Crm Support · crm · organisation · réel · actif · crédits épuisés le 16 octobre 2026 · secret posé le 8 octobre 2026")).toBeInTheDocument()
-  })
-
-  it("should create a live account with its secret: the account first, mode reel, then its secret", async () => {
-    fetchMock.mockResolvedValueOnce(reponse(200, { data: { account: { id: COMPTE, label: "Crm Support" } } }))
-    fetchMock.mockResolvedValueOnce(reponse(200, { data: { account: { id: COMPTE } } }))
-    rendre({ ...VIVANTS, accounts: [] })
-    expect(screen.getByText(/^Mode : réel\./)).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText("Libellé"), { target: { value: "Crm Support" } })
-    fireEvent.change(screen.getByLabelText("Client ID"), { target: { value: "id-1" } })
-    fireEvent.change(screen.getByLabelText("Client secret"), { target: { value: "s3cr3t" } })
-    fireEvent.click(screen.getByRole("button", { name: "Créer le compte" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    const corps = fetchMock.mock.calls.map(([url, init]) => [url, JSON.parse(String(init?.body))])
-    expect(corps).toEqual([
-      ["/api/platform/admin/accounts", { connector: "crm", owner_kind: "org", label: "Crm Support", mode: "reel" }],
-      [`/api/platform/admin/accounts/${COMPTE}/secret`, { secret: { client_id: "id-1", client_secret: "s3cr3t" }, settings: { region: "us" } }],
-    ])
-  })
-})
-
-const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
-const MS: OrgConnector = { connector: "microsoft", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }] }
-const MON_COMPTE_MS: AccountView = {
-  id: COMPTE,
-  label: "lea@contoso.test (microsoft)",
-  connector: "microsoft",
-  owner: { kind: "user" },
-  mode: "reel",
-  status: "active",
-  secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" },
-  settings: {},
-  viewerLevel: "manage",
-}
-
-describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
-  it("should offer « Connecter mon compte », start the consent and send the browser to the address it gets, never offering to create such an account by hand", async () => {
+  it("should offer the gesture of a state to whoever may make it: the key to enter leads to the detail, the owner reconnects, the others read whom to ask", async () => {
     const assign = vi.fn()
     vi.stubGlobal("location", { ...window.location, assign })
     fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://login.example.test/authorize?state=s" } }))
-    rendre({ connectors: [MAIL_ACTIF, MS], formulaires: [FORMULAIRE_MS], accounts: [MON_COMPTE_MS] })
+    const sansCle: AccountView = { ...BANQUE, secret: { fields: [], updatedAt: null } }
+    const monAgenda: AccountView = { ...AGENDA, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d44", label: "Mon agenda", owner: A_LEA, status: "error", viewerLevel: "manage" }
+    rendre({ accounts: [sansCle, monAgenda, { ...AGENDA, status: "error" }] })
 
-    expect(screen.getByText("lea@contoso.test (microsoft) · microsoft · personnel · réel · actif · jetons du 16 octobre 2026")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Secret et réglages/ })).toBeNull()
-    expect(within(screen.getByLabelText("Connecteur")).queryByRole("option", { name: "microsoft" })).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Microsoft 365" }))
+    expect(ligneDe("Banque").getByText("À terminer")).toBeInTheDocument()
+    expect(ligneDe("Banque").getByRole("link", { name: "Saisir la clé de Banque" })).toHaveAttribute("href", `${ICI}?connector=${BANQUE.id}`)
+    const agenda = ligneDe("Agenda de Paul")
+    expect(agenda.getByText("À reconnecter")).toBeInTheDocument()
+    expect(agenda.getByText("Demandez à Paul Durand de le reconnecter.")).toBeInTheDocument()
+    expect(agenda.queryByRole("button")).toBeNull()
 
+    fireEvent.click(ligneDe("Mon agenda").getByRole("button", { name: "Reconnecter Mon agenda" }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
-    expect(envoi()).toEqual({ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: "/admin/connectors" } })
+    expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: ICI } }])
   })
 
-  it("should offer to reconnect an account to connect again, with its reason, and say a refused start", async () => {
-    fetchMock.mockResolvedValue(reponse(403, { error: { code: "not_enabled", message: "server text" } }))
-    rendre({ connectors: [MS], formulaires: [FORMULAIRE_MS], accounts: [{ ...MON_COMPTE_MS, status: "error", statusReason: "Microsoft 365 no longer accepts its authorization (expired or revoked)" }] })
-    expect(screen.getByText(/en erreur · à reconnecter : Microsoft 365 no longer accepts its authorization/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Reconnecter le compte lea@contoso.test (microsoft)" }))
-    expect(await screen.findAllByRole("alert")).not.toHaveLength(0)
-    expect(envoi().corps).toEqual({ connector: "microsoft", return_to: "/admin/connectors" })
+  it("should say an empty page and offer to add a connector, once", () => {
+    rendre({ accounts: [] })
+    expect(screen.getByText("Aucun connecteur pour l'instant")).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: "Ajouter un connecteur" })).toHaveLength(1)
+    expect(screen.queryByRole("table")).toBeNull()
   })
 
-  it("should say the outcome of a return from the third party", () => {
-    render(
-      <ContexteDeRafraichissement.Provider value={rafraichir}>
-        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ consent: "connected", account: "lea@contoso.test (microsoft)" })} />
-      </ContexteDeRafraichissement.Provider>,
-    )
-    expect(screen.getByText("Compte « lea@contoso.test (microsoft) » connecté.")).toBeInTheDocument()
-    cleanup()
-    render(
-      <ContexteDeRafraichissement.Provider value={rafraichir}>
-        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ consent: "failed", reason: "invalid_arguments" })} />
-      </ContexteDeRafraichissement.Provider>,
-    )
-    expect(screen.getByRole("alert")).toHaveTextContent("La connexion n'a pas abouti : refusée, annulée, expirée ou déjà servie. Recommencez.")
-    expect(issueDuConsentement({})).toBeUndefined()
-  })
-})
-
-const FORMULAIRE_LI: ConnectorAccountForm = { connector: "messagerie", label: "Messagerie", hosted: { ready: true }, fields: [], settings: [] }
-const LI: OrgConnector = { connector: "messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }] }
-const MON_COMPTE_LI: AccountView = { ...MON_COMPTE_MS, label: "lea@contoso.test (messagerie)", connector: "messagerie", secret: { fields: [], updatedAt: null } }
-
-describe("EcranConnecteurs, a hosted account (accountIdentity)", () => {
-  it("should offer « Connecter mon compte » on the hosted link, never a secret nor a creation by hand", async () => {
-    const assign = vi.fn()
-    vi.stubGlobal("location", { ...window.location, assign })
-    fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://link.example.test/auth/abc" } }))
-    rendre({ connectors: [MAIL_ACTIF, LI], formulaires: [FORMULAIRE_LI], accounts: [MON_COMPTE_LI] })
-
-    expect(screen.getByText("lea@contoso.test (messagerie) · messagerie · personnel · réel · actif")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Secret et réglages/ })).toBeNull()
-    expect(within(screen.getByLabelText("Connecteur")).queryByRole("option", { name: "messagerie" })).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Messagerie" }))
-
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://link.example.test/auth/abc"))
-    expect(envoi()).toEqual({ url: "/api/platform/hosted-link", methode: "POST", corps: { connector: "messagerie", return_to: "/admin/connectors" } })
-  })
-
-  it("should offer to reconnect an account in error, and nothing while the host has not given its port", () => {
-    rendre({ connectors: [LI], formulaires: [FORMULAIRE_LI], accounts: [{ ...MON_COMPTE_LI, status: "error", statusReason: "session lost" }] })
-    expect(screen.getByText(/en erreur · à reconnecter : session lost/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Reconnecter le compte lea@contoso.test (messagerie)" })).toBeInTheDocument()
-    cleanup()
-    rendre({ connectors: [LI], formulaires: [{ ...FORMULAIRE_LI, hosted: { ready: false } }], accounts: [{ ...MON_COMPTE_LI, status: "error" }] })
-    expect(screen.queryByRole("button", { name: /Reconnecter|Connecter mon compte/ })).toBeNull()
-  })
-
-  it("should say the outcome of a hosted link, by its reason", () => {
-    expect(issueDuConsentement({ hosted: "connected", account: "lea@contoso.test (messagerie)" })).toEqual({ issue: "connected", compte: "lea@contoso.test (messagerie)" })
-    render(
-      <ContexteDeRafraichissement.Provider value={rafraichir}>
-        <EcranConnecteurs resultat={{ data: DONNEES }} Lien={Lien} ici="/admin/connectors" consentement={issueDuConsentement({ hosted: "failed", reason: "ambiguous_candidates" })} />
-      </ContexteDeRafraichissement.Provider>,
-    )
-    expect(screen.getByRole("alert")).toHaveTextContent("Plusieurs comptes pourraient correspondre à cette demande ; rien n'a été rangé. Recommencez dans quelques minutes.")
-  })
-})
-
-describe("EcranConnecteurs, states (AC12)", () => {
-  it("should render a busy status while loading", () => {
+  it("should say a failed read in an alert, with a way to retry, and render a busy status while loading", () => {
+    const { unmount } = rendre({ error: "Une erreur est survenue. Réessayez." })
+    expect(screen.getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez.")
+    expect(screen.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", ICI)
+    expect(screen.queryByRole("button", { name: "Ajouter un connecteur" })).toBeNull()
+    unmount()
     render(<EcranConnecteursChargement />)
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true")
-    expect(screen.getByRole("status")).toHaveTextContent("Chargement des connecteurs…")
-  })
-
-  it("should say a failed read in an alert, with a way to retry", () => {
-    rendre({ error: "Une erreur est survenue. Réessayez." })
-    expect(screen.getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez.")
-    expect(screen.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/admin/connectors")
   })
 })
 
-describe("capacités atteintes (E12-S02, AC-10)", () => {
-  it("should grey the activation of an inactive connector at connectors_max, with the raise link", () => {
-    rendre({ connectors: [MAIL_INACTIF], limites: { members: null, teams: null, connectors: { max: 0, used: 0 }, raiseUrl: "https://acme.test/billing?from=pkg" } })
-    expect(screen.getByRole("button", { name: "Activer" })).toBeDisabled()
-    expect(screen.getByText(/Limite atteinte : 0 connecteur actif sur 0\./)).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?from=pkg&capacity=connectors_max")
+describe("EcranConnecteurs, the detail of a connector", () => {
+  it("should open the account of the address in a drawer: its state, who has access, what the assistant may do and its connection; the close button and Escape lead back to the list", () => {
+    rendre({}, { vue: { filtre: "mine", compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    expect(detail.getByText("Non testé")).toBeInTheDocument()
+    expect(detail.getAllByRole("listitem").slice(0, 3).map((ligne) => ligne.textContent)).toEqual([
+      expect.stringMatching(/Léa Bernard.*vous.*Propriétaire$/),
+      expect.stringMatching(/Équipe Finance.*Lecture seule$/),
+      expect.stringMatching(/Paul Durand.*Lecture et écriture$/),
+    ])
+    expect(detail.getByText("actions de lecture").previousElementSibling).toHaveTextContent("2")
+    expect(detail.getByText("action d'écriture").previousElementSibling).toHaveTextContent("1")
+    expect(detail.getByText("action sensible").previousElementSibling).toHaveTextContent("1")
+    expect(detail.getByText("crm.delete")).toBeInTheDocument()
+    expect(detail.getByText("Clé posée le 2 novembre 2026. Jamais réaffichée, jamais transmise à l'assistant.")).toBeInTheDocument()
+
+    fireEvent.click(detail.getByRole("button", { name: "Fermer le détail" }))
+    expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?filter=mine`)
+    cleanup()
+    rendre({}, { vue: { compte: BANQUE.id } })
+    fireEvent(screen.getByRole("dialog", { name: "Banque" }), new Event("cancel", { cancelable: true }))
+    expect(naviguer).toHaveBeenLastCalledWith(ICI)
   })
-})
 
-describe("EcranConnecteurs, the share journal of an account (#68)", () => {
-  const MON_COMPTE: AccountView = { ...MAIL_VENTES, label: "Mail Léa", owner: { kind: "user" } }
+  it("should open nothing for an account the person does not see", () => {
+    rendre({}, { vue: { compte: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d99" } })
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
 
-  it("should read the journal of an account the person manages on opening, and say each share in French", async () => {
+  it("should offer nothing reserved to who manages the account under that level, and say who manages it", () => {
+    rendre({ accounts: [{ ...BANQUE, owner: A_PAUL, viewerLevel: "sensitive" }], partages: {} }, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    expect(detail.getByText("Votre accès : Toutes les actions. Géré par Paul Durand.")).toBeInTheDocument()
+    for (const geste of [/^Partager/, /^Gérer les accès/, /la clé/, /^Désactiver/, /^Journal des partages/]) expect(detail.queryByRole("button", { name: geste })).toBeNull()
+  })
+
+  it("should replace the key in the drawer, never prefilling a secret field, and say a refusal in the form", async () => {
+    fetchMock.mockResolvedValueOnce(reponse(400, { error: { code: "invalid_arguments", message: "server text" } })).mockResolvedValueOnce(reponse(200, { data: { account: { id: BANQUE.id } } }))
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    expect(detail.queryByRole("form")).toBeNull()
+    fireEvent.click(detail.getByRole("button", { name: "Remplacer la clé de Banque" }))
+    const formulaire = within(detail.getByRole("form", { name: "Clé et réglages de Banque" }))
+    expect(formulaire.getByLabelText("Clé d'API")).toHaveAttribute("type", "password")
+    expect(formulaire.getByLabelText("Clé d'API")).toHaveValue("")
+    fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: "s3cr3t" } })
+    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
+    expect(await formulaire.findByRole("alert")).toBeInTheDocument()
+    expect(rafraichir).not.toHaveBeenCalled()
+
+    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()[1]).toEqual({ url: `/api/platform/admin/accounts/${BANQUE.id}/secret`, methode: "POST", corps: { secret: { api_key: "s3cr3t" } } })
+    expect(screen.queryByDisplayValue("s3cr3t")).toBeNull()
+  })
+
+  it("should offer the key form open when the account waits for its key", () => {
+    rendre({ accounts: [{ ...BANQUE, secret: { fields: [], updatedAt: null } }] }, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    expect(detail.getByText("À terminer")).toBeInTheDocument()
+    expect(detail.getByRole("button", { name: "Saisir la clé de Banque" })).toHaveAttribute("aria-expanded", "true")
+    expect(detail.getByRole("form", { name: "Clé et réglages de Banque" })).toBeInTheDocument()
+  })
+
+  it("should disable the account after the question, which keeps the warning that it does not come back", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { account: { id: BANQUE.id } } }))
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    fireEvent.click(detail.getByRole("button", { name: "Désactiver Banque" }))
+    const question = "Désactiver « Banque » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Un connecteur désactivé ne se réactive pas : il faudra en ajouter un autre."
+    fireEvent.click(within(detail.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/disable`, methode: "POST", corps: {} }])
+    // La relecture emporte le bouton : le focus l'attend au titre de l'état, qui reste.
+    expect(detail.getByRole("heading", { name: "État" })).toHaveFocus()
+  })
+
+  it("should say a disabled account without any gesture on it", () => {
+    rendre({ accounts: [{ ...BANQUE, status: "disabled" }] }, { vue: { compte: BANQUE.id } })
+    expect(ligneDe("Banque").getByText("Désactivé")).toBeInTheDocument()
+    const detail = detailDe(BANQUE)
+    for (const geste of [/la clé/, /^Désactiver/]) expect(detail.queryByRole("button", { name: geste })).toBeNull()
+  })
+
+  it("should read the share journal on opening, and say each share in the words of the levels", async () => {
     fetchMock.mockResolvedValue(
       reponse(200, {
         data: {
-          label: "Mail Léa",
+          label: "Banque",
           events: [
             { at: "2026-10-18T09:12:00.000Z", action: "removed", subject: { kind: "user", name: "Paul Durand" }, level: "read", previous: null, by: { name: "Léa Bernard" } },
             { at: "2026-10-17T08:00:00.000Z", action: "set", subject: { kind: "team", name: "Support" }, level: "write", previous: "read", by: { name: null } },
@@ -413,142 +333,204 @@ describe("EcranConnecteurs, the share journal of an account (#68)", () => {
         },
       }),
     )
-    rendre({ accounts: [MON_COMPTE] })
-    const bouton = screen.getByRole("button", { name: "Journal des partages de Mail Léa" })
-    expect(bouton).toHaveAttribute("aria-expanded", "false")
-    fireEvent.click(bouton)
-
-    const journal = await screen.findByRole("list", { name: "Journal des partages de Mail Léa" })
+    rendre({}, { vue: { compte: BANQUE.id } })
+    fireEvent.click(detailDe(BANQUE).getByRole("button", { name: "Journal des partages de Banque" }))
+    const journal = await screen.findByRole("list", { name: "Journal des partages de Banque" })
     expect(within(journal).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
-      expect.stringMatching(/^18 octobre 2026 à \d\d:12 · Léa Bernard a retiré le partage à Paul Durand \(en lecture\)$/),
-      expect.stringMatching(/^17 octobre 2026 à \d\d:00 · Une personne qui n'est plus membre a partagé à l'équipe Support en écriture \(avant : en lecture\)$/),
-      expect.stringMatching(/^16 octobre 2026 à \d\d:00 · Hors session a partagé à toute l'organisation jusqu'aux fonctions sensibles$/),
+      expect.stringMatching(/^18 octobre 2026 à \d\d:12 · Léa Bernard a retiré le partage à Paul Durand \(Lecture seule\)$/),
+      expect.stringMatching(/^17 octobre 2026 à \d\d:00 · Une personne qui n'est plus membre a partagé à l'équipe Support \(Lecture et écriture, avant : Lecture seule\)$/),
+      expect.stringMatching(/^16 octobre 2026 à \d\d:00 · Hors session a partagé à toute l'organisation \(Toutes les actions\)$/),
     ])
-    expect(envoi()).toEqual({ url: `/api/platform/admin/accounts/${COMPTE}/share-journal`, methode: "GET", corps: undefined })
-    expect(bouton).toHaveAttribute("aria-expanded", "true")
-  })
-
-  it("should say an empty journal and a refused read", async () => {
-    fetchMock.mockResolvedValueOnce(reponse(200, { data: { label: "Mail Léa", events: [] } }))
-    rendre({ accounts: [MON_COMPTE] })
-    fireEvent.click(screen.getByRole("button", { name: "Journal des partages de Mail Léa" }))
-    expect(await screen.findByText("Aucun partage posé ni retiré sur ce compte.")).toBeInTheDocument()
-    cleanup()
-
-    fetchMock.mockResolvedValueOnce(reponse(403, { error: { code: "forbidden" } }))
-    rendre({ accounts: [MON_COMPTE] })
-    fireEvent.click(screen.getByRole("button", { name: "Journal des partages de Mail Léa" }))
-    expect(await screen.findByRole("alert")).toBeInTheDocument()
-  })
-
-  it("should offer no journal on an account the person does not manage", () => {
-    rendre({ accounts: [{ ...MON_COMPTE, label: "Mail Claire", viewerLevel: "write" }] })
-    expect(screen.queryByRole("button", { name: /Journal des partages/ })).toBeNull()
+    expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/share-journal`, methode: "GET", corps: undefined }])
   })
 })
 
-// L'écran ouvert aux membres (`connecteurs-et-comptes.md` § Écran Connecteurs) : à qui n'administre pas, ses seuls
-// comptes personnels, sans catalogue ni création ; sous chaque compte personnel qu'il gère, ses partages, retirés par un
-// geste confirmé, et le formulaire qui partage à toute l'organisation ou à une équipe.
-describe("EcranConnecteurs, a member's own accounts and their shares", () => {
-  const MON_COMPTE: AccountView = { ...MAIL_VENTES, label: "Mail Léa", owner: { kind: "user" } }
-  const REGLE_ORG = "1a2b3c4d-0000-4000-8000-000000000001"
-  const REGLE_VENTES = "1a2b3c4d-0000-4000-8000-000000000002"
-  const PARTAGES = {
-    [COMPTE]: { general: { id: REGLE_ORG, level: "write" as const }, rules: [{ id: REGLE_VENTES, subject: { kind: "team" as const, name: "Ventes" }, level: "read" as const }] },
-  }
-  const MES_COMPTES: DonneesDeMesComptes = { accounts: [MON_COMPTE], options: { teams: [{ id: VENTES, name: "Ventes" }] }, partages: PARTAGES }
-
-  function rendreMesComptes(donnees: Partial<DonneesDeMesComptes> = {}) {
-    return render(
-      <ContexteDeRafraichissement.Provider value={rafraichir}>
-        <EcranConnecteurs resultat={{ data: { ...MES_COMPTES, ...donnees } }} Lien={Lien} ici="/admin/connectors" />
-      </ContexteDeRafraichissement.Provider>,
-    )
+describe("EcranConnecteurs, sharing a connector", () => {
+  const ouvrir = (libelle: RegExp = /^Partager Banque$/) => {
+    fireEvent.click(detailDe(BANQUE).getByRole("button", { name: libelle }))
+    return within(screen.getByRole("dialog", { name: "Partager « Banque »" }))
   }
 
-  it("should show a member their own accounts only, with neither the catalog nor the creation of an account", () => {
-    rendreMesComptes()
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Connecteurs")
-    const comptes = within(screen.getByRole("region", { name: "Mes comptes" }))
-    expect(comptes.getByText("1 compte")).toBeInTheDocument()
-    expect(comptes.getByText("Mail Léa · mail · personnel · simulé · actif")).toBeInTheDocument()
-    expect(screen.queryByRole("region", { name: "Connecteurs" })).toBeNull()
-    expect(screen.queryByRole("region", { name: "Créer un compte" })).toBeNull()
-    expect(screen.queryByRole("region", { name: "Connecter mon compte" })).toBeNull()
-    expect(comptes.getByRole("button", { name: "Journal des partages de Mail Léa" })).toBeInTheDocument()
-  })
-
-  it("should say a member has no account yet, and offer to connect theirs where the host gave the port", () => {
-    rendreMesComptes({ accounts: [], partages: {}, formulaires: [FORMULAIRE_MS] })
-    expect(within(screen.getByRole("region", { name: "Mes comptes" })).getByText("Vous n'avez aucun compte personnel.")).toBeInTheDocument()
-    expect(within(screen.getByRole("region", { name: "Connecter mon compte" })).getByRole("button", { name: "Connecter mon compte Microsoft 365" })).toBeInTheDocument()
-  })
-
-  it("should list the shares of an account the person manages, and remove one after the question", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { rule: { id: REGLE_VENTES } } }))
-    rendreMesComptes()
-
-    const partages = within(screen.getByRole("list", { name: "Partages de Mail Léa" }))
-    expect(partages.getAllByRole("listitem").map((ligne) => ligne.querySelector("span")?.textContent)).toEqual([
-      "toute l'organisation · en écriture",
-      "l'équipe Ventes · en lecture",
+  it("should open the panel from « Partager » and from « Gérer les accès », with the shares read and what the engine does of a personal account", () => {
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir(/^Gérer les accès de Banque$/)
+    expect(within(panneau.getByRole("list", { name: "Personnes et équipes ajoutées" })).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
+      expect.stringContaining("Équipe Finance"),
+      expect.stringContaining("Paul Durand"),
     ])
-    fireEvent.click(partages.getByRole("button", { name: "Retirer le partage à l'équipe Ventes" }))
-    const question = "Retirer le partage de « Mail Léa » à l'équipe Ventes ?"
-    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Retirer le partage" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({ url: `/api/platform/admin/account-rules/${REGLE_VENTES}`, methode: "DELETE", corps: undefined })
-    expect(screen.getByRole("heading", { level: 2, name: "Mes comptes" })).toHaveFocus()
+    expect(libellesDesChoix(panneau.getByLabelText("Accès de Paul Durand"))).toEqual(["Toutes les actions", "Lecture et écriture", "Lecture seule", "Retirer l'accès"])
+    expect(panneau.getByText(/L'assistant de la personne s'en servira quand elle le lui demandera en le nommant\. La clé reste cachée : personne ne peut la lire ni la copier\./)).toBeInTheDocument()
+    fireEvent.click(panneau.getByRole("button", { name: "Fermer" }))
+    expect(screen.queryByRole("dialog", { name: "Partager « Banque »" })).toBeNull()
+    expect(ouvrir().getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeInTheDocument()
   })
 
-  it("should share an account with a team at a level of the account scale, never the management, then have the page re-read", async () => {
-    fetchMock.mockResolvedValue(reponse(201, { data: { rule: { id: REGLE_VENTES, created: true } } }))
-    rendreMesComptes({ partages: { [COMPTE]: { general: null, rules: [] } } })
-
-    expect(screen.getByText("Ce compte n'est partagé avec personne.")).toBeInTheDocument()
-    expect(libellesDesChoix(screen.getByLabelText("Partager à"))).toEqual(["toute l'organisation", "l'équipe Ventes"])
-    expect(libellesDesChoix(screen.getByLabelText("Niveau"))).toEqual(["en lecture", "en écriture", "jusqu'aux fonctions sensibles"])
-    choisirDansLaListe(screen.getByLabelText("Partager à"), "l'équipe Ventes")
-    choisirDansLaListe(screen.getByLabelText("Niveau"), "jusqu'aux fonctions sensibles")
-    fireEvent.click(screen.getByRole("button", { name: "Partager" }))
-
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envoi()).toEqual({
-      url: "/api/platform/admin/account-rules",
-      methode: "POST",
-      corps: { accountId: COMPTE, subject: { kind: "team", id: VENTES }, level: "sensitive" },
-    })
-    expect(within(screen.getByRole("form", { name: "Partager Mail Léa" })).getByRole("status")).toHaveTextContent("Partage enregistré.")
+  it("should say that the assistant of the members uses a team account without naming it", () => {
+    const dEquipe: AccountView = { ...MAIL_VENTES, viewerLevel: "manage" }
+    rendre({ accounts: [dEquipe], partages: { [dEquipe.id]: { general: null, rules: [] } } }, { vue: { compte: dEquipe.id } })
+    fireEvent.click(detailDe(dEquipe).getByRole("button", { name: "Partager Mail Ventes" }))
+    expect(screen.getByText(/L'assistant des membres s'en sert sans avoir à le nommer\./)).toBeInTheDocument()
   })
 
-  it("should share with the whole organisation by default, and say a refusal under the form", async () => {
+  it("should propose the teams and the people that answer a name, never the owner of a personal account nor a subject already added, and add the chosen one in read only", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { rule: {} } }))
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir()
+    const champ = panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })
+    fireEvent.change(champ, { target: { value: "e" } })
+    // « e » est dans Ventes, Finance, Léa Bernard, Nadia Finet : Finance est déjà ajoutée, Léa possède le compte.
+    const proposes = panneau.getAllByRole("option")
+    expect(proposes).toHaveLength(2)
+    expect(proposes[0]).toHaveAccessibleName("Équipe Ventes")
+    expect(proposes[1]).toHaveAccessibleName("Nadia Finet")
+    fireEvent.change(champ, { target: { value: "ventes" } })
+    fireEvent.click(panneau.getByRole("option", { name: "Équipe Ventes" }))
+
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/account-rules", methode: "POST", corps: { accountId: BANQUE.id, subject: { kind: "team", id: VENTES }, level: "read" } }])
+    expect(panneau.getByRole("status")).toHaveTextContent("Équipe Ventes : lecture seule.")
+  })
+
+  it("should change the level of a line, never offering the management, and remove an access without a further question", async () => {
+    // Une réponse neuve par appel : le corps d'une `Response` ne se lit qu'une fois.
+    fetchMock.mockImplementation(async () => reponse(200, { data: {} }))
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir()
+    choisirDansLaListe(panneau.getByLabelText("Accès de Équipe Finance"), /^Toutes les actions/)
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    choisirDansLaListe(panneau.getByLabelText("Accès de Paul Durand"), "Retirer l'accès")
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
+    expect(envois()).toEqual([
+      { url: "/api/platform/admin/account-rules", methode: "POST", corps: { accountId: BANQUE.id, subject: { kind: "team", id: FINANCE }, level: "sensitive" } },
+      { url: `/api/platform/admin/account-rules/${PARTAGES_DE_BANQUE.rules[1].id}`, methode: "DELETE", corps: undefined },
+    ])
+    await waitFor(() => expect(screen.getByRole("heading", { name: /Personnes et équipes ajoutées/ })).toHaveFocus())
+  })
+
+  it("should set the rule of the whole organisation, and remove it on « Aucun accès »", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: {} }))
+    const { rerender } = rendre({}, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir()
+    expect(libellesDesChoix(panneau.getByLabelText("Accès de toute l'organisation"))).toEqual(["Toutes les actions", "Lecture et écriture", "Lecture seule", "Aucun accès"])
+    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), /^Lecture seule/)
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+
+    const general = { id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c09", level: "read" as const }
+    rerender(ecran({ partages: { [BANQUE.id]: { ...PARTAGES_DE_BANQUE, general } } }, { vue: { compte: BANQUE.id } }))
+    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Aucun accès")
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
+    expect(envois()).toEqual([
+      { url: "/api/platform/admin/account-rules", methode: "POST", corps: { accountId: BANQUE.id, subject: { kind: "org" }, level: "read" } },
+      { url: `/api/platform/admin/account-rules/${general.id}`, methode: "DELETE", corps: undefined },
+    ])
+  })
+
+  it("should give the focus to the state of the detail when the person lowers their own management and the panel leaves with the re-read", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: {} }))
+    const dePaul: AccountView = { ...BANQUE, owner: A_PAUL }
+    const maRegle = { id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c07", subject: { kind: "user" as const, id: LEA, name: "Léa Bernard" }, level: "manage" as const }
+    const { rerender } = rendre({ accounts: [dePaul], partages: { [BANQUE.id]: { general: null, rules: [maRegle] } } }, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir()
+    expect(libellesDesChoix(panneau.getByLabelText("Accès de Léa Bernard"))).toEqual(["Gestion", "Toutes les actions", "Lecture et écriture", "Lecture seule", "Retirer l'accès"])
+    choisirDansLaListe(panneau.getByLabelText("Accès de Léa Bernard"), /^Lecture seule/)
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+
+    // La relecture : elle ne gère plus le compte, ni panneau ni « Partager ».
+    rerender(ecran({ accounts: [{ ...dePaul, viewerLevel: "read" }], partages: {} }, { vue: { compte: BANQUE.id } }))
+    expect(screen.queryByRole("dialog", { name: "Partager « Banque »" })).toBeNull()
+    await waitFor(() => expect(detailDe(BANQUE).getByRole("heading", { name: "État" })).toHaveFocus())
+  })
+
+  it("should say a refusal of the service and keep the level served", async () => {
     fetchMock.mockResolvedValue(reponse(403, { error: { code: "forbidden", message: "server text" } }))
-    rendreMesComptes()
-    fireEvent.click(screen.getByRole("button", { name: "Partager" }))
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Seule une personne qui gère ce compte peut le partager.")
-    expect(envoi().corps).toEqual({ accountId: COMPTE, subject: { kind: "org" }, level: "read" })
+    rendre({}, { vue: { compte: BANQUE.id } })
+    const panneau = ouvrir()
+    choisirDansLaListe(panneau.getByLabelText("Accès de Paul Durand"), /^Lecture seule/)
+    expect(await panneau.findByRole("alert")).toHaveTextContent("Seule une personne qui gère ce connecteur peut le partager.")
+    expect(panneau.getByLabelText("Accès de Paul Durand")).toHaveTextContent("Lecture et écriture")
     expect(rafraichir).not.toHaveBeenCalled()
   })
+})
 
-  it("should offer no share on an account the person does not manage, nor on an account of a team or of the organisation", () => {
-    rendreMesComptes({ accounts: [{ ...MON_COMPTE, viewerLevel: "write" }] })
-    expect(screen.queryByRole("form", { name: /^Partager/ })).toBeNull()
-    expect(screen.queryByText("Partages de Mail Léa")).toBeNull()
-    cleanup()
-
-    // L'administrateur garde sa vue : un compte d'équipe qu'il gère n'a que son journal, même si des partages arrivaient.
-    rendre({ partages: { [COMPTE]: { general: null, rules: [] } } })
-    expect(screen.queryByRole("form", { name: /^Partager/ })).toBeNull()
-    expect(screen.getByRole("button", { name: "Journal des partages de Mail Ventes" })).toBeInTheDocument()
+describe("EcranConnecteurs, adding a connector", () => {
+  it("should let a member connect their own account from the window, and offer them no creation by hand", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://login.example.test/authorize?state=s" } }))
+    rendre()
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    expect(fenetre.queryByRole("form")).toBeNull()
+    fireEvent.click(fenetre.getByRole("button", { name: "Connecter mon compte Microsoft 365" }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
+    expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: ICI } }])
   })
 
-  it("should give an administrator the shares of their own personal account, beside the catalog", () => {
-    rendre({ accounts: [MAIL_VENTES, { ...MON_COMPTE, id: "8d4b5e3f-6a7c-4d8e-9f0a-1b2c3d4e5f60" }], partages: { "8d4b5e3f-6a7c-4d8e-9f0a-1b2c3d4e5f60": { general: null, rules: [] } } })
-    expect(screen.getByRole("region", { name: "Connecteurs" })).toBeInTheDocument()
-    expect(within(screen.getByRole("region", { name: "Comptes" })).getAllByRole("form", { name: /^Partager/ })).toHaveLength(1)
-    expect(screen.getByRole("form", { name: "Partager Mail Léa" })).toBeInTheDocument()
+  it("should say so to a member who can add nothing by themselves", () => {
+    rendre({ formulaires: [FORMULAIRE_CRM] })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    expect(screen.getByText("Aucun outil ne se connecte par vous-même pour l'instant. Un administrateur peut ajouter un connecteur et le partager avec vous.")).toBeInTheDocument()
+  })
+
+  it("should let an administrator create an account for a team, never of a connector each person connects themselves", async () => {
+    fetchMock.mockResolvedValue(reponse(201, { data: { account: { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60", label: "Mail Finance" } } }))
+    const MS: OrgConnector = { ...MAIL, connector: "microsoft", functions: [] }
+    rendre({ connectors: [MAIL, CRM, MS], administration: { impacts: {} } })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const formulaire = within(screen.getByRole("form", { name: "Créer un compte" }))
+    expect(libellesDesChoix(formulaire.getByLabelText("Connecteur"))).toEqual(["mail", "crm"])
+    fireEvent.change(formulaire.getByLabelText("Libellé"), { target: { value: "Mail Finance" } })
+    fireEvent.click(formulaire.getByLabelText("Une équipe"))
+    choisirDansLaListe(formulaire.getByLabelText("Équipe"), "Finance")
+    fireEvent.click(formulaire.getByRole("button", { name: "Créer le compte" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/accounts", methode: "POST", corps: { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "Mail Finance", mode: "simule" } }])
+    // La fenêtre se ferme et le détail du compte créé s'ouvre par son adresse.
+    expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60`)
+    expect(screen.queryByRole("dialog", { name: "Ajouter un connecteur" })).toBeNull()
+  })
+
+  it("should say the outcome of a return from the third party", () => {
+    const { unmount } = rendre({}, { consentement: issueDuConsentement({ consent: "connected", account: "lea@contoso.test (microsoft)" }) })
+    expect(screen.getByRole("status")).toHaveTextContent("« lea@contoso.test (microsoft) » est connecté.")
+    unmount()
+    rendre({}, { consentement: issueDuConsentement({ hosted: "failed", reason: "expired" }) })
+    expect(screen.getByRole("alert")).toHaveTextContent("Cette demande de connexion a expiré. Recommencez.")
+    expect(issueDuConsentement({ q: "x" })).toBeUndefined()
+  })
+})
+
+describe("EcranConnecteurs, the tools of the organisation (administrator)", () => {
+  const INACTIF: OrgConnector = { ...MAIL, state: "inactive", activatedAt: null, activatedBy: null }
+
+  it("should list each connector with its functions and its state, and activate one without a question", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { connector: MAIL } }))
+    rendre({ connectors: [INACTIF, CRM], administration: { impacts: {} } })
+    const ilot = within(screen.getByRole("region", { name: "Outils de l'organisation" }))
+    expect(ilot.getByText("2 connecteurs activables")).toBeInTheDocument()
+    expect(ilot.getByText("2 fonctions : mail.create_draft, mail.send_draft")).toBeInTheDocument()
+    expect(ilot.getByText("Actif depuis le 24 septembre 2026")).toBeInTheDocument()
+    fireEvent.click(ilot.getByRole("button", { name: "Activer mail" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "POST", corps: {} }])
+    expect(screen.getByRole("heading", { level: 2, name: "Outils de l'organisation" })).toHaveFocus()
+  })
+
+  it("should ask before deactivating, naming the procedures and the accounts it touches", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { connector: INACTIF } }))
+    rendre({ connectors: [MAIL], administration: { impacts: { mail: { functions: ["mail.create_draft", "mail.send_draft"], procedures: ["ventes/qualifier_prospects"], accounts: 1 } } } })
+    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
+    const question =
+      "Désactiver « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde. 1 procédure publiée le cite dans ses blocs d'appel : ventes/qualifier_prospects. Son compte est conservé."
+    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "DELETE", corps: undefined }])
+  })
+
+  it("should grey the activation of an inactive connector at connectors_max, with the raise link", () => {
+    rendre({ connectors: [INACTIF], administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 0, used: 0 }, raiseUrl: "https://acme.test/billing?from=pkg" } } })
+    expect(screen.getByRole("button", { name: "Activer" })).toBeDisabled()
+    expect(screen.getByText(/Limite atteinte : 0 connecteur actif sur 0\./)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?from=pkg&capacity=connectors_max")
   })
 })

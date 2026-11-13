@@ -149,7 +149,11 @@ export type AccountView = {
   id: string
   label: string
   connector: string
-  owner: { kind: "org" | "team" | "user"; teamName?: string }
+  /**
+   * Pour un compte personnel : sa personne (`userId`) et son nom dans l'annuaire (`userName`, `null` quand elle n'est
+   * plus membre), que l'écran Connecteurs lit pour dire « Partagé par … » et pour reconnaître les comptes de l'appelant.
+   */
+  owner: { kind: "org" | "team" | "user"; teamName?: string; userId?: string; userName?: string | null }
   mode: AccountMode
   status: "active" | "disabled" | "error"
   /** Ce que l'écran dit du secret, jamais sa valeur : les champs posés et la date de la dernière saisie. */

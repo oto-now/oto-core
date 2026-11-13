@@ -609,8 +609,8 @@ registerConnectors([messagerie.connector], {
 - **Compte** : à l'écran Connecteurs (un connecteur déclaré y prend des comptes réels, avec leur formulaire), par
   `admin_connector` `create_account` avec `mode: "reel"`, ou par `createAccount` de `/server`. Un compte simulé d'un connecteur réel est refusé
   (`invalid_arguments`), un compte réel ou de bac à sable d'un connecteur simulé aussi (`unavailable_in_v1`).
-- **Secret et réglages** : jamais par un outil MCP. À l'écran Connecteurs, « Secret et réglages » sous la ligne d'un
-  compte réel : la page passe à l'écran `formulaires: connectorAccountForms()` (de `/server`) dans
+- **Secret et réglages** : jamais par un outil MCP. À l'écran Connecteurs, « Saisir la clé » ou « Remplacer la clé »
+  dans le détail d'un compte réel : la page passe à l'écran `formulaires: connectorAccountForms()` (de `/server`) dans
   `DonneesDesConnecteurs` ; sans eux, l'écran ne crée que des comptes simulés. L'écran écrit par
   `POST /api/platform/admin/accounts/<id>/secret` (`{ secret?: { champ: valeur | null }, settings?: { réglage:
   valeur | null } }`), réservée à qui gère le compte ; un nom absent est gardé, `null` ou vide l'efface ; le secret
@@ -768,7 +768,7 @@ paquet ne connaît ni offre, ni prix, ni prestataire. Sans rien enregistrer, rie
   `details: { reason: "quota", max }`. Même refus par l'API, le MCP et le MCP admin. Baisser une limite
   ne supprime rien : seule la création suivante est refusée.
 - **Écrans** : la page passe `orgLimitsView(db, identity)` à `EcranEquipes` (`limites`) et à
-  `EcranConnecteurs` (`donnees.limites`) ; le geste au plafond est grisé, et un administrateur voit
+  `EcranConnecteurs` (`donnees.administration.limites`) ; le geste au plafond est grisé, et un administrateur voit
   « Relever la limite », vers `<raiseUrl>?capacity=<nom>` (`raiseUrl` : `https://…` ou un chemin de
   l'hôte, résolu sur l'adresse de l'organisation). `AdressesDuRail.abonnement` ajoute l'écran
   « Abonnement » de l'hôte aux réglages de l'entreprise.
