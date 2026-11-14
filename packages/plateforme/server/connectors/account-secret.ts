@@ -17,6 +17,7 @@ import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
+import { formOwnerKinds } from "./account-owners"
 import { managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
 import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
 import { accountMode } from "./modes"
@@ -100,7 +101,7 @@ function fieldsOf(declared: DeclaredConnector, opened: OpenedCredential): Record
 }
 
 /** Les réglages saisis, contrôlés contre la déclaration ; une adresse perd son `/` final. */
-function checkedSettings(declared: DeclaredConnector, given: Record<string, string | null>): Record<string, string | null> {
+export function checkedSettings(declared: DeclaredConnector, given: Record<string, string | null>): Record<string, string | null> {
   const settings = declared.definition.settings ?? []
   const checked: Record<string, string | null> = {}
   for (const [name, raw] of Object.entries(given)) {
@@ -162,21 +163,31 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
 }
 
 /**
- * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les champs du secret que garde un
- * compte (jamais ceux de l'hôte), puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en
- * saisir le secret. Un connecteur `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par
- * son consentement. Un connecteur à `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le
- * port (`ready`). Sans lecture de base.
+ * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les propriétaires qu'admettent
+ * ses `modes` (`formOwnerKinds`), si sa sonde se joue (`probe`), les champs du secret que garde un compte (jamais ceux
+ * de l'hôte), puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret.
+ * Un connecteur dont les `modes` n'admettent ni `byo_user` ni `byo_org` (`platform` seul, servi par la clé de l'hôte)
+ * n'en a pas. Un connecteur `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par son
+ * consentement. Un connecteur à `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le port
+ * (`ready`). Sans lecture de base, sans rôle exigé : aucun secret n'y figure.
  */
 export function connectorAccountForms(): ConnectorAccountForm[] {
-  return declaredConnectors().map(({ definition, hostedLinks }) => ({
-    connector: definition.name,
-    label: definition.label,
-    consent: definition.auth.kind === "oauth2_user",
-    ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
-    fields: definition.credential.filter((field) => field.holder !== "host").map(({ name, label, secret }) => ({ name, label, secret })),
-    settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
-  }))
+  return declaredConnectors().flatMap(({ definition, hostedLinks, probe }) => {
+    const ownerKinds = formOwnerKinds(definition)
+    if (ownerKinds.length === 0) return []
+    return [
+      {
+        connector: definition.name,
+        label: definition.label,
+        consent: definition.auth.kind === "oauth2_user",
+        ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
+        ownerKinds,
+        probe: { available: probe !== null, balance: definition.probe?.balance !== undefined },
+        fields: definition.credential.filter((field) => field.holder !== "host").map(({ name, label, secret }) => ({ name, label, secret })),
+        settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
+      },
+    ]
+  })
 }
 
 /** Le jeton d'un échange, lu et écrit sur la ligne du compte, chiffré à part du secret saisi. */
@@ -200,7 +211,7 @@ export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
 }
 
 /** Le premier champ du compte exigé par l'authentification qui manque, nommé par son libellé ; `null` : aucun. */
-function missingField(declared: DeclaredConnector, present: readonly string[]): string | null {
+export function missingField(declared: DeclaredConnector, present: readonly string[]): string | null {
   const own = accountFieldNames(declared.definition)
   const name = requiredFields(declared.auth).find((field) => own.includes(field) && !present.includes(field))
   return name === undefined ? null : (declared.definition.credential.find((field) => field.name === name)?.label ?? name)

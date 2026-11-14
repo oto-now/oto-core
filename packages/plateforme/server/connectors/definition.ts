@@ -2,9 +2,17 @@
 // `connecteurs-et-comptes.md` § Moteur des connecteurs décrits) : des données structurelles, sans code, que le moteur
 // exécute. Le paquet ne dépend d'aucun dépôt de connecteurs : ce type est le sien, de même forme que la sortie de la
 // fabrique du dépôt `connectors` (`ts/src/types.ts`), qu'un hôte lui passe telle quelle ; un connecteur propre à
-// l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, modes, quota, exposition) est
-// ignoré. Aucun secret ici : `auth` nomme des champs de `credential`, les valeurs viennent du compte à l'appel ; celles
-// d'un consentement (`oauth2_user`) viennent de la personne qui a consenti et de l'application OAuth de l'hôte.
+// l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, quota, exposition) est ignoré ;
+// `modes` y figure : il dit qui peut posséder un compte du connecteur. Aucun secret ici : `auth` nomme des champs de
+// `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement (`oauth2_user`) viennent de la
+// personne qui a consenti et de l'application OAuth de l'hôte.
+
+/**
+ * Qui sert un compte du connecteur, comme la fabrique l'écrit : `byo_user`, la clé d'une personne (un compte personnel) ;
+ * `byo_org`, celle de l'organisation ou d'une équipe (un compte d'organisation ou d'équipe) ; `platform`, la clé de
+ * l'hôte (`holder: host`), qu'un compte d'organisation ou d'équipe ouvre sans rien saisir.
+ */
+export type ConnectorMode = "platform" | "byo_user" | "byo_org"
 
 /** L'application OAuth d'un connecteur `oauth2_user`, fournie par l'hôte (jamais lue de l'environnement par le paquet). */
 export type OAuthApplication = { readonly clientId: string; readonly clientSecret: string }
@@ -436,6 +444,8 @@ export type ConnectorDefinition = {
   /** Présente pour un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs. */
   readonly accountIdentity?: ConnectorAccountIdentity
   readonly settings?: readonly ConnectorSetting[]
+  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
+  readonly modes: readonly ConnectorMode[]
   readonly timeoutMs: number
   readonly queryArrays?: "repeat" | "brackets" | "comma"
   /** En-têtes constants de toute requête ; jamais l'en-tête d'authentification. */

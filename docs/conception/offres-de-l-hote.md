@@ -83,7 +83,7 @@ Choix de mise en œuvre :
 
 ## Écart avec le code
 
-- `account_owner_kinds` et `accounts_per_owner_max` sont déclarés et lus ; leur contrôle dans `createAccount` appartient au chantier des connecteurs ([connecteurs et comptes](connecteurs-et-comptes.md)).
+- `account_owner_kinds` et `accounts_per_owner_max` sont contrôlés à la création et à la réactivation d'un compte (`createAccount`, `enableAccount`, depuis le lot 1 de l'écran Connecteurs : [connecteurs et comptes](connecteurs-et-comptes.md) § Comptes et résolution) ; ils ne sont pas comptés dans `orgLimitsView`, l'écran ne grise donc rien d'après eux.
 - Publié dans la 1.2.0 (migration `20261001090000_v1_2_0.sql`, partie 1 : `signup_org`, `org_skeleton` ; partie 2 : `org_usage`). Plusieurs organisations, bascule et passage des limites par l'équipe plateforme : pour la 1.3.0 (migration `20261001180000_v1_3_0.sql`, `signup_org` sans borne), non publiée.
 - Une organisation sans adresse n'apparaît pas dans la bascule. L'hôte de référence ne donne pas d'adresse d'inscription : « Créer une organisation » ne s'y montre pas.
 - L'hôte de référence ne monte ni l'inscription ni une source de capacités : l'écran d'inscription n'est éprouvé qu'en test de composant, jamais de bout en bout.

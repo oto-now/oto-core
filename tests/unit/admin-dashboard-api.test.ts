@@ -197,8 +197,8 @@ const ROUTES: RouteCase[] = [
     method: "POST",
     path: "admin/accounts",
     body: { connector: "mail", owner_kind: "org", label: "Mail Acme 2" },
-    // Un compte personnel se crée par son propriétaire, jamais ici (N11).
-    invalid: { path: "admin/accounts", body: { connector: "mail", owner_kind: "user", label: "Perso" } },
+    // Un libellé de plus de 80 caractères (un compte personnel, lui, se crée ici au nom de l'appelant : oto-core#103).
+    invalid: { path: "admin/accounts", body: { connector: "mail", owner_kind: "org", label: "M".repeat(81) } },
     data: () => ({ account: expect.objectContaining({ label: "Mail Acme 2", mode: "simule" }) }),
     target: "Mail Acme 2",
   },
@@ -210,6 +210,29 @@ const ROUTES: RouteCase[] = [
     invalid: { path: "admin/accounts/Mail Acme/disable", body: {} },
     data: () => ({ account: expect.objectContaining({ id: ACCOUNT, status: "disabled" }) }),
     target: ACCOUNT,
+  },
+  {
+    name: "PATCH admin/accounts",
+    method: "PATCH",
+    path: `admin/accounts/${ACCOUNT}`,
+    body: { label: "Mail Direction", description: "La boîte de la direction." },
+    // Ni libellé ni description : rien à changer.
+    invalid: { path: `admin/accounts/${ACCOUNT}`, body: {} },
+    data: () => ({ account: expect.objectContaining({ id: ACCOUNT, label: "Mail Direction", description: "La boîte de la direction." }) }),
+    target: ACCOUNT,
+  },
+  {
+    name: "POST admin/accounts/enable",
+    method: "POST",
+    path: `admin/accounts/${ACCOUNT}/enable`,
+    body: {},
+    invalid: { path: "admin/accounts/Mail Acme/enable", body: {} },
+    data: () => ({ account: expect.objectContaining({ id: ACCOUNT, status: "active" }) }),
+    target: ACCOUNT,
+    // Le compte d'organisation, désactivé : la réactivation le rouvre, son secret gardé.
+    change: (all) => {
+      all.accounts = all.accounts.map((row) => ({ ...row, status: "disabled" }))
+    },
   },
   {
     name: "POST admin/accounts/secret",
@@ -318,6 +341,24 @@ describe.skipIf(!sqlConfigured)(portable("admin/* routes of the dashboard (AC10)
     expect(served.status).toBe(200)
     expect(served.journal).toMatchObject([{ args: { secret: "[masked]" } }])
     expect(JSON.stringify([served.body, served.journal]).includes(SECRET_VALUE)).toBe(false)
+  })
+
+  it("should probe a key before the account for any member, journaling the connector only, never the key, and refuse a connector or an account without a probe", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ company: "Acme", scopes: ["contacts:read"] }))))
+    try {
+      const served = await call("marc", { method: "POST", path: `admin/connectors/${LIVE}/probe`, body: { fields: { api_key: SECRET_VALUE } } })
+      expect([served.status, served.body.data]).toEqual([200, { probe: { healthy: true, reason: null, balance: null } }])
+      expect(served.writes).toEqual([])
+      expect(served.journal).toMatchObject([{ tool: "POST admin/connectors/probe", target: LIVE, args: { connector: LIVE }, is_error: false }])
+      expect(JSON.stringify([served.body, served.journal]).includes(SECRET_VALUE)).toBe(false)
+      const noProbe = await call("marc", { method: "POST", path: "admin/connectors/mail/probe", body: { fields: { api_key: "k" } } })
+      expect([noProbe.status, noProbe.body.error.code, noProbe.body.error.details]).toEqual([400, "invalid_arguments", { reason: "no_probe" }])
+      const account = await call("ada", { method: "POST", path: `admin/accounts/${ACCOUNT}/probe`, body: {} })
+      expect([account.status, account.body.error.details]).toEqual([400, { reason: "no_probe" }])
+      expect(account.journal).toMatchObject([{ tool: "POST admin/accounts/probe", target: ACCOUNT, is_error: true }])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it("should journal a refused account creation under its label made well-formed, a lone surrogate half becoming U+FFFD", async () => {

@@ -4,11 +4,13 @@
 // ne se décide ici (H123) : chaque service décide le sien, et son refus est rendu tel quel.
 import * as z from "zod/v4"
 import { accountOwnerRefSchema, connectorRefSchema, createAccountSchema, orgSlugSchema, setAccountRuleSchema, type AccountView, type OrgConnector } from "../../../schemas"
-import { findAccount, readRef, resolveRef } from "../../../server/admin/context"
+import { findAccount, ownerWords, readRef, resolveRef } from "../../../server/admin/context"
 import { ownerDescription } from "../../../server/admin/nodes"
 import type { CatalogFunction } from "../../../server/catalog/define"
 import { catalogFunctions } from "../../../server/catalog/registry"
-import { createAccount, disableAccount, listOrgAccounts, markWords } from "../../../server/connectors/accounts"
+import { disableAccount } from "../../../server/connectors/account-changes"
+import { quotedDescription } from "../../../server/connectors/account-refusals"
+import { createAccount, listOrgAccounts, markWords } from "../../../server/connectors/accounts"
 import { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "../../../server/connectors/activations"
 import { isSimulatedConnector, modeLabel } from "../../../server/connectors/modes"
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../../server/rules"
@@ -107,18 +109,15 @@ async function deactivate(call: OpCall): Promise<AdminOutput> {
   return { text: `${connector} deactivated in ${org}: its functions answer not_enabled from now on.`, data: { connectors: [activableData(deactivated)] }, target: connector, nextActions: ["admin_connector catalogue"] }
 }
 
-/** « team Ventes », « organisation », « personal » : le propriétaire d'un compte tel qu'une ligne le dit (AC10, AC12). */
-function ownerShort(owner: AccountView["owner"]): string {
-  if (owner.kind === "team") return `team ${owner.teamName ?? "?"}`
-  return owner.kind === "user" ? "personal" : "organisation"
-}
-
+// La description d'un compte, écrite par un membre, est servie comme une donnée citée (`quotedDescription`), jamais une consigne.
 const accountData = (account: AccountView) => ({
+  id: account.id,
   label: account.label,
   connector: account.connector,
-  owner: ownerShort(account.owner),
+  owner: ownerWords(account.owner),
   mode: account.mode,
   status: account.status,
+  description: account.description,
   ...(account.mark ? { mark: account.mark } : {}),
 })
 
@@ -133,7 +132,7 @@ async function accounts(call: OpCall): Promise<AdminOutput> {
     return { ...output, text, data: { accounts: [] } }
   }
   const line = (account: AccountView) =>
-    `- ${account.label} · ${account.connector} · ${ownerShort(account.owner)} · ${modeLabel(account.mode)} · ${account.status}${account.mark ? ` · marked: ${markWords(account.mark)}` : ""}`
+    `- ${account.label} · ${account.connector} · ${ownerWords(account.owner)} · ${modeLabel(account.mode)} · ${account.status}${account.mark ? ` · marked: ${markWords(account.mark)}` : ""}${quotedDescription(account.description)}`
   return { ...output, text: listLines(shown, line).join("\n"), data: { accounts: shown.map(accountData) } }
 }
 
@@ -160,7 +159,7 @@ async function disable(call: OpCall): Promise<AdminOutput> {
   const output = { data: { accounts: [accountData(account)] }, target: `account:${account.label}` }
   if (account.status === "disabled") return { ...output, text: `Account ${account.label} is already disabled; nothing changed.`, nextActions: ["admin_connector accounts"] }
   if (call.input.confirm !== true) {
-    const head = `About to disable account ${account.label} (${account.connector}, ${ownerShort(account.owner)}): calls that resolve to it fail from now on. V1 cannot enable an account again: create a new one if needed.`
+    const head = `About to disable account ${account.label} (${account.connector}, ${ownerWords(account.owner)}): calls that resolve to it fail from now on. Its secret is kept: whoever manages it can enable it again from the dashboard's Connectors screen.`
     return { ...output, text: [head, nothingWas("disabled")].join("\n"), nextActions: [] }
   }
   await disableAccount(db, identity, { account_id: account.id })
@@ -210,6 +209,7 @@ const ref = z.string()
 const builtIn = "invalid_arguments: table is built in: it is always active and has no accounts."
 const unknownConnector = "not_found: Unknown connector <x>. Connectors you can activate: <list>."
 const unknownAccount = "not_found: No account labelled <label> in <org>. Accounts: <list>."
+const homonyms = "ambiguous_account: Several accounts are labelled <label> in <org>: <list with ids>. Ask which one is meant, then name it by its id."
 
 export const CONNECTOR_OPS: OpTable = {
   help: {
@@ -268,7 +268,7 @@ export const CONNECTOR_OPS: OpTable = {
       "invalid_arguments: owner must be org or team:<slug>: a personal account is created by its owner, not by the platform team.",
       "unavailable_in_v1: a live account of a simulated connector, or a sandbox account.",
       "invalid_arguments: a simulated account of a live connector: create it with mode reel.",
-      "conflict: An account labelled <label> already exists in <org>.",
+      "conflict: An account labelled <label> already exists for the same owner in <org>.",
       unknownConnector,
     ],
     run: createAccountOp,
@@ -277,18 +277,18 @@ export const CONNECTOR_OPS: OpTable = {
     schema: z.object({ ...onAccount, confirm: z.boolean().optional() }),
     org: "target",
     twoStep: true,
-    summary: "Disables an account: calls that resolve to it fail from now on; V1 cannot enable it again.",
+    summary: "Disables an account: calls that resolve to it fail from now on; its secret is kept and whoever manages it can enable it again on the dashboard.",
     example: { org: "acme", account: "Mail Ventes" },
-    refusals: [unknownAccount],
+    refusals: [unknownAccount, homonyms],
     run: disable,
   },
   account_rules: {
     schema: z.object(onAccount),
     org: "target",
     twoStep: false,
-    summary: "Lists the access rules set on an account and names its owner.",
+    summary: "Lists the access rules set on an account and names its owner; reserved to whoever manages the account, like its share log.",
     example: { org: "acme", account: "Mail Ventes" },
-    refusals: [unknownAccount],
+    refusals: [unknownAccount, homonyms, "forbidden: the caller does not manage the account."],
     run: accountRules,
   },
   add_account_rule: {
@@ -299,6 +299,7 @@ export const CONNECTOR_OPS: OpTable = {
     example: { org: "acme", account: "Mail Ventes", subject: "team:support", level: "read" },
     refusals: [
       unknownAccount,
+      homonyms,
       "invalid_arguments: subject must be team:<slug> or user:<email>.",
       "invalid_arguments: A rule naming the owner of the personal account « <label> » would change nothing: its owner manages it whatever the rules.",
       "forbidden: Using account « <label> » is reserved to <who>.",
@@ -311,7 +312,7 @@ export const CONNECTOR_OPS: OpTable = {
     twoStep: false,
     summary: "Removes the rule of a team or a person on an account.",
     example: { org: "acme", account: "Mail Ventes", subject: "team:support" },
-    refusals: [unknownAccount, "not_found: No rule for <subject> on account <label>."],
+    refusals: [unknownAccount, homonyms, "not_found: No rule for <subject> on account <label>."],
     run: removeAccountRuleOp,
   },
 }

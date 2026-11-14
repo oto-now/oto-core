@@ -333,8 +333,8 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect((await create({ account: "Mail Live", owner: "org", mode: "reel" })).text).toBe(
         "mail is simulated in this version: its accounts are simulated, a live account is not available. Create it with mode simule.",
       )
-      // Le libellé du compte personnel de Claire, que l'équipe plateforme ne voit pas : l'index unique refuse quand même.
-      expect((await create({ account: "Mail Direction", owner: "org" })).text).toBe("An account labelled Mail Direction already exists in Acme Test.")
+      // Le libellé d'un compte du même propriétaire, sans casse : l'index unique (propriétaire, libellé) refuse (N6).
+      expect((await create({ account: "mail acme", owner: "org" })).text).toBe("An account labelled mail acme already exists for the same owner in Acme Test.")
       expect((await create({ account: "Fax", connector: "fax", owner: "org" })).text).toBe("Unknown connector fax. Connectors you can activate: mail.")
       expect(codes(journal)).toEqual([null, "invalid_arguments", "unavailable_in_v1", "conflict", "not_found"])
     })
@@ -347,7 +347,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       const disable = (args: Record<string, unknown>) => connector({ op: "disable_account", ...args })
       expect((await disable({ account: "mail ventes" })).text).toBe(
         [
-          "About to disable account Mail Ventes (mail, team Ventes): calls that resolve to it fail from now on. V1 cannot enable an account again: create a new one if needed.",
+          "About to disable account Mail Ventes (mail, team Ventes): calls that resolve to it fail from now on. Its secret is kept: whoever manages it can enable it again from the dashboard's Connectors screen.",
           NOTHING("disabled"),
         ].join("\n"),
       )
@@ -363,6 +363,25 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         'Field connector is not used by op disable_account of admin_connector. Fields of disable_account: org, account, confirm. Call admin_connector {"op": "help"} for details.',
       )
       expect(await statusOf(accountId(3))).toBe("active")
+    })
+  })
+
+  describe("admin_connector homonyms (oto-core#103)", () => {
+    it("should name the homonyms of two owners with their id, never pick one, and find an account by its id", async () => {
+      // Le libellé est unique pour un même propriétaire : l'équipe Ventes nomme un compte comme celui de l'organisation.
+      const [{ id }] = await seed.admin<{ id: string }[]>`
+        insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, label, mode)
+        values (${admin.orgs.acme.id}, 'mail', 'team', ${admin.id(TEAMS.ventes.id)}, 'Mail Acme', 'simule') returning id`
+      undo.push(() => seed.admin`delete from platform.accounts where id = ${id}`)
+      const { connector, journal } = await session()
+      const refused = (await connector({ op: "disable_account", account: "mail acme", confirm: true })).text
+      expect(refused).toMatch(new RegExp(`^Several accounts are labelled mail acme in ${admin.orgs.acme.slug}: `))
+      expect(refused).toContain(`Mail Acme (organisation, id ${admin.id(accountId(2))})`)
+      expect(refused).toContain(`Mail Acme (team Ventes, id ${id})`)
+      expect(refused).toMatch(/Ask which one is meant, then name it by its id\.$/)
+      expect(await statusOf(accountId(2))).toBe("active")
+      expect((await connector({ op: "account_rules", account: id })).text).toMatch(/Owner: team Ventes/)
+      expect(codes(journal)).toEqual(["ambiguous_account", null])
     })
   })
 
@@ -403,7 +422,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect(lines.at(-2)).toBe("… and 803 more")
     })
 
-    it("should refuse to set or remove a rule without the management of the account, and the manage level to a non-administrator, before any write", async () => {
+    it("should refuse to list, set or remove the rules without the management of the account, and the manage level to a non-administrator, before any write", async () => {
       // La base simulée faisait de tout appelant du MCP admin un membre de l'équipe plateforme (`is_staff`) :
       // Marc et Claire y entrent le temps du test.
       const staff = [admin.persons.marc.id, admin.persons.claire.id]
@@ -412,6 +431,8 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       // Marc lit « Mail Ventes » par une règle, sans le gérer : il ne pose ni ne retire une règle.
       const marc = await session("marc")
       const reserved = "Using account « Mail Ventes » is reserved to team Ventes (lead: Claire Morel). Ask them for access."
+      // La liste des partages est réservée, comme leur journal, à qui gère le compte (oto-core#103).
+      expect((await marc.connector({ op: "account_rules", account: "Mail Ventes" })).text).toBe(reserved)
       expect((await marc.connector({ op: "add_account_rule", account: "Mail Ventes", subject: "team:conseil", level: "read" })).text).toBe(reserved)
       expect((await marc.connector({ op: "remove_account_rule", account: "Mail Ventes", subject: "team:support" })).text).toBe(reserved)
       expect((await ventesRules()).map(([subject]) => subject)).toEqual([TEAMS.support.id, PERSONS.marc.id].sort())
@@ -421,7 +442,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         "Only an administrator of Acme Test can grant the manage level.",
       )
       expect(requestedWrites([...marc.spy.requests, ...claire.spy.requests])).toEqual([])
-      expect(codes([...marc.journal, ...claire.journal])).toEqual(["forbidden", "forbidden", "forbidden"])
+      expect(codes([...marc.journal, ...claire.journal])).toEqual(["forbidden", "forbidden", "forbidden", "forbidden"])
     })
 
     it("should let the owner of a personal account share it to her own team and keep managing it (decided on 19/10)", async () => {
@@ -453,7 +474,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect(codes(claire.journal)).toEqual(["invalid_arguments"])
     })
 
-    it("should serve the rules of an account the caller reads only, an invisible account answering as an unknown one (H68)", async () => {
+    it("should serve the rules of an account the caller manages only, an invisible account answering as an unknown one (H68)", async () => {
       const deps = await admin.deps("sam")
       const spy = recordRequests(deps.db)
       const identity = await resolveAdminOrg(spy.db, deps.caller, admin.orgs.acme.slug)

@@ -159,6 +159,31 @@ describe("check-migrations", () => {
     expect(renamed.stdout).toMatch(/\.sql:1 drop\n/)
   })
 
+  // L'écran Connecteurs (oto-core#103) : un index unique ne se retire que remplacé, dans le même fichier, par un index
+  // unique de la même table dont les clés couvrent les siennes et en ajoutent ; il admet alors toute ligne qu'admettait
+  // l'ancien. Plus étroit, sur une autre table, ou inconnu des fichiers lus : le retrait reste refusé, avec la règle.
+  it("should accept a unique index dropped once a wider one of the same table replaces it in the same file, and refuse any other drop of an index", () => {
+    const OLD = "create unique index uq_items_org_label on platform.items using btree (org_id, lower(label));\n"
+    const replaced = (created: string) => check(`${OLD}${created}\ndrop index platform.uq_items_org_label;\n`)
+    expect(replaced("create unique index uq_items_owner_label on platform.items using btree (org_id, owner_id, lower(label)) nulls not distinct;")).toMatchObject({
+      status: 0,
+    })
+    for (const created of [
+      "create unique index uq_items_label on platform.items using btree (lower(label));",
+      "create unique index uq_items_org_label_bis on platform.items using btree (org_id, lower(label));",
+      "create unique index uq_others_owner_label on platform.others using btree (org_id, owner_id, lower(label));",
+      "create index ix_items_owner_label on platform.items using btree (org_id, owner_id, lower(label));",
+    ]) {
+      const refused = replaced(created)
+      expect(refused.status, created).toBe(1)
+      expect(refused.stdout, created).toMatch(/\.sql:3 drop/)
+      expect(refused.stdout, created).toContain("un index unique ne se retire que remplacé")
+    }
+    const unknown = check("create unique index uq_a on platform.items (org_id, label, x);\ndrop index platform.uq_elsewhere;\n")
+    expect(unknown.status).toBe(1)
+    expect(unknown.stdout).toMatch(/\.sql:2 drop/)
+  })
+
   it("should reject a dropped constraint alone", () => {
     const result = check("alter table platform.nodes drop constraint a;\n")
     expect(result.status).toBe(1)
