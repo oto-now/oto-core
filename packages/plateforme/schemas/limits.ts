@@ -22,8 +22,8 @@ export const orgLimitsSchema = z
     account_owner_kinds: z
       .array(z.enum(ACCOUNT_OWNER_KINDS))
       .max(ACCOUNT_OWNER_KINDS.length)
-      .describe("Who may own a connector account; read here, checked by the connectors work (ADR-022 § 8)."),
-    accounts_per_owner_max: count("Accounts of one connector per owner at most; read here, checked by the connectors work (ADR-022 § 8)."),
+      .describe("Who may own a connector account; checked when creating or enabling an account (ADR-022 § 8)."),
+    accounts_per_owner_max: count("Accounts of one connector per owner at most, disabled ones aside; checked when creating or enabling an account (ADR-022 § 8)."),
   })
   .partial()
 

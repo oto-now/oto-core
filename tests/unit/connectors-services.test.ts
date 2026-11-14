@@ -8,7 +8,8 @@ import * as z from "zod/v4"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { defineFunction, type CatalogFunction } from "../../packages/plateforme/server/catalog/define"
 import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
-import { createAccount, disableAccount, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
+import { disableAccount } from "../../packages/plateforme/server/connectors/account-changes"
+import { createAccount, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import {
   activableConnectors,
   activateConnector,

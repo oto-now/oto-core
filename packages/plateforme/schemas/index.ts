@@ -44,8 +44,16 @@ export type { BlockLike, BlockSection, CallLocation, RenderOptions } from "./blo
 export { decisionErrorSchema } from "./oauth"
 // `connectorNameSchema`, `accountLabelSchema` et `accountModeSchema` restent internes à
 // `connectors.ts` tant que seuls ses schémas les lisent (E04-S01, N33).
-export { accountSecretInputSchema, connectorRefSchema, createAccountSchema, disableAccountSchema } from "./connectors"
-export type { AccountMode, AccountSecretInput } from "./connectors"
+export {
+  ACCOUNT_DESCRIPTION_MAX,
+  accountChangeSchema,
+  accountSecretInputSchema,
+  connectorProbeInputSchema,
+  connectorRefSchema,
+  createAccountSchema,
+  disableAccountSchema,
+} from "./connectors"
+export type { AccountChange, AccountMode, AccountSecretInput, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
 export type {
@@ -155,7 +163,17 @@ export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.
 export { orgSettingsFormSchema } from "./admin"
 export type { OrgSettingsForm, OrgView } from "./admin"
-export type { AccountMark, AccountMarkReason, AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector } from "./connectors"
+export type {
+  AccountHealth,
+  AccountMark,
+  AccountMarkReason,
+  AccountProbe,
+  AccountView,
+  ConnectorAccountForm,
+  DeactivationImpact,
+  OrgConnector,
+  ProbedBalance,
+} from "./connectors"
 // L'écran d'un tableau (E07-S03) : décision de la revue, paramètres de la grille, vue d'un bloc
 // `reference`, formes des lectures de l'écran.
 export {

@@ -77,7 +77,7 @@ export const TABLES = [
     people: { user_id: 'sauter' },
   }),
   table('accounts', {
-    columns: cols('id org_id connector owner_kind owner_team_id owner_user_id label status health mode created_at updated_at settings status_reason'),
+    columns: cols('id org_id connector owner_kind owner_team_id owner_user_id label status health mode created_at updated_at settings status_reason description'),
     // Le secret, ce qui en dit l'état, le jeton d'un échange ou d'un consentement et ses droits accordés ne quittent
     // jamais la base : un compte importé se reconnecte par qui le gère.
     excluded: ['secret_ciphertext', 'secret_fields', 'secret_updated_at', 'token_ciphertext', 'token_expires_at', 'granted_scopes', 'linked_id', 'linked_at'],

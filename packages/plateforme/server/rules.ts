@@ -357,13 +357,15 @@ export async function readAccount({ db, sql }: InOperation, identity: Identity, 
 }
 
 /**
- * Les règles d'un compte que l'appelant lit (niveau 1 au moins) : les équipes, puis les personnes, par nom.
- * Les règles, puis les noms de leurs équipes, se lisent l'une après l'autre dans la transaction de l'opération.
+ * Les règles d'un compte, pour qui le gère (`ACCOUNT_LEVELS.manage`, comme son journal des partages : la liste nomme
+ * les personnes et les équipes avec qui il est partagé) : les équipes, puis les personnes, par nom. Un lecteur sans la
+ * gestion reçoit le refus de `readAccount`. Les règles, puis les noms de leurs équipes, se lisent l'une après l'autre
+ * dans la transaction de l'opération.
  */
 export async function listAccountRules(db: PlatformDb, identity: Identity, accountId: unknown): Promise<AccountRulesView> {
   const id = parseId(accountId, "account")
   return inTransaction(db, "listAccountRules", async (sql) => {
-    const account = await readAccount({ db, sql }, identity, id, ACCOUNT_LEVELS.read)
+    const account = await readAccount({ db, sql }, identity, id, ACCOUNT_LEVELS.manage)
     // Rangées par id, comme les pages qu'en lisait PostgREST : un même nom garde son ordre.
     const rows = await sql<RuleRow[]>`
       select id, subject_team_id, subject_user_id, subject_org, level from platform.access_rules

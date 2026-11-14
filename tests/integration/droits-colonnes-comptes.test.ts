@@ -14,7 +14,8 @@ import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../h
 const VERSION = "20261017090000"
 const MARK_VERSION = "20261017150000"
 const SERVER_VERSION = "20261019130000"
-const VERSIONS = [VERSION, MARK_VERSION, SERVER_VERSION]
+const SCREEN_VERSION = "20261114120000"
+const VERSIONS = [VERSION, MARK_VERSION, SERVER_VERSION, SCREEN_VERSION]
 const missing = await pendingMigrations()
 const pending = VERSIONS.some((version) => missing.includes(version))
 
@@ -28,7 +29,8 @@ const NOT_INSERTED: Record<string, string> = {
   updated_at: "set by the database",
   linked_id: "written only by platform.link_hosted_account (a person connects their own account)",
   linked_at: "written only by platform.link_hosted_account, with linked_id",
-  health: "written only by platform.mark_account (the mark of an account); a new account takes its default",
+  health: "written only by platform.mark_account and platform.record_account_probe (the mark and the last probe of an account); a new account takes its default",
+  description: "a new account has none: set afterwards by whoever manages it (updateAccount), under platform_server",
   status: BY_THE_SERVER,
   status_reason: BY_THE_SERVER,
   settings: BY_THE_SERVER,
@@ -41,7 +43,20 @@ const NOT_INSERTED: Record<string, string> = {
 }
 
 /** Colonnes que `platform_server` modifie, et lui seul : `authenticated` ne modifie aucune colonne d'un compte. */
-const UPDATED_BY_SERVER = ["status", "status_reason", "settings", "secret_ciphertext", "secret_fields", "secret_updated_at", "token_ciphertext", "token_expires_at", "granted_scopes"]
+const UPDATED_BY_SERVER = [
+  "status",
+  "status_reason",
+  "settings",
+  "secret_ciphertext",
+  "secret_fields",
+  "secret_updated_at",
+  "token_ciphertext",
+  "token_expires_at",
+  "granted_scopes",
+  // Renommer et décrire un compte (`updateAccount`, `20261114120000`) : le service décide qui le gère, puis écrit.
+  "label",
+  "description",
+]
 
 /** Colonnes qu'`authenticated` ne lit pas : chiffrés, et l'identifiant d'un compte rattaché. */
 const NOT_READ: Record<string, string> = {
@@ -55,7 +70,7 @@ const NOT_READ: Record<string, string> = {
 const NEVER = ["linked_id", "linked_at"]
 
 /** Colonnes qu'`authenticated` lit sans les écrire : une seule fonction les écrit. */
-const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account" }
+const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account and platform.record_account_probe" }
 
 type Privileges = { column_name: string; can_insert: boolean; can_select: boolean; can_update: boolean; server_updates: boolean }
 
@@ -134,7 +149,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(problems).toEqual([])
   })
 
-  it("should let authenticated update no column of accounts, and platform_server only the state, settings, secret, tokens and granted scopes", () => {
+  it("should let authenticated update no column of accounts, and platform_server only the state, settings, secret, tokens, granted scopes, label and description", () => {
     expect(columns.filter((column) => column.can_update).map((column) => `platform.accounts.${column.column_name}: authenticated can UPDATE it. Grant it to platform_server only: the service writes an account under the server role.`)).toEqual([])
     expect(columns.filter((column) => column.server_updates).map((column) => column.column_name).sort()).toEqual([...UPDATED_BY_SERVER].sort())
   })

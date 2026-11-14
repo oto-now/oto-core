@@ -142,6 +142,9 @@ ADDED.push("comments_select_reader", "comments_insert_reader", "comments_update_
 // L'état de l'email groupé des commentaires (`20261112090000`) : chacun lit ses propres lignes, jamais écrites par une session
 // (`oto-platform comments notify`, sur la connexion d'administration).
 ADDED.push("comment_mails_select_own", "comment_mail_items_select_own")
+// L'activation implicite d'un connecteur au premier compte (`20261114120000`, écran Connecteurs) : au rôle du serveur seul,
+// une ligne active de l'organisation de l'appelant, à son nom ; le service décide (jamais activé, `connectors_max`).
+ADDED.push("connector_activations_insert_server")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [

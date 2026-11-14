@@ -14,6 +14,7 @@ import { issuesText, PlatformError } from "../errors"
 import { backgroundRunnerProblem, declareBackgroundRunner, type BackgroundRunner } from "../jobs/trigger"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
+import { modesProblem } from "./account-owners"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import { bodyArgumentProblem } from "./body-argument"
 import { bodyListProblem } from "./body-list"
@@ -303,7 +304,11 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
   const problem =
-    connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition) ?? holderProblem(definition) ?? accountIdentityProblem(definition)
+    (connectorProblem(definition, reserved, seen) ?? modesProblem(definition)) ??
+    (typeof kindProblem === "string" ? kindProblem : null) ??
+    accountProblem(definition) ??
+    holderProblem(definition) ??
+    accountIdentityProblem(definition)
   if (problem) throw new CatalogRegistrationError(problem)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)

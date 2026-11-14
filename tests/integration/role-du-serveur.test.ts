@@ -14,7 +14,9 @@ import { withServerSession } from "../../packages/plateforme/server/sql"
 
 const VERSION = "20261019130000"
 const DELETES = "20261019140000"
-const missing = (await pendingMigrations()).filter((version) => version === VERSION || version === DELETES)
+/** L'écran Connecteurs (`record_account_probe`, libellé et description écrits par le serveur). */
+const SCREEN = "20261114120000"
+const missing = (await pendingMigrations()).filter((version) => [VERSION, DELETES, SCREEN].includes(version))
 const pending = missing.length > 0
 
 /**
@@ -79,6 +81,7 @@ const RESERVED: Record<string, string> = {
   "platform.link_hosted_account(uuid,text,timestamp with time zone,text)": "the identifier and creation date given by the third party",
   "platform.mark_account(uuid,text)": "the refusal of the third party",
   "platform.mark_files_ready(uuid,uuid[])": "the object read in the storage",
+  "platform.record_account_probe(uuid,boolean,text,jsonb)": "the answer of the third party to the probe",
   "platform.pseudonym_org(uuid,text,text)": "the salt and the witness of the server's key",
   "platform.purge_transit_files(uuid)": "the transit files of others, which the caller cannot see",
   "platform.signup_org(text,text,text,text[])": "the addresses given by the host",
@@ -108,9 +111,24 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   teams: ["name", "lead_user_id"],
 }
 
-/** Les colonnes que `platform_server` modifie en plus d'`authenticated` : l'état, le secret et les jetons d'un compte. */
+/**
+ * Les colonnes que `platform_server` modifie en plus d'`authenticated` : l'état, le secret et les jetons d'un compte, et
+ * son libellé et sa description, que le service écrit une fois décidé qui gère le compte (`updateAccount`).
+ */
 const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
-  accounts: ["secret_ciphertext", "status", "settings", "secret_fields", "secret_updated_at", "token_ciphertext", "token_expires_at", "status_reason", "granted_scopes"],
+  accounts: [
+    "secret_ciphertext",
+    "status",
+    "settings",
+    "secret_fields",
+    "secret_updated_at",
+    "token_ciphertext",
+    "token_expires_at",
+    "status_reason",
+    "granted_scopes",
+    "label",
+    "description",
+  ],
 }
 
 /**

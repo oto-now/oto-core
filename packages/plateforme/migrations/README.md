@@ -445,6 +445,17 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   2. `20261113090000_platform_contact_reserve.sql` (contact d'une organisation) : `org_contact`, re-versionnée à
      signature identique, ne rend plus de ligne qu'à un membre de l'organisation ou à l'équipe plateforme ; un
      non-membre n'en reçoit aucune. Privilèges redits ; aucune table, colonne, policy ni index ; rien à relancer avant.
+- `20261114120000_platform_ecran_connecteurs.sql` (écran Connecteurs, lot 1, oto-core#103 ; connecteurs et comptes,
+  § Écran Connecteurs) : la colonne `accounts.description` (200 caractères au plus, lue par `authenticated`, jamais
+  insérée par lui) ; `UPDATE(label, description)` à `platform_server`, qui renomme et décrit un compte une fois décidé
+  qui le gère ; `platform.record_account_probe`, `security definer` réservée au rôle du serveur, qui range le dernier
+  test d'un compte dans `health.last_probe` ; la policy `connector_activations_insert_server` (activation implicite au
+  premier compte d'un connecteur jamais activé, une ligne active au nom de l'appelant) ; l'index unique
+  `uq_accounts_org_id_label` (organisation, libellé) remplacé par `uq_accounts_owner_label` (organisation,
+  propriétaire, libellé, `nulls not distinct`), plus large : il admet toute ligne qu'admettait l'ancien. Le seul
+  retrait d'index admis par `check:migrations` : un index unique remplacé dans le même fichier par un index unique de la
+  même table dont les clés couvrent les siennes et en ajoutent. Une colonne, une fonction, une policy, un index
+  remplacé ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant le tag.
 
 ## Installer sur un hôte neuf
 
@@ -705,7 +716,9 @@ d'administration, les retire.
   d'abord, dans le même fichier, qu'aucune ligne ne contrevient à la nouvelle et s'arrête sinon
   (`20260928120000`, fiche D107 : `teams_slug_reserved` refuse désormais `private`) ; de même une clé étrangère
   remplacée par une clé du même nom (`add constraint x foreign key …`, M26) : la revue vérifie la
-  décision qui change son action. Refuse aussi une fonction de
+  décision qui change son action ; et un `drop index` d'un index unique connu des fichiers lus, quand le même fichier
+  crée un index unique de la même table dont les clés couvrent toutes les siennes et en ajoutent (plus large, il admet
+  toute ligne qu'admettait l'ancien : `20261114120000`, le libellé d'un compte unique par propriétaire). Refuse aussi une fonction de
   `platform` sans `revoke execute … from public` dans le même
   fichier (`function-execute-not-revoked`, fonctions de déclencheur exceptées), et ce qui
   attacherait de nouveau le schéma à Supabase ou à une extension que l'hôte refuse (E01-S09) : une

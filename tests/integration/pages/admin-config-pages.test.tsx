@@ -102,7 +102,7 @@ const PAGES = [
 const [PAGE_ORGANISATION] = PAGES
 
 /** Un compte personnel de qui regarde, qu'il gère : la page en lit les partages. */
-const MON_COMPTE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", label: "Mail Claire", connector: "mail", owner: { kind: "user" }, mode: "simule", status: "active", viewerLevel: "manage" }
+const MON_COMPTE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", label: "Mail Claire", connector: "mail", owner: { kind: "user" }, mode: "simule", status: "active", viewerLevel: "manage", description: null, lastProbe: null }
 const PARTAGES = { id: MON_COMPTE.id, label: MON_COMPTE.label, owner: { kind: "user" as const, teamId: null, userId: "user-1" }, viewerLevel: 4 as const, rules: [], general: { id: "regle-1", level: "write" as const } }
 
 beforeEach(() => {
@@ -118,7 +118,7 @@ beforeEach(() => {
     contact: null,
   })
   vi.mocked(listConnectorsForOrg).mockResolvedValue([
-    { connector: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [] },
+    { connector: "mail", label: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [], closedBy: null },
   ])
   vi.mocked(listOrgAccounts).mockResolvedValue([])
   vi.mocked(listOwnAccounts).mockResolvedValue([])

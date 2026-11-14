@@ -21,6 +21,7 @@ const COMPTE = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e"
 
 const MAIL_ACTIF: OrgConnector = {
   connector: "mail",
+  label: "mail",
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
   activatedBy: { userId: "user-claire", name: "Claire Morel" },
@@ -28,10 +29,11 @@ const MAIL_ACTIF: OrgConnector = {
     { name: "mail.create_draft", class: "write" },
     { name: "mail.send_draft", class: "sensitive" },
   ],
+  closedBy: null,
 }
 const MAIL_INACTIF: OrgConnector = { ...MAIL_ACTIF, state: "inactive", activatedAt: null, activatedBy: null }
 
-const MAIL_VENTES: AccountView = { id: COMPTE, label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "manage" }
+const MAIL_VENTES: AccountView = { id: COMPTE, label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "manage", description: null, lastProbe: null }
 
 const DONNEES: DonneesDesConnecteurs = {
   connectors: [MAIL_ACTIF],
@@ -195,17 +197,19 @@ describe("EcranConnecteurs, accounts (AC6, AC7)", () => {
   })
 })
 
-const CRM: OrgConnector = { connector: "crm", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "crm.get_company", class: "read" }] }
+const CRM: OrgConnector = { connector: "crm", label: "Crm", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "crm.get_company", class: "read" }], closedBy: null }
 const FORMULAIRE_CRM: ConnectorAccountForm = {
   connector: "crm",
   label: "Crm",
+  ownerKinds: ["org", "team", "user"],
+  probe: { available: true, balance: false },
   fields: [
     { name: "client_id", label: "Client ID", secret: false },
     { name: "client_secret", label: "Client secret", secret: true },
   ],
   settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
 }
-const CRM_VENTES: AccountView = { id: COMPTE, label: "Crm Ventes", connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: [], updatedAt: null }, settings: {}, viewerLevel: "manage" }
+const CRM_VENTES: AccountView = { id: COMPTE, label: "Crm Ventes", connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: [], updatedAt: null }, settings: {}, viewerLevel: "manage", description: null, lastProbe: null }
 const VIVANTS: Partial<DonneesDesConnecteurs> = { connectors: [CRM], impacts: {}, accounts: [CRM_VENTES], formulaires: [FORMULAIRE_CRM] }
 
 describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-champs)", () => {
@@ -277,8 +281,16 @@ describe("EcranConnecteurs, live accounts and their secret (comptes-a-plusieurs-
   })
 })
 
-const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
-const MS: OrgConnector = { connector: "microsoft", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }] }
+const FORMULAIRE_MS: ConnectorAccountForm = {
+  connector: "microsoft",
+  label: "Microsoft 365",
+  consent: true,
+  ownerKinds: ["user"],
+  probe: { available: false, balance: false },
+  fields: [],
+  settings: [],
+}
+const MS: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }], closedBy: null }
 const MON_COMPTE_MS: AccountView = {
   id: COMPTE,
   label: "lea@contoso.test (microsoft)",
@@ -289,6 +301,8 @@ const MON_COMPTE_MS: AccountView = {
   secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" },
   settings: {},
   viewerLevel: "manage",
+  description: null,
+  lastProbe: null,
 }
 
 describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
@@ -334,8 +348,16 @@ describe("EcranConnecteurs, a person's consent (oauth2_user)", () => {
   })
 })
 
-const FORMULAIRE_LI: ConnectorAccountForm = { connector: "messagerie", label: "Messagerie", hosted: { ready: true }, fields: [], settings: [] }
-const LI: OrgConnector = { connector: "messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }] }
+const FORMULAIRE_LI: ConnectorAccountForm = {
+  connector: "messagerie",
+  label: "Messagerie",
+  hosted: { ready: true },
+  ownerKinds: ["user"],
+  probe: { available: false, balance: false },
+  fields: [],
+  settings: [],
+}
+const LI: OrgConnector = { connector: "messagerie", label: "Messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }], closedBy: null }
 const MON_COMPTE_LI: AccountView = { ...MON_COMPTE_MS, label: "lea@contoso.test (messagerie)", connector: "messagerie", secret: { fields: [], updatedAt: null } }
 
 describe("EcranConnecteurs, a hosted account (accountIdentity)", () => {

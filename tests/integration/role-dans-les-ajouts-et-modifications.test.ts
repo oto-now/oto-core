@@ -359,14 +359,16 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     expect(await seed.admin`select id from platform.accounts where org_id = ${org.id}`).toHaveLength(before.length + 4)
   })
 
-  it.each(SESSIONS)("should refuse a plain member activating or deactivating a connector, and let an administrator (session %s)", async (session) => {
+  it.each(SESSIONS)("should refuse a plain member activating or deactivating a connector, but the implicit activation under the server role, and let an administrator (session %s)", async (session) => {
     await seed.admin`delete from platform.connector_activations where org_id = ${org.id}`
     const activate = (by: SeededPerson) => (sql: Tx) =>
       sql`insert into platform.connector_activations (org_id, connector, state, activated_by) values (${org.id}, 'notion', 'active', ${by.id})
           on conflict (org_id, connector) do update set state = excluded.state, activated_by = excluded.activated_by returning connector`
     const deactivate = (sql: Tx) => sql`update platform.connector_activations set state = 'inactive' where org_id = ${org.id} and connector = 'notion' returning connector`
-    expect(await attempt(lea, activate(lea), session)).toBe("42501")
-    expect(await seed.admin`select 1 from platform.connector_activations where org_id = ${org.id}`).toHaveLength(0)
+    // Sous le rôle du serveur, un membre active à son nom un connecteur jamais activé : l'activation implicite du premier
+    // compte (`connector_activations_insert_server`, écran Connecteurs, lot 1), décidée par `openConnectorForAccount`.
+    expect(await attempt(lea, activate(lea), session)).toBe(session === "server" ? 1 : "42501")
+    expect(await seed.admin`select 1 from platform.connector_activations where org_id = ${org.id}`).toHaveLength(session === "server" ? 1 : 0)
     expect(await attempt(ada, activate(ada), session)).toBe(1)
     expect(await attempt(lea, deactivate, session)).toBe(0)
     expect(await seed.admin`select state from platform.connector_activations where org_id = ${org.id}`).toEqual([{ state: "active" }])
