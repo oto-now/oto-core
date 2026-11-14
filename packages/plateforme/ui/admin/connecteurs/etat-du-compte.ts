@@ -2,7 +2,7 @@
 // répare pour qui peut le faire. Fonction pure, lue par la liste et par le détail : sans elle, chacun recomposait l'état
 // depuis le mode, la marque, le secret et le consentement. Module sans « use client » : l'écran, rendu par le serveur,
 // l'appelle.
-import type { AccountView, ConnectorAccountForm } from "../../../schemas"
+import type { AccountProbe, AccountView, ConnectorAccountForm } from "../../../schemas"
 import { dateLisible } from "../../format/dates"
 
 /** Comment se connecte un compte d'un connecteur : saisi à la main, par consentement, ou branché chez le tiers. */
@@ -15,12 +15,12 @@ export const connexionDe = (formulaire: ConnectorAccountForm | undefined): Conne
 type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
 
 export type EtatDuCompte = {
-  code: "non_teste" | "a_terminer" | "a_reconnecter" | "cle_refusee" | "credits_epuises" | "desactive"
+  code: "non_teste" | "fonctionne" | "test_en_echec" | "a_terminer" | "a_reconnecter" | "cle_refusee" | "credits_epuises" | "desactive"
   /** Le mot de l'état, toujours écrit : la couleur du point ne le dit jamais seule. */
   mot: string
   precision: string | null
   /** L'état du point du design system (`.oto-dot`). */
-  point: "rest" | "review" | "failed" | "paused"
+  point: "rest" | "ok" | "review" | "failed" | "paused"
   /** Vrai pour un état qui attend quelqu'un : ces comptes viennent en tête de la liste. */
   demandeUnGeste: boolean
   /** Le geste offert à qui regarde ; `null` : aucun, ou pas pour lui. */
@@ -81,15 +81,42 @@ function aTerminer(compte: AccountView, formulaire: ConnectorAccountForm | undef
   if (connexion === "consentement") {
     return jamaisConnecte(compte) ? { ...base, precision: "Pas encore connecté au service.", geste: droits.aMoi ? "connecter" : null } : null
   }
-  // Un connecteur sans champ de secret n'attend aucune clé ; un compte branché naît connecté.
-  if (connexion !== "saisie" || formulaire?.fields.length === 0 || clePosee(compte)) return null
+  // Un connecteur sans formulaire (simulé, ou servi par la clé de l'hôte) ou sans champ de secret n'attend aucune clé ;
+  // un compte branché naît connecté.
+  if (connexion !== "saisie" || !formulaire || formulaire.fields.length === 0 || clePosee(compte)) return null
   return { ...base, precision: "Aucune clé saisie.", geste: droits.gere && formulaire ? "saisir" : null }
 }
 
 /**
+ * Le dernier test gardé, s'il porte sur la clé en place : pour une clé saisie, un test plus ancien qu'elle ne compte
+ * plus. Un compte connecté chez le tiers garde son test : la date de son secret avance à chaque jeton renouvelé.
+ */
+function dernierTest(compte: AccountView, formulaire: ConnectorAccountForm | undefined): AccountProbe | null {
+  const test = compte.lastProbe
+  const cle = compte.secret?.updatedAt
+  return test && cle && connexionDe(formulaire) === "saisie" && Date.parse(test.at) < Date.parse(cle) ? null : test
+}
+
+/** La raison du dernier test, s'il a échoué : le détail la montre quel que soit l'état (désactivé, à terminer). */
+export function echecDuDernierTest(compte: AccountView, formulaire: ConnectorAccountForm | undefined): string | null {
+  const test = dernierTest(compte, formulaire)
+  return test && !test.healthy ? test.reason : null
+}
+
+/** Ce que dit le dernier test : « Fonctionne », avec sa date et le solde lu, ou « Test en échec ». */
+function teste(compte: AccountView, formulaire: ConnectorAccountForm | undefined): EtatDuCompte | null {
+  const test = dernierTest(compte, formulaire)
+  if (!test) return null
+  const date = dateLisible(test.at)
+  if (!test.healthy) return { code: "test_en_echec", mot: "Test en échec", precision: date ? `Le test du ${date} a échoué.` : "Le dernier test a échoué.", point: "failed", demandeUnGeste: true, geste: null }
+  const solde = test.balance && test.balance.value !== null ? ` Solde : ${test.balance.value.toLocaleString("fr-FR")} ${test.balance.unit}.` : ""
+  return { code: "fonctionne", mot: "Fonctionne", precision: `${date ? `Testé le ${date}.` : "Testé."}${solde}`, point: "ok", demandeUnGeste: false, geste: null }
+}
+
+/**
  * L'état d'un compte pour la personne `moi` : désactivé, à reconnecter (en erreur, ou refusé par un service où il
- * se connecte chez le tiers), marqué (clé refusée, crédits épuisés), à
- * terminer, sinon sain. L'état sain se dit « Non testé » : aucun test de connexion n'est encore gardé sur le compte.
+ * se connecte chez le tiers), marqué (clé refusée, crédits épuisés), à terminer, sinon ce que dit son dernier test
+ * (« Fonctionne », « Test en échec »), et « Non testé » sans test, ou quand la clé a changé depuis.
  */
 export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string): EtatDuCompte {
   if (compte.status === "disabled") return { code: "desactive", mot: "Désactivé", precision: null, point: "paused", demandeUnGeste: false, geste: null }
@@ -98,7 +125,8 @@ export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountFo
   if (compte.status === "error") return aReconnecter(compte, formulaire, aMoi)
   return (
     marque(compte, formulaire, { gere, aMoi }) ??
-    aTerminer(compte, formulaire, { gere, aMoi }) ?? {
+    aTerminer(compte, formulaire, { gere, aMoi }) ??
+    teste(compte, formulaire) ?? {
       code: "non_teste",
       mot: "Non testé",
       precision: compte.mode === "simule" ? "Connecteur simulé : rien ne sort du serveur." : null,

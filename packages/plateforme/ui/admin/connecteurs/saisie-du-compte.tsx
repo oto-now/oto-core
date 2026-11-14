@@ -6,7 +6,7 @@
 // revient jamais : un champ posé le dit, laissé vide il est gardé, coché « Effacer » il est effacé ; un réglage vidé
 // est effacé. La validation est celle de l'API (`accountSecretInputSchema`), le refus du service dit le champ en
 // cause. Après un succès, la saisie se vide et la page se relit.
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { FormProvider, useForm } from "react-hook-form"
 import { accountSecretInputSchema, type AccountView, type ConnectorAccountForm } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
@@ -68,14 +68,17 @@ type SaisieDuCompteProps = SaisieProps & {
 export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieDuCompteProps) {
   const [ouvert, setOuvert] = useState(ouverte)
   const [annonce, setAnnonce] = useState("")
+  const bouton = useRef<HTMLButtonElement>(null)
   const fermer = (texte: string) => {
     setAnnonce(texte)
     setOuvert(false)
+    // La saisie part avec le focus qu'elle portait : il revient au bouton qui l'a ouverte.
+    bouton.current?.focus()
   }
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
+        <Button ref={bouton} type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
           {libelle}
           <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>

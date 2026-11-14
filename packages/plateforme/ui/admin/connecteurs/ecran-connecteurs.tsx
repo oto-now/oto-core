@@ -4,9 +4,10 @@
 // qui le répare ; des filtres et une recherche tenus par l'adresse ; le détail d'un connecteur dans un tiroir, ouvert par
 // l'adresse (`detail-du-connecteur.tsx`), où qui le gère le partage comme une page, remplace sa clé, lit le journal de
 // ses partages et le désactive ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ; l'issue du retour d'un
-// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les connecteurs qu'il active ou
-// désactive pour l'organisation, tant que l'activation reste une étape du moteur. Server Component : il calcule les
-// lignes (`lignes-des-connecteurs.ts`) et ne passe à ses îlots clients que des données.
+// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les outils ouverts, ceux qu'il a
+// fermés, qu'il ferme ou rouvre ; un outil jamais utilisé s'ouvre au premier ajout. Server Component : il calcule les
+// lignes (`lignes-des-connecteurs.ts`) et le catalogue de l'ajout (`catalogue-des-connecteurs.ts`), et ne passe à ses
+// îlots clients que des données.
 //
 // Les mots « activation », « compte » et « secret » ne s'écrivent plus pour un membre (`connecteurs-et-comptes.md`
 // § Écran Connecteurs). L'écran masque un geste, le service le décide.
@@ -26,9 +27,10 @@ import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
 import { questionDeDesactivation } from "../textes"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
-import { AjoutDUnConnecteur, type CreationPossible, type ServiceAConnecter } from "./ajout-d-un-connecteur"
+import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
+import { outilsAAjouter } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
-import { connexionDe } from "./etat-du-compte"
+import { estAMoi } from "./etat-du-compte"
 import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, SEUIL_DE_RECHERCHE, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 
@@ -111,27 +113,30 @@ function pluriel(nombre: number, singulier: string, pluriel: string): string {
   return `${nombre} ${nombre > 1 ? pluriel : singulier}`
 }
 
+/** Ouvert, fermé par un administrateur, ou jamais utilisé : le premier ajout l'ouvre alors. */
 function etat(connecteur: OrgConnector): string {
-  if (connecteur.state !== "active") return "Inactif"
-  const qui = connecteur.activatedBy?.name
-  return `Actif depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
+  if (connecteur.state === "active") {
+    const qui = connecteur.activatedBy?.name
+    return `Ouvert depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
+  }
+  return connecteur.closedBy ? `Fermé par ${connecteur.closedBy.name ?? "un administrateur"}` : "S'ouvre au premier ajout"
 }
 
-/** L'activation d'un connecteur inactif : grisée au plafond de `connectors_max` (E12-S02), avec le lien de l'hôte (îlot réservé aux administrateurs). */
+/** La réouverture d'un outil fermé : grisée au plafond de `connectors_max` (E12-S02), avec le lien de l'hôte (îlot réservé aux administrateurs). */
 function Activation({ nom, ressource, limites }: { nom: string; ressource: string; limites: OrgLimitsView | undefined }) {
   if (limites?.connectors && limitReached(limites.connectors)) {
-    return <LimiteAtteinte libelle="Activer" nom="connectors_max" etat={limites.connectors} lien={limites.raiseUrl} />
+    return <LimiteAtteinte libelle="Rouvrir" nom="connectors_max" etat={limites.connectors} lien={limites.raiseUrl} />
   }
   // Réversible : sans question (N5).
-  return <ActionPlateforme libelle="Activer" nomAccessible={`Activer ${nom}`} requete={{ methode: "POST", ressource, corps: {} }} ancre={ANCRE_DES_CONNECTEURS} />
+  return <ActionPlateforme libelle="Rouvrir" nomAccessible={`Rouvrir ${nom}`} requete={{ methode: "POST", ressource, corps: {} }} ancre={ANCRE_DES_CONNECTEURS} />
 }
 
 type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationImpact | undefined; limites: OrgLimitsView | undefined }
 
 function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurProps) {
-  const nom = connecteur.connector
+  const nom = connecteur.label
   const fonctions = connecteur.functions.map((fonction) => fonction.name)
-  const ressource = `admin/connectors/${encodeURIComponent(nom)}/activation`
+  const ressource = `admin/connectors/${encodeURIComponent(connecteur.connector)}/activation`
   // `flex-wrap` : la question d'une désactivation, ou un refus, passe sous la ligne au lieu de l'écraser.
   return (
     <Row className="flex-wrap gap-3" lead={<Icon as={Plug} size="sm" />}>
@@ -140,30 +145,29 @@ function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurPro
         <span className="oto-caption">{`${pluriel(fonctions.length, "fonction", "fonctions")} : ${fonctions.join(", ")}`}</span>
       </div>
       <span className="oto-caption">{etat(connecteur)}</span>
-      {connecteur.state === "active" ? (
+      {connecteur.state === "active" && (
         <ActionPlateforme
-          libelle="Désactiver"
-          nomAccessible={`Désactiver ${nom}`}
+          libelle="Fermer"
+          nomAccessible={`Fermer ${nom}`}
           requete={{ methode: "DELETE", ressource }}
-          confirmation={{ question: questionDeDesactivation(nom, impact), libelleConfirmer: "Désactiver" }}
+          confirmation={{ question: questionDeDesactivation(nom, impact), libelleConfirmer: "Fermer" }}
           ancre={ANCRE_DES_CONNECTEURS}
         />
-      ) : (
-        <Activation nom={nom} ressource={ressource} limites={limites} />
       )}
+      {connecteur.state !== "active" && connecteur.closedBy && <Activation nom={nom} ressource={ressource} limites={limites} />}
     </Row>
   )
 }
 
 type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: Partial<Record<string, DeactivationImpact>>; limites: OrgLimitsView | undefined }
 
-/** « Outils de l'organisation », pour un administrateur : les connecteurs du catalogue, qu'il active ou désactive pour toute l'organisation. */
+/** « Outils de l'organisation », pour un administrateur : les outils du catalogue, qu'il ferme ou rouvre pour toute l'organisation. */
 function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
   return (
-    <Ilot id={ANCRE_DES_CONNECTEURS} titre="Outils de l'organisation" compte={pluriel(connecteurs.length, "connecteur activable", "connecteurs activables")}>
+    <Ilot id={ANCRE_DES_CONNECTEURS} titre="Outils de l'organisation" compte={pluriel(connecteurs.length, "outil", "outils")}>
       <div className="flex flex-col gap-3">
-        <p className="oto-caption">Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours actives : elles ne s&apos;activent pas.</p>
-        <RowList rules empty={<EmptyState compact title="Aucun connecteur à activer dans cette version de la plateforme." />}>
+        <p className="oto-caption">Un outil s&apos;ouvre au premier connecteur qu&apos;un membre ajoute. Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours ouvertes.</p>
+        <RowList rules empty={<EmptyState compact title="Aucun outil dans cette version de la plateforme." />}>
           {connecteurs.map((connecteur) => (
             <LigneDeConnecteur key={connecteur.connector} connecteur={connecteur} impact={impacts[connecteur.connector]} limites={limites} />
           ))}
@@ -173,27 +177,16 @@ function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
   )
 }
 
-/** Les services que la personne connecte d'ici : l'hôte a fourni le port du consentement ou du branchement. */
-function servicesAConnecter(formulaires: readonly ConnectorAccountForm[]): ServiceAConnecter[] {
-  return formulaires
-    .filter((formulaire) => formulaire.consent === true || formulaire.hosted?.ready === true)
-    .map((formulaire) => ({ connecteur: formulaire.connector, libelle: formulaire.label, ressource: formulaire.consent === true ? "connector-consent" : "hosted-link" }))
-}
-
-/** Ce qu'un administrateur crée à la main : un compte de tout connecteur du catalogue que chacun ne connecte pas lui-même. */
-function creationPossible(donnees: DonneesDesConnecteurs): CreationPossible | null {
-  if (!donnees.administration) return null
-  const formulaires = donnees.formulaires ?? []
-  const personnels = formulaires.filter((formulaire) => connexionDe(formulaire) !== "saisie").map((formulaire) => formulaire.connector)
-  return {
-    connecteurs: donnees.connectors.map((connecteur) => connecteur.connector).filter((connecteur) => !personnels.includes(connecteur)),
-    equipes: donnees.sujets.equipes.map((equipe) => ({ id: equipe.id, name: equipe.nom })),
-    formulaires,
-  }
-}
-
-function Ajout({ donnees, ici }: { donnees: DonneesDesConnecteurs; ici: string }) {
-  return <AjoutDUnConnecteur aConnecter={servicesAConnecter(donnees.formulaires ?? [])} creation={creationPossible(donnees)} ici={ici} />
+/** « Ajouter un connecteur » : le catalogue de la personne, ses équipes si elle administre, et les noms qu'elle porte déjà. */
+function Ajout({ donnees, moi, ici }: { donnees: DonneesDesConnecteurs; moi: string; ici: string }) {
+  return (
+    <AjoutDUnConnecteur
+      outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.administration !== undefined)}
+      equipes={donnees.sujets.equipes.map((equipe) => ({ id: equipe.id, name: equipe.nom }))}
+      mesNoms={donnees.accounts.filter((compte) => estAMoi(compte, moi)).map((compte) => compte.label)}
+      ici={ici}
+    />
+  )
 }
 
 type VueProps = { donnees: DonneesDesConnecteurs; moi: string; vue: VueDesConnecteurs; ici: string }
@@ -207,7 +200,7 @@ function recherche(vue: VueDesConnecteurs, ici: string): { chemin: string; param
 function Liste({ donnees, moi, vue, ici }: VueProps) {
   if (donnees.accounts.length === 0) {
     return (
-      <EmptyState icon={<Icon as={Plug} />} title="Aucun connecteur pour l'instant" action={<Ajout donnees={donnees} ici={ici} />}>
+      <EmptyState icon={<Icon as={Plug} />} title="Aucun connecteur pour l'instant" action={<Ajout donnees={donnees} moi={moi} ici={ici} />}>
         Branchez un outil pour que votre assistant puisse y lire et y agir. Il reste privé tant que vous ne le partagez pas.
       </EmptyState>
     )
@@ -268,7 +261,7 @@ export function EcranConnecteurs({ resultat, moi, vue, Lien, ici, fil, consentem
   // Une lecture nourrit tout l'écran : son échec se dit une fois, sans « Ajouter », qui a besoin d'elle.
   const lu = resultat.error === undefined ? resultat.data : null
   // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans la page vide sinon, jamais deux fois.
-  const ajout = lu && lu.accounts.length > 0 ? <Ajout donnees={lu} ici={ici} /> : undefined
+  const ajout = lu && lu.accounts.length > 0 ? <Ajout donnees={lu} moi={moi} ici={ici} /> : undefined
   return (
     <>
       <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} meta={SOUS_TITRE} actions={ajout} />

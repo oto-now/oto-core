@@ -1,69 +1,152 @@
 "use client"
 
-// « Ajouter un connecteur » (écran Connecteurs) : le bouton et sa fenêtre. Elle rassemble ce que le moteur sait faire
-// aujourd'hui : chacun y connecte son propre compte à un service à consentement ou à compte rattaché
-// (`ConnexionParConsentement`), et un administrateur y crée un compte pour l'organisation ou pour une équipe
-// (`CreationDeCompte`). Le catalogue avec recherche, l'ajout d'un connecteur à clé par tout membre et le test à la saisie
-// attendent le moteur (`ajout-d-un-connecteur.md`) : ils rempliront cette fenêtre. L'îlot ne reçoit que des données.
-import { useState } from "react"
-import type { ConnectorAccountForm } from "../../../schemas"
+// « Ajouter un connecteur » (écran Connecteurs) : le bouton et sa fenêtre, en deux temps. D'abord le catalogue : les
+// outils que la personne peut ajouter (`catalogue-des-connecteurs.ts`), cherchés par leur nom, un outil fermé par un
+// administrateur dit sans geste. Puis l'outil choisi : sa clé à saisir (`FormulaireDAjout`), ou sa connexion chez le
+// tiers (`ConnexionParConsentement`). Une carte ne dit jamais comment l'outil se connecte. L'îlot ne reçoit que des
+// données ; la recherche et l'outil choisi sont un état de la fenêtre, perdu à sa fermeture.
+import { useEffect, useRef, useState } from "react"
 import { Dialog } from "../../ds/react/dialog"
-import { Button } from "../../ds/react/primitives"
+import { Input } from "../../ds/react/forms"
+import { Avatar, Button } from "../../ds/react/primitives"
 import { useHote } from "../../hote/navigation"
+import { nomLibre, outilsCherches, type OutilAAjouter } from "./catalogue-des-connecteurs"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
-import { CreationDeCompte } from "./creation-de-compte"
-import { adresseDeLaVue } from "./lignes-des-connecteurs"
+import { FormulaireDAjout } from "./formulaire-d-ajout"
+import { adresseDeLaVue, SEUIL_DE_RECHERCHE } from "./lignes-des-connecteurs"
 
 const TITRE = "Ajouter un connecteur"
+const RECHERCHER = "Rechercher un outil"
 
-/** Un service que la personne connecte d'ici, par son consentement ou par un compte rattaché. */
-export type ServiceAConnecter = { connecteur: string; libelle: string; ressource: "connector-consent" | "hosted-link" }
+function Carte({ outil, choisir }: { outil: OutilAAjouter; choisir: (connecteur: string) => void }) {
+  if (outil.ferme) {
+    return (
+      <li className="flex items-center gap-3 px-3 py-2 text-mute">
+        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
+        <span className="flex min-w-0 flex-col">
+          <span>{outil.libelle}</span>
+          <span className="oto-caption">Fermé par un administrateur</span>
+        </span>
+      </li>
+    )
+  }
+  return (
+    <li>
+      <Button type="button" variant="secondary" block onClick={() => choisir(outil.connecteur)}>
+        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
+        {outil.libelle}
+      </Button>
+    </li>
+  )
+}
 
-/** Ce qu'un administrateur crée : un compte d'un de ces connecteurs, pour l'organisation ou une de ces équipes. */
-export type CreationPossible = { connecteurs: string[]; equipes: { id: string; name: string }[]; formulaires: ConnectorAccountForm[] }
+/** Le premier temps : la recherche au-delà de quelques outils, puis les cartes. `auRetour` : le focus va à son titre. */
+function Catalogue({ outils, choisir, auRetour }: { outils: OutilAAjouter[]; choisir: (connecteur: string) => void; auRetour: boolean }) {
+  const [q, setQ] = useState("")
+  const titre = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (auRetour) titre.current?.focus()
+  }, [auRetour])
+  const trouves = outilsCherches(outils, q)
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 ref={titre} tabIndex={-1} className="oto-label">
+        Choisir un outil
+      </h3>
+      {outils.length > SEUIL_DE_RECHERCHE && <Input type="search" aria-label={RECHERCHER} placeholder={RECHERCHER} value={q} onChange={(evenement) => setQ(evenement.target.value)} />}
+      {outils.length === 0 && <p>Aucun outil à ajouter pour l&apos;instant. Un administrateur peut ajouter un connecteur et le partager avec vous.</p>}
+      {/* Montée d'emblée : une recherche sans réponse s'y annonce. */}
+      <p role="status">{outils.length > 0 && trouves.length === 0 ? "Aucun outil ne correspond." : ""}</p>
+      {trouves.length > 0 && (
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {trouves.map((outil) => (
+            <Carte key={outil.connecteur} outil={outil} choisir={choisir} />
+          ))}
+        </ul>
+      )}
+      <p className="oto-caption">Ces connecteurs servent votre assistant à travers Oto, dans toutes vos conversations. Ils n&apos;apparaissent pas dans les réglages de votre assistant.</p>
+    </div>
+  )
+}
+
+type OutilChoisiProps = {
+  outil: OutilAAjouter
+  equipes: { id: string; name: string }[]
+  mesNoms: string[]
+  ici: string
+  retour: () => void
+  apresAjout: (compte: { id: string }) => void
+}
+
+/** Le second temps : l'outil choisi, son titre (qui prend le focus) et sa façon de se connecter. */
+function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: OutilChoisiProps) {
+  const titre = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    titre.current?.focus()
+  }, [])
+  const chezLeTiers = outil.facon === "consentement" || outil.facon === "branchement"
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <Button type="button" variant="ghost" size="sm" onClick={retour}>
+          Tous les outils
+        </Button>
+      </div>
+      <h3 ref={titre} tabIndex={-1} className="flex items-center gap-2 font-medium text-ink">
+        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
+        {outil.libelle}
+      </h3>
+      {chezLeTiers ? (
+        <>
+          <p className="text-sm text-ink">{`Aucune clé à saisir : vous vous connectez chez ${outil.libelle}, puis vous revenez ici.`}</p>
+          <div>
+            <ConnexionParConsentement
+              ressource={outil.facon === "branchement" ? "hosted-link" : "connector-consent"}
+              connecteur={outil.connecteur}
+              libelle={outil.facon === "branchement" ? `Relier mon compte ${outil.libelle}` : `Connecter mon compte ${outil.libelle}`}
+              retour={ici}
+            />
+          </div>
+          <p className="oto-caption">Privé : vous seul pourrez l&apos;utiliser. Vous le partagerez ensuite si vous voulez.</p>
+        </>
+      ) : (
+        <FormulaireDAjout outil={outil} equipes={equipes} nomPropose={nomLibre(outil.libelle, mesNoms)} annuler={retour} apresAjout={apresAjout} />
+      )}
+    </div>
+  )
+}
 
 type AjoutDUnConnecteurProps = {
-  aConnecter: ServiceAConnecter[]
-  /** `null` : la personne n'administre pas l'organisation. */
-  creation: CreationPossible | null
+  /** Les outils que la personne peut ajouter (`outilsAAjouter`). */
+  outils: OutilAAjouter[]
+  /** Les équipes de l'organisation, pour qui administre. */
+  equipes: { id: string; name: string }[]
+  /** Les noms des connecteurs personnels de la personne : le nom proposé n'en reprend aucun. */
+  mesNoms: string[]
   /** L'adresse de l'écran : un consentement y revient. */
   ici: string
 }
 
-function ServicesAConnecter({ services, ici }: { services: ServiceAConnecter[]; ici: string }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h3 className="oto-label">Connecter mon compte</h3>
-      <p className="oto-caption">Ces services se connectent personne par personne : le connecteur est à vous, privé tant que vous ne le partagez pas.</p>
-      {services.map((service) => (
-        <ConnexionParConsentement key={service.connecteur} ressource={service.ressource} connecteur={service.connecteur} libelle={`Connecter mon compte ${service.libelle}`} retour={ici} />
-      ))}
-    </section>
-  )
-}
-
-function Creation({ creation, apresCreation }: { creation: CreationPossible; apresCreation: (compte: { id: string }) => void }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h3 className="oto-label">Pour l&apos;organisation ou une équipe</h3>
-      {creation.connecteurs.length === 0 ? (
-        <p className="oto-caption">Aucun outil ne demande de clé dans cette version de la plateforme.</p>
-      ) : (
-        <CreationDeCompte connecteurs={creation.connecteurs} equipes={creation.equipes} formulaires={creation.formulaires} apresCreation={apresCreation} />
-      )}
-    </section>
-  )
-}
-
-export function AjoutDUnConnecteur({ aConnecter, creation, ici }: AjoutDUnConnecteurProps) {
+export function AjoutDUnConnecteur({ outils, equipes, mesNoms, ici }: AjoutDUnConnecteurProps) {
   const { naviguer } = useHote()
   const [ouvert, setOuvert] = useState(false)
+  const [choisi, setChoisi] = useState<string | null>(null)
+  const [revenu, setRevenu] = useState(false)
+  const outil = outils.find((candidat) => candidat.connecteur === choisi)
+  const fermer = () => {
+    setOuvert(false)
+    setChoisi(null)
+    setRevenu(false)
+  }
   // Un compte créé : la fenêtre se ferme, la liste le montre et son détail s'ouvre.
   const ouvrirLeDetail = (compte: { id: string }) => {
-    setOuvert(false)
+    fermer()
     naviguer(adresseDeLaVue(ici, { filtre: "all", q: "", compte: compte.id }))
   }
-  const rien = aConnecter.length === 0 && creation === null
+  const retour = () => {
+    setChoisi(null)
+    setRevenu(true)
+  }
   return (
     <>
       <Button type="button" variant="primary" onClick={() => setOuvert(true)}>
@@ -71,12 +154,13 @@ export function AjoutDUnConnecteur({ aConnecter, creation, ici }: AjoutDUnConnec
       </Button>
       {/* Montée à l'ouverture : fermée, ni le formulaire ni sa saisie ne restent dans le document. */}
       {ouvert && (
-        <Dialog open onClose={() => setOuvert(false)} title={TITRE} size="md">
-          <div className="flex flex-col gap-6">
-            {aConnecter.length > 0 && <ServicesAConnecter services={aConnecter} ici={ici} />}
-            {creation && <Creation creation={creation} apresCreation={ouvrirLeDetail} />}
-            {rien && <p>Aucun outil ne se connecte par vous-même pour l&apos;instant. Un administrateur peut ajouter un connecteur et le partager avec vous.</p>}
-          </div>
+        <Dialog open onClose={fermer} title={TITRE} size="md">
+          {outil ? (
+            // Une instance par outil : la saisie d'un outil ne passe jamais à un autre.
+            <OutilChoisi key={outil.connecteur} outil={outil} equipes={equipes} mesNoms={mesNoms} ici={ici} retour={retour} apresAjout={ouvrirLeDetail} />
+          ) : (
+            <Catalogue outils={outils} choisir={setChoisi} auRetour={revenu} />
+          )}
         </Dialog>
       )}
     </>

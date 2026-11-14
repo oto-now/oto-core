@@ -1,5 +1,6 @@
-// Le détail d'un connecteur (écran Connecteurs), dans un tiroir ouvert par l'adresse : son état et le geste qui le
-// répare, qui y a accès, ce que l'assistant peut y faire, sa connexion, le journal de ses partages et sa désactivation.
+// Le détail d'un connecteur (écran Connecteurs), dans un tiroir ouvert par l'adresse : son nom et sa description, son
+// état, son test et le geste qui le répare, qui y a accès, ce que l'assistant peut y faire, sa connexion, le journal de
+// ses partages, sa désactivation et sa réactivation.
 // Rendu par le serveur : les gestes sont des îlots clients qui ne reçoivent que des données. Le tiroir est celui du
 // journal (`TiroirDeConversation`, un `<dialog>` natif : Échap et le bouton le ferment, le focus revient au lien qui l'a
 // ouvert). L'écran masque un geste, le service le décide : rien de ce qui est réservé à qui gère le compte ne s'offre
@@ -15,12 +16,15 @@ import { TiroirDeConversation } from "../../journal/tiroir-de-conversation"
 import { EtiquetteDeLigne } from "../../noeud/partage-visuel"
 import { questionDeDesactivationDuCompte } from "../textes"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
-import { ANCRE_DE_L_ETAT, connexionDe, estAMoi, etatDuCompte, type EtatDuCompte } from "./etat-du-compte"
+import { ANCRE_DE_L_ETAT, connexionDe, echecDuDernierTest, estAMoi, etatDuCompte, type EtatDuCompte } from "./etat-du-compte"
 import { JournalDesPartages } from "./journal-des-partages"
+import { ModificationDuConnecteur } from "./modification-du-connecteur"
 import { actionsParClasse, NIVEAUX_DU_COMPTE, TON_DU_NIVEAU } from "./libelles-des-partages"
 import type { PartagesDuCompte } from "./lignes-des-connecteurs"
 import { OuvrirLePartage, PartageDuConnecteur, PorteeDuPartage } from "./partage-du-connecteur"
+import { REFUS_DE_LA_REACTIVATION } from "./refus-des-connecteurs"
 import { SaisieDuCompte } from "./saisie-du-compte"
+import { DetailDuTest, TestDuConnecteur } from "./test-de-connexion"
 
 function Section({ titre, id, action, children }: { titre: string; id?: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -43,9 +47,11 @@ type Detail = {
   ici: string
 }
 
-/** L'état en un mot, sa précision, et le geste chez le tiers quand il revient à la personne. */
+/** L'état en un mot, sa précision, le geste chez le tiers quand il revient à la personne, et le test pour qui gère. */
 function Etat({ compte, formulaire, etat, ici }: Detail) {
   const chezLeTiers = etat.geste === "connecter" || etat.geste === "reconnecter"
+  const gereUnReel = compte.viewerLevel === "manage" && compte.mode === "reel" && formulaire !== undefined
+  const echec = echecDuDernierTest(compte, formulaire)
   return (
     <Section titre="État" id={ANCRE_DE_L_ETAT}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -65,6 +71,9 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
           />
         )}
       </div>
+      {echec && <DetailDuTest raison={echec} />}
+      {gereUnReel && formulaire.probe.available && <TestDuConnecteur compte={{ id: compte.id, label: compte.label }} />}
+      {gereUnReel && !formulaire.probe.available && connexionDe(formulaire) === "saisie" && <p className="oto-caption">Pas de test automatique pour cet outil : essayez-le dans votre assistant.</p>}
     </Section>
   )
 }
@@ -196,10 +205,13 @@ function phraseDeConnexion(compte: AccountView, formulaire: ConnectorAccountForm
   return date ? `Clé posée le ${date}. Jamais réaffichée, jamais transmise à l'assistant.` : "Aucune clé posée."
 }
 
-/** La connexion, et pour qui gère un compte réel à clé, la saisie qui la pose ou la remplace. */
+/**
+ * La connexion, et pour qui gère un compte réel à clé, la saisie qui la pose ou la remplace ; un compte désactivé la
+ * garde, pour poser une nouvelle clé et la tester avant de le réactiver.
+ */
 function Connexion({ compte, formulaire, etat }: Omit<Detail, "ici">) {
   const aCle = formulaire !== undefined && connexionDe(formulaire) === "saisie" && formulaire.fields.length + formulaire.settings.length > 0
-  const saisissable = compte.viewerLevel === "manage" && compte.mode === "reel" && compte.status !== "disabled" && aCle
+  const saisissable = compte.viewerLevel === "manage" && compte.mode === "reel" && aCle
   return (
     <Section titre="Connexion">
       <p className="text-sm text-ink">{phraseDeConnexion(compte, formulaire)}</p>
@@ -239,6 +251,8 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
             </span>
             {gere && partages && <OuvrirLePartage libelle="Partager" nomAccessible={`Partager ${compte.label}`} variante="primary" />}
           </div>
+          {compte.description && <p className="text-sm text-ink">{compte.description}</p>}
+          {gere && <ModificationDuConnecteur compte={{ id: compte.id, label: compte.label, description: compte.description }} />}
           <Etat compte={compte} formulaire={formulaire} etat={etat} ici={ici} />
           <Acces compte={compte} partages={partages} moi={moi} />
           <Actions fonctions={fonctions} />
@@ -250,6 +264,15 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
               nomAccessible={`Désactiver ${compte.label}`}
               requete={{ methode: "POST", ressource: `admin/accounts/${encodeURIComponent(compte.id)}/disable`, corps: {} }}
               confirmation={{ question: questionDeDesactivationDuCompte(compte.label), libelleConfirmer: "Désactiver" }}
+              ancre={ANCRE_DE_L_ETAT}
+            />
+          )}
+          {gere && compte.status === "disabled" && (
+            <ActionPlateforme
+              libelle="Réactiver"
+              nomAccessible={`Réactiver ${compte.label}`}
+              requete={{ methode: "POST", ressource: `admin/accounts/${encodeURIComponent(compte.id)}/enable`, corps: {} }}
+              messages={REFUS_DE_LA_REACTIVATION}
               ancre={ANCRE_DE_L_ETAT}
             />
           )}

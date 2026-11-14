@@ -6,7 +6,7 @@
 |-------|--------|
 | **Épic** | Écrans de la plateforme (V2) : écran Connecteurs et traduction |
 | **Parcours** | 4.5 Administrer |
-| **Statut** | ⬜ Draft — le mainteneur du moteur a répondu le 2026-11-12 et livré son premier lot sur `main` le 2026-11-14 (§ Dépendances du moteur) ; à passer par la Definition of Ready avant de coder |
+| **Statut** | 🔵 In Progress — le mainteneur du moteur a répondu le 2026-11-12 et livré son premier lot sur `main` le 2026-11-14 (§ Dépendances du moteur) ; l'écran est codé sur ce lot (§ Post-implémentation), le contrôle visuel reste à faire |
 | **Priorité** | Must (V2) |
 | **Référence UI** | Maquette « Oto · Connecteurs, refonte UX » du responsable du produit, écrans 5 à 7 (choisir l'outil, coller la clé, les trois autres façons de se connecter), décrits en texte dans § Référence UI ci-dessous |
 | **Conventions** | portage, a11y, forms, security, state, api, database, registry, testing |
@@ -275,7 +275,14 @@ Hôte
 
 ## Rayon d'impact
 
-À compléter quand les formes du moteur sont arrêtées. Relevé du 2026-11-12 :
+Relevé du 2026-11-14, à l'implémentation de l'écran sur le lot 1 ; le relevé du 2026-11-12, plus bas, portait sur le moteur.
+
+- **Appelants** : la fenêtre d'ajout et l'ancienne création — `rg -l "AjoutDUnConnecteur|CreationDeCompte|creation-de-compte" packages src tests scripts` → `ecran-connecteurs.tsx` et `ajout-d-un-connecteur.tsx` seuls : la création est retirée, l'écran passe le catalogue. Les textes changés — `rg -l "questionDeDesactivation|LIBELLE_PRIS" packages src tests scripts` → `ui/admin/textes.ts` et `ecran-connecteurs.tsx` : la question dit « Fermer », `LIBELLE_PRIS` part avec son seul lecteur. L'état — `rg -l "etatDuCompte|dernierTest" packages src tests scripts` → `lignes-des-connecteurs.ts`, `detail-du-connecteur.tsx`, `tests/unit/lignes-des-connecteurs.test.ts` : deux codes de plus, lus par leur mot. Les doublures des tests de l'écran et de sa page suivent (gestes « Fermer », « Rouvrir », fenêtre en deux temps).
+- **Doublons** : les refus — `rg -l "refusDuConnecteur|messageDErreur" packages/plateforme/ui/admin/connecteurs` → `messageDErreur` dit les codes communs ; `refus-des-connecteurs.ts` ne porte que les raisons du lot, et s'appuie sur lui. La recherche du catalogue est un champ de la fenêtre, filtré à la frappe, et non `ListTools`, qui soumet une adresse : la fenêtre n'a pas d'adresse. Le formulaire des champs reste `champs-du-compte.tsx`, réutilisé tel quel.
+- **Effet produit** : aucune prop de l'écran ne change, la page de l'hôte non plus ; les routes appelées sont celles du lot 1, donc sa migration ; le MCP admin et `context` ne sont pas touchés par l'écran.
+- **Refacto** : aucun proposé.
+
+Relevé du 2026-11-12 :
 
 ### Appelants
 
@@ -340,4 +347,13 @@ Hôte
 
 ## Post-implémentation
 
-À remplir.
+- **Livré** : les critères « Choisir », « Connecter par une clé », « Connecter autrement », « Nommer et décrire », « Tester », « Réactiver » et « Administrateur », sur le lot 1 du moteur. « Sur demande » et « Demander l'accès » sont tombés (point 6, refusé).
+- **Non livré, faute de moteur** (lot 2) : les catégories, la phrase d'une carte, « Où trouver ma clé ? », « Bon à savoir », l'aide par champ, les avertissements d'une description.
+- **Non livré, sans destination** : « Demander un connecteur » (aucune route ne reçoit une demande) ; « copier une demande à coller dans l'assistant » pour un outil sans sonde : le détail dit seulement « Pas de test automatique pour cet outil : essayez-le dans votre assistant. ».
+- **Fichiers** : `ui/admin/connecteurs/{ajout-d-un-connecteur,formulaire-d-ajout,test-de-connexion,modification-du-connecteur}.tsx`, `{catalogue-des-connecteurs,refus-des-connecteurs}.ts` (nouveaux ou réécrits) ; `detail-du-connecteur.tsx`, `ecran-connecteurs.tsx`, `etat-du-compte.ts`, `lignes-des-connecteurs.ts`, `liste-des-connecteurs.tsx`, `ui/admin/textes.ts` (modifiés) ; `creation-de-compte.tsx` (retiré). Le catalogue vit dans `catalogue-des-connecteurs.ts`, sans `.tsx` propre : l'écran, rendu par le serveur, le calcule. `champs-du-compte.tsx` et la page de l'hôte ne changent pas.
+- **Choix d'implémentation** : une suite qui échoue après la création (clé, description, test) se dit dans la fenêtre avec sa raison, puis « Ouvrir le connecteur » mène au détail. Un outil sans formulaire se crée réel, puis simulé quand le service répond `unavailable_in_v1` : l'écran ne sait pas lequel il est. La recherche et l'outil choisi sont un état de la fenêtre, non de l'adresse. Le nom proposé n'évite que les connecteurs personnels de la personne ; pour l'organisation ou une équipe, le refus du moteur le dit sous le champ.
+- **Tests** : `tests/unit/catalogue-des-connecteurs.test.ts` (nouveau), `tests/unit/lignes-des-connecteurs.test.ts` (états du dernier test), `tests/integration/components/ecran-connecteurs.test.tsx` (détail, ajout, îlot), `tests/integration/pages/admin-config-pages.test.tsx`. Sur une vraie base : les services du lot sont couverts par les tests du moteur (`tests/integration/ecran-connecteurs-services.test.ts`) ; la clé posée sur un compte désactivé est lue dans le code de `setAccountSecret`, sans test propre.
+- **Revue** : une revue isolée a demandé onze corrections, faites : la même clé ne part plus deux fois à la sonde ; « Ajouter quand même » est un bouton distinct, qui ne vaut que pour la clé qui a échoué ; les suites de la création se disent avec leur raison ; un outil servi par la clé de l'hôte s'ajoute ; la raison d'un test en échec se lit même désactivé ; un compte connecté chez le tiers garde son test ; le focus revient au bouton après « Modifier le nom » et après la saisie de la clé ; les gestes réservés à qui gère ont leur test de droit ; « ni à chaque frappe » et « sans accent » sont prouvés ; la conception décrit l'état présent. Restent signalés, non appliqués : le squelette commun de `SaisieDuCompte` et `ModificationDuConnecteur` ; le champ « Description » écrit dans deux formulaires ; « Connexion réussie. » qui reste affiché après un remplacement de clé ; une sélection par classe dans un test ; `prise-des-connecteurs.md` qui cite encore `creation-de-compte.tsx`.
+- **Livré autrement que le critère** : « Réactiver » part sans question (geste réversible), la clé restant remplaçable et testable dans le détail avant ; la carte d'un outil fermé dit « Fermé par un administrateur » sans le nommer (une ligne fermée avant le lot nommerait celui qui l'avait activée) ; « Ajouter » avec une clé vide crée un connecteur « À terminer » ; la recherche du catalogue porte sur le nom seul, la phrase d'une carte n'existant pas encore.
+- **À demander au mainteneur du moteur** : un code pour la raison d'un test ; une donnée qui dise un connecteur simulé ; `closedBy` non nul pour un outil fermé dont l'auteur n'est plus membre ; fermer d'avance un outil jamais utilisé ; les équipes qu'une personne dirige, pour proposer l'ajout à leurs responsables.
+- **Contrôle visuel** : non fait.

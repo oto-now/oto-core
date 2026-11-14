@@ -275,7 +275,10 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     rendre({ accounts: [{ ...BANQUE, owner: A_PAUL, viewerLevel: "sensitive" }], partages: {} }, { vue: { compte: BANQUE.id } })
     const detail = detailDe(BANQUE)
     expect(detail.getByText("Votre accès : Toutes les actions. Géré par Paul Durand.")).toBeInTheDocument()
-    for (const geste of [/^Partager/, /^Gérer les accès/, /la clé/, /^Désactiver/, /^Journal des partages/]) expect(detail.queryByRole("button", { name: geste })).toBeNull()
+    for (const geste of [/^Partager/, /^Gérer les accès/, /la clé/, /^Désactiver/, /^Journal des partages/, /^Tester/, /^Modifier le nom/]) expect(detail.queryByRole("button", { name: geste })).toBeNull()
+    cleanup()
+    rendre({ accounts: [{ ...BANQUE, owner: A_PAUL, viewerLevel: "sensitive", status: "disabled" }], partages: {} }, { vue: { compte: BANQUE.id } })
+    for (const geste of [/^Réactiver/, /la clé/, /^Tester/]) expect(detailDe(BANQUE).queryByRole("button", { name: geste })).toBeNull()
   })
 
   it("should replace the key in the drawer, never prefilling a secret field, and say a refusal in the form", async () => {
@@ -306,12 +309,12 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     expect(detail.getByRole("form", { name: "Clé et réglages de Banque" })).toBeInTheDocument()
   })
 
-  it("should disable the account after the question, which keeps the warning that it does not come back", async () => {
+  it("should disable the account after the question, which says it can be enabled again", async () => {
     fetchMock.mockResolvedValue(reponse(200, { data: { account: { id: BANQUE.id } } }))
     rendre({}, { vue: { compte: BANQUE.id } })
     const detail = detailDe(BANQUE)
     fireEvent.click(detail.getByRole("button", { name: "Désactiver Banque" }))
-    const question = "Désactiver « Banque » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Un connecteur désactivé ne se réactive pas : il faudra en ajouter un autre."
+    const question = "Désactiver « Banque » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Vous pourrez le réactiver."
     fireEvent.click(within(detail.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/disable`, methode: "POST", corps: {} }])
@@ -319,11 +322,85 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     expect(detail.getByRole("heading", { name: "État" })).toHaveFocus()
   })
 
-  it("should say a disabled account without any gesture on it", () => {
+  it("should enable a disabled account again without a question, keeping its key form, and say a refusal by its reason", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: { account: BANQUE } }))
     rendre({ accounts: [{ ...BANQUE, status: "disabled" }] }, { vue: { compte: BANQUE.id } })
     expect(ligneDe("Banque").getByText("Désactivé")).toBeInTheDocument()
     const detail = detailDe(BANQUE)
-    for (const geste of [/la clé/, /^Désactiver/]) expect(detail.queryByRole("button", { name: geste })).toBeNull()
+    expect(detail.queryByRole("button", { name: /^Désactiver/ })).toBeNull()
+    expect(detail.getByRole("button", { name: "Remplacer la clé de Banque" })).toBeInTheDocument()
+    fireEvent.click(detail.getByRole("button", { name: "Réactiver Banque" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/enable`, methode: "POST", corps: {} }])
+    expect(detail.getByRole("heading", { name: "État" })).toHaveFocus()
+
+    fetchMock.mockImplementation(async () => reponse(403, { error: { code: "not_enabled", details: { reason: "closed", administrators: [{ userId: "u", name: "Claire Morel" }] } } }))
+    fireEvent.click(detail.getByRole("button", { name: "Réactiver Banque" }))
+    expect(await detail.findByText("Cet outil a été fermé par un administrateur. Un administrateur peut le rouvrir.")).toBeInTheDocument()
+  })
+
+  it("should test a connector for who manages it, say a failed test and too many tests, and offer no test under that level", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: { probe: { at: "2026-11-14T09:00:00.000Z", healthy: false, reason: "Crm refused the key. (key_rejected)", balance: null } } }))
+    const { unmount } = rendre({}, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    fireEvent.click(detail.getByRole("button", { name: "Tester Banque" }))
+    expect(await detail.findByText("Le test a échoué.")).toBeInTheDocument()
+    expect(rafraichir).toHaveBeenCalledTimes(1)
+    expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/probe`, methode: "POST", corps: {} }])
+
+    fetchMock.mockImplementation(async () => reponse(429, { error: { code: "rate_limited", details: { retry_after_s: 12 } } }))
+    fireEvent.click(detail.getByRole("button", { name: "Tester Banque" }))
+    expect(await detail.findByText("Trop de tests : réessayez dans 12 secondes.")).toBeInTheDocument()
+    expect(rafraichir).toHaveBeenCalledTimes(1)
+    unmount()
+
+    rendre({}, { vue: { compte: AGENDA.id } })
+    expect(detailDe(AGENDA).queryByRole("button", { name: /^Tester/ })).toBeNull()
+  })
+
+  it("should say the last test kept on the account: its failure with the reason of the engine, and that a tool has no automatic test", () => {
+    const teste = { ...BANQUE, lastProbe: { at: "2026-11-14T09:00:00.000Z", healthy: false, reason: "Crm is unreachable.", balance: null } }
+    const { unmount } = rendre({ accounts: [teste] }, { vue: { compte: BANQUE.id } })
+    expect(ligneDe("Banque").getByText("Test en échec")).toBeInTheDocument()
+    expect(detailDe(BANQUE).getByText("Crm is unreachable.")).toBeInTheDocument()
+    unmount()
+
+    // Désactivé, l'état ne dit pas le test : sa raison reste lisible dans le détail.
+    const desactive = rendre({ accounts: [{ ...teste, status: "disabled" }] }, { vue: { compte: BANQUE.id } })
+    expect(ligneDe("Banque").getByText("Désactivé")).toBeInTheDocument()
+    expect(detailDe(BANQUE).getByText("Crm is unreachable.")).toBeInTheDocument()
+    desactive.unmount()
+
+    rendre({ formulaires: [{ ...FORMULAIRE_CRM, probe: { available: false, balance: false } }] }, { vue: { compte: BANQUE.id } })
+    const detail = detailDe(BANQUE)
+    expect(detail.queryByRole("button", { name: /^Tester/ })).toBeNull()
+    expect(detail.getByText("Pas de test automatique pour cet outil : essayez-le dans votre assistant.")).toBeInTheDocument()
+  })
+
+  it("should rename and describe a connector for who manages it, warn that the old name is forgotten, and say a name already taken", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: { account: BANQUE } }))
+    rendre({ accounts: [{ ...BANQUE, description: "Les relevés du compte courant" }, AGENDA] }, { vue: { compte: BANQUE.id } })
+    // La description remplace le nom de l'outil sous le libellé, et se lit dans le détail.
+    expect(screen.getByRole("link", { name: "Banque" }).closest("td")?.querySelector(".oto-caption")).toHaveTextContent("Les relevés du compte courant")
+    const detail = detailDe(BANQUE)
+    fireEvent.click(detail.getByRole("button", { name: "Modifier le nom de Banque" }))
+    const formulaire = within(detail.getByRole("form", { name: "Nom et description de Banque" }))
+    expect(formulaire.getByText("L'ancien nom ne sera plus reconnu par votre assistant.")).toBeInTheDocument()
+    fireEvent.change(formulaire.getByLabelText("Nom"), { target: { value: "Banque pro" } })
+    fireEvent.change(formulaire.getByLabelText("Description (facultatif)"), { target: { value: "" } })
+    fireEvent.click(formulaire.getByRole("button", { name: "Enregistrer" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}`, methode: "PATCH", corps: { label: "Banque pro", description: null } }])
+    expect(detail.getByText("Nom et description enregistrés.")).toBeInTheDocument()
+    // La saisie repliée emportait le focus : il revient au bouton qui l'a ouverte.
+    expect(detail.getByRole("button", { name: "Modifier le nom de Banque" })).toHaveFocus()
+
+    fetchMock.mockImplementation(async () => reponse(409, { error: { code: "conflict", details: { reason: "label_taken" } } }))
+    fireEvent.click(detail.getByRole("button", { name: "Modifier le nom de Banque" }))
+    const repris = within(detail.getByRole("form", { name: "Nom et description de Banque" }))
+    fireEvent.change(repris.getByLabelText("Nom"), { target: { value: "Agenda" } })
+    fireEvent.click(repris.getByRole("button", { name: "Enregistrer" }))
+    expect(await repris.findByText("Un connecteur du même propriétaire porte déjà ce nom.")).toBeInTheDocument()
   })
 
   it("should read the share journal on opening, and say each share in the words of the levels", async () => {
@@ -459,41 +536,194 @@ describe("EcranConnecteurs, sharing a connector", () => {
 })
 
 describe("EcranConnecteurs, adding a connector", () => {
-  it("should let a member connect their own account from the window, and offer them no creation by hand", async () => {
+  const MS: OrgConnector = { ...CRM, connector: "microsoft", label: "Microsoft 365", functions: [] }
+  const CREE = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60"
+  // Une clé de test composée à l'exécution : aucun faux secret en littéral.
+  const CLE = ["cle", "de", "test"].join("-")
+  const SAINE = { healthy: true, reason: null, balance: null }
+
+  /** Les réponses de l'API par méthode et ressource ; une route inattendue lève. */
+  const parRoute = (routes: Record<string, () => Response>) =>
+    fetchMock.mockImplementation(async (url, init) => {
+      const route = `${init?.method ?? "GET"} ${String(url).replace("/api/platform/", "")}`
+      if (!Object.hasOwn(routes, route)) throw new Error(`route inattendue : ${route}`)
+      return routes[route]()
+    })
+
+  const ouvrirLaFenetre = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    return within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+  }
+
+  /** Le texte d'une carte sans son avatar, caché aux lecteurs d'écran. */
+  const nomDe = (carte: HTMLElement) => {
+    const copie = carte.cloneNode(true)
+    if (!(copie instanceof HTMLElement)) return null
+    copie.querySelectorAll('[aria-hidden="true"]').forEach((cache) => cache.remove())
+    return copie.textContent
+  }
+
+  /** Les noms des cartes du catalogue, dans l'ordre. */
+  const cartes = (fenetre: ReturnType<typeof within>) => within(fenetre.getByRole("list")).getAllByRole("button").map(nomDe)
+
+  it("should show a member the tools they may add for themselves, never how a tool connects, and connect an account at the third party", async () => {
     const assign = vi.fn()
     vi.stubGlobal("location", { ...window.location, assign })
     fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://login.example.test/authorize?state=s" } }))
-    rendre()
-    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
-    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    rendre({ connectors: [MAIL, CRM, MS] })
+    const fenetre = ouvrirLaFenetre()
+    // « mail », sans formulaire, ne se crée que pour l'organisation ou une équipe : un membre ne le voit pas.
+    expect(cartes(fenetre)).toEqual(["Crm Pro", "Microsoft 365"])
+    fireEvent.click(fenetre.getByRole("button", { name: "Microsoft 365" }))
+    expect(fenetre.getByRole("heading", { name: "Microsoft 365" })).toHaveFocus()
     expect(fenetre.queryByRole("form")).toBeNull()
     fireEvent.click(fenetre.getByRole("button", { name: "Connecter mon compte Microsoft 365" }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
     expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: ICI } }])
+    fireEvent.click(fenetre.getByRole("button", { name: "Tous les outils" }))
+    expect(fenetre.getByRole("heading", { name: "Choisir un outil" })).toHaveFocus()
   })
 
-  it("should say so to a member who can add nothing by themselves", () => {
-    rendre({ formulaires: [FORMULAIRE_CRM] })
-    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
-    expect(screen.getByText("Aucun outil ne se connecte par vous-même pour l'instant. Un administrateur peut ajouter un connecteur et le partager avec vous.")).toBeInTheDocument()
+  it("should say so to a member who can add nothing, and say a tool closed by an administrator without offering it", () => {
+    const { unmount } = rendre({ connectors: [MAIL] })
+    expect(ouvrirLaFenetre().getByText("Aucun outil à ajouter pour l'instant. Un administrateur peut ajouter un connecteur et le partager avec vous.")).toBeInTheDocument()
+    unmount()
+    rendre({ connectors: [{ ...CRM, state: "inactive", closedBy: { userId: "user-claire", name: "Claire Morel" } }] })
+    const fenetre = ouvrirLaFenetre()
+    expect(fenetre.getByText("Fermé par un administrateur")).toBeInTheDocument()
+    expect(fenetre.queryByRole("button", { name: "Crm Pro" })).toBeNull()
   })
 
-  it("should let an administrator create an account for a team, never of a connector each person connects themselves", async () => {
-    fetchMock.mockResolvedValue(reponse(201, { data: { account: { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60", label: "Mail Finance" } } }))
-    const MS: OrgConnector = { ...MAIL, connector: "microsoft", functions: [] }
-    rendre({ connectors: [MAIL, CRM, MS], administration: { impacts: {} } })
-    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
-    const formulaire = within(screen.getByRole("form", { name: "Créer un compte" }))
-    expect(libellesDesChoix(formulaire.getByLabelText("Connecteur"))).toEqual(["mail", "crm"])
-    fireEvent.change(formulaire.getByLabelText("Libellé"), { target: { value: "Mail Finance" } })
-    fireEvent.click(formulaire.getByLabelText("Une équipe"))
-    choisirDansLaListe(formulaire.getByLabelText("Équipe"), "Finance")
-    fireEvent.click(formulaire.getByRole("button", { name: "Créer le compte" }))
-    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
-    expect(envois()).toEqual([{ url: "/api/platform/admin/accounts", methode: "POST", corps: { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "Mail Finance", mode: "simule" } }])
-    // La fenêtre se ferme et le détail du compte créé s'ouvre par son adresse.
-    expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60`)
+  it("should let a member add a key connector: the key tested once complete, then the account, its key, its description and its test, the key never shown again", async () => {
+    parRoute({
+      "POST admin/connectors/crm/probe": () => reponse(200, { data: { probe: SAINE } }),
+      "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "Crm Pro" } } }),
+      [`POST admin/accounts/${CREE}/secret`]: () => reponse(200, { data: { account: { id: CREE } } }),
+      [`PATCH admin/accounts/${CREE}`]: () => reponse(200, { data: { account: { id: CREE } } }),
+      [`POST admin/accounts/${CREE}/probe`]: () => reponse(200, { data: { probe: { ...SAINE, at: "2026-11-14T09:00:00.000Z" } } }),
+    })
+    rendre()
+    const fenetre = ouvrirLaFenetre()
+    fireEvent.click(fenetre.getByRole("button", { name: "Crm Pro" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    // Un membre n'a pas le choix du propriétaire : le connecteur est à lui, et le nom proposé est libre.
+    expect(formulaire.queryByRole("group", { name: "Pour qui" })).toBeNull()
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Crm Pro")
+    const cle = formulaire.getByLabelText("Clé d'API")
+    // Sans clé, la sortie d'un champ ne teste rien.
+    fireEvent.blur(cle)
+    expect(envois()).toEqual([])
+    // Une frappe ne teste rien : la clé part à la sortie du champ.
+    fireEvent.change(cle, { target: { value: CLE } })
+    expect(envois()).toEqual([])
+    fireEvent.change(formulaire.getByLabelText("Description (facultatif)"), { target: { value: "Le suivi des clients" } })
+    // « Ajouter » aussitôt sorti du champ, le test encore en cours : la même clé ne part pas deux fois.
+    fireEvent.blur(cle)
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
+    expect(envois()).toEqual([
+      { url: "/api/platform/admin/connectors/crm/probe", methode: "POST", corps: { fields: { api_key: CLE }, settings: { region: "us" } } },
+      { url: "/api/platform/admin/accounts", methode: "POST", corps: { connector: "crm", owner_kind: "user", label: "Crm Pro", mode: "reel" } },
+      { url: `/api/platform/admin/accounts/${CREE}/secret`, methode: "POST", corps: { secret: { api_key: CLE }, settings: { region: "us" } } },
+      { url: `/api/platform/admin/accounts/${CREE}`, methode: "PATCH", corps: { description: "Le suivi des clients" } },
+      { url: `/api/platform/admin/accounts/${CREE}/probe`, methode: "POST", corps: {} },
+    ])
+    expect(rafraichir).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole("dialog", { name: "Ajouter un connecteur" })).toBeNull()
+    expect(screen.queryByDisplayValue(CLE)).toBeNull()
+  })
+
+  it("should ask « Ajouter quand même ? » after a failed test, create only from that question and only for the key that failed, and say a name already taken, the entry kept", async () => {
+    const creation = vi.fn(() => reponse(409, { error: { code: "conflict", details: { reason: "label_taken" } } }))
+    const sonde = vi.fn(() => reponse(200, { data: { probe: { healthy: false, reason: "Crm refused the key. (key_rejected)", balance: null } } }))
+    parRoute({ "POST admin/connectors/crm/probe": sonde, "POST admin/accounts": creation })
+    rendre()
+    const fenetre = ouvrirLaFenetre()
+    fireEvent.click(fenetre.getByRole("button", { name: "Crm Pro" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: CLE } })
+    // « Ajouter » sans être sorti du champ : la clé se teste d'abord, et son échec pose la question au lieu de créer.
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    const question = within(await formulaire.findByRole("group", { name: "Ajouter quand même ?" }))
+    expect(formulaire.getByText("Crm refused the key. (key_rejected)")).toBeInTheDocument()
+    // « Ajouter » de nouveau, un double clic par exemple : toujours rien de créé, et la même clé ne se reteste pas.
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    await waitFor(() => expect(formulaire.getByRole("button", { name: "Ajouter" })).toBeEnabled())
+    expect([sonde.mock.calls.length, creation.mock.calls.length]).toEqual([1, 0])
+    // Une autre clé, saisie sans sortir du champ : « Ajouter quand même » la teste, et ne crée rien sur son échec.
+    fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: `${CLE}-2` } })
+    fireEvent.click(question.getByRole("button", { name: "Ajouter quand même" }))
+    await waitFor(() => expect(sonde).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(formulaire.getByRole("button", { name: "Ajouter" })).toBeEnabled())
+    expect(creation).not.toHaveBeenCalled()
+    fireEvent.click(within(formulaire.getByRole("group", { name: "Ajouter quand même ?" })).getByRole("button", { name: "Ajouter quand même" }))
+    expect(await formulaire.findByText("Un connecteur du même propriétaire porte déjà ce nom.")).toBeInTheDocument()
+    expect([sonde.mock.calls.length, creation.mock.calls.length]).toEqual([2, 1])
+    expect(formulaire.getByLabelText("Clé d'API")).toHaveValue(`${CLE}-2`)
+    expect(naviguer).not.toHaveBeenCalled()
+  })
+
+  it("should say what is left to finish when a step fails after the account is created, with its reason, then open the detail", async () => {
+    parRoute({
+      "POST admin/connectors/crm/probe": () => reponse(200, { data: { probe: SAINE } }),
+      "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "Crm Pro" } } }),
+      [`POST admin/accounts/${CREE}/secret`]: () => reponse(400, { error: { code: "invalid_arguments" } }),
+      [`PATCH admin/accounts/${CREE}`]: () => reponse(200, { data: { account: { id: CREE } } }),
+    })
+    rendre()
+    const fenetre = ouvrirLaFenetre()
+    fireEvent.click(fenetre.getByRole("button", { name: "Crm Pro" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: CLE } })
+    fireEvent.change(formulaire.getByLabelText("Description (facultatif)"), { target: { value: "Le suivi des clients" } })
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    expect(await fenetre.findByText("« Crm Pro » est ajouté, mais il reste à terminer.")).toHaveFocus()
+    expect(fenetre.getByText("Sa clé n'est pas posée : Certaines valeurs sont invalides.")).toBeInTheDocument()
+    // La clé n'est pas posée : le compte ne se teste pas, et la saisie de la clé a quitté le document.
+    expect(envois().map((envoi) => envoi.url)).not.toContain(`/api/platform/admin/accounts/${CREE}/probe`)
+    expect(screen.queryByDisplayValue(CLE)).toBeNull()
+    expect(naviguer).not.toHaveBeenCalled()
+    fireEvent.click(fenetre.getByRole("button", { name: "Ouvrir le connecteur" }))
+    expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`)
+  })
+
+  it("should not test the key of a tool without a probe, and say it", async () => {
+    parRoute({
+      "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "Crm Pro" } } }),
+      [`POST admin/accounts/${CREE}/secret`]: () => reponse(200, { data: { account: { id: CREE } } }),
+    })
+    rendre({ formulaires: [{ ...FORMULAIRE_CRM, probe: { available: false, balance: false } }] })
+    const fenetre = ouvrirLaFenetre()
+    fireEvent.click(fenetre.getByRole("button", { name: "Crm Pro" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    expect(formulaire.getByText("Pas de test automatique pour cet outil : essayez-le dans votre assistant.")).toBeInTheDocument()
+    fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: CLE } })
+    fireEvent.blur(formulaire.getByLabelText("Clé d'API"))
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    await waitFor(() => expect(naviguer).toHaveBeenCalledTimes(1))
+    expect(envois().map((envoi) => envoi.url)).toEqual(["/api/platform/admin/accounts", `/api/platform/admin/accounts/${CREE}/secret`])
+  })
+
+  it("should let an administrator add a connector for a team, of a tool without a form too, and never propose themselves for it", async () => {
+    // « mail » n'a pas de formulaire : l'écran le crée réel, et le service répond qu'il est simulé.
+    const creation = vi.fn<() => Response>()
+    creation.mockReturnValueOnce(reponse(400, { error: { code: "unavailable_in_v1" } })).mockReturnValueOnce(reponse(201, { data: { account: { id: CREE, label: "mail" } } }))
+    parRoute({ "POST admin/accounts": creation })
+    rendre({ connectors: [MAIL, CRM, MS], administration: { impacts: {} } })
+    const fenetre = ouvrirLaFenetre()
+    expect(cartes(fenetre)).toEqual(["Crm Pro", "mail", "Microsoft 365"])
+    fireEvent.click(fenetre.getByRole("button", { name: "mail" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter mail" }))
+    const pourQui = within(formulaire.getByRole("group", { name: "Pour qui" }))
+    expect(pourQui.getAllByRole("radio").map((choix) => choix.getAttribute("value"))).toEqual(["org", "team"])
+    fireEvent.click(pourQui.getByLabelText("Une équipe"))
+    choisirDansLaListe(formulaire.getByLabelText("Équipe"), "Finance")
+    fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
+    await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
+    expect(envois().map((envoi) => envoi.corps)).toEqual([
+      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "reel" },
+      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" },
+    ])
   })
 
   it("should say the outcome of a return from the third party", () => {
@@ -507,35 +737,40 @@ describe("EcranConnecteurs, adding a connector", () => {
 })
 
 describe("EcranConnecteurs, the tools of the organisation (administrator)", () => {
-  const INACTIF: OrgConnector = { ...MAIL, state: "inactive", activatedAt: null, activatedBy: null }
+  const FERME: OrgConnector = { ...MAIL, state: "inactive", activatedAt: null, activatedBy: null, closedBy: { userId: "user-claire", name: "Claire Morel" } }
+  const JAMAIS: OrgConnector = { ...MAIL, connector: "agenda", label: "Agenda", state: "inactive", activatedAt: null, activatedBy: null, functions: [] }
 
-  it("should list each connector with its functions and its state, and activate one without a question", async () => {
+  it("should say each tool open, closed and by whom, or never used, and open a closed one again without a question", async () => {
     fetchMock.mockResolvedValue(reponse(200, { data: { connector: MAIL } }))
-    rendre({ connectors: [INACTIF, CRM], administration: { impacts: {} } })
+    rendre({ connectors: [FERME, CRM, JAMAIS], administration: { impacts: {} } })
     const ilot = within(screen.getByRole("region", { name: "Outils de l'organisation" }))
-    expect(ilot.getByText("2 connecteurs activables")).toBeInTheDocument()
+    expect(ilot.getByText("3 outils")).toBeInTheDocument()
     expect(ilot.getByText("2 fonctions : mail.create_draft, mail.send_draft")).toBeInTheDocument()
-    expect(ilot.getByText("Actif depuis le 24 septembre 2026")).toBeInTheDocument()
-    fireEvent.click(ilot.getByRole("button", { name: "Activer mail" }))
+    expect(ilot.getByText("Ouvert depuis le 24 septembre 2026")).toBeInTheDocument()
+    expect(ilot.getByText("Fermé par Claire Morel")).toBeInTheDocument()
+    // Un outil jamais utilisé s'ouvre au premier ajout : aucun geste.
+    expect(ilot.getByText("S'ouvre au premier ajout")).toBeInTheDocument()
+    expect(ilot.getAllByRole("button").map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)).toEqual(["Rouvrir mail", "Fermer Crm Pro"])
+    fireEvent.click(ilot.getByRole("button", { name: "Rouvrir mail" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "POST", corps: {} }])
     expect(screen.getByRole("heading", { level: 2, name: "Outils de l'organisation" })).toHaveFocus()
   })
 
-  it("should ask before deactivating, naming the procedures and the accounts it touches", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { connector: INACTIF } }))
+  it("should ask before closing a tool, naming the procedures and the connectors it touches", async () => {
+    fetchMock.mockResolvedValue(reponse(200, { data: { connector: FERME } }))
     rendre({ connectors: [MAIL], administration: { impacts: { mail: { functions: ["mail.create_draft", "mail.send_draft"], procedures: ["ventes/qualifier_prospects"], accounts: 1 } } } })
-    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
+    fireEvent.click(screen.getByRole("button", { name: "Fermer mail" }))
     const question =
-      "Désactiver « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde. 1 procédure publiée le cite dans ses blocs d'appel : ventes/qualifier_prospects. Son compte est conservé."
-    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Désactiver" }))
+      "Fermer « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde, et plus personne ne pourra l'ajouter. 1 procédure publiée le cite dans ses blocs d'appel : ventes/qualifier_prospects. Son connecteur est conservé."
+    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Fermer" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "DELETE", corps: undefined }])
   })
 
-  it("should grey the activation of an inactive connector at connectors_max, with the raise link", () => {
-    rendre({ connectors: [INACTIF], administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 0, used: 0 }, raiseUrl: "https://acme.test/billing?from=pkg" } } })
-    expect(screen.getByRole("button", { name: "Activer" })).toBeDisabled()
+  it("should grey the reopening of a closed tool at connectors_max, with the raise link", () => {
+    rendre({ connectors: [FERME], administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 0, used: 0 }, raiseUrl: "https://acme.test/billing?from=pkg" } } })
+    expect(screen.getByRole("button", { name: "Rouvrir" })).toBeDisabled()
     expect(screen.getByText(/Limite atteinte : 0 connecteur actif sur 0\./)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?from=pkg&capacity=connectors_max")
   })

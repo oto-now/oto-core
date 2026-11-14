@@ -26,7 +26,7 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
         <Lien href={ligne.ouverture} className={`font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
-        <span className="oto-caption">{ligne.outil}</span>
+        <span className="oto-caption">{ligne.description ?? ligne.outil}</span>
       </span>
     </span>
   )

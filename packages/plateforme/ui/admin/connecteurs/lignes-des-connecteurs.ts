@@ -71,6 +71,8 @@ export type LigneDeConnecteur = {
   libelle: string
   /** Le nom lisible de l'outil. */
   outil: string
+  /** La description écrite par qui le gère : elle remplace le nom de l'outil sous le libellé. */
+  description: string | null
   acces: string
   /** Sous l'accès : le niveau de la personne, ou « Vous seul ». */
   niveau: string
@@ -129,6 +131,7 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
         id: compte.id,
         libelle: compte.label,
         outil: libelleDuConnecteur(compte.connector, formulaires),
+        description: compte.description,
         ...accesDe(compte, moi, partages[compte.id]),
         etat: { mot: etat.mot, precision: etat.precision, point: etat.point },
         desactive: etat.code === "desactive",
@@ -137,7 +140,7 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
       }
       return { ligne, rang: rang(etat) }
     })
-    .filter(({ ligne }) => cherche === "" || normalizeTitle(ligne.libelle).includes(cherche) || normalizeTitle(ligne.outil).includes(cherche))
+    .filter(({ ligne }) => cherche === "" || [ligne.libelle, ligne.outil, ligne.description ?? ""].some((texte) => normalizeTitle(texte).includes(cherche)))
     .sort((a, b) => a.rang - b.rang || a.ligne.libelle.localeCompare(b.ligne.libelle, "fr"))
     .map(({ ligne }) => ligne)
   return { lignes, comptes: { tous: comptes.length, moi: miens.length, partages: comptes.length - miens.length } }

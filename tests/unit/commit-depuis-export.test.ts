@@ -93,9 +93,9 @@ function lancer(cas: ReturnType<typeof monter>, args = ["--depot", cas.depot, "-
   return { status: result.status, output: result.stdout + result.stderr, sha: /^Commit ([0-9a-f]{40})/m.exec(result.stdout)?.[1] }
 }
 
-// Une dizaine de lancements de git par cas, plus node : environ 1 s au calme ; 30 s, comme les autres tests
-// sur dépôt jetable (`check-framework.test.ts`), sur la machine partagée.
-describe("commit-depuis-export on a throwaway repository", { timeout: 30_000 }, () => {
+// Des dizaines de lancements de git par cas, plus node : d'une à dix secondes au calme, plus de trente pour les cas
+// d'une branche de travail sur la machine partagée quand elle est chargée ; 60 s.
+describe("commit-depuis-export on a throwaway repository", { timeout: 60_000 }, () => {
   it("should build the commit of the export on its base, with the receipt in trailers, without pushing nor touching the checkout", () => {
     const cas = monter()
     fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 2\n")

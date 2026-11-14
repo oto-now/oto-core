@@ -276,7 +276,7 @@ Hôte
 
 ## Hypothèses
 
-Prises pendant l'implémentation, sous l'option la plus proche des décisions du 2026-11-12 ; chacune se défait sans toucher au moteur.
+Prises pendant l'implémentation, sous l'option la plus proche des décisions du 2026-11-12 ; chacune se défait sans toucher au moteur. Les trois premières sont levées depuis par `ajout-d-un-connecteur.md` : l'îlot ferme et rouvre, la fenêtre porte le catalogue, l'état lit le dernier test.
 
 - **Les gestes de l'administrateur restent à l'écran tant que le moteur garde l'activation.** L'activation et la désactivation d'un connecteur pour l'organisation vivent dans un îlot « Outils de l'organisation », sous la liste, pour l'administrateur seul : c'est l'îlot que `ajout-d-un-connecteur.md` (§ Administrateur) prévoit. Sans lui, aucun connecteur ne pourrait plus être activé depuis l'écran.
 - **La fenêtre « Ajouter un connecteur » rassemble ce que le moteur sait faire aujourd'hui.** Chacun y connecte son compte à un service à consentement ou à compte rattaché ; un administrateur y retrouve le formulaire actuel de création d'un compte d'organisation ou d'équipe, avec ses mots d'avant (« Créer un compte », « Libellé »). Un membre sans service à connecter y lit qu'un administrateur peut ajouter un connecteur et le partager avec lui. `ajout-d-un-connecteur.md` remplit cette fenêtre (catalogue, clé, test).

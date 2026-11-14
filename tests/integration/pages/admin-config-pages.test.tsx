@@ -239,16 +239,16 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     expect(contexte.getByRole("link", { name: "Modifier" })).toHaveAttribute("href", "/n/contexte")
   })
 
-  it("should read the impact of deactivating each active connector for the connectors page, and put it in the question", async () => {
+  it("should read the impact of closing each open tool for the connectors page, and put it in the question", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
     render(await ConnecteursPage({}))
     expect(deactivationImpact).toHaveBeenCalledWith(SESSION.db, identite("admin"), "mail")
     expect(listOrgAccounts).toHaveBeenCalledWith(SESSION.db, identite("admin"))
 
     // L'impact simulé, indexé par le nom du connecteur, arrive dans la question (AC5).
-    fireEvent.click(screen.getByRole("button", { name: "Désactiver mail" }))
+    fireEvent.click(screen.getByRole("button", { name: "Fermer mail" }))
     expect(
-      screen.getByText("Désactiver « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde. Aucune procédure publiée ne le cite. Il n'a aucun compte."),
+      screen.getByText("Fermer « mail » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde, et plus personne ne pourra l'ajouter. Aucune procédure publiée ne le cite. Il n'a aucun connecteur."),
     ).toBeInTheDocument()
   })
 

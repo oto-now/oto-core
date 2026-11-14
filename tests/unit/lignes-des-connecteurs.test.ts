@@ -43,6 +43,12 @@ describe("etatDuCompte", () => {
       ["clé refusée puis remplacée", compte({ mark: marque, secret: { fields: ["api_key"], updatedAt: "2026-11-05T09:00:01.000Z" } }), CLE],
       ["clé refusée à l'instant de sa saisie", compte({ mark: marque, secret: { fields: ["api_key"], updatedAt: marque.at } }), CLE],
       ["crédits épuisés", compte({ mark: { reason: "quota_exhausted", at: "2026-11-05T09:00:00.000Z" } }), CLE],
+      ["testé, sain, avec un solde", compte({ lastProbe: { at: "2026-11-03T09:00:00.000Z", healthy: true, reason: null, balance: { value: 1200, unit: "crédits", min: 10 } } }), CLE],
+      ["testé, en échec", compte({ lastProbe: { at: "2026-11-03T09:00:00.000Z", healthy: false, reason: "Crm is unreachable.", balance: null } }), CLE],
+      ["testé avant la clé en place", compte({ lastProbe: { at: "2026-11-01T09:00:00.000Z", healthy: true, reason: null, balance: null } }), CLE],
+      ["refusé, puis testé", compte({ mark: marque, lastProbe: { at: "2026-11-05T09:00:00.000Z", healthy: false, reason: "Crm refused the key.", balance: null } }), CLE],
+      ["à consentement, testé avant un jeton renouvelé", compte({ connector: "microsoft", owner: A_MOI, lastProbe: { at: "2026-11-01T09:00:00.000Z", healthy: true, reason: null, balance: null } }), CONSENTEMENT],
+      ["réel sans formulaire, sans clé", compte({ connector: "interne", secret: { fields: [], updatedAt: null } }), undefined],
       ["désactivé", compte({ status: "disabled", mark: marque }), CLE],
     ]
     const lus = cas.map(([nom, un, formulaire]) => {
@@ -67,6 +73,12 @@ describe("etatDuCompte", () => {
       ["clé refusée puis remplacée", "Non testé", null, null, false],
       ["clé refusée à l'instant de sa saisie", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["crédits épuisés", "Crédits épuisés", "Depuis le 5 novembre 2026. La clé reste bonne.", null, true],
+      ["testé, sain, avec un solde", "Fonctionne", "Testé le 3 novembre 2026. Solde : 1\u202f200 crédits.", null, false],
+      ["testé, en échec", "Test en échec", "Le test du 3 novembre 2026 a échoué.", null, true],
+      ["testé avant la clé en place", "Non testé", null, null, false],
+      ["refusé, puis testé", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
+      ["à consentement, testé avant un jeton renouvelé", "Fonctionne", "Testé le 1 novembre 2026.", null, false],
+      ["réel sans formulaire, sans clé", "Non testé", null, null, false],
       ["désactivé", "Désactivé", null, null, false],
     ])
   })
