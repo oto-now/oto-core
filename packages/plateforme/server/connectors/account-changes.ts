@@ -9,6 +9,7 @@ import type { PlatformDb } from "../db"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
+import { ownerNames } from "../directory"
 import { accountOwner, accountRows, accountView, labelTaken, managedAccount, summary, type AccountSummary } from "./accounts"
 import { closedConnector, openConnectorForAccount } from "./activations"
 
@@ -51,7 +52,7 @@ async function managedView(db: PlatformDb, identity: Identity, id: string, servi
     console.error(`[platform] ${service}: account ${id} written but not read back`)
     throw new PlatformError("internal", "Internal error.")
   }
-  return accountView(row, ACCOUNT_LEVELS.manage)
+  return accountView(row, ACCOUNT_LEVELS.manage, await ownerNames(db, identity.org.id, [row]))
 }
 
 /**

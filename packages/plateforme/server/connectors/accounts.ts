@@ -37,7 +37,7 @@ import {
 import { declaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
-import { leadNames, leadWord, memberDirectory, teamsWithLeads } from "../directory"
+import { leadNames, leadWord, memberDirectory, ownerNames, teamsWithLeads } from "../directory"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
@@ -357,11 +357,12 @@ function accountStatus(value: string): AccountView["status"] {
 function ownerView(row: AccountRow, names: ReadonlyMap<string, string>): AccountView["owner"] {
   const { kind } = accountOwner(row)
   if (kind === "team" && row.team_name !== null) return { kind, teamName: row.team_name }
-  return kind === "user" && row.owner_user_id !== null ? { kind, userId: row.owner_user_id, userName: names.get(row.owner_user_id) ?? null } : { kind }
+  if (kind === "user" && row.owner_user_id !== null) return { kind, userId: row.owner_user_id, userName: names.get(row.owner_user_id) ?? null }
+  return { kind }
 }
 
-/** La vue d'un compte au niveau `level` ; `names` nomme la personne d'un compte personnel, sans lui elle reste sans nom. */
-export function accountView(row: AccountRow, level: AccountLevel, names: ReadonlyMap<string, string> = new Map()): AccountView {
+/** La vue d'un compte au niveau `level` ; `names` nomme la personne d'un compte personnel (`ownerNames`). */
+export function accountView(row: AccountRow, level: AccountLevel, names: ReadonlyMap<string, string>): AccountView {
   return {
     id: row.id,
     label: row.label,
@@ -410,8 +411,7 @@ async function visibleViews(db: PlatformDb, identity: Identity, rows: AccountRow
     const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
     return level >= ACCOUNT_LEVELS.read ? [{ row, level }] : []
   })
-  const directory = visible.some(({ row }) => row.owner_kind === "user") ? await memberDirectory(db, identity.org.id) : []
-  const names = new Map(directory.map((person) => [person.userId, person.name]))
+  const names = await ownerNames(db, identity.org.id, visible.map(({ row }) => row))
   return visible.map(({ row, level }) => accountView(row, level, names)).sort((a, b) => a.label.localeCompare(b.label, "fr"))
 }
 

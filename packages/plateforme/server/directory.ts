@@ -57,6 +57,15 @@ export async function memberDirectory(db: PlatformDb, orgId: string): Promise<Di
 }
 
 /**
+ * Les noms des personnes des comptes personnels de `rows`, par identifiant : l'annuaire ne se lit que si l'un d'eux est
+ * personnel. La vue d'un compte y nomme son propriétaire (`accountView`).
+ */
+export async function ownerNames(db: PlatformDb, orgId: string, rows: readonly { owner_kind: string }[]): Promise<Map<string, string>> {
+  const directory = rows.some((row) => row.owner_kind === "user") ? await memberDirectory(db, orgId) : []
+  return new Map(directory.map((person) => [person.userId, person.name]))
+}
+
+/**
  * `memberDirectory`, lu dans une transaction déjà ouverte : un refus décidé au milieu d'une écriture (une limite atteinte)
  * nomme qui peut le lever sans ouvrir une seconde transaction.
  */

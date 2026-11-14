@@ -84,7 +84,8 @@ premier lot, avec une seule migration.
 - **Sur un compte (`AccountView`)** : `description` (200 caractères au plus, `null` sans description) ; `lastProbe`, le
   dernier test gardé (`at`, `healthy`, `reason`, `balance` pour un connecteur qui déclare un solde), `null` tant
   qu'aucun test n'a eu lieu. Un test ne pose pas d'autre marque qu'un appel : une clé que la sonde refuse pose
-  `credential_rejected`, un solde sous son seuil `quota_exhausted` ; un autre échec n'en pose aucune.
+  `credential_rejected`, un solde sous son seuil `quota_exhausted` ; un autre échec n'en pose aucune. Un test sain lève
+  la marque : « Tester » après une nouvelle clé efface « Clé refusée ».
 - **Sur le catalogue (`OrgConnector`)** : `label`, le nom lisible de l'outil ; `closedBy`, qui a fermé le connecteur
   (`null` : ouvert, ou jamais activé ; une ligne fermée avant ce lot nomme celui qui l'avait activée).
 - **Sur le formulaire (`ConnectorAccountForm`)** : `ownerKinds`, les propriétaires admis (`user`, `team`, `org`) ;
