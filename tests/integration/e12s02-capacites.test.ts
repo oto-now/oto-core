@@ -216,7 +216,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "organisation limits (E12-S02)" 
     expect(await refusal(orgUsage("not-an-id"))).toMatchObject({ code: "invalid_arguments" })
   })
 
-  it("should read account_owner_kinds and accounts_per_owner_max without refusing anything (AC-11)", async () => {
+  it("should read account_owner_kinds and accounts_per_owner_max without counting them in the view: the connectors check them (AC-11, ecran-connecteurs-services)", async () => {
     limit({ account_owner_kinds: ["org"], accounts_per_owner_max: 1, teams_max: 1_000 }, "/billing")
     expect(await orgLimitsView(as("ada").db, as("ada").identity)).toMatchObject({ members: null, connectors: null, raiseUrl: "/billing" })
   })

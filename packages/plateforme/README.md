@@ -505,7 +505,8 @@ registerFunctions([/* fonctions de l'ERP */])
   log), `bearer`, `basic`, `oauth2_client_credentials` (jeton échangé, rangé chiffré sur la ligne du compte, renouvelé
   à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous), `oauth2_jwt_bearer` (un compte de service : le fichier JSON de
   sa clé collé dans le seul champ secret, une assertion RS256 échangée à un `tokenUrl` fixe, le jeton rangé et renouvelé
-  comme celui d'un échange) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
+  comme celui d'un échange ; avec des niveaux d'accès, l'assertion demande les droits du `defaultLevel` de la description
+  et une fonction hors de ce niveau est refusée avant tout envoi, `access_level_denied`) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
   (`https://{domain}.example.net`, `{server}/v1`), une adresse saisie ne joignant jamais un hôte interne ; `GET`, `POST`, `PUT`, `PATCH`, `DELETE` ; en-têtes et constantes ; listes en query ; arguments encodés
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon
@@ -515,8 +516,12 @@ registerFunctions([/* fonctions de l'ERP */])
   (face `server`), fonctions pures, en donnent le pire cas, la quantité à régler et la relève à votre service.
 - **Fichiers envoyés à un tiers** : `request.files` envoie en `multipart/form-data` un fichier en transit de la
   personne qui appelle, lu sous son identité et consommé après un appel réussi ; l'agent ne passe que son identifiant.
-- **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
-  lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
+- **Propriétaires** : `modes` (`platform`, `byo_user`, `byo_org`), requis, tel que la fabrique le sort : `byo_user`
+  admet un compte personnel, `byo_org` un compte d'organisation ou d'équipe, `platform` seul la clé de l'hôte (sans
+  formulaire). Une définition écrite à la main le déclare aussi : aucun défaut.
+- **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi ;
+  `modes` absent, vide ou inconnu…) lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien
+  n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa
   première activation ou à son premier compte (migration `20261007090000_platform_connecteurs_declares.sql`) ; les
   champs, réglages et jeton d'un compte vivent sur sa ligne (migration `20261008090000_platform_comptes_a_champs.sql`).
@@ -576,9 +581,12 @@ registerConnectors([messagerie.connector], {
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
 
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
-  qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }` ; une sonde à solde (`probe.balance`) y
-  ajoute `balance: { value, unit, min }`, non saine sous le seuil, solde absent ou illisible, et pose ou lève la
-  marque `quota_exhausted` du compte selon le solde lu.
+  qui le gère, un compte désactivé compris, et rend `{ at, healthy, reason, balance }`, gardé sur le compte
+  (`AccountView.lastProbe`) ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
+  sous le seuil, solde absent ou illisible, et pose ou lève la marque `quota_exhausted` du compte selon le solde lu.
+  `probeConnector(db, identity, { connector, input: { fields, settings? } })` joue la même sonde sur une clé saisie,
+  avant l'ajout, sans rien écrire. Routes de l'écran : `POST admin/accounts/<id>/probe` et
+  `POST admin/connectors/<nom>/probe` ; 10 tests par minute et par personne, dans le processus (`rate_limited`).
 
 - **Réservé au serveur** : `registerConnectors(defs, { serverOnly: { <connecteur>: "all" | ["crm.get_contact", …] } })`
   (noms servis), ou `defineErpFunction({ serverOnly: true })` : la fonction est inconnue de l'assistant (ni `find`, ni
@@ -606,6 +614,12 @@ registerConnectors([messagerie.connector], {
   l'application, jamais en `NEXT_PUBLIC_`. Lue à l'usage seulement : sans elle, l'application démarre, et poser un
   secret ou appeler un connecteur réel lève `PlatformConfigError` qui la nomme. La changer rend illisibles les
   secrets déjà posés : les reposer.
+- **Écran Connecteurs** (lot 1) : un membre y ajoute son compte personnel (`POST admin/accounts`, `owner_kind:
+  "user"`, à son nom ; le premier compte d'un connecteur jamais activé l'active, un connecteur fermé par un
+  administrateur le refuse), renomme et décrit un compte qu'il gère (`PATCH admin/accounts/<id>`, `{ label?,
+  description? }`), le réactive (`POST admin/accounts/<id>/enable`) et le teste. Services de `/server` :
+  `updateAccount`, `enableAccount`, `probeConnector`. Base : migration
+  `20261114120000_platform_ecran_connecteurs.sql`.
 - **Compte** : à l'écran Connecteurs (un connecteur déclaré y prend des comptes réels, avec leur formulaire), par
   `admin_connector` `create_account` avec `mode: "reel"`, ou par `createAccount` de `/server`. Un compte simulé d'un connecteur réel est refusé
   (`invalid_arguments`), un compte réel ou de bac à sable d'un connecteur simulé aussi (`unavailable_in_v1`).
@@ -761,7 +775,7 @@ paquet ne connaît ni offre, ni prix, ni prestataire. Sans rien enregistrer, rie
   `/schemas`, toutes les clés facultatives, absente = sans limite) ou `null` : `members_max` (membres
   et invitations en attente, contrôlé à l'invitation), `teams_max` (0 ferme la création d'équipes),
   `connectors_max` (connecteurs actifs), `storage_bytes` (10 Go sans valeur), `account_owner_kinds` et
-  `accounts_per_owner_max` (lus, contrôlés par aucun service dans cette version). Elle est appelée à
+  `accounts_per_owner_max` (contrôlés à la création et à la réactivation d'un compte de connecteur). Elle est appelée à
   chaque écriture bridée et par `orgLimitsView` ; une clé inconnue, une valeur hors schéma ou une
   exception refusent l'écriture (`internal`), jamais « sans limite ».
 - **Refus** : `forbidden`, `details: { reason: "limit", limit, max }` ; le stockage, `too_large`,

@@ -39,12 +39,15 @@ import { transitFilesRoutes } from "./transit-files"
 import {
   accountCreationRoute,
   accountDisablingRoute,
+  accountEnablingRoute,
+  accountProbeRoute,
   accountRuleRemovalRoute,
   accountRuleSettingRoute,
   accountSecretRoute,
   accountShareJournalRoute,
+  accountUpdateRoute,
 } from "./admin/accounts"
-import { activationRoute, deactivationRoute } from "./admin/connectors"
+import { activationRoute, connectorProbeRoute, deactivationRoute } from "./admin/connectors"
 import { flagRoute } from "./admin/flags"
 import { openEntryRoute, orgRoute } from "./admin/org"
 
@@ -119,14 +122,24 @@ const RESOURCES: Record<string, ResourceRoutes> = {
   "platform-access": platformAccessRoutes,
   nodes: nodesRoutes,
   feedback: feedbackRoutes,
-  // Tableau de bord (E08-S03) : `admin/org`, `admin/open-entry`, `admin/connectors/<nom>/activation`, `admin/accounts`,
-  // `admin/accounts/<id>/disable`, `admin/accounts/<id>/secret`, `admin/accounts/<id>/share-journal` (lecture),
+  // Tableau de bord (E08-S03) : `admin/org`, `admin/open-entry`, `admin/connectors/<nom>/activation`,
+  // `admin/connectors/<nom>/probe` (sonde à blanc), `admin/accounts`, `admin/accounts/<id>` (libellé, description),
+  // `admin/accounts/<id>/disable`, `…/enable`, `…/secret`, `…/probe`, `admin/accounts/<id>/share-journal` (lecture),
   // `admin/account-rules` et `admin/account-rules/<id>` (le partage d'un compte, pour qui le gère) et `admin/flags`,
   // départagées par leurs segments fixes.
   admin: {
     GET: accountShareJournalRoute,
-    PATCH: [orgRoute, flagRoute, openEntryRoute],
-    POST: [activationRoute, accountCreationRoute, accountDisablingRoute, accountSecretRoute, accountRuleSettingRoute],
+    PATCH: [orgRoute, flagRoute, openEntryRoute, accountUpdateRoute],
+    POST: [
+      activationRoute,
+      connectorProbeRoute,
+      accountCreationRoute,
+      accountDisablingRoute,
+      accountEnablingRoute,
+      accountSecretRoute,
+      accountProbeRoute,
+      accountRuleSettingRoute,
+    ],
     DELETE: [deactivationRoute, accountRuleRemovalRoute],
   },
   tables: tablesRoutes,

@@ -9,14 +9,14 @@ const MOI = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c01"
 const PAUL = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c02"
 const ICI = "/admin/connectors"
 
-const CLE: ConnectorAccountForm = { connector: "crm", label: "Crm Pro", fields: [{ name: "api_key", label: "Clé d'API", secret: true }], settings: [] }
-const CONSENTEMENT: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
-const RATTACHE: ConnectorAccountForm = { connector: "reseau", label: "Réseau", hosted: { ready: true }, fields: [], settings: [] }
+const CLE: ConnectorAccountForm = { connector: "crm", label: "Crm Pro", ownerKinds: ["org", "team", "user"], probe: { available: true, balance: false }, fields: [{ name: "api_key", label: "Clé d'API", secret: true }], settings: [] }
+const CONSENTEMENT: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
+const RATTACHE: ConnectorAccountForm = { connector: "reseau", label: "Réseau", hosted: { ready: true }, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
 
 let rang = 0
 function compte(champs: Partial<AccountView>): AccountView {
   rang += 1
-  return { id: `00000000-0000-4000-8000-${String(rang).padStart(12, "0")}`, label: `Compte ${rang}`, connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: ["api_key"], updatedAt: "2026-11-02T09:00:00.000Z" }, viewerLevel: "manage", ...champs }
+  return { id: `00000000-0000-4000-8000-${String(rang).padStart(12, "0")}`, label: `Compte ${rang}`, connector: "crm", owner: { kind: "org" }, mode: "reel", status: "active", secret: { fields: ["api_key"], updatedAt: "2026-11-02T09:00:00.000Z" }, viewerLevel: "manage", description: null, lastProbe: null, ...champs }
 }
 
 const A_MOI: AccountView["owner"] = { kind: "user", userId: MOI, userName: "Léa Bernard" }

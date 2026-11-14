@@ -281,7 +281,8 @@ describe("lireLeRecu", () => {
 
   it.each<[string, Record<string, unknown>, string]>([
     ["older than an hour", { at: new Date(Date.now() - 61 * 60 * 1000).toISOString() }, "périmé"],
-    ["dated in the future", { at: new Date(Date.now() + 60 * 1000).toISOString() }, "périmé"],
+    // Une heure d'avance : la table se date à la lecture du fichier, et les tests d'avant durent plus d'une minute sur un poste chargé.
+    ["dated in the future", { at: new Date(Date.now() + 60 * 60 * 1000).toISOString() }, "périmé"],
     ["without a check", { checks: ["type-check", "lint", "test"] }, "check:framework"],
     ["without the code tree", { tree: undefined }, "arbre de code"],
     ["without the test summary", { tests: undefined }, "résume pas les tests"],

@@ -11,7 +11,8 @@
 import { randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
-import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
+import type { AccountProbe } from "../../packages/plateforme/schemas"
+import { forgetRecentProbes, probeAccount } from "../../packages/plateforme/server/connectors/probe"
 import { listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { teamConnectorLines } from "../../packages/plateforme/server/connectors/lines"
@@ -284,23 +285,30 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       await setAccountSecret(ada.db, ada.identity, { account_id: id, input: { secret: { api_key: `k_${randomBytes(12).toString("hex")}` } } })
       return { id, label }
     }
-    const probe = (id: string, answer: Response) => {
+    /** L'issue d'un test, sans sa date : `reason` et `balance` à `null` quand la sonde n'en dit rien. */
+    const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, reason: probe.reason, balance: probe.balance })
+    const probe = async (id: string, answer: Response) => {
       vi.stubGlobal("fetch", vi.fn(async () => answer))
-      return probeAccount(ada.db, ada.identity, { account_id: id })
+      return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }))
     }
+    /** Ce que `health` porte hors du dernier test, gardé sous `last_probe` (écran Connecteurs, lot 1). */
+    const healthOf = async (id: string) => Object.fromEntries(Object.entries((await row(id)).health as Record<string, unknown>).filter(([key]) => key !== "last_probe"))
     const markOf = async (id: string) => ((await row(id)).health.mark ?? null) as { reason: string; at: string } | null
+    // La limite de 10 tests par minute et par personne vaut dans le processus : chaque cas repart de zéro.
+    afterEach(() => forgetRecentProbes())
     const journalCount = async () => Number((await fx.admin<{ n: string }[]>`select count(*) as n from platform.journal where org_id = ${o.org.id}`)[0].n)
     const credits = (remaining: unknown) => json({ name: "Contoso", credits: { remaining } })
     const BALANCE = { unit: "credits", min: 10 }
 
-    it("should say healthy at the threshold and above, with the value, its unit and the threshold, and write nothing", async () => {
+    it("should say healthy at the threshold and above, with the value, its unit and the threshold, keep the last probe only, and journal nothing", async () => {
       const paid = await paidAccount()
-      const before = await row(paid.id)
       const lines = await journalCount()
-      expect(await probe(paid.id, credits(250))).toEqual({ healthy: true, balance: { value: 250, ...BALANCE } })
-      expect(await probe(paid.id, credits(10))).toEqual({ healthy: true, balance: { value: 10, ...BALANCE } })
-      expect(await probe(paid.id, credits(10.5))).toEqual({ healthy: true, balance: { value: 10.5, ...BALANCE } })
-      expect((await row(paid.id)).updated_at).toBe(before.updated_at)
+      expect(await probe(paid.id, credits(250))).toEqual({ healthy: true, reason: null, balance: { value: 250, ...BALANCE } })
+      expect(await probe(paid.id, credits(10))).toEqual({ healthy: true, reason: null, balance: { value: 10, ...BALANCE } })
+      expect(await probe(paid.id, credits(10.5))).toEqual({ healthy: true, reason: null, balance: { value: 10.5, ...BALANCE } })
+      // Le dernier test seul est gardé, à la date de la base, sans marque.
+      const kept = (await row(paid.id)).health as { last_probe: AccountProbe }
+      expect(kept).toEqual({ last_probe: { at: expect.any(String), healthy: true, reason: null, balance: { value: 10.5, ...BALANCE } } })
       expect(await journalCount()).toBe(lines)
     })
 
@@ -315,8 +323,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const view = (await listOrgAccounts(ada.db, ada.identity)).find((candidate) => candidate.id === paid.id)
       expect(view).toMatchObject({ status: "active", mark: { reason: "quota_exhausted" } })
 
-      expect(await probe(paid.id, credits(12))).toEqual({ healthy: true, balance: { value: 12, ...BALANCE } })
-      expect((await row(paid.id)).health).toEqual({})
+      expect(await probe(paid.id, credits(12))).toEqual({ healthy: true, reason: null, balance: { value: 12, ...BALANCE } })
+      expect(await healthOf(paid.id)).toEqual({})
       expect(await journalCount()).toBe(lines)
     })
 
@@ -329,7 +337,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const paid = await paidAccount()
       const answer = remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining)
       expect(await probe(paid.id, answer)).toEqual({ healthy: false, reason, balance: { value: null, ...BALANCE } })
-      expect((await row(paid.id)).health).toEqual({})
+      expect(await healthOf(paid.id)).toEqual({})
       await probe(paid.id, credits(1))
       const spent = await markOf(paid.id)
       expect(spent?.reason).toBe("quota_exhausted")
@@ -343,7 +351,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const paid = await paidAccount()
       const refused = await probe(paid.id, json({}, 401))
       expect(refused.healthy).toBe(false)
-      expect(refused).not.toHaveProperty("balance")
+      expect(refused.balance).toBeNull()
       expect((await markOf(paid.id))?.reason).toBe("credential_rejected")
       // Le tiers accepte de nouveau la clé : la marque de clé refusée tombe, comme au premier appel réussi ; le solde
       // décide de la suite.
@@ -361,8 +369,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))
       expect((await markOf(crm.id))?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => json({ name: "Contoso", scopes: ["read"] })))
-      expect(await probeAccount(ada.db, ada.identity, { account_id: crm.id })).toEqual({ healthy: true })
-      expect((await row(crm.id)).health).toEqual({})
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }))).toEqual({ healthy: true, reason: null, balance: null })
+      expect(await healthOf(crm.id)).toEqual({})
     })
   })
 })

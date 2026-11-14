@@ -1,3 +1,15 @@
+-- Version 1.7.0 du paquet (un seul fichier de migration par version publiée, database-patterns.md § Règles) : les
+-- deux migrations ajoutées depuis 1.6.2, réunies au contenu identique, dans l'ordre de leurs horodatages, chacune
+-- précédée d'une bannière qui nomme son sujet et son fichier d'origine. Aucune ligne n'est changée : chaque partie
+-- garde son bloc ROLLBACK (commentaire, jamais exécuté) à sa fin ; pour défaire, les parties dans l'ordre inverse.
+-- Aucune version publiée ne portait les deux fichiers d'origine : une base qui en avait appliqué un avant la réunion
+-- (base de développement, projet de test) suit `migrations/README.md` § « Hôtes qui avaient appliqué une migration
+-- de la 1.7.0 ».
+
+-- ====================================================================================================
+-- Partie 1 sur 2 : les commentaires d'une page, écrite en 20261112090000_platform_commentaires.sql.
+-- ====================================================================================================
+
 -- Les commentaires d'une page (parcours 5.4, « commenter un contenu ») : des fils de discussion entre les personnes qui
 -- lisent une page, une procédure, un Contexte ou un tableau. Sans eux, une personne qui lit une page ne peut rien y
 -- signaler sans la modifier. Deux tables :
@@ -361,3 +373,31 @@ GRANT SELECT ON TABLE platform.comment_mail_items TO authenticated;
 --   forget_user : reprendre le corps de 20261018090000_platform_partage_des_comptes.sql (point 6) ;
 --   drop table platform.comments ;
 --   drop table platform.comment_threads.
+
+-- ====================================================================================================
+-- Partie 2 sur 2 : le contact d'une organisation réservé à ses membres et à l'équipe plateforme, écrite en 20261113090000_platform_contact_reserve.sql.
+-- ====================================================================================================
+
+-- Le contact d'une organisation réservé à ses membres et à l'équipe plateforme. `org_contact` rendait le nom et l'email
+-- de l'administrateur le plus ancien à toute personne connectée qui en donnait l'identifiant, membre ou non : sur un
+-- hôte ouvert à l'inscription, n'importe qui lisait ce contact. Elle ne rend plus de ligne qu'à un membre de
+-- l'organisation (`member_orgs`) ou à l'équipe plateforme (`is_staff`), qui la lit dans la fiche d'une organisation.
+--
+-- Re-versionnée à signature identique, privilèges redits à l'identique. Aucune table, colonne, policy ni index ; rien à
+-- relancer avant. Un hôte dont l'écran « aucune organisation » lisait ce contact pour un non-membre reçoit désormais
+-- « aucun contact » : son écran dit de demander à un administrateur, sans le nommer.
+
+CREATE OR REPLACE FUNCTION platform.org_contact(p_org uuid) RETURNS TABLE(name text, email text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(nullif(m.profile ->> 'name', ''), split_part(m.email, '@', 1)), m.email
+    from platform.members m
+   where m.org_id = p_org and m.role = 'admin'
+     and (p_org in (select platform.member_orgs()) or platform.is_staff())
+   order by m.created_at, m.user_id
+   limit 1
+$$;
+
+REVOKE ALL ON FUNCTION platform.org_contact(p_org uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION platform.org_contact(p_org uuid) TO authenticated;

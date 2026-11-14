@@ -10,6 +10,8 @@
  * clé ou lecture vers `auth.users`, extension hors de `pg_trgm`, `unaccent` et `ltree` ; et qu'une
  * fonction pose un paramètre de `pg_trgm` avant que la session ait chargé sa bibliothèque ; et qu'une fonction
  * redéfinie donne `EXECUTE` à un rôle qu'elle n'avait pas (`migrations-execute-grants.mjs`, suivi de fichier en fichier).
+ * Seule exception au retrait d'un index : un index unique remplacé, dans le même fichier, par un index unique plus large
+ * (`uniqueIndexTracker`), qui admet toute ligne qu'admettait l'ancien.
  *
  * Sortie : `fichier:ligne règle` par erreur, suivie de son explication quand la règle en donne une ; code 1 s'il y en a une.
  */
@@ -181,7 +183,79 @@ function relaxedNotNullDrops(body) {
   return positions
 }
 
-function additiveErrors(stmt, next, report) {
+/** Les morceaux d'une liste séparée par des virgules de premier niveau (hors parenthèses), en minuscules, sans blanc ni guillemet. */
+function topLevelItems(list) {
+  const items = []
+  let level = 0
+  let start = 0
+  for (let j = 0; j <= list.length; j++) {
+    const c = list[j]
+    if (c === '(') level++
+    else if (c === ')') level--
+    else if (j === list.length || (c === ',' && level === 0)) {
+      items.push(list.slice(start, j).replace(/\s+/g, '').replace(/"/g, '').toLowerCase())
+      start = j + 1
+    }
+  }
+  return items.filter(Boolean)
+}
+
+/** Les colonnes et expressions clés d'un index entre parenthèses, la première ouvrant à `open` ; `null` sans fermeture. */
+function indexKeys(body, open) {
+  let depth = 0
+  for (let k = open; k < body.length; k++) {
+    if (body[k] === '(') depth++
+    else if (body[k] === ')' && --depth === 0) return topLevelItems(body.slice(open + 1, k))
+  }
+  return null
+}
+
+const UNIQUE_INDEX = new RegExp(String.raw`^\s*create\s+unique\s+index\s+(?:if\s+not\s+exists\s+)?(${IDENT})\s+on\s+(?:only\s+)?(?:(${IDENT})\s*\.\s*)?(${IDENT})\s*(?:using\s+\w+\s*)?\(`, 'i')
+const DROP_INDEX = new RegExp(String.raw`^\s*drop\s+index\s+(?:if\s+exists\s+)?(?:(${IDENT})\s*\.\s*)?(${IDENT})\s*$`, 'i')
+
+/** Un index unique créé par l'instruction : son nom, sa table (`schéma.table`) et ses clés ; `null` pour une autre. */
+function uniqueIndexOf(body) {
+  const m = body.match(UNIQUE_INDEX)
+  if (!m) return null
+  const keys = indexKeys(body, m[0].length - 1)
+  return keys && { name: unquote(m[1]), table: `${m[2] ? unquote(m[2]) : 'public'}.${unquote(m[3])}`, keys }
+}
+
+/**
+ * Les index uniques de `platform`, suivis de migration en migration, et l'exception étroite à « aucun retrait » : un
+ * `drop index` d'un index unique connu est admis seulement si le même fichier crée un index unique sur la même table
+ * dont les clés couvrent toutes les siennes et en ajoutent (le libellé d'un compte unique par propriétaire, et non plus
+ * dans toute l'organisation). Un index plus large admet toute ligne qu'admettait l'ancien : rien de ce qu'une base
+ * porte n'est refusé ensuite. Un index inconnu (créé hors des fichiers lus) n'est pas admis : rien n'en dit les clés.
+ */
+export function uniqueIndexTracker() {
+  const known = new Map()
+  return {
+    /** Les positions (rang d'instruction) des `drop index` admis du fichier ; les index du fichier sont retenus. */
+    file(statements) {
+      const created = statements.map((stmt) => uniqueIndexOf(stmt.body)).filter(Boolean)
+      const admitted = new Set()
+      statements.forEach((stmt, k) => {
+        const index = uniqueIndexOf(stmt.body)
+        if (index) known.set(index.name, index)
+        const drop = stmt.body.match(DROP_INDEX)
+        if (!drop) return
+        const name = unquote(drop[2])
+        const dropped = known.get(name)
+        const wider = dropped && created.some((other) => other.name !== name && other.table === dropped.table && dropped.keys.every((key) => other.keys.includes(key)) && other.keys.length > dropped.keys.length)
+        if (wider) {
+          admitted.add(k)
+          known.delete(name)
+        }
+      })
+      return admitted
+    },
+  }
+}
+
+const DROPPED_INDEX_DETAIL = 'un index unique ne se retire que remplacé, dans le même fichier, par un index unique de la même table dont les clés couvrent les siennes et en ajoutent'
+
+function additiveErrors(stmt, next, report, admittedDrop = false) {
   const isAlterTable = /^\s*alter\s+table\b/i.test(stmt.body)
   const rules = [
     [/\brename\b/gi, 'rename'],
@@ -191,12 +265,13 @@ function additiveErrors(stmt, next, report) {
     rules.push([/\balter\s+(?:column\s+)?(?!table\b)[\w"]+\s+(?:set\s+data\s+)?type\b/gi, 'alter-column-type'])
   }
   for (const [re, rule] of rules) for (const m of stmt.body.matchAll(re)) report(stmt.offset + m.index, rule)
-  if (isDropBeforeRecreate(stmt, next)) return
+  if (isDropBeforeRecreate(stmt, next) || admittedDrop) return
   const replaced = isAlterTable ? new Set([...replacedCheckDrops(stmt.body), ...relaxedNotNullDrops(stmt.body)]) : new Set()
+  const droppedIndex = DROP_INDEX.test(stmt.body)
   for (const m of stmt.body.matchAll(/\bdrop\b/gi)) {
     if (replaced.has(m.index)) continue
     const dropColumn = isAlterTable && /^drop\s+(?:column\b|(?!constraint\b|default\b|not\b|identity\b|expression\b)[a-z_"])/i.test(stmt.body.slice(m.index))
-    report(stmt.offset + m.index, dropColumn ? 'drop-column' : 'drop')
+    report(stmt.offset + m.index, dropColumn ? 'drop-column' : 'drop', droppedIndex ? DROPPED_INDEX_DETAIL : undefined)
   }
 }
 
@@ -276,17 +351,18 @@ function pgTrgmErrors(statements, report) {
   }
 }
 
-function checkSql(sql, { pgTrgmLoadedBefore = false, grants } = {}) {
+function checkSql(sql, { pgTrgmLoadedBefore = false, grants, indexes = uniqueIndexTracker() } = {}) {
   const { text, dollarRanges } = clean(sql)
   const errors = []
   const report = (offset, rule, detail) => errors.push({ line: text.slice(0, offset).split('\n').length, rule, detail })
   const statements = splitStatements(text, dollarRanges)
+  const admittedDrops = indexes.file(statements)
   statements.forEach((stmt, k) => {
     // La position utile est celle du premier mot, pas des blancs qui le précèdent.
     const lead = stmt.body.match(/^\s*/)[0].length
     const trimmed = { offset: stmt.offset + lead, body: stmt.body.slice(lead) }
     schemaErrors(trimmed, report)
-    additiveErrors(trimmed, statements[k + 1], report)
+    additiveErrors(trimmed, statements[k + 1], report, admittedDrops.has(k))
     portabilityErrors(trimmed, report)
   })
   executeErrors(statements, report)
@@ -312,9 +388,10 @@ export function checkMigrations({ files }) {
   let failures = 0
   // Les fichiers dans l'ordre où ils s'appliquent (`sqlFiles` les trie) : le droit d'une fonction est celui d'avant.
   const grants = executeGrantTracker()
+  const indexes = uniqueIndexTracker()
   for (const file of files) {
     const pgTrgmLoadedBefore = PG_TRGM_LOADED_BEFORE.includes(basename(file))
-    for (const { line, rule, detail } of checkSql(readFileSync(file, 'utf8'), { pgTrgmLoadedBefore, grants })) {
+    for (const { line, rule, detail } of checkSql(readFileSync(file, 'utf8'), { pgTrgmLoadedBefore, grants, indexes })) {
       console.log(`${shown(file)}:${line} ${rule}${detail ? ` — ${detail}` : ''}`)
       failures++
     }

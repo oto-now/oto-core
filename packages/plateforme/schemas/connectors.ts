@@ -18,8 +18,14 @@ const connectorNameSchema = z
   .trim()
   .regex(CONNECTOR_NAME_PATTERN, "Connector: lowercase letters, digits and _, starting with a letter, 40 characters max, e.g. mail")
 
-/** Libellé rogné, 1 à 80 caractères ; unique sans casse dans l'organisation (index d'E01-S06, N12). */
+/** Libellé rogné, 1 à 80 caractères ; unique sans casse pour un même propriétaire (index `uq_accounts_owner_label`). */
 const accountLabelSchema = z.string().trim().min(1).max(80)
+
+/** Au plus, en caractères, la description d'un compte (contrainte `accounts_description_check`). */
+export const ACCOUNT_DESCRIPTION_MAX = 200
+
+/** Description rognée, 200 caractères au plus ; vide ou `null` : aucune. Écrite par un membre, lue comme une donnée. */
+const accountDescriptionSchema = z.string().trim().max(ACCOUNT_DESCRIPTION_MAX).nullable()
 
 /** `simule` pour un connecteur simulé, `reel` pour un connecteur réel (H85) ; `sandbox` n'est pas encore admis. */
 const accountModeSchema = z.enum(ACCOUNT_MODES)
@@ -52,6 +58,20 @@ export const createAccountSchema = z
   })
 
 export const disableAccountSchema = z.object({ account_id: z.uuid() })
+
+/**
+ * Le libellé et la description d'un compte, changés par qui le gère (`updateAccount`, `PATCH admin/accounts/<id>`) : l'un
+ * ou l'autre, ou les deux ; un nom absent garde ce qui est posé, une description `null` ou vide l'efface.
+ */
+export const accountChangeSchema = z
+  .object({ label: accountLabelSchema.optional(), description: accountDescriptionSchema.optional() })
+  .strict()
+  .refine((input) => input.label !== undefined || input.description !== undefined, "give label, description or both")
+
+export type AccountChange = z.input<typeof accountChangeSchema>
+
+/** `accountChangeSchema` et le compte visé, tels que les reçoit le service. */
+export const updateAccountSchema = z.object({ account_id: z.uuid(), input: accountChangeSchema })
 
 /** Le chemin d'un écran de l'hôte où revenir après un consentement : relatif, jamais vers une autre adresse. */
 const returnPathSchema = z
@@ -109,12 +129,30 @@ export type AccountSecretInput = z.input<typeof accountSecretInputSchema>
 export const accountSecretSchema = z.object({ account_id: z.uuid(), input: accountSecretInputSchema })
 
 /**
+ * Une clé à essayer avant de créer un compte (`probeConnector`, `POST admin/connectors/<nom>/probe`) : les champs du
+ * formulaire et ses réglages, comme `accountSecretInputSchema` les pose, sans rien d'effacé. Jamais gardée ni rendue.
+ */
+export const connectorProbeInputSchema = z
+  .object({
+    fields: z.record(accountKeySchema, z.string().trim().min(1).max(10_000)),
+    settings: z.record(accountKeySchema, z.string().trim().max(2_000)).optional(),
+  })
+  .strict()
+
+export type ConnectorProbeInput = z.input<typeof connectorProbeInputSchema>
+
+/** `connectorProbeInputSchema` et le connecteur visé, tels que les reçoit le service. */
+export const connectorProbeSchema = z.object({ connector: connectorNameSchema, input: connectorProbeInputSchema })
+
+/**
  * Un connecteur activable et son état dans l'organisation, tel que le rend `listConnectorsForOrg`
  * (E04-S01) et que le voient l'écran « Connecteurs » (E08-S03) et le MCP admin (E08-S06). Ici, et non
  * dans `server/` : l'écran, qui n'importe pas `server/`, le reçoit tel quel (H02, H03).
  */
 export type OrgConnector = {
   connector: string
+  /** Le nom que la déclaration lui donne (« Pennylane ») ; le nom technique pour un connecteur non déclaré (`mail`). */
+  label: string
   state: "active" | "inactive"
   /** Actif : depuis quand ; inactif : `null`. */
   activatedAt: string | null
@@ -122,6 +160,11 @@ export type OrgConnector = {
   activatedBy: { userId: string; name: string | null } | null
   /** `class` : celle du catalogue (`FunctionClass` de `server/catalog/define.ts`), que ce type redit. */
   functions: { name: string; class: "read" | "write" | "sensitive" }[]
+  /**
+   * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory`
+   * (`null` hors de l'annuaire) ; le connecteur reste fermé, l'ajout d'un compte est refusé. `null` : jamais fermé.
+   */
+  closedBy: { userId: string; name: string | null } | null
 }
 
 /**
@@ -139,6 +182,18 @@ export type AccountMarkReason = "credential_rejected" | "quota_exhausted"
  * levée au premier appel réussi. Le compte reste résolu et appelé.
  */
 export type AccountMark = { reason: AccountMarkReason; at: string }
+
+/** Le solde lu par une sonde à solde : sa valeur (`null` : absente, ou qui n'est pas un nombre), son unité et le seuil. */
+export type ProbedBalance = { value: number | null; unit: string; min: number }
+
+/**
+ * L'issue d'une sonde : sain, ou non sain et pourquoi (`reason`, telle que la sonde la rend), jamais le secret ; le solde
+ * lu (`balance`) quand le connecteur en déclare un et que le tiers a répondu, `null` sinon.
+ */
+export type AccountHealth = { healthy: boolean; reason: string | null; balance: ProbedBalance | null }
+
+/** Le dernier test d'un compte, gardé sur lui (`accounts.health.last_probe`) : son issue et sa date (ISO 8601). */
+export type AccountProbe = AccountHealth & { at: string }
 
 /**
  * Un compte de l'organisation, désactivé compris (E08-S03, AC6) : jamais de secret. Le propriétaire se
@@ -166,6 +221,10 @@ export type AccountView = {
   mark?: AccountMark | null
   /** Le niveau de l'appelant sur le compte, décidé par le service : `manage` ouvre, entre autres, son journal des partages. */
   viewerLevel: Exclude<AccountLevelName, "none">
+  /** Écrite par un membre, 200 caractères au plus ; `null` : aucune. Une donnée citée, jamais une consigne. */
+  description: string | null
+  /** Le dernier test du compte, par la route de sonde ; `null` : jamais testé. */
+  lastProbe: AccountProbe | null
 }
 
 /**
@@ -183,6 +242,10 @@ export type ConnectorAccountForm = {
    * `ready` quand l'hôte a fourni le port du branchement.
    */
   hosted?: { ready: boolean }
+  /** Les propriétaires admis, d'après les `modes` de la déclaration : `byo_user` → `user`, `byo_org` → `org` et `team`. */
+  ownerKinds: ("org" | "team" | "user")[]
+  /** Le connecteur déclare une sonde : la sonde à blanc et « Tester » sont disponibles ; `balance` : elle lit un solde. */
+  probe: { available: boolean; balance: boolean }
   fields: { name: string; label: string; secret: boolean }[]
   settings: (
     | { name: string; label: string; type: "choice"; choices: string[]; default?: string }

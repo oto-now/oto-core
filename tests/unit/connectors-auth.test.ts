@@ -3,12 +3,14 @@
 // réseau ni base. `basic` sur deux champs ; `api_key` en query, la clé absente de tout log, erreur et texte rendu ;
 // adresse par région et par sous-domaine ; `oauth2_client_credentials` : échange, jeton rangé par le compte (pas en
 // mémoire du processus), réutilisé, renouvelé à l'échéance, une fois de plus après un 401 ; `oauth2_jwt_bearer` : la
-// même mécanique, la clé refusée qui marque le compte, la déclaration contrôlée ; une adresse saisie qui mène à un hôte
-// interne, refusée avant tout envoi. Secrets tirés à l'exécution, la clé du compte de service construite par les cas
+// même mécanique, la clé refusée qui marque le compte, la déclaration contrôlée, et ses niveaux d'accès (l'assertion aux
+// droits du niveau du compte, sinon de `defaultLevel` ; une fonction hors niveau refusée avant tout envoi ; le jeton
+// gardé par ses droits) ; une adresse saisie qui mène à un hôte interne, refusée avant tout envoi. Secrets tirés à l'exécution, la clé du compte de service construite par les cas
 // communs.
 import { randomBytes } from "crypto"
 import type { LookupAddress } from "node:dns"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { credentialValue, jwtBearerCases } from "@otomata_tech/connectors/jwt-bearer-cases"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import { CatalogRegistrationError } from "../../packages/plateforme/server/catalog/erp"
 import type { AccountCredential, AccountMarker } from "../../packages/plateforme/server/connectors/auth"
@@ -18,7 +20,6 @@ import type { ConnectorDefinition } from "../../packages/plateforme/server/conne
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
-import { credentialValue, jwtBearerCases } from "../factories/jwt-bearer-cases"
 import { loggedText } from "../helpers/logs"
 
 const secret = () => `s_${randomBytes(12).toString("hex")}`
@@ -226,12 +227,104 @@ describe("oauth2_jwt_bearer", () => {
       serviceAccount({ tokenUrl: "http://oauth2.example.test/token" }),
       serviceAccount({ scopes: [] }),
       serviceAccount({}, [{ ...signed.credential[0], secret: false }]),
-      serviceAccount({}, [...signed.credential, { name: "other", label: "Other", secret: true }]),
+      serviceAccount({}, [...signed.credential, { name: "other", label: "Other", secret: true, holder: "account" as const }]),
       serviceAccount(),
     ].map(declared)
     const address = "crm: auth oauth2_jwt_bearer needs a fixed https tokenUrl (no template, query nor tokenUrls)."
     const key = "crm: auth oauth2_jwt_bearer: key must name the one credential field, secret (the JSON key file)."
     expect(verdicts).toEqual([address, address, address, "crm: auth oauth2_jwt_bearer needs scopes, a non-empty list.", key, key, "declared"])
+  })
+})
+
+describe("oauth2_jwt_bearer with access levels", () => {
+  const leveled = jwtBearerCases.find((c) => c.name === "assertion_at_default_level")
+  if (!leveled) throw new Error("the common case assertion_at_default_level is missing")
+  const [READ, WRITE] = ["https://api.example.test/auth/read", "https://api.example.test/auth/write"]
+  /** Le connecteur de test en compte de service à niveaux (`read` par défaut, `full`) : lire exige READ, écrire WRITE. */
+  const serviceAccount = (auth: Record<string, unknown> = {}, scopesOf = (fn: ConnectorDefinition["functions"][number]): string[] | undefined => [fn.class === "read" ? READ : WRITE]) => {
+    const base = describedConnector()
+    return { ...base, auth: { ...leveled.auth, ...auth } as ConnectorDefinition["auth"], credential: leveled.credential, functions: base.functions.map((fn) => ({ ...fn, scopes: scopesOf(fn) })) }
+  }
+  const keyOf = () => ({ [leveled.credential[0].name]: credentialValue(leveled) })
+  const scopeOf = (body: unknown) => {
+    const assertion = new URLSearchParams(String(body)).get("assertion") ?? ""
+    return (JSON.parse(Buffer.from(assertion.split(".")[1], "base64url").toString("utf8")) as { scope: string }).scope
+  }
+  const run = (name: string, credential: AccountCredential, args: Record<string, unknown> = {}) => {
+    const prepared = declaredConnector("crm")?.functions.find((fn) => fn.name === name)
+    if (!prepared) throw new Error(`${name} is not declared`)
+    return prepared.run({ credential, account: { id: ACCOUNT } } as never, args as never)
+  }
+  const declared = (definition: ConnectorDefinition) => {
+    try {
+      registerConnectors([definition])
+      return "declared"
+    } catch (error) {
+      if (error instanceof CatalogRegistrationError) return error.message
+      throw error
+    }
+  }
+
+  it("should sign the assertion with the scopes of defaultLevel, keep them with the token, and refuse a function outside the level before anything is sent", async () => {
+    registerConnectors([serviceAccount()])
+    const tokens = memoryTokens()
+    const token = secret()
+    const { send, sent } = stub(json({ access_token: token, expires_in: 3600 }), json({ id: "co-1" }))
+    await run("crm.get_company", { fields: keyOf(), settings: {}, tokens })
+    expect(scopeOf(sent()[0].body)).toBe(READ)
+    expect(tokens.written.map((written) => written.scopes)).toEqual([[READ]])
+    const error = await refusal(run("crm.rename_contact", { fields: keyOf(), settings: {}, tokens }, { contact_id: "c-42", name: "Ada" }))
+    expect([error.code, error.details, send.mock.calls.length]).toEqual(["not_enabled", { refusal: "access_level_denied", level: "read" }, 2])
+    expect(error.message).toBe(`Crm: crm.rename_contact is not allowed at the access level « read » of this account; it needs a level that grants ${WRITE}.`)
+  })
+
+  it("should serve every function at the level full of an account, signing a new assertion when the kept token carries other scopes", async () => {
+    registerConnectors([serviceAccount()])
+    const tokens = memoryTokens({ token: "read-token", expiresAt: new Date(Date.now() + 600_000), scopes: [READ] })
+    const token = secret()
+    const { sent } = stub(json({ access_token: token, expires_in: 3600 }), json({}))
+    await run("crm.rename_contact", { fields: keyOf(), settings: {}, tokens, accessLevel: "full" }, { contact_id: "c-42", name: "Ada" })
+    const requests = sent()
+    expect([scopeOf(requests[0].body), requests[1].headers.authorization, tokens.written.map((written) => written.scopes)]).toEqual([WRITE, `Bearer ${token}`, [[WRITE]]])
+  })
+
+  it("should reuse a kept token that carries the scopes of the level", async () => {
+    registerConnectors([serviceAccount()])
+    const tokens = memoryTokens({ token: "read-token", expiresAt: new Date(Date.now() + 600_000), scopes: [READ] })
+    const { sent } = stub(json({ id: "co-1" }))
+    await run("crm.get_company", { fields: keyOf(), settings: {}, tokens })
+    expect(sent().map((request) => request.headers.authorization)).toEqual(["Bearer read-token"])
+  })
+
+  it("should take full without defaultLevel, and refuse an account level the description does not declare, sending nothing", async () => {
+    registerConnectors([serviceAccount({ defaultLevel: undefined })])
+    const { send, sent } = stub(json({ access_token: secret(), expires_in: 3600 }), json({}))
+    await run("crm.rename_contact", { fields: keyOf(), settings: {}, tokens: memoryTokens() }, { contact_id: "c-42", name: "Ada" })
+    expect(scopeOf(sent()[0].body)).toBe(WRITE)
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    const error = await refusal(run("crm.get_company", { fields: keyOf(), settings: {}, tokens: memoryTokens(), accessLevel: "support" }))
+    expect([error.code, send.mock.calls.length]).toEqual(["internal", 2])
+    expect(loggedText(errors)).toContain('access level "support" is not declared (it declares full, read)')
+  })
+
+  it("should refuse at declaration scopes beside levels, an undeclared defaultLevel, defaultLevel without levels, and function scopes no level grants", () => {
+    const head = "crm: auth oauth2_jwt_bearer"
+    const verdicts = [
+      serviceAccount({ scopes: [READ] }),
+      serviceAccount({ defaultLevel: "support" }),
+      variant({ auth: { ...jwtBearerCases[0].auth, defaultLevel: "read" } as ConnectorDefinition["auth"], credential: jwtBearerCases[0].credential }),
+      serviceAccount({}, (fn) => (fn.name === "crm.get_company" ? ["https://api.example.test/auth/admin"] : [READ])),
+      serviceAccount({}, (fn) => (fn.name === "crm.get_company" ? undefined : [READ])),
+      serviceAccount(),
+    ].map(declared)
+    expect(verdicts).toEqual([
+      `${head}: scopes and accessLevels exclude each other; a connector with access levels asks the scopes of a level.`,
+      `${head}: defaultLevel must name a declared access level (read, full).`,
+      `${head}: scopeImplies and defaultLevel need accessLevels.`,
+      "crm.get_company: no access level grants its scopes (https://api.example.test/auth/admin), directly or through scopeImplies.",
+      "crm.get_company: scopes must list the scopes the function needs, in a connector with access levels.",
+      "declared",
+    ])
   })
 })
 

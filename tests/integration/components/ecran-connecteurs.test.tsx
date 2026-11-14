@@ -27,6 +27,8 @@ const FINANCE = "0e8e5a3c-7f10-4a5b-8d3b-2b1c4d5e6f71"
 
 const MAIL: OrgConnector = {
   connector: "mail",
+  label: "mail",
+  closedBy: null,
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
   activatedBy: { userId: "user-claire", name: "Claire Morel" },
@@ -37,6 +39,8 @@ const MAIL: OrgConnector = {
 }
 const CRM: OrgConnector = {
   connector: "crm",
+  label: "Crm Pro",
+  closedBy: null,
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
   activatedBy: null,
@@ -50,17 +54,19 @@ const CRM: OrgConnector = {
 const FORMULAIRE_CRM: ConnectorAccountForm = {
   connector: "crm",
   label: "Crm Pro",
+  ownerKinds: ["org", "team", "user"],
+  probe: { available: true, balance: false },
   fields: [{ name: "api_key", label: "Clé d'API", secret: true }],
   settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
 }
-const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, fields: [], settings: [] }
+const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
 
 const A_LEA: AccountView["owner"] = { kind: "user", userId: LEA, userName: "Léa Bernard" }
 const A_PAUL: AccountView["owner"] = { kind: "user", userId: PAUL, userName: "Paul Durand" }
 
-const BANQUE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d41", label: "Banque", connector: "crm", owner: A_LEA, mode: "reel", status: "active", secret: { fields: ["api_key"], updatedAt: "2026-11-02T09:00:00.000Z" }, settings: { region: "us" }, viewerLevel: "manage" }
-const AGENDA: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d42", label: "Agenda de Paul", connector: "microsoft", owner: A_PAUL, mode: "reel", status: "active", secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" }, viewerLevel: "read" }
-const MAIL_VENTES: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d43", label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "write" }
+const BANQUE: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d41", label: "Banque", connector: "crm", owner: A_LEA, mode: "reel", status: "active", secret: { fields: ["api_key"], updatedAt: "2026-11-02T09:00:00.000Z" }, settings: { region: "us" }, viewerLevel: "manage", description: null, lastProbe: null }
+const AGENDA: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d42", label: "Agenda de Paul", connector: "microsoft", owner: A_PAUL, mode: "reel", status: "active", secret: { fields: ["refresh_token"], updatedAt: "2026-10-16T09:00:00.000Z" }, viewerLevel: "read", description: null, lastProbe: null }
+const MAIL_VENTES: AccountView = { id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d43", label: "Mail Ventes", connector: "mail", owner: { kind: "team", teamName: "Ventes" }, mode: "simule", status: "active", viewerLevel: "write", description: null, lastProbe: null }
 
 const PARTAGES_DE_BANQUE = {
   general: null,

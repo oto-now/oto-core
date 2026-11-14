@@ -10,11 +10,8 @@
 // ni PostgREST) : le job `bare-postgres` la joue.
 import { randomUUID } from "crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import {
-  createAccount,
-  disableAccount,
-  listUsableAccounts,
-} from "../../packages/plateforme/server/connectors/accounts"
+import { disableAccount } from "../../packages/plateforme/server/connectors/account-changes"
+import { createAccount, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import {
   activateConnector,
   deactivateConnector,
@@ -102,28 +99,34 @@ describe.skipIf(!sqlConfigured || privatePending)(
         const first = await activateConnector(db, identity, { connector: "mail" })
         expect(first).toEqual({
           connector: "mail",
+          label: "mail",
           state: "active",
           activatedAt: expect.any(String),
           activatedBy: { userId: o.people.ada.id, name: "Ada Martin" },
           functions: FUNCTIONS,
+          closedBy: null,
         })
         expect(await loadActiveConnectors(db, o.org.id)).toEqual(new Set(["mail"]))
         const again = await activateConnector(db, identity, { connector: " mail " })
         expect(again.activatedAt).toBe(first.activatedAt)
         expect(await activationRows()).toEqual([{ connector: "mail", state: "active", activated_by: o.people.ada.id }])
 
+        // Fermé par Ada : l'écran le dit (`closedBy`), et refuse l'ajout d'un compte (oto-core#103).
+        const closedBy = { userId: o.people.ada.id, name: "Ada Martin" }
         expect(await deactivateConnector(db, identity, { connector: "mail" })).toEqual({
           connector: "mail",
+          label: "mail",
           state: "inactive",
           activatedAt: null,
           activatedBy: null,
           functions: FUNCTIONS,
+          closedBy,
         })
         expect(await activationRows()).toEqual([{ connector: "mail", state: "inactive", activated_by: o.people.ada.id }])
         expect(await loadActiveConnectors(db, o.org.id)).toEqual(new Set())
         // La ligne inactive, relue : ni date ni auteur, comme sans ligne (N18, écran « Inactif » d'E08-S03).
         expect(await listConnectorsForOrg(db, identity)).toEqual([
-          { connector: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS },
+          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy },
         ])
         expect((await accountRow(account)).status).toBe("active")
         expect((await activateConnector(db, identity, { connector: "mail" })).state).toBe("active")
@@ -133,7 +136,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
         await resetActivations()
         const lea = as("lea")
         expect(await listConnectorsForOrg(lea.db, lea.identity)).toEqual([
-          { connector: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS },
+          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy: null },
         ])
         const ada = as("ada")
         await activateConnector(ada.db, ada.identity, { connector: "mail" })
@@ -192,16 +195,23 @@ describe.skipIf(!sqlConfigured || privatePending)(
         expect(error.message).toBe(`Unknown team ${unknown} in Acme Test.`)
       })
 
-      it("should refuse a label already taken in the organisation, without case, other connectors and invisible accounts included (AC7)", async () => {
+      it("should refuse a label already taken by the same owner, without case and across connectors, and admit it for another owner (AC7, N6)", async () => {
         const tag = hex(3)
+        await fx.createAccount(o.org.id, { ownerKind: "user", ownerUserId: o.people.claire.id, label: `Perso Claire ${tag}` })
+        await fx.createAccount(o.org.id, { connector: "notion", ownerKind: "user", ownerUserId: o.people.claire.id, label: `Notion Claire ${tag}`, mode: "reel" })
         await fx.createAccount(o.org.id, { ownerKind: "team", ownerTeamId: o.teams.ventes, label: `Mail Ventes ${tag}` })
-        await fx.createAccount(o.org.id, { connector: "notion", ownerKind: "org", label: `Notion ${tag}`, mode: "reel" })
         await fx.createAccount(o.org.id, { ownerKind: "user", ownerUserId: o.people.paul.id, label: `Perso Paul ${tag}` })
         const { db, identity } = as("claire")
-        for (const label of [`mail ventes ${tag}`, `NOTION ${tag}`, `perso paul ${tag}`]) {
+        for (const label of [`perso claire ${tag}`, `NOTION CLAIRE ${tag}`]) {
           const error = await refusal(createAccount(db, identity, { connector: "mail", owner_kind: "user", label }))
           expect(error.code, label).toBe("conflict")
-          expect(error.message, label).toBe(`An account labelled ${label} already exists in Acme Test.`)
+          expect(error.message, label).toBe(`An account labelled ${label} already exists for the same owner in Acme Test.`)
+          expect(error.details, label).toEqual({ reason: "label_taken" })
+        }
+        // Le libellé d'une équipe ou d'une autre personne reste libre pour Claire : deux homonymes se départagent à l'appel.
+        for (const label of [`mail ventes ${tag}`, `perso paul ${tag}`]) {
+          const created = await createAccount(db, identity, { connector: "mail", owner_kind: "user", label })
+          expect((await accountRow(created.id)).owner_user_id, label).toBe(o.people.claire.id)
         }
       })
 

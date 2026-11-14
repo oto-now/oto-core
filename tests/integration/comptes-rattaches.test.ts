@@ -235,7 +235,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect([unnamed.code, unnamed.message, unnamed.details]).toEqual([
       "not_enabled",
       yours + shared,
-      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux" }] },
+      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
     ])
     const named = await callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts`, account: label("lea") }, { origin: origin(o) })
     expect([named.status, named.account?.label, sent.at(-1)?.url]).toEqual(["done", label("lea"), `${API}/${id}/contacts?view=full`])
@@ -442,13 +442,18 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(await linkedRows(id)).toHaveLength(1)
   })
 
-  it("should refuse a link onto a label another account of the organisation holds, writing nothing", async () => {
-    await admin`
-      insert into platform.accounts (org_id, connector, owner_kind, label, mode, status)
-      values (${o.org.id}, ${CONNECTOR}, 'org', ${label("lea")}, 'reel', 'active')`
-    const location = await connect("lea", accountId("lea"))
-    expect(outcome(location)).toEqual(["/admin/connectors", "failed", "conflict"])
-    expect(await admin`select 1 from platform.accounts where connector = ${CONNECTOR} and linked_id is not null`).toHaveLength(0)
+  it("should refuse a link onto a label another account of the same person holds, writing nothing (N6)", async () => {
+    // Le libellé est unique pour un même propriétaire (oto-core#103) : un compte de Léa d'un autre connecteur le tient.
+    const [holder] = await admin<{ id: string }[]>`
+      insert into platform.accounts (org_id, connector, owner_kind, owner_user_id, label, mode, status)
+      values (${o.org.id}, 'mail', 'user', ${o.people.lea.id}, ${label("lea")}, 'simule', 'active') returning id`
+    try {
+      const location = await connect("lea", accountId("lea"))
+      expect(outcome(location)).toEqual(["/admin/connectors", "failed", "conflict"])
+      expect(await admin`select 1 from platform.accounts where connector = ${CONNECTOR} and linked_id is not null`).toHaveLength(0)
+    } finally {
+      await admin`delete from platform.accounts where id = ${holder.id}`
+    }
   })
 
   it("should refuse to set linked_id or a host field by hand, and refuse a call on an account not linked yet", async () => {

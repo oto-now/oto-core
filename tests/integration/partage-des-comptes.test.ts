@@ -109,7 +109,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       `No mail account is connected for you (your own, then the organisation). Ask an administrator of ${o.org.name} (Ada Martin) to connect one on the dashboard: ${ORIGIN}/admin/connectors.` +
         sharedText(mail.label, "Léa Roux"),
     )
-    expect(unnamed.details).toEqual({ shared_accounts: [{ id: mail.id, label: mail.label, owner: "Léa Roux" }] })
+    expect(unnamed.details).toEqual({ shared_accounts: [{ id: mail.id, label: mail.label, owner: "Léa Roux", description: null }] })
 
     const lent = await draft(marc, mail.label)
     expect(lent.account?.owner).toEqual({ kind: "user", userId: o.people.lea.id, name: "Léa Roux", yours: false })
