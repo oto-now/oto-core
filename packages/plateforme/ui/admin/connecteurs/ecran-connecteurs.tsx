@@ -31,7 +31,7 @@ import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
 import { estAMoi } from "./etat-du-compte"
-import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, SEUIL_DE_RECHERCHE, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
+import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 
 /** Ce que la page lit pour l'écran : les comptes que la personne voit, le catalogue, leurs partages, et à qui partager. */
@@ -135,14 +135,13 @@ type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationIm
 
 function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurProps) {
   const nom = connecteur.label
-  const fonctions = connecteur.functions.map((fonction) => fonction.name)
   const ressource = `admin/connectors/${encodeURIComponent(connecteur.connector)}/activation`
   // `flex-wrap` : la question d'une désactivation, ou un refus, passe sous la ligne au lieu de l'écraser.
   return (
     <Row className="flex-wrap gap-3" lead={<Icon as={Plug} size="sm" />}>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="font-medium">{nom}</span>
-        <span className="oto-caption">{`${pluriel(fonctions.length, "fonction", "fonctions")} : ${fonctions.join(", ")}`}</span>
+        <span className="oto-caption">{pluriel(connecteur.functions.length, "fonction", "fonctions")}</span>
       </div>
       <span className="oto-caption">{etat(connecteur)}</span>
       {connecteur.state === "active" && (
@@ -212,11 +211,9 @@ function Liste({ donnees, moi, vue, ici }: VueProps) {
     { valeur: "mine", libelle: `À moi · ${comptes.moi}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "mine", compte: null }) },
     { valeur: "shared", libelle: `Partagés avec moi · ${comptes.partages}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "shared", compte: null }) },
   ]
-  // La recherche ne s'offre qu'à une liste longue ; une recherche en cours reste visible, pour s'effacer.
-  const cherchable = comptes.tous > SEUIL_DE_RECHERCHE || vue.q !== ""
   return (
     <>
-      <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={cherchable ? recherche(vue, ici) : null} ici={ici} />
+      <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={recherche(vue, ici)} ici={ici} />
       <p className="oto-caption">Un connecteur est privé tant que vous ne le partagez pas.</p>
     </>
   )

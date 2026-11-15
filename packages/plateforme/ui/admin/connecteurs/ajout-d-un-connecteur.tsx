@@ -1,30 +1,35 @@
 "use client"
 
-// « Ajouter un connecteur » (écran Connecteurs) : le bouton et sa fenêtre, en deux temps. D'abord le catalogue : les
-// outils que la personne peut ajouter (`catalogue-des-connecteurs.ts`), cherchés par leur nom, un outil fermé par un
-// administrateur dit sans geste. Puis l'outil choisi : sa clé à saisir (`FormulaireDAjout`), ou sa connexion chez le
+// « Ajouter un connecteur » (écran Connecteurs) : le bouton et sa fenêtre, en deux temps. D'abord le catalogue : une
+// recherche, puis une carte par outil que la personne peut ajouter (`catalogue-des-connecteurs.ts`), un outil fermé par
+// un administrateur dit sans geste. Puis l'outil choisi : sa clé à saisir (`FormulaireDAjout`), ou sa connexion chez le
 // tiers (`ConnexionParConsentement`). Une carte ne dit jamais comment l'outil se connecte. L'îlot ne reçoit que des
 // données ; la recherche et l'outil choisi sont un état de la fenêtre, perdu à sa fermeture.
 import { useEffect, useRef, useState } from "react"
+import { CaretLeft } from "@phosphor-icons/react/dist/csr/CaretLeft"
+import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { Dialog } from "../../ds/react/dialog"
-import { Input } from "../../ds/react/forms"
-import { Avatar, Button } from "../../ds/react/primitives"
+import { Icon } from "../../ds/react/icon"
+import { InputAffix } from "../../ds/react/input-affix"
+import { Button } from "../../ds/react/primitives"
 import { useHote } from "../../hote/navigation"
 import { nomLibre, outilsCherches, type OutilAAjouter } from "./catalogue-des-connecteurs"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
 import { FormulaireDAjout } from "./formulaire-d-ajout"
-import { adresseDeLaVue, SEUIL_DE_RECHERCHE } from "./lignes-des-connecteurs"
+import { adresseDeLaVue } from "./lignes-des-connecteurs"
+import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const TITRE = "Ajouter un connecteur"
 const RECHERCHER = "Rechercher un outil"
+const CARTE = "flex w-full items-center gap-3 rounded-lg p-4 text-left ring-1 ring-inset ring-hair"
 
 function Carte({ outil, choisir }: { outil: OutilAAjouter; choisir: (connecteur: string) => void }) {
   if (outil.ferme) {
     return (
-      <li className="flex items-center gap-3 px-3 py-2 text-mute">
-        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
+      <li className={`${CARTE} text-mute`}>
+        <TuileDeLOutil nom={outil.libelle} />
         <span className="flex min-w-0 flex-col">
-          <span>{outil.libelle}</span>
+          <span className="font-semibold">{outil.libelle}</span>
           <span className="oto-caption">Fermé par un administrateur</span>
         </span>
       </li>
@@ -32,15 +37,15 @@ function Carte({ outil, choisir }: { outil: OutilAAjouter; choisir: (connecteur:
   }
   return (
     <li>
-      <Button type="button" variant="secondary" block onClick={() => choisir(outil.connecteur)}>
-        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
+      <button type="button" className={`${CARTE} cursor-pointer font-semibold text-ink hover:bg-desk focus-visible:ring-2 focus-visible:ring-ink`} onClick={() => choisir(outil.connecteur)}>
+        <TuileDeLOutil nom={outil.libelle} />
         {outil.libelle}
-      </Button>
+      </button>
     </li>
   )
 }
 
-/** Le premier temps : la recherche au-delà de quelques outils, puis les cartes. `auRetour` : le focus va à son titre. */
+/** Le premier temps : la recherche, puis les cartes. `auRetour` : le focus va à son titre. */
 function Catalogue({ outils, choisir, auRetour }: { outils: OutilAAjouter[]; choisir: (connecteur: string) => void; auRetour: boolean }) {
   const [q, setQ] = useState("")
   const titre = useRef<HTMLHeadingElement>(null)
@@ -49,21 +54,31 @@ function Catalogue({ outils, choisir, auRetour }: { outils: OutilAAjouter[]; cho
   }, [auRetour])
   const trouves = outilsCherches(outils, q)
   return (
-    <div className="flex flex-col gap-3">
-      <h3 ref={titre} tabIndex={-1} className="oto-label">
+    <div className="flex flex-col gap-4">
+      <h3 ref={titre} tabIndex={-1} className="oto-sr-only">
         Choisir un outil
       </h3>
-      {outils.length > SEUIL_DE_RECHERCHE && <Input type="search" aria-label={RECHERCHER} placeholder={RECHERCHER} value={q} onChange={(evenement) => setQ(evenement.target.value)} />}
+      {outils.length > 0 && (
+        <InputAffix
+          type="search"
+          aria-label={RECHERCHER}
+          placeholder={RECHERCHER}
+          start={<Icon as={MagnifyingGlass} size="sm" />}
+          value={q}
+          onChange={(evenement) => setQ(evenement.target.value)}
+        />
+      )}
       {outils.length === 0 && <p>Aucun outil à ajouter pour l&apos;instant. Un administrateur peut ajouter un connecteur et le partager avec vous.</p>}
       {/* Montée d'emblée : une recherche sans réponse s'y annonce. */}
       <p role="status">{outils.length > 0 && trouves.length === 0 ? "Aucun outil ne correspond." : ""}</p>
       {trouves.length > 0 && (
-        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {trouves.map((outil) => (
             <Carte key={outil.connecteur} outil={outil} choisir={choisir} />
           ))}
         </ul>
       )}
+      <hr className="oto-separator" data-orientation="horizontal" />
       <p className="oto-caption">Ces connecteurs servent votre assistant à travers Oto, dans toutes vos conversations. Ils n&apos;apparaissent pas dans les réglages de votre assistant.</p>
     </div>
   )
@@ -78,7 +93,7 @@ type OutilChoisiProps = {
   apresAjout: (compte: { id: string }) => void
 }
 
-/** Le second temps : l'outil choisi, son titre (qui prend le focus) et sa façon de se connecter. */
+/** Le second temps : le retour au catalogue, l'outil choisi (son titre prend le focus) et sa façon de se connecter. */
 function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: OutilChoisiProps) {
   const titre = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
@@ -86,16 +101,18 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: Outil
   }, [])
   const chezLeTiers = outil.facon === "consentement" || outil.facon === "branchement"
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div>
-        <Button type="button" variant="ghost" size="sm" onClick={retour}>
+        <Button type="button" variant="ghost" size="sm" iconStart={<Icon as={CaretLeft} size="xs" />} onClick={retour}>
           Tous les outils
         </Button>
       </div>
-      <h3 ref={titre} tabIndex={-1} className="flex items-center gap-2 font-medium text-ink">
-        <Avatar name={outil.libelle} size="sm" aria-hidden="true" />
-        {outil.libelle}
-      </h3>
+      <div className="flex items-center gap-3">
+        <TuileDeLOutil nom={outil.libelle} taille="lg" />
+        <h3 ref={titre} tabIndex={-1} className="text-lg font-semibold text-ink">
+          {outil.libelle}
+        </h3>
+      </div>
       {chezLeTiers ? (
         <>
           <p className="text-sm text-ink">{`Aucune clé à saisir : vous vous connectez chez ${outil.libelle}, puis vous revenez ici.`}</p>
@@ -107,6 +124,7 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: Outil
               retour={ici}
             />
           </div>
+          <hr className="oto-separator" data-orientation="horizontal" />
           <p className="oto-caption">Privé : vous seul pourrez l&apos;utiliser. Vous le partagerez ensuite si vous voulez.</p>
         </>
       ) : (
@@ -154,7 +172,7 @@ export function AjoutDUnConnecteur({ outils, equipes, mesNoms, ici }: AjoutDUnCo
       </Button>
       {/* Montée à l'ouverture : fermée, ni le formulaire ni sa saisie ne restent dans le document. */}
       {ouvert && (
-        <Dialog open onClose={fermer} title={TITRE} size="md">
+        <Dialog open onClose={fermer} title={TITRE} size="lg">
           {outil ? (
             // Une instance par outil : la saisie d'un outil ne passe jamais à un autre.
             <OutilChoisi key={outil.connecteur} outil={outil} equipes={equipes} mesNoms={mesNoms} ici={ici} retour={retour} apresAjout={ouvrirLeDetail} />

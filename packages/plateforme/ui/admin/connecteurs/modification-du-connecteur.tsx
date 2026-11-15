@@ -4,7 +4,7 @@
 // `PATCH /api/platform/admin/accounts/<id>` sur le schéma de l'API (`accountChangeSchema`). Aucun alias n'est gardé :
 // l'écran le dit avant de valider. Un nom déjà porté par le même propriétaire se dit sous le champ. Après un succès,
 // la saisie se replie et la page se relit.
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
 import { ACCOUNT_DESCRIPTION_MAX, accountChangeSchema, type AccountChange } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
@@ -70,8 +70,11 @@ function Formulaire({ compte, fermer }: { compte: Compte; fermer: (annonce: stri
   )
 }
 
-/** Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. */
-export function ModificationDuConnecteur({ compte }: { compte: Compte }) {
+/**
+ * Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. `avant` : le geste qui
+ * le précède dans la même rangée (« Partager »), déjà rendu.
+ */
+export function ModificationDuConnecteur({ compte, avant }: { compte: Compte; avant?: ReactNode }) {
   const [ouvert, setOuvert] = useState(false)
   const [annonce, setAnnonce] = useState("")
   const bouton = useRef<HTMLButtonElement>(null)
@@ -83,8 +86,9 @@ export function ModificationDuConnecteur({ compte }: { compte: Compte }) {
   }
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <Button ref={bouton} type="button" variant="ghost" size="sm" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
+      <div className="flex flex-wrap items-center gap-2">
+        {avant}
+        <Button ref={bouton} type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
           Modifier le nom
           <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>

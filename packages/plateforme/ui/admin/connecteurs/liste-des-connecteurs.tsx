@@ -1,29 +1,30 @@
 "use client"
 
 // La liste de l'écran Connecteurs : les filtres en pastilles avec leur compte, la recherche, puis le tableau du design
-// system, une ligne par compte que la personne voit. L'îlot ne reçoit que des données : les lignes, leurs textes et leurs
-// adresses sont calculés par l'écran (`lignes-des-connecteurs.ts`), le filtre et la recherche vivent dans l'adresse de
-// l'hôte (`useHote().naviguer`), le détail s'ouvre par un lien. L'état se lit par son mot, le point ne fait que
-// l'accompagner. Sur le modèle de `journal/tableau-des-conversations.tsx` et d'`equipes/outils-des-personnes.tsx`.
+// system, une ligne par compte que la personne voit : la tuile de son outil, son nom et sa description, à qui il est,
+// son état en un mot de la couleur de l'état, et un geste au plus. L'îlot ne reçoit que des données : les lignes, leurs
+// textes et leurs adresses sont calculés par l'écran (`lignes-des-connecteurs.ts`), le filtre et la recherche vivent
+// dans l'adresse de l'hôte (`useHote().naviguer`), le détail s'ouvre par un lien. L'état se lit par son mot, le point et
+// la couleur ne font que l'accompagner. Sur le modèle de `journal/tableau-des-conversations.tsx`.
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { AnimatedIcon } from "../../ds/react/icon"
 import { ListTools } from "../../ds/react/list-tools"
-import { Avatar } from "../../ds/react/primitives"
 import { Table, type Column } from "../../ds/react/table"
 import { useHote } from "../../hote/navigation"
 import { FiltreSegmente, type ChoixDuFiltre } from "../filtre-segmente"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
 import type { LigneDeConnecteur } from "./lignes-des-connecteurs"
+import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const RECHERCHER = "Rechercher un connecteur"
 
 function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
   const { Lien } = useHote()
   return (
-    <span className="flex min-w-0 items-center gap-3">
-      <Avatar name={ligne.outil} size="sm" aria-hidden="true" />
+    <span className="flex min-w-0 items-center gap-3 py-1">
+      <TuileDeLOutil nom={ligne.outil} />
       <span className="flex min-w-0 flex-col">
-        <Lien href={ligne.ouverture} className={`font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
+        <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
         <span className="oto-caption">{ligne.description ?? ligne.outil}</span>
@@ -35,17 +36,17 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
 function Acces({ ligne }: { ligne: LigneDeConnecteur }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className={ligne.desactive ? "text-mute" : undefined}>{ligne.acces}</span>
+      <span className={`font-medium ${ligne.desactive ? "text-mute" : ""}`}>{ligne.acces}</span>
       <span className="oto-caption">{ligne.niveau}</span>
     </span>
   )
 }
 
-/** Le mot de l'état, toujours écrit ; le point, décoratif, le souligne. */
+/** Le mot de l'état, toujours écrit, à la couleur de l'état ; le point, décoratif, le souligne. */
 function Etat({ ligne }: { ligne: LigneDeConnecteur }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className={`flex items-center gap-2${ligne.desactive ? " text-mute" : ""}`}>
+      <span className={`oto-etat flex items-center gap-2 font-medium${ligne.desactive ? " text-mute" : ""}`} data-state={ligne.etat.point}>
         <span className="oto-dot" data-state={ligne.etat.point} aria-hidden="true" />
         {ligne.etat.mot}
       </span>
@@ -61,7 +62,7 @@ function Geste({ ligne, retour }: { ligne: LigneDeConnecteur; retour: string }) 
     return <ConnexionParConsentement ressource={ligne.geste.ressource} connecteur={ligne.geste.connecteur} libelle={ligne.geste.libelle} nomAccessible={`${ligne.geste.libelle} ${ligne.libelle}`} retour={retour} />
   }
   return (
-    <Lien href={ligne.ouverture} className="oto-btn anim-host" data-variant="secondary" data-size="sm">
+    <Lien href={ligne.ouverture} className="oto-btn anim-host" data-variant="secondary">
       <span>
         {ligne.geste.libelle}
         <span className="oto-sr-only">{` de ${ligne.libelle}`}</span>
@@ -95,8 +96,8 @@ type ListeDesConnecteursProps = {
   filtres: ChoixDuFiltre[]
   filtre: string
   q: string
-  /** L'adresse de la recherche, sans `q` ; `null` : la liste est assez courte pour s'en passer. */
-  recherche: Recherche | null
+  /** L'adresse de la recherche, sans `q`. */
+  recherche: Recherche
   /** L'adresse de l'écran : un consentement y revient. */
   ici: string
 }
@@ -105,19 +106,17 @@ export function ListeDesConnecteurs({ lignes, filtres, filtre, q, recherche, ici
   const { naviguer } = useHote()
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <FiltreSegmente libelle="Filtrer les connecteurs" choix={filtres} valeur={filtre} />
-        {recherche && (
-          <ListTools
-            key={q}
-            className="min-w-0 flex-1"
-            label={RECHERCHER}
-            placeholder={RECHERCHER}
-            defaultValue={q}
-            icon={<AnimatedIcon as={MagnifyingGlass} anim="magnify" size="xs" />}
-            onSearch={(valeur) => naviguer(adresseDeRecherche(recherche, valeur))}
-          />
-        )}
+        <ListTools
+          key={q}
+          className="w-full sm:w-64"
+          label={RECHERCHER}
+          placeholder="Rechercher"
+          defaultValue={q}
+          icon={<AnimatedIcon as={MagnifyingGlass} anim="magnify" size="xs" />}
+          onSearch={(valeur) => naviguer(adresseDeRecherche(recherche, valeur))}
+        />
       </div>
       <Table<LigneDeConnecteur>
         caption="Connecteurs"

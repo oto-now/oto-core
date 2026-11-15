@@ -80,7 +80,7 @@ Quatre écrans de la maquette, en texte.
 
 - [ ] **Given** un membre, administrateur ou non **When** il ouvre l'écran **Then** une seule liste montre chaque compte
   qu'il voit au niveau lecture au moins (`listOrgAccounts`), et aucun compte de niveau 0
-- [ ] **Given** une ligne **When** elle s'affiche **Then** elle porte le libellé du compte, le libellé lisible du
+- [ ] **Given** une ligne **When** elle s'affiche **Then** elle porte la tuile de l'outil, le libellé du compte, le libellé lisible du
   connecteur (celui de sa définition, à défaut son nom technique), l'accès, l'état, et un geste au plus
 - [ ] **Given** un compte personnel de la personne **When** il n'a aucune règle de partage **Then** la colonne accès
   dit « Privé » ; **When** il en a **Then** elle nomme le premier sujet, puis « +n »
@@ -287,8 +287,14 @@ Prises pendant l'implémentation, sous l'option la plus proche des décisions du
 
 ## Écarts avec la référence UI
 
+Relevés le 2026-11-15, la maquette remise à côté des captures de l'écran.
+
+- **L'en-tête de la page** est celui de la coque (`EnTeteDAdministration`) : le sous-titre s'y lit à droite, sous le bouton, et non sous le titre ; la liste n'est pas dans une carte qui porterait aussi le titre.
+- **Les lignes** ont la hauteur du tableau du design system, plus basse que celle de la maquette.
+- **Sous la liste**, l'îlot « Outils de l'organisation » de l'administrateur n'est pas sur la maquette.
+- **Le détail** n'a pas de menu « ⋯ » : « Désactiver » et « Réactiver » sont des boutons en bas du tiroir. Sa section « Ce que l'assistant peut faire » n'a ni la phrase de l'outil (second lot du moteur) ni la promesse d'un accord avant une action sensible (la règle appartient au moteur).
 - Le panneau de partage s'ouvre dans un dialogue au-dessus du tiroir, et non dans un panneau accroché au bouton : le tiroir est déjà un dialogue, étroit, en bas de l'écran sur un téléphone.
-- Le détail ne montre ni « Modifier le nom », ni « Tester », ni l'activité (dernière utilisation, nombre d'appels) : hors périmètre, le moteur ne les sert pas.
+- Le détail ne montre pas l'activité (dernière utilisation, nombre d'appels) : le moteur ne la sert pas.
 - La page vide ne propose pas de raccourcis vers des outils nommés : le catalogue arrive avec `ajout-d-un-connecteur.md`.
 - Le pied de la liste garde sa première phrase seule.
 
@@ -305,4 +311,4 @@ Prises pendant l'implémentation, sous l'option la plus proche des décisions du
 - **Champ commun** : `ui/noeud/champ-d-ajout-d-acces.tsx` sert le partage d'une page et celui d'un connecteur ; `partage-du-noeud.tsx` le monte, sans changement de geste ni de mot, ses tests inchangés (`tests/integration/components/partager.test.tsx`). La comparaison sans casse ni accent passe par `normalizeTitle` de `schemas/`.
 - **Tests** : `tests/unit/lignes-des-connecteurs.test.ts`, `tests/integration/components/ecran-connecteurs.test.tsx` (réécrit), `tests/integration/pages/admin-config-pages.test.tsx`, `tests/integration/partage-des-comptes.test.ts` (un cas sur base réelle). Le retour du focus à la ligne à la fermeture du tiroir tient au `<dialog>` natif : il ne se joue pas sous jsdom, à contrôler à l'œil.
 - **Revue** : une revue isolée a demandé six corrections, faites (mots « compte » encore montrés, `normaliser` et `estAMoi` en double, un type exporté sans lecteur, le focus après « Désactiver » et après une gestion perdue, le détail ouvert après une création). Ses remarques mineures ont été appliquées ensuite, à la demande du responsable du produit : un refus du service sur un compte connecté chez le tiers se dit « À reconnecter » ; un refus plus ancien que la dernière clé saisie ou la dernière connexion ne se dit plus (décidé le 13/11/2026 : sans cela, la ligne dirait encore « À reconnecter » ou « Clé refusée » après la réparation, jusqu'au premier appel réussi de l'assistant) ; un niveau se décrit par « L'assistant consulte… », juste pour une personne, une équipe et toute l'organisation ; `vue` est requise ; la ligne d'un compte désactivé s'atténue en entier ; `listMembers` ne se lit que pour le partage du compte ouvert ; sept types sans lecteur hors de leur fichier ne sont plus exportés. Reste signalé, non appliqué : sur un compte d'équipe ou d'organisation en erreur, qui le gère lit « Demandez à qui le gère de le reconnecter » (la réponse dépend du moteur) ; un compte rattaché refusé puis relié garde « À reconnecter » jusqu'au premier appel réussi, aucune date de connexion n'étant servie pour lui ; un connecteur sans champ de compte, refusé, offre « Remplacer la clé » vers un détail sans formulaire.
-- **Contrôle visuel** : non fait.
+- **Contrôle visuel** : fait le 2026-11-15, avec celui de `ajout-d-un-connecteur.md` (§ Post-implémentation) : un premier passage a vérifié l'affichage sans remettre la maquette à côté ; le second l'a fait, et la liste et le détail ont été repris (tuile de l'outil, mot d'état en couleur, recherche toujours offerte, en-tête du détail, gestes sur une rangée, sections séparées, « Tester » à droite de l'état, cartes de comptes). Ce qui reste d'écart est dans § Écarts avec la référence UI.

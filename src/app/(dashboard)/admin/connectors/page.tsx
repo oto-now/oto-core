@@ -24,6 +24,8 @@ import {
   type DonneesDesConnecteurs,
   type EcranConnecteursProps,
 } from "@otomata_tech/oto_platform/ui"
+// Pour son effet : la page lit les connecteurs que l'hôte déclare, et son bundle n'a pas ceux des routes.
+import "@/lib/fonctions-metier"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { ADRESSES } from "../adresses"
 

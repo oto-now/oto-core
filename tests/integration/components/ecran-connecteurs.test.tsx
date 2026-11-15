@@ -181,17 +181,16 @@ describe("EcranConnecteurs, the list", () => {
     expect(screen.getByRole("link", { name: "Banque" })).toHaveAttribute("href", `${ICI}?filter=mine&connector=${BANQUE.id}`)
   })
 
-  it("should count each filter on its pill and write the chosen one in the address; the search shows only above eight lines and keeps the filter", () => {
+  it("should count each filter on its pill and write the chosen one in the address; the search is always there and keeps the filter", () => {
     const { unmount } = rendre()
     const filtres = within(screen.getByRole("radiogroup", { name: "Filtrer les connecteurs" }))
     expect(filtres.getAllByRole("radio").map((filtre) => filtre.textContent)).toEqual(["Tous · 3", "À moi · 1", "Partagés avec moi · 2"])
     fireEvent.click(filtres.getByRole("radio", { name: "À moi · 1" }))
     expect(naviguer).toHaveBeenCalledWith(`${ICI}?filter=mine`)
-    expect(screen.queryByRole("searchbox")).toBeNull()
     unmount()
 
-    const neuf = Array.from({ length: 9 }, (_, rang) => ({ ...MAIL_VENTES, id: `6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d5${rang}`, label: `Mail ${rang}` }))
-    rendre({ accounts: neuf }, { vue: { filtre: "shared" } })
+    // La recherche s'offre dès la première ligne, comme sur la maquette.
+    rendre({ accounts: [MAIL_VENTES] }, { vue: { filtre: "shared" } })
     const champ = screen.getByRole("searchbox", { name: "Rechercher un connecteur" })
     fireEvent.change(champ, { target: { value: "mail 3" } })
     fireEvent.submit(champ)
@@ -307,6 +306,8 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     expect(detail.getByText("À terminer")).toBeInTheDocument()
     expect(detail.getByRole("button", { name: "Saisir la clé de Banque" })).toHaveAttribute("aria-expanded", "true")
     expect(detail.getByRole("form", { name: "Clé et réglages de Banque" })).toBeInTheDocument()
+    // Sans clé, rien à tester.
+    expect(detail.queryByRole("button", { name: /^Tester/ })).toBeNull()
   })
 
   it("should disable the account after the question, which says it can be enabled again", async () => {
@@ -745,7 +746,7 @@ describe("EcranConnecteurs, the tools of the organisation (administrator)", () =
     rendre({ connectors: [FERME, CRM, JAMAIS], administration: { impacts: {} } })
     const ilot = within(screen.getByRole("region", { name: "Outils de l'organisation" }))
     expect(ilot.getByText("3 outils")).toBeInTheDocument()
-    expect(ilot.getByText("2 fonctions : mail.create_draft, mail.send_draft")).toBeInTheDocument()
+    expect(ilot.getByText("2 fonctions")).toBeInTheDocument()
     expect(ilot.getByText("Ouvert depuis le 24 septembre 2026")).toBeInTheDocument()
     expect(ilot.getByText("Fermé par Claire Morel")).toBeInTheDocument()
     // Un outil jamais utilisé s'ouvre au premier ajout : aucun geste.

@@ -9,7 +9,6 @@ import type { ReactNode } from "react"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "../../../schemas"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Avatar } from "../../ds/react/primitives"
-import { Stat } from "../../ds/react/stat"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { dateLisible } from "../../format/dates"
 import { TiroirDeConversation } from "../../journal/tiroir-de-conversation"
@@ -25,18 +24,22 @@ import { OuvrirLePartage, PartageDuConnecteur, PorteeDuPartage } from "./partage
 import { REFUS_DE_LA_REACTIVATION } from "./refus-des-connecteurs"
 import { SaisieDuCompte } from "./saisie-du-compte"
 import { DetailDuTest, TestDuConnecteur } from "./test-de-connexion"
+import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 function Section({ titre, id, action, children }: { titre: string; id?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 id={id} tabIndex={id ? -1 : undefined} className="oto-label">
-          {titre}
-        </h3>
-        {action}
-      </div>
-      {children}
-    </section>
+    <>
+      <hr className="oto-separator" data-orientation="horizontal" />
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id={id} tabIndex={id ? -1 : undefined} className="oto-label">
+            {titre}
+          </h3>
+          {action}
+        </div>
+        {children}
+      </section>
+    </>
   )
 }
 
@@ -54,9 +57,9 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
   const echec = echecDuDernierTest(compte, formulaire)
   return (
     <Section titre="État" id={ANCRE_DE_L_ETAT}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col">
-          <span className="flex items-center gap-2 font-medium">
+          <span className="oto-etat flex items-center gap-2 font-medium" data-state={etat.point}>
             <span className="oto-dot" data-state={etat.point} aria-hidden="true" />
             {etat.mot}
           </span>
@@ -70,9 +73,9 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
             retour={ici}
           />
         )}
+        {gereUnReel && formulaire.probe.available && etat.code !== "a_terminer" && <TestDuConnecteur compte={{ id: compte.id, label: compte.label }} />}
       </div>
       {echec && <DetailDuTest raison={echec} />}
-      {gereUnReel && formulaire.probe.available && <TestDuConnecteur compte={{ id: compte.id, label: compte.label }} />}
       {gereUnReel && !formulaire.probe.available && connexionDe(formulaire) === "saisie" && <p className="oto-caption">Pas de test automatique pour cet outil : essayez-le dans votre assistant.</p>}
     </Section>
   )
@@ -166,6 +169,16 @@ function FonctionsDUneClasse({ titre, noms }: { titre: string; noms: string[] })
   )
 }
 
+/** Un compte d'actions, dans sa carte : le nombre, puis ce qu'il compte. */
+function Compte({ nombre, libelle }: { nombre: number; libelle: string }) {
+  return (
+    <div className="flex flex-col rounded-lg p-3 ring-1 ring-inset ring-hair">
+      <span className="text-lg font-semibold text-ink">{nombre}</span>
+      <span className="oto-caption">{libelle}</span>
+    </div>
+  )
+}
+
 /** Ce que l'assistant peut faire : les fonctions du connecteur comptées par classe, et leur liste dépliable. */
 function Actions({ fonctions }: { fonctions: OrgConnector["functions"] }) {
   if (fonctions.length === 0) {
@@ -178,10 +191,10 @@ function Actions({ fonctions }: { fonctions: OrgConnector["functions"] }) {
   const parClasse = actionsParClasse(fonctions)
   return (
     <Section titre="Ce que l'assistant peut faire">
-      <div className="flex flex-wrap gap-6">
-        <Stat value={parClasse.read} label={parClasse.read > 1 ? "actions de lecture" : "action de lecture"} />
-        <Stat value={parClasse.write} label={parClasse.write > 1 ? "actions d'écriture" : "action d'écriture"} />
-        <Stat value={parClasse.sensitive} label={parClasse.sensitive > 1 ? "actions sensibles" : "action sensible"} />
+      <div className="grid grid-cols-3 gap-2">
+        <Compte nombre={parClasse.read} libelle={parClasse.read > 1 ? "actions de lecture" : "action de lecture"} />
+        <Compte nombre={parClasse.write} libelle={parClasse.write > 1 ? "actions d'écriture" : "action d'écriture"} />
+        <Compte nombre={parClasse.sensitive} libelle={parClasse.sensitive > 1 ? "actions sensibles" : "action sensible"} />
       </div>
       <details>
         <summary className="cursor-pointer text-sm text-ink underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink">Voir les fonctions</summary>
@@ -243,16 +256,20 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
   return (
     <TiroirDeConversation titre={compte.label} fermer={fermer}>
       <PorteeDuPartage>
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm text-mute">
-              <Avatar name={outil} size="sm" aria-hidden="true" />
-              {outil}
-            </span>
-            {gere && partages && <OuvrirLePartage libelle="Partager" nomAccessible={`Partager ${compte.label}`} variante="primary" />}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <TuileDeLOutil nom={outil} taille="lg" />
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-sm text-mute">{outil}</span>
+              {compte.description && <p className="text-sm text-ink">{compte.description}</p>}
+            </div>
           </div>
-          {compte.description && <p className="text-sm text-ink">{compte.description}</p>}
-          {gere && <ModificationDuConnecteur compte={{ id: compte.id, label: compte.label, description: compte.description }} />}
+          {gere && (
+            <ModificationDuConnecteur
+              compte={{ id: compte.id, label: compte.label, description: compte.description }}
+              avant={partages ? <OuvrirLePartage libelle="Partager" nomAccessible={`Partager ${compte.label}`} variante="primary" /> : undefined}
+            />
+          )}
           <Etat compte={compte} formulaire={formulaire} etat={etat} ici={ici} />
           <Acces compte={compte} partages={partages} moi={moi} />
           <Actions fonctions={fonctions} />

@@ -9,11 +9,13 @@
 // du secret, et ne se réaffiche jamais : la fenêtre se ferme avec le formulaire.
 import { useEffect, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { Lock } from "@phosphor-icons/react/dist/csr/Lock"
 import { FormProvider, useForm, useFormContext, useWatch } from "react-hook-form"
 import type * as z from "zod/v4"
 import { ACCOUNT_DESCRIPTION_MAX, createAccountSchema, type ConnectorAccountForm, type ConnectorProbeInput } from "../../../schemas"
 import { appelerPlateforme, type ErreurPlateforme } from "../../api/client"
 import { Field, Input } from "../../ds/react/forms"
+import { Icon } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
 import { Radio } from "../../ds/react/radio"
 import { Select } from "../../ds/react/select"
@@ -97,7 +99,12 @@ function ChoixDuProprietaire({ proprietaires, equipes, erreur }: { proprietaires
 /** Ce que le pied dit du connecteur à naître, selon son propriétaire. */
 function Pied() {
   const genre = useWatch<Saisie, "owner_kind">({ name: "owner_kind" })
-  return <p className="oto-caption">{genre === "user" ? "Privé : vous seul pourrez l'utiliser. Vous le partagerez ensuite si vous voulez." : "Il servira l'organisation ou l'équipe choisie, selon ses partages."}</p>
+  return (
+    <p className="oto-caption flex min-w-0 items-center gap-2">
+      {genre === "user" && <Icon as={Lock} size="xs" />}
+      {genre === "user" ? "Privé : vous seul pourrez l'utiliser. Vous le partagerez ensuite si vous voulez." : "Il servira l'organisation ou l'équipe choisie, selon ses partages."}
+    </p>
+  )
 }
 
 /** Le compte est créé, mais une suite a échoué : ce qui reste à terminer, avec sa raison, puis le détail. */
@@ -207,15 +214,14 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
         {sonde && <AnnonceDeLEssai essai={essai} />}
         {formulaire && !sonde && <p className="oto-caption">Pas de test automatique pour cet outil : essayez-le dans votre assistant.</p>}
         {!formulaire && <p className="oto-caption">Aucune clé à saisir pour cet outil.</p>}
-        <Field label="Nom" error={erreurDuNom}>
+        <Field label="Nom" error={erreurDuNom} hint="C'est par ce nom que vous et votre assistant le désignerez.">
           <Input type="text" {...form.register("label")} />
         </Field>
-        <Field label="Description (facultatif)" hint="Ce à quoi sert ce connecteur : votre assistant la lit pour choisir le bon.">
+        <Field label="Description (facultatif)" hint="Dites quand l'utiliser : l'assistant la lit pour choisir entre deux connecteurs.">
           <Textarea maxLength={ACCOUNT_DESCRIPTION_MAX} {...form.register("description")} />
         </Field>
         {outil.proprietaires.length > 1 && <ChoixDuProprietaire proprietaires={outil.proprietaires} equipes={equipes} erreur={errors.team_id ? EQUIPE_MANQUANTE : undefined} />}
         {errors.root?.message && <Alert tone="fail" title={errors.root.message} />}
-        <Pied />
         {question && (
           <div role="group" aria-label="Ajouter quand même ?" className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-ink">Le test a échoué. Ajouter quand même ?</span>
@@ -224,13 +230,17 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
             </Button>
           </div>
         )}
-        <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-            {isSubmitting ? "Ajout…" : "Ajouter"}
-          </Button>
-          <Button type="button" variant="ghost" onClick={annuler}>
-            Annuler
-          </Button>
+        <hr className="oto-separator" data-orientation="horizontal" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Pied />
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" onClick={annuler}>
+              Annuler
+            </Button>
+            <Button type="submit" variant="primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+              {isSubmitting ? "Ajout…" : "Ajouter"}
+            </Button>
+          </div>
         </div>
       </form>
     </FormProvider>

@@ -29,10 +29,10 @@ export function AnnonceDeLEssai({ essai }: { essai: Essai }) {
   const rate = essaiRate(essai)
   return (
     <div className="flex flex-col gap-1">
-      <p role="status" className="oto-caption">
+      <p role="status" className="oto-etat text-sm font-medium" data-state={essai.etat === "reussi" ? "ok" : undefined}>
         {rate ? "" : essai.texte}
       </p>
-      <p role="alert" className="text-sm text-ink">
+      <p role="alert" className="oto-etat text-sm font-medium" data-state="failed">
         {rate ? essai.texte : ""}
       </p>
       {essai.detail && <DetailDuTest raison={essai.detail} />}
@@ -106,7 +106,7 @@ export function TestDuConnecteur({ compte }: { compte: { id: string; label: stri
 
   const enCours = essai.etat === "en_cours"
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="flex flex-col items-end gap-1">
       <div>
         <Button type="button" variant="secondary" disabled={enCours} aria-busy={enCours} onClick={() => void tester()}>
           Tester

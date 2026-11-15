@@ -23,9 +23,6 @@ type FiltreDesConnecteurs = (typeof FILTRES)[number]
 /** Ce que l'adresse de l'écran demande : le filtre, la recherche, et le compte dont le détail est ouvert. */
 export type VueDesConnecteurs = { filtre: FiltreDesConnecteurs; q: string; compte: string | null }
 
-/** La recherche ne s'offre qu'au-delà de ce nombre de comptes : en dessous, la liste se lit d'un regard. */
-export const SEUIL_DE_RECHERCHE = 8
-
 /** La vue lue dans la query de l'écran (`?filter=mine&q=…&connector=<id>`) ; une valeur inconnue vaut son défaut. */
 export function vueDesConnecteurs(query: Readonly<Record<string, string | string[] | undefined>>): VueDesConnecteurs {
   const lu = (nom: string) => {
