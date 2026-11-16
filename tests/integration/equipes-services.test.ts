@@ -113,13 +113,17 @@ describe.skipIf(!sqlConfigured || privatePending)(
 
     // Le « ⋯ » d'une équipe dans le rail (2026-10-15) : l'équipe, les personnes, composer pour son responsable seul.
     describe("teamPanel", () => {
-      it("should read a team by its slug with the people of the organisation, compose for its lead only, and refuse an unknown slug", async () => {
+      it("should read a team by its slug, give the people to add and the emails of its members to who composes it only, and refuse an unknown slug", async () => {
         const claire = await teamPanel(as("claire").db, as("claire").identity, "ventes")
         expect(claire.team).toMatchObject({ id: o.teams.ventes, name: "Ventes" })
         expect(claire.people.map((person) => person.name)).toEqual(expect.arrayContaining(["Claire Morel", "Léa Roux"]))
         expect([claire.compose, claire.admin]).toEqual([true, false])
+        expect(claire.people.every((person) => !("email" in person))).toBe(true)
+        expect(Object.fromEntries(claire.team.members.map((person) => [person.name, person.email]))).toEqual({ "Claire Morel": o.people.claire.email, "Léa Roux": o.people.lea.email })
         const lea = await teamPanel(as("lea").db, as("lea").identity, "ventes")
         expect([lea.compose, lea.admin]).toEqual([false, false])
+        expect(lea.people).toEqual([])
+        expect(Object.fromEntries(lea.team.members.map((person) => [person.name, person.email]))).toEqual({ "Claire Morel": "", "Léa Roux": o.people.lea.email })
         expect((await refusal(teamPanel(as("lea").db, as("lea").identity, "inconnue"))).code).toBe("not_found")
       })
     })

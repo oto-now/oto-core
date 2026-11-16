@@ -13,6 +13,7 @@ import {
   type TreeImportArgs,
 } from "../../schemas/tree-transfer"
 import { defineFunction, type FunctionContext, type FunctionOutput } from "../catalog/define"
+import { fetchesCallerUrls } from "../catalog/surface-source"
 import { PlatformError } from "../errors"
 import { boundedBytes, onStorage, readableFile, requireStore } from "../files/service"
 import { fileStore, objectKey } from "../files/store"
@@ -161,6 +162,10 @@ async function sourceOf(context: FunctionContext, address: string): Promise<{ by
     const file = await readableFile(context.db, context.identity, fileId)
     const url = await onStorage("read url", () => store.readUrl(objectKey(context.identity.org.id, file.id), { contentType: "application/octet-stream", disposition: "attachment" }))
     return { bytes: await boundedBytes(url, file.name, TREE_IMPORT_BYTES_MAX), type: null, name: file.name }
+  }
+  // Fermé par l'hôte (`registerHostSurface`) : le refus dit la voie qui reste, le fichier joint à une page.
+  if (!fetchesCallerUrls()) {
+    throw new PlatformError("invalid_arguments", "This platform does not download from an address. Attach the file to a page, then give the address of that attached file as source_url.")
   }
   const fetched = await fetchSource(address, { ...treeFetchDeps(), maxBytes: TREE_IMPORT_BYTES_MAX, timeoutMs: 30_000 })
   if ("failure" in fetched) throw new PlatformError("invalid_arguments", `Could not download the source: ${fetched.failure}. Export it again (an export address lasts one hour), or give another address.`)

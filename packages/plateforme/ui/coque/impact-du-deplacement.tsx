@@ -60,7 +60,7 @@ type ConfirmationProps = { demande: DemandeConfirmee; enCours: boolean; confirme
 export function ConfirmationDuDeplacement({ demande, enCours, confirmer, renoncer }: ConfirmationProps) {
   return (
     <ConfirmDialog open title={DEPLACEMENT_RAIL.confirmer(demande.nom)} confirmLabel={DEPLACEMENT_RAIL.geste} onConfirm={confirmer} onCancel={renoncer} busy={enCours}>
-      {/* L'espace est écrit sur le nœud (20261103150000) : un déplacement ne le change pas, la section du chemin n'est que l'adresse. */}
+      {/* L'espace est écrit sur le nœud (20261116214500) : un déplacement ne le change pas, la section du chemin n'est que l'adresse. */}
       <PhrasesDeLImpact impact={demande.impact} />
       {demande.sousContenus > 0 && <p>{DEPLACEMENT_RAIL.sousContenus(demande.sousContenus)}</p>}
     </ConfirmDialog>

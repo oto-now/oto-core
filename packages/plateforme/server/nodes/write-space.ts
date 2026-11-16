@@ -1,6 +1,6 @@
 // L'espace d'un nœud créé par `write` (`droits-d-acces.md` § Propriétaires, déplacements, personnel ; décidé avec JB le
 // 03/11) : Privé d'une personne, une équipe ou Tout le monde, écrit sur le nœud à sa création (migration
-// 20261103150000), et la ligne de la réponse qui le dit. Une écriture qui ne nomme aucun espace partagé tombe dans le
+// 20261116214500), et la ligne de la réponse qui le dit. Une écriture qui ne nomme aucun espace partagé tombe dans le
 // Privé de son auteur : le code le garantit, pas une consigne à l'assistant. Sans ce module, un chemin écrit hors d'un
 // dossier d'équipe ou du Privé publiait la page à toute l'organisation.
 import type { Owner } from "../access"
@@ -14,7 +14,7 @@ import type { WriteOrigin } from "./write-result"
 /** Ce que l'écriture demande : `everyone` (Tout le monde), `private` (le Privé de l'auteur), ou rien. */
 export type SpaceAsked = "everyone" | "private" | undefined
 
-/** Le propriétaire écrit sur une ligne de `nodes` ; `null` s'il n'en porte pas (impossible depuis 20261103150000). */
+/** Le propriétaire écrit sur une ligne de `nodes` ; `null` s'il n'en porte pas (impossible depuis 20261116214500). */
 export function rowOwner(row: Pick<NodeRow, "owner_kind" | "owner_team_id" | "owner_user_id">): Owner | null {
   const { owner_kind: kind } = row
   if (kind !== "org" && kind !== "team" && kind !== "user") return null

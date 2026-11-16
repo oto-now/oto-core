@@ -31,7 +31,7 @@ import { leadNames, leadWord, memberDirectory, teamsWithLeads, type DirectoryEnt
 import { fromDatabaseError, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 
-export { ACCESS_LEVELS, ACCOUNT_LEVELS, isOrgAdmin, isStaffWithGrant, leadsTeam, requiredAccountLevel } from "./access-levels"
+export { ACCESS_LEVELS, ACCOUNT_LEVELS, emailFor, isOrgAdmin, isStaffWithGrant, leadsTeam, requiredAccountLevel } from "./access-levels"
 export type { AccessLevel, AccountLevel, NodeOwner, Owner } from "./access-levels"
 export { nodeOwner } from "./access-facts"
 // Chemins de l'arbre (H50, H51), sans décision : `server/nodes/` les lit ici, `access-levels.ts` lui
@@ -352,6 +352,19 @@ export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeI
   const plain: Caller = { userId: "", orgId: identity.org.id, isOrgAdmin: false, teamIds: new Set([teamId]), ledTeamIds: new Set() }
   const withoutTeam: NodeChain = { ...chain, rules: chain.rules.filter((rule) => rule.targetId !== nodeId || rule.teamId !== teamId) }
   return { members, team: { level: nodeLevelOf(plain, chain), inherited: nodeLevelOf(plain, withoutTeam) } }
+}
+
+/**
+ * Les membres de l'organisation qui lisent un nœud (niveau 1 au moins), par identifiant : ceux qu'un commentaire de la
+ * page peut mentionner. Chacun tel que le calcul le décide (`nodeLevelOf`, sur les faits de chaque membre, comme
+ * `teamMemberLevels`) ; vide quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.
+ */
+export async function nodeReaders(db: PlatformDb, identity: Identity, nodeId: string): Promise<Set<string>> {
+  const [chains, callers] = await Promise.all([readNodeChains(db, identity.org.id, [nodeId]), readMemberCallers(db, identity.org.id)])
+  const read = chains.get(nodeId)
+  if (!read) return new Set()
+  const chain = await completedChain(db, nodeId, read)
+  return new Set(callers.filter((caller) => nodeLevelOf(caller, chain) >= ACCESS_LEVELS.read).map((caller) => caller.userId))
 }
 
 /**

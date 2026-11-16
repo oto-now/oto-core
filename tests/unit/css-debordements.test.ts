@@ -40,6 +40,16 @@ describe("overflows of the screens kept closed by their CSS", () => {
     expect(rendu).toMatch(/z-index:\s*1/)
   })
 
+  // Mesuré dans Chrome à 390 px, au doigt : la gouttière cachée gardait 48 px à gauche de chaque bloc (texte de 232 px
+  // de large sur 348), et le bouton de 44 px de la bulle débordait sa cellule de 32 px, l'îlot défilait de côté.
+  it("should give a touch screen the whole width: no gutter kept for the « + » and the handle, a comment cell as wide as its target", () => {
+    const tactile = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(css("components/css/blocks.css"))?.[1] ?? ""
+    expect(tactile).toMatch(/\.oto-block-row \{ --block-gutter: 0px; \}/)
+    expect(tactile).toMatch(/\.oto-block-gutter \{ display: none; \}/)
+    expect(tactile).toMatch(/--block-comment: var\(--touch\);/)
+    expect(tactile).toMatch(/padding-inline-end: max\(var\(--island-pad\), var\(--touch\)\);/)
+  })
+
   it("should show every entry of the « + » and of « / » without a scroll bar, the « + » bounded by the window only", () => {
     const editeur = css("components/css/editeur.css")
     expect(regle(editeur, ".oto-pop.oto-menu-du-plus > .oto-menu")).toMatch(/max-block-size:\s*calc\(100dvh/)

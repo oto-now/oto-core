@@ -31,6 +31,7 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - By default a member reads everyone's contents, writes in their teams' and manages their private ones; rules per content change it (read, write, manage). A refusal says who to ask: never work around it.
 - <p>_write publishes at once; publish: false keeps an unpublished draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
 - Moving or renaming changes neither who sees a content nor its links: the old path still leads there.
+- A content you can read can be commented without editing it, to ask, flag or suggest: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with <p>_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.

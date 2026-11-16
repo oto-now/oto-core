@@ -105,14 +105,17 @@ function errorOf(api: ConnectorApi, status: number, answer: unknown): PlatformEr
   return new PlatformError("upstream_error", `${api.label} answered with an unexpected status (${status}). Retry later.`)
 }
 
-/** Une panne de `fetch` (réseau, délai) : une erreur neuve, sans cause, qui n'emporte ni la requête ni le jeton. */
+/**
+ * Une panne de `fetch` (réseau, délai) : une erreur neuve, sans cause, qui n'emporte ni la requête ni le jeton ; sa
+ * raison (`details.reason`, `timeout` ou `unreachable`) départage les deux pour la sonde (`ProbeFailureCode`).
+ */
 function unreachable(api: ConnectorApi, error: unknown): PlatformError {
   const name = error instanceof Error ? error.name : "unknown"
   console.error(`[platform] connector ${api.label}: request failed (${name})`)
   if (name === "TimeoutError") {
-    return new PlatformError("upstream_error", `${api.label} did not answer within ${Math.round(api.timeoutMs / 1000)} s. Retry later.`)
+    return new PlatformError("upstream_error", `${api.label} did not answer within ${Math.round(api.timeoutMs / 1000)} s. Retry later.`, { reason: "timeout" })
   }
-  return new PlatformError("upstream_error", `${api.label} could not be reached. Retry later.`)
+  return new PlatformError("upstream_error", `${api.label} could not be reached. Retry later.`, { reason: "unreachable" })
 }
 
 /** L'attente que demande `Retry-After` (secondes ou date HTTP), `null` au-delà de la borne. */

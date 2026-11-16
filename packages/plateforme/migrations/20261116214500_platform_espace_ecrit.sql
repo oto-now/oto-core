@@ -139,7 +139,7 @@ begin
                          where g.org_id = p_org and g.user_id = v_uid and g.revoked_at is null)) then
     return 0;
   end if;
-  -- L'espace est écrit sur le nœud (migration 20261103150000) : plus aucun propriétaire ne se lit sur un ancêtre. Dans un
+  -- L'espace est écrit sur le nœud (migration 20261116214500) : plus aucun propriétaire ne se lit sur un ancêtre. Dans un
   -- espace personnel, seules comptent les règles posées sur le haut de l'espace (le nœud le moins profond de la suite
   -- d'ancêtres qui portent la même personne, `private/<handle>` pour l'espace d'origine) ou en dessous : une règle posée
   -- plus haut (`private`, la racine, le dossier où un contenu Privé est rangé) n'y ouvre rien et n'en ferme pas le

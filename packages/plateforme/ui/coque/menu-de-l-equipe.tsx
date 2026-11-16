@@ -72,7 +72,8 @@ function DialogueDuGeste({ panneau, geste, prefixe, onFermer, annoncer }: Omit<P
   const { team, people, compose, admin } = panneau
   if (geste === "supprimer") return <SuppressionDEquipe equipe={team} onFermer={onFermer} apresUnDepart={() => undefined} prefixeDesPages={prefixe} />
   if (geste === "renommer") return <ReglagesDEquipe equipe={team} onFermer={onFermer} apresLeRenommage={(nouveau) => annoncer(MENU_DE_L_EQUIPE.renommee(nouveau))} />
-  const personnes = people.map((personne) => ({ id: personne.id, nom: personne.name, email: personne.email }))
+  // Les personnes à ajouter viennent sans email : le nom les désigne.
+  const personnes = people.map((personne) => ({ id: personne.id, nom: personne.name, email: "" }))
   return <PersonnesDeLEquipe equipe={team} personnes={personnes} compose={compose} nommeLesResponsables={admin} onFermer={onFermer} />
 }
 

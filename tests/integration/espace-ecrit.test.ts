@@ -1,6 +1,6 @@
 // @vitest-environment node
 // L'espace d'un nœud écrit sur lui (`droits-d-acces.md` § Propriétaires, déplacements, personnel ; décidé avec JB le
-// 03/11, migration 20261103150000) sur une vraie base : une écriture d'assistant qui ne nomme aucun espace partagé tombe
+// 03/11, migration 20261116214500) sur une vraie base : une écriture d'assistant qui ne nomme aucun espace partagé tombe
 // dans le Privé de son auteur, et sa réponse le dit ; `space: "everyone"` crée dans Tout le monde ; un dossier d'équipe
 // ou un Privé nomme son espace ; sous une session, la base n'admet que l'espace du parent ou le Privé de l'auteur ; un
 // déplacement ou une copie ne partagent rien. Portable : O de `seedReferenceOrg`, sessions `asCaller`.
@@ -15,7 +15,7 @@ import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededDat
 
 const SETUP_TIMEOUT = 180_000
 const NETWORK_TIMEOUT = 60_000
-const SUITE = "the space written on a node at its creation (20261103150000)"
+const SUITE = "the space written on a node at its creation (20261116214500)"
 const AGENT: WriteOrigin = { kind: "agent", ctx: null }
 
 describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_REASON})`, { timeout: NETWORK_TIMEOUT }, () => {

@@ -152,10 +152,10 @@ describe("files sent to a third party", () => {
   })
 
   it("should keep the file after a named refusal of the third party, a server error or a timeout, never consumed", async () => {
-    const cas: [string, () => Response | Error, string, { refusal: string } | undefined][] = [
+    const cas: [string, () => Response | Error, string, { refusal: string } | { reason: string } | undefined][] = [
       ["a named refusal of the third party", () => json({ error: "bad type" }, 422), "invalid_arguments", { refusal: "document_rejected" }],
       ["a server error", () => json({}, 503), "upstream_error", { refusal: "upstream_unavailable" }],
-      ["a timeout", () => Object.assign(new Error("timed out"), { name: "TimeoutError" }), "upstream_error", undefined],
+      ["a timeout", () => Object.assign(new Error("timed out"), { name: "TimeoutError" }), "upstream_error", { reason: "timeout" }],
     ]
     const verdicts: Record<string, unknown> = {}
     for (const [label, answer] of cas) {

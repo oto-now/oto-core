@@ -15,7 +15,7 @@ import { AnimatedIcon } from "../ds/react/icon"
 import { LinkedContent } from "../ds/react/linked-content"
 import { dateLisible } from "../format/dates"
 import { LIGNES_SERVIES, nomDuBloc, type EquipesNommees } from "./libelles"
-import type { Legende, LigneServie, MorceauServi } from "./parties-du-contexte"
+import type { Legende, LigneServie, MarquesDeCommentaires, MorceauServi } from "./parties-du-contexte"
 
 type Navigation = { prefixeDesPages: string; Lien: LienDeLHote }
 
@@ -49,14 +49,23 @@ function VersLeContenu({ chemin, texte, precision, prefixeDesPages, Lien }: Navi
   )
 }
 
+/** La précision d'une ligne, suivie de ce que ses commentaires y ajoutent : les nouveaux, puis les fils qui attendent un assistant. */
+function avecLesCommentaires(precision: string, { commentaires, pourLAssistant }: MarquesDeCommentaires): string {
+  const marques = [
+    commentaires === undefined ? null : LIGNES_SERVIES.nouveauxCommentaires(commentaires),
+    pourLAssistant === undefined ? null : LIGNES_SERVIES.pourLAssistant(pourLAssistant),
+  ]
+  return [precision, ...marques].filter((partie) => partie !== null).join(", ")
+}
+
 function Ligne({ ligne, ...navigation }: Navigation & { ligne: LigneServie }): ReactNode {
   switch (ligne.genre) {
     case "connecteur":
       return LIGNES_SERVIES.connecteur(ligne.nom, date(ligne.date))
     case "version":
-      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.version(ligne.nature, ligne.revision, date(ligne.date))} {...navigation} />
+      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={avecLesCommentaires(LIGNES_SERVIES.version(ligne.nature, ligne.revision, date(ligne.date)), ligne)} {...navigation} />
     case "recent":
-      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.recent(ligne.nature, date(ligne.date))} {...navigation} />
+      return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={avecLesCommentaires(LIGNES_SERVIES.recent(ligne.nature, date(ligne.date)), ligne)} {...navigation} />
     case "index":
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={ligne.resume} {...navigation} />
   }

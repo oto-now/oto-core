@@ -102,16 +102,18 @@ async function ownerTeam(db: PlatformDb, nodeId: string): Promise<string | null>
  * de plus, que l'affichage d'une page ne paie pas ; sur demande aussi (`subjects`), les équipes et les membres qu'on peut
  * ajouter, déjà lus pour nommer les règles.
  */
-export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
+export async function listNodeRules(db: PlatformDb, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean; action?: NodeAction } = {}): Promise<NodeRulesView> {
   return inTransaction(db, "listNodeRules", (sql) => nodeRulesIn({ db, sql }, identity, path, options))
 }
 
 /**
  * Le panneau d'un nœud dans la transaction `sql` d'un appelant : celle d'un service qui lit encore autre chose du même
  * nœud (`node.access` et son lien public) sans ouvrir une seconde transaction (`supabase-patterns.md § Couplage à Supabase`).
+ * `action` : le geste que l'appelant s'apprête à faire, exigé avant toute autre lecture (`node.share` : le refus précède
+ * la résolution d'une personne dans l'annuaire).
  */
-export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean } = {}): Promise<NodeRulesView> {
-  const node = await readNode({ db, sql }, identity, path)
+export async function nodeRulesIn({ db, sql }: InOperation, identity: Identity, path: string, options: { people?: boolean; subjects?: boolean; action?: NodeAction } = {}): Promise<NodeRulesView> {
+  const node = await readNode({ db, sql }, identity, path, options.action)
   const [owner, [rules, teams], directory] = await Promise.all([
     nodeOwner(db, node.id),
     Promise.all([
@@ -355,13 +357,15 @@ export async function readAccount({ db, sql }: InOperation, identity: Identity, 
 }
 
 /**
- * Les règles d'un compte que l'appelant lit (niveau 1 au moins) : les équipes, puis les personnes, par nom.
- * Les règles, puis les noms de leurs équipes, se lisent l'une après l'autre dans la transaction de l'opération.
+ * Les règles d'un compte, pour qui le gère (`ACCOUNT_LEVELS.manage`, comme son journal des partages : la liste nomme
+ * les personnes et les équipes avec qui il est partagé) : les équipes, puis les personnes, par nom. Un lecteur sans la
+ * gestion reçoit le refus de `readAccount`. Les règles, puis les noms de leurs équipes, se lisent l'une après l'autre
+ * dans la transaction de l'opération.
  */
 export async function listAccountRules(db: PlatformDb, identity: Identity, accountId: unknown): Promise<AccountRulesView> {
   const id = parseId(accountId, "account")
   return inTransaction(db, "listAccountRules", async (sql) => {
-    const account = await readAccount({ db, sql }, identity, id, ACCOUNT_LEVELS.read)
+    const account = await readAccount({ db, sql }, identity, id, ACCOUNT_LEVELS.manage)
     // Rangées par id, comme les pages qu'en lisait PostgREST : un même nom garde son ordre.
     const rows = await sql<RuleRow[]>`
       select id, subject_team_id, subject_user_id, subject_org, level from platform.access_rules

@@ -250,7 +250,7 @@ describe("/n/[...chemin] page not found and failures (AC6, AC7)", () => {
   })
 
   // Un panneau « Partager » sans ses sujets proposerait un champ vide : la lecture en échec se dit (portage § 4).
-  // L'espace se dit par le propriétaire du nœud (20261103150000), lu avec lui : les équipes illisibles ne le changent pas.
+  // L'espace se dit par le propriétaire du nœud (20261116214500), lu avec lui : les équipes illisibles ne le changent pas.
   it.each([
     ["the rules of the node", "Ventes", () => vi.mocked(listNodeRules).mockRejectedValue(new Error("panne"))],
     ["the teams", "Ventes", () => vi.mocked(listTeams).mockRejectedValue(new Error("panne"))],

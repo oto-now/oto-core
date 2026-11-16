@@ -11,9 +11,10 @@ const KEY_FACTORIES = { uuid: () => randomUUID(), ctx: newCtxCode, sim: newSimId
 
 /**
  * Tables dont une ligne sautée emporte les lignes qui la désignent (AC9) : les nœuds personnels d'une
- * personne absente (et leurs descendants), ses comptes personnels.
+ * personne absente (et leurs descendants), ses comptes personnels ; les fils de commentaires d'un nœud sauté, dont les
+ * commentaires suivent.
  */
-const CASCADING = ['nodes', 'accounts']
+const CASCADING = ['nodes', 'accounts', 'comment_threads']
 
 /** Colonnes hors de l'empreinte (AC8) : ce que l'import change, et les clés propres que rien ne désigne. */
 const UNCOMPARED = {
@@ -26,6 +27,8 @@ const UNCOMPARED = {
   // E05-S13 (fiche D128) : ni l'un ni l'autre n'est plus lu ; un ancien export les porte, sa copie non.
   teams: ['lead_user_id'],
   members: ['default_team_id'],
+  // Un commentaire reçoit un nouvel identifiant, que rien ne désigne ; son fil se compare par son rang (`naturalRefs`).
+  comments: ['id'],
 }
 
 /**
@@ -275,6 +278,7 @@ function naturalRefs(doc) {
   }
   rank(refs, tables.ctx ?? [], 'code', 'ctx')
   rank(refs, tables.sim_outbox ?? [], 'id', 'sim')
+  rank(refs, tables.comment_threads ?? [], 'id', 'thread')
   return refs
 }
 

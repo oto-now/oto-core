@@ -105,6 +105,16 @@ export function leadsTeam(identity: Identity, teamId: string): boolean {
   return identity.teams.some((team) => team.id === teamId && team.role === "lead")
 }
 
+/**
+ * L'email d'une personne, pour qui a à la joindre : l'administrateur, elle-même, ou un responsable d'une de ses équipes
+ * (`teamIds`) ; vide pour tout autre membre, qui la connaît par son nom. Décidé ici pour chaque lecture de l'annuaire
+ * rendue à un écran (`listMembers`, `listTeams`, panneau d'une équipe).
+ */
+export function emailFor(identity: Identity, person: { userId: string; email: string }, teamIds: readonly string[]): string {
+  const sees = isOrgAdmin(identity) || person.userId === identity.user.id || teamIds.some((teamId) => leadsTeam(identity, teamId))
+  return sees ? person.email : ""
+}
+
 export function callerOf(identity: Identity): Caller {
   return {
     userId: identity.user.id,
@@ -151,7 +161,7 @@ function placedOwner(chain: NodeChain, lineage: readonly NodeFact[]): PlacedOwne
     // la plus proche, que le plancher compte de toute façon (HN-E01S07-4).
     return { owner: { kind, teamId, userId }, depth: holder ? nodeDepth(holder.path) : 0 }
   }
-  // Le plus proche qui porte un propriétaire (le nœud lui-même depuis que l'espace est écrit, migration 20261103150000),
+  // Le plus proche qui porte un propriétaire (le nœud lui-même depuis que l'espace est écrit, migration 20261116214500),
   // puis le haut de son espace : les ancêtres contigus qui portent le même propriétaire.
   const byDepth = [...lineage].sort((a, b) => nodeDepth(b.path) - nodeDepth(a.path))
   const index = byDepth.findIndex((n) => n.owner !== null)

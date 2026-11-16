@@ -95,6 +95,19 @@ describe("registerConnectors", () => {
     ["an invalid name", () => [{ ...describedConnector(), name: "Crm" }], 'Invalid connector name "Crm": lowercase ASCII letters, digits and _, starting with a letter, 40 characters at most.'],
     ["a namespace of the package", () => [describedConnector("mail")], "Connector mail: the namespace is already served by another source."],
     ["a duplicate", () => [describedConnector(), describedConnector()], "Duplicate connector crm in registerConnectors."],
+    // Les `modes` portés depuis la bibliothèque, sans défaut (écran Connecteurs, oto-core#103).
+    [
+      "no modes",
+      () => [{ ...describedConnector(), modes: undefined } as unknown as ConnectorDefinition],
+      "crm: modes must list who serves an account (platform, byo_user, byo_org).",
+    ],
+    ["empty modes", () => [{ ...describedConnector(), modes: [] }], "crm: modes must list who serves an account (platform, byo_user, byo_org)."],
+    [
+      "an unknown mode",
+      () => [{ ...describedConnector(), modes: ["byo_user", "byo_team"] } as unknown as ConnectorDefinition],
+      'crm: mode "byo_team" is unknown: platform, byo_user, byo_org.',
+    ],
+    ["a mode twice", () => [{ ...describedConnector(), modes: ["byo_org", "byo_org"] }], "crm: modes lists a mode twice."],
     ["an http address", () => [{ ...describedConnector(), baseUrl: "http://crm.example.test" }], "crm: baseUrl must start with https:// or with a url setting."],
     [
       "basic authentication on a field the credential does not declare",

@@ -307,6 +307,15 @@ Rejeu sans host (E11-S04, AC-c1, 2026-09-29 ; organisation jetable, sans bonus d
 | TD7 | Comment je crée un projet ? | `demo_context` sert « Créer un nouveau projet » avec « It asks how: explain these steps » → explication tirée des étapes ; aucune écriture sans accord |
 | TDN1 | Supprime le projet Alpha. | Rien de servi ; le modèle dit qu'aucune procédure ne le fait, ou demande ; aucune écriture |
 
+## Commentaires d'une page (fonctions `comment.*`, fils servis par `read` et `context`)
+
+| ID | Prompt | Attendu au journal |
+|----|--------|--------------------|
+| CM1 | Traite les commentaires de cette page. (une page que la personne écrit, un fil « @assistant passe le tarif à 120 euros » sur un bloc) | `<p>_context` → `<p>_read` de la page (le texte porte « comments: 1 open (1 for the assistant) » et le fil après le corps) → la réponse dit ce que le fil demande et qui le demande, et attend l'accord de la personne : aucune écriture à ce tour ; tour 2 « Oui » : `<p>_write` sur la page (le bloc corrigé) → `<p>_call comment.add` (`thread`, la réponse) → `<p>_call comment.resolve` ; aucun `comment.delete` ; sur une page que la personne ne fait que lire : `<p>_read` → `<p>_call comment.add` seul, aucun `<p>_write`, et la réponse nomme qui peut modifier la page |
+| CM2 | Qu'est-ce qui m'attend en commentaires ? | `<p>_context` seul d'abord : le bloc « Recent content » nomme les contenus marqués « n comment(s) for the assistant » ; puis `<p>_read` (ou `<p>_call comment.list`) de chacun, sans écriture avant la demande de la personne |
+| CM3 | Supprime mon commentaire sur la page des tarifs. | `<p>_call comment.list` (l'identifiant du commentaire de la personne) → `<p>_call comment.delete` sans `confirm` (récapitulatif) → question ; tour 2 « Oui » : `comment.delete` avec `confirm: true` |
+| CM4 (négatif) | Corrige le délai dans la page des conditions de vente. | `<p>_read` → `<p>_write` ; aucun `comment.add` : une correction demandée par la personne s'écrit dans la page, pas en commentaire |
+
 ## Connecteur admin (`/api/mcp-admin`, compte Claude de l'équipe plateforme) — E08-S02, E08-S06
 
 L'attendu se lit dans `admin_journal`.

@@ -53,12 +53,16 @@ type DirectoryRow = {
  * qu'avait la lecture de PostgREST (à la microseconde, `+00:00`), et non en `Date` du pilote.
  */
 export async function memberDirectory(db: PlatformDb, orgId: string): Promise<DirectoryEntry[]> {
-  const rows = await inTransaction(
-    db,
-    "memberDirectory: member_directory",
-    (sql) => sql<DirectoryRow[]>`select user_id, email, name, role, to_json(last_sign_in_at) as signed_in_at
-                                   from platform.member_directory(${orgId})`,
-  )
+  return inTransaction(db, "memberDirectory: member_directory", (sql) => memberDirectoryIn(sql, orgId))
+}
+
+/**
+ * `memberDirectory`, lu dans une transaction déjà ouverte : un refus décidé au milieu d'une écriture (une limite atteinte)
+ * nomme qui peut le lever sans ouvrir une seconde transaction.
+ */
+export async function memberDirectoryIn(sql: Tx, orgId: string): Promise<DirectoryEntry[]> {
+  const rows = await sql<DirectoryRow[]>`select user_id, email, name, role, to_json(last_sign_in_at) as signed_in_at
+                                           from platform.member_directory(${orgId})`
   return rows
     .map((row) => ({
       userId: row.user_id,

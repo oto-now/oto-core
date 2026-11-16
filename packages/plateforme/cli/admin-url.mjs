@@ -1,6 +1,6 @@
 /**
  * L'adresse de la base des commandes à connexion d'administration (`db prepare`, `accounts secret`, `journal purge`,
- * `org delete`), une règle pour toutes. Ce que ça empêche : un mot de passe passé en argument, que `ps` montre à tout
+ * `comments notify`, `org delete`), une règle pour toutes. Ce que ça empêche : un mot de passe passé en argument, que `ps` montre à tout
  * compte de la machine et que l'historique du shell garde. L'adresse se lit dans `PLATFORM_ADMIN_DATABASE_URL`, mot
  * de passe compris ; `--db-url` reste admis sans mot de passe, celui-ci lu par postgres.js dans `PGPASSWORD` (pas
  * dans `.pgpass`, que postgres.js ne lit pas). Ni l'un ni l'autre, ou les deux : refusé, sans choix silencieux. Aucun

@@ -5,6 +5,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyG
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { makeVerifyToken } from "../../packages/plateforme/mcp/auth"
 import { handleMcpPost, mcpMethodNotAllowed } from "../../packages/plateforme/mcp/handler"
+import { registerHostSurface } from "../../packages/plateforme/server/catalog/surface"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { resolveIdentity, resolveOrg, type ServedHost } from "../../packages/plateforme/server/identity"
 
@@ -187,6 +188,26 @@ describe("organisation of the address the host chooses", () => {
     const { response, tasks } = await call(post({ bearer: await token() }))
     expect(response.status).toBe(200)
     expect(tasks).toEqual([])
+  })
+
+  // Le widget tient par les ressources MCP : fermées par l'hôte (`registerHostSurface`), il n'est plus annoncé.
+  it("should announce the resources of the widget only to a host that serves them", async () => {
+    vi.mocked(resolveIdentity).mockRejectedValue(new PlatformError("not_member", "claire@example.test is not a member of Acme."))
+    vi.mocked(resolveOrg).mockResolvedValue({ id: "org-1", slug: "acme", name: "Acme", prefix: "acme", brand: null, domains: null } as never)
+    const announced = async () => {
+      const response = await handleMcpPost(post({ bearer: await token() }), { verifyToken: makeVerifyToken({ jwks, issuer: ISSUER }), defer: () => undefined, widgets: true })
+      // La réponse d'`initialize` part en flux d'événements : la ligne `data:` porte le message JSON-RPC.
+      const data = (await response.text()).split("\n").find((line) => line.startsWith("data: ")) ?? "data: {}"
+      const answer: { result?: { capabilities?: Record<string, unknown> } } = JSON.parse(data.slice("data: ".length))
+      return Object.keys(answer.result?.capabilities ?? {}).sort()
+    }
+    try {
+      expect(await announced()).toEqual(["prompts", "resources", "tools"])
+      registerHostSurface({ functions: [], capabilities: ["prompts"], fetchCallerUrls: true })
+      expect(await announced()).toEqual(["prompts", "tools"])
+    } finally {
+      registerHostSurface(null)
+    }
   })
 
   it("should still refuse a caller who is not a member of the organisation of the chosen address", async () => {

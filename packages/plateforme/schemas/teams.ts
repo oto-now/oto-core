@@ -49,6 +49,7 @@ export type MemberRoleView = "admin" | "member"
 
 export type MemberView = {
   userId: string
+  /** Vide pour qui n'a pas à joindre la personne (`emailFor`) : ni administrateur, ni elle-même, ni responsable d'une de ses équipes. */
   email: string
   name: string
   role: MemberRoleView
@@ -63,17 +64,17 @@ export type TeamView = {
   name: string
   /** Les noms des responsables, par ordre alphabétique, joints par « , » ; `null` : aucun (AC-23). */
   leadName: string | null
-  /** Les responsables d'abord, puis par nom. */
+  /** Les responsables d'abord, puis par nom ; l'email, vide pour qui n'a pas à joindre la personne (`emailFor`). */
   members: { userId: string; name: string; email: string; role: "lead" | "member" }[]
 }
 
 /**
- * Une équipe lue par le « ⋯ » de sa section du rail (`GET teams/<slug>`) : elle, les personnes de l'organisation, et ce
- * que la personne peut y faire (composer : l'administrateur ou un responsable ; `admin` : nommer les responsables, supprimer).
+ * Une équipe lue par le « ⋯ » de sa section du rail (`GET teams/<slug>`) : elle, les personnes de l'organisation qu'on
+ * peut y ajouter (pour qui la compose seul, sans email), et ce que la personne peut y faire (composer : l'administrateur ou un responsable ; `admin` : nommer les responsables, supprimer).
  */
 export type TeamPanel = {
   team: TeamView
-  people: { id: string; name: string; email: string }[]
+  people: { id: string; name: string }[]
   compose: boolean
   admin: boolean
 }

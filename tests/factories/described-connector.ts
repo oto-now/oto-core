@@ -144,6 +144,7 @@ export function describedConnector(name = "crm"): ConnectorDefinition {
     baseUrl: "https://crm.example.test/v2",
     auth: { kind: "bearer", token: "api_key" },
     credential: [{ name: "api_key", label: "API key", secret: true }],
+    modes: ["byo_user", "byo_org"],
     timeoutMs: 5_000,
     queryArrays: "brackets",
     headers: { "Crm-Version": "2026-10" },
@@ -220,6 +221,7 @@ export function consentConnector(name = "crm"): ConnectorDefinition {
   return {
     ...describedConnector(name),
     credential: [],
+    modes: ["byo_user"],
     auth: {
       kind: "oauth2_user",
       authorizeUrl: "https://login.crm.example.test/authorize",
@@ -324,6 +326,7 @@ export function hostedConnector(name = "crm"): ConnectorDefinition {
     baseUrl: "https://crm.example.test/v2/{account_id}",
     auth: { kind: "api_key", in: "header", name: "X-Api-Key", key: "api_key" },
     credential: [{ name: "api_key", label: "API key", secret: true, holder: "host" }],
+    modes: ["platform"],
     accountIdentity: { name: "account_id", label: "Account", pattern: HOSTED_ID_PATTERN },
   }
 }

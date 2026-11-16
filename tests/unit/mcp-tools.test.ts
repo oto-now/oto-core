@@ -225,4 +225,11 @@ describe("server identity and instructions (AC9)", () => {
     expect(text.split(/\.\s/)).toHaveLength(1)
     expect(serverOptions(ACME).instructions).toBe(text)
   })
+
+  it("should serve the organisation's https logo as the server icon, and no icon otherwise", () => {
+    const logo = "https://acme.example/logo.png"
+    expect(serverOptions({ ...ACME, brand: { logo_url: logo } }).serverInfo.icons).toEqual([{ src: logo }])
+    expect(serverOptions({ ...ACME, brand: { logo_url: "http://acme.example/logo.png" } }).serverInfo).not.toHaveProperty("icons")
+    expect(serverOptions(ACME).serverInfo).not.toHaveProperty("icons")
+  })
 })

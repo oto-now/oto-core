@@ -7,7 +7,7 @@ import {
   type MarqueDOrganisation,
   type ResultatAucuneOrganisation,
 } from "@otomata_tech/oto_platform/ui"
-import { listOrganisationsOfPerson, normalizeHost, orgContact, resolveOrg } from "@otomata_tech/oto_platform/server"
+import { listOrganisationsOfPerson, normalizeHost, resolveOrg } from "@otomata_tech/oto_platform/server"
 import { linkOrigin } from "@otomata_tech/oto_platform/schemas"
 import { logoutAction } from "@/lib/actions/auth"
 import { marqueDOrganisation } from "@/lib/plateforme/marque-de-l-adresse"
@@ -36,13 +36,13 @@ type Etat = { resultat: ResultatAucuneOrganisation; marque: MarqueDOrganisation 
 async function nonMembre(session: PlatformSession): Promise<Etat> {
   try {
     const org = await resolveOrg(session.db, session.host)
-    const contact = await orgContact(session.db, org.id)
     return {
       resultat: {
         data: {
           email: session.user.email,
           hote: normalizeHost(session.host),
-          organisation: { nom: org.name, contact: contact ? { nom: contact.name, email: contact.email } : null },
+          // Le contact d'une organisation ne se lit que de l'intérieur (`org_contact`) : un non-membre n'en reçoit aucun.
+          organisation: { nom: org.name, contact: null },
         },
       },
       // Thème et ligne de l'organisation que la page vient de résoudre : aucune lecture de plus.

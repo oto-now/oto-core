@@ -128,6 +128,19 @@
   max-inline-size: 100%;
   margin-inline: auto;
 }
+/* Un bloc lu est dans sa boîte (`.oto-bloc-lu`, `blocks.css` : la bulle de commentaire s'y pose), qui prend la colonne à sa place : le premier bloc ne décolle toujours pas du haut de l'îlot, et un tableau s'élargit toujours des deux côtés, sa boîte à sa largeur, lui défilant dedans. */
+.oto-island-body[data-reading] > .oto-bloc-lu:first-child > :first-child { margin-block-start: 0; }
+.oto-island-body[data-reading]:not([data-reading="blocs"]) .oto-bloc-lu:has(> :is(.oto-table-wrap, pre.oto-code)) {
+  inline-size: fit-content;
+  min-inline-size: min(100%, var(--colonne-du-lecteur));
+  max-inline-size: 100%;
+  margin-inline: auto;
+}
+.oto-island-body[data-reading]:not([data-reading="blocs"]) .oto-bloc-lu > :is(.oto-table-wrap, pre.oto-code) {
+  container-type: normal;
+  overflow-x: auto;
+  max-inline-size: 100%;
+}
 
 /* L'encart de contenu, un objet posé au fil du texte et pas une ligne : sa vignette (la trame du thème, le glyphe de son type) dit ce que c'est avant qu'on lise le nom. */
 
@@ -376,3 +389,99 @@
 /* Cassé, le lien pointe dans le vide : la couleur ne porte pas seule, un mot dans le qualificatif et l'icône changent, `--st-fail-text` le fait voir de loin. */
 .oto-content-tree-row[data-broken] > .oto-content-tree-icon,
 .oto-content-tree-row[data-broken] .oto-object-link-name { color: var(--st-fail-text); }
+
+/* ── L'ENCART « COMMENTAIRES » (`ui/noeud/commentaires/`) : la pastille est celle des contenus liés (`.oto-linked`) ; dessous, des onglets, puis une carte par fil. Les textes sont en `--ink` ou en `--mute` sur `--island` (5,4:1 au moins dans les huit teintes, jour et nuit : mesure d'`editeur.css`), les étiquettes sont des `Badge`. */
+
+/* Sur la ligne des encarts d'un tableau, l'encart ouvert garde la largeur d'une colonne étroite ; dans la colonne de droite, toute sa largeur. */
+.oto-commentaires { min-inline-size: 0; max-inline-size: 28rem; }
+.oto-two-columns-aside > .oto-commentaires { max-inline-size: none; }
+.oto-commentaires .oto-tabpanel,
+.oto-fils { display: flex; flex-direction: column; gap: var(--space-2); }
+.oto-commentaires .oto-tabpanel { padding-block-start: var(--space-3); }
+/* « Commenter la page » : sur toute la largeur de l'encart, son libellé centré, à distance des onglets. */
+.oto-commenter-la-page { inline-size: 100%; justify-content: center; }
+.oto-fils-vide { padding: var(--space-2-5) var(--space-1-5); text-align: center; font-size: var(--fs-xs); color: var(--mute); }
+
+/* La carte d'un fil ; celle du fil ouvert se borde à la couleur du thème, comme son bloc dans le document. */
+.oto-fil {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  padding: var(--space-2-5);
+  border: 1px solid var(--island-bd);
+  border-radius: var(--r-card);
+  background: var(--island);
+  transition: var(--tr-colors);
+}
+.oto-fil[data-actif] { border-color: var(--primary); }
+/* Le nouveau fil, pas encore envoyé : un bord en pointillés. */
+.oto-fil[data-nouveau] { border-style: dashed; }
+.oto-fil-tete { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.oto-fil-ancre { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-1-5); min-inline-size: 0; font-size: var(--fs-xs); color: var(--mute); }
+.oto-fil-ancre strong { color: var(--ink); font-weight: var(--fw-semibold); }
+/* Le lien vers le passage : `--link`, la couleur des liens du paquet. */
+.oto-fil-ancre > button { color: var(--link); font-weight: var(--fw-semibold); text-align: start; border-radius: var(--r-ctrl); }
+.oto-fil-ancre > button:hover { text-decoration: underline; }
+.oto-fil-etiquette { cursor: help; }
+/* La coche du fil, toujours visible, ne rétrécit pas ; inerte pour qui ne peut pas résoudre, elle s'efface à moitié et garde son infobulle. */
+.oto-fil-etat { flex: none; }
+.oto-fil-etat[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.oto-fil-etat[aria-disabled="true"]:hover { background: var(--island); }
+.oto-fil-citation { padding-inline-start: var(--space-2); border-inline-start: var(--space-0-5) solid var(--primary); font-size: var(--fs-xs); color: var(--mute); overflow-wrap: anywhere; }
+.oto-fil-commentaires { display: flex; flex-direction: column; gap: var(--space-2); }
+.oto-fil-pied { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1-5); }
+/* « Répondre » à droite, sous l'étiquette d'attente ; le champ de réponse garde toute la largeur. */
+.oto-fil-pied > .oto-btn { align-self: flex-end; }
+.oto-fil-pied > .oto-commentaire-champ { align-self: stretch; }
+
+/* Un commentaire : la signature, le texte, et pour les siens deux petites icônes en haut à droite, révélées au survol et au focus. */
+.oto-commentaire { position: relative; display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.oto-commentaire + .oto-commentaire { padding-block-start: var(--space-2); border-block-start: 1px solid var(--hair); }
+.oto-commentaire-signature { padding-inline-end: calc(var(--ctrl-h-sm) * 2); font-size: var(--fs-xs); color: var(--mute); }
+.oto-commentaire-signature strong { color: var(--ink); font-weight: var(--fw-semibold); }
+.oto-commentaire-texte { font-size: var(--fs-sm); color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+/* Une mention enregistrée : `--link` et la graisse, jamais la couleur seule (le `@` la dit aussi). */
+.oto-mention { color: var(--link); font-weight: var(--fw-semibold); }
+.oto-commentaire-outils {
+  position: absolute;
+  inset-block-start: calc(var(--space-1) * -1);
+  inset-inline-end: calc(var(--space-1) * -1);
+  display: flex;
+  border-radius: var(--r-ctrl);
+  background: var(--island);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.oto-commentaire + .oto-commentaire > .oto-commentaire-outils { inset-block-start: var(--space-1); }
+.oto-commentaire:hover > .oto-commentaire-outils,
+.oto-commentaire:focus-within > .oto-commentaire-outils { opacity: 1; }
+@media (hover: none) {
+  .oto-commentaire-outils { opacity: 1; }
+}
+/* La poubelle au survol : le ton d'échec, sur une icône (3:1 demandé). */
+.oto-commentaire-outils .oto-icon-btn[data-danger]:hover { color: var(--st-fail-text); }
+
+/* Le champ d'un commentaire : la zone de texte, la liste des mentions dessous (dans le flux : rien ne la rogne), les encadrés, les gestes. */
+.oto-commentaire-champ { display: flex; flex-direction: column; gap: var(--space-1-5); align-self: stretch; min-inline-size: 0; }
+.oto-mentions { display: flex; flex-direction: column; padding: var(--space-1); border: 1px solid var(--island-bd); border-radius: var(--r-menu); background: var(--island); box-shadow: var(--sh-pop); }
+.oto-mention-choix { display: flex; flex-direction: column; align-items: flex-start; padding: var(--space-1) var(--space-2); border-radius: var(--r-ctrl); text-align: start; font-size: var(--fs-sm); color: var(--ink); }
+.oto-mention-choix > small { font-size: var(--fs-xs); color: var(--mute); }
+/* L'option courante, au clavier comme au survol : le fond du survol d'un bouton-icône (`button.css`). */
+.oto-mention-choix:hover,
+.oto-mention-choix[aria-selected="true"] { background: var(--hair); }
+/* Ce qu'une mention déclenchera : la teinte de la pastille d'encart, le texte en `--ink` ; vide, la région ne prend aucune place. */
+.oto-commentaire-encadre {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding: var(--space-2) var(--space-2-5);
+  border: 1px solid color-mix(in oklab, var(--primary) 32%, transparent);
+  border-radius: var(--r-ctrl);
+  background: color-mix(in oklab, var(--primary) 9%, var(--island));
+  font-size: var(--fs-xs);
+  color: var(--ink);
+}
+.oto-commentaire-encadre:empty { display: none; }
+/* Sous le champ : « Annuler » à gauche, « Envoyer » à droite. */
+.oto-commentaire-gestes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1-5); }

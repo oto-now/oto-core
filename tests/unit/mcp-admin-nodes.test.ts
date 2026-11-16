@@ -281,7 +281,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       expect(done.text).toBe("ventes/tarifs now belongs to team Support (2 nodes changed owner).")
       const transferred = await nodesOf(mine.admin, mine.seed)
       expect(transferred["ventes/tarifs"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id, owner_user_id: null, updated_by: PERSONS.sam.id })
-      // Le descendant du même propriétaire le suit, écrit dans la même transaction (20261103150000) ; aucun bloc ni
+      // Le descendant du même propriétaire le suit, écrit dans la même transaction (20261116214500) ; aucun bloc ni
       // brouillon n'est touché (ADR-011 § 2).
       expect(transferred["ventes/tarifs/grille"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id })
       expect(rewritten(before, transferred).sort()).toEqual(["ventes/tarifs", "ventes/tarifs/grille"])
