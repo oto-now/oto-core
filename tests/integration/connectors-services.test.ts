@@ -62,7 +62,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       return found
     }
 
-    const activationRows = () => fx.admin`select connector, state, activated_by from platform.connector_activations where org_id = ${o.org.id}`
+    const activationRows = () => fx.admin`select connector, state, activated_by, closed_by from platform.connector_activations where org_id = ${o.org.id}`
 
     async function resetActivations() {
       await fx.admin`delete from platform.connector_activations where org_id = ${o.org.id}`
@@ -105,11 +105,12 @@ describe.skipIf(!sqlConfigured || privatePending)(
           activatedBy: { userId: o.people.ada.id, name: "Ada Martin" },
           functions: FUNCTIONS,
           closedBy: null,
+          accountModes: ["simule"],
         })
         expect(await loadActiveConnectors(db, o.org.id)).toEqual(new Set(["mail"]))
         const again = await activateConnector(db, identity, { connector: " mail " })
         expect(again.activatedAt).toBe(first.activatedAt)
-        expect(await activationRows()).toEqual([{ connector: "mail", state: "active", activated_by: o.people.ada.id }])
+        expect(await activationRows()).toEqual([{ connector: "mail", state: "active", activated_by: o.people.ada.id, closed_by: null }])
 
         // Fermé par Ada : l'écran le dit (`closedBy`), et refuse l'ajout d'un compte (oto-core#103).
         const closedBy = { userId: o.people.ada.id, name: "Ada Martin" }
@@ -121,22 +122,26 @@ describe.skipIf(!sqlConfigured || privatePending)(
           activatedBy: null,
           functions: FUNCTIONS,
           closedBy,
+          accountModes: ["simule"],
         })
-        expect(await activationRows()).toEqual([{ connector: "mail", state: "inactive", activated_by: o.people.ada.id }])
+        // La fermeture a son auteur (`closed_by`) ; `activated_by` reste qui avait activé.
+        expect(await activationRows()).toEqual([{ connector: "mail", state: "inactive", activated_by: o.people.ada.id, closed_by: o.people.ada.id }])
         expect(await loadActiveConnectors(db, o.org.id)).toEqual(new Set())
         // La ligne inactive, relue : ni date ni auteur, comme sans ligne (N18, écran « Inactif » d'E08-S03).
         expect(await listConnectorsForOrg(db, identity)).toEqual([
-          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy },
+          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy, accountModes: ["simule"] },
         ])
         expect((await accountRow(account)).status).toBe("active")
         expect((await activateConnector(db, identity, { connector: "mail" })).state).toBe("active")
+        // Rouvert : la fermeture n'a plus d'auteur.
+        expect(await activationRows()).toEqual([{ connector: "mail", state: "active", activated_by: o.people.ada.id, closed_by: null }])
       })
 
       it("should list each activable connector with its state, who activated it and its functions, to any member (AC3)", async () => {
         await resetActivations()
         const lea = as("lea")
         expect(await listConnectorsForOrg(lea.db, lea.identity)).toEqual([
-          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy: null },
+          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy: null, accountModes: ["simule"] },
         ])
         const ada = as("ada")
         await activateConnector(ada.db, ada.identity, { connector: "mail" })

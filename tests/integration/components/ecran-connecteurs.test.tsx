@@ -30,6 +30,7 @@ const MAIL_ACTIF: OrgConnector = {
     { name: "mail.send_draft", class: "sensitive" },
   ],
   closedBy: null,
+  accountModes: ["simule"],
 }
 const MAIL_INACTIF: OrgConnector = { ...MAIL_ACTIF, state: "inactive", activatedAt: null, activatedBy: null }
 
@@ -197,7 +198,7 @@ describe("EcranConnecteurs, accounts (AC6, AC7)", () => {
   })
 })
 
-const CRM: OrgConnector = { connector: "crm", label: "Crm", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "crm.get_company", class: "read" }], closedBy: null }
+const CRM: OrgConnector = { connector: "crm", label: "Crm", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "crm.get_company", class: "read" }], closedBy: null, accountModes: ["reel"] }
 const FORMULAIRE_CRM: ConnectorAccountForm = {
   connector: "crm",
   label: "Crm",
@@ -290,7 +291,7 @@ const FORMULAIRE_MS: ConnectorAccountForm = {
   fields: [],
   settings: [],
 }
-const MS: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }], closedBy: null }
+const MS: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "microsoft.get_me", class: "read" }], closedBy: null, accountModes: ["reel"] }
 const MON_COMPTE_MS: AccountView = {
   id: COMPTE,
   label: "lea@contoso.test (microsoft)",
@@ -357,7 +358,7 @@ const FORMULAIRE_LI: ConnectorAccountForm = {
   fields: [],
   settings: [],
 }
-const LI: OrgConnector = { connector: "messagerie", label: "Messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }], closedBy: null }
+const LI: OrgConnector = { connector: "messagerie", label: "Messagerie", state: "active", activatedAt: null, activatedBy: null, functions: [{ name: "messagerie.get_me", class: "read" }], closedBy: null, accountModes: ["reel"] }
 const MON_COMPTE_LI: AccountView = { ...MON_COMPTE_MS, label: "lea@contoso.test (messagerie)", connector: "messagerie", secret: { fields: [], updatedAt: null } }
 
 describe("EcranConnecteurs, a hosted account (accountIdentity)", () => {

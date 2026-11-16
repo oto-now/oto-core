@@ -169,9 +169,10 @@ export const TABLES = [
   table('connector_activations', {
     key: ['org_id', 'connector'],
     newKey: null,
-    columns: cols('org_id connector state activated_by created_at updated_at'),
+    columns: cols('org_id connector state activated_by closed_by created_at updated_at'),
     refs: { org_id: 'orgs' },
-    people: { activated_by: 'auteur' },
+    // `closed_by` : `null`, jamais l'auteur de l'import, qui n'a pas fermé le connecteur (une fermeture sans auteur connu).
+    people: { activated_by: 'auteur', closed_by: 'null' },
   }),
   table('invitations', {
     columns: cols('id org_id email role team_id invited_by created_at expires_at accepted_at accepted_by declined_at revoked_at'),

@@ -347,7 +347,7 @@ describe.skipIf(!sqlConfigured)(portable("admin/* routes of the dashboard (AC10)
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ company: "Acme", scopes: ["contacts:read"] }))))
     try {
       const served = await call("marc", { method: "POST", path: `admin/connectors/${LIVE}/probe`, body: { fields: { api_key: SECRET_VALUE } } })
-      expect([served.status, served.body.data]).toEqual([200, { probe: { healthy: true, reason: null, balance: null } }])
+      expect([served.status, served.body.data]).toEqual([200, { probe: { healthy: true, code: null, reason: null, balance: null } }])
       expect(served.writes).toEqual([])
       expect(served.journal).toMatchObject([{ tool: "POST admin/connectors/probe", target: LIVE, args: { connector: LIVE }, is_error: false }])
       expect(JSON.stringify([served.body, served.journal]).includes(SECRET_VALUE)).toBe(false)

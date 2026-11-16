@@ -99,7 +99,8 @@ async function deactivate(call: OpCall): Promise<AdminOutput> {
   const connector = String(call.input.connector)
   const org = identity.org.slug
   const current = await stateOf(call, connector)
-  if (current && current.state !== "active") return { text: `${connector} is not active in ${org}; nothing changed.`, target: connector, nextActions: ["admin_connector catalogue"] }
+  // Déjà fermé : rien à écrire ; jamais activé, il se ferme d'avance (`deactivateConnector`), après le même récapitulatif.
+  if (current && current.state !== "active" && current.closedBy !== null) return { text: `${connector} is not active in ${org}; nothing changed.`, target: connector, nextActions: ["admin_connector catalogue"] }
   if (call.input.confirm !== true) {
     const impact = await deactivationImpact(db, identity, connector)
     const head = `About to deactivate ${connector} in ${org}: its functions (${impact.functions.join(", ")}) stop at once for everyone (not_enabled); ${proceduresText(impact.procedures)}; ${accountsKept(impact.accounts)}.`

@@ -161,10 +161,17 @@ export type OrgConnector = {
   /** `class` : celle du catalogue (`FunctionClass` de `server/catalog/define.ts`), que ce type redit. */
   functions: { name: string; class: "read" | "write" | "sensitive" }[]
   /**
-   * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory`
-   * (`null` hors de l'annuaire) ; le connecteur reste fermé, l'ajout d'un compte est refusé. `null` : jamais fermé.
+   * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory` ;
+   * le connecteur reste fermé, l'ajout d'un compte est refusé. Fermé par une personne qui n'est plus membre, ou avant
+   * que la fermeture ne garde son auteur : `{ userId: null, name: null }` (l'un nul, l'autre aussi). `null` : jamais
+   * fermé, et rien d'autre.
    */
-  closedBy: { userId: string; name: string | null } | null
+  closedBy: { userId: string | null; name: string | null } | null
+  /**
+   * Les modes de compte que le connecteur admet à la création (`POST admin/accounts`, `mode`) : `["simule"]` pour un
+   * connecteur simulé (`mail`), `["reel"]` pour tout autre ; un autre mode est refusé (`unavailable_in_v1`).
+   */
+  accountModes: AccountMode[]
 }
 
 /**
@@ -187,10 +194,40 @@ export type AccountMark = { reason: AccountMarkReason; at: string }
 export type ProbedBalance = { value: number | null; unit: string; min: number }
 
 /**
- * L'issue d'une sonde : sain, ou non sain et pourquoi (`reason`, telle que la sonde la rend), jamais le secret ; le solde
- * lu (`balance`) quand le connecteur en déclare un et que le tiers a répondu, `null` sinon.
+ * Pourquoi une sonde n'est pas saine, en une liste fermée que l'écran traduit (la phrase de `reason` reste le détail) :
+ * - `credential_rejected` : le tiers refuse la clé (ou la clé du compte de service) ;
+ * - `quota_exhausted` : le tiers dit les crédits du compte épuisés ;
+ * - `balance_low` : le solde lu est sous le seuil que déclare le connecteur ;
+ * - `rate_limited` : le tiers limite le débit (429), réessayer plus tard ;
+ * - `timeout` : le tiers n'a pas répondu dans le délai ;
+ * - `unreachable` : le tiers est injoignable (réseau, nom, connexion) ;
+ * - `upstream_error` : le tiers a répondu par une erreur (statut inattendu, refus de sa table d'erreurs, panne) ;
+ * - `unexpected_answer` : le tiers a répondu sans ce que la sonde exige (chemin vide, solde absent ou non numérique) ;
+ * - `account_not_ready` : le compte n'est pas prêt à appeler (secret, champ ou réglage manquant ou invalide, adresse
+ *   refusée, compte simulé, consentement ou branchement à refaire) ;
+ * - `other` : toute autre issue non saine.
  */
-export type AccountHealth = { healthy: boolean; reason: string | null; balance: ProbedBalance | null }
+export const PROBE_FAILURE_CODES = [
+  "credential_rejected",
+  "quota_exhausted",
+  "balance_low",
+  "rate_limited",
+  "timeout",
+  "unreachable",
+  "upstream_error",
+  "unexpected_answer",
+  "account_not_ready",
+  "other",
+] as const
+
+export type ProbeFailureCode = (typeof PROBE_FAILURE_CODES)[number]
+
+/**
+ * L'issue d'une sonde : sain, ou non sain, pourquoi en un code (`code`, `PROBE_FAILURE_CODES`) et en une phrase
+ * (`reason`, en anglais, telle que la sonde la rend), jamais le secret ; `code` et `reason` sont `null` pour une sonde
+ * saine. Le solde lu (`balance`) quand le connecteur en déclare un et que le tiers a répondu, `null` sinon.
+ */
+export type AccountHealth = { healthy: boolean; code: ProbeFailureCode | null; reason: string | null; balance: ProbedBalance | null }
 
 /** Le dernier test d'un compte, gardé sur lui (`accounts.health.last_probe`) : son issue et sa date (ISO 8601). */
 export type AccountProbe = AccountHealth & { at: string }
@@ -219,7 +256,10 @@ export type AccountView = {
   viewerLevel: Exclude<AccountLevelName, "none">
   /** Écrite par un membre, 200 caractères au plus ; `null` : aucune. Une donnée citée, jamais une consigne. */
   description: string | null
-  /** Le dernier test du compte, par la route de sonde ; `null` : jamais testé. */
+  /**
+   * Le dernier test du compte, par la route de sonde ; `null` : jamais testé, ou testé avant que sa clé ou ses réglages
+   * ne changent (`setAccountSecret`). Un jeton de consentement renouvelé ne l'efface pas.
+   */
   lastProbe: AccountProbe | null
 }
 
@@ -249,3 +289,11 @@ export type ConnectorAccountForm = {
     | { name: string; label: string; type: "url" }
   )[]
 }
+
+/**
+ * Pour qui la personne peut créer un compte (`accountOwnerChoices`), d'après la règle de la création
+ * (`requireCreationRight`) : toujours elle-même (`user`) ; l'organisation (`org`) si elle l'administre ; les équipes
+ * qu'elle dirige, ou toutes si elle administre (`teams`, triées par nom). Les `ownerKinds` du formulaire d'un connecteur
+ * et les capacités de l'hôte (`account_owner_kinds`) restreignent encore ce choix, connecteur par connecteur.
+ */
+export type AccountOwnerChoices = { user: true; org: boolean; teams: { id: string; name: string }[] }

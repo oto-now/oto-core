@@ -18,9 +18,10 @@ import { isJsonObject } from "../json"
 import { orgLimits, requireUnderLimit, type LimitScope } from "../limits"
 import type { Tx } from "../sql"
 import { keepDeclaredConnector } from "./declaration"
+import { creatableModes } from "./modes"
 
 /** Une ligne d'activation ; `updated_at` lu par `to_json`, en texte ISO comme PostgREST le rendait (AC-x2). */
-type ActivationRow = { connector: string; state: string; activated_by: string | null; updated_at: string }
+type ActivationRow = { connector: string; state: string; activated_by: string | null; closed_by: string | null; updated_at: string }
 
 /**
  * Les connecteurs qui demandent une activation (origine `connecteur`, H81), triés par nom,
@@ -63,15 +64,16 @@ export async function loadActiveConnectors(db: PlatformDb, orgId: string): Promi
 /** La ligne d'activation du connecteur dans l'organisation (clé `org_id, connector`), ou `null`. */
 async function activationRow(sql: Tx, orgId: string, connector: string): Promise<ActivationRow | null> {
   const [row] = await sql<ActivationRow[]>`
-    select connector, state, activated_by, to_json(updated_at) as updated_at
+    select connector, state, activated_by, closed_by, to_json(updated_at) as updated_at
       from platform.connector_activations
      where org_id = ${orgId} and connector = ${connector}`
   return row ?? null
 }
 
 /**
- * La ligne d'un connecteur. `activated_by` nomme qui a posé l'état de la ligne : qui l'a activé, ou, la ligne fermée,
- * qui l'a désactivé (`closedBy`).
+ * La ligne d'un connecteur. `activated_by` nomme qui l'a activé (`activatedBy`, la ligne active) ; `closed_by`, qui l'a
+ * fermé (`closedBy`, la ligne inactive) : hors de l'annuaire, ou fermé avant que la fermeture ne garde son auteur
+ * (`closed_by` nul), un auteur inconnu, `{ userId: null, name: null }`, jamais `null`, qui dit « jamais fermé ».
  */
 function connectorView(
   connector: string,
@@ -81,6 +83,10 @@ function connectorView(
 ): OrgConnector {
   const active = row?.state === "active"
   const person = (userId: string | null) => (userId ? { userId, name: directory.find((entry) => entry.userId === userId)?.name ?? null } : null)
+  const closer = (userId: string | null): NonNullable<OrgConnector["closedBy"]> => {
+    const entry = userId ? directory.find((candidate) => candidate.userId === userId) : undefined
+    return entry ? { userId: entry.userId, name: entry.name } : { userId: null, name: null }
+  }
   return {
     connector,
     label: declaredConnector(connector)?.definition.label ?? connector,
@@ -88,7 +94,8 @@ function connectorView(
     activatedAt: active ? row.updated_at : null,
     activatedBy: active ? person(row.activated_by) : null,
     functions: functions.map((fn) => ({ name: fn.name, class: fn.class })).sort((a, b) => a.name.localeCompare(b.name)),
-    closedBy: row !== null && !active ? person(row.activated_by) : null,
+    closedBy: row !== null && !active ? closer(row.closed_by) : null,
+    accountModes: creatableModes(connector),
   }
 }
 
@@ -101,7 +108,7 @@ export async function listConnectorsForOrg(db: PlatformDb, identity: Identity): 
   if (activable.size === 0) return []
   const [rows, directory] = await Promise.all([
     inTransaction(db, "listConnectorsForOrg: connector_activations", (sql) => sql<ActivationRow[]>`
-        select connector, state, activated_by, to_json(updated_at) as updated_at
+        select connector, state, activated_by, closed_by, to_json(updated_at) as updated_at
           from platform.connector_activations
          where org_id = ${identity.org.id}`),
     memberDirectory(db, identity.org.id),
@@ -149,31 +156,47 @@ export async function activateConnector(db: PlatformDb, identity: Identity, inpu
     const [written] = await sql<ActivationRow[]>`
       insert into platform.connector_activations (org_id, connector, state, activated_by)
       values (${orgId}, ${connector}, 'active', ${identity.user.id})
-      on conflict (org_id, connector) do update set state = excluded.state, activated_by = excluded.activated_by
-      returning connector, state, activated_by, to_json(updated_at) as updated_at`
+      on conflict (org_id, connector) do update set state = excluded.state, activated_by = excluded.activated_by, closed_by = null
+      returning connector, state, activated_by, closed_by, to_json(updated_at) as updated_at`
     return written
   }, "server")
   return connectorView(connector, functions, row, await memberDirectory(db, orgId))
 }
 
 /**
- * Désactive un connecteur (administrateur) : ses fonctions cessent aussitôt de répondre ; ses
- * comptes restent, ils reviennent à la réactivation (N13). Jamais activé : rien à écrire. La ligne fermée nomme qui
- * l'a fermée (`activated_by`, lu en `closedBy`) : un membre ne la rouvre pas par l'ajout d'un compte.
+ * Ferme un connecteur (administrateur) : ses fonctions cessent aussitôt de répondre ; ses comptes restent, ils
+ * reviennent à la réactivation (N13). Jamais activé, il est fermé d'avance : une ligne inactive, que l'ajout d'un compte
+ * ne rouvre pas (le premier compte n'active plus le connecteur). Déjà fermé : rien à écrire. La ligne fermée nomme qui
+ * l'a fermée (`closed_by`, lu en `closedBy`) ; `activated_by` reste qui l'avait activé, ou, fermé d'avance, l'appelant
+ * (la policy d'insertion l'exige). Sous le rôle du serveur, qui tient la liste des connecteurs
+ * (`keepDeclaredConnector`), comme `activateConnector`.
  */
 export async function deactivateConnector(db: PlatformDb, identity: Identity, input: unknown): Promise<OrgConnector> {
   const { connector, functions } = await checkedConnector(db, identity, input)
   const orgId = identity.org.id
+  const userId = identity.user.id
   const { stillActive, closed } = await inTransaction(db, "deactivateConnector: connector_activations", async (sql) => {
+    const before = await activationRow(sql, orgId, connector)
+    if (before?.state === "inactive") return { stillActive: false, closed: before }
+    if (!before) {
+      await keepDeclaredConnector(sql, connector)
+      const [inserted] = await sql<ActivationRow[]>`
+        insert into platform.connector_activations (org_id, connector, state, activated_by, closed_by)
+        values (${orgId}, ${connector}, 'inactive', ${userId}, ${userId})
+        on conflict (org_id, connector) do nothing
+        returning connector, state, activated_by, closed_by, to_json(updated_at) as updated_at`
+      // Une ligne posée entre-temps (une activation implicite) : elle se ferme comme une ligne active.
+      if (inserted) return { stillActive: false, closed: inserted }
+    }
     const changed = await sql<ActivationRow[]>`
-      update platform.connector_activations set state = 'inactive', activated_by = ${identity.user.id}
+      update platform.connector_activations set state = 'inactive', closed_by = ${userId}
        where org_id = ${orgId} and connector = ${connector} and state = 'active'
-      returning connector, state, activated_by, to_json(updated_at) as updated_at`
-    // Aucune ligne changée : jamais activé ou déjà inactif, rien à écrire ; encore actif, l'écriture n'a
-    // pas eu lieu après la décision (course, ou garde-fou de la base) : un conflit (HN-E01S07-6).
+      returning connector, state, activated_by, closed_by, to_json(updated_at) as updated_at`
+    // Aucune ligne changée : déjà inactive, rien à écrire ; encore active, l'écriture n'a pas eu lieu après la décision
+    // (course, ou garde-fou de la base) : un conflit (HN-E01S07-6).
     const current = changed[0] ?? (await activationRow(sql, orgId, connector))
     return { stillActive: changed.length === 0 && current?.state === "active", closed: current }
-  })
+  }, "server")
   if (stillActive) {
     console.error(`[platform] deactivateConnector: ${connector} still active after the update`)
     throw new PlatformError("conflict", `Connector ${connector} at ${identity.org.name} changed meanwhile. Reload it and retry.`)
