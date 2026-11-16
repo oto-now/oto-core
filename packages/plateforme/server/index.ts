@@ -90,6 +90,8 @@ export { listActivities } from "./activities"
 export { usefulProcedures } from "./context/blocks/procedures"
 // 1.4.13 : la carte « Reprendre » de l'accueil, et la vue d'une page que l'hôte enregistre.
 export { homeContents } from "./home-contents"
+// Le bloc « Commentaires » de l'accueil : les fils ouverts destinés à la personne.
+export { homeComments } from "./comments/followed"
 export { recordNodeView } from "./node-views"
 export { describeTeamDeletion } from "./teams"
 export type { TeamDeletion } from "./teams"
@@ -127,7 +129,9 @@ export { handlesFeedback } from "./feedback"
 // Tableau de bord (E08-S03) : services de connecteurs d'E04-S01, qui lui laissait ces exports, impact
 // d'une désactivation et comptes de l'organisation ; les comptes personnels de qui regarde, pour l'écran ouvert aux membres.
 export { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "./connectors/activations"
-export { createAccount, disableAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
+export { disableAccount, enableAccount, updateAccount } from "./connectors/account-changes"
+export { createAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
+export { accountOwnerChoices } from "./connectors/creation-right"
 // Le secret et les réglages d'un compte réel, posés par qui le gère (écran Connecteurs, outillage), jamais rendus ; le
 // formulaire de chaque connecteur déclaré, que l'écran Connecteurs reçoit de sa page.
 export { connectorAccountForms, setAccountSecret } from "./connectors/account-secret"
@@ -160,7 +164,7 @@ export { HOSTED_LINK_CALLBACK_PATH, hostedLinkReturnUrl, startHostedLink } from 
 // asynchrone ; le paquet ne réserve ni ne règle rien.
 export { collectionOf, ConnectorCostError, costOf, settledQuantity } from "./connectors/cost"
 export type { ConnectorCollection, ConnectorCostQuantity, ConnectorSettlement } from "./connectors/cost"
-export { probeAccount } from "./connectors/probe"
+export { probeAccount, probeConnector } from "./connectors/probe"
 export type { AccountHealth, ProbedBalance } from "./connectors/probe"
 // Une fonction du catalogue lancée par le serveur de l'hôte, sous la personne connectée : contrôles et journal de
 // `<p>_call`, `method` `api` au journal.
@@ -174,6 +178,9 @@ export type { RunJobsOptions, RunJobsReport } from "./jobs/runner"
 export type { BackgroundRunner } from "./jobs/trigger"
 export { CatalogRegistrationError, defineErpFunction, registerFunctions, registerWidgetViews } from "./catalog/erp"
 export type { ErpFunction, ErpFunctionContext } from "./catalog/erp"
+// Ce que l'hôte sert à un assistant, en liste fermée : fonctions du paquet, capacités MCP, adresses fournies.
+export { registerHostSurface } from "./catalog/surface"
+export type { HostSurface, OptionalCapability } from "./catalog/surface-source"
 // E07-S03 : la grille, son résumé et la file de revue d'un tableau, la décision de la revue, les blocs
 // `reference` rendus en place.
 export { tableGridRows, tableGridSummary, tableReviewQueue } from "./tables/screen"

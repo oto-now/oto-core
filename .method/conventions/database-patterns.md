@@ -82,7 +82,7 @@ CREATE TRIGGER set_updated_at
 - **Objets non idempotents par nature** (`CREATE POLICY`, `CREATE TRIGGER` : il n'existe pas de `IF NOT EXISTS` pour eux) → les précéder d'un `DROP ... IF EXISTS` explicite. La règle vise un objet qu'une migration antérieure a pu poser : la ligne de base, qui crée elle-même le schéma `platform` (`CREATE SCHEMA` sans `IF NOT EXISTS`), n'a rien à retirer et n'en porte aucun ; toute migration qui la suit y reste soumise.
 - **RLS activée et policies créées dans la même migration** que la table
 - **Toute policy `FOR UPDATE` déclare `WITH CHECK`** en plus de `USING`
-- **Migration destructive = rollback fourni.** Toute migration contenant `DROP`, `ALTER ... TYPE`, `SET NOT NULL` ou `RENAME` est accompagnée d'un `supabase/migrations/rollback/<timestamp>.sql`, et découpée en expand/contract sur deux déploiements.
+- **Migration destructive = rollback fourni.** Toute migration contenant `DROP`, `ALTER ... TYPE`, `SET NOT NULL` ou `RENAME` est accompagnée d'un `supabase/migrations/rollback/<timestamp>.sql`, et découpée en expand/contract sur deux déploiements ; le second temps déclare son retrait (§ Expand/contract sur base partagée).
 - **Vérifiable :** une migration seule dans un diff est un défaut — elle est accompagnée soit d'une entrée dans `supabase/seed.sql`, soit d'un test qui lit ou écrit la nouvelle table.
 - **NULL passe un `CHECK` et saute un `if`.** Une contrainte `CHECK` accepte une expression qui vaut NULL, et `if <NULL> then raise` ne lève rien : une comparaison `=` à une valeur qui peut être NULL (colonne nullable, sous-requête scalaire sans ligne) laisse passer ce qu'elle devait refuser. Une contrainte à plusieurs cas sur une colonne discriminante nullable (`(kind is null and …) or (kind = 'a' and …) or …`) passe entière dès que `kind` vaut NULL et que le cas NULL est faux : les autres cas valent alors NULL, pas faux. **Vérifiable :** dans un `CHECK` ou une condition de garde plpgsql, une telle comparaison s'écrit `is not distinct from` ou `coalesce(…, false)`, ou le cas NULL s'écrit à part sans comparaison (`kind is not null or (…)`), et le test de la story essaie la valeur NULL. Une règle écrite après une erreur se confronte aussitôt à toutes les contraintes et gardes de la migration fautive, pas seulement à celle qui l'a révélée. Le SQL qu'une story donne « tel quel » n'en est pas exempté : l'agent le confronte à cette règle avant le premier `db push`, une migration appliquée ne se corrigeant plus que par une autre.
 - **Dans un déclencheur `security invoker`, une fonction accordée au seul `authenticated` s'appelle dans un `if` imbriqué sous `current_user = 'authenticated'`.** Postgres contrôle le droit d'exécuter chaque fonction d'une condition quand il la prépare, même si l'évaluation s'arrête avant elle : `if current_user = 'authenticated' and … and not platform.is_org_admin(…)` refuse en `42501` toute mise à jour faite par l'outillage (connexion d'administration). **Vérifiable :** dans une fonction de déclencheur `security invoker`, un appel à une fonction accordée au seul `authenticated` n'apparaît que dans un bloc déjà gardé par `current_user = 'authenticated'` (ou `v_api`), jamais dans la même condition (`nodes_guard` imbrique ses appels). Sous le rôle du serveur, `current_user` vaut `platform_server` : un déclencheur qui garde une table que ce rôle écrit directement le nomme aussi (`expires_at_clock`) ; `nodes_guard`, `platform_grants_guard` et `team_members_guard` ne le nomment pas, aucune écriture directe de leurs tables ne courant sous lui.
@@ -107,6 +107,21 @@ CREATE TRIGGER set_updated_at
 - **Une fonction est `SECURITY INVOKER` (le défaut) par principe** : `SECURITY DEFINER` seulement pour ce que la RLS ne peut exprimer, et alors avec les règles de § Règles `SECURITY DEFINER`.
 - **Un conflit de révision lève `PT409`, jamais `40001`** : `server/errors.ts` traduit `PT409` en `stale_revision`, alors que `40001` est le code qu'un client rejoue (PostgREST en boucle, sans rendre la main). **Vérifiable :** `rg "40001" packages/plateforme/migrations -g "*.sql"` ne trouve rien.
 - **Un paramètre ajouté à une fonction existante crée une surcharge, jamais une ambiguïté** : `create or replace` avec un paramètre de plus crée une seconde fonction du même nom, et retirer l'ancienne n'est pas additif (FR-INST-04). La nouvelle prend son paramètre sans défaut ; l'ancienne appelle la nouvelle avec une valeur neutre (un seul corps). **Vérifiable :** deux fonctions de `platform` du même nom n'acceptent aucun même jeu d'arguments.
+
+### Expand/contract sur base partagée
+
+Une base qui porte `platform` sert parfois deux versions d'oto-core à la fois (production et canari d'un hôte) : un retrait (suppression, renommage, changement de type, `set not null`) s'y livre en deux temps. **1. Élargir** : une migration qui n'ajoute que, livrée comme toute autre ; le code qui cesse de lire l'ancien objet sort dans une version `vN`. **2. Resserrer** : une migration ultérieure retire l'objet et le déclare dans son en-tête (ses lignes de commentaire `--` du début du fichier, blanches comprises ; plus bas, une mention n'est pas lue), une ligne par groupe, chacune avec sa version :
+
+```sql
+-- retrait: platform.orgs.legacy_name, platform.idx_orgs_legacy_name ; plus lu depuis v1.8.0
+```
+
+- **Objets** : `platform.<table>`, `platform.<table>.<colonne>` (colonne retirée, renommée, retypée, rendue obligatoire, défaut ou identité retiré), `platform.<nom>` pour un index, une fonction, une contrainte (son nom seul, sans sa table), une policy, un déclencheur ; noms lus comme le SQL (minuscules hors guillemets). **Version** : `vX.Y.Z`, une étiquette d'oto-core.
+- **Contrôle** (`oto-platform migrations check`) : sans mention, rien ne change (`drop`, `drop-column`, `rename`, `set-not-null`, `alter-column-type`). Avec une mention, une opération dont elle nomme l'objet n'est plus signalée, et s'ajoutent `retrait-malformed` (mention mal écrite, objet hors de `platform.…`, version hors de `vX.Y.Z`), `retrait-untagged` (version qui n'est pas une étiquette), `retrait-untagged-unverifiable` (étiquettes illisibles), `retrait-uncovered` (opération non additive sur un objet absent de la mention, nommé dans l'explication, ou indéterminable : `drop` dans un bloc `do`, objet hors de `platform` ; jamais admise) et `retrait-unused` (objet de la mention que le fichier ne retire pas). Les autres règles restent entières.
+- **Étiquettes** : `git tag --list 'v*'` du dépôt git qui contient le fichier ; hors dépôt, ou pour un fichier que son dépôt ignore (le paquet dans `node_modules` d'un hôte), la liste explicite `--tags v1.7.0,v1.8.0,…`, qui l'emporte sur git quand elle est donnée. Sans l'une ni l'autre, un fichier qui déclare un retrait est refusé ; un fichier sans mention n'en a jamais besoin. La CI d'oto-core récupère les étiquettes (`fetch-depth: 0`).
+- **Sortie d'une livraison** : `oto-platform migrations check --json [--tags …] --file <a.sql> --file <b.sql>` écrit un seul objet JSON sur la sortie standard, rien d'autre, code 1 à la moindre erreur : `{ "ok": true, "files": [{ "file": "supabase/migrations/…_retrait.sql", "retraits": [{ "line": 1, "objects": ["platform.orgs.legacy_name"], "since": "v1.8.0" }], "errors": [] }], "requires": "v1.8.0" }`. `file` est relatif au répertoire courant ; `errors[]` porte `{ line, rule, detail }`, les erreurs de la sortie texte (`fichier:ligne règle — explication`, le défaut) ; `requires` est la plus haute version déclarée, `null` sans retrait.
+- **Qui décide qu'il n'y a plus de lecteur** : la box de livraison, pas une personne. Elle appelle `--json` **sur les seuls fichiers pas encore appliqués** à la base partagée (un `--file` chacun) : une mention ancienne, déjà appliquée, ne pèse jamais sur une livraison. Elle lit ensuite les versions d'oto-core en production et au canari, et refuse d'appliquer si l'une est antérieure à `requires`, en nommant laquelle et la version à monter d'abord. Répétition sur copie et go de production inchangés.
+- **Réunion d'une version** (§ Règles, fiche D124) : le fichier `<horodatage>_vX_Y_Z.sql` porte en tête les mentions de toutes ses parties, sans quoi celle d'une partie qui suit la première tombe dans le corps et son retrait est refusé. `node scripts/reunir-migrations.mjs --version X.Y.Z --horodatage <AAAAMMJJHHMMSS> <fichier.sql> …` réunit les parties sans changer une ligne, recopie leurs mentions en tête, écrit le fichier dans `packages/plateforme/migrations` et `supabase/migrations`, retire les parties et relance `migrations check`.
 
 ## Types & Enums
 
@@ -235,18 +250,17 @@ hors de la sienne ; une entrée ajoutée à l'une de ces listes dit pourquoi ell
 
 **Exception écrite — fonctions d'accueil.** Une fonction que l'architecture ouvre à qui n'est pas
 membre ne compare pas `auth.uid()` à son paramètre : ce qu'elle rend est son contrôle d'accès.
-Deux existent (`docs/reference/schema-platform.md`) : `org_by_host` (l'organisation d'une adresse,
+Une existe (`docs/reference/schema-platform.md`) : `org_by_host` (l'organisation d'une adresse,
 exécutable par `anon`) rend `id`, `slug`, `name`, `prefix`, `brand` et `domains`
-(les domaines de travail de `settings`, chaîne libre que cite la description de `context`) ;
-`org_contact` (l'admin le plus ancien, à qui demander d'entrer, exécutable par toute personne
-connectée — donc aussi par un membre d'une autre organisation qui en connaît l'adresse) rend
-`name` et `email`. Une telle fonction rend seulement les colonnes listées ici, jamais une ligne
+(les domaines de travail de `settings`, chaîne libre que cite la description de `context`).
+Une donnée d'une personne (nom, email) n'entre jamais dans une fonction d'accueil : `org_contact`
+contrôle l'appartenance (`member_orgs`, ou `is_staff`). Une telle fonction rend seulement les colonnes listées ici, jamais une ligne
 entière : une colonne de plus s'inscrit d'abord dans cette liste et dans
 `docs/reference/schema-platform.md`. Elle garde `search_path` vide et un `GRANT` au rôle le plus étroit.
 Une fonction que seul un rôle de service exécute (`hook_before_user_created` :
 `supabase_auth_admin`) n'a pas d'`auth.uid()` à comparer : son `GRANT` est son
 contrôle. **Vérifiable :** un `SECURITY DEFINER` exécutable par `anon` ou `authenticated` sans
-contrôle de `auth.uid()` est l'une de ces deux fonctions, qui rend les colonnes listées ici et
+contrôle de `auth.uid()` est `org_by_host`, qui rend les colonnes listées ici et
 rien d'autre, ou une fonction qu'`docs/reference/schema-platform.md` ou un document de `docs/conception/` ouvre
 explicitement ; sinon, défaut HAUTE.
 

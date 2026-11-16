@@ -334,7 +334,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           "Flags: none.",
           "Rules version: 1.",
           `Administrators: Ada Martin <${ada.email}>.`,
-          `Contact shown to non-members: Ada Martin <${ada.email}>.`,
+          `Contact (oldest administrator): Ada Martin <${ada.email}>.`,
           `Platform accesses in progress: ${sam.email} since 2026-09-20 (granted by Théo Staff).`,
           "Revoked platform accesses (last 5): none.",
         ].join("\n"),

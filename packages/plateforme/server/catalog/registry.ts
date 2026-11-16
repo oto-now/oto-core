@@ -6,6 +6,7 @@
 // Repris de la maquette (`mcp-test/src/proto/functions/registry.ts` l. 13-59) : recherche par mots,
 // contrat, forme du nom. Retiré : le catalogue en dur (sources : E07-S01, E04-S01, E08-S05).
 import { normalizeTitle } from "../../schemas"
+import { commentAdd, commentDelete, commentEdit, commentList, commentResolve } from "../comments/functions"
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
 import { fileKeep } from "../files/keep-function"
 import { jobRead } from "../jobs/read-function"
@@ -29,6 +30,7 @@ import { argumentsJsonSchema } from "./arguments"
 import { declaredConnectors } from "./connector-source"
 import type { CatalogFunction } from "./define"
 import { erpFunctions } from "./erp-source"
+import { hostSurface } from "./surface-source"
 import { uploadLink } from "./upload-link"
 
 /** Le connecteur natif du paquet (H80) : toujours actif et sans compte, même avant ses fonctions (E07-S01). */
@@ -38,10 +40,20 @@ export const NATIVE_CONNECTOR = "table"
  * Catalogue de la V1 (H80) : `mail` simulé (E04-S01), lecture des tableaux (E07-S01), écriture et file
  * de travail (E07-S02), import d'un CSV (E10-S01), suppression de lignes, abandon d'un brouillon et
  * corbeille (E11-S02, connecteur natif `node`) ; ERP (E08-S05) s'y ajoute ; le dépôt par lien (E10-S02 lot f, connecteur
- * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les fonctions des connecteurs
+ * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les commentaires d'une page (connecteur `comment`) ; les fonctions des connecteurs
  * décrits que l'hôte déclare (`registerConnectors`).
  */
 export function catalogFunctions(): CatalogFunction[] {
+  return [...packageFunctions(), ...hostFunctions()]
+}
+
+/** Les fonctions que l'hôte inscrit lui-même : celles de l'ERP et celles de ses connecteurs décrits. */
+function hostFunctions(): CatalogFunction[] {
+  return [...erpFunctions(), ...declaredConnectors().flatMap((connector) => connector.functions)]
+}
+
+/** Les fonctions que le paquet apporte : celles qu'une déclaration d'hôte (`registerHostSurface`) nomme une à une. */
+export function packageFunctions(): CatalogFunction[] {
   return [
     mailCreateDraft,
     mailSendDraft,
@@ -67,26 +79,34 @@ export function catalogFunctions(): CatalogFunction[] {
     uploadLink,
     fileKeep,
     jobRead,
-    ...erpFunctions(),
-    ...declaredConnectors().flatMap((connector) => connector.functions),
+    commentList,
+    commentAdd,
+    commentEdit,
+    commentDelete,
+    commentResolve,
   ]
 }
 
 /**
  * Le catalogue que voit l'assistant : sans les fonctions réservées au serveur de l'hôte (`serverOnly`), que seul
  * `callFunction` court. Toute porte qui sert un assistant (`find`, `read`, `call`, exemples de `call`, procédures) lit
- * celui-ci ; les écrans et l'activation lisent `catalogFunctions()`.
+ * celui-ci ; les écrans et l'activation lisent `catalogFunctions()`. Quand l'hôte a déclaré sa surface
+ * (`registerHostSurface`), une fonction du paquet qu'il n'a pas nommée n'y est pas : elle n'est ni trouvée, ni décrite,
+ * ni exécutée, ni citée en suite.
  */
 export function assistantFunctions(): CatalogFunction[] {
-  return catalogFunctions().filter((fn) => fn.serverOnly !== true)
+  const surface = hostSurface()
+  const own = surface ? packageFunctions().filter((fn) => surface.functions.includes(fn.name)) : packageFunctions()
+  return [...own, ...hostFunctions()].filter((fn) => fn.serverOnly !== true)
 }
 
 /**
- * Les noms des fonctions du catalogue : la description d'un tableau (`read`, `table.schema`) ne cite
- * `table.write`, `table.claim` ou `table.release` que s'ils y sont (E07-S01, N15).
+ * Les noms des fonctions servies à un assistant : la description d'un tableau (`read`, `table.schema`) ne cite
+ * `table.write`, `table.claim` ou `table.release` que s'ils y sont (E07-S01, N15), celle d'un outil ne cite que
+ * celles-là.
  */
 export function catalogNames(): ReadonlySet<string> {
-  return new Set(catalogFunctions().map((fn) => fn.name))
+  return new Set(assistantFunctions().map((fn) => fn.name))
 }
 
 export function findFunction(functions: readonly CatalogFunction[], name: string): CatalogFunction | null {

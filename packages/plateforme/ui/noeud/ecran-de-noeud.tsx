@@ -22,6 +22,8 @@
 // annexes de l'hôte puis « Cité dans », « Cite » et « Sous-pages » ; un tableau garde toute la largeur, ses encarts
 // sur une ligne au-dessus de la grille ; la rangée du chapô ne reste que si elle porte quelque chose.
 // E10-S02 (lot c, AC-c2) : `?view=<id>` : la visionneuse d'un fichier joint remplace l'écran du nœud trouvé.
+// Commentaires (parcours 5.4) : l'encart « Commentaires » avant les encarts des liens, dans la colonne de droite ou sur
+// leur ligne pour un tableau ; l'écran entier sous `FournisseurDeCommentaires`, que lisent aussi les bulles des blocs.
 import type { ReactNode } from "react"
 import { FileText } from "@phosphor-icons/react/dist/ssr/FileText"
 import { tableHeaderSchema, type FileView, type NodeRulesView, type NodeView, type TreeNode } from "../../schemas"
@@ -37,6 +39,8 @@ import { Skeleton, SkeletonText } from "../ds/react/skeleton"
 import { TwoColumns } from "../ds/react/two-columns"
 import type { SujetsDeRegle } from "../equipes/types"
 import { OptionsDuTableau } from "../tableau/options-du-tableau"
+import { EncartCommentaires } from "./commentaires/encart-commentaires"
+import { FournisseurDeCommentaires } from "./commentaires/fournisseur-de-commentaires"
 import { blocsAffiches, cheminsCites, CorpsDuNoeud, niveauDEcritureDe, type CorpsDuNoeudProps } from "./corps-du-noeud"
 import { FileDOperations } from "./editeur/file-d-operations"
 import { ChapoDuNoeud, EnTeteDuNoeud } from "./en-tete-du-noeud"
@@ -176,8 +180,20 @@ function PageDuNoeud(props: PageDuNoeudProps) {
       <LecturesEnEchec arbre={arbre} equipes={equipes} ici={props.ici} Lien={props.Lien} />
     </>
   )
+  // L'encart « Commentaires » avant « Cité dans », « Cite » et « Sous-pages » : en tête de la colonne de droite (après les
+  // annexes d'un Contexte, qui gardent la tête), et sur leur ligne pour un tableau.
   const encarts = (disposition: "colonne" | "ligne") => (
-    <ContenusLies vue={vue} arbre={arbreLu} contextes={contextes} liens={props.liens} Lien={props.Lien} hrefDuChemin={props.hrefDuChemin} ici={props.ici} disposition={disposition} />
+    <ContenusLies
+      vue={vue}
+      arbre={arbreLu}
+      contextes={contextes}
+      liens={props.liens}
+      Lien={props.Lien}
+      hrefDuChemin={props.hrefDuChemin}
+      ici={props.ici}
+      disposition={disposition}
+      avant={<EncartCommentaires />}
+    />
   )
   // Une page, une procédure, un Contexte (AC-e1, AC-e2) : l'en-tête et les colonnes sont frères dans le contenu,
   // l'en-tête suit la colonne du document (`islands.css`) ; le chapô est seul dans sa rangée, pour que la colonne
@@ -216,10 +232,16 @@ function PageDuNoeud(props: PageDuNoeudProps) {
         </TwoColumns>
       </>
     )
-  if (niveauDEcriture === null) return ecran
+  // Seuls les blocs publiés se commentent : leurs identifiants, que la bulle d'un bloc lit, à la lecture comme dans l'éditeur.
+  const commente = (
+    <FournisseurDeCommentaires chemin={vue.path} revision={vue.revision} blocsPublies={vue.kind === "table" ? [] : vue.blocks.map((bloc) => bloc.id)}>
+      {ecran}
+    </FournisseurDeCommentaires>
+  )
+  if (niveauDEcriture === null) return commente
   return (
     <FileDOperations key={vue.id} chemin={vue.path} revisionPubliee={vue.revision} tampon={vue.draft?.draftStamp ?? null}>
-      {ecran}
+      {commente}
     </FileDOperations>
   )
 }

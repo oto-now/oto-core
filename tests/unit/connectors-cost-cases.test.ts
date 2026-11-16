@@ -3,7 +3,7 @@
 // sa fabrique dans `@otomata_tech/connectors/cost-cases`, dépendance de développement épinglée à un commit) : le même
 // fichier, joué ici contre `costOf`, `settledQuantity` et `collectionOf`, l'est là-bas contre `oto.connectors.cost`.
 // Des cas synthétiques : le connecteur des cas n'est déclaré que le temps du test. Les cas `quantity_*` (le coût d'une
-// requête, `cost.quantity`) se jouent sur une copie de la sortie de la fabrique (`tests/factories/cost-cases.ts`), en
+// requête, `cost.quantity`) et `scale_*` (l'échelle de la quantité relue, `cost.settle.scale`) se jouent sur une copie de la sortie de la fabrique (`tests/factories/cost-cases.ts`), en
 // attendant l'épingle qui les apporte. Un écart est un désalignement à corriger du côté qui s'écarte du format, jamais
 // un cas à retirer.
 import { connector, costCases } from "@otomata_tech/connectors/cost-cases"
@@ -40,14 +40,15 @@ describe("common cost cases", () => {
   })
 })
 
-describe("common cost cases of the quantity of a request (copied)", () => {
-  const quantityCases = copiedCases.filter((c) => c.name.startsWith("quantity_"))
+describe("common cost cases of the quantity of a request and of the scale of a settled quantity (copied)", () => {
+  const quantityCases = copiedCases.filter((c) => c.name.startsWith("quantity_") || c.name.startsWith("scale_"))
 
-  it("should copy the quantity cases", () => {
-    expect(quantityCases.length).toBeGreaterThan(0)
+  it("should copy the quantity and scale cases", () => {
+    expect(quantityCases.some((c) => c.name.startsWith("quantity_"))).toBe(true)
+    expect(quantityCases.some((c) => c.name.startsWith("scale_"))).toBe(true)
   })
 
-  it("should declare the copied case connector: cost.quantity passes the declaration as it passes the fabrique", () => {
+  it("should declare the copied case connector: cost.quantity and cost.settle.scale pass the declaration as they pass the fabrique", () => {
     expect(() => registerConnectors([copiedConnector])).not.toThrow()
   })
 
@@ -58,5 +59,5 @@ describe("common cost cases of the quantity of a request (copied)", () => {
     expectOutcome(c.collection, () => collectionOf(c.function, c.submission))
   })
 
-  it.todo("should play the quantity cases of @otomata_tech/connectors/cost-cases once the connectors pin brings them")
+  it.todo("should play the quantity and scale cases of @otomata_tech/connectors/cost-cases once the connectors pin brings them")
 })

@@ -2,11 +2,14 @@
 // markdown par M05, en-tête, plan, section, écart depuis une révision, brouillon, références courtes,
 // contrat d'une fonction, curseur au-delà de 45 000 caractères. Le niveau vient de `findNode`
 // (`access.ts`) ; le brouillon ne se lit qu'à partir du niveau 2, décidé avant sa lecture (H123, N35).
+// Les fils de commentaires ouverts du nœud suivent le corps d'une lecture entière (`comments/served.ts`).
 // Sans lui, rien ne se lit.
-import { FILE_ADDRESS, type BlockView, type NodeView, type ReadNodeInput } from "../../schemas"
+import { FILE_ADDRESS, type BlockView, type CommentThreadView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
 import { contractNames, getContract, renderContract } from "../catalog/contracts"
 import { assistantFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
+import { blockRefs, bodyWithComments, commentsLine, waitingCount } from "../comments/served"
+import { openThreads } from "../comments/threads"
 import { loadActiveConnectors } from "../connectors/activations"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
@@ -102,19 +105,23 @@ type Context = {
   /** Liens sortants et entrants de l'en-tête (E03-S07 AC4) ; ancien chemin par lequel le nœud a été lu (AC7). */
   links: Awaited<ReturnType<typeof linkHeader>>
   movedFrom: string | null
+  /** Les fils de commentaires ouverts du nœud, tels que l'appelant les lit. */
+  threads: CommentThreadView[]
 }
 
 async function contextOf(db: PlatformDb, identity: Identity, found: NonNullable<Awaited<ReturnType<typeof findNode>>>): Promise<Context> {
   const { node, level } = found
   const writer = level >= ACCESS_LEVELS.write
-  const [owner, { parent, ...children }, draft, links] = await Promise.all([
+  const [owner, { parent, ...children }, draft, links, threads] = await Promise.all([
     ownerOf(db, node.id),
     familyOf(db, identity, node),
     // Le brouillon ne se lit qu'à partir du niveau 2, décidé ici avant toute lecture (N35, H123).
     writer ? loadDraft(db, node.id) : Promise.resolve(null),
     linkHeader(db, identity, node),
+    openThreads(db, identity, { id: node.id, path: node.path, kind: node.kind, level }),
   ])
-  const texts = await ownerTexts(db, identity, owner, level === ACCESS_LEVELS.write)
+  // Qui écrit la page se nomme aussi à qui ne fait que la lire, quand un fil y attend un assistant (`commentsText`).
+  const texts = await ownerTexts(db, identity, owner, level === ACCESS_LEVELS.write || (!writer && waitingCount(threads) > 0))
   const savedAt = draft ? await draftSavedAt(db, node.id, draft.stamp) : null
   return {
     node,
@@ -125,6 +132,7 @@ async function contextOf(db: PlatformDb, identity: Identity, found: NonNullable<
     draft: draft && savedAt ? { ...draft, savedAt } : null,
     links,
     movedFrom: found.movedFrom,
+    threads,
   }
 }
 
@@ -179,6 +187,10 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
   }
   const context = await contextOf(db, identity, found)
   const draftMode = input.draft === true
+  // Les fils ouverts suivent le corps d'une lecture entière ou d'un plan servi d'office ; avec une section, un plan demandé
+  // ou un écart, la ligne d'en-tête seule.
+  const whole = input.section === undefined && input.outline !== true && input.since_revision === undefined
+  const comments = commentsLine(context.threads, { served: whole, prefix, path: context.node.path })
   const header = headerLines({
     node: context.node,
     level: context.level,
@@ -193,10 +205,11 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
     moved: found.movedFrom && found.movedAt ? movedNotice(found.movedFrom, found.node, found.movedAt) : null,
     links: context.links.lines,
   })
-  const served = await servedOf(db, identity, { input, context, prefix, draftMode, fileRoute: fileRouteOf(options.origin) })
+  const body = await servedOf(db, identity, { input, context, prefix, draftMode, fileRoute: fileRouteOf(options.origin) })
+  const served = whole ? withComments(body, context, prefix) : body
   const data = dataOf(context, served, input)
   const nextActions = context.level >= ACCESS_LEVELS.write ? [`${prefix}_write`] : []
-  const output = paginate({ input, node: context.node, prefix, header: header.join("\n"), served, data, nextActions, teamId: context.owner.teamId })
+  const output = paginate({ input, node: context.node, prefix, header: [...header, ...(comments === null ? [] : [comments])].join("\n"), served, data, nextActions, teamId: context.owner.teamId })
   // Un tableau sert sa description, sans bloc : `served.blocks` est vide, aucune vue.
   return options.views ? withPageView(output, served, input) : output
 }
@@ -230,6 +243,16 @@ async function servedOf(db: PlatformDb, identity: Identity, request: { input: Re
   const reference = readReference(referenceLines(resolved))
   const references = resolved.filter((one) => current.has(one.blockId))
   return { ...serveBody({ ...request, blocks, since, draft: context.draft, reference }), references }
+}
+
+/**
+ * Le corps suivi des fils de commentaires ouverts du nœud, chacun sur son bloc par la référence courte que sert
+ * `refs: true` ; sans fil ouvert, le corps tel quel. Les fils font partie du texte coupé en parties (`paginate`).
+ */
+function withComments(served: Body, context: Context, prefix: string): Body {
+  // Qui ne fait que lire la page apprend qui l'écrit (la partie « à qui » d'un refus d'écriture).
+  const writers = context.level >= ACCESS_LEVELS.write ? null : (context.owner.publisher ?? "its writers")
+  return { ...served, body: bodyWithComments(served.body, context.threads, { path: context.node.path, prefix, refOf: blockRefs(served.blocks), writers }) }
 }
 
 /**
@@ -270,6 +293,7 @@ function dataOf(context: Context, served: Body, input: ReadNodeInput): Record<st
     has_draft: context.draft !== null,
     ...context.links.data,
     references,
+    ...(context.threads.length === 0 ? {} : { comments: { open: context.threads.length, for_assistant: waitingCount(context.threads) } }),
   }
 }
 

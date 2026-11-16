@@ -385,6 +385,16 @@ structure de l'arbre (racine, espaces, Contextes, dossiers d'équipe) ne se part
 n'est jamais indexée ; un lien désactivé ou inconnu rend
 « introuvable » ; l'admin voit et désactive les liens de son organisation (ADR-013).
 
+**Commenter un contenu.** Qui lit une page, une procédure, un Contexte ou un tableau y ouvre un fil
+de commentaires sans le modifier : sur la page entière, sur un bloc, ou sur un passage sélectionné,
+cité dans le fil. Tous ceux qui lisent la page lisent ses fils et y répondent ; un fil se résout et
+se rouvre par son auteur ou par qui écrit la page, un commentaire ne se modifie et ne se supprime que
+par son auteur, et un fil résolu se rouvre avant d'y répondre. « @ » mentionne un lecteur de la
+page ; « @assistant » laisse le fil au prochain assistant d'une personne qui peut modifier la page,
+qui le lit en lisant la page, corrige, répond et résout. Les fils qui attendent une personne sont
+sur son accueil, lus ou non, et lui arrivent par un email groupé, un par heure au plus, si l'hôte a
+un relais d'envoi.
+
 | Écran | Référence UI | Ce qu'il montre |
 |---|---|---|
 | Éditeur de page | oto-frontend | Titre en place (le résumé, d'une procédure seule), blocs à la poignée (menu, glisser-déposer, styles), page vide ouverte sur un Texte et son invite, « @ » pour citer un contenu, liens cliquables, publication seule |
@@ -410,6 +420,7 @@ n'est jamais indexée ; un lien désactivé ou inconnu rend
 | FR-CONC-12 | Organiser l'arbre depuis l'écran (ci-dessus) : création sans modale, glisser-déposer, Déplacer avec son impact, Dupliquer (« <titre> (copie) », sous-contenus et lignes compris, sans les règles explicites), corbeille de 30 jours ; le chemin suit le titre, le premier libre s'il est pris ; sous un Contexte se rangent d'autres contenus | Must | Livrée |
 | FR-CONC-13 | Partage public d'un contenu par lien (ci-dessus, ADR-013) | Should | Livrée |
 | FR-CONC-14 | Supprimer depuis un assistant, derrière `call`, en deux temps (récapitulatif, puis `confirm: true`) : `node.trash` met un contenu à la corbeille (gestion), `table.delete_rows` supprime des lignes par clé pour de bon (écriture ; lignes à revoir dites, et au fil de l'accueil), `node.discard_draft` abandonne le brouillon d'un contenu publié (écriture) (E11-S02) | Must | Prévue |
+| FR-CONC-15 | Commenter un contenu (ci-dessus) : fils sur la page, un bloc publié ou un passage cité, dès le niveau lecture ; résoudre et rouvrir par l'auteur du fil ou dès le niveau écriture, modifier et supprimer par l'auteur du commentaire seul, fil résolu figé ; mentions « @ » des lecteurs de la page ; « @assistant » : fils ouverts servis par `read`, marqués par `context`, traités derrière `call` (`comment.list`, `add`, `edit`, `delete` en deux temps, `resolve`) ; fils destinés à la personne sur l'accueil, et par email groupé (un par heure au plus, commande horaire de l'hôte) | Must | Livrée ; commenter une ligne de tableau, `find` dans les commentaires et un état lu par fil : V2 |
 
 | ID | Catégorie | Exigence | Cible | État |
 |---|---|---|---|---|

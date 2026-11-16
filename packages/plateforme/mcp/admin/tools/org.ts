@@ -79,7 +79,7 @@ function sheetText(sheet: OrgSheet): string {
     `Flags: ${boundedList(flags) || "none"}.`,
     `Rules version: ${sheet.rulesVersion}.`,
     `Administrators: ${people(sheet.administrators)}.`,
-    `Contact shown to non-members: ${sheet.contact ? `${sheet.contact.name} <${sheet.contact.email}>` : "none"}.`,
+    `Contact (oldest administrator): ${sheet.contact ? `${sheet.contact.name} <${sheet.contact.email}>` : "none"}.`,
     `Platform accesses in progress: ${boundedList(current, "; ") || "none"}.`,
     `Revoked platform accesses (last 5): ${revoked.join("; ") || "none"}.`,
   ].join("\n")

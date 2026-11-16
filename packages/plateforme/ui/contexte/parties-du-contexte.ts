@@ -103,11 +103,17 @@ export function partiesDuContexte({ text, blocks }: Pick<DonneesDeLApercu, "text
 // reconnue reste un morceau `brut`, montré tel que servi (jamais perdu). Sans ces fonctions, l'écran ne montrerait
 // que le texte anglais brut que lit l'assistant.
 
+/**
+ * Ce que les commentaires d'un contenu ajoutent à sa ligne : `commentaires` nouveaux commentaires dans des fils destinés
+ * à la personne, `pourLAssistant` fils en attente d'un assistant ; absents sans marque.
+ */
+export type MarquesDeCommentaires = { commentaires?: number; pourLAssistant?: number }
+
 /** Une ligne reconnue d'une liste servie : `version`, un contenu publié depuis la conversation précédente. */
 export type LigneServie =
-  | { genre: "version"; chemin: string; nature: string; revision: number; date: string; titre: string }
+  | ({ genre: "version"; chemin: string; nature: string; revision: number; date: string; titre: string } & MarquesDeCommentaires)
   | { genre: "connecteur"; nom: string; date: string }
-  | { genre: "recent"; chemin: string; nature: string; date: string; titre: string }
+  | ({ genre: "recent"; chemin: string; nature: string; date: string; titre: string } & MarquesDeCommentaires)
   | { genre: "index"; chemin: string; titre: string; resume: string }
 
 /**
@@ -161,7 +167,35 @@ function ligneDeConnecteur(ligne: string): LigneServie | null {
   return DATE_SERVIE.test(date) ? { genre: "connecteur", nom: corps.slice(0, activation), date } : null
 }
 
-/** `- <chemin> (<genre>, <date>): <titre>`, `- <chemin> (<genre>, new v<rév>, <date>): <titre>`, ou un connecteur activé. */
+/** `<n><un>` ou `<n><plusieurs>` : `n`, ou `null` quand la marque n'a pas cette forme. */
+function compte(marque: string, un: string, plusieurs: string): number | null {
+  const nombre = entre(marque, "", un) ?? entre(marque, "", plusieurs)
+  return nombre !== null && NOMBRE_SERVI.test(nombre) ? Number(nombre) : null
+}
+
+/**
+ * Les marques d'une ligne, entre son genre et sa date : `new v<rév>`, `<n> new comment(s)`, `<n> comment(s) for the
+ * assistant` ; `null` dès qu'une marque n'est aucune des trois (la ligne reste telle que servie).
+ */
+function marquesDe(marques: readonly string[]): ({ revision?: number } & MarquesDeCommentaires) | null {
+  const { newMark, newCommentOne, newCommentMany, forAssistantOne, forAssistantMany } = SERVED_RECENT
+  const lues: { revision?: number } & MarquesDeCommentaires = {}
+  for (const marque of marques) {
+    const revision = entre(marque, newMark, "")
+    const commentaires = compte(marque, newCommentOne, newCommentMany)
+    const pourLAssistant = compte(marque, forAssistantOne, forAssistantMany)
+    if (revision !== null && NOMBRE_SERVI.test(revision)) lues.revision = Number(revision)
+    else if (commentaires !== null) lues.commentaires = commentaires
+    else if (pourLAssistant !== null) lues.pourLAssistant = pourLAssistant
+    else return null
+  }
+  return lues
+}
+
+/**
+ * `- <chemin> (<genre>, <date>): <titre>`, `- <chemin> (<genre>, new v<rév>, <date>): <titre>`, l'une ou l'autre avec les
+ * marques de ses commentaires avant la date, ou un connecteur activé.
+ */
 function ligneRecente(ligne: string): LigneServie | null {
   const connecteur = ligneDeConnecteur(ligne)
   if (connecteur) return connecteur
@@ -170,12 +204,12 @@ function ligneRecente(ligne: string): LigneServie | null {
   if (!lue || fin < 0) return null
   const [nature, ...suite] = lue.reste.slice(0, fin).split(SERVED_RECENT.dateStart)
   const date = suite.at(-1)
-  if (!nature || date === undefined || !DATE_SERVIE.test(date) || suite.length > 2) return null
+  const marques = marquesDe(suite.slice(0, -1))
+  if (!nature || date === undefined || !DATE_SERVIE.test(date) || marques === null) return null
   const titre = lue.reste.slice(fin + SERVED_RECENT.dateEnd.length)
-  if (suite.length === 1) return { genre: "recent", chemin: lue.chemin, nature, date, titre }
-  const revision = entre(suite[0], SERVED_RECENT.newMark, "")
-  if (revision === null || !NOMBRE_SERVI.test(revision)) return null
-  return { genre: "version", chemin: lue.chemin, nature, revision: Number(revision), date, titre }
+  const { revision, ...commentaires } = marques
+  if (revision === undefined) return { genre: "recent", chemin: lue.chemin, nature, date, titre, ...commentaires }
+  return { genre: "version", chemin: lue.chemin, nature, revision, date, titre, ...commentaires }
 }
 
 /** Les morceaux en construction : une ligne non reconnue rejoint le morceau brut qui la précède, une ligne reconnue la liste. */
@@ -208,13 +242,18 @@ function lignesDuBloc(lignes: readonly string[], legende: Legende | null, lire: 
   return morceaux
 }
 
-/** `## Recent content`, ou `## Recent content (new: published since <date>)` : la borne en légende. */
+/**
+ * `## Recent content`, ou `## Recent content (new: published since <date>)` : la borne en légende. La consigne des
+ * commentaires (`commentsHint`) dit à l'assistant où lire les fils : elle n'est pas une ligne de contenu, l'écran ne la
+ * montre pas.
+ */
 function recents(lignes: readonly string[]): MorceauServi[] | null {
-  const { title, sinceStart, sinceEnd } = SERVED_RECENT
-  if (lignes[0] === title) return lignesDuBloc(lignes.slice(1), null, ligneRecente)
+  const { title, sinceStart, sinceEnd, commentsHint } = SERVED_RECENT
+  const contenus = lignes.slice(1).filter((ligne) => ligne !== commentsHint)
+  if (lignes[0] === title) return lignesDuBloc(contenus, null, ligneRecente)
   const depuis = entre(lignes[0], `${title}${sinceStart}`, sinceEnd)
   if (depuis === null || !DATE_SERVIE.test(depuis)) return null
-  return lignesDuBloc(lignes.slice(1), { genre: "nouveautes", depuis }, ligneRecente)
+  return lignesDuBloc(contenus, { genre: "nouveautes", depuis }, ligneRecente)
 }
 
 const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[]) => MorceauServi[] | null>> = {

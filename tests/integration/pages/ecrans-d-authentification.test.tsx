@@ -6,7 +6,7 @@ import { Suspense, type ReactNode } from "react"
 import type { Metadata } from "next"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { orgContact, resolveOrg, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { resolveOrg, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import type { MarqueDOrganisation } from "@otomata_tech/oto_platform/ui"
 import ForgotPasswordPage, { metadata as metadataMotDePasseOublie } from "@/app/(auth)/forgot-password/page"
 import LoginPage, { metadata as metadataConnexion } from "@/app/(auth)/login/page"
@@ -58,7 +58,6 @@ vi.mock("next/navigation", async (importOriginal) => ({
 vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@otomata_tech/oto_platform/server")>()),
   resolveOrg: vi.fn(),
-  orgContact: vi.fn(),
   listOrganisationsOfPerson: vi.fn(async () => []),
 }))
 
@@ -291,7 +290,6 @@ describe("/no-organization on the template (E05-S07, AC10)", () => {
   it("should take the theme and the line of the organisation it resolves for a non-member, no other read", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code: "not_member" } })
     vi.mocked(resolveOrg).mockResolvedValue(ACME)
-    vi.mocked(orgContact).mockResolvedValue({ name: "Paul Martin", email: "paul@acme.test" })
 
     await rendre(await AucuneOrganisationPage())
 
