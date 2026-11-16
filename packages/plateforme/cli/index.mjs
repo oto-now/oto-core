@@ -41,14 +41,24 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --from  migrations à copier (défaut : celles du paquet)
     --to    migrations de l'hôte (défaut : supabase/migrations du répertoire courant)
 
-  migrations check [--file <fichier.sql>]
+  migrations check [--file <fichier.sql> …] [--tags <v1.6.0,v1.6.1,…>] [--json]
     Contrôle que le SQL ne touche que le schéma platform et ne fait qu'ajouter, que toute
     fonction créée dans platform retire l'exécution à public dans le même fichier
     (revoke execute … from public ; fonctions de déclencheur exceptées), et qu'il reste portable :
     aucune clé vers auth.users, aucune lecture de auth.users (fonction, vue, requête, bloc) hors
     des trois fonctions propres à Supabase, aucune extension hors de pg_trgm, unaccent et ltree ;
     et qu'une fonction redéfinie ne donne l'exécution à aucun rôle de plus qu'avant le fichier.
-    --file  un fichier seul (défaut : les migrations du paquet)
+    Un retrait (drop, rename, set not null, changement de type) n'est admis que déclaré dans
+    l'en-tête du fichier, une ligne par groupe :
+      -- retrait: platform.<table>.<colonne>, platform.<nom> ; plus lu depuis vX.Y.Z
+    où vX.Y.Z est une étiquette d'oto-core (refus retrait-malformed, retrait-untagged,
+    retrait-untagged-unverifiable, retrait-uncovered, retrait-unused).
+    --file  un fichier à contrôler ; répétable (défaut : les migrations du paquet)
+    --tags  les étiquettes d'oto-core, séparées par des virgules (défaut : git tag --list 'v*'
+            du dépôt qui contient chaque fichier ; lues seulement pour un fichier qui déclare
+            un retrait)
+    --json  un seul objet JSON sur la sortie standard : { ok, files: [{ file, retraits,
+            errors }], requires }, requires étant la plus haute version déclarée (ou null)
 
   db prepare [--db-url <url>]
     Prépare une base avant les migrations, une fois ; un second passage ne change rien. Sur un
@@ -119,7 +129,9 @@ Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, pu
 const OPTIONS = {
   from: { type: 'string' },
   to: { type: 'string' },
-  file: { type: 'string' },
+  file: { type: 'string', multiple: true },
+  tags: { type: 'string' },
+  json: { type: 'boolean' },
   'db-url': { type: 'string' },
   views: { type: 'string' },
   out: { type: 'string' },
@@ -135,7 +147,7 @@ const OPTIONS = {
 }
 // Options de chaque sous-commande : celle d'une autre y est une option inconnue.
 const COMMANDS = {
-  migrations: { sync: ['from', 'to'], check: ['file'] },
+  migrations: { sync: ['from', 'to'], check: ['file', 'tags', 'json'] },
   db: { prepare: ['db-url'] },
   widgets: { build: ['views', 'out'] },
   accounts: { secret: ['db-url', 'account', 'setting'] },
@@ -181,8 +193,9 @@ function parse(argv, env) {
   if (extra !== undefined) throw new UsageError(`argument en trop « ${extra} »`)
   for (const [name, value] of Object.entries(values)) {
     if (!subcommands[subcommand].includes(name)) throw new UsageError(`option « --${name} » inconnue de « ${command} ${subcommand} »`)
-    if (value === '') throw new UsageError(`l'option « --${name} » attend une valeur`)
+    if (value === '' || (Array.isArray(value) && value.includes(''))) throw new UsageError(`l'option « --${name} » attend une valeur`)
   }
+  if (values.tags !== undefined && !values.tags.split(',').every((tag) => tag.trim())) throw new UsageError(`l'option « --tags » attend des étiquettes séparées par des virgules`)
   if (command === 'accounts' && !values.account) throw new UsageError('« accounts secret » attend --account <id>')
   if (command === 'org' && !values.org) throw new UsageError('« org delete » attend --org <slug>')
   if (command === 'org' && values.yes && !values.by) throw new UsageError('« org delete --yes » attend --by <email>')
@@ -272,6 +285,7 @@ export async function run(argv) {
   if (options.subcommand === 'sync') {
     return syncMigrations({ from: options.from ?? PACKAGE_MIGRATIONS, to: options.to ?? 'supabase/migrations' })
   }
-  const files = options.file ? [options.file] : sqlFiles(PACKAGE_MIGRATIONS).map((file) => join(PACKAGE_MIGRATIONS, file))
-  return checkMigrations({ files })
+  const files = options.file ?? sqlFiles(PACKAGE_MIGRATIONS).map((file) => join(PACKAGE_MIGRATIONS, file))
+  const tags = options.tags?.split(',').map((tag) => tag.trim())
+  return checkMigrations({ files, tags, json: options.json === true })
 }
