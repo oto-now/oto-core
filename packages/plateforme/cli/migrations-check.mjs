@@ -13,15 +13,30 @@
  * Seule exception au retrait d'un index : un index unique remplacé, dans le même fichier, par un index unique plus large
  * (`uniqueIndexTracker`), qui admet toute ligne qu'admettait l'ancien.
  *
+ * Retrait déclaré (second temps d'un expand/contract sur base partagée, database-patterns.md § Expand/contract sur base
+ * partagée) : une opération non additive (`drop`, `drop-column`, `rename`, `set-not-null`, `alter-column-type`) n'est
+ * admise que si l'en-tête du fichier (ses lignes de commentaire avant la première instruction) la déclare, une ligne par
+ * groupe : `-- retrait: platform.foo.bar, platform.baz ; plus lu depuis v1.8.0`. Un objet s'écrit `platform.<table>`,
+ * `platform.<table>.<colonne>`, ou `platform.<nom>` pour un index, une fonction, une contrainte, une policy ou un
+ * déclencheur ; la version, `vX.Y.Z`, est une étiquette d'oto-core. Sans mention, rien ne change. Avec une mention, les
+ * opérations qu'elle couvre ne sont plus signalées, et cinq refus s'ajoutent : `retrait-malformed` (mention mal écrite ou
+ * version hors de `vX.Y.Z`), `retrait-untagged` (version qui n'est pas une étiquette), `retrait-untagged-unverifiable`
+ * (étiquettes introuvables : ni dépôt git qui suive le fichier, ni `--tags`), `retrait-uncovered` (opération non additive
+ * sur un objet hors de la mention, ou dont l'objet ne se détermine pas) et `retrait-unused` (objet de la mention que le
+ * fichier ne retire pas). Une mention après la première ligne qui n'est ni blanche ni un commentaire `--` n'est pas lue.
+ * Objets et mentions : `migrations-retrait.mjs`.
+ *
  * Sortie : `fichier:ligne règle` par erreur, suivie de son explication quand la règle en donne une ; code 1 s'il y en a une.
+ * Avec `json`, un seul objet JSON sur la sortie standard (`{ ok, files: [{ file, retraits, errors }], requires }`, où
+ * `requires` est la plus haute version déclarée), et rien d'autre.
  */
 import { existsSync, readFileSync } from 'node:fs'
-import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { executeGrantTracker } from './migrations-execute-grants.mjs'
+import { IDENT, objectAt, unquote } from './migrations-names.mjs'
+import { printResults } from './migrations-report.mjs'
+import { alteredTable, columnBefore, droppedInAlterTable, droppedObjects, gitTags, renamedObject, retraitMentions, tagSource, underRetraits } from './migrations-retrait.mjs'
 
-const IDENT = String.raw`(?:"[^"]+"|[a-z_][a-z0-9_$]*)`
-const QUALIFIED = new RegExp(String.raw`^(${IDENT})(?:\s*\.\s*(${IDENT}))?`, 'i')
-const unquote = (s) => (s.startsWith('"') ? s.slice(1, -1) : s.toLowerCase())
 
 /**
  * Remplace commentaires et littéraux '…' par des espaces, en gardant longueur et retours à la
@@ -91,14 +106,6 @@ export function splitStatements(text, dollarRanges) {
     }
   }
   return statements
-}
-
-/** Schéma et nom de l'objet qui commence à `pos` dans `body` (après les mots-clés). */
-function objectAt(body, pos) {
-  const rest = body.slice(pos).replace(/^\s*(?:if\s+(?:not\s+)?exists\s+)?(?:only\s+)?/i, '')
-  const m = rest.match(QUALIFIED)
-  if (!m) return { schema: null, name: null }
-  return m[2] ? { schema: unquote(m[1]), name: unquote(m[2]) } : { schema: null, name: unquote(m[1]) }
 }
 
 const CREATE = /\bcreate\s+(?:or\s+replace\s+)?(?:unique\s+)?(?:(?:temp|temporary|unlogged|materialized|constraint)\s+)?(table|view|function|type|index|trigger|policy|sequence|schema|extension)\b/gi
@@ -255,23 +262,29 @@ export function uniqueIndexTracker() {
 
 const DROPPED_INDEX_DETAIL = 'un index unique ne se retire que remplacé, dans le même fichier, par un index unique de la même table dont les clés couvrent les siennes et en ajoutent'
 
+/**
+ * Les opérations non additives de l'instruction. Chacune porte, pour le retrait déclaré, les objets qu'elle touche
+ * (`objects`, `null` quand ils ne se déterminent pas) : une mention qui les nomme tous la couvre.
+ */
 function additiveErrors(stmt, next, report, admittedDrop = false) {
   const isAlterTable = /^\s*alter\s+table\b/i.test(stmt.body)
-  const rules = [
-    [/\brename\b/gi, 'rename'],
-    [/\bset\s+not\s+null\b/gi, 'set-not-null'],
-  ]
+  const table = isAlterTable ? alteredTable(stmt.body) : undefined
+  const nonAdditive = (m, rule, object, detail) => report(stmt.offset + m.index, rule, detail, { objects: object ? (Array.isArray(object) ? object : [object]) : null })
+  for (const m of stmt.body.matchAll(/\brename\b/gi)) nonAdditive(m, 'rename', renamedObject(stmt.body, m.index, table))
+  for (const m of stmt.body.matchAll(/\bset\s+not\s+null\b/gi)) nonAdditive(m, 'set-not-null', isAlterTable ? columnBefore(stmt.body, m.index, table) : null)
   if (isAlterTable) {
-    rules.push([/\balter\s+(?:column\s+)?(?!table\b)[\w"]+\s+(?:set\s+data\s+)?type\b/gi, 'alter-column-type'])
+    for (const m of stmt.body.matchAll(/\balter\s+(?:column\s+)?(?!table\b)([\w"]+)\s+(?:set\s+data\s+)?type\b/gi)) {
+      nonAdditive(m, 'alter-column-type', table && `${table}.${unquote(m[1])}`)
+    }
   }
-  for (const [re, rule] of rules) for (const m of stmt.body.matchAll(re)) report(stmt.offset + m.index, rule)
   if (isDropBeforeRecreate(stmt, next) || admittedDrop) return
   const replaced = isAlterTable ? new Set([...replacedCheckDrops(stmt.body), ...relaxedNotNullDrops(stmt.body)]) : new Set()
   const droppedIndex = DROP_INDEX.test(stmt.body)
   for (const m of stmt.body.matchAll(/\bdrop\b/gi)) {
     if (replaced.has(m.index)) continue
     const dropColumn = isAlterTable && /^drop\s+(?:column\b|(?!constraint\b|default\b|not\b|identity\b|expression\b)[a-z_"])/i.test(stmt.body.slice(m.index))
-    report(stmt.offset + m.index, dropColumn ? 'drop-column' : 'drop', droppedIndex ? DROPPED_INDEX_DETAIL : undefined)
+    const objects = isAlterTable ? droppedInAlterTable(stmt.body, m.index, table, dropColumn) : m.index === 0 ? droppedObjects(stmt.body) : null
+    nonAdditive(m, dropColumn ? 'drop-column' : 'drop', objects, droppedIndex ? DROPPED_INDEX_DETAIL : undefined)
   }
 }
 
@@ -351,10 +364,12 @@ function pgTrgmErrors(statements, report) {
   }
 }
 
-function checkSql(sql, { pgTrgmLoadedBefore = false, grants, indexes = uniqueIndexTracker() } = {}) {
+function checkSql(sql, { pgTrgmLoadedBefore = false, grants, indexes = uniqueIndexTracker(), mentions = [], tags = () => null } = {}) {
   const { text, dollarRanges } = clean(sql)
   const errors = []
-  const report = (offset, rule, detail) => errors.push({ line: text.slice(0, offset).split('\n').length, rule, detail })
+  const lineOf = (offset) => text.slice(0, offset).split('\n').length
+  const report = (offset, rule, detail, retrait) =>
+    errors.push({ line: lineOf(offset), rule, detail, nonAdditive: retrait && { line: lineOf(offset), rule, objects: retrait.objects } })
   const statements = splitStatements(text, dollarRanges)
   const admittedDrops = indexes.file(statements)
   statements.forEach((stmt, k) => {
@@ -368,38 +383,28 @@ function checkSql(sql, { pgTrgmLoadedBefore = false, grants, indexes = uniqueInd
   executeErrors(statements, report)
   if (!pgTrgmLoadedBefore) pgTrgmErrors(statements, report)
   grants?.file(statements, report)
-  return errors.sort((a, b) => a.line - b.line)
+  return underRetraits(errors, mentions, tags).sort((a, b) => a.line - b.line)
 }
 
-/** Chemin affiché : relatif au répertoire courant quand le fichier y est, absolu sinon. */
-function shown(file) {
-  const absolute = resolve(file)
-  const rel = relative(process.cwd(), absolute)
-  const outside = rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)
-  return outside ? absolute : rel.split(sep).join('/')
-}
-
-export function checkMigrations({ files }) {
+/**
+ * `tags` : la liste explicite des étiquettes d'oto-core (`--tags`) ; sans elle, celles du dépôt git qui contient chaque
+ * fichier (`listTags`, lue seulement pour un fichier qui déclare un retrait). `json` : un seul objet JSON sur stdout.
+ */
+export function checkMigrations({ files, tags = null, json = false, listTags = gitTags }) {
   const missing = files.find((file) => !existsSync(file))
   if (missing) {
     console.error(`check:migrations — fichier introuvable : ${resolve(missing)}`)
     return 1
   }
-  let failures = 0
+  const tagsOf = tagSource({ tags, listTags })
   // Les fichiers dans l'ordre où ils s'appliquent (`sqlFiles` les trie) : le droit d'une fonction est celui d'avant.
   const grants = executeGrantTracker()
   const indexes = uniqueIndexTracker()
-  for (const file of files) {
+  const results = files.map((file) => {
+    const sql = readFileSync(file, 'utf8')
     const pgTrgmLoadedBefore = PG_TRGM_LOADED_BEFORE.includes(basename(file))
-    for (const { line, rule, detail } of checkSql(readFileSync(file, 'utf8'), { pgTrgmLoadedBefore, grants, indexes })) {
-      console.log(`${shown(file)}:${line} ${rule}${detail ? ` — ${detail}` : ''}`)
-      failures++
-    }
-  }
-  if (failures) {
-    console.error(`check:migrations — ${failures} erreur(s)`)
-    return 1
-  }
-  console.log(`check:migrations — ${files.length} fichier(s) conforme(s)`)
-  return 0
+    const mentions = retraitMentions(sql)
+    return { file, mentions, errors: checkSql(sql, { pgTrgmLoadedBefore, grants, indexes, mentions, tags: () => tagsOf(file) }) }
+  })
+  return printResults(results, { json })
 }
