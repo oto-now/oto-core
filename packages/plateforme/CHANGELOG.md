@@ -18,6 +18,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Hosts
+- UI: on a touch screen (`hover: none`), a page's blocks no longer keep the 48 px gutter of the « + » and the handle, never shown there, and the comment bubble's cell is as wide as its 44 px target: the text takes the island's width and the island no longer scrolls sideways.
 - CLI: `migrations check` admits a non-additive operation (`drop`, `drop-column`, `rename`, `set-not-null`, `alter-column-type`) only when the file header declares it, one line per group: `-- retrait: platform.<table>.<column>, platform.<name> ; plus lu depuis vX.Y.Z`, the version an oto-core tag. Without a mention nothing changes; with one, new refusals `retrait-malformed`, `retrait-untagged`, `retrait-untagged-unverifiable`, `retrait-uncovered`, `retrait-unused`.
 - CLI: `migrations check` reads tags from `git tag --list 'v*'` of the repository holding each file, or from `--tags v1.7.0,v1.8.0,…`; the installed package sits in an ignored `node_modules`, so a host checking a version that declares a retrait passes `--tags`. Files without a mention never need tags.
 - CLI: `migrations check --json` prints one JSON object `{ ok, files: [{ file, retraits, errors }], requires }` (`requires`: highest declared version, or `null`); `--file` is repeatable.

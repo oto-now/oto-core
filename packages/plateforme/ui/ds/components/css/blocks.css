@@ -175,12 +175,21 @@ ol.oto-block-steps {
   opacity: 1;
   pointer-events: auto;
 }
-/* Sans survol (écran tactile), aucune bulle ne se révèle : elles restent montrées. */
+/* Sans survol (écran tactile), aucune bulle ne se révèle : elles restent montrées. La gouttière, elle, ne se révèle
+   jamais au doigt (« / » dans un Texte vide insère) : sa marge gardée réservait 48 px vides à gauche de chaque bloc, le
+   texte d'un téléphone tenait sur les deux tiers de l'îlot ; le rembourrage de l'îlot revient à gauche. La cellule de
+   la bulle prend la largeur de la cible tactile, sinon le bouton de 44 px débordait la cellule et faisait défiler
+   l'îlot de côté. */
 @media (hover: none) {
+  .oto-block-row { --block-gutter: 0px; }
+  .oto-block-gutter { display: none; }
+  .oto-island-body:has(.oto-block-row) { padding-inline-start: var(--island-pad); }
   .oto-block-menu {
+    --block-comment: var(--touch);
     opacity: 1;
     pointer-events: auto;
   }
+  .oto-island-body:has(.oto-bulle, .oto-bulle-compte) { padding-inline-end: max(var(--island-pad), var(--touch)); }
 }
 
 /* La pastille des fils ouverts d'un bloc : le glyphe et leur nombre, à la couleur du thème ; la paire `--btn-fg` sur `--btn-bg` est celle du bouton primaire (`button.css`). */
