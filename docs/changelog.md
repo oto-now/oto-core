@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-16] — Écran de préparation de l'espace : la sonde bornée, le retard à l'horloge
+**Quoi :** `adresseRepond` borne chaque sonde à 5 s : une connexion suspendue compte comme un échec, par abandon et par course contre le minuteur. `DepartVersLOrganisation` dit le retard à deux minutes d'horloge (et non après 40 sondes) ; passé ce délai, il montre le lien vers l'espace et continue de sonder, puis part seul dès que l'adresse répond. Le bouton « Réessayer » est retiré, devenu sans objet.
+**Pourquoi :** issue oto-core #89 « Écran de préparation de l'espace : l'arrivée en ligne n'est pas détectée » : une sonde sans délai restait suspendue pendant l'émission du certificat, l'écran restait bloqué sans fin ; après 40 échecs, il ne voyait plus l'adresse répondre.
+**Fichiers :** `packages/plateforme/ui/api/client.ts`, `packages/plateforme/ui/inscription/depart-vers-l-organisation.tsx`, `tests/integration/components/e12s01-inscription.test.tsx`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-16] — Page au doigt : plus de gouttière réservée, la bulle dans sa cellule
 **Quoi :** sous `@media (hover: none)` (`blocks.css`), la rangée d'un bloc ne garde plus les 48 px de la gouttière (« + » et poignée, jamais révélés au doigt ; « / » dans un Texte vide insère), le rembourrage de gauche de l'îlot revient, et la cellule de la bulle de commentaire prend la largeur de la cible tactile (44 px), le rembourrage de droite de l'îlot d'autant. Garde ajoutée à `tests/unit/css-debordements.test.ts`.
 **Pourquoi :** mesuré dans Chrome à 390 px, au doigt, sur l'écran d'une page : le texte commençait à 113 px du bord et tenait sur 232 px des 348 de l'îlot ; le bouton de 44 px de la bulle débordait sa cellule de 32 px et l'îlot défilait de côté (largeur de contenu 354 pour 348). Après : texte à 37 px du bord, plus de défilement.
