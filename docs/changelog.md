@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-16] — Invitation : le lien ouvre la création de compte avec l'adresse invitée
+**Quoi :** le lien de l'email d'invitation (`invitationMail`) porte, sous leurs noms OIDC, l'adresse invitée (`login_hint`) et la création de compte en premier écran (`first_screen=register`) ; la phrase dit d'abord « créez votre compte avec l'adresse », puis « ou connectez-vous avec elle si vous en avez déjà un ». Un hôte OIDC transmet ces deux paramètres à son émetteur ; un hôte qui ne les lit pas les ignore.
+**Pourquoi :** issue oto-app #7 « Invitation : ouvrir la création de compte préremplie (code, mot de passe, Google) et corriger "La connexion n'a pas abouti" » : le lien menait à `<origine>/login` sans l'adresse, et l'invité, sans compte, arrivait sur « Se connecter ».
+**Fichiers :** `packages/plateforme/server/mail.ts`, `tests/unit/mail.test.ts`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-16] — Écran de préparation de l'espace : la sonde bornée, le retard à l'horloge
 **Quoi :** `adresseRepond` borne chaque sonde à 5 s : une connexion suspendue compte comme un échec, par abandon et par course contre le minuteur. `DepartVersLOrganisation` dit le retard à deux minutes d'horloge (et non après 40 sondes) ; passé ce délai, il montre le lien vers l'espace et continue de sonder, puis part seul dès que l'adresse répond. Le bouton « Réessayer » est retiré, devenu sans objet.
 **Pourquoi :** issue oto-core #89 « Écran de préparation de l'espace : l'arrivée en ligne n'est pas détectée » : une sonde sans délai restait suspendue pendant l'émission du certificat, l'écran restait bloqué sans fin ; après 40 échecs, il ne voyait plus l'adresse répondre.

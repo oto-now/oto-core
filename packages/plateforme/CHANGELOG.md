@@ -44,6 +44,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: new `accountOwnerChoices(db, identity)`: `{ user: true, org, teams: [{ id, name }] }`, the owners the caller may create an account for, by the rule `createAccount` applies (administrator: the organisation and every team; team lead: their teams).
 - Server: a connector request that fails without an answer (`upstream_error`) says why in `details.reason`: `timeout` or `unreachable`.
 - UI: the "your space is getting ready" screen bounds each probe of the new address to 5 s, says the delay after two minutes of clock time, then keeps probing and leaves on its own once the address answers; its "Réessayer" button is gone.
+- Server: the invitation email links to `<origin>/login?login_hint=<invited address>&first_screen=register`; an OIDC host may forward both parameters to its issuer so the invited person lands on account creation with the address filled in, any other host ignores them.
 
 ## 1.7.0 — 2026-11-13
 
