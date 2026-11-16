@@ -1,5 +1,5 @@
 // @vitest-environment node
-// La supervision de la plateforme (administration et cellule, N9 ; migration `20261102090000`) sur une vraie base,
+// La supervision de la plateforme (administration et cellule, N9 ; migration `20261116213000`) sur une vraie base,
 // en suite portable : les trois fonctions `staff_org_*` refusent qui n'est pas de l'équipe plateforme (42501), sont
 // `security definer` à `search_path` vide, ne rendent aucune colonne secrète, et rendent à un membre de l'équipe
 // plateforme sans accès à une organisation son identité, ses chiffres, ses membres et ses comptes ; les services
@@ -14,7 +14,7 @@ import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { hex } from "../helpers/plateforme"
 import { asCaller, codeOf, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
 
-const VERSION = "20261102090000"
+const VERSION = "20261116213000"
 const pending = (await pendingMigrations()).includes(VERSION)
 const SETUP_TIMEOUT = 180_000
 const NETWORK_TIMEOUT = 60_000

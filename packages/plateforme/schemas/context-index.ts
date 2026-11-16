@@ -36,7 +36,11 @@ export const CONTEXT_INDEX = {
  * `## Recent content`, suivi de ` (new: published since <AAAA-MM-JJ>)` quand la borne des nouveautés est connue, puis une
  * ligne par contenu : `- <chemin> (<genre>, <AAAA-MM-JJ>): <titre>` pour un contenu lu ou écrit par la personne,
  * `- <chemin> (<genre>, new v<rév>, <AAAA-MM-JJ>): <titre>` pour une version publiée depuis la borne, et
- * `- Connector <nom> activated (<AAAA-MM-JJ>)` pour un connecteur activé depuis la borne.
+ * `- Connector <nom> activated (<AAAA-MM-JJ>)` pour un connecteur activé depuis la borne. Un contenu que la personne écrit
+ * et dont des fils de commentaires attendent un assistant porte, avant sa date, `<n> comment for the assistant` ou
+ * `<n> comments for the assistant` : `- <chemin> (<genre>, 2 comments for the assistant, <AAAA-MM-JJ>): <titre>`. Un contenu
+ * dont un fil destiné à la personne porte des commentaires d'un autre depuis la borne porte, avant cette mention,
+ * `<n> new comment` ou `<n> new comments` : `- <chemin> (<genre>, 2 new comments, <AAAA-MM-JJ>): <titre>`.
  */
 export const SERVED_RECENT = {
   title: "## Recent content",
@@ -45,6 +49,12 @@ export const SERVED_RECENT = {
   item: "- ",
   kindStart: " (",
   newMark: "new v",
+  newCommentOne: " new comment",
+  newCommentMany: " new comments",
+  forAssistantOne: " comment for the assistant",
+  forAssistantMany: " comments for the assistant",
+  /** La consigne servie une fois, après les lignes, dès que l'une d'elles porte une marque de commentaires : sans elle, l'assistant voit le compte sans savoir où lire les fils. */
+  commentsHint: "Comments: read a page marked above to get its open comment threads, each with the exact call to reply and to resolve.",
   dateStart: ", ",
   dateEnd: "): ",
   connector: "- Connector ",

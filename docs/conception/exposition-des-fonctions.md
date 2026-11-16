@@ -1,7 +1,8 @@
 # Exposition des fonctions
 
-- **Statut** : validé avec Alexis le 23/10/2026 (principe et modes) ; la forme reste à revoir avec JB
-- **Dernière révision** : 2026-10-23
+- **Statut** : validé avec Alexis le 23/10/2026 (principe et modes) ; la forme reste à revoir avec JB ; le regroupement
+  par famille est validé par Alexis le 11/11/2026, sa forme reste à revoir avec JB
+- **Dernière révision** : 2026-11-11
 
 ## Résumé
 
@@ -95,6 +96,34 @@ métier (`<espace>.<fonction>`) tient lieu de connecteur.
   et ceux des espaces métier, toujours actifs. Elle suit donc l'activation, sans que le client le voie tout de suite :
   c'est ce que dit le message d'activation.
 
+### Le regroupement par famille
+
+Pour un connecteur ou un espace métier de quelques fonctions, `connector` suffit. Pour un ERP, aucun des trois modes ne
+convient : `function` expose des dizaines d'outils, et `connector` n'en expose qu'un, dont le paramètre `function` prend
+des dizaines de valeurs et dont la description dépasse ce qu'un client lit (première phrase sur claude.ai, 2 048
+caractères sur Claude Code). Le juste milieu est une famille d'objets métier : un outil pour les factures, un pour les
+fournisseurs, un pour les écritures.
+
+| Mode | Ce que voit l'assistant | Outil |
+|---|---|---|
+| `group` | un outil par famille de fonctions | `<préfixe>_<connecteur>_<famille>`, la fonction en paramètre |
+
+- **La famille se déclare sur la fonction**, pas sur l'hôte : `group: "invoice"` sur la fonction d'un connecteur décrit
+  ou sur une fonction métier (`defineFunction`). C'est l'auteur de la fonction qui sait à quel objet elle se rattache ;
+  l'hôte choisit seulement le mode `group` pour ce connecteur ou cet espace, comme les autres modes.
+- **Une fonction sans famille** reste appelable par `call` et n'est pas exposée en mode `group`. La déclaration le dit,
+  pour qu'un oubli ne se lise pas comme un choix.
+- **L'outil** a la forme de celui du mode `connector`, restreinte aux fonctions de sa famille :
+  `{ ctx, function, arguments, confirm? }`, une ligne par fonction dans sa description, l'appel par `runCall`.
+- **Exemple** (un ERP) : `erp_invoice` (lister, lire, créer, valider une facture), `erp_supplier`, `erp_ledger_entry`.
+- **Le lien avec les descriptions de connecteurs.** Le dépôt connectors porte déjà un bloc `exposure` par description
+  (`format-de-description.md` de ce dépôt) avec ses propres noms : `via_call` (= `call`), `per_connector`
+  (= `connector`), `per_action` (= `function`), et `tool`, le nom de l'outil unique. Le regroupement y ajouterait un
+  `group` par fonction et un mode `per_group`. Les deux vocabulaires sont à aligner en même temps.
+- **Oto 1** sert les descriptions par son lecteur générique en paire lecture/action (`<ns>` et `<ns>_act`) et ignore
+  `exposure`. Il s'aligne sur ce qui sera décidé ici : en mode `group`, une paire par famille
+  (`<ns>_<famille>` et `<ns>_<famille>_act`).
+
 ### Le message d'activation
 
 L'activation (écran et MCP admin) rend un message calculé sur l'état réel :
@@ -152,6 +181,7 @@ Rien n'est réalisé. Les points d'accroche :
 ## Questions ouvertes
 
 - La forme de l'option, les noms des modes et la forme de l'outil en mode `connector` : à revoir avec JB.
+- Le regroupement par famille (`group`) : la forme à revoir avec JB (nom du mode, nom de l'outil).
 - Une description de connecteur peut-elle imposer son mode (le bloc `exposure` existant) ? Ou bien le choix
   reste-t-il seulement à l'hôte ?
 - Quels services porter aux fonctions métier, et pour quel hôte : fichier rendu, fonction longue ?
@@ -162,3 +192,7 @@ Rien n'est réalisé. Les points d'accroche :
 - 2026-10-23 : trois modes (`call` par défaut, `connector`, `function`), un défaut et un choix forcé par connecteur,
   connecteurs et fonctions métier, sans borne de nombre ; la liste suit l'activation — décidé par Alexis (source :
   réponse à la note).
+- 2026-11-11 : regroupement par famille (`group`), entre l'outil unique et l'outil par fonction, pour un ERP ;
+  lien avec le bloc `exposure` des descriptions de connecteurs — proposé (source : demande d'Alexis).
+- 2026-11-11 : regroupement par famille, la famille déclarée sur la fonction — validé par Alexis (source : réponse
+  à la PR de la note) ; la forme reste à revoir avec JB.

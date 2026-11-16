@@ -14,7 +14,7 @@ import type { PlatformDb } from "../db"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError, type PlatformErrorCode } from "../errors"
 import type { Identity, IdentityOrg } from "../identity"
 import type { Tx } from "../sql"
-import { accountRows, summary, type AccountSummary } from "./accounts"
+import { accountRows, labelTaken, summary, type AccountSummary } from "./accounts"
 import { CONSENT_DEFAULT_RETURN, consentLabel } from "./consent"
 import { keepDeclaredConnector } from "./declaration"
 import type { ConnectorAccountIdentity, HostedLinkProvider } from "./definition"
@@ -217,7 +217,7 @@ async function link(db: PlatformDb, identity: Identity, connector: HostedConnect
       return summary(written)
     }, "server")
     .catch((error) => {
-      if (isUniqueViolation(error)) throw new PlatformError("conflict", `An account labelled ${label} already exists in ${identity.org.name}, held by someone else. Ask an administrator of ${identity.org.name}.`)
+      if (isUniqueViolation(error)) throw labelTaken(label, identity.org.name)
       throw fromDatabaseError(error, "linkHostedAccount: link_hosted_account")
     })
 }

@@ -16,7 +16,7 @@ sans étape de build, sous licence MIT.
 | `api/` | `@otomata_tech/oto_platform/api` | Route handlers `/api/platform/*` : adaptateurs des services |
 | `server/` | `@otomata_tech/oto_platform/server` | Services : la seule porte d'écriture (Zod → droits → écriture → journal) |
 | `migrations/` | `@otomata_tech/oto_platform/migrations/*` | SQL du schéma `platform`, additif, copié par l'application hôte |
-| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) ; suppression d'une organisation (`org delete`) |
+| `cli/` | commande `oto-platform` | Copie et contrôle des migrations dans l'application hôte ; préparation d'une base (`db prepare`) ; bundle du widget avec les vues de l'ERP (`widgets build`) ; purge du journal (`journal purge`) ; email groupé des commentaires (`comments notify`) ; suppression d'une organisation (`org delete`) |
 | `widgets/` | `@otomata_tech/oto_platform/widgets` | Widget routeur dans la conversation (sources construites par Vite) ; l'export ne porte que les types d'une vue de l'ERP (`ErpView`, `ErpViewProps`) |
 
 ## Règle de dépendance entre faces
@@ -503,7 +503,10 @@ registerFunctions([/* fonctions de l'ERP */])
   d'erreurs, fonctions avec leur JSON Schema d'entrée strict, exemples, requête).
 - **Ce que le moteur exécute** : authentification `api_key` (en en-tête ou en query, la clé alors absente de tout
   log), `bearer`, `basic`, `oauth2_client_credentials` (jeton échangé, rangé chiffré sur la ligne du compte, renouvelé
-  à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
+  à son échéance et une fois après un 401), `oauth2_user` (le consentement d'une personne, ci-dessous), `oauth2_jwt_bearer` (un compte de service : le fichier JSON de
+  sa clé collé dans le seul champ secret, une assertion RS256 échangée à un `tokenUrl` fixe, le jeton rangé et renouvelé
+  comme celui d'un échange ; avec des niveaux d'accès, l'assertion demande les droits du `defaultLevel` de la description
+  et une fonction hors de ce niveau est refusée avant tout envoi, `access_level_denied`) ; adresse fixe, par région (`baseUrls`) ou en gabarit sur un réglage
   (`https://{domain}.example.net`, `{server}/v1`), une adresse saisie ne joignant jamais un hôte interne ; `GET`, `POST`, `PUT`, `PATCH`, `DELETE` ; en-têtes et constantes ; listes en query ; arguments encodés
   en JSON ; pagination (`all_pages`) ; contrôles avant l'appel et sur la réponse ; débit du tiers par compte et nouvel
   essai après un 429 ; délai de chaque requête, celui de la fonction si elle déclare le sien (`timeoutMs`), sinon
@@ -513,8 +516,12 @@ registerFunctions([/* fonctions de l'ERP */])
   (face `server`), fonctions pures, en donnent le pire cas, la quantité à régler et la relève à votre service.
 - **Fichiers envoyés à un tiers** : `request.files` envoie en `multipart/form-data` un fichier en transit de la
   personne qui appelle, lu sous son identité et consommé après un appel réussi ; l'agent ne passe que son identifiant.
-- **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi…)
-  lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien n'est déclaré.
+- **Propriétaires** : `modes` (`platform`, `byo_user`, `byo_org`), requis, tel que la fabrique le sort : `byo_user`
+  admet un compte personnel, `byo_org` un compte d'organisation ou d'équipe, `platform` seul la clé de l'hôte (sans
+  formulaire). Une définition écrite à la main le déclare aussi : aucun défaut.
+- **Refus** : une définition invalide (champ ou réglage mal déclaré ; schéma non strict ; espace de noms déjà servi ;
+  `modes` absent, vide ou inconnu…) lève `CatalogRegistrationError` au chargement de la route, qui la nomme, et rien
+  n'est déclaré.
 - **Base** : aucun SQL à écrire ; le paquet ajoute le nom d'un connecteur déclaré à `platform.connectors` à sa
   première activation ou à son premier compte (migration `20261007090000_platform_connecteurs_declares.sql`) ; les
   champs, réglages et jeton d'un compte vivent sur sa ligne (migration `20261008090000_platform_comptes_a_champs.sql`).
@@ -574,9 +581,13 @@ registerConnectors([messagerie.connector], {
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
 
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
-  qui le gère, et rend `{ healthy: true }` ou `{ healthy: false, reason }` ; une sonde à solde (`probe.balance`) y
-  ajoute `balance: { value, unit, min }`, non saine sous le seuil, solde absent ou illisible, et pose ou lève la
-  marque `quota_exhausted` du compte selon le solde lu.
+  qui le gère, un compte désactivé compris, et rend `{ at, healthy, code, reason, balance }`, gardé sur le compte
+  (`AccountView.lastProbe`, effacé quand `setAccountSecret` change la saisie) ; `code`, d'une liste fermée
+  (`PROBE_FAILURE_CODES` de `/schemas`), dit la raison d'un test raté, `reason` la phrase ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
+  sous le seuil, solde absent ou illisible, et pose ou lève la marque `quota_exhausted` du compte selon le solde lu.
+  `probeConnector(db, identity, { connector, input: { fields, settings? } })` joue la même sonde sur une clé saisie,
+  avant l'ajout, sans rien écrire. Routes de l'écran : `POST admin/accounts/<id>/probe` et
+  `POST admin/connectors/<nom>/probe` ; 10 tests par minute et par personne, dans le processus (`rate_limited`).
 
 - **Réservé au serveur** : `registerConnectors(defs, { serverOnly: { <connecteur>: "all" | ["crm.get_contact", …] } })`
   (noms servis), ou `defineErpFunction({ serverOnly: true })` : la fonction est inconnue de l'assistant (ni `find`, ni
@@ -590,6 +601,11 @@ registerConnectors([messagerie.connector], {
 - **Rétention** : migration `20261019100000_platform_retention.sql`, puis, de votre tâche planifiée, sur la connexion
   d'administration : `pnpm exec oto-platform journal purge --journal-days 365 --feedback-days 730`,
   l'URL dans `PLATFORM_ADMIN_DATABASE_URL` (journal et journal de l'équipe plateforme ; tickets `feedback`). Sans durée, rien n'est purgé.
+- **Email groupé des commentaires** : de votre tâche planifiée, chaque heure, sur la connexion d'administration :
+  `pnpm exec oto-platform comments notify`, avec `PLATFORM_ADMIN_DATABASE_URL`, `PLATFORM_SMTP_URL` et
+  `PLATFORM_MAIL_FROM` dans son environnement, dans les deux modes (Supabase et OIDC). Une personne reçoit au plus un
+  email par heure, qui réunit les commentaires qui la concernent sur les pages qu'elle lit. Sans relais, la commande le
+  dit et sort à 0, et l'écran n'annonce aucun email.
 - **Suppression d'une organisation** : `pnpm exec oto-platform org delete --org <slug>` (URL dans
   `PLATFORM_ADMIN_DATABASE_URL`) compte ce qui partirait ; `--yes --by <email>` (un membre de l'équipe plateforme) supprime ses objets du stockage
   (les cinq variables `PLATFORM_STORAGE_*`, ou `--without-storage`), puis toutes ses lignes ; ses lignes du journal de
@@ -599,6 +615,12 @@ registerConnectors([messagerie.connector], {
   l'application, jamais en `NEXT_PUBLIC_`. Lue à l'usage seulement : sans elle, l'application démarre, et poser un
   secret ou appeler un connecteur réel lève `PlatformConfigError` qui la nomme. La changer rend illisibles les
   secrets déjà posés : les reposer.
+- **Écran Connecteurs** (lot 1) : un membre y ajoute son compte personnel (`POST admin/accounts`, `owner_kind:
+  "user"`, à son nom ; le premier compte d'un connecteur jamais activé l'active, un connecteur fermé par un
+  administrateur le refuse), renomme et décrit un compte qu'il gère (`PATCH admin/accounts/<id>`, `{ label?,
+  description? }`), le réactive (`POST admin/accounts/<id>/enable`) et le teste. Services de `/server` :
+  `updateAccount`, `enableAccount`, `probeConnector`. Base : migration
+  `20261114120000_platform_ecran_connecteurs.sql`.
 - **Compte** : à l'écran Connecteurs (un connecteur déclaré y prend des comptes réels, avec leur formulaire), par
   `admin_connector` `create_account` avec `mode: "reel"`, ou par `createAccount` de `/server`. Un compte simulé d'un connecteur réel est refusé
   (`invalid_arguments`), un compte réel ou de bac à sable d'un connecteur simulé aussi (`unavailable_in_v1`).
@@ -716,6 +738,31 @@ fiche, une page, ou une vue de l'ERP. Éteint par défaut, le MCP reste en texte
 - **Actions** : « Lignes suivantes » d'un tableau et `call` d'une vue de l'ERP passent par l'host vers l'outil
   `call`, sous le `ctx` de la conversation ; une suite proposée part en message à l'assistant.
 
+## Servir en liste fermée
+
+Par défaut, un assistant reçoit tout ce que le paquet apporte, y compris ce qu'une mise à jour ajoute. Un hôte qui
+doit classer chaque sortie avant de l'ouvrir déclare sa surface, une fois, dans le module que chaque route du paquet
+importe (comme `registerFunctions`) :
+
+```ts
+import { registerHostSurface } from "@otomata_tech/oto_platform/server"
+
+registerHostSurface({
+  functions: ["table.schema", "table.rows", "node.access"],
+  capabilities: ["prompts"],
+  fetchCallerUrls: false,
+})
+```
+
+- **`functions`** : les fonctions du paquet servies à un assistant, par nom. Une fonction absente est inconnue de
+  l'assistant (`find`, `read`, `call`, `context`), et le paquet ne la cite plus (suites, descriptions des outils). Vos
+  fonctions (`registerFunctions`, `registerConnectors`) ne sont pas concernées. Un nom inconnu du paquet lève
+  `CatalogRegistrationError` : après une montée de version, la liste des fonctions du paquet est dans le message.
+- **`capabilities`** : les capacités MCP facultatives servies, parmi `prompts` et `resources` (le widget).
+- **`fetchCallerUrls`** : `false` coupe tout téléchargement d'une adresse fournie par un appelant (`source_url`).
+- `registerHostSurface(null)` retire la déclaration. Le MCP d'administration et les routes de l'API ne sont pas
+  couverts : vous montez ces routes vous-même.
+
 ## Capacités par organisation
 
 Un hôte qui vend le paquet par offres borne certaines écritures de chaque organisation (ADR-022) ; le
@@ -729,7 +776,7 @@ paquet ne connaît ni offre, ni prix, ni prestataire. Sans rien enregistrer, rie
   `/schemas`, toutes les clés facultatives, absente = sans limite) ou `null` : `members_max` (membres
   et invitations en attente, contrôlé à l'invitation), `teams_max` (0 ferme la création d'équipes),
   `connectors_max` (connecteurs actifs), `storage_bytes` (10 Go sans valeur), `account_owner_kinds` et
-  `accounts_per_owner_max` (lus, contrôlés par aucun service dans cette version). Elle est appelée à
+  `accounts_per_owner_max` (contrôlés à la création et à la réactivation d'un compte de connecteur). Elle est appelée à
   chaque écriture bridée et par `orgLimitsView` ; une clé inconnue, une valeur hors schéma ou une
   exception refusent l'écriture (`internal`), jamais « sans limite ».
 - **Refus** : `forbidden`, `details: { reason: "limit", limit, max }` ; le stockage, `too_large`,

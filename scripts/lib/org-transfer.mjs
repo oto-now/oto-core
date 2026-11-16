@@ -77,7 +77,7 @@ export const TABLES = [
     people: { user_id: 'sauter' },
   }),
   table('accounts', {
-    columns: cols('id org_id connector owner_kind owner_team_id owner_user_id label status health mode created_at updated_at settings status_reason'),
+    columns: cols('id org_id connector owner_kind owner_team_id owner_user_id label status health mode created_at updated_at settings status_reason description'),
     // Le secret, ce qui en dit l'état, le jeton d'un échange ou d'un consentement et ses droits accordés ne quittent
     // jamais la base : un compte importé se reconnecte par qui le gère.
     excluded: ['secret_ciphertext', 'secret_fields', 'secret_updated_at', 'token_ciphertext', 'token_expires_at', 'granted_scopes', 'linked_id', 'linked_at'],
@@ -147,6 +147,12 @@ export const TABLES = [
     refs: { org_id: 'orgs', source_node_id: 'nodes', source_block_id: 'blocks', target_node_id: 'nodes' },
     nullWhenSkipped: ['target_node_id'],
   }),
+  // Les commentaires d'une page : un fil suit son nœud (un nœud sauté emporte ses fils, et un fil sauté ses commentaires,
+  // `CASCADING` du plan) ; son bloc (`block_id`, sans clé étrangère) et les membres mentionnés (`mentions`) changent
+  // d'identifiant avec les autres (`deepReplace`). Une personne absente de la cible laisse ses commentaires sans auteur.
+  // Chaque table sur une ligne : le fichier est au plafond de lignes d'ESLint.
+  table('comment_threads', { columns: cols('id org_id node_id block_id quote block_revision status resolved_by resolved_at created_by created_at'), refs: { org_id: 'orgs', node_id: 'nodes', block_id: 'blocks' }, people: { resolved_by: 'null', created_by: 'null' } }),
+  table('comments', { columns: cols('id org_id thread_id author text mentions created_at edited_at to_assistant via_assistant'), refs: { org_id: 'orgs', thread_id: 'comment_threads' }, people: { author: 'null' } }),
   table('access_rules', {
     columns: cols('id org_id node_id account_id subject_team_id subject_user_id level created_by created_at subject_org'),
     refs: { org_id: 'orgs', node_id: 'nodes', account_id: 'accounts', subject_team_id: 'teams' },
@@ -163,9 +169,10 @@ export const TABLES = [
   table('connector_activations', {
     key: ['org_id', 'connector'],
     newKey: null,
-    columns: cols('org_id connector state activated_by created_at updated_at'),
+    columns: cols('org_id connector state activated_by closed_by created_at updated_at'),
     refs: { org_id: 'orgs' },
-    people: { activated_by: 'auteur' },
+    // `closed_by` : `null`, jamais l'auteur de l'import, qui n'a pas fermé le connecteur (une fermeture sans auteur connu).
+    people: { activated_by: 'auteur', closed_by: 'null' },
   }),
   table('invitations', {
     columns: cols('id org_id email role team_id invited_by created_at expires_at accepted_at accepted_by declined_at revoked_at'),
@@ -251,8 +258,8 @@ NEVER_EXPORTED.push('hosted_link_requests')
 // repose les règles, y écrit leurs lignes « posée » hors session. Les lignes de la source citeraient des équipes et des
 // personnes par leurs anciens identifiants. Les traces des fichiers en transit effacés (`20261021190000`) : 30 jours, lues
 // par leur auteur ; un fichier en transit reste hors de l'export, sa trace aussi.
-// Les travaux en tâche de fond (`20261022230000`), chiffrés sous la clé de la source : un travail se relance.
-NEVER_EXPORTED.push('account_share_events', 'erased_files', 'jobs')
+// Les travaux en tâche de fond (`20261022230000`), chiffrés sous la clé de la source : un travail se relance. L'état de l'email groupé des commentaires (`20261112090000`) : l'hôte cible a son relais et sa tâche horaire, l'organisation importée y repart sans envoi passé.
+NEVER_EXPORTED.push('account_share_events', 'erased_files', 'jobs', 'comment_mails', 'comment_mail_items')
 
 /** @param {string} name */
 function tableSpec(name) {
@@ -468,9 +475,7 @@ export function formatSummary({ slug, inserted, skipped, absent, unconfirmed, cl
   if (closedInvitations > 0) lines.push(`Invitations closes ou expirées, non importées : ${closedInvitations}`)
   if (revokedGrants > 0) lines.push(`Accès plateforme en cours, révoqués à l'import (autre projet) : ${revokedGrants}`)
   const renumbered = tickets.filter(([before, after]) => before !== after)
-  if (renumbered.length > 0) {
-    lines.push(`Tickets renumérotés : ${renumbered.map(([before, after]) => `${ticket(before)} → ${ticket(after)}`).join(', ')}`)
-  }
+  if (renumbered.length > 0) lines.push(`Tickets renumérotés : ${renumbered.map(([before, after]) => `${ticket(before)} → ${ticket(after)}`).join(', ')}`)
   if (domains.length > 0) lines.push(`Adresses posées : ${domains.join(', ')}`)
   return lines
 }

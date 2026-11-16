@@ -34,7 +34,7 @@ const CREATE_SUMMARY =
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
 /** La migration de la supervision (N9) : ses opérations se sautent tant que le projet ne l'a pas. */
-const SUPERVISION = "20261102090000"
+const SUPERVISION = "20261116213000"
 const supervisionPending = (await pendingMigrations()).includes(SUPERVISION)
 
 /** Une ligne d'ancrage d'`admin_context`, datée de `age` millisecondes. */
@@ -349,7 +349,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
           "Flags: none.",
           "Rules version: 1.",
           `Administrators: Ada Martin <${ada.email}>.`,
-          `Contact shown to non-members: Ada Martin <${ada.email}>.`,
+          `Contact (oldest administrator): Ada Martin <${ada.email}>.`,
           `Platform accesses in progress: ${sam.email} since 2026-09-20 (granted by Théo Staff).`,
           "Revoked platform accesses (last 5): none.",
         ].join("\n"),

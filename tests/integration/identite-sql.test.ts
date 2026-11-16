@@ -125,14 +125,19 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
   describe("org_contact (AC3)", () => {
     const contactOf = (person: SeededPerson, org: SeededOrg) => asCaller(person.id, person.email).tx((sql) => sql`select * from platform.org_contact(${org.id})`)
 
-    it("should name the oldest admin to a signed-in non-member", async () => {
+    it("should name the oldest admin to a member and to the platform team, and nobody to a signed-in non-member", async () => {
       const org = await seed.createOrg()
       const first = seed.person()
       const second = seed.person()
+      const member = seed.person()
+      const staff = seed.person()
       await addMember(org, first, { role: "admin", profile: { name: "Paul Martin" } })
       await addMember(org, second, { role: "admin" })
+      await addMember(org, member)
+      await seed.admin`insert into platform.platform_staff (user_id, email) values (${staff.id}, ${staff.email})`
 
-      expect(await contactOf(seed.person(), org)).toEqual([{ name: "Paul Martin", email: first.email }])
+      const contact = [{ name: "Paul Martin", email: first.email }]
+      expect([await contactOf(member, org), await contactOf(staff, org), await contactOf(seed.person(), org)]).toEqual([contact, contact, []])
     })
 
     it("should return no row for an organisation without admin", async () => {

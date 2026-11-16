@@ -302,6 +302,117 @@ export type Database = {
           },
         ]
       }
+      comment_threads: {
+        Row: {
+          block_id: string | null
+          block_revision: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          node_id: string
+          org_id: string
+          quote: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          block_id?: string | null
+          block_revision?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          node_id: string
+          org_id: string
+          quote?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          block_id?: string | null
+          block_revision?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          node_id?: string
+          org_id?: string
+          quote?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_threads_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_threads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          author: string | null
+          created_at: string
+          edited_at: string | null
+          id: string
+          mentions: string[]
+          org_id: string
+          text: string
+          thread_id: string
+          to_assistant: boolean
+          via_assistant: boolean
+        }
+        Insert: {
+          author?: string | null
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          mentions?: string[]
+          org_id: string
+          text: string
+          thread_id: string
+          to_assistant?: boolean
+          via_assistant?: boolean
+        }
+        Update: {
+          author?: string | null
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          mentions?: string[]
+          org_id?: string
+          text?: string
+          thread_id?: string
+          to_assistant?: boolean
+          via_assistant?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "comment_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connector_activations: {
         Row: {
           activated_by: string | null

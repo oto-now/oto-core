@@ -248,6 +248,8 @@ export type ContenusLiesProps = Navigation & {
   disposition: "colonne" | "ligne"
   /** Le nom montré de chaque Contexte (`nomsDesContextes`), pour ses lignes (E11-S15, AC-a9). */
   contextes: NomsDesContextes
+  /** Un encart de l'écran posé avant eux, dans leur conteneur : la colonne, ou leur ligne (l'encart « Commentaires »). */
+  avant?: ReactNode
 }
 
 /**
@@ -255,9 +257,10 @@ export type ContenusLiesProps = Navigation & {
  * connu avec le nœud, se rend tout de suite, hors de lui, une seule fois dans le flux ; à la place des deux autres,
  * « Lecture des liens… », puis leur échec et « Réessayer ».
  */
-export function ContenusLies({ vue, arbre, liens, disposition, contextes, ...navigation }: ContenusLiesProps) {
+export function ContenusLies({ vue, arbre, liens, disposition, contextes, avant, ...navigation }: ContenusLiesProps) {
   const encarts = (
     <>
+      {avant}
       {liens && (
         <Suspense
           fallback={

@@ -105,6 +105,16 @@ export function leadsTeam(identity: Identity, teamId: string): boolean {
   return identity.teams.some((team) => team.id === teamId && team.role === "lead")
 }
 
+/**
+ * L'email d'une personne, pour qui a à la joindre : l'administrateur, elle-même, ou un responsable d'une de ses équipes
+ * (`teamIds`) ; vide pour tout autre membre, qui la connaît par son nom. Décidé ici pour chaque lecture de l'annuaire
+ * rendue à un écran (`listMembers`, `listTeams`, panneau d'une équipe).
+ */
+export function emailFor(identity: Identity, person: { userId: string; email: string }, teamIds: readonly string[]): string {
+  const sees = isOrgAdmin(identity) || person.userId === identity.user.id || teamIds.some((teamId) => leadsTeam(identity, teamId))
+  return sees ? person.email : ""
+}
+
 export function callerOf(identity: Identity): Caller {
   return {
     userId: identity.user.id,

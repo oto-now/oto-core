@@ -14,7 +14,7 @@ import { fromDatabaseError, invalidInput, isUniqueViolation, PlatformError } fro
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { applicationMissing } from "./account-secret"
-import { accountRows, summary, type AccountSummary } from "./accounts"
+import { accountRows, labelTaken, summary, type AccountSummary } from "./accounts"
 import type { AccountCredential, StoredToken } from "./auth"
 import { keepDeclaredConnector } from "./declaration"
 import type { OAuthApplication } from "./definition"
@@ -184,7 +184,7 @@ async function keepConsent(db: PlatformDb, identity: Identity, consent: { connec
       return summary(written)
     }, "server")
     .catch((error) => {
-      if (isUniqueViolation(error)) throw new PlatformError("conflict", `An account labelled ${label} already exists in ${identity.org.name}, held by someone else. Ask an administrator of ${identity.org.name}.`)
+      if (isUniqueViolation(error)) throw labelTaken(label, identity.org.name)
       throw fromDatabaseError(error, "completeConnectorConsent: accounts")
     })
 }

@@ -6,7 +6,8 @@
 
 .oto-home {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  /* 3fr / 2fr : la colonne de droite prend 40 % de la largeur (un cinquième de plus qu'à 2fr / 1fr), pour que l'extrait d'un commentaire suivi tienne sur une ou deux lignes. */
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: var(--gap);
   align-items: start;
 }
@@ -58,6 +59,8 @@
 /* WaitList, l'îlot qui appelle une décision : un filet safran au-dessus et une bande d'en-tête plus franche, deux gestes seulement ; des lignes, pas des cartes (la conséquence en gras, la provenance dessous, les actions au bout). */
 
 .oto-wait { border-block-start: 2px solid var(--primary); }
+/* Une file d'attente vide ne prend pas de place ; elle reste après une revue faite dans la session, pour son résumé à copier (son champ). */
+.oto-wait[data-vide]:not(:has(textarea)) { display: none; }
 
 .oto-wait > .oto-island-head { background: color-mix(in oklab, var(--primary) 13%, var(--island)); }
 
@@ -188,6 +191,9 @@
   color: var(--mute);
 }
 
+/* Un fil de commentaires suivi sur l'accueil : l'extrait prend toute la largeur de la ligne, sous le titre et l'heure. */
+.oto-fil-suivi > .oto-feed-what { grid-column: 2 / -1; }
+
 /* L'heure ne se coupe jamais en deux : elle tient sa colonne. */
 .oto-feed-when {
   grid-column: 3;
@@ -315,3 +321,7 @@
 
 /* « Brancher votre assistant » (1.4.13) : les assistants pris en charge en pastilles, sous l'en-tête, avant l'état ; le titre court tient sur une ligne avec « Brancher ». */
 .oto-branchement-assistants { display: flex; flex-wrap: wrap; gap: var(--space-1-5); margin-block-end: var(--space-2); }
+/* Les pastilles des assistants et l'état du branchement sur une même ligne ; les connexions listées passent dessous. */
+.oto-branchement-ligne { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1-5) var(--space-3); }
+.oto-branchement-ligne > .oto-branchement-assistants { margin-block-end: 0; }
+.oto-branchement-ligne > ul:not(.oto-branchement-assistants) { flex-basis: 100%; }

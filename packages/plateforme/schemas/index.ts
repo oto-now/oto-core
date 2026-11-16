@@ -44,8 +44,16 @@ export type { BlockLike, BlockSection, CallLocation, RenderOptions } from "./blo
 export { decisionErrorSchema } from "./oauth"
 // `connectorNameSchema`, `accountLabelSchema` et `accountModeSchema` restent internes à
 // `connectors.ts` tant que seuls ses schémas les lisent (E04-S01, N33).
-export { accountSecretInputSchema, connectorRefSchema, createAccountSchema, disableAccountSchema } from "./connectors"
-export type { AccountMode, AccountSecretInput } from "./connectors"
+export {
+  ACCOUNT_DESCRIPTION_MAX,
+  accountChangeSchema,
+  accountSecretInputSchema,
+  connectorProbeInputSchema,
+  connectorRefSchema,
+  createAccountSchema,
+  disableAccountSchema,
+} from "./connectors"
+export type { AccountChange, AccountMode, AccountSecretInput, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
 export type {
@@ -84,6 +92,8 @@ export { USEFUL_PROCEDURES_SHOWN } from "./activity"
 export type { Activity, ActivityPage, ActivityVerb, UsefulProcedure } from "./activity"
 // 1.4.13 : la carte « Reprendre » et les vues des pages de l'accueil.
 export {
+  HOME_COMMENT_EXCERPT_CHARS,
+  HOME_COMMENTS_SHOWN,
   HOME_PAGE_SIZE,
   HOME_SCOPES,
   HOME_VIEWED_DAYS,
@@ -93,7 +103,7 @@ export {
   NODE_VIEWS_KEPT_DAYS,
   nodeViewSchema,
 } from "./accueil"
-export type { HomeContent, HomeContentsPage, HomeScope, HomeSpace, HomeTab } from "./accueil"
+export type { HomeComments, HomeCommentThread, HomeContent, HomeContentsPage, HomeScope, HomeSpace, HomeTab } from "./accueil"
 // Les bornes du nom, des domaines de travail, des seuils, du motif et du préfixe ne sortent que par les
 // schémas qui les composent : les schémas servis du MCP admin les en tirent (`orgSettingsSchema.shape`,
 // `platformAccessSchema.shape`). `hostSchema` sort seul : E09-S02 en passe chaque adresse d'une création
@@ -153,7 +163,20 @@ export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.
 export { orgSettingsFormSchema } from "./admin"
 export type { OrgSettingsForm, OrgView } from "./admin"
-export type { AccountMark, AccountMarkReason, AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector } from "./connectors"
+export { PROBE_FAILURE_CODES } from "./connectors"
+export type {
+  AccountHealth,
+  AccountMark,
+  AccountMarkReason,
+  AccountProbe,
+  AccountView,
+  ConnectorAccountForm,
+  DeactivationImpact,
+  AccountOwnerChoices,
+  OrgConnector,
+  ProbedBalance,
+  ProbeFailureCode,
+} from "./connectors"
 // L'écran d'un tableau (E07-S03) : décision de la revue, paramètres de la grille, vue d'un bloc
 // `reference`, formes des lectures de l'écran.
 export {
@@ -269,3 +292,33 @@ export type { UploadDone, UploadFormView, UploadKind, UploadLinkArgs, UploadMode
 // L'origine d'un lien vers l'hôte appelé, sans base : `https` hors du poste local, jamais `x-forwarded-proto`. Le middleware
 // de l'hôte la lit (Edge, sans la face server) ; `trustedRequestOrigin` (face server) y ajoute la confiance dans l'hôte.
 export { linkOrigin } from "./link-origin"
+// Les commentaires d'une page : saisies, bornes et vues d'un fil.
+export {
+  COMMENT_MAX_CHARS,
+  COMMENT_MENTIONS_MAX,
+  COMMENT_QUOTE_MAX_CHARS,
+  COMMENT_LIST_STATUSES,
+  COMMENT_THREAD_STATUSES,
+  addressesAssistant,
+  commentAddArgsSchema,
+  commentDeleteArgsSchema,
+  commentEditArgsSchema,
+  commentListArgsSchema,
+  commentResolveArgsSchema,
+  createCommentSchema,
+  editCommentSchema,
+  mentionPlaces,
+  readMentions,
+  threadStatusSchema,
+} from "./comments"
+export type {
+  CommentAddArgs,
+  CommentAnchor,
+  CommentThreadStatus,
+  CommentThreadView,
+  CommentView,
+  CreateCommentInput,
+  EditCommentInput,
+  NodeCommentsView,
+  ThreadStatusInput,
+} from "./comments"

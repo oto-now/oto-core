@@ -14,7 +14,11 @@ import { withServerSession } from "../../packages/plateforme/server/sql"
 
 const VERSION = "20261019130000"
 const DELETES = "20261019140000"
-const missing = (await pendingMigrations()).filter((version) => version === VERSION || version === DELETES)
+/** L'écran Connecteurs (`record_account_probe`, libellé et description écrits par le serveur). */
+const SCREEN = "20261114120000"
+/** L'écran Connecteurs, lot 2 (le code d'un test, son effacement, qui a fermé un connecteur). */
+const SCREEN_LOT2 = "20261116161500"
+const missing = (await pendingMigrations()).filter((version) => [VERSION, DELETES, SCREEN, SCREEN_LOT2].includes(version))
 const pending = missing.length > 0
 
 /**
@@ -82,6 +86,9 @@ const RESERVED: Record<string, string> = {
   "platform.link_hosted_account(uuid,text,timestamp with time zone,text)": "the identifier and creation date given by the third party",
   "platform.mark_account(uuid,text)": "the refusal of the third party",
   "platform.mark_files_ready(uuid,uuid[])": "the object read in the storage",
+  "platform.record_account_probe(uuid,boolean,text,jsonb)": "the answer of the third party to the probe",
+  "platform.record_account_probe(uuid,boolean,text,text,jsonb)": "the answer of the third party to the probe, with the code of its reason",
+  "platform.forget_account_probe(uuid)": "the change of the account's key, decided by the server",
   "platform.pseudonym_org(uuid,text,text)": "the salt and the witness of the server's key",
   "platform.purge_transit_files(uuid)": "the transit files of others, which the caller cannot see",
   "platform.signup_org(text,text,text,text[])": "the addresses given by the host",
@@ -91,7 +98,10 @@ const RESERVED: Record<string, string> = {
 const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   access_rules: ["level"],
   blocks: ["position", "type", "text", "data", "key", "provenance", "revision", "claimed_by", "claimed_by_user", "lease_until", "updated_by"],
-  connector_activations: ["org_id", "connector", "state", "activated_by", "created_at", "updated_at"],
+  // Les commentaires d'une page (`20261112090000`) : l'état d'un fil, le texte d'un commentaire par son auteur.
+  comment_threads: ["status", "resolved_by", "resolved_at"],
+  comments: ["text", "mentions", "edited_at", "to_assistant"],
+  connector_activations: ["org_id", "connector", "state", "activated_by", "closed_by", "created_at", "updated_at"],
   ctx: ["contexts"],
   feedback: ["state", "resolution", "handled_by", "handled_at"],
   invitations: ["revoked_at"],
@@ -108,9 +118,24 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   teams: ["name", "lead_user_id"],
 }
 
-/** Les colonnes que `platform_server` modifie en plus d'`authenticated` : l'état, le secret et les jetons d'un compte. */
+/**
+ * Les colonnes que `platform_server` modifie en plus d'`authenticated` : l'état, le secret et les jetons d'un compte, et
+ * son libellé et sa description, que le service écrit une fois décidé qui gère le compte (`updateAccount`).
+ */
 const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
-  accounts: ["secret_ciphertext", "status", "settings", "secret_fields", "secret_updated_at", "token_ciphertext", "token_expires_at", "status_reason", "granted_scopes"],
+  accounts: [
+    "secret_ciphertext",
+    "status",
+    "settings",
+    "secret_fields",
+    "secret_updated_at",
+    "token_ciphertext",
+    "token_expires_at",
+    "status_reason",
+    "granted_scopes",
+    "label",
+    "description",
+  ],
 }
 
 /**
@@ -122,6 +147,8 @@ const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
 const DELETED_BY_AUTHENTICATED: Record<string, string> = {
   access_rules: "removeRule, removeAccountRule, setGeneralAccess (server/rules.ts, server/general-access.ts): the person who manages the node or the account; the policy requires the management of the node (node_level_for >= 3, 20261020190000), an account rule membership only",
   blocks: "draft blocks dropped on a save (server/nodes/store.ts), table rows by delete_rows (server/tables/delete-rows.ts)",
+  comment_threads: "deleteComment (server/comments/comments.ts): the author of a thread deletes its first comment, the thread and its replies leave; the policy requires its author (20261112090000)",
+  comments: "deleteComment (server/comments/comments.ts): the author of a comment; the policy requires its author (20261112090000)",
   connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
   files: "undone upload, size mismatch (server/uploads-write.ts, server/files/service.ts): the policy requires the write level of the node (node_level_for >= 2, 20261021170000); the caller's transit file (server/files/transit.ts), its author; the abandoned uploads go through purge_pending_files (20261021170000), the trash purge through purge_trash and erase_team_trash (20261021140000)",
   hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",

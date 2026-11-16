@@ -8,8 +8,9 @@
 // qu'il garde tiennent dans la transaction du service, sous le verrou de l'organisation.
 import * as z from "zod/v4"
 import { ORG_QUOTA_BYTES, orgLimitsSchema, type LimitState, type OrgLimits, type OrgLimitsView } from "../schemas"
-import { describeOwner, isOrgAdmin } from "./access"
+import { administrators, isOrgAdmin } from "./access"
 import { createAnonPlatformDb, type PlatformDb } from "./db"
+import { memberDirectoryIn } from "./directory"
 import { inTransaction, invalidInput, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import type { Tx } from "./sql"
@@ -111,27 +112,82 @@ function passesLimits(identity: Identity): boolean {
   return identity.isStaff && identity.hasOpenGrant
 }
 
+/** Le verrou consultatif de l'organisation, pris avant de compter : deux ajouts concurrents ne passent pas tous deux. */
+async function lockLimits(sql: Tx, identity: Identity): Promise<void> {
+  await sql`select pg_catalog.pg_advisory_xact_lock(${LIMIT_LOCK}, pg_catalog.hashtext(${identity.org.id}::text))`
+}
+
+/**
+ * Au plafond, compté sous le verrou : l'équipe plateforme passe, une ligne du journal de l'organisation nommant la limite
+ * passée ; tout autre est refusé (`forbidden`, `reason: "limit"`, `limit`, `max`), et qui n'administre pas apprend qui
+ * peut la faire relever.
+ */
+async function atLimit(sql: Tx, { identity }: LimitScope, limit: { name: string; max: number; used: number; text: string }): Promise<void> {
+  const { name, max, used } = limit
+  if (passesLimits(identity)) {
+    await sql`
+      insert into platform.journal (org_id, user_id, method, tool, target, args)
+      values (${identity.org.id}, ${identity.user.id}, 'api', 'limit passed', ${name}, ${sql.json({ max, used })})`
+    return
+  }
+  // Les administrateurs, lus dans la transaction ouverte : une seconde transaction n'est jamais ouverte pendant celle-ci.
+  const ask = isOrgAdmin(identity) ? "" : ` Ask ${administrators(identity, await memberDirectoryIn(sql, identity.org.id))} about it.`
+  throw new PlatformError("forbidden", `${limit.text}${ask}`, { reason: "limit", limit: name, max })
+}
+
 /**
  * Refuse l'ajout qui passerait la limite `name` (ADR-022 § 3), dans la transaction qui écrira ensuite : le verrou de
  * l'organisation, puis le compte ; au plafond, `forbidden` (`reason: "limit"`, `limit`, `max`). À qui n'administre pas,
  * le refus nomme qui peut la faire relever. Sans valeur pour `name`, rien n'est lu. L'équipe plateforme passe : une
  * ligne du journal de l'organisation, écrite dans la même transaction que l'ajout, nomme la limite passée.
  */
-export async function requireUnderLimit(sql: Tx, { db, identity, limits }: LimitScope, name: CountedLimit): Promise<void> {
-  const max = limits[name]
+export async function requireUnderLimit(sql: Tx, scope: LimitScope, name: CountedLimit): Promise<void> {
+  const max = scope.limits[name]
   if (max === undefined) return
-  await sql`select pg_catalog.pg_advisory_xact_lock(${LIMIT_LOCK}, pg_catalog.hashtext(${identity.org.id}::text))`
-  const counts = await limitCounts(sql, identity.org.id)
+  await lockLimits(sql, scope.identity)
+  const counts = await limitCounts(sql, scope.identity.org.id)
   if (counts[name] < max) return
-  if (passesLimits(identity)) {
-    await sql`
-      insert into platform.journal (org_id, user_id, method, tool, target, args)
-      values (${identity.org.id}, ${identity.user.id}, 'api', 'limit passed', ${name}, ${sql.json({ max, used: counts[name] })})`
-    return
-  }
-  const text = limitText(identity.org.name, name, max)
-  const ask = isOrgAdmin(identity) ? "" : ` Ask ${await describeOwner(db, identity, { kind: "org", teamId: null, userId: null })} about it.`
-  throw new PlatformError("forbidden", `${text}${ask}`, { reason: "limit", limit: name, max })
+  await atLimit(sql, scope, { name, max, used: counts[name], text: limitText(scope.identity.org.name, name, max) })
+}
+
+/** Le propriétaire d'un compte de connecteur, tel que la base le range. */
+export type AccountOwnerRef = { kind: "org" | "team" | "user"; teamId: string | null; userId: string | null }
+
+/**
+ * Refuse un compte de connecteur que les capacités de l'hôte n'admettent pas (ADR-022 § 8), avant la transaction qui
+ * l'écrit : un propriétaire hors d'`account_owner_kinds` (`forbidden`, `reason: "limit"`, `limit`, `admitted`). Sans
+ * valeur, tout propriétaire passe. Ce n'est pas une limite comptée : l'équipe plateforme ne la passe pas.
+ */
+export function requireAdmittedAccountOwner({ identity, limits }: LimitScope, kind: AccountOwnerRef["kind"]): void {
+  const admitted = limits.account_owner_kinds
+  if (admitted === undefined || admitted.includes(kind)) return
+  const words = { org: "organisation", team: "team", user: "personal" } as const
+  throw new PlatformError("forbidden", `${identity.org.name} does not open ${words[kind]} connector accounts.`, {
+    reason: "limit",
+    limit: "account_owner_kinds",
+    admitted,
+  })
+}
+
+/**
+ * Refuse un compte de connecteur de plus pour un même propriétaire au-delà d'`accounts_per_owner_max` (ADR-022 § 8),
+ * dans la transaction qui l'écrit ou le réactive, sous le verrou des limites : les comptes de ce connecteur et de ce
+ * propriétaire comptés, un compte désactivé exclu. Au plafond, comme `requireUnderLimit`. Sans valeur, rien n'est lu.
+ */
+export async function requireUnderAccountsPerOwner(sql: Tx, scope: LimitScope, account: { connector: string; owner: AccountOwnerRef }): Promise<void> {
+  const max = scope.limits.accounts_per_owner_max
+  if (max === undefined) return
+  const { connector, owner } = account
+  await lockLimits(sql, scope.identity)
+  const [{ used }] = await sql<{ used: number }[]>`
+    select count(*)::int as used from platform.accounts
+     where org_id = ${scope.identity.org.id} and connector = ${connector} and status <> 'disabled'
+       and owner_kind = ${owner.kind}
+       and owner_team_id is not distinct from ${owner.teamId}::uuid and owner_user_id is not distinct from ${owner.userId}::uuid`
+  if (used < max) return
+  const whose = owner.kind === "user" ? "one person" : owner.kind === "team" ? "one team" : "the organisation"
+  const text = `${scope.identity.org.name} is limited to ${max} ${connector} ${max > 1 ? "accounts" : "account"} for ${whose}, disabled ones aside.`
+  await atLimit(sql, scope, { name: "accounts_per_owner_max", max, used, text })
 }
 
 /**

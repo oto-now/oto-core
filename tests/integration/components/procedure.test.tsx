@@ -224,7 +224,8 @@ describe("un appel déjà écrit, sur l'écran d'une page (M59)", () => {
   const schema = appel(21, "table.schema", {})
 
   it("should read a call as its function and arguments in plain text, markup not read, never run", () => {
-    const envois = vi.fn()
+    // Seule requête de l'écran : la lecture des fils de commentaires, par l'encart « Commentaires » ; aucun appel n'est exécuté.
+    const envois = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { path: "ventes/contexte", threads: [], readers: [], mailEnabled: false } }), { status: 200 }))
     vi.stubGlobal("fetch", envois)
     const brut = appel(22, "mail.create_draft", { subject: "<b>Relance</b>", body: "**gras** _ici_ [[ventes/contexte]]" })
     const { container } = ecran({ chemin: "ventes/contexte", noeud: { data: vueDuNoeud({ path: "ventes/contexte", kind: "context", blocks: [claim, schema, brut] }) } })
@@ -233,8 +234,9 @@ describe("un appel déjà écrit, sur l'écran d'une page (M59)", () => {
     expect(ancre(claim.ref)?.textContent).toBe(LU.claim)
     expect(ancre(schema.ref)?.textContent).toBe("Appel de table.schema")
     expect(ancre(brut.ref)?.textContent).toBe('Appel de mail.create_draft : { "subject": "<b>Relance</b>", "body": "**gras** _ici_ [[ventes/contexte]]" }')
-    expect(container.querySelector("b, strong, em, script, a[href='/n/ventes/contexte']")).toBeNull()
-    expect(envois).not.toHaveBeenCalled()
+    // Dans le document : la pastille d'un encart de la colonne de droite a son titre en gras.
+    expect(container.querySelector(".oto-two-columns-main")?.querySelector("b, strong, em, script, a[href='/n/ventes/contexte']")).toBeNull()
+    expect(envois.mock.calls.map(([adresse]) => String(adresse))).toEqual(["/api/platform/comments?path=ventes%2Fcontexte"])
   })
 
   it("should keep a call as it is while it is not changed, write it as a text once changed, and delete it from its menu", async () => {

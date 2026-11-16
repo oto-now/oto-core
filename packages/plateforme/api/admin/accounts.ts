@@ -1,28 +1,24 @@
-// `POST admin/accounts`, `POST admin/accounts/<id>/disable` et `POST admin/accounts/<id>/secret` du tableau de bord
-// (E08-S03, AC6, AC7, AC10 ; comptes à plusieurs champs) : créer un compte, désactiver un compte, poser le secret et
-// les réglages d'un compte réel ; `GET admin/accounts/<id>/share-journal` : le journal des partages d'un compte, pour
-// qui le gère (partage des comptes) ; `POST admin/account-rules` et `DELETE admin/account-rules/<id>` : poser ou
-// remplacer, puis retirer, le partage d'un compte, pour qui le gère (l'écran Connecteurs ouvert aux membres : le
-// propriétaire d'un compte personnel y partage le sien). Adaptateur mince : la validation, les droits et l'écriture sont
-// dans `createAccount`, `disableAccount`, `setAccountSecret`, `listAccountShareJournal`, `setAccountRule` et
-// `removeAccountRule` ; la route n'ajoute qu'une règle, un compte d'organisation ou d'équipe seulement à la création
-// (N11). Le secret arrive sous la clé `secret` du corps, que le journal masque entière ; la réponse ne le rend jamais.
+// `POST admin/accounts`, `PATCH admin/accounts/<id>`, `POST admin/accounts/<id>/disable`, `…/enable`, `…/secret` et
+// `…/probe` du tableau de bord (E08-S03, AC6, AC7, AC10 ; comptes à plusieurs champs ; écran Connecteurs, lot 1) : créer
+// un compte (d'organisation, d'équipe, ou le sien), le renommer et le décrire, le désactiver, le réactiver, poser le
+// secret et les réglages d'un compte réel, le tester ; `GET admin/accounts/<id>/share-journal` : le journal des
+// partages d'un compte, pour qui le gère (partage des comptes) ; `POST admin/account-rules` et `DELETE
+// admin/account-rules/<id>` : poser ou remplacer, puis retirer, le partage d'un compte, pour qui le gère (l'écran
+// Connecteurs ouvert aux membres : le propriétaire d'un compte personnel y partage le sien). Adaptateur mince : la
+// validation, les droits et l'écriture sont dans `createAccount`, `updateAccount`, `disableAccount`, `enableAccount`,
+// `setAccountSecret`, `probeAccount`, `listAccountShareJournal`, `setAccountRule` et `removeAccountRule`. Un compte
+// personnel se crée toujours au nom de l'appelant (E04-S01 N15). Le secret arrive sous la clé `secret` du corps, que le
+// journal masque entière ; la réponse ne le rend jamais.
 import { createAccountSchema, setAccountRuleSchema } from "../../schemas"
 import { listAccountShareJournal } from "../../server/account-share-journal"
 import { setAccountSecret } from "../../server/connectors/account-secret"
-import { createAccount, disableAccount } from "../../server/connectors/accounts"
-import { PlatformError } from "../../server/errors"
+import { disableAccount, enableAccount, updateAccount } from "../../server/connectors/account-changes"
+import { createAccount } from "../../server/connectors/accounts"
+import { probeAccount } from "../../server/connectors/probe"
 import { clip, MAX_TARGET_CHARS } from "../../server/journal"
 import { removeAccountRule, setAccountRule } from "../../server/rules"
 import type { Route } from "../handler"
 import { idOrNull } from "../ids"
-
-/** Un compte personnel se crée par son propriétaire, jamais depuis le tableau de bord (E04-S01 N15, N11). */
-const PERSONAL_REFUSED = "A personal account is created by its owner, not from the dashboard: use owner_kind org or team."
-
-function isPersonal(body: unknown): boolean {
-  return typeof body === "object" && body !== null && "owner_kind" in body && body.owner_kind === "user"
-}
 
 export const accountCreationRoute: Route = {
   params: 1,
@@ -34,7 +30,6 @@ export const accountCreationRoute: Route = {
     return parsed.success ? clip(parsed.data.label, MAX_TARGET_CHARS) : null
   },
   async handle({ db, identity, body }) {
-    if (isPersonal(body)) throw new PlatformError("invalid_arguments", PERSONAL_REFUSED)
     const account = await createAccount(db, identity, body)
     return { status: 200, data: { account }, journal: { target: account.label, teamId: account.owner.teamId } }
   },
@@ -47,6 +42,39 @@ export const accountDisablingRoute: Route = {
   async handle({ db, identity, params }) {
     const account = await disableAccount(db, identity, { account_id: params[1] })
     return { status: 200, data: { account }, journal: { target: account.id, teamId: account.owner.teamId } }
+  },
+}
+
+/** Renomme un compte, pose ou efface sa description : `{ label?, description? }`, l'un des deux au moins. */
+export const accountUpdateRoute: Route = {
+  params: 2,
+  fixed: { 0: "accounts" },
+  target: ({ params }) => idOrNull(params[1]),
+  async handle({ db, identity, params, body }) {
+    const account = await updateAccount(db, identity, { account_id: params[1], input: body })
+    return { status: 200, data: { account }, journal: { target: account.id } }
+  },
+}
+
+/** Réactive un compte désactivé, le pendant de `…/disable` ; son secret a été gardé. */
+export const accountEnablingRoute: Route = {
+  params: 3,
+  fixed: { 0: "accounts", 2: "enable" },
+  target: ({ params }) => idOrNull(params[1]),
+  async handle({ db, identity, params }) {
+    const account = await enableAccount(db, identity, { account_id: params[1] })
+    return { status: 200, data: { account }, journal: { target: account.id } }
+  },
+}
+
+/** Teste un compte par la sonde de son connecteur ; l'issue est gardée sur le compte. Une clé refusée rend `200`. */
+export const accountProbeRoute: Route = {
+  params: 3,
+  fixed: { 0: "accounts", 2: "probe" },
+  target: ({ params }) => idOrNull(params[1]),
+  async handle({ db, identity, params }) {
+    const probe = await probeAccount(db, identity, { account_id: params[1] })
+    return { status: 200, data: { probe }, journal: { target: params[1] } }
   },
 }
 
