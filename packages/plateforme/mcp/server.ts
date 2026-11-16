@@ -23,6 +23,7 @@ import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
 import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
 import { servesCapability } from "../server/catalog/surface-source"
+import { readBrand } from "../server/brand"
 import { buildContext } from "../server/context"
 import { changedCtxMessage, requireCtx, type CallOutcome, type CtxChange } from "../server/ctx"
 import type { PlatformDb } from "../server/db"
@@ -129,9 +130,16 @@ const SERVICES: { [K in ToolKey]: Service<K> } = {
   feedback: ({ db, identity }, input, ctx) => recordFeedback(db, identity, input, ctx?.code ?? null),
 }
 
-export function serverOptions(org: ToolOrg, options: { widgets?: boolean } = {}) {
+/** `brand` : la marque de l'organisation ; son logo (`https:` seulement, `readBrand`) devient l'icône du serveur. */
+export function serverOptions(org: ToolOrg & { brand?: unknown }, options: { widgets?: boolean } = {}) {
+  const { logoUrl } = readBrand({ name: org.name, brand: org.brand })
   return {
-    serverInfo: { name: "oto-platform", title: displayOrg(org).name, version: PLATFORM_MCP_VERSION },
+    serverInfo: {
+      name: "oto-platform",
+      title: displayOrg(org).name,
+      version: PLATFORM_MCP_VERSION,
+      ...(logoUrl ? { icons: [{ src: logoUrl }] } : {}),
+    },
     instructions: serverInstructions(org),
     // `resources` : les deux variantes du bundle du widget, déclarées seulement quand il est allumé.
     // `prompts` : fermées par un hôte qui ne les sert pas (`registerHostSurface`).
