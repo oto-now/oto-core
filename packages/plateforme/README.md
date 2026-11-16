@@ -581,8 +581,9 @@ registerConnectors([messagerie.connector], {
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
 
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
-  qui le gère, un compte désactivé compris, et rend `{ at, healthy, reason, balance }`, gardé sur le compte
-  (`AccountView.lastProbe`) ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
+  qui le gère, un compte désactivé compris, et rend `{ at, healthy, code, reason, balance }`, gardé sur le compte
+  (`AccountView.lastProbe`, effacé quand `setAccountSecret` change la saisie) ; `code`, d'une liste fermée
+  (`PROBE_FAILURE_CODES` de `/schemas`), dit la raison d'un test raté, `reason` la phrase ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
   sous le seuil, solde absent ou illisible, et pose ou lève la marque `quota_exhausted` du compte selon le solde lu.
   `probeConnector(db, identity, { connector, input: { fields, settings? } })` joue la même sonde sur une clé saisie,
   avant l'ajout, sans rien écrire. Routes de l'écran : `POST admin/accounts/<id>/probe` et

@@ -131,6 +131,7 @@ export { handlesFeedback } from "./feedback"
 export { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "./connectors/activations"
 export { disableAccount, enableAccount, updateAccount } from "./connectors/account-changes"
 export { createAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
+export { accountOwnerChoices } from "./connectors/creation-right"
 // Le secret et les réglages d'un compte réel, posés par qui le gère (écran Connecteurs, outillage), jamais rendus ; le
 // formulaire de chaque connecteur déclaré, que l'écran Connecteurs reçoit de sa page.
 export { connectorAccountForms, setAccountSecret } from "./connectors/account-secret"

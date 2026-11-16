@@ -456,6 +456,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   retrait d'index admis par `check:migrations` : un index unique remplacé dans le même fichier par un index unique de la
   même table dont les clés couvrent les siennes et en ajoutent. Une colonne, une fonction, une policy, un index
   remplacé ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant le tag.
+- `20261116161500_platform_ecran_connecteurs_lot2.sql` (écran Connecteurs, lot 2, oto-core#103 ; connecteurs et comptes,
+  § Écran Connecteurs) : la colonne `connector_activations.closed_by` (qui a fermé un connecteur ; nulle sur une ligne
+  active ou fermée avant ce fichier, aucune ligne réécrite) ; `forget_user`, re-versionnée à signature identique, l'efface
+  comme `activated_by` ; `platform.record_account_probe` à cinq arguments (le code de la raison d'un test, rangé sous
+  `code`), celle à quatre restant, plus appelée par le paquet ; `platform.forget_account_probe`, qui retire le dernier
+  test d'un compte quand sa saisie change. Les deux fonctions neuves sont `security definer`, réservées au rôle du
+  serveur. Une colonne, trois fonctions ; rien à relancer avant. Fichier de développement, à réunir avec les autres de
+  la version avant le tag.
 
 ## Installer sur un hôte neuf
 

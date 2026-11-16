@@ -184,17 +184,19 @@ describe.skipIf(!sqlConfigured)(portable("connector services on a real database 
       expect(await mailState()).toBe("inactive")
     })
 
-    // Une désactivation que l'écriture ne fait pas après la décision : `mail` inactif au moment de la mise
-    // à jour, qui ne change aucune ligne, puis réactivé par une autre requête avant la relecture (course).
+    // Une désactivation que l'écriture ne fait pas après la décision : `mail` actif à la lecture, inactif au moment de
+    // la mise à jour, qui ne change aucune ligne, puis réactivé par une autre requête avant la relecture (course).
     it("should answer conflict when the deactivation changes no row while mail stays active (HN-E01S07-6)", async () => {
       const log = vi.spyOn(console, "error").mockImplementation(() => {})
       try {
-        await setMail("inactive")
+        await setMail("active")
         let updated = false
         const { db } = spyDb(await ref.db("ada"), {
           before: async (query) => {
-            if (onTable(query, "connector_activations", "update")) updated = true
-            else if (updated && onTable(query, "connector_activations", "select")) await setMail("active")
+            if (onTable(query, "connector_activations", "update")) {
+              updated = true
+              await setMail("inactive")
+            } else if (updated && onTable(query, "connector_activations", "select")) await setMail("active")
           },
         })
         const error = await refusal(deactivateConnector(db, ref.identityOf("ada"), { connector: "mail" }))

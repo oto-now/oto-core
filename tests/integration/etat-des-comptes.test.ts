@@ -286,7 +286,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       return { id, label }
     }
     /** L'issue d'un test, sans sa date : `reason` et `balance` à `null` quand la sonde n'en dit rien. */
-    const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, reason: probe.reason, balance: probe.balance })
+    const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, code: probe.code, reason: probe.reason, balance: probe.balance })
     const probe = async (id: string, answer: Response) => {
       vi.stubGlobal("fetch", vi.fn(async () => answer))
       return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }))
@@ -303,27 +303,27 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     it("should say healthy at the threshold and above, with the value, its unit and the threshold, keep the last probe only, and journal nothing", async () => {
       const paid = await paidAccount()
       const lines = await journalCount()
-      expect(await probe(paid.id, credits(250))).toEqual({ healthy: true, reason: null, balance: { value: 250, ...BALANCE } })
-      expect(await probe(paid.id, credits(10))).toEqual({ healthy: true, reason: null, balance: { value: 10, ...BALANCE } })
-      expect(await probe(paid.id, credits(10.5))).toEqual({ healthy: true, reason: null, balance: { value: 10.5, ...BALANCE } })
+      expect(await probe(paid.id, credits(250))).toEqual({ healthy: true, code: null, reason: null, balance: { value: 250, ...BALANCE } })
+      expect(await probe(paid.id, credits(10))).toEqual({ healthy: true, code: null, reason: null, balance: { value: 10, ...BALANCE } })
+      expect(await probe(paid.id, credits(10.5))).toEqual({ healthy: true, code: null, reason: null, balance: { value: 10.5, ...BALANCE } })
       // Le dernier test seul est gardé, à la date de la base, sans marque.
       const kept = (await row(paid.id)).health as { last_probe: AccountProbe }
-      expect(kept).toEqual({ last_probe: { at: expect.any(String), healthy: true, reason: null, balance: { value: 10.5, ...BALANCE } } })
+      expect(kept).toEqual({ last_probe: { at: expect.any(String), healthy: true, code: null, reason: null, balance: { value: 10.5, ...BALANCE } } })
       expect(await journalCount()).toBe(lines)
     })
 
     it("should say not healthy under the threshold, mark the account quota_exhausted, keep its date, and lift it once the balance is back", async () => {
       const paid = await paidAccount()
       const lines = await journalCount()
-      expect(await probe(paid.id, credits(9))).toEqual({ healthy: false, reason: "Crm balance is 9 credits, under 10 credits.", balance: { value: 9, ...BALANCE } })
+      expect(await probe(paid.id, credits(9))).toEqual({ healthy: false, code: "balance_low", reason: "Crm balance is 9 credits, under 10 credits.", balance: { value: 9, ...BALANCE } })
       const spent = await markOf(paid.id)
       expect(spent?.reason).toBe("quota_exhausted")
-      expect(await probe(paid.id, credits(0))).toEqual({ healthy: false, reason: "Crm balance is 0 credits, under 10 credits.", balance: { value: 0, ...BALANCE } })
+      expect(await probe(paid.id, credits(0))).toEqual({ healthy: false, code: "balance_low", reason: "Crm balance is 0 credits, under 10 credits.", balance: { value: 0, ...BALANCE } })
       expect(await markOf(paid.id)).toEqual(spent)
       const view = (await listOrgAccounts(ada.db, ada.identity)).find((candidate) => candidate.id === paid.id)
       expect(view).toMatchObject({ status: "active", mark: { reason: "quota_exhausted" } })
 
-      expect(await probe(paid.id, credits(12))).toEqual({ healthy: true, reason: null, balance: { value: 12, ...BALANCE } })
+      expect(await probe(paid.id, credits(12))).toEqual({ healthy: true, code: null, reason: null, balance: { value: 12, ...BALANCE } })
       expect(await healthOf(paid.id)).toEqual({})
       expect(await journalCount()).toBe(lines)
     })
@@ -336,7 +336,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     ])("should never say healthy on a balance %s, and keep a quota_exhausted mark", async (_case, remaining, reason) => {
       const paid = await paidAccount()
       const answer = remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining)
-      expect(await probe(paid.id, answer)).toEqual({ healthy: false, reason, balance: { value: null, ...BALANCE } })
+      expect(await probe(paid.id, answer)).toEqual({ healthy: false, code: "unexpected_answer", reason, balance: { value: null, ...BALANCE } })
       expect(await healthOf(paid.id)).toEqual({})
       await probe(paid.id, credits(1))
       const spent = await markOf(paid.id)
@@ -351,6 +351,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const paid = await paidAccount()
       const refused = await probe(paid.id, json({}, 401))
       expect(refused.healthy).toBe(false)
+      expect(refused.code).toBe("credential_rejected")
       expect(refused.balance).toBeNull()
       expect((await markOf(paid.id))?.reason).toBe("credential_rejected")
       // Le tiers accepte de nouveau la clé : la marque de clé refusée tombe, comme au premier appel réussi ; le solde
@@ -369,7 +370,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))
       expect((await markOf(crm.id))?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => json({ name: "Contoso", scopes: ["read"] })))
-      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }))).toEqual({ healthy: true, reason: null, balance: null })
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(await healthOf(crm.id)).toEqual({})
     })
   })

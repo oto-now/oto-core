@@ -248,7 +248,7 @@ function accessTables(ids: Ids): Record<string, Row[]> {
       rule({ account_id: ids.bobAccount, subject_team_id: ids.ventes }),
       rule({ node_id: ids.devis, subject_team_id: ids.support, level: "write" }),
     ],
-    connector_activations: [{ org_id: ids.org, connector: "mail", state: "active", activated_by: ids.alice, created_at: AT, updated_at: AT }],
+    connector_activations: [{ org_id: ids.org, connector: "mail", state: "active", activated_by: ids.alice, closed_by: null, created_at: AT, updated_at: AT }],
     invitations: [
       invitation("new@example.test"),
       invitation("accepted@example.test", { accepted_at: LATER, accepted_by: ids.carol }),

@@ -118,7 +118,7 @@ beforeEach(() => {
     contact: null,
   })
   vi.mocked(listConnectorsForOrg).mockResolvedValue([
-    { connector: "mail", label: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [], closedBy: null },
+    { connector: "mail", label: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [], closedBy: null, accountModes: ["simule"] },
   ])
   vi.mocked(listOrgAccounts).mockResolvedValue([])
   vi.mocked(listOwnAccounts).mockResolvedValue([])
