@@ -231,17 +231,33 @@ export async function resolveRef(db: PlatformDb, identity: Identity, ref: OwnerR
 }
 
 /**
- * Un compte par son libellé, sans casse, parmi ceux que l'appelant voit (`listOrgAccounts`, E08-S03 : un
- * compte de niveau 0 n'y est pas) ; le libellé est unique dans l'organisation (N6) : zéro ou un. Aucun :
- * `not_found`, qui liste les libellés visibles, 20 au plus.
+ * Un compte par son identifiant, ou par son libellé sans casse, parmi ceux que l'appelant voit (`listOrgAccounts`,
+ * E08-S03 : un compte de niveau 0 n'y est pas). Le libellé est unique pour un même propriétaire (N6), non dans
+ * l'organisation : deux homonymes de propriétaires différents rendent `ambiguous_account`, qui les nomme avec leur
+ * identifiant, jamais un choix. Aucun : `not_found`, qui liste les libellés visibles, 20 au plus.
  */
 export async function findAccount(db: PlatformDb, identity: Identity, input: { label: string }): Promise<AccountView> {
-  const label = input.label.trim()
+  const wanted = input.label.trim()
   const accounts = await listOrgAccounts(db, identity)
-  const account = accounts.find((candidate) => candidate.label.toLowerCase() === label.toLowerCase())
-  if (account) return account
+  const byId = accounts.find((candidate) => candidate.id === wanted)
+  if (byId) return byId
+  const found = accounts.filter((candidate) => candidate.label.toLowerCase() === wanted.toLowerCase())
+  if (found.length === 1) return found[0]
+  if (found.length > 1) {
+    const named = boundedList(found.map((candidate) => `${candidate.label} (${ownerWords(candidate.owner)}, id ${candidate.id})`))
+    throw new PlatformError(
+      "ambiguous_account",
+      `Several accounts are labelled ${wanted} in ${identity.org.slug}: ${named}. Ask which one is meant, then name it by its id.`,
+    )
+  }
   const labels = boundedList(accounts.map((candidate) => candidate.label)) || "none"
-  throw new PlatformError("not_found", `No account labelled ${label} in ${identity.org.slug}. Accounts: ${labels}.`)
+  throw new PlatformError("not_found", `No account labelled ${wanted} in ${identity.org.slug}. Accounts: ${labels}.`)
+}
+
+/** Le propriétaire d'un compte tel qu'une ligne ou un refus le dit : « team Ventes », « organisation », « personal » (AC10, AC12). */
+export function ownerWords(owner: AccountView["owner"]): string {
+  if (owner.kind === "team") return `team ${owner.teamName ?? "?"}`
+  return owner.kind === "user" ? "personal" : "organisation"
 }
 
 type StaffRow = { user_id: string; email: string; name: string; added_at: string }

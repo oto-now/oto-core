@@ -224,6 +224,14 @@ describe.skipIf(!configured || accountFieldsPending)(
       // Un lien public actif (ADR-013) : son jeton, un secret, ne sort pas (AC4) ; la copie l'a désactivé (HN-E05S10e-9).
       shareToken = (await one(admin<{ token: string }[]>`
         insert into platform.node_shares (org_id, node_id, created_by) values (${source.id}, ${offre}, ${e2e.id}) returning token`, "node_shares")).token
+      // Un fil de commentaires sur un bloc publié de l'offre, dont le commentaire mentionne une personne : la copie les
+      // porte, le bloc et la personne sous leurs identifiants de la cible.
+      const thread = await one(admin<{ id: string }[]>`
+        insert into platform.comment_threads (org_id, node_id, block_id, quote, block_revision, created_by)
+        values (${source.id}, ${offre}, ${blockIds[1]}, 'Voir', 1, ${e2e.id}) returning id`, "comment_threads")
+      await admin`
+        insert into platform.comments (org_id, thread_id, author, text, mentions)
+        values (${source.id}, ${thread.id}, ${e2e.id}, 'À relire, @Quentin Test.', ${[q.id]}::uuid[])`
       await admin`select * from platform.open_draft(${grille})`
       await admin`update platform.blocks set text = 'Pré-étude : 1 800 € HT.' where node_id = ${grille} and state = 'draft' and text like 'Pré-étude%'`
       await admin`update platform.node_drafts set title = 'Grille tarifaire 2027' where node_id = ${grille}`

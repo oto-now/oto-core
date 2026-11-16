@@ -1,5 +1,6 @@
 // Comptes de connecteurs (H67, H85, FR-ADMIN-02, FR-ADMIN-03) : créer un compte, simulé ou réel selon son
-// connecteur, lister les comptes qu'une personne peut utiliser, désactiver ; et la lecture commune aux résolutions
+// connecteur, lister les comptes qu'une personne peut utiliser, décider qui gère un compte (`managedAccount`) ; et la
+// lecture commune aux résolutions
 // (équipe porteuse, compte), au bloc `team` et au secret d'un compte (`account-secret.ts`). Sans ce module, aucun
 // compte ne se pose hors de l'outillage. Aucun secret n'est rendu (NFR-ADMIN-01) : chaque requête liste ses colonnes,
 // `secret_ciphertext` et `token_ciphertext` ne sont pas accordées en lecture à `authenticated`, et leurs chiffrés ne se
@@ -8,18 +9,21 @@
 // garde-fou. Face SQL (E01-S10, lot d1) : chaque lecture ou écriture dans une transaction `db.tx`, les
 // décisions d'`access.ts` et l'annuaire hors d'elle.
 //
-// Repris d'Oto (`docs\roles-and-resolution.md`) : un libellé déjà pris est refusé. Retiré : compte par
-// défaut `is_default`, paliers tenant et plateforme (architecture § 10).
+// Repris d'Oto (`docs\roles-and-resolution.md`) : un libellé déjà pris par le même propriétaire est refusé. Retiré :
+// compte par défaut `is_default`, paliers tenant et plateforme (architecture § 10). Désactiver, réactiver, renommer et
+// décrire un compte : `account-changes.ts`.
 import {
   ACCOUNT_LEVEL_NAMES,
   connectorRefSchema,
+  PROBE_FAILURE_CODES,
   createAccountSchema,
-  disableAccountSchema,
   type AccountLevelName,
   type AccountMark,
   type AccountMarkReason,
   type AccountMode,
+  type AccountProbe,
   type AccountView,
+  type ProbeFailureCode,
 } from "../../schemas"
 import {
   ACCOUNT_LEVELS,
@@ -27,8 +31,6 @@ import {
   accountLevels,
   administrators,
   describeOwner,
-  isOrgAdmin,
-  leadsTeam,
   type AccountLevel,
   type Owner,
 } from "../access"
@@ -40,9 +42,12 @@ import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, Plat
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
-import { requireActivable } from "./activations"
+import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
+import { requireAdmittedOwner } from "./account-owners"
+import { closedConnector, openConnectorForAccount, requireActivable } from "./activations"
+import { mayCreateAccountFor } from "./creation-right"
 import { keepDeclaredConnector } from "./declaration"
-import { accountMode, isSimulatedConnector, modeLabel } from "./modes"
+import { accountMode, creatableModes, isSimulatedConnector, modeLabel } from "./modes"
 
 /**
  * Niveau sur un compte tel que le lit le modèle : 1 lecture, 2 écriture, 3 sensible, 4 gestion (`ACCOUNT_LEVELS`) ; les
@@ -62,6 +67,8 @@ export type AccountSummary = { id: string; label: string; connector: string; mod
  * l'organisation (`ownerLeft`, relu à chaque lecture : son compte ne sert plus aux autres) : ce que lisent les résolutions.
  */
 export type ConnectorAccount = AccountSummary & {
+  /** Écrite par un membre : servie à l'assistant comme une donnée citée (`quotedDescription`), jamais une consigne. */
+  description?: string | null
   status: string
   statusReason?: string | null
   mark?: AccountMark | null
@@ -92,6 +99,43 @@ export function markOf(value: unknown): AccountMark | null {
   throw new PlatformError("internal", "Internal error.")
 }
 
+/** Le code d'un test gardé : celui de la liste fermée ; absent (un test gardé avant les codes), `other` s'il a échoué. */
+function probeCodeOf(healthy: boolean, code: unknown): ProbeFailureCode | null | undefined {
+  if (code === undefined || code === null) return healthy ? null : "other"
+  return healthy ? undefined : PROBE_FAILURE_CODES.find((known) => known === code)
+}
+
+/**
+ * Le dernier test lu en base (`health -> 'last_probe'`, écrit par `platform.record_account_probe` seule, date en UTC) ;
+ * `null` : jamais testé. Une autre forme ne vient que d'une écriture hors de la fonction : panne nommée.
+ */
+export function lastProbeOf(value: unknown): AccountProbe | null {
+  if (value === null || value === undefined) return null
+  const probe = isJsonObject(value) ? value : null
+  const balance = probe && isJsonObject(probe.balance) ? probe.balance : null
+  const balanceOk =
+    probe?.balance === null || (balance !== null && (balance.value === null || typeof balance.value === "number") && typeof balance.unit === "string" && typeof balance.min === "number")
+  if (
+    probe &&
+    typeof probe.at === "string" &&
+    !Number.isNaN(Date.parse(probe.at)) &&
+    typeof probe.healthy === "boolean" &&
+    (probe.reason === null || typeof probe.reason === "string") &&
+    probeCodeOf(probe.healthy, probe.code) !== undefined &&
+    balanceOk
+  ) {
+    return {
+      at: new Date(probe.at).toISOString(),
+      healthy: probe.healthy,
+      code: probeCodeOf(probe.healthy, probe.code) ?? null,
+      reason: probe.reason,
+      balance: balance ? { value: balance.value as number | null, unit: balance.unit as string, min: balance.min as number } : null,
+    }
+  }
+  console.error("[platform] accounts: health.last_probe of an unknown shape")
+  throw new PlatformError("internal", "Internal error.")
+}
+
 /**
  * Un compte lu, et le nom de son équipe propriétaire (`team_name`, sous RLS : `null` quand elle ne se lit pas) ; ses
  * réglages en clair, les noms des champs posés de son secret et la date de la dernière saisie, jamais le secret.
@@ -110,8 +154,11 @@ export type AccountRow = {
   secret_fields: string[]
   secret_updated_at: string | null
   status_reason: string | null
+  description: string | null
   /** `health -> 'mark'`, lu par `markOf`. */
   mark: unknown
+  /** `health -> 'last_probe'`, lu par `lastProbeOf`. */
+  last_probe: unknown
   /**
    * Compte personnel dont la personne n'est plus membre de l'organisation (`droits-d-acces.md` § Partage d'un compte
    * de connecteur) : il cesse de servir aux autres, rien n'est supprimé. Seul point qui dit qu'un propriétaire n'est
@@ -128,7 +175,8 @@ export type AccountRow = {
 export function accountRows(sql: Tx, orgId: string, only: { connector?: string; id?: string; ownerUserId?: string } = {}) {
   return sql<AccountRow[]>`
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
-           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.health -> 'mark' as mark,
+           a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.description,
+           a.health -> 'mark' as mark, a.health -> 'last_probe' as last_probe,
            a.owner_kind = 'user' and not exists (select 1 from platform.members m where m.org_id = a.org_id and m.user_id = a.owner_user_id) as owner_left
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
@@ -167,6 +215,7 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
     rows
       .map((row) => ({
         ...summary(row),
+        description: row.description,
         status: row.status,
         statusReason: row.status_reason,
         mark: markOf(row.mark),
@@ -180,15 +229,13 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
 }
 
 /**
- * Qui crée quoi (AC5, AC7), décidé avant l'insertion : un administrateur (`isOrgAdmin`), des comptes
- * d'organisation et d'équipe ; chaque responsable (`leadsTeam`, E05-S13 : une équipe peut en avoir
- * plusieurs), ceux de son équipe ; chacun, son propre compte personnel (N15).
+ * La règle de la création (`mayCreateAccountFor`) appliquée avant l'insertion : l'équipe visée doit exister dans
+ * l'organisation, et un refus nomme qui peut créer.
  */
 async function requireCreationRight(db: PlatformDb, identity: Identity, account: { owner_kind: string; team_id?: string }): Promise<void> {
   if (account.owner_kind === "user") return
-  const isAdmin = isOrgAdmin(identity)
   if (account.owner_kind === "org") {
-    if (isAdmin) return
+    if (mayCreateAccountFor(identity, { kind: "org" })) return
     const who = administrators(identity, await memberDirectory(db, identity.org.id))
     throw new PlatformError("forbidden", `Creating an organisation account is reserved to ${who}.`)
   }
@@ -201,26 +248,22 @@ async function requireCreationRight(db: PlatformDb, identity: Identity, account:
   const teamId = account.team_id
   const [team] = await inTransaction(db, "createAccount: teams", (sql) => teamsWithLeads(sql, identity.org.id, teamId))
   if (!team) throw new PlatformError("invalid_arguments", `Unknown team ${account.team_id} in ${identity.org.name}.`)
-  if (isAdmin || leadsTeam(identity, account.team_id)) return
+  if (mayCreateAccountFor(identity, { kind: "team", teamId })) return
   const directory = await memberDirectory(db, identity.org.id)
   const names = leadNames(team.leads, (userId) => directory.find((person) => person.userId === userId)?.name)
   const leads = names.length > 0 ? `its ${leadWord(names.length)} (${names.join(", ")}) and ` : ""
   throw new PlatformError("forbidden", `Creating an account for team ${team.name} is reserved to ${leads}${administrators(identity, directory)}.`)
 }
 
-/**
- * Le mode qu'un compte du connecteur admet (H85) : `simule` pour un connecteur simulé, `reel` pour un connecteur
- * réel (son secret se pose ensuite, `setAccountSecret`) ; `sandbox` n'est pas encore admis.
- */
+/** Refuse un mode que le connecteur n'admet pas (`creatableModes`), en disant lequel prendre. */
 function requireCreatableMode(connector: string, mode: AccountMode): void {
+  if (creatableModes(connector).includes(mode)) return
   if (isSimulatedConnector(connector)) {
-    if (mode === "simule") return
     throw new PlatformError(
       "unavailable_in_v1",
       `${connector} is simulated in this version: its accounts are simulated, a ${modeLabel(mode)} account is not available. Create it with mode simule.`,
     )
   }
-  if (mode === "reel") return
   if (mode === "sandbox") {
     throw new PlatformError("unavailable_in_v1", `Sandbox accounts are not available yet. Create a live account of ${connector} with mode reel.`)
   }
@@ -247,13 +290,22 @@ export function refuseLinkedId(input: unknown, at: Record<string, unknown> | nul
   throw new PlatformError("invalid_arguments", "linked_id is never set by hand: it is written only when a person connects their own account (Connect my account).")
 }
 
+/** Le refus d'un libellé déjà pris par le même propriétaire (`conflict`, `label_taken`). */
+export function labelTaken(label: string, orgName: string): PlatformError {
+  return new PlatformError("conflict", `An account labelled ${label} already exists for the same owner in ${orgName}.`, { reason: "label_taken" })
+}
+
 /**
- * Crée un compte pour un connecteur activable, actif ou non (N12), au mode que son connecteur admet
- * (`requireCreatableMode`). Le mode est posé explicitement : le défaut de la colonne est `reel`. Un libellé déjà
- * pris dans l'organisation, sans casse, tous connecteurs et comptes invisibles compris, est refusé par l'index
- * unique d'E01-S06 (`23505` → `conflict`). L'identifiant chez un tiers (`linked_id`) n'est jamais une saisie. Écrit sous
- * le rôle du serveur, qui tient la liste des connecteurs (`keepDeclaredConnector`) ; l'état prend sa valeur par défaut,
- * actif : `authenticated` n'insère que ce que la personne fournit.
+ * Crée un compte pour un connecteur activable, au mode que son connecteur admet (`requireCreatableMode`), pour un
+ * propriétaire qu'admettent les `modes` de sa déclaration (`requireAdmittedOwner`) et les capacités de l'hôte
+ * (`account_owner_kinds`, `accounts_per_owner_max`, un compte désactivé hors du compte). Le connecteur s'ouvre dans la
+ * même transaction (`openConnectorForAccount`) : jamais activé, il l'est au nom de l'appelant, compté contre
+ * `connectors_max` ; fermé par un administrateur, le compte est refusé (`not_enabled`, `closed`). Le mode est posé
+ * explicitement : le défaut de la colonne est `reel`. Un libellé déjà pris par le même propriétaire, sans casse, tous
+ * connecteurs compris, est refusé par l'index unique (`23505` → `conflict`, `label_taken`). L'identifiant chez un tiers
+ * (`linked_id`) n'est jamais une saisie. Écrit sous le rôle du serveur, qui tient la liste des connecteurs
+ * (`keepDeclaredConnector`) ; l'état prend sa valeur par défaut, actif : `authenticated` n'insère que ce que la
+ * personne fournit.
  */
 export async function createAccount(db: PlatformDb, identity: Identity, input: unknown): Promise<AccountSummary> {
   refuseLinkedId(input)
@@ -264,6 +316,10 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   requireNotConsent(account.connector)
   requireCreatableMode(account.connector, account.mode)
   await requireCreationRight(db, identity, account)
+  const declared = declaredConnector(account.connector)
+  if (declared) requireAdmittedOwner(declared.definition, account.owner_kind)
+  const scope: LimitScope = { db, identity, limits: await orgLimits(identity.org) }
+  requireAdmittedAccountOwner(scope, account.owner_kind)
   const teamId = account.owner_kind === "team" ? (account.team_id ?? null) : null
   const userId = account.owner_kind === "user" ? identity.user.id : null
   // Une moitié de paire de substitution ne s'écrit jamais telle quelle : U+FFFD.
@@ -271,6 +327,8 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   const orgId = identity.org.id
   const row = await db
     .tx(async (sql) => {
+      if ((await openConnectorForAccount(sql, scope, account.connector)) === "closed") return null
+      await requireUnderAccountsPerOwner(sql, scope, { connector: account.connector, owner: { kind: account.owner_kind, teamId, userId } })
       await keepDeclaredConnector(sql, account.connector)
       const [created] = await sql<{ id: string }[]>`
         insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode)
@@ -286,11 +344,10 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
       return written
     }, "server")
     .catch((error) => {
-      if (isUniqueViolation(error)) {
-        throw new PlatformError("conflict", `An account labelled ${account.label} already exists in ${identity.org.name}.`)
-      }
+      if (isUniqueViolation(error)) throw labelTaken(account.label, identity.org.name)
       throw fromDatabaseError(error, "createAccount: accounts")
     })
+  if (!row) throw await closedConnector(db, identity, account.connector)
   return summary(row)
 }
 
@@ -299,7 +356,7 @@ function accountStatus(value: string): AccountView["status"] {
   return value === "active" || value === "disabled" ? value : "error"
 }
 
-function accountView(row: AccountRow, level: AccountLevel): AccountView {
+export function accountView(row: AccountRow, level: AccountLevel): AccountView {
   const { kind } = accountOwner(row)
   return {
     id: row.id,
@@ -313,6 +370,8 @@ function accountView(row: AccountRow, level: AccountLevel): AccountView {
     statusReason: row.status_reason,
     mark: markOf(row.mark),
     viewerLevel: levelName(level),
+    description: row.description,
+    lastProbe: lastProbeOf(row.last_probe),
   }
 }
 
@@ -382,36 +441,4 @@ export async function managedAccount(db: PlatformDb, identity: Identity, id: str
     throw new PlatformError("forbidden", `${use.gesture} « ${row.label} » is reserved to those who manage it: ${who}.`)
   }
   return row
-}
-
-/**
- * Désactive un compte (AC9) : réservé à qui le gère (la gestion : responsable d'un compte d'équipe,
- * administrateur d'un compte d'organisation, propriétaire d'un compte personnel), décidé avant
- * l'écriture. Inconnu ou invisible (niveau 0) : `not_found`. Déjà désactivé : rien n'est écrit. Une
- * écriture qui ne rend aucune ligne après la décision est un conflit (HN-E01S07-6). L'état d'un compte ne s'écrit
- * que sous le rôle du serveur.
- */
-export async function disableAccount(
-  db: PlatformDb,
-  identity: Identity,
-  input: unknown,
-): Promise<AccountSummary & { status: "disabled" }> {
-  const parsed = disableAccountSchema.safeParse(input)
-  if (!parsed.success) throw invalidInput(parsed.error)
-  const id = parsed.data.account_id
-  const row = await managedAccount(db, identity, id, { service: "disableAccount", gesture: "Disabling" })
-  if (row.status !== "disabled") {
-    const updated = await inTransaction(
-      db,
-      "disableAccount: accounts update",
-      (sql) => sql`update platform.accounts set status = 'disabled' where id = ${id} returning id`,
-      "server",
-    )
-    // Aucune ligne après la décision : le compte a changé entre la lecture et l'écriture.
-    if (updated.length === 0) {
-      console.error(`[platform] disableAccount: no row written for account ${id}`)
-      throw new PlatformError("conflict", `Account « ${row.label} » changed meanwhile. Reload it and retry.`)
-    }
-  }
-  return { ...summary(row), status: "disabled" }
 }

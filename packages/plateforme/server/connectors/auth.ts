@@ -3,7 +3,8 @@
 // en en-tête ou en query, `bearer`, `basic`, `oauth2_client_credentials` : le jeton échangé contre l'identifiant et le
 // secret du client, rangé en base (chiffré, `token_ciphertext`) et non dans la mémoire du processus, renouvelé à son
 // échéance, et une fois de plus après un 401 ; `oauth2_user` : le jeton d'accès du consentement d'une personne, rangé
-// de même, renouvelé par `oauth-user.ts`. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
+// de même, renouvelé par `oauth-user.ts` ; `oauth2_jwt_bearer` : le jeton d'un compte de service, rangé et renouvelé
+// comme celui d'un échange, par `service-account.ts`. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
 // secret ne sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import type { AccountMark, AccountMarkReason } from "../../schemas"
 import { PlatformError } from "../errors"
@@ -11,6 +12,7 @@ import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorSetting, OAuthApplication } from "./definition"
 import { requestJson, type ApiRequest, type Fetch } from "./http"
 import { consentAccessToken, EXPIRY_MARGIN_MS, prepareUserConsent, type UserConsentAuth } from "./oauth-user"
+import { prepareServiceAccount, serviceAccountToken, type ServiceAccountAuth } from "./service-account"
 import { addressProblem, resolveAddress, type AccountSettings, type AddressSpec } from "./settings"
 import { basicOf, clientPlacement, expiryOf } from "./token-endpoint"
 
@@ -18,7 +20,7 @@ const HEADER_NAME = /^[A-Za-z0-9-]+$/
 const QUERY_NAME = /^[A-Za-z0-9_.-]+$/
 
 /** Les sortes d'authentification que le moteur exécute. */
-export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials", "oauth2_user"]
+export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials", "oauth2_user", "oauth2_jwt_bearer"]
 
 /** L'authentification déclarée, prête pour l'appel : les noms des champs du compte qu'elle lit. */
 export type PreparedAuth =
@@ -36,11 +38,15 @@ export type PreparedAuth =
       expiresInDefault: number | null
     }
   | UserConsentAuth
+  | ServiceAccountAuth
 
-/** Le jeton d'un échange tel que le garde un compte. */
-export type StoredToken = { token: string; expiresAt: Date | null }
+/**
+ * Le jeton d'un échange tel que le garde un compte ; `scopes` : les droits qu'il porte, rangés avec lui par un compte de
+ * service à niveaux d'accès (`granted_scopes`), absents sinon.
+ */
+export type StoredToken = { token: string; expiresAt: Date | null; scopes?: string[] }
 
-/** Où le jeton d'un échange se lit et s'écrit : la ligne du compte, chiffré (`token_ciphertext`). */
+/** Où le jeton d'un échange se lit et s'écrit : la ligne du compte, chiffré (`token_ciphertext`), et ses droits. */
 export type TokenStore = { read: () => Promise<StoredToken | null>; write: (token: StoredToken) => Promise<void> }
 
 /**
@@ -76,10 +82,12 @@ export type AccountMarker = {
  * Le compte d'un appel : ses champs déchiffrés, ceux de l'hôte (`holder: host`) compris, ses réglages, son jeton ; son
  * consentement pour `oauth2_user` ; l'identifiant du compte chez le tiers (`linkedId`, `accounts.linked_id`) pour un
  * connecteur à `accountIdentity` ; sa marque (`mark`), absente seulement pour l'identité lue au consentement, avant
- * que le compte existe.
+ * que le compte existe ; son niveau d'accès (`accessLevel`), pour un compte de service à niveaux, absent tant que l'hôte
+ * n'en garde pas par compte : le niveau par défaut de la description s'applique (`levels.ts`).
  */
 export type AccountCredential = {
   fields: Readonly<Record<string, string>>
+  accessLevel?: string
   settings: AccountSettings
   tokens: TokenStore
   consent?: ConsentCredential
@@ -118,7 +126,7 @@ function clientCredentials(definition: ConnectorDefinition, auth: Record<string,
 /**
  * L'authentification déclarée prête pour l'appel, ou le problème qui la refuse : chaque valeur qui désigne un secret
  * nomme un champ de `credential` ; `basic` sans `username` signe d'un identifiant vide ; `oauth2_user` (consentement
- * d'une personne) n'en nomme aucun. Toute autre sorte (`none`) est refusée.
+ * d'une personne) n'en nomme aucun ; `oauth2_jwt_bearer` nomme le seul, secret. Toute autre sorte (`none`) est refusée.
  */
 export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | string {
   const auth: Record<string, unknown> = { ...definition.auth }
@@ -141,7 +149,8 @@ export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | str
   }
   if (auth.kind === "oauth2_client_credentials") return clientCredentials(definition, auth)
   if (auth.kind === "oauth2_user") return prepareUserConsent(definition, auth)
-  return `${head} is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials and oauth2_user.`
+  if (auth.kind === "oauth2_jwt_bearer") return prepareServiceAccount(definition, auth)
+  return `${head} is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user and oauth2_jwt_bearer.`
 }
 
 /** Les champs du compte que l'authentification lit : chacun est exigé à l'appel. */
@@ -149,6 +158,7 @@ export function requiredFields(auth: PreparedAuth): string[] {
   if (auth.kind === "basic") return auth.username === null ? [auth.password] : [auth.username, auth.password]
   if (auth.kind === "client_credentials") return [auth.clientId, auth.clientSecret]
   if (auth.kind === "user_consent") return []
+  if (auth.kind === "service_account") return [auth.key]
   return [auth.field]
 }
 
@@ -202,6 +212,7 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   if (auth.kind === "query") return { headers: {}, query: [[auth.param, field(auth.field)]] }
   if (auth.kind === "basic") return { headers: { authorization: basicOf(auth.username === null ? "" : field(auth.username), field(auth.password)) }, query: [] }
   if (auth.kind === "user_consent") return { headers: { authorization: `Bearer ${await consentAccessToken({ ...signer, auth }, fresh)}` }, query: [] }
+  if (auth.kind === "service_account") return { headers: { authorization: `Bearer ${await serviceAccountToken({ ...signer, auth }, fresh)}` }, query: [] }
   const kept = fresh ? null : await credential.tokens.read()
   const usable = kept !== null && (kept.expiresAt === null || kept.expiresAt.getTime() - EXPIRY_MARGIN_MS > Date.now())
   const exchange = { auth, label: signer.definition.label, timeoutMs: signer.definition.timeoutMs, accountId: signer.accountId, fetcherFor: signer.fetcherFor }
@@ -210,7 +221,8 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
 }
 
 /**
- * Vrai si un 401 se rejoue une fois sur un jeton neuf : un échange, ou un consentement qui se renouvelle (`refresh`
- * autre que `none`), dont le jeton vient d'un compte.
+ * Vrai si un 401 se rejoue une fois sur un jeton neuf : un échange, un compte de service, ou un consentement qui se
+ * renouvelle (`refresh` autre que `none`), dont le jeton vient d'un compte.
  */
-export const renewsOnUnauthorized = (auth: PreparedAuth): boolean => auth.kind === "client_credentials" || (auth.kind === "user_consent" && auth.refresh !== "none")
+export const renewsOnUnauthorized = (auth: PreparedAuth): boolean =>
+  auth.kind === "client_credentials" || auth.kind === "service_account" || (auth.kind === "user_consent" && auth.refresh !== "none")

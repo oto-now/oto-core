@@ -74,7 +74,7 @@ describe.skipIf(!sqlConfigured)(portable("dashboard views of the connector servi
   }, 180_000)
 
   /** Ce que la vue d'un compte dit d'un secret jamais posé. */
-const NO_SECRET = { secret: { fields: [], updatedAt: null }, settings: {}, statusReason: null }
+const NO_SECRET = { secret: { fields: [], updatedAt: null }, settings: {}, statusReason: null, description: null, lastProbe: null }
 
 describe("deactivationImpact (AC11, H123)", () => {
     it("should name and count only the published procedures the caller reads, whose published call block calls the connector", async () => {
@@ -121,13 +121,14 @@ describe("deactivationImpact (AC11, H123)", () => {
   })
 
   describe("createAccount on a label already taken (AC11, N6)", () => {
-    it("should answer conflict from the unique index, without reading the accounts first, even when the account holding the label is of level 0", async () => {
-      // « Mail Claire » est le compte personnel de Claire, invisible d'Ada : l'index `accounts (org_id, lower(label))` refuse l'insertion.
+    it("should answer conflict from the unique index of the owner, without looking the label up first", async () => {
+      // « Mail Org » est un compte de l'organisation : l'index `accounts (org_id, propriétaire, lower(label))` refuse l'insertion.
       const { db, requests } = recordDb(await ref.db("ada"))
 
-      await expect(createAccount(db, ref.identityOf("ada"), { connector: "mail", owner_kind: "org", label: "mail claire" })).rejects.toMatchObject({
+      await expect(createAccount(db, ref.identityOf("ada"), { connector: "mail", owner_kind: "org", label: "mail org" })).rejects.toMatchObject({
         code: "conflict",
-        message: "An account labelled mail claire already exists in Acme Test.",
+        message: "An account labelled mail org already exists for the same owner in Acme Test.",
+        details: { reason: "label_taken" },
       })
       expect(requests.filter((sent) => namesOf(sent).includes("accounts")).map(opOf)).toEqual(["insert"])
     })

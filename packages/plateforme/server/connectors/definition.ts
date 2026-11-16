@@ -2,9 +2,17 @@
 // `connecteurs-et-comptes.md` § Moteur des connecteurs décrits) : des données structurelles, sans code, que le moteur
 // exécute. Le paquet ne dépend d'aucun dépôt de connecteurs : ce type est le sien, de même forme que la sortie de la
 // fabrique du dépôt `connectors` (`ts/src/types.ts`), qu'un hôte lui passe telle quelle ; un connecteur propre à
-// l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, modes, quota, exposition) est
-// ignoré. Aucun secret ici : `auth` nomme des champs de `credential`, les valeurs viennent du compte à l'appel ; celles
-// d'un consentement (`oauth2_user`) viennent de la personne qui a consenti et de l'application OAuth de l'hôte.
+// l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, quota, exposition) est ignoré ;
+// `modes` y figure : il dit qui peut posséder un compte du connecteur. Aucun secret ici : `auth` nomme des champs de
+// `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement (`oauth2_user`) viennent de la
+// personne qui a consenti et de l'application OAuth de l'hôte.
+
+/**
+ * Qui sert un compte du connecteur, comme la fabrique l'écrit : `byo_user`, la clé d'une personne (un compte personnel) ;
+ * `byo_org`, celle de l'organisation ou d'une équipe (un compte d'organisation ou d'équipe) ; `platform`, la clé de
+ * l'hôte (`holder: host`), qu'un compte d'organisation ou d'équipe ouvre sans rien saisir.
+ */
+export type ConnectorMode = "platform" | "byo_user" | "byo_org"
 
 /** L'application OAuth d'un connecteur `oauth2_user`, fournie par l'hôte (jamais lue de l'environnement par le paquet). */
 export type OAuthApplication = { readonly clientId: string; readonly clientSecret: string }
@@ -114,6 +122,20 @@ export type ConnectorOAuthScopes =
     }
 
 /**
+ * Les droits d'un compte de service : `scopes` (le niveau `full`), ou des niveaux d'accès comme ceux d'un consentement,
+ * et `defaultLevel`, le niveau d'un compte qui n'en dit pas, un niveau déclaré (`full` sans lui). L'assertion demande
+ * les droits du niveau du compte ; une fonction que le niveau n'accorde pas est refusée avant tout envoi (`levels.ts`).
+ */
+export type ConnectorServiceAccountScopes =
+  | { readonly scopes: readonly string[]; readonly accessLevels?: never; readonly scopeImplies?: never; readonly defaultLevel?: never }
+  | {
+      readonly accessLevels: { readonly full: ConnectorAccessLevel; readonly [level: string]: ConnectorAccessLevel }
+      readonly scopeImplies?: { readonly [scope: string]: readonly string[] }
+      readonly defaultLevel?: string
+      readonly scopes?: never
+    }
+
+/**
  * Qui a consenti, lu juste après le consentement : la valeur non vide au chemin `path` de la réponse nomme le compte.
  * Soit `function`, une lecture du connecteur sans argument requis, appelée avec `{}` ; soit `url`, une adresse complète
  * `https` fixe (le service d'identité commun d'un fournisseur), lue en `GET` avec le jeton d'accès, et `scopes`, les
@@ -142,11 +164,13 @@ export type ConnectorOAuthUser = {
   ConnectorOAuthScopes
 
 /**
- * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials` et
- * `oauth2_user` (le consentement d'une personne) s'exécutent ; toute autre sorte (`none`) se déclare mais est refusée
- * nommément par `registerConnectors`. Chaque valeur qui désigne un secret nomme un champ de `credential`. `basic` :
- * `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans `username`, l'identifiant est vide (une clé
- * seule passée en mot de passe).
+ * L'authentification : `api_key` (en en-tête ou en query), `bearer`, `basic`, `oauth2_client_credentials`,
+ * `oauth2_user` (le consentement d'une personne) et `oauth2_jwt_bearer` (un compte de service) s'exécutent ; toute autre
+ * sorte (`none`) se déclare mais est refusée nommément par `registerConnectors`. Chaque valeur qui désigne un secret
+ * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
+ * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
+ * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`),
+ * contre les droits de `scopes` ou du niveau du compte.
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -163,6 +187,7 @@ export type ConnectorAuth =
       readonly expiresInDefault?: number
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
+  | ({ readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly key: string } & ConnectorServiceAccountScopes)
   | { readonly kind: string }
 
 /**
@@ -232,6 +257,12 @@ export type ConnectorRequest = {
    * de la fabrique de `connectors`).
    */
   readonly body: ConnectorBodyMap | string
+  /**
+   * `true` : le corps construit (table, emboîtée ou non, constante comprise, ou argument entier) part seul élément d'une
+   * liste JSON, pour un tiers dont le corps est un tableau nu d'un objet (`body-list.ts`, règle 23 de la fabrique de
+   * `connectors`). Exige un corps ; jamais en `GET` ni avec `files`.
+   */
+  readonly bodyList?: true
   readonly headers: ConnectorArgumentMap
   /**
    * Nom de partie → argument qui porte l'identifiant d'un fichier en transit de l'appelant. Présent, le corps part en
@@ -299,7 +330,14 @@ export type ConnectorCheck = {
 export type ConnectorExpectation = { readonly kind: string; readonly refusal: string; readonly path: string }
 
 /** Où lire la quantité réelle d'un appel : un nombre JSON fini, positif ou nul, au chemin pointé `path` de sa réponse. */
-export type ConnectorCostSettle = { readonly path: string }
+export type ConnectorCostSettle = {
+  readonly path: string
+  /**
+   * Le facteur de la valeur lue à `unit`, un entier de deux ou plus : la quantité réglée est la valeur fois `scale`,
+   * arrondie à six décimales puis à l'entier supérieur (un coût lu en dollars, réglé en microdollars).
+   */
+  readonly scale?: number
+}
 
 /**
  * Le poids d'une valeur, à la place de `times` : chaque élément de la liste `items` compte la somme des poids des valeurs
@@ -349,7 +387,10 @@ export type ConnectorFunctionDefinition = {
    * les autres sous `<connecteur>.<fonction>`. Jamais `true` pour `read`, jamais `false` pour `sensitive`.
    */
   readonly act: boolean
-  /** Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès. */
+  /**
+   * Les droits que la fonction exige, tous : présents si et seulement si le connecteur a des niveaux d'accès
+   * (consentement ou compte de service), et accordés par l'un d'eux au moins.
+   */
   readonly scopes?: readonly string[]
   readonly description: string
   /** Racine `type: object`, `additionalProperties: false`. */
@@ -403,6 +444,8 @@ export type ConnectorDefinition = {
   /** Présente pour un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs. */
   readonly accountIdentity?: ConnectorAccountIdentity
   readonly settings?: readonly ConnectorSetting[]
+  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
+  readonly modes: readonly ConnectorMode[]
   readonly timeoutMs: number
   readonly queryArrays?: "repeat" | "brackets" | "comma"
   /** En-têtes constants de toute requête ; jamais l'en-tête d'authentification. */

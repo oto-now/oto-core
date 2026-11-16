@@ -12,6 +12,7 @@ import { isJsonObject } from "../json"
 import type { AccountCredential, Signer } from "./auth"
 import type { ConnectorDefinition, OAuthApplication } from "./definition"
 import { requestToken, type ApiRequest, type Fetch } from "./http"
+import { isScopeList, readAccessLevels } from "./levels"
 import { addressProblem, resolveAddress, type AddressSpec } from "./settings"
 import { clientPlacement, expiryOf } from "./token-endpoint"
 
@@ -22,14 +23,6 @@ export const EXPIRY_MARGIN_MS = 60_000
 const RESERVED_AUTHORIZE_PARAMS = ["client_id", "redirect_uri", "response_type", "scope", "state", "code_challenge", "code_challenge_method"]
 const PARAM_NAME = /^[A-Za-z0-9_.-]+$/
 const GRANT_TYPE = /^[A-Za-z0-9_.:-]+$/
-/** Un scope n'a ni espace ni guillemet (RFC 6749 § 3.3). */
-const SCOPE = /^[\x21\x23-\x5B\x5D-\x7E]+$/
-const LEVEL_NAME = /^[a-z][a-z0-9_]{0,39}$/
-
-/** Une liste de scopes sans espace ; `nonEmpty` : au moins un. */
-export const isScopeList = (value: unknown, nonEmpty: boolean): value is string[] =>
-  Array.isArray(value) && (!nonEmpty || value.length > 0) && value.every((scope) => typeof scope === "string" && SCOPE.test(scope))
-
 /** Qui a consenti : une fonction du connecteur, ou une adresse complète lue avec le jeton, et ses droits. */
 export type ConsentIdentity = { function: string; path: string } | { url: string; path: string; scopes: string[] }
 
@@ -83,20 +76,9 @@ function scopesOf(head: string, auth: Record<string, unknown>): Pick<UserConsent
     if (scopes !== undefined && !isScopeList(scopes, false)) return `${head}: scopes must list texts without spaces.`
     return { scopes: [...((scopes as string[] | undefined) ?? [])], accessLevels: null, scopeImplies: {} }
   }
-  if (scopes !== undefined) return `${head}: scopes and accessLevels exclude each other; a connector with access levels asks the scopes of a level.`
-  if (!isJsonObject(accessLevels) || !isJsonObject(accessLevels.full)) return `${head}: accessLevels needs the level full.`
-  const levels: Record<string, string[]> = {}
-  for (const [name, level] of Object.entries(accessLevels)) {
-    if (!LEVEL_NAME.test(name) || !isJsonObject(level) || !isScopeList(level.scopes, true)) {
-      return `${head}: access level ${JSON.stringify(name)} needs a name in lowercase ASCII letters, digits and _, and a non-empty list of scopes without spaces.`
-    }
-    levels[name] = [...level.scopes]
-  }
-  const implies = scopeImplies ?? {}
-  if (!isJsonObject(implies) || Object.entries(implies).some(([scope, implied]) => !SCOPE.test(scope) || !isScopeList(implied, true))) {
-    return `${head}: scopeImplies must map a scope to the non-empty list of scopes it covers.`
-  }
-  return { scopes: levels.full, accessLevels: levels, scopeImplies: Object.fromEntries(Object.entries(implies).map(([scope, implied]) => [scope, [...(implied as string[])]])) }
+  const declared = readAccessLevels(head, auth)
+  if (typeof declared === "string") return declared
+  return { scopes: declared.levels.full, accessLevels: declared.levels, scopeImplies: declared.implies }
 }
 
 /** L'identité déclarée : `{ function, path }`, ou `{ url, path, scopes }`, une adresse `https` fixe ; ou le problème. */

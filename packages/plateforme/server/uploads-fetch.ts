@@ -10,6 +10,7 @@ import { request as httpsRequest } from "node:https"
 import { BlockList, isIP, type LookupFunction } from "node:net"
 import { UPLOAD_BYTES_MAX } from "../schemas"
 import { readBounded } from "./bounded-read"
+import { fetchesCallerUrls } from "./catalog/surface-source"
 
 const TIMEOUT_MS = 10_000
 const REDIRECTS_MAX = 3
@@ -25,6 +26,7 @@ export const SOURCE_FAILURES = {
   timeout: `source_url did not answer within ${TIMEOUT_MS / 1000} s`,
   tooLarge: "source_url serves more than 1 MB",
   unreachable: "source_url could not be reached",
+  closed: "this platform does not download from an address",
 } as const
 
 /**
@@ -205,6 +207,8 @@ async function hop(url: URL, deps: { resolve: Resolve; get: SourceGet; signal: A
  * attente de 10 s).
  */
 export async function fetchSource(source: string, deps: { resolve?: Resolve; get?: SourceGet; timeoutMs?: number; maxBytes?: number } = {}): Promise<Fetched> {
+  // Un hôte qui a fermé ces téléchargements (`registerHostSurface`) : aucune requête ne part, pour aucun appelant.
+  if (!fetchesCallerUrls()) return { failure: SOURCE_FAILURES.closed }
   const signal = AbortSignal.timeout(deps.timeoutMs ?? TIMEOUT_MS)
   const chain = { resolve: deps.resolve ?? systemResolve, get: deps.get ?? httpsGet, signal, maxBytes: deps.maxBytes ?? UPLOAD_BYTES_MAX }
   try {

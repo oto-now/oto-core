@@ -3,10 +3,11 @@
  * et contrôle des migrations du schéma `platform` (ADR-006), préparation d'une base (ADR-012 § 1),
  * bundle du widget avec les vues de l'ERP (story widgets-dans-la-conversation), secret et réglages d'un
  * compte réel de connecteur (connecteurs-et-comptes), purge du journal et des retours au-delà de la rétention de l'hôte
- * (pseudonymisation), suppression d'une organisation (administration-et-cellule).
+ * (pseudonymisation), email groupé des commentaires (parcours 5.4), suppression d'une organisation
+ * (administration-et-cellule).
  *
- * `run(argv)` rend le code de sortie : 0 succès, 1 copie ou migration refusée, préparation, build ou suppression en
- * échec, 2 usage incorrect. Appelée par `bin.mjs` (le `bin` du paquet) et par les scripts `migrations:sync`
+ * `run(argv)` rend le code de sortie : 0 succès, 1 copie ou migration refusée, préparation, build, envoi ou suppression
+ * en échec, 2 usage incorrect. Appelée par `bin.mjs` (le `bin` du paquet) et par les scripts `migrations:sync`
  * et `check:migrations` du dépôt.
  */
 import { join } from 'node:path'
@@ -24,9 +25,10 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
         oto-platform widgets build --views <dossier> --out <fichier>
         oto-platform accounts secret [--db-url <url>] --account <id> [--setting nom=valeur …] < champs.json
         oto-platform journal purge [--db-url <url>] [--journal-days <jours>] [--feedback-days <jours>]
+        oto-platform comments notify [--db-url <url>]
         oto-platform org delete [--db-url <url>] --org <slug> [--yes --by <email>] [--without-storage]
 
-  Adresse de la base (db prepare, accounts secret, journal purge, org delete)
+  Adresse de la base (db prepare, accounts secret, journal purge, comments notify, org delete)
     Celle d'un rôle d'administration, lue dans PLATFORM_ADMIN_DATABASE_URL, mot de passe compris ; ou
     --db-url <url> SANS mot de passe, celui-ci dans PGPASSWORD (un argument se lit dans ps et l'historique
     du shell). --db-url à mot de passe (admin:…@, vide compris, ou ?password=) : refusé. Les deux, ou
@@ -39,14 +41,24 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --from  migrations à copier (défaut : celles du paquet)
     --to    migrations de l'hôte (défaut : supabase/migrations du répertoire courant)
 
-  migrations check [--file <fichier.sql>]
+  migrations check [--file <fichier.sql> …] [--tags <v1.6.0,v1.6.1,…>] [--json]
     Contrôle que le SQL ne touche que le schéma platform et ne fait qu'ajouter, que toute
     fonction créée dans platform retire l'exécution à public dans le même fichier
     (revoke execute … from public ; fonctions de déclencheur exceptées), et qu'il reste portable :
     aucune clé vers auth.users, aucune lecture de auth.users (fonction, vue, requête, bloc) hors
     des trois fonctions propres à Supabase, aucune extension hors de pg_trgm, unaccent et ltree ;
     et qu'une fonction redéfinie ne donne l'exécution à aucun rôle de plus qu'avant le fichier.
-    --file  un fichier seul (défaut : les migrations du paquet)
+    Un retrait (drop, rename, set not null, changement de type) n'est admis que déclaré dans
+    l'en-tête du fichier, une ligne par groupe :
+      -- retrait: platform.<table>.<colonne>, platform.<nom> ; plus lu depuis vX.Y.Z
+    où vX.Y.Z est une étiquette d'oto-core (refus retrait-malformed, retrait-untagged,
+    retrait-untagged-unverifiable, retrait-uncovered, retrait-unused).
+    --file  un fichier à contrôler ; répétable (défaut : les migrations du paquet)
+    --tags  les étiquettes d'oto-core, séparées par des virgules (défaut : git tag --list 'v*'
+            du dépôt qui contient chaque fichier ; lues seulement pour un fichier qui déclare
+            un retrait)
+    --json  un seul objet JSON sur la sortie standard : { ok, files: [{ file, retraits,
+            errors }], requires }, requires étant la plus haute version déclarée (ou null)
 
   db prepare [--db-url <url>]
     Prépare une base avant les migrations, une fois ; un second passage ne change rien. Sur un
@@ -84,6 +96,15 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
     --journal-days   rétention du journal, en jours (1 à 36 500)
     --feedback-days  rétention des retours, en jours (1 à 36 500)
 
+  comments notify [--db-url <url>]
+    Envoie l'email groupé des commentaires, pour toutes les organisations : à chaque personne qu'un
+    commentaire concerne et qui lit encore la page, un seul email par heure au plus, qui réunit ce qui est
+    arrivé depuis son précédent email. À lancer chaque heure par la tâche planifiée de l'hôte ; relancée,
+    elle n'envoie rien en double. Le relais se lit dans PLATFORM_SMTP_URL et PLATFORM_MAIL_FROM : sans
+    eux, elle le dit, n'envoie rien et sort à 0. Rend le nombre d'emails, de commentaires et d'échecs ; un
+    envoi en échec (code 1) laisse ses commentaires au passage suivant.
+    --db-url  adresse de la base sans mot de passe (Adresse de la base, ci-dessus)
+
   org delete [--db-url <url>] --org <slug> [--yes --by <email>] [--without-storage]
     Supprime une organisation : toutes ses lignes de platform, et ses objets du stockage (sous <org_id>/).
     Sans --yes, compte ce qui serait supprimé, table par table, et n'écrit rien. Avec --yes : le stockage
@@ -102,13 +123,15 @@ const USAGE = `Usage : oto-platform migrations <sync|check> [options]
 
   -h, --help  cette aide
 
-Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, purge ou suppression refusé, 2 usage incorrect
+Codes de sortie : 0 succès, 1 copie, migration, préparation, build, secret, purge, envoi ou suppression refusé, 2 usage incorrect
 (adresse de la base refusée comprise).`
 
 const OPTIONS = {
   from: { type: 'string' },
   to: { type: 'string' },
-  file: { type: 'string' },
+  file: { type: 'string', multiple: true },
+  tags: { type: 'string' },
+  json: { type: 'boolean' },
   'db-url': { type: 'string' },
   views: { type: 'string' },
   out: { type: 'string' },
@@ -124,11 +147,12 @@ const OPTIONS = {
 }
 // Options de chaque sous-commande : celle d'une autre y est une option inconnue.
 const COMMANDS = {
-  migrations: { sync: ['from', 'to'], check: ['file'] },
+  migrations: { sync: ['from', 'to'], check: ['file', 'tags', 'json'] },
   db: { prepare: ['db-url'] },
   widgets: { build: ['views', 'out'] },
   accounts: { secret: ['db-url', 'account', 'setting'] },
   journal: { purge: ['db-url', 'journal-days', 'feedback-days'] },
+  comments: { notify: ['db-url'] },
   org: { delete: ['db-url', 'org', 'by', 'yes', 'without-storage'] },
 }
 
@@ -169,8 +193,9 @@ function parse(argv, env) {
   if (extra !== undefined) throw new UsageError(`argument en trop « ${extra} »`)
   for (const [name, value] of Object.entries(values)) {
     if (!subcommands[subcommand].includes(name)) throw new UsageError(`option « --${name} » inconnue de « ${command} ${subcommand} »`)
-    if (value === '') throw new UsageError(`l'option « --${name} » attend une valeur`)
+    if (value === '' || (Array.isArray(value) && value.includes(''))) throw new UsageError(`l'option « --${name} » attend une valeur`)
   }
+  if (values.tags !== undefined && !values.tags.split(',').every((tag) => tag.trim())) throw new UsageError(`l'option « --tags » attend des étiquettes séparées par des virgules`)
   if (command === 'accounts' && !values.account) throw new UsageError('« accounts secret » attend --account <id>')
   if (command === 'org' && !values.org) throw new UsageError('« org delete » attend --org <slug>')
   if (command === 'org' && values.yes && !values.by) throw new UsageError('« org delete --yes » attend --by <email>')
@@ -229,6 +254,16 @@ export async function run(argv) {
       printError: (line) => console.error(line),
     })
   }
+  if (options.command === 'comments') {
+    // Chargé à la demande, comme `db prepare` : le pilote Postgres et le client SMTP ne servent qu'ici.
+    const { commentsNotifyCommand } = await import('./comments-notify.mjs')
+    return commentsNotifyCommand({
+      dbUrl: options.dbUrl,
+      env: process.env,
+      print: (line) => console.log(line),
+      printError: (line) => console.error(line),
+    })
+  }
   if (options.command === 'org') {
     // Chargé à la demande, comme `db prepare` : le pilote Postgres et le client du stockage ne servent qu'ici.
     const { orgDeleteCommand } = await import('./org-delete.mjs')
@@ -250,6 +285,7 @@ export async function run(argv) {
   if (options.subcommand === 'sync') {
     return syncMigrations({ from: options.from ?? PACKAGE_MIGRATIONS, to: options.to ?? 'supabase/migrations' })
   }
-  const files = options.file ? [options.file] : sqlFiles(PACKAGE_MIGRATIONS).map((file) => join(PACKAGE_MIGRATIONS, file))
-  return checkMigrations({ files })
+  const files = options.file ?? sqlFiles(PACKAGE_MIGRATIONS).map((file) => join(PACKAGE_MIGRATIONS, file))
+  const tags = options.tags?.split(',').map((tag) => tag.trim())
+  return checkMigrations({ files, tags, json: options.json === true })
 }

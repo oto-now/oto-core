@@ -14,8 +14,10 @@ import { issuesText, PlatformError } from "../errors"
 import { backgroundRunnerProblem, declareBackgroundRunner, type BackgroundRunner } from "../jobs/trigger"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
+import { modesProblem } from "./account-owners"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import { bodyArgumentProblem } from "./body-argument"
+import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
@@ -25,7 +27,8 @@ import { errorTable } from "./error-table"
 import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedApplications, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
 import { callerTransitFiles, filesProblem } from "./multipart"
-import { isScopeList, type UserConsentAuth } from "./oauth-user"
+import { declaredLevels, functionScopesProblem, type AccessLevels } from "./levels"
+import type { UserConsentAuth } from "./oauth-user"
 import { stripProblem } from "./output"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
@@ -109,14 +112,14 @@ function typesOf(property: unknown): unknown[] {
   return Array.isArray(property.type) ? property.type : [property.type]
 }
 
-/** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`) ou emboîté (`body-table.ts`) compris ; `null` : aucun. */
+/** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`), emboîté (`body-table.ts`) ou en liste (`body-list.ts`) compris ; `null` : aucun. */
 function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
   const spec = fn.request
   if (!isJsonObject(spec) || !METHODS.includes(spec.method) || typeof spec.path !== "string" || !spec.path.startsWith("/")) {
     return `${fn.name}: request needs a method (GET, POST, PUT, PATCH, DELETE) and a path starting with /.`
   }
   const shaped = isJsonObject(spec.query) && (bodyTableShaped(spec.body) || typeof spec.body === "string") && isJsonObject(spec.headers) && Array.isArray(spec.pathParams)
-  const shape = shaped ? (bodyArgumentProblem(fn) ?? bodyTableProblem(fn)) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
+  const shape = shaped ? (bodyArgumentProblem(fn) ?? bodyTableProblem(fn) ?? bodyListProblem(fn)) : `${fn.name}: request needs pathParams, query, body (a map, or the argument that is the whole body) and headers.`
   if (shape) return shape
   const properties = isJsonObject(fn.schema.properties) ? fn.schema.properties : {}
   const inPath = [...spec.path.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1])
@@ -273,15 +276,8 @@ function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments
   }
 }
 
-/**
- * Les droits qu'une fonction exige (`scopes`) : exigés dans un connecteur à niveaux d'accès, refusés ailleurs, comme le
- * format le dit. Gardés sans être appliqués (issue oto-now/oto-core#71).
- */
-function functionScopesProblem(fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
-  const levels = auth.kind === "user_consent" ? auth.accessLevels : null
-  if (levels === null) return fn.scopes === undefined ? null : `${fn.name}: scopes need the connector's accessLevels.`
-  return isScopeList(fn.scopes, true) ? null : `${fn.name}: scopes must list the scopes the function needs, in a connector with access levels.`
-}
+/** Les niveaux d'accès d'une authentification : ceux d'un consentement ou d'un compte de service ; `null` ailleurs. */
+const levelsOf = (auth: PreparedAuth): AccessLevels | null => (auth.kind === "user_consent" || auth.kind === "service_account" ? declaredLevels(auth) : null)
 
 /**
  * L'identité lue à une adresse complète, préparée comme une lecture sans argument : un `GET` sur l'adresse, avec le
@@ -308,7 +304,11 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
   const problem =
-    connectorProblem(definition, reserved, seen) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(definition) ?? holderProblem(definition) ?? accountIdentityProblem(definition)
+    (connectorProblem(definition, reserved, seen) ?? modesProblem(definition)) ??
+    (typeof kindProblem === "string" ? kindProblem : null) ??
+    accountProblem(definition) ??
+    holderProblem(definition) ??
+    accountIdentityProblem(definition)
   if (problem) throw new CatalogRegistrationError(problem)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
@@ -323,7 +323,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, auth) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
+    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, levelsOf(auth)) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
     const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
@@ -363,9 +363,9 @@ export type ConnectorOptions = HostOptions & {
  * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
  * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
- * `oauth2_client_credentials`, `oauth2_user`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
+ * `oauth2_client_credentials`, `oauth2_user` et `oauth2_jwt_bearer`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
  * classe, description, schéma strict et compilé (JSON Schema 2020-12), exemples, requête, pagination, contrôles,
- * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux, délai propre (toute clé inconnue d'une
+ * récapitulatif d'une fonction sensible, droits exigés d'un connecteur à niveaux (accordés par un niveau au moins), délai propre (toute clé inconnue d'une
  * fonction refusée), fonction longue (`background`, comme la règle 21 de la fabrique), coût (`cost`) et travail
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
  * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,

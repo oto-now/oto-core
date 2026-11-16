@@ -14,6 +14,8 @@
 // les liens sortants lus (`liens`, que seul le titre d'un lien attend, M64) ; l'indication
 // d'enregistrement d'un tableau se pose en haut à droite de son brouillon (AC-1).
 // E11-S05 (AC-g2) : une page vide dont le titre est écrit s'ouvre le focus dans son Texte vide.
+// Commentaires (parcours 5.4, AC14) : chaque bloc lu est dans sa boîte (`oto-bloc-lu`, `data-bloc`), sa bulle de
+// commentaire à droite, dans la cellule `oto-block-menu` de la rangée d'un bloc écrit.
 import type { ReactNode } from "react"
 import type { BlockView, NodeView } from "../../schemas"
 import { listItemTexts, tableCells } from "../../schemas/blocks"
@@ -32,6 +34,8 @@ import { cheminsCitesDans, type CiblesDesLiens } from "./en-ligne"
 import { ECRAN, genreDuNoeud, PAGE_VIDE } from "./libelles"
 import { Publication } from "./publication"
 import { BlocsRepliables } from "./blocs-repliables"
+import { BulleDeBloc } from "./commentaires/bulle-de-bloc"
+import { premiersMots } from "./editeur/modele"
 import { RenduDUnBloc } from "./rendu-des-blocs"
 
 /** Le niveau d'écriture de l'écran (AC9) : celui d'un rédacteur hors de la version publiée, sinon aucun. */
@@ -97,7 +101,14 @@ function Lecture({ blocs, Lien, hrefDuChemin, referencesRendues, cibles, liens }
       ) : (
         <BlocsRepliables
           blocs={blocs}
-          rendre={(bloc) => <RenduDUnBloc bloc={bloc} Lien={Lien} hrefDuChemin={hrefDuChemin} cibles={cibles} lecture={liens} rendu={referencesRendues?.[bloc.id]} />}
+          rendre={(bloc) => (
+            <div className="oto-bloc-lu" data-bloc={bloc.id}>
+              <RenduDUnBloc bloc={bloc} Lien={Lien} hrefDuChemin={hrefDuChemin} cibles={cibles} lecture={liens} rendu={referencesRendues?.[bloc.id]} />
+              <div className="oto-block-menu">
+                <BulleDeBloc bloc={bloc.id} mots={premiersMots(bloc)} />
+              </div>
+            </div>
+          )}
         />
       )}
     </Reader>

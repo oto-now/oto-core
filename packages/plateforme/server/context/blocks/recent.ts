@@ -3,13 +3,17 @@
 // personne a lus ou écrits sur 90 jours — lectures et écritures au journal, blocs qu'elle a écrits
 // (brouillon d'une page, ligne d'un tableau), nœuds qu'elle a publiés —, datés de leur source la plus
 // récente, 20 au plus (sans taille, E11-S03) ; ni procédure, ni Contexte, ni la racine, ni nœud
-// qu'elle ne lit pas. Sans lui, la personne ne retrouve pas ce sur quoi elle travaillait.
+// qu'elle ne lit pas. Les contenus qu'elle écrit et dont des fils de commentaires attendent un assistant y sont nommés,
+// marqués (`comments/waiting.ts`), comme ceux dont un fil qui lui est destiné porte un commentaire d'un autre depuis sa
+// conversation précédente (`comments/followed.ts`). Sans lui, la personne ne retrouve pas ce sur quoi elle travaillait.
 //
 // Repris de la maquette (`mcp-test/src/proto/services/context.ts` l. 205-208, 227-230) : forme des
 // lignes, exclusions (procédures, racine), 20 au plus. Retiré : les documents de toute l'organisation
 // (→ ceux de la personne, H36), la lecture par clé de service.
 import { NODE_PATH_PATTERN, SERVED_RECENT } from "../../../schemas"
 import { ACCESS_LEVELS, nodeLevels } from "../../access"
+import { pagesWithNewComments, type CommentedPage } from "../../comments/followed"
+import { pagesWaitingAssistant, type WaitingPage } from "../../comments/waiting"
 import type { PlatformDb } from "../../db"
 import { inTransaction } from "../../errors"
 import type { Identity } from "../../identity"
@@ -118,47 +122,84 @@ export async function recentDocuments(db: PlatformDb, identity: Identity): Promi
 type Line = { at: string; path: string; text: string }
 
 /**
+ * Un contenu que ses commentaires font nommer : `threads` fils y attendent un assistant (`WaitingPage`), `comments`
+ * commentaires d'un autre y sont arrivés depuis la borne dans des fils destinés à la personne (`CommentedPage`) ; `at` :
+ * le plus récent des deux (ISO).
+ */
+export type MarkedPage = Pick<WaitingPage, "path" | "kind" | "title" | "at"> & { threads?: number; comments?: number }
+
+/** Les contenus marqués par leurs commentaires, une fois chacun : ceux qui attendent un assistant, et ceux aux commentaires nouveaux. */
+export function markedPages(waiting: readonly WaitingPage[], commented: readonly CommentedPage[]): MarkedPage[] {
+  const pages = new Map<string, MarkedPage>(waiting.map(({ path, kind, title, at, threads }) => [path, { path, kind, title, at, threads }]))
+  for (const page of commented) {
+    const known = pages.get(page.path)
+    pages.set(page.path, { ...page, threads: known?.threads, at: known && Date.parse(known.at) > Date.parse(page.at) ? known.at : page.at })
+  }
+  return [...pages.values()]
+}
+
+/**
  * Le texte du bloc (AC5, AC6 ; E05-S12, AC-20 ; 2026-10-27, « What's new » et « Recent content » fusionnés, décision de
  * JB) : « ## Recent content », la borne des nouveautés quand elle est connue, puis une ligne par contenu, jamais deux fois
  * le même : une version publiée depuis la borne, marquée `new v<rév>` (elle l'emporte sur la ligne du même contenu lu
  * ou écrit), un contenu de la personne, un connecteur activé ; les plus récentes d'abord, 20 au plus, servi entier
- * (E11-S03, AC-b1) ; `null` sans ligne. Formats de `SERVED_RECENT`, que l'écran relit (E05-S13, AC-16) ; exporté pour son
- * test de parité, sans base.
+ * (E11-S03, AC-b1) ; `null` sans ligne. Un contenu de `waiting` (la personne l'écrit, des fils y attendent un assistant)
+ * porte leur nombre avant sa date, sur la ligne qui le nomme déjà, sinon sur une ligne à lui, datée de la dernière demande ;
+ * de même, avant lui, le nombre des commentaires nouveaux d'un fil destiné à la personne (`2 new comments`). Formats de
+ * `SERVED_RECENT`, que l'écran relit (E05-S13, AC-16) ; exporté pour son test de parité, sans base.
  */
 export function recentText(
   documents: readonly (Pick<DocumentNode, "path" | "kind" | "title"> & { at: string })[],
   news: News | null,
   since: string | null,
+  waiting: readonly MarkedPage[] = [],
 ): ContextBlock | null {
   const { title, sinceStart, sinceEnd, item, kindStart, newMark, dateStart, dateEnd, connector, activated, connectorEnd } = SERVED_RECENT
+  const { newCommentOne, newCommentMany, forAssistantOne, forAssistantMany } = SERVED_RECENT
   const versions = news?.versions ?? []
   const fresh = new Set(versions.map((version) => version.path))
+  const marked = new Map(waiting.map((page) => [page.path, page]))
+  const counted = (count: number | undefined, one: string, many: string) => (count === undefined ? "" : `${dateStart}${count}${count === 1 ? one : many}`)
+  // « , 2 new comments, 1 comment for the assistant » avant la date d'un contenu marqué par ses commentaires ; rien sinon.
+  const mark = (path: string) => {
+    const page = marked.get(path)
+    return `${counted(page?.comments, newCommentOne, newCommentMany)}${counted(page?.threads, forAssistantOne, forAssistantMany)}`
+  }
+  const kept = documents.filter((document) => !fresh.has(document.path))
+  const named = new Set([...fresh, ...kept.map((document) => document.path)])
   const lines: Line[] = [
     ...versions.map((version) => ({
       at: version.at,
       path: version.path,
-      text: `${item}${version.path}${kindStart}${version.kind}${dateStart}${newMark}${version.revision}${dateStart}${day(version.at)}${dateEnd}${version.title}`,
+      text: `${item}${version.path}${kindStart}${version.kind}${dateStart}${newMark}${version.revision}${mark(version.path)}${dateStart}${day(version.at)}${dateEnd}${version.title}`,
     })),
     ...(news?.activations ?? []).map((activation) => ({ at: activation.at, path: "", text: `${connector}${activation.connector}${activated}${day(activation.at)}${connectorEnd}` })),
-    ...documents
-      .filter((document) => !fresh.has(document.path))
-      .map((document) => ({ at: document.at, path: document.path, text: `${item}${document.path}${kindStart}${document.kind}${dateStart}${day(document.at)}${dateEnd}${document.title}` })),
+    ...[...kept, ...waiting.filter((page) => !named.has(page.path))].map((document) => ({
+      at: document.at,
+      path: document.path,
+      text: `${item}${document.path}${kindStart}${document.kind}${mark(document.path)}${dateStart}${day(document.at)}${dateEnd}${document.title}`,
+    })),
   ]
   if (lines.length === 0) return null
   const shown = lines.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || byPath(a, b)).slice(0, RECENT_MAX)
   const head = since === null ? title : `${title}${sinceStart}${day(since)}${sinceEnd}`
-  return { name: "recent content", text: [head, ...shown.map((line) => line.text)].join("\n") }
+  // Une consigne, une fois, quand une ligne montrée porte une marque de commentaires : où lire les fils et comment y répondre.
+  const hint = shown.some((line) => line.path !== "" && mark(line.path) !== "") ? [SERVED_RECENT.commentsHint] : []
+  return { name: "recent content", text: [head, ...shown.map((line) => line.text), ...hint].join("\n") }
 }
 
 /**
  * Le bloc : les documents récents de la personne (`recentDocuments`) et les nouveautés depuis `since` (`newsItems`),
  * lus en parallèle, sur 90 jours au plus (une borne plus ancienne est ramenée à 90 jours). `since` nul (borne illisible)
- * ou nouveautés en panne : les seuls documents, sans borne dite ; la panne au log, `context` répond (AC13).
+ * ou nouveautés en panne : les seuls documents, sans borne dite ; la panne au log, `context` répond (AC13). Avec eux, les
+ * contenus qu'elle écrit et dont des fils attendent un assistant (`pagesWaitingAssistant`) ; en panne : sans eux, au log.
+ * Et, depuis la même borne, ceux dont un fil qui lui est destiné porte un commentaire d'un autre (`pagesWithNewComments`,
+ * une lecture, aucune sans borne) ; en panne : sans eux, au log.
  */
 export async function recentBlock(db: PlatformDb, identity: Identity, since: string | null): Promise<ContextBlock | null> {
   const window = daysAgo(RECENT_DAYS)
   const from = since === null ? null : Date.parse(since) > Date.parse(window) ? since : window
-  const [documents, news] = await Promise.all([
+  const [documents, news, waiting, commented] = await Promise.all([
     recentDocuments(db, identity),
     from === null
       ? null
@@ -166,6 +207,16 @@ export async function recentBlock(db: PlatformDb, identity: Identity, since: str
           console.error("[platform] context: news read failed", error)
           return null
         }),
+    pagesWaitingAssistant(db, identity).catch((error: unknown) => {
+      console.error("[platform] context: comments for the assistant read failed", error)
+      return []
+    }),
+    from === null
+      ? []
+      : pagesWithNewComments(db, identity, from).catch((error: unknown) => {
+          console.error("[platform] context: new comments read failed", error)
+          return []
+        }),
   ])
-  return recentText(documents, news, news === null ? null : from)
+  return recentText(documents, news, news === null ? null : from, markedPages(waiting, commented))
 }

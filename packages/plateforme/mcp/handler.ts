@@ -8,6 +8,7 @@
 // avant le jeton par une clé de service (N1) et les lignes de refus au journal (N2, AC2).
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler"
 import { ensureZodMessages } from "../schemas/zod-messages"
+import { servesCapability } from "../server/catalog/surface-source"
 import { loadActiveConnectors } from "../server/connectors/activations"
 import { createPlatformDb } from "../server/db"
 import { isPlatformError } from "../server/errors"
@@ -129,8 +130,10 @@ async function serveAuthenticated(request: Request, context: RequestContext): Pr
   }
   if (resolved.kind === "unknown_org") return rpcError(404, -32001, resolved.message)
 
-  const deps: McpDeps = { ...resolved.deps, widgets: context.widgets }
-  const mcp = createMcpHandler((server) => installPlatformMcp(server, deps), serverOptions(resolved.org, { widgets: context.widgets }), {
+  // Le widget tient par les ressources MCP : un hôte qui ne les sert pas (`registerHostSurface`) sert le texte seul.
+  const widgets = Boolean(context.widgets) && servesCapability("resources")
+  const deps: McpDeps = { ...resolved.deps, widgets }
+  const mcp = createMcpHandler((server) => installPlatformMcp(server, deps), serverOptions(resolved.org, { widgets }), {
     basePath: "/api", // → /api/mcp
     maxDuration: 60,
     disableSse: true,

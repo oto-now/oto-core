@@ -17,6 +17,7 @@ import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
+import { formOwnerKinds } from "./account-owners"
 import { managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
 import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
 import { accountMode } from "./modes"
@@ -100,7 +101,7 @@ function fieldsOf(declared: DeclaredConnector, opened: OpenedCredential): Record
 }
 
 /** Les réglages saisis, contrôlés contre la déclaration ; une adresse perd son `/` final. */
-function checkedSettings(declared: DeclaredConnector, given: Record<string, string | null>): Record<string, string | null> {
+export function checkedSettings(declared: DeclaredConnector, given: Record<string, string | null>): Record<string, string | null> {
   const settings = declared.definition.settings ?? []
   const checked: Record<string, string | null> = {}
   for (const [name, raw] of Object.entries(given)) {
@@ -119,7 +120,8 @@ function checkedSettings(declared: DeclaredConnector, given: Record<string, stri
  * avant l'écriture. La saisie fusionne avec ce qui est posé : un champ ou un réglage absent est gardé, `null` ou vide
  * l'efface. Champs et réglages sont contrôlés contre la déclaration du connecteur ; les champs sont chiffrés ensemble,
  * et le jeton d'un échange est effacé (il découlait de l'ancienne saisie). Une saisie concurrente entre la lecture et
- * l'écriture est refusée (`stale_revision`). Rien du secret n'est rendu. Refus : inconnu ou invisible (`not_found`),
+ * l'écriture est refusée (`stale_revision`). Le dernier test du compte (`lastProbe`) s'efface : il portait sur l'ancienne
+ * saisie ; un jeton renouvelé (consentement, échange) n'y touche pas. Rien du secret n'est rendu. Refus : inconnu ou invisible (`not_found`),
  * non géré (`forbidden`), compte simulé, connecteur non déclaré, champ ou réglage inconnu ou invalide, champ que
  * fournit l'hôte (`holder: host`), identifiant chez un tiers (`linked_id`) (`invalid_arguments`).
  */
@@ -147,12 +149,17 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
   const nextSettings = mergeCredential(current?.settings ?? {}, settings)
   const ciphertext = Object.keys(fields).length > 0 ? encryptCredential(id, fields) : null
   const version = current?.secret_updated_at ?? null
-  const updated = await inTransaction(db, "setAccountSecret: accounts update", (sql) => sql`
-    update platform.accounts
-       set secret_ciphertext = ${ciphertext}, secret_fields = ${Object.keys(fields).sort()}::text[], settings = ${sql.json(nextSettings)},
-           secret_updated_at = now(), token_ciphertext = null, token_expires_at = null
-     where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
-     returning id`, "server")
+  // Le dernier test portait sur l'ancienne saisie : il s'efface avec elle, dans la même transaction (`lastProbe` à `null`).
+  const updated = await inTransaction(db, "setAccountSecret: accounts update", async (sql) => {
+    const written = await sql`
+      update platform.accounts
+         set secret_ciphertext = ${ciphertext}, secret_fields = ${Object.keys(fields).sort()}::text[], settings = ${sql.json(nextSettings)},
+             secret_updated_at = now(), token_ciphertext = null, token_expires_at = null
+       where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
+       returning id`
+    if (written.length > 0) await sql`select platform.forget_account_probe(${id})`
+    return written
+  }, "server")
   // Aucune ligne après la décision : une autre saisie a été écrite depuis la lecture qui fonde la fusion.
   if (updated.length === 0) {
     console.error(`[platform] setAccountSecret: account ${id} changed since its secret was read`)
@@ -162,42 +169,55 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
 }
 
 /**
- * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les champs du secret que garde un
- * compte (jamais ceux de l'hôte), puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en
- * saisir le secret. Un connecteur `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par
- * son consentement. Un connecteur à `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le
- * port (`ready`). Sans lecture de base.
+ * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les propriétaires qu'admettent
+ * ses `modes` (`formOwnerKinds`), si sa sonde se joue (`probe`), les champs du secret que garde un compte (jamais ceux
+ * de l'hôte), puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret.
+ * Un connecteur dont les `modes` n'admettent ni `byo_user` ni `byo_org` (`platform` seul, servi par la clé de l'hôte)
+ * n'en a pas. Un connecteur `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par son
+ * consentement. Un connecteur à `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le port
+ * (`ready`). Sans lecture de base, sans rôle exigé : aucun secret n'y figure.
  */
 export function connectorAccountForms(): ConnectorAccountForm[] {
-  return declaredConnectors().map(({ definition, hostedLinks }) => ({
-    connector: definition.name,
-    label: definition.label,
-    consent: definition.auth.kind === "oauth2_user",
-    ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
-    fields: definition.credential.filter((field) => field.holder !== "host").map(({ name, label, secret }) => ({ name, label, secret })),
-    settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
-  }))
+  return declaredConnectors().flatMap(({ definition, hostedLinks, probe }) => {
+    const ownerKinds = formOwnerKinds(definition)
+    if (ownerKinds.length === 0) return []
+    return [
+      {
+        connector: definition.name,
+        label: definition.label,
+        consent: definition.auth.kind === "oauth2_user",
+        ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
+        ownerKinds,
+        probe: { available: probe !== null, balance: definition.probe?.balance !== undefined },
+        fields: definition.credential.filter((field) => field.holder !== "host").map(({ name, label, secret }) => ({ name, label, secret })),
+        settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
+      },
+    ]
+  })
 }
 
 /** Le jeton d'un échange, lu et écrit sur la ligne du compte, chiffré à part du secret saisi. */
 export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
   return {
     async read() {
-      const [row] = await inTransaction(db, "tokenStore: account_token", (sql) => sql<{ token: string | null; expires_at: string | null }[]>`
-        select platform.account_token(${accountId}) as token, to_json(a.token_expires_at) #>> '{}' as expires_at
+      const [row] = await inTransaction(db, "tokenStore: account_token", (sql) => sql<{ token: string | null; expires_at: string | null; scopes: string[] | null }[]>`
+        select platform.account_token(${accountId}) as token, to_json(a.token_expires_at) #>> '{}' as expires_at, a.granted_scopes as scopes
           from platform.accounts a where a.id = ${accountId}`)
-      return row?.token ? { token: decryptToken(accountId, row.token), expiresAt: row.expires_at ? new Date(row.expires_at) : null } : null
+      if (!row?.token) return null
+      return { token: decryptToken(accountId, row.token), expiresAt: row.expires_at ? new Date(row.expires_at) : null, ...(row.scopes ? { scopes: row.scopes } : {}) }
     },
-    async write({ token, expiresAt }: StoredToken) {
+    async write({ token, expiresAt, scopes }: StoredToken) {
       const ciphertext = encryptToken(accountId, token)
+      // Des droits dits remplacent ceux du compte ; sans eux (un échange, un compte de service sans niveaux), rien n'y touche.
       await inTransaction(db, "tokenStore: accounts update", (sql) => sql`
-        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt} where id = ${accountId}`, "server")
+        update platform.accounts set token_ciphertext = ${ciphertext}, token_expires_at = ${expiresAt}, granted_scopes = coalesce(${scopes ?? null}::text[], granted_scopes)
+         where id = ${accountId}`, "server")
     },
   }
 }
 
 /** Le premier champ du compte exigé par l'authentification qui manque, nommé par son libellé ; `null` : aucun. */
-function missingField(declared: DeclaredConnector, present: readonly string[]): string | null {
+export function missingField(declared: DeclaredConnector, present: readonly string[]): string | null {
   const own = accountFieldNames(declared.definition)
   const name = requiredFields(declared.auth).find((field) => own.includes(field) && !present.includes(field))
   return name === undefined ? null : (declared.definition.credential.find((field) => field.name === name)?.label ?? name)

@@ -10,7 +10,7 @@
 import type { ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { homeContents, lastConnections, listActivities, loadNode, PlatformError, previewContext, usefulProcedures, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { homeComments, homeContents, lastConnections, listActivities, loadNode, PlatformError, previewContext, usefulProcedures, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import AccueilPage, { metadata } from "@/app/(dashboard)/page"
 import { getPlatformIdentitySafely, getRequestOrigin, type PlatformSession } from "@/lib/plateforme/session"
 import { simulerLesDialogues } from "../../helpers/dialogue"
@@ -31,6 +31,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   lastConnections: vi.fn(),
   listActivities: vi.fn(),
   homeContents: vi.fn(),
+  homeComments: vi.fn(),
   usefulProcedures: vi.fn(),
   previewContext: vi.fn(),
   loadNode: vi.fn(),
@@ -79,6 +80,10 @@ beforeEach(() => {
     items: [{ path: "ventes/grille", title: "Grille tarifaire", kind: "page", space: { kind: "team", name: "Ventes" }, at: "2026-09-20T08:00:00Z" }],
     hasMore: false,
   })
+  vi.mocked(homeComments).mockResolvedValue({
+    threads: [{ id: "f1", path: "ventes/grille", title: "Grille tarifaire", author: "Marc Petit", viaAssistant: false, excerpt: "Le tarif est-il à jour ?", at: "2026-09-20T08:00:00Z", unread: true }],
+    more: 0,
+  })
   vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude Code", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
 })
 
@@ -119,6 +124,8 @@ describe("/ page reads (AC-b1)", () => {
 
     expect(listActivities).toHaveBeenCalledWith(SESSION.db, IDENTITE, { periodDays: 7, scope: "teams" })
     expect(homeContents).toHaveBeenCalledWith(SESSION.db, IDENTITE, { tab: "recent", scope: "teams" })
+    expect(homeComments).toHaveBeenCalledWith(SESSION.db, IDENTITE)
+    expect(ilot("Commentaires").getByRole("link", { name: /^Grille tarifaire Non lu/ })).toHaveAttribute("href", "/n/ventes/grille")
     expect(usefulProcedures).toHaveBeenCalledWith(SESSION.db, IDENTITE, 10)
     expect(lastConnections).toHaveBeenCalledWith(SESSION.db, IDENTITE)
     expect(screen.getByRole("heading", { level: 1, name: `Bonjour ${IDENTITE.member.profile.name}` })).toBeInTheDocument()

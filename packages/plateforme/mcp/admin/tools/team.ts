@@ -145,7 +145,9 @@ async function removeLead(call: OpCall): Promise<AdminOutput> {
   const identity = targetOf(call)
   const team = await findTeam(db, identity, String(call.input.team))
   const email = String(call.input.email)
-  const member = team.members.find((candidate) => sameEmail(candidate.email, email))
+  // Par l'annuaire : l'équipe ne rend l'email d'un membre qu'à qui a à le joindre (`emailFor`).
+  const person = await findMember(db, identity, email)
+  const member = team.members.find((candidate) => candidate.userId === person.userId)
   if (!member) throw new PlatformError("not_found", `${email} is not a member of team ${team.name}.`)
   const output = { target: `team:${team.slug}`, nextActions: AFTER_WRITE }
   const leads = leadsOf(team).filter((lead) => !sameEmail(lead.email, email))
@@ -173,7 +175,9 @@ async function removeMember(call: OpCall): Promise<AdminOutput> {
   const identity = targetOf(call)
   const team = await findTeam(db, identity, String(call.input.team))
   const email = String(call.input.email)
-  const member = team.members.find((candidate) => sameEmail(candidate.email, email))
+  // Par l'annuaire : l'équipe ne rend l'email d'un membre qu'à qui a à le joindre (`emailFor`).
+  const person = await findMember(db, identity, email)
+  const member = team.members.find((candidate) => candidate.userId === person.userId)
   const notInTeam = new PlatformError("not_found", `${email} is not a member of team ${team.name}.`)
   if (!member) throw notInTeam
   const removed = await removeTeamMember(db, identity, team.id, member.userId)

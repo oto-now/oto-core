@@ -215,7 +215,7 @@ const WRITTEN = {
   // `seed.createOrg` ; celles-ci s'écrivent après. `id` des tables à identité (`links`, `feedback`,
   // `journal`, `admin_journal`) n'est jamais écrit : la base le tire.
   org_domains: { host: REQUIRED, org_id: REQUIRED, created_at: now },
-  connector_activations: { org_id: REQUIRED, connector: REQUIRED, state: "active", activated_by: null, created_at: now, updated_at: now },
+  connector_activations: { org_id: REQUIRED, connector: REQUIRED, state: "active", activated_by: null, closed_by: null, created_at: now, updated_at: now },
   // `rules_version` : celle d'une organisation neuve (`orgs.rules_version`, défaut 1).
   // `contexts` : aucun Contexte gardé, jamais périmé (E11-S03) ; un test pose les révisions qu'il garde.
   ctx: { code: REQUIRED, org_id: REQUIRED, user_id: REQUIRED, rules_version: 1, contexts: {}, host: null, user_agent: null, created_at: now },

@@ -3,8 +3,9 @@
 // L'attente après la création d'une organisation (E12-S01) : son adresse est neuve, et un sous-domaine attend son
 // certificat une à deux minutes ; y partir aussitôt mène à une erreur du navigateur. L'écran dit ce qui est fait et ce
 // qui reste (trois étapes), avance une barre qui ne finit qu'avec la sonde, apprend à la personne ce qu'elle va trouver,
-// puis la conduit à l'adresse dès qu'elle répond. Au bout de deux minutes sans réponse, il le dit et donne alors le lien et
-// « Réessayer » (jamais avant : l'adresse ne répond pas encore). Sans lui, `FormulaireDInscription` porterait la sonde, ses minuteurs et cet écran.
+// puis la conduit à l'adresse dès qu'elle répond. Au bout de deux minutes sans réponse, il le dit et donne alors le lien
+// (jamais avant : l'adresse ne répond pas encore), sans cesser de sonder : il part seul dès qu'elle répond. Sans lui,
+// `FormulaireDInscription` porterait la sonde, ses minuteurs et cet écran.
 import { useEffect, useState, type CSSProperties } from "react"
 import { Check } from "@phosphor-icons/react/dist/csr/Check"
 import { CircleNotch } from "@phosphor-icons/react/dist/csr/CircleNotch"
@@ -12,11 +13,11 @@ import { adresseRepond } from "../api/client"
 import { IlotDAuthentification } from "../authentification/ilot-d-authentification"
 import { useMediaQuery } from "../ds/react/hooks"
 import { Icon } from "../ds/react/icon"
-import { Button } from "../ds/react/primitives"
 
-/** L'adresse est sondée toutes les trois secondes, deux minutes au plus. */
+/** L'adresse est sondée trois secondes après chaque réponse ; le retard se dit à deux minutes d'horloge, pas au compte des
+ * sondes : un onglet en arrière-plan espace ses minuteurs. */
 const SONDE_MS = 3000
-const SONDES_MAX = 40
+const RETARD_MS = 120_000
 /** Le temps de voir l'aboutissement avant le départ. */
 const DEPART_MS = 600
 /** Un texte reste sept secondes. */
@@ -53,57 +54,45 @@ function Etape({ titre, detail, faite }: { titre: string; detail?: string; faite
 /** `adresse` : l'origine de la nouvelle organisation (`https://<hôte>/`). */
 export function DepartVersLOrganisation({ adresse }: { adresse: string }) {
   const [etat, setEtat] = useState<Etat>("attente")
-  const [essai, setEssai] = useState(0)
   const [secondes, setSecondes] = useState(0)
   // Mouvement réduit : la barre ne bouge plus, les textes ne tournent plus.
   const reduit = useMediaQuery("(prefers-reduced-motion: reduce)")
   const hote = new URL(adresse).host
 
   useEffect(() => {
-    let sondes = 0
+    const debut = Date.now()
     let minuteur: ReturnType<typeof setTimeout> | undefined
     let quitte = false
     async function sonder() {
-      sondes += 1
       const repond = await adresseRepond(adresse)
       if (quitte) return
       if (repond) {
         setEtat("pret")
         minuteur = setTimeout(() => window.location.assign(adresse), DEPART_MS)
-      } else if (sondes < SONDES_MAX) minuteur = setTimeout(() => void sonder(), SONDE_MS)
-      else setEtat("retard")
+        return
+      }
+      if (Date.now() - debut >= RETARD_MS) setEtat("retard")
+      minuteur = setTimeout(() => void sonder(), SONDE_MS)
     }
     void sonder()
     return () => {
       quitte = true
       clearTimeout(minuteur)
     }
-  }, [adresse, essai])
+  }, [adresse])
 
   const enVol = etat === "attente" && !reduit
   useEffect(() => {
     if (!enVol) return
     const horloge = setInterval(() => setSecondes((ecoulees) => ecoulees + 1), 1000)
     return () => clearInterval(horloge)
-  }, [enVol, essai])
-
-  function reessayer() {
-    setSecondes(0)
-    setEtat("attente")
-    setEssai((rang) => rang + 1)
-  }
+  }, [enVol])
 
   const progres = etat === "pret" ? 100 : reduit ? 50 : avancement(secondes)
   const rang = Math.floor(secondes / TEXTE_S) % TEXTES.length
-  const pied =
-    etat === "retard" ? (
-      <Button type="button" variant="primary" block onClick={reessayer}>
-        Réessayer
-      </Button>
-    ) : undefined
 
   return (
-    <IlotDAuthentification titre="Votre espace se prépare" statut={etat === "pret" ? "C'est prêt : ouverture de votre espace." : "Votre organisation est créée."} pied={pied}>
+    <IlotDAuthentification titre="Votre espace se prépare" statut={etat === "pret" ? "C'est prêt : ouverture de votre espace." : "Votre organisation est créée."}>
       <div className="flex flex-col gap-3">
         <ol className="oto-stepper m-0 list-none p-0" data-orientation="vertical">
           <Etape titre="Organisation créée" faite />
@@ -124,7 +113,7 @@ export function DepartVersLOrganisation({ adresse }: { adresse: string }) {
         )}
         {/* Montée vide : le retard s'y écrit, et s'annonce. */}
         <p role="status" className="text-sm text-ink">
-          {etat === "retard" ? "La mise en ligne prend plus de temps que prévu. Votre organisation est bien créée." : ""}
+          {etat === "retard" ? "La mise en ligne prend plus de temps que prévu. Votre organisation est bien créée, et cette page s'ouvrira dès que l'adresse répondra." : ""}
         </p>
         {/* Le lien seulement au retard : avant, l'adresse ne répond pas, et il mènerait à l'erreur du navigateur. */}
         {etat === "retard" && (

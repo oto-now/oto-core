@@ -24,6 +24,7 @@ import { EntrepriseDuRail } from "./entreprise-du-rail"
 import { RAIL } from "./libelles"
 import { PiedDuRail } from "./pied-du-rail"
 import { useLigneCouranteEnVue } from "./ligne-courante-en-vue"
+import { useAdresseCourante } from "./noeud-ouvert"
 import { PoigneeDuRail } from "./poignee-du-rail"
 import { RechercheDuRail } from "./recherche-du-rail"
 import { SectionsDuRail } from "./sections-du-rail"
@@ -84,7 +85,8 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
   const tiroir = useTiroirDuRail(chemin)
   const { arbre, enPanne } = useArbreDuRail(servi, chemin)
   const idDuRail = useId()
-  useLigneCouranteEnVue(idDuRail, chemin)
+  // À l'adresse que le rail marque courante : sous un ancien chemin, la ligne n'est connue qu'une fois le chemin actuel annoncé.
+  useLigneCouranteEnVue(idDuRail, useAdresseCourante(adresses.pages))
   const lu = arbre.error === undefined && equipes.error === undefined ? { tree: arbre.data.tree, equipes: equipes.data } : null
   return (
     <>
