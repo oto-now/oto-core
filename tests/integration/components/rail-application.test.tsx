@@ -360,7 +360,7 @@ describe("RailApplication menus (AC-a4)", () => {
     const rail = monter()
     expect(within(rail).queryByRole("button", { name: "Actions sur l'équipe Tout le monde" })).toBeNull()
     fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
-    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Renommer l'équipe…", "Supprimer l'équipe…"])
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Partages de l'équipe…", "Renommer l'équipe…", "Supprimer l'équipe…"])
     fireEvent.click(menu().getByRole("menuitem", { name: "Les personnes de Ventes" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Les personnes de Ventes" })).toHaveTextContent("Claire Morel"))
     // Le dialogue lit ensuite le niveau de chaque membre sur les pages de l'équipe (1.4.12).
@@ -371,7 +371,7 @@ describe("RailApplication menus (AC-a4)", () => {
     cleanup()
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
-    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Partages de l'équipe…"])
   })
 
   // Règle de la racine (28/10) : le « ⋯ » de Tout le monde, pour qui administre seulement, ouvre « Partager » sur la racine,
@@ -1522,5 +1522,88 @@ describe("the teams where the person is a guest", () => {
     const sections = within(rail).getAllByRole("button", { name: /^Replier (Tout le monde|Finance|Support|Ventes|Privé)$/ })
     expect(sections.map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Replier Tout le monde", "Replier Finance", "Replier Support", "Replier Ventes", "Replier Privé"])
     expect(within(rail).getByRole("button", { name: "Créer dans Support" })).toBeInTheDocument()
+  })
+})
+
+describe("« Les partages de … » a team, from the « ⋯ » of its section", () => {
+  const INVITEE = [noeud("guide", "page", "Guide de Démo", [...ARBRE[0].children, noeud("support/faq", "page", "FAQ")])]
+  const donnees = { arbre: { data: { tree: INVITEE, truncated: false } }, equipes: { data: [...EQUIPES, { slug: "support", name: "Support" }] }, equipesDeLaPersonne: ["ventes"] }
+  const PARTAGES = {
+    team: { slug: "ventes", name: "Ventes" },
+    opened: [
+      {
+        path: "ventes/devis",
+        title: "Devis",
+        kind: "page",
+        manage: true,
+        subjects: [
+          { kind: "team", name: "Support", level: "read" },
+          { kind: "org", name: "", level: "read" },
+          { kind: "user", name: "Paul Girard", level: "write" },
+        ],
+      },
+    ],
+    received: [{ team: { slug: "support", name: "Support" }, entries: [{ path: "support/dossier", title: "Dossier", kind: "page", under: 4 }, { path: "support/faq", title: "FAQ", kind: "page", under: 0 }] }],
+    brokenLinks: [{ from: { path: "ventes/devis", title: "Devis" }, to: { path: "private/claire/notes", title: null } }],
+    brokenTotal: 1,
+  }
+  const ouvrir = async (rail: HTMLElement) => {
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Partages de l'équipe…" }))
+    // Le dialogue d'attente, puis celui des partages : un autre élément, relu une fois ses sections rendues.
+    await screen.findAllByRole("heading", { level: 3 })
+    return within(screen.getByRole("dialog", { name: "Les partages de Ventes" }))
+  }
+  const lignes = (liste: HTMLElement) => within(liste).getAllByRole("listitem").map((ligne) => ligne.textContent)
+
+  it("should offer it to the members of the team and to an administrator, never on a team the person is only a guest of", () => {
+    const rail = monter({ ...donnees, administre: false })
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Support" }))
+    expect(itemsDuMenu()).toEqual(["Les personnes de Support"])
+    cleanup()
+
+    const admin = monter({ ...donnees, administre: true })
+    fireEvent.click(within(admin).getByRole("button", { name: "Actions sur l'équipe Support" }))
+    expect(itemsDuMenu()).toContain("Partages de l'équipe…")
+  })
+
+  it("should read the shares by GET teams/<slug>/shares and say what the team shares outside, with whom and at which level, what others share with it, and the links its members cannot open", async () => {
+    const appels = simulerLAPI({ data: PARTAGES })
+    const dialogue = await ouvrir(monter(donnees))
+
+    await waitFor(() => expect(dialogue.getByRole("list", { name: "Les contenus de Ventes partagés hors de l'équipe" })).toBeInTheDocument())
+    expect(appels).toEqual([{ url: "/api/platform/teams/ventes/shares", methode: "GET", corps: undefined }])
+    expect(dialogue.getByRole("heading", { level: 3, name: "1 contenu partagé hors de l'équipe" })).toBeInTheDocument()
+    expect(lignes(dialogue.getByRole("list", { name: "Les contenus de Ventes partagés hors de l'équipe" }))).toEqual(["Devisavec Support, toute l'organisationPeut lireavec Paul GirardPeut modifier"])
+    expect(dialogue.getAllByRole("link", { name: "Devis" }).map((lien) => lien.getAttribute("href"))).toEqual(["/n/ventes/devis", "/n/ventes/devis"])
+    expect(dialogue.getByRole("heading", { level: 3, name: "2 contenus partagés par d'autres équipes" })).toBeInTheDocument()
+    // Le compte d'un dossier suit son titre ; « · » ne les sépare que sur un écran étroit.
+    expect(lignes(dialogue.getByRole("list", { name: "Les contenus que d'autres équipes partagent avec Ventes" }))).toEqual(["Dossieret 4 contenus dessous·par Support", "FAQpar Support"])
+    // Le titre d'une cible que la personne ne lit pas n'est pas servi : son chemin, sans lien.
+    const note = within(dialogue.getByRole("note", { name: "1 lien à vérifier" }))
+    expect(note.getByText("Ce lien mène à un contenu que les membres de Ventes ne peuvent pas ouvrir.")).toBeInTheDocument()
+    expect(note.getByRole("listitem").textContent).toBe("Devis mène à private/claire/notes")
+    expect(note.getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(["/n/ventes/devis"])
+  })
+
+  it("should say under each count, in one line, how to share when nothing is shared outside, and nothing more when no team shares with it, without a note", async () => {
+    simulerLAPI({ data: { ...PARTAGES, opened: [], received: [], brokenLinks: [], brokenTotal: 0 } })
+    const dialogue = await ouvrir(monter(donnees))
+
+    expect(dialogue.getAllByRole("heading", { level: 3 }).map((titre) => titre.textContent)).toEqual(["0 contenu partagé hors de l'équipe", "0 contenu partagé par d'autres équipes"])
+    expect(dialogue.getByText("Pour partager un contenu : son menu « Partager ».")).toBeInTheDocument()
+    expect(dialogue.queryByRole("note")).toBeNull()
+    expect(dialogue.queryByRole("list")).toBeNull()
+  })
+
+  it("should say a refused read in the dialog, with « Réessayer »", async () => {
+    simulerLAPI(REFUS)
+    fireEvent.click(within(monter(donnees)).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Partages de l'équipe…" }))
+
+    const alerte = await screen.findByRole("alert")
+    expect(alerte).toHaveTextContent("Les partages n'ont pas pu être lus")
+    expect(alerte).toHaveTextContent("Les partages d'une équipe sont réservés à ses membres et aux administrateurs.")
+    expect(within(alerte).getByRole("button", { name: "Réessayer" })).toBeInTheDocument()
   })
 })

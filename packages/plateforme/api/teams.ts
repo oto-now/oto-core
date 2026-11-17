@@ -3,14 +3,17 @@
 // (E05-S13, AC-24). Adaptateur mince : la validation, les droits et l'écriture sont dans `server/teams.ts`.
 // `GET teams/<slug>` : le panneau d'une équipe, lu par le « ⋯ » de sa section du rail (`server/team-panel.ts`) ;
 // `GET teams/<slug>/deletion` : ce que sa suppression emporterait ou ce qui la bloque, lu par la confirmation (1.4.13).
+// `GET teams/<slug>/shares` : les partages de l'équipe, pour ses membres et les administrateurs (`server/team-shares.ts`).
 import { createTeamSchema } from "../schemas"
 import { teamPanel } from "../server/team-panel"
+import { teamShares } from "../server/team-shares"
 import { addTeamMember, createTeam, deleteTeam, describeTeamDeletion, removeTeamMember, setTeamMemberRole, teamSlug, updateTeam } from "../server/teams"
 import type { ResourceRoutes } from "./handler"
 import { idOrNull } from "./ids"
 
 const MEMBERS = { 1: "members" } as const
 const DELETION = { 1: "deletion" } as const
+const SHARES = { 1: "shares" } as const
 
 export const teamsRoutes: ResourceRoutes = {
   GET: [
@@ -25,6 +28,13 @@ export const teamsRoutes: ResourceRoutes = {
       fixed: DELETION,
       async handle({ db, identity, params }) {
         return { status: 200, data: await describeTeamDeletion(db, identity, params[0]) }
+      },
+    },
+    {
+      params: 2,
+      fixed: SHARES,
+      async handle({ db, identity, params }) {
+        return { status: 200, data: await teamShares(db, identity, params[0]) }
       },
     },
   ],

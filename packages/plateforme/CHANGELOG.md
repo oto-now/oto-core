@@ -18,6 +18,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Assistants
+- `team.shares` lists what a team shares outside it, what other teams share with it, and the links its members cannot open. For its members and the administrators.
 - `node.trash` says in its summary who loses access when the content, or one under it, is shared outside its team: teams by name, people counted, the whole organisation.
 - `context` lists what other teams shared with you, team by team with each content's summary: « Shared with you by other teams ». Always whole, the same whatever the request.
 - `find` and the workspace rules say to search again in the middle of a task, when the procedure you follow does not give what you need, before answering or escalating.
@@ -25,6 +26,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - When a write is refused on a content you can read, comment it instead: the rule about comments now says so (`comment.add` opens a thread without any edit right).
 
 ### Hosts
+- API: `GET teams/<slug>/shares` returns the shares of a team (`TeamShares`), for its members and the administrators; the « ⋯ » of a team's section opens « Les partages de <équipe> » on it. Nothing to mount.
+- MCP: a built-in connector `team`, always active, with one function, `team.shares` (read).
 - UI: `RailApplication` takes an optional `equipesDeLaPersonne` (the slugs of `identity.teams`): the sections of the teams the person is not a member of come after « Privé », under one heading, « Partagé avec vous », without a section « + ». Without it, the rail is unchanged.
 - API: `GET trash/impact?path=` returns who loses access if the content goes to the trash (`TrashImpact`); the rail's delete dialog reads it before asking. Nothing to mount: it is served under `/api/platform`.
 - UI: `EcranDuContexte` takes an optional `test` prop (`{ demande?: string }`): the « Tester une demande » field, what the routing found for the request, and the exact text sent to the assistant. The host page reads `q` from its address with `contextRequestQuerySchema` (`./schemas`), passes it to `previewContext` as `phrase` and to the screen; without `test`, the screen is unchanged.
