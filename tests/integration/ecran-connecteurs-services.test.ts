@@ -26,9 +26,9 @@ import { hex, REFERENCE_PEOPLE, type ReferencePerson } from "../helpers/platefor
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, testAdminSql, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
 
 /** La migration de l'écran : description, dernier test, libellé par propriétaire, activation implicite. */
-const VERSION = "20261114120000"
+const VERSION = "20261117220000"
 /** La migration du lot 2 : le code d'un test et son effacement, l'auteur d'une fermeture. */
-const LOT2 = "20261116161500"
+const LOT2 = "20261117220000"
 const missing = (await pendingMigrations()).filter((version) => [VERSION, LOT2].includes(version))
 const pending = missing.length > 0
 
