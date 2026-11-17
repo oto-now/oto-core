@@ -238,7 +238,7 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
     expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(19)
     expect(rules.length).toBeLessThanOrEqual(3_700)
-    expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
+    expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
     expect(rules).toContain("A procedure is a page of numbered steps")
     expect(rules).toContain("A good procedure has a part « When to use it »")
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)

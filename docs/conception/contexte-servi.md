@@ -1,7 +1,7 @@
 # Contexte servi
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-12
+- **Dernière révision** : 2026-11-17
 
 ## Résumé
 
@@ -51,7 +51,7 @@ Ordre servi : le bloc `code` (première ligne « ctx: XXXX-XXXX », règles « H
 
 Notice des procédures (1.4.12) : les règles « How this workspace works » disent à chaque contexte, en deux lignes, ce qu'est une procédure (des étapes numérotées pour une tâche qui revient, routées par titre et résumé) et ce qui la fait bien marcher (« When to use it », une action par étape, un bloc `call` après son étape, quoi faire de chaque résultat, la sortie attendue, à qui demander), puis où lire le reste (`help`, section procedures, et `write.procedure`). Une demande sans procédure décidée qui mène à cette section du guide (`closestHelpSection`, en écrire ou en modifier une) reçoit la section entière dans le bloc `code`, au lieu du seul chemin pour la lire (`hintLines`) ; les autres sections restent un pointeur.
 
-Commentaires (2026-11-12) : les règles gagnent une ligne, après celle des anciens chemins : un contenu qu'on lit se commente sans le modifier, pour demander, signaler ou proposer (`comment.add` ouvre un fil sur un bloc ou sur la page entière, ou répond ; `@Nom complet` prévient ce lecteur), et `read` d'une page sert ses fils ouverts, chacun avec l'appel pour y répondre. Les règles tiennent en 19 lignes et 3 700 caractères au plus, pour un préfixe de dix caractères ([commentaires](commentaires.md)).
+Commentaires (2026-11-12) : les règles gagnent une ligne, après celle des anciens chemins : un contenu qu'on lit se commente sans le modifier, pour demander, signaler ou proposer, ou quand une écriture est refusée (`comment.add` ouvre un fil sur un bloc ou sur la page entière, ou répond ; `@Nom complet` prévient ce lecteur), et `read` d'une page sert ses fils ouverts, chacun avec l'appel pour y répondre. Les règles tiennent en 19 lignes et 3 700 caractères au plus, pour un préfixe de dix caractères ([commentaires](commentaires.md)).
 
 - La règle du routage (2026-10-27) dit que les procédures les plus proches suivent les règles, la meilleure en tête quand il y en a une : lire celle qui convient par `read`, puis suivre ses étapes dans l'ordre ; sinon chercher, et demander à la personne quand rien ne convient. Elle disait « its steps come right after this part », vrai tant que les étapes étaient servies.
 - Les règles (1.4.3) tiennent en 16 lignes et 3 100 caractères au plus avec un préfixe de 10 caractères (1 200 de plus qu'avant, borne du cahier des charges), une ligne de plus avec l'adresse d'Oto : en plus de la carte des outils, une ligne « Reference » (`read path functions` et le contrat d'une fonction, `read path help` le guide de la plateforme une section à la fois, `write.procedure` et `write.table` avant d'en écrire un, `call table.schema` avant d'écrire des lignes) et les pièges qui coûtent le plus : un titre publié déplace le chemin, réorganiser par `node.move` et jamais recréer puis jeter, `contexte` est le nom du Contexte de l'organisation, d'une équipe ou d'un espace, nommer les outils sans préfixe dans un texte.
@@ -147,4 +147,5 @@ Relevées par la story E05-S12, à trancher par JB ; le code suit l'option A :
 - 2026-10-21 : l'adresse d'Oto en fin de `context`, pour que l'assistant donne le lien d'une page — décidé par JB (source : un assistant disait ne pas connaître l'adresse de l'Oto où il était).
 - 2026-10-27 : plus d'étapes de procédure ni de liste « Procedures you can run » dans `context` ; cinq procédures proches, la décidée en tête à lire par `read` ; huit contenus proches ; nouveautés et contenus récents en un bloc de 20 lignes ; l'adresse d'Oto en première règle — décidé par JB (source : session du 27/10/2026, `context` trop lourd).
 - 2026-11-12 : « n new comment(s) » sur la ligne d'un contenu dans les contenus récents, à côté de « for the assistant », et une consigne servie une fois après les lignes marquées, qui dit où lire les fils — décidé par le responsable du produit (source : décision du 12/11/2026 sur le suivi des commentaires).
+- 2026-11-17 : la règle des commentaires dit de commenter aussi quand une écriture est refusée — décidé par le responsable du produit (source : décision du 17/11/2026 sur les règles servies).
 - 2026-11-12 : une règle servie dit qu'un contenu lu se commente sans le modifier, et que `read` sert ses fils ouverts — décidé par le responsable du produit (source : décision du 12/11/2026 sur les règles servies).

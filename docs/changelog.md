@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-17] — Règles servies : commenter quand l'écriture est refusée
+**Quoi :** la règle des commentaires servie à chaque session (`workspaceRules`, `server/context/blocks/code.ts`) dit qu'un contenu qu'on lit se commente aussi quand une écriture y est refusée (« or when a write is refused »). Les règles restent sous 3 700 caractères et 19 lignes.
+**Pourquoi :** un assistant qui n'a que la lecture d'une page ne lisait nulle part quoi faire d'un refus d'écriture, sinon demander à qui de droit ; le commentaire est le geste prévu. Décision du responsable du produit du 17/11/2026.
+**Fichiers :** `packages/plateforme/server/context/blocks/code.ts`, `tests/unit/texte-servi.test.ts`, `docs/conception/contexte-servi.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-16] — Invitation : le lien ouvre la création de compte avec l'adresse invitée
 **Quoi :** le lien de l'email d'invitation (`invitationMail`) porte, sous leurs noms OIDC, l'adresse invitée (`login_hint`) et la création de compte en premier écran (`first_screen=register`) ; la phrase dit d'abord « créez votre compte avec l'adresse », puis « ou connectez-vous avec elle si vous en avez déjà un ». Un hôte OIDC transmet ces deux paramètres à son émetteur ; un hôte qui ne les lit pas les ignore.
 **Pourquoi :** issue oto-app #7 « Invitation : ouvrir la création de compte préremplie (code, mot de passe, Google) et corriger "La connexion n'a pas abouti" » : le lien menait à `<origine>/login` sans l'adresse, et l'invité, sans compte, arrivait sur « Se connecter ».
