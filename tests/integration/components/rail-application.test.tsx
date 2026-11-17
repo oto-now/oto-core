@@ -371,7 +371,8 @@ describe("RailApplication menus (AC-a4)", () => {
     cleanup()
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
-    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Partages de l'équipe…"])
+    // Sans les équipes de la personne, l'hôte ne dit pas qui est membre : les partages restent à qui administre.
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
   })
 
   // Règle de la racine (28/10) : le « ⋯ » de Tout le monde, pour qui administre seulement, ouvre « Partager » sur la racine,
@@ -1535,7 +1536,6 @@ describe("« Les partages de … » a team, from the « ⋯ » of its section", 
         path: "ventes/devis",
         title: "Devis",
         kind: "page",
-        manage: true,
         subjects: [
           { kind: "team", name: "Support", level: "read" },
           { kind: "org", name: "", level: "read" },

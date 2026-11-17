@@ -16,5 +16,5 @@ export const RELATED_KINDS = ["page", "table"] as const
 /** Le bloc, ou `null` sans contenu proche : rien ne s'affiche alors. */
 export function relatedBlock(related: readonly Candidate[], prefix: string): ContextBlock | null {
   if (related.length === 0) return null
-  return { name: "related", text: [SERVED_RELATED.title, ...related.map(otherLine), `Read one with ${prefix}_read {"path": "<path>"}.`].join("\n") }
+  return { name: "related", text: [SERVED_RELATED.title, ...related.map(otherLine), `${SERVED_RELATED.readHint}${prefix}_read {"path": "<path>"}.`].join("\n") }
 }

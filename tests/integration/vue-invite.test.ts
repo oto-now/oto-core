@@ -119,6 +119,20 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "guest view of a team on a real 
     expect({ teams: reads("teams"), teamMembers: reads("team_members") }).toEqual({ teams: 1, teamMembers: 1 })
   })
 
+  it("should serve the same block, byte for byte, whatever the request", async () => {
+    const db = await ref.db("lea")
+    const block = async (phrase: string) => {
+      const { text } = await previewContext(db, ref.identityOf("lea"), { phrase })
+      const start = text.indexOf(SERVED_GUESTS.title)
+      const end = text.indexOf("\n## ", start + 1)
+      return text.slice(start, end < 0 ? undefined : end)
+    }
+    const first = await block("un devis pour un client")
+
+    expect(first).toContain("### Team Support. Lead: Paul Girard.")
+    expect(await block("les questions fréquentes du support")).toBe(first)
+  })
+
   it("should keep the block whole after the Contextes when they fill the budget, and leave it out of a light context", async () => {
     const long = Array.from({ length: 45 }, (_, rank) => ({ type: "paragraph" as const, text: `${rank} ${"contexte long ".repeat(70)}` }))
     await ref.addBlocks("contexte", "published", long)

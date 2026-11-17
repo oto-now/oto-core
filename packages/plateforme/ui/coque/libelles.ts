@@ -7,6 +7,7 @@ export const MENU_DE_L_EQUIPE = {
   actions: (nom: string) => `Actions sur l'équipe ${nom}`,
   personnes: (nom: string) => `Les personnes de ${nom}`,
   partages: "Partages de l'équipe…",
+  titreDesPartages: (nom: string) => `Les partages de ${nom}`,
   chargementDesPartages: "Lecture des partages…",
   echecDesPartages: "Les partages n'ont pas pu être lus",
   partagesReserves: "Les partages d'une équipe sont réservés à ses membres et aux administrateurs.",

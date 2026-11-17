@@ -90,15 +90,15 @@ export function sectionsDeLArbre(
   }
   const parNom = [...equipes].sort((a, b) => a.name.localeCompare(b.name, "fr"))
   const membre = (equipe: { slug: string }) => equipesDeLaPersonne === undefined || equipesDeLaPersonne.includes(equipe.slug)
-  const ordre: { cle: string; titre: string; invite?: true }[] = [
+  const ordre: { cle: string; titre: string; invite?: boolean }[] = [
     { cle: "", titre: TOUT_LE_MONDE },
-    ...parNom.filter(membre).map((equipe) => ({ cle: equipe.slug, titre: equipe.name })),
+    ...parNom.filter(membre).map((equipe) => ({ cle: equipe.slug, titre: equipe.name, ...(equipesDeLaPersonne === undefined ? {} : { invite: false }) })),
     { cle: PERSO, titre: SECTION_PERSO },
-    ...parNom.filter((equipe) => !membre(equipe)).map((equipe) => ({ cle: equipe.slug, titre: equipe.name, invite: true as const })),
+    ...parNom.filter((equipe) => !membre(equipe)).map((equipe) => ({ cle: equipe.slug, titre: equipe.name, invite: true })),
   ]
   return ordre.flatMap(({ cle, titre, invite }) => {
     const noeuds = contexteDAbord(noeudsDArbreDepuis(lignes.get(cle) ?? []))
-    return noeuds.length > 0 ? [{ cle, titre, noeuds, ...(invite ? { invite } : {}) }] : []
+    return noeuds.length > 0 ? [{ cle, titre, noeuds, ...(invite === undefined ? {} : { invite }) }] : []
   })
 }
 
