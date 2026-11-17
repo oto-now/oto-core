@@ -10,12 +10,13 @@ import type { ReactNode } from "react"
 import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut"
 import { TreeStructure } from "@phosphor-icons/react/dist/ssr/TreeStructure"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
+import { titreDeContexte } from "../arbre/depuis-l-arbre"
 import { LIEN } from "../components/classes"
 import { AnimatedIcon } from "../ds/react/icon"
 import { LinkedContent } from "../ds/react/linked-content"
 import { dateLisible } from "../format/dates"
 import { LIGNES_SERVIES, nomDuBloc, type EquipesNommees } from "./libelles"
-import type { Legende, LigneServie, MarquesDeCommentaires, MorceauServi } from "./parties-du-contexte"
+import { estUnContexte, type Legende, type LigneServie, type MarquesDeCommentaires, type MorceauServi } from "./parties-du-contexte"
 
 type Navigation = { prefixeDesPages: string; Lien: LienDeLHote }
 
@@ -59,7 +60,7 @@ function avecLesCommentaires(precision: string, { commentaires, pourLAssistant }
   return [precision, ...marques].filter((partie) => partie !== null).join(", ")
 }
 
-function Ligne({ ligne, ...navigation }: Navigation & { ligne: LigneServie }): ReactNode {
+function Ligne({ ligne, equipe, ...navigation }: Navigation & { ligne: LigneServie; equipe?: string }): ReactNode {
   switch (ligne.genre) {
     case "connecteur":
       return LIGNES_SERVIES.connecteur(ligne.nom, date(ligne.date))
@@ -69,11 +70,26 @@ function Ligne({ ligne, ...navigation }: Navigation & { ligne: LigneServie }): R
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={avecLesCommentaires(LIGNES_SERVIES.recent(ligne.nature, date(ligne.date)), ligne)} {...navigation} />
     case "index":
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={ligne.resume} {...navigation} />
+    case "proche":
+      return (
+        <>
+          <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.proche(ligne.nature, ligne.score)} {...navigation} />
+          {ligne.resume !== "" && <span className="block text-mute">{ligne.resume}</span>}
+        </>
+      )
+    case "partages":
+      return LIGNES_SERVIES.partages(ligne.nombre)
     case "invite":
       // Le résumé dit quand se servir du contenu : sous son lien, sur sa propre ligne.
       return (
         <>
-          <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={ligne.dessous > 0 ? LIGNES_SERVIES.dessous(ligne.dessous) : ""} {...navigation} />
+          {/* Le Contexte d'une équipe se nomme comme dans le rail : « Contexte · Support ». */}
+          <VersLeContenu
+            chemin={ligne.chemin}
+            texte={equipe !== undefined && estUnContexte(ligne.chemin) ? titreDeContexte(equipe) : ligne.titre}
+            precision={ligne.dessous > 0 ? LIGNES_SERVIES.dessous(ligne.dessous) : ""}
+            {...navigation}
+          />
           {ligne.resume !== "" && <span className="block text-mute">{ligne.resume}</span>}
         </>
       )
@@ -92,7 +108,7 @@ function Liste({ morceau, id, ...navigation }: Navigation & { morceau: Extract<M
       {morceau.lignes.map((ligne, rang) => (
         // Une ligne servie n'a pas d'identité propre (deux nouveautés peuvent viser le même contenu) : son rang.
         <li key={rang}>
-          <Ligne ligne={ligne} {...navigation} />
+          <Ligne ligne={ligne} equipe={morceau.legende?.genre === "equipe" ? morceau.legende.nom : undefined} {...navigation} />
         </li>
       ))}
     </ul>

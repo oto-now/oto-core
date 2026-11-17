@@ -54,4 +54,9 @@ export type DonneesDuRail = {
   administre: boolean
   /** Les organisations de la personne (`listMyOrganisations`) : à partir de deux, le menu de l'entreprise porte la bascule. */
   organisations?: PersonOrganisation[]
+  /**
+   * Les slugs des équipes de la personne (`identity.teams`) : les sections des autres équipes, où elle ne voit que ce
+   * qu'on partage avec elle, viennent après « Privé » sous « Partagé avec vous » ; absents, le rail d'avant.
+   */
+  equipesDeLaPersonne?: string[]
 }

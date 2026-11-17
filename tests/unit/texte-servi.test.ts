@@ -23,6 +23,7 @@ import { contextParts, type ContextBody, type PartFacts } from "../../packages/p
 import { guestsText } from "../../packages/plateforme/server/context/blocks/guests"
 import { orgAddress } from "../../packages/plateforme/server/context/blocks/org"
 import { recentText } from "../../packages/plateforme/server/context/blocks/recent"
+import { relatedBlock } from "../../packages/plateforme/server/context/blocks/related"
 import { CONTEXT_BUDGET, renderContext, type ContextBlock } from "../../packages/plateforme/server/context/engine"
 import type { Identity, IdentityTeam } from "../../packages/plateforme/server/identity"
 import {
@@ -521,6 +522,29 @@ describe("the end of the text read back (AC-14)", () => {
   })
 })
 
+describe("the contents close to a tested request read back by the screen", () => {
+  it("should read each content by its kind, its score, its title and the start of its summary, without the reading instruction", () => {
+    const close = [
+      { nodeId: "n1", path: "ventes/suivi_prospects", kind: "table", title: "Suivi des prospects", summary: "Les prospects de l'équipe. Leur statut.", score: 0.49 },
+      { nodeId: "n2", path: "ventes/notes", kind: "page", title: "Notes", summary: "", score: 0.4 },
+    ]
+    // La doublure ne porte que ce que `otherLine` lit d'un candidat.
+    const block = relatedBlock(close as unknown as Parameters<typeof relatedBlock>[0], "demo")
+
+    expect(ancreDeLaPartie({ name: "related" }, 1)).toBe("related-content")
+    expect(relu(block)).toEqual([
+      {
+        genre: "liste",
+        legende: null,
+        lignes: [
+          { genre: "proche", chemin: "ventes/suivi_prospects", nature: "table", score: "0.49", titre: "Suivi des prospects", resume: "Les prospects de l'équipe. Leur statut." },
+          { genre: "proche", chemin: "ventes/notes", nature: "page", score: "0.40", titre: "Notes", resume: "" },
+        ],
+      },
+    ])
+  })
+})
+
 describe("the guest view read back by the screen", () => {
   const teams = [
     { id: "t-f", slug: "finance", name: "Finance", leads: [], entries: [{ path: "finance/mandat", title: "Mandat SEPA", summary: "Quand un client paie par prélèvement.", kind: "page" as const, under: 0 }] },
@@ -549,11 +573,16 @@ describe("the guest view read back by the screen", () => {
     ])
   })
 
-  it("should keep as served a block whose lines have another form: the last tier, one line per team", () => {
+  it("should read the last tier, one line per team, as the team with the count of what it shares", () => {
     const many = { ...teams[0], entries: Array.from({ length: 400 }, (_, rank) => ({ path: `finance/page_${rank}`, title: `Page ${rank}`, summary: "s", kind: "page" as const, under: 0 })) }
     const { text, tier } = guestsText([many], "demo")
 
     expect(tier).toBe(4)
-    expect(morceauxDuBloc("guests", text)).toEqual([{ genre: "brut", texte: "### Team Finance. 400 contents shared with you: search them with demo_find." }])
+    expect(morceauxDuBloc("guests", text)).toEqual([{ genre: "liste", legende: { genre: "equipe", nom: "Finance", responsables: "" }, lignes: [{ genre: "partages", nombre: 400 }] }])
+    // Avec ses responsables, et un seul contenu.
+    const seul = "### Team Support. Lead: Paul Girard. 1 content shared with you: search it with demo_find."
+    expect(morceauxDuBloc("guests", [...text.split("\n").slice(0, 2), seul].join("\n"))).toEqual([
+      { genre: "liste", legende: { genre: "equipe", nom: "Support", responsables: "Paul Girard" }, lignes: [{ genre: "partages", nombre: 1 }] },
+    ])
   })
 })

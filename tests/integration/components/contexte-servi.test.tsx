@@ -508,7 +508,8 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
           "### Team Finance. Lead: Paul Girard, Marc Petit.",
           "- finance/mandat — Mandat SEPA — Quand un client paie par prélèvement.",
           "- finance/esg (+4 under it) — Politique ESG — Ce que nous publions chaque année.",
-          "### Team Support.",
+          "### Team Support. Lead: Paul Girard.",
+          "- support/contexte — Contexte — Les règles du Support.",
           "- support/faq — FAQ",
         ].join("\n"),
       },
@@ -558,15 +559,18 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
       ])
     })
 
-    it("should read « Partagé par d'autres équipes » team by team with its leads, each entry a link with its summary under it and the count of a folder", () => {
+    it("should read « Partagé avec vous » team by team with its leads, each entry a link with its summary under it and the count of a folder", () => {
       monter()
-      const invites = carte("Partagé par d'autres équipes")
+      const invites = carte("Partagé avec vous")
       expect(lignes(invites.getByRole("list", { name: "Équipe Finance · Responsables : Paul Girard, Marc Petit" }))).toEqual([
         ["Mandat SEPAQuand un client paie par prélèvement.", "/n/finance/mandat"],
         ["Politique ESG — et 4 contenus dessousCe que nous publions chaque année.", "/n/finance/esg"],
       ])
-      // Sans responsable nommé, et sans résumé quand la taille l'a retiré.
-      expect(lignes(invites.getByRole("list", { name: "Équipe Support" }))).toEqual([["FAQ", "/n/support/faq"]])
+      // Un seul responsable s'accorde ; le Contexte de l'équipe se nomme comme dans le rail ; sans résumé quand la taille l'a retiré.
+      expect(lignes(invites.getByRole("list", { name: "Équipe Support · Responsable : Paul Girard" }))).toEqual([
+        ["Contexte · SupportLes règles du Support.", "/n/support/contexte"],
+        ["FAQ", "/n/support/faq"],
+      ])
     })
 
     it("should leave none of the served English headers in the page", () => {

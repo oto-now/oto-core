@@ -99,7 +99,7 @@ listés : `(+N under it)` les compte.
   (`visibleTree` puis `sectionsDeLArbre`), sur le même jeu.
 - [ ] **AC12** La lecture ne coûte pas une requête par équipe : nœuds publiés sous les slugs des équipes invitantes et
   niveaux en un lot, responsables en une lecture.
-- [ ] **AC13** Vue « Contexte » de l'écran : le bloc devient la partie « Partagé par d'autres équipes » (ancre
+- [ ] **AC13** Vue « Contexte » de l'écran : le bloc devient la partie « Partagé avec vous » (ancre
   `guest-views`), un intertitre par équipe avec ses responsables, chaque entrée un lien vers le contenu avec son résumé
   dessous, « et 4 contenus dessous » pour un dossier ; l'explication gagne l'étape « Calculé d'après les partages :
   votre assistant sait ce qu'il peut lire dans les équipes dont vous n'êtes pas membre. » ; le texte recomposé par
@@ -142,7 +142,7 @@ listés : `(+N under it)` les compte.
 ### Lot 4 — Le rail distingue les équipes où l'on est invité
 
 - [ ] **AC23** **Given** `equipesDeLaPersonne` (slugs) passé au rail **Then** les sections d'équipes dont la personne
-  n'est pas membre viennent après « Privé », par nom, sous un seul intertitre « Partagé par d'autres équipes », qui nomme leur groupe pour les
+  n'est pas membre viennent après « Privé », par nom, sous un seul intertitre « Partagé avec vous », qui nomme leur groupe pour les
   lecteurs d'écran, sans chevron ni pli ni « + », sur une ligne à 232 px ; leur titre porte, au survol et pour les
   lecteurs d'écran, « Vous n'êtes pas membre de <équipe> : vous y voyez ce qu'elle partage avec vous. » ; elles n'ont pas de « + » de section ; les « + » des contenus qu'on peut écrire restent.
 - [ ] **AC24** **Given** un hôte qui ne passe pas la prop **Then** le rail d'aujourd'hui, à l'identique.

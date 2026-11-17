@@ -25,6 +25,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - When a write is refused on a content you can read, comment it instead: the rule about comments now says so (`comment.add` opens a thread without any edit right).
 
 ### Hosts
+- UI: `RailApplication` takes an optional `equipesDeLaPersonne` (the slugs of `identity.teams`): the sections of the teams the person is not a member of come after « Privé », under one heading, « Partagé avec vous », without a section « + ». Without it, the rail is unchanged.
 - API: `GET trash/impact?path=` returns who loses access if the content goes to the trash (`TrashImpact`); the rail's delete dialog reads it before asking. Nothing to mount: it is served under `/api/platform`.
 - UI: `EcranDuContexte` takes an optional `test` prop (`{ demande?: string }`): the « Tester une demande » field, what the routing found for the request, and the exact text sent to the assistant. The host page reads `q` from its address with `contextRequestQuerySchema` (`./schemas`), passes it to `previewContext` as `phrase` and to the screen; without `test`, the screen is unchanged.
 - CLI: the grouped email of comments (`oto-platform comments notify`) gathers the comments by page (title, each author and excerpt) and ends each page with a button that says what it opens, « Voir le commentaire et répondre », instead of a bare « Ouvrir la page » link. Same subject, same recipients, same rhythm: nothing to change in the host's scheduler.

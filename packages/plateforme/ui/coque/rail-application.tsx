@@ -31,7 +31,7 @@ import { SectionsDuRail } from "./sections-du-rail"
 import type { AdressesDuRail, DonneesDuRail } from "./types"
 import { useArbreDuRail } from "./use-arbre-du-rail"
 
-type ArbreProps = Pick<DonneesDuRail, "arbre" | "equipes" | "handle" | "administre"> & { prefixe: string; enPanne: boolean }
+type ArbreProps = Pick<DonneesDuRail, "arbre" | "equipes" | "handle" | "administre" | "equipesDeLaPersonne"> & { prefixe: string; enPanne: boolean }
 
 /**
  * L'arbre en sections, ou l'échec de sa lecture (sans équipes, les sections ne se rangent pas) : le
@@ -41,12 +41,12 @@ type ArbreProps = Pick<DonneesDuRail, "arbre" | "equipes" | "handle" | "administ
  * dans une région de statut montée vide (`accessibility-patterns.md § Régions dynamiques`), hors de la mise en page
  * tant qu'elle l'est (le titre de groupe du rail réduit est un filet).
  */
-function ArbreDuRail({ arbre, equipes, handle, prefixe, enPanne, administre }: ArbreProps) {
+function ArbreDuRail({ arbre, equipes, handle, prefixe, enPanne, administre, equipesDeLaPersonne }: ArbreProps) {
   if (arbre.error !== undefined) return <ErreurDeLecture titre={RAIL.arbreEnPanne} message={arbre.error} />
   if (equipes.error !== undefined) return <ErreurDeLecture titre={RAIL.arbreEnPanne} message={equipes.error} />
   return (
     <>
-      <SectionsDuRail arbre={arbre.data.tree} equipes={equipes.data} handle={handle} prefixe={prefixe} tronque={arbre.data.truncated} administre={administre} />
+      <SectionsDuRail arbre={arbre.data.tree} equipes={equipes.data} handle={handle} prefixe={prefixe} tronque={arbre.data.truncated} administre={administre} equipesDeLaPersonne={equipesDeLaPersonne} />
       <p role="status" className={enPanne ? "oto-rail-group" : "oto-sr-only"}>
         {enPanne ? RAIL.arbreNonActualise : ""}
       </p>
@@ -80,7 +80,7 @@ function useTiroirDuRail(chemin: string) {
 
 export type RailApplicationProps = DonneesDuRail & { adresses: AdressesDuRail }
 
-export function RailApplication({ entreprise, arbre: servi, equipes, handle, compte, administre, adresses, organisations }: RailApplicationProps) {
+export function RailApplication({ entreprise, arbre: servi, equipes, handle, compte, administre, adresses, organisations, equipesDeLaPersonne }: RailApplicationProps) {
   const { chemin } = useHote()
   const tiroir = useTiroirDuRail(chemin)
   const { arbre, enPanne } = useArbreDuRail(servi, chemin)
@@ -101,7 +101,7 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
             <RailItem as={LigneDuRail} href={adresses.accueil} label={RAIL.accueil} icon={<AnimatedIcon as={SquaresFour} size="xs" />} active={chemin === adresses.accueil} />
           )}
           <RechercheDuRail arbre={lu} handle={handle} adresses={adresses} administre={administre} />
-          <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} administre={administre} />
+          <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} administre={administre} equipesDeLaPersonne={equipesDeLaPersonne} />
         </RailScroll>
         <PiedDuRail compte={compte} adresses={adresses} administre={administre} />
         <PoigneeDuRail />
