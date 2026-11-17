@@ -131,6 +131,15 @@ export const DEPLACEMENT_RAIL = {
   },
 } as const
 
+/**
+ * Les sections des équipes dont la personne n'est pas membre : l'intertitre qui les coiffe, et ce que dit le titre de
+ * chacune, au survol et aux lecteurs d'écran.
+ */
+export const SECTIONS_INVITEES = {
+  titre: "Partagé avec vous",
+  invite: (equipe: string) => `Vous n'êtes pas membre de ${equipe} : vous y voyez ce qu'elle partage avec vous.`,
+} as const
+
 /** Les gestes du « ⋯ » d'une ligne (E05-S10, partie b2) : « Dupliquer » (AC-b10), « Supprimer » (AC-b11). */
 export const GESTES_DU_RAIL = {
   dupliquer: "Dupliquer",

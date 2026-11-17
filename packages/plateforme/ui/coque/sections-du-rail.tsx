@@ -26,6 +26,7 @@ import { GlisserDansLeRail, useDeplacementDansLeRail, type DeplacementDansLeRail
 import { aplatir } from "./freres"
 import { useGestesDuRail, type GestesDuRail } from "./gestes-du-rail"
 import { DeposerSurLeRail } from "./import-de-fichier"
+import { SECTIONS_INVITEES } from "./libelles"
 import { MenuDeLEquipe } from "./menu-de-l-equipe"
 import { MenuDeToutLeMonde } from "./menu-de-tout-le-monde"
 import { useAdresseCourante } from "./noeud-ouvert"
@@ -79,7 +80,8 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
   const cleDuPli = cleDuPliDe(section)
   const replie = plis.isFolded(cleDuPli)
   const racine = racineDe(section, handle)
-  const alaRacine: CibleDeCreation | null = racine === null ? null : { nom: section.titre, parent: racine }
+  // Rien ne se crée à la racine d'une équipe dont on n'est pas membre : pas de « + » de section ; ceux des lignes restent.
+  const alaRacine: CibleDeCreation | null = racine === null || section.invite ? null : { nom: section.titre, parent: racine }
   const itemsDeLaRacine = alaRacine === null ? undefined : creation.itemsPour(alaRacine)
   const lignes = versArbreDuRail(section.noeuds, { prefixe, chemin, section: section.titre, depliage })
 
@@ -104,7 +106,9 @@ function SectionDuRail({ section, handle, prefixe, plis, creation, gestes, depli
         controls={idDeLArbre}
         addItems={itemsDeLaRacine}
         end={menuDeLaSection(section, administre, prefixe)}
+        title={section.invite ? SECTIONS_INVITEES.invite(section.titre) : undefined}
       />
+      {section.invite && <p className="oto-sr-only">{SECTIONS_INVITEES.invite(section.titre)}</p>}
       {/* La liste porte le nom de sa section, comme le navigateur d'arbre qu'elle remplace. */}
       <RailTree as={LigneDuRail} id={idDeLArbre} hidden={replie} aria-label={section.titre} nodes={lignes} addItems={addItems} moreItems={moreItems} />
     </>
@@ -139,25 +143,37 @@ function ListeDesSections({ sections, arbre, equipes, handle, prefixe, montrer, 
   const genres = useMemo(() => new Map(aplatir(arbre).map((noeud) => [noeud.path, noeud.kind])), [arbre])
   const titres = useMemo(() => titresParChemin(arbre), [arbre])
   const deposer = (chemin: string, fichier: File) => creation.deposer({ nom: titres.get(chemin) ?? chemin, parent: chemin }, fichier)
+  const idDesInvitees = useId()
+  const invitees = sections.filter((section) => section.invite)
+  const rendre = (section: SectionCle) => (
+    <SectionDuRail
+      key={cleDuPliDe(section)}
+      section={section}
+      handle={handle}
+      prefixe={prefixe}
+      plis={plis}
+      creation={creation}
+      gestes={gestes}
+      depliage={depliage}
+      deplacement={deplacement}
+      genres={genres}
+      administre={administre}
+    />
+  )
   return (
     <DeplierAuClic.Provider value={depliage.deplier}>
       <DeposerSurLeRail.Provider value={deposer}>
         <GlisserDansLeRail.Provider value={deplacement.glisser}>
-          {sections.map((section) => (
-            <SectionDuRail
-              key={cleDuPliDe(section)}
-              section={section}
-              handle={handle}
-              prefixe={prefixe}
-              plis={plis}
-              creation={creation}
-              gestes={gestes}
-              depliage={depliage}
-              deplacement={deplacement}
-              genres={genres}
-              administre={administre}
-            />
-          ))}
+          {sections.filter((section) => !section.invite).map(rendre)}
+          {invitees.length > 0 && (
+            // Un groupe nommé par son intertitre : ni pli, ni « + », ni survol ; il coiffe les sections, il n'en est pas une.
+            <div role="group" aria-labelledby={idDesInvitees}>
+              <p id={idDesInvitees} className="oto-rail-group">
+                {SECTIONS_INVITEES.titre}
+              </p>
+              {invitees.map(rendre)}
+            </div>
+          )}
         </GlisserDansLeRail.Provider>
       </DeposerSurLeRail.Provider>
       {creation.retour}
@@ -178,12 +194,14 @@ export type SectionsDuRailProps = {
   tronque?: boolean
   /** `isOrgAdmin` de l'identité : le « ⋯ » d'une équipe propose de la supprimer, Tout le monde règle ses droits ; absent, non. */
   administre?: boolean
+  /** Les slugs des équipes de la personne : les autres équipes, après « Privé », sous « Partagé avec vous » ; absents, le rail d'avant. */
+  equipesDeLaPersonne?: string[]
 }
 
 /** Les sections de l'arbre : Tout le monde, une par équipe, Perso ; chacune ouverte par son Contexte. */
-export function SectionsDuRail({ arbre: servi, equipes, handle, prefixe, tronque = false, administre = false }: SectionsDuRailProps) {
+export function SectionsDuRail({ arbre: servi, equipes, handle, prefixe, tronque = false, administre = false, equipesDeLaPersonne }: SectionsDuRailProps) {
   const { montre: arbre, ajouter } = useArbreAvecLesCreations(servi)
-  const sections = sectionsDeLArbre(arbre, equipes, handle)
+  const sections = sectionsDeLArbre(arbre, equipes, handle, equipesDeLaPersonne)
   // Un rail muet se lit comme un chargement sans fin (`first-team.tsx` d'oto-frontend) : une ligne le dit,
   // dans la classe des titres, qui lit les jetons du rail et s'efface quand il se réduit.
   if (sections.length === 0) return <p className="oto-rail-group">{ARBRE_VIDE}</p>

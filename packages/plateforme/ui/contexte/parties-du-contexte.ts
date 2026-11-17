@@ -12,7 +12,7 @@
 //
 // M71 : les listes d'index d'une partie (enfants, pages liées) ne sont que dans son texte servi, pas dans les blocs
 // de son Contexte ; `morceauxDuContexte` les en relit par les textes que le service écrit (`CONTEXT_INDEX`).
-import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_GUESTS, SERVED_RECENT } from "../../schemas"
+import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_GUESTS, SERVED_RECENT, SERVED_RELATED } from "../../schemas"
 import { PERSO } from "../arbre/depuis-l-arbre"
 import type { DonneesDeLApercu } from "./apercu-du-contexte"
 
@@ -39,6 +39,7 @@ export const CONTEXTE_DE_TOUT_LE_MONDE = "contexte"
 const ANCRES_DES_BLOCS: Readonly<Record<string, string>> = {
   guests: "guest-views",
   "recent content": "recent-content",
+  related: "related-content",
 }
 
 /**
@@ -118,6 +119,10 @@ export type LigneServie =
   | { genre: "index"; chemin: string; titre: string; resume: string }
   /** Un point d'entrée de la vue invité : `dessous`, les contenus lisibles sous lui. */
   | { genre: "invite"; chemin: string; titre: string; resume: string; dessous: number }
+  /** Une page ou un tableau proche de la demande testée : son genre, son score, son titre et le début de son résumé. */
+  | { genre: "proche"; chemin: string; nature: string; score: string; titre: string; resume: string }
+  /** Le dernier repli de la vue invité : les contenus qu'une équipe partage, comptés au lieu d'être listés. */
+  | { genre: "partages"; nombre: number }
 
 /**
  * La légende d'une liste servie : la borne des nouveautés lue dans l'en-tête des contenus récents, ou le titre d'une
@@ -263,12 +268,22 @@ function recents(lignes: readonly string[]): MorceauServi[] | null {
 const EQUIPE_SERVIE = { debut: "Team ", responsables: ". Lead: ", fin: "." } as const
 
 /**
- * `### Team <nom>. Lead: <responsables>.` : l'équipe d'une vue invité ; `null` pour toute autre ligne, dont celle du
- * dernier repli, qui porte le compte de ses contenus à la place de leur liste.
+ * La ligne d'équipe du dernier repli, `### Team <nom>. Lead: <responsables>. <n> contents shared with you: search them
+ * with <p>_find.` : la ligne de l'équipe, et le compte de ses contenus ; `null` pour toute autre ligne.
  */
+function equipeComptee(ligne: string): { equipe: string; nombre: number } | null {
+  const marque = [SERVED_GUESTS.countOne, SERVED_GUESTS.countMany].map((compte) => ligne.lastIndexOf(compte)).find((rang) => rang > 0)
+  if (marque === undefined || !ligne.endsWith(SERVED_GUESTS.countEnd)) return null
+  const avant = ligne.slice(0, marque)
+  const espace = avant.lastIndexOf(" ")
+  const nombre = avant.slice(espace + 1).replaceAll(",", "")
+  return espace > 0 && NOMBRE_SERVI.test(nombre) ? { equipe: avant.slice(0, espace), nombre: Number(nombre) } : null
+}
+
+/** `### Team <nom>. Lead: <responsables>.` : l'équipe d'une vue invité ; `null` pour toute autre ligne. */
 function equipeInvitante(ligne: string): Legende | null {
   const faits = entre(ligne, `${SERVED_GUESTS.team}${EQUIPE_SERVIE.debut}`, EQUIPE_SERVIE.fin)
-  if (faits === null || faits === "" || ligne.includes(SERVED_GUESTS.countOne) || ligne.includes(SERVED_GUESTS.countMany)) return null
+  if (faits === null || faits === "") return null
   const coupe = faits.lastIndexOf(EQUIPE_SERVIE.responsables)
   if (coupe < 0) return { genre: "equipe", nom: faits, responsables: "" }
   return { genre: "equipe", nom: faits.slice(0, coupe), responsables: faits.slice(coupe + EQUIPE_SERVIE.responsables.length) }
@@ -291,23 +306,47 @@ function ligneInvitee(ligne: string): LigneServie | null {
 
 /**
  * La vue invité : son titre et sa consigne (dite à l'assistant, non montrée), puis une liste par équipe, sous son nom et
- * ses responsables. Une ligne d'une autre forme (le dernier repli, une ligne par équipe) reste telle que servie.
+ * ses responsables : ses points d'entrée, ou, au dernier repli, le compte de ses contenus. Une ligne d'une autre forme
+ * reste telle que servie.
  */
 function invites(lignes: readonly string[]): MorceauServi[] | null {
   if (lignes[0] !== SERVED_GUESTS.title || !lignes[1]?.startsWith(SERVED_GUESTS.noticeStart)) return null
   const { morceaux, brut, ligne } = assembleur()
   for (const texte of lignes.slice(2)) {
-    const equipe = equipeInvitante(texte)
+    const comptee = equipeComptee(texte)
+    const equipe = equipeInvitante(comptee?.equipe ?? texte)
     const lue = equipe ? null : ligneInvitee(texte)
-    if (equipe) morceaux.push({ genre: "liste", legende: equipe, lignes: [] })
+    if (equipe) morceaux.push({ genre: "liste", legende: equipe, lignes: comptee ? [{ genre: "partages", nombre: comptee.nombre }] : [] })
     else if (lue && morceaux.at(-1)?.genre === "liste") ligne(lue)
     else brut(texte)
   }
   return morceaux
 }
 
+/** Ce que `otherLine` écrit entre le chemin, le genre, le score et le texte d'un contenu proche. */
+const PROCHE_SERVI = { genre: " (", score: ", score ", texte: "): ", resume: ". ", consigne: "Read one with " } as const
+
+/** `- <chemin> (<genre>, score <s>): <titre>. <résumé>` ; sans « . », tout le texte est le titre. */
+function ligneProche(ligne: string): LigneServie | null {
+  const lue = cheminEtReste(ligne, PROCHE_SERVI.genre)
+  const fin = lue ? lue.reste.indexOf(PROCHE_SERVI.texte) : -1
+  if (!lue || fin < 0) return null
+  const [nature, score, ...autres] = lue.reste.slice(0, fin).split(PROCHE_SERVI.score)
+  if (!nature || score === undefined || autres.length > 0) return null
+  const texte = lue.reste.slice(fin + PROCHE_SERVI.texte.length)
+  const coupe = texte.indexOf(PROCHE_SERVI.resume)
+  return { genre: "proche", chemin: lue.chemin, nature, score, titre: coupe < 0 ? texte : texte.slice(0, coupe), resume: coupe < 0 ? "" : texte.slice(coupe + PROCHE_SERVI.resume.length) }
+}
+
+/** `## Pages and tables close to the request` : une ligne par contenu ; la consigne de lecture, dite à l'assistant, n'est pas montrée. */
+function proches(lignes: readonly string[]): MorceauServi[] | null {
+  if (lignes[0] !== SERVED_RELATED.title) return null
+  return lignesDuBloc(lignes.slice(1).filter((ligne) => !ligne.startsWith(PROCHE_SERVI.consigne)), null, ligneProche)
+}
+
 const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[]) => MorceauServi[] | null>> = {
   guests: invites,
+  related: proches,
   "recent content": recents,
 }
 

@@ -106,7 +106,17 @@ export function TexteExact({ apercu, ouvert }: { apercu: DonneesDeLApercu; ouver
   const taille = TEST_D_UNE_DEMANDE.taille(nombreLisible(apercu.text.length), nombreLisible(apercu.budget))
   return (
     // Un `<details>` a le rôle `group` sans nom propre : il prend celui de son titre.
-    <LinkedContent open={ouvert} aria-label={TEST_D_UNE_DEMANDE.texteExact} title={TEST_D_UNE_DEMANDE.texteExact} summary={taille}>
+    <LinkedContent
+      open={ouvert}
+      aria-label={TEST_D_UNE_DEMANDE.texteExact}
+      title={
+        <>
+          {TEST_D_UNE_DEMANDE.texteExactCourt}
+          <span className="max-sm:hidden">{TEST_D_UNE_DEMANDE.texteExactSuite}</span>
+        </>
+      }
+      summary={taille}
+    >
       <pre className="oto-code whitespace-pre-wrap break-words p-3">{apercu.text}</pre>
     </LinkedContent>
   )

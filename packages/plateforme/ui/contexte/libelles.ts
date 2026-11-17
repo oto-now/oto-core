@@ -57,7 +57,8 @@ export function aQuoiSert(portee: Portee): string {
  */
 export const NOMS_DES_BLOCS: Readonly<Record<string, string>> = {
   code: "Règles Oto",
-  guests: "Partagé par d'autres équipes",
+  guests: "Partagé avec vous",
+  related: "Pages et tableaux proches de la demande",
   "recent content": "Contenus récents et nouveautés",
 }
 
@@ -124,7 +125,7 @@ export const EXPLICATION_DU_CONTEXTE = {
   ordre: "Il est assemblé dans cet ordre :",
   etapes: [
     "l'adresse de cet Oto et ses règles, les mêmes pour tous (non montrées ici) ;",
-    "les procédures les plus proches de votre demande, la meilleure en tête quand Oto en reconnaît clairement une, que l'assistant lit avant d'en suivre les étapes, et les pages et tableaux proches (non montrés ici) ;",
+    "les procédures les plus proches de votre demande, la meilleure en tête quand Oto en reconnaît clairement une, que l'assistant lit avant d'en suivre les étapes, et les pages et tableaux proches (montrés quand vous testez une demande) ;",
     "le Contexte de Tout le monde, puis le vôtre (Privé), puis celui de chacune de vos équipes : chacun s'ouvre sur quelques faits (l'organisation, vous, l'équipe et ses connecteurs), puis son texte, puis la liste des contenus rangés dessous et des pages qu'il cite, par leur titre et leur résumé, sans leur contenu ;",
     "ce que d'autres équipes partagent avec vous, calculé d'après les partages : votre assistant sait ce qu'il peut lire dans les équipes dont vous n'êtes pas membre ;",
     "vos contenus récents, les pages et tableaux que vous avez lus ou écrits ces derniers temps, avec les nouveautés depuis votre dernière conversation (contenus publiés, marqués comme tels, et connecteurs activés).",
@@ -148,6 +149,9 @@ export const TEST_D_UNE_DEMANDE = {
   proches: "Procédures proches",
   score: (score: number) => `score ${score.toFixed(2).replace(".", ",")}`,
   texteExact: "Texte exact envoyé à l'assistant",
+  /** Le titre en deux morceaux : sur un écran étroit, seul le premier est montré, pour que la taille tienne sur sa ligne. */
+  texteExactCourt: "Texte exact",
+  texteExactSuite: " envoyé à l'assistant",
   taille: (caracteres: string, plafond: string) => `${caracteres} caractères sur ${plafond}`,
 } as const
 
@@ -175,7 +179,11 @@ export const LIGNES_SERVIES = {
   children: "Rangés sous ce contexte",
   linked: "Pages citées",
   /** L'équipe d'une vue invité, et ses responsables quand elle en nomme. */
-  equipe: (nom: string, responsables: string) => (responsables === "" ? `Équipe ${nom}` : `Équipe ${nom} · Responsables : ${responsables}`),
+  equipe: (nom: string, responsables: string) => (responsables === "" ? `Équipe ${nom}` : `Équipe ${nom} · ${responsables.includes(", ") ? "Responsables" : "Responsable"} : ${responsables}`),
+  /** Un contenu proche de la demande testée : son genre et son score. */
+  proche: (nature: string, score: string) => `${NATURES[nature] ?? nature}, score ${score.replace(".", ",")}`,
+  /** Le dernier repli : les contenus qu'une équipe partage, comptés. */
+  partages: (nombre: number) => (nombre > 1 ? `${nombreLisible(nombre)} contenus partagés avec vous` : "1 contenu partagé avec vous"),
   /** Les contenus lisibles sous un dossier partagé. */
   dessous: (nombre: number) => `et ${accorde(nombre, "contenu", "contenus")} dessous`,
   suite: "La suite de ce contexte est lue à la demande.",

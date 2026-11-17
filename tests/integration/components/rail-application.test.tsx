@@ -1485,3 +1485,42 @@ describe("the coque (E05-S11, lot e ; E11-S05)", () => {
     })
   })
 })
+
+describe("the teams where the person is a guest", () => {
+  const INVITEE = [
+    noeud("guide", "page", "Guide de Démo", [
+      ...ARBRE[0].children,
+      noeud("support/faq", "page", "FAQ"),
+      noeud("finance/mandat", "page", "Mandat SEPA"),
+    ]),
+  ]
+  const TOUTES = [...EQUIPES, { slug: "support", name: "Support" }, { slug: "finance", name: "Finance" }]
+  const donnees = { arbre: { data: { tree: INVITEE, truncated: false } }, equipes: { data: TOUTES } }
+
+  it("should group them after Privé under one heading that names their group, each saying the person is not a member, without a « + » of section", () => {
+    const rail = monter({ ...donnees, equipesDeLaPersonne: ["ventes"] })
+
+    const groupe = within(rail).getByRole("group", { name: LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre })
+    expect(within(groupe).getAllByRole("button", { name: /^Replier / }).map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Replier Finance", "Replier Support"])
+    // Après « Privé », la dernière section de la personne.
+    expect(within(rail).getByRole("button", { name: "Replier Privé" }).compareDocumentPosition(groupe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // L'intertitre coiffe les sections : ni pli ni bouton.
+    const intertitre = within(groupe).getByText(LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre)
+    expect([intertitre.tagName, intertitre.querySelector("button")]).toEqual(["P", null])
+    expect(within(groupe).getByText("Vous n'êtes pas membre de Finance : vous y voyez ce qu'elle partage avec vous.")).toBeInTheDocument()
+    expect(within(groupe).getByRole("button", { name: "Replier Finance" }).closest("[title]")).toHaveAttribute("title", "Vous n'êtes pas membre de Finance : vous y voyez ce qu'elle partage avec vous.")
+    // Rien ne se crée à la racine d'une équipe dont on n'est pas membre ; les « + » de ses lignes restent.
+    expect(within(rail).getAllByRole("button", { name: /^Créer dans / }).map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Créer dans Tout le monde", "Créer dans Ventes", "Créer dans Privé"])
+    expect(within(groupe).getByRole("button", { name: "Ajouter dans FAQ" })).toBeInTheDocument()
+  })
+
+  it("should keep the rail as before for a host that does not name the person's teams", () => {
+    const rail = monter(donnees)
+
+    expect(within(rail).queryByRole("group", { name: LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre })).toBeNull()
+    // Les sections seules : une ligne dépliée de l'arbre porte aussi un bouton « Replier ».
+    const sections = within(rail).getAllByRole("button", { name: /^Replier (Tout le monde|Finance|Support|Ventes|Privé)$/ })
+    expect(sections.map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Replier Tout le monde", "Replier Finance", "Replier Support", "Replier Ventes", "Replier Privé"])
+    expect(within(rail).getByRole("button", { name: "Créer dans Support" })).toBeInTheDocument()
+  })
+})

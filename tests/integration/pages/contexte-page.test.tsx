@@ -155,6 +155,8 @@ describe("/context page tests a request", () => {
     expect(exact).toHaveAttribute("open")
     expect(exact.querySelector("summary")?.textContent).toMatch(new RegExp(`${TEXTE.length} caractères sur 20\\s000$`))
     expect(exact.querySelector("pre")?.textContent).toBe(TEXTE)
+    // Le titre entier dans le résumé ; sa fin se masque sur un écran étroit, le nom accessible reste entier.
+    expect(exact.querySelector("summary strong")?.textContent).toBe("Texte exact envoyé à l'assistant")
     // L'explication se replie pendant un test : le résultat vient d'abord.
     expect(screen.getByRole("group", { name: "À quoi sert cette page" })).not.toHaveAttribute("open")
   })
