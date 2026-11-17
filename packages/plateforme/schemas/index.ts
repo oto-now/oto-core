@@ -56,6 +56,8 @@ export {
 export type { AccountChange, AccountMode, AccountSecretInput, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
+export { BROKEN_LINKS_MAX, teamSharesArgsSchema } from "./team-shares"
+export type { ShareLevel, ShareSubject, TeamShares, TeamSharesArgs } from "./team-shares"
 export type {
   CreateTeam,
   EquipesTab,

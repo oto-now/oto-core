@@ -151,21 +151,21 @@ listés : `(+N under it)` les compte.
 
 - [ ] **AC25** `teamShares(db, identity, slug)` rend `opened` (contenus de l'équipe ouverts par une règle de lecture ou
   plus à une autre équipe, à une personne non membre, nom seul, ou à toute l'organisation ; groupés par contenu, niveau
-  de chaque sujet ; jamais une fermeture `none`), `received` (points d'entrée que d'autres équipes ont ouverts à cette
-  équipe, par équipe, filtrés à ce que l'appelant lit) et `brokenLinks` (20 au plus : liens des contenus publiés de
+  de chaque sujet ; jamais une fermeture `none`), `received` (la vue invité d'un simple membre de l'équipe : ce que les autres équipes partagent avec elle, un
+  partage avec toute l'organisation compris, par équipe, comme le rail et `context` le montrent) et `brokenLinks` (20 au plus : liens des contenus publiés de
   l'équipe vers un contenu qu'un simple membre de l'équipe ne peut pas ouvrir).
 - [ ] **AC26** **Given** un appelant ni membre de l'équipe ni administrateur **Then** `forbidden`, avec à qui demander,
   décidé avant toute lecture ; équipe inconnue : `not_found`.
 - [ ] **AC27** `GET teams/<slug>/shares` rend ces données ; la fonction `team.shares` (classe `read`, origine `paquet`,
-  l'équipe portée par le paramètre `team` de `call` si le serveur peut le résoudre ainsi, avec son refus d'équipe ambiguë ;
-  sinon un argument `team`, et un refus qui liste les équipes de la personne et dit de demander) rend les mêmes en texte compact, borné.
+  un argument `team` propre à la fonction, facultatif quand la personne n'a qu'une équipe : le paramètre `team` de `call` ne
+  nomme que les équipes de la personne, un administrateur non membre ne pourrait pas s'en servir ; plusieurs équipes sans
+  argument : refus qui les liste et dit de demander) rend les mêmes en texte compact, borné.
 - [ ] **AC28** Le menu d'une équipe porte « Partages de l'équipe… » après « Les personnes de … », pour ses membres et
   pour qui administre ; il ouvre le dialogue « Les partages de <équipe> » (`Dialog` `xl`, pied « Fermer »), chargé à la
-  demande : la note des liens cassés quand il y en a, « n contenus partagés hors de l'équipe » (une ligne par contenu, « avec
-  Support, Ventes » ou « avec 9 équipes », le niveau au libellé du panneau « Partager », « Régler le partage » pour qui
-  gère le contenu), « n contenus partagés par d'autres équipes » (par équipe, « et 4 contenus dessous ») ; états vides : « Rien
-  n'est partagé hors de l'équipe » avec « Pour partager un contenu : son menu « Partager ». », et « Aucune équipe ne
-  partage encore de contenu avec <équipe>. » ; chargement, erreur.
+  demande : la note « n liens à vérifier » quand il y en a, « n contenus partagés hors de l'équipe » (une rangée par contenu, « avec
+  Support, Ventes » ou « avec 9 équipes ou personnes », le niveau au libellé du panneau « Partager » ; le titre mène à la
+  page du contenu, où « Partager » le règle), « n contenus partagés par d'autres équipes » (par équipe, « et 4 contenus dessous ») ; vides : l'intertitre avec son compte, et
+  la ligne « Pour partager un contenu : son menu « Partager ». » sous le premier ; chargement, erreur.
 
 ### Lot 7 (facultatif) — Mesurer les vues invité
 
