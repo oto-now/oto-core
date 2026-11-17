@@ -12,7 +12,7 @@
 //
 // M71 : les listes d'index d'une partie (enfants, pages liées) ne sont que dans son texte servi, pas dans les blocs
 // de son Contexte ; `morceauxDuContexte` les en relit par les textes que le service écrit (`CONTEXT_INDEX`).
-import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_RECENT } from "../../schemas"
+import { CONTEXT_INDEX, NODE_PATH_PATTERN, SERVED_BUDGET, SERVED_GUESTS, SERVED_RECENT } from "../../schemas"
 import { PERSO } from "../arbre/depuis-l-arbre"
 import type { DonneesDeLApercu } from "./apercu-du-contexte"
 
@@ -37,6 +37,7 @@ export const CONTEXTE_DE_TOUT_LE_MONDE = "contexte"
  * Depuis le 2026-10-27, `context` ne sert plus ni nouveautés ni procédures utiles en blocs à part.
  */
 const ANCRES_DES_BLOCS: Readonly<Record<string, string>> = {
+  guests: "guest-views",
   "recent content": "recent-content",
 }
 
@@ -115,12 +116,14 @@ export type LigneServie =
   | { genre: "connecteur"; nom: string; date: string }
   | ({ genre: "recent"; chemin: string; nature: string; date: string; titre: string } & MarquesDeCommentaires)
   | { genre: "index"; chemin: string; titre: string; resume: string }
+  /** Un point d'entrée de la vue invité : `dessous`, les contenus lisibles sous lui. */
+  | { genre: "invite"; chemin: string; titre: string; resume: string; dessous: number }
 
 /**
  * La légende d'une liste servie : la borne des nouveautés lue dans l'en-tête des contenus récents, ou le titre d'une
- * liste d'index d'un Contexte.
+ * liste d'index d'un Contexte, ou l'équipe d'une vue invité avec ses responsables (`""` sans responsable nommé).
  */
-export type Legende = { genre: "nouveautes"; depuis: string } | { genre: "children" } | { genre: "linked" }
+export type Legende = { genre: "nouveautes"; depuis: string } | { genre: "children" } | { genre: "linked" } | { genre: "equipe"; nom: string; responsables: string }
 
 /** Un morceau d'une partie relue : une liste, une phrase fixe, l'avis de budget, ou du texte tel que servi. */
 export type MorceauServi =
@@ -256,7 +259,55 @@ function recents(lignes: readonly string[]): MorceauServi[] | null {
   return lignesDuBloc(contenus, { genre: "nouveautes", depuis }, ligneRecente)
 }
 
+/** Les faits d'une équipe tels que `teamLine` les écrit : `Team <nom>.`, ou `Team <nom>. Lead: <responsables>.` */
+const EQUIPE_SERVIE = { debut: "Team ", responsables: ". Lead: ", fin: "." } as const
+
+/**
+ * `### Team <nom>. Lead: <responsables>.` : l'équipe d'une vue invité ; `null` pour toute autre ligne, dont celle du
+ * dernier repli, qui porte le compte de ses contenus à la place de leur liste.
+ */
+function equipeInvitante(ligne: string): Legende | null {
+  const faits = entre(ligne, `${SERVED_GUESTS.team}${EQUIPE_SERVIE.debut}`, EQUIPE_SERVIE.fin)
+  if (faits === null || faits === "" || ligne.includes(SERVED_GUESTS.countOne) || ligne.includes(SERVED_GUESTS.countMany)) return null
+  const coupe = faits.lastIndexOf(EQUIPE_SERVIE.responsables)
+  if (coupe < 0) return { genre: "equipe", nom: faits, responsables: "" }
+  return { genre: "equipe", nom: faits.slice(0, coupe), responsables: faits.slice(coupe + EQUIPE_SERVIE.responsables.length) }
+}
+
+/** `- <chemin> — <titre> — <résumé>`, ou `- <chemin> (+<n> under it) — …` pour un dossier ; le résumé peut manquer. */
+function ligneInvitee(ligne: string): LigneServie | null {
+  const { separator, item } = CONTEXT_INDEX
+  const { underStart, underEnd } = SERVED_GUESTS
+  if (!ligne.startsWith(item)) return null
+  const fin = ligne.indexOf(separator)
+  if (fin < 0) return null
+  const tete = ligne.slice(item.length, fin)
+  const compte = tete.endsWith(underEnd) ? tete.lastIndexOf(underStart) : -1
+  const nombre = compte < 0 ? "" : tete.slice(compte + underStart.length, tete.length - underEnd.length).replaceAll(",", "")
+  if (compte >= 0 && !NOMBRE_SERVI.test(nombre)) return null
+  const lue = ligneDIndex(`${item}${compte < 0 ? tete : tete.slice(0, compte)}${ligne.slice(fin)}`)
+  return lue?.genre === "index" ? { genre: "invite", chemin: lue.chemin, titre: lue.titre, resume: lue.resume, dessous: compte < 0 ? 0 : Number(nombre) } : null
+}
+
+/**
+ * La vue invité : son titre et sa consigne (dite à l'assistant, non montrée), puis une liste par équipe, sous son nom et
+ * ses responsables. Une ligne d'une autre forme (le dernier repli, une ligne par équipe) reste telle que servie.
+ */
+function invites(lignes: readonly string[]): MorceauServi[] | null {
+  if (lignes[0] !== SERVED_GUESTS.title || !lignes[1]?.startsWith(SERVED_GUESTS.noticeStart)) return null
+  const { morceaux, brut, ligne } = assembleur()
+  for (const texte of lignes.slice(2)) {
+    const equipe = equipeInvitante(texte)
+    const lue = equipe ? null : ligneInvitee(texte)
+    if (equipe) morceaux.push({ genre: "liste", legende: equipe, lignes: [] })
+    else if (lue && morceaux.at(-1)?.genre === "liste") ligne(lue)
+    else brut(texte)
+  }
+  return morceaux
+}
+
 const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[]) => MorceauServi[] | null>> = {
+  guests: invites,
   "recent content": recents,
 }
 

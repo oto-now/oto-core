@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Suspense, use } from "react"
+import { contextRequestQuerySchema } from "@otomata_tech/oto_platform/schemas"
 import { isPlatformError, loadNode, previewContext, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { cheminDuContexte, EcranDuContexte, EcranDuContexteChargement, resultatDe, type DonneesDuContexteServi } from "@otomata_tech/oto_platform/ui"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
@@ -10,7 +11,8 @@ import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 // compte ; ex-onglet de l'accueil (E05-S11, AC-13, AC-14). La page revérifie la session, hors de tout `try` (le
 // layout n'est pas une frontière, `nextjs-patterns.md § Un layout n'est JAMAIS une frontière d'autorisation`), puis
 // lit l'aperçu (`previewContext` sans phrase) et chaque Contexte qu'il sert par son chemin (`loadNode`), dont le
-// niveau de la personne, décidé par le service, choisit l'éditeur ou la lecture.
+// niveau de la personne, décidé par le service, choisit l'éditeur ou la lecture. Le paramètre `q` de l'adresse porte une
+// demande à tester : validé par son schéma, il part à `previewContext` et à l'écran ; illisible, rien n'est testé.
 export const metadata: Metadata = {
   title: "Contexte",
   robots: { index: false },
@@ -26,8 +28,8 @@ const ICI = "/context"
  * service décide du niveau (H123), la page ne décide rien. L'aperçu ne sert que des Contextes que la personne lit :
  * une lecture refusée depuis est une lecture en échec, dite dans sa partie.
  */
-async function lireLeContexte(db: PlatformDb, identity: Identity): Promise<DonneesDuContexteServi> {
-  const apercu = await resultatDe(previewContext(db, identity, {}))
+async function lireLeContexte(db: PlatformDb, identity: Identity, demande: string | undefined): Promise<DonneesDuContexteServi> {
+  const apercu = await resultatDe(previewContext(db, identity, demande === undefined ? {} : { phrase: demande }))
   // Le Contexte de chaque partie, servi ou non : un Contexte écrivable montre son éditeur même en brouillon
   // (E05-S12, AC-7, HN-E05S12-C2).
   const chemins = apercu.data ? [...new Set(apercu.data.blocks.flatMap((bloc) => cheminDuContexte(bloc) ?? []))] : []
@@ -53,20 +55,25 @@ async function lireLeContexte(db: PlatformDb, identity: Identity): Promise<Donne
 }
 
 /** La vue lue, sous son `<Suspense>` : le chargement paraît pendant les lectures. */
-function ContexteLu({ lecture }: { lecture: Promise<DonneesDuContexteServi> }) {
-  return <EcranDuContexte resultat={{ data: use(lecture) }} Lien={Link} prefixeDesPages="/n/" ici={ICI} />
+function ContexteLu({ lecture, demande }: { lecture: Promise<DonneesDuContexteServi>; demande: string | undefined }) {
+  return <EcranDuContexte resultat={{ data: use(lecture) }} Lien={Link} prefixeDesPages="/n/" ici={ICI} test={{ demande }} />
 }
 
-export default async function ContextePage() {
+type ContextePageProps = { searchParams: Promise<Record<string, string | string[] | undefined>> }
+
+export default async function ContextePage({ searchParams }: ContextePageProps) {
   const identite = await getPlatformIdentitySafely("context")
   if (identite?.error?.code === "unauthenticated") redirect("/login")
   if (identite?.error) redirect("/no-organization")
   // Une panne de la résolution de l'identité : l'écran la dit une fois, avec « Réessayer ».
   if (!identite) return <EcranDuContexte resultat={ECHEC} Lien={Link} prefixeDesPages="/n/" ici={ICI} />
   const { session, identity } = identite.data
+  const lu = contextRequestQuerySchema.safeParse(await searchParams)
+  const demande = lu.success ? lu.data.q : undefined
   return (
-    <Suspense fallback={<EcranDuContexteChargement />}>
-      <ContexteLu lecture={lireLeContexte(session.db, identity)} />
+    // `key` : une autre demande relit sous le chargement, au lieu de garder l'écran d'avant.
+    <Suspense key={demande ?? ""} fallback={<EcranDuContexteChargement />}>
+      <ContexteLu lecture={lireLeContexte(session.db, identity, demande)} demande={demande} />
     </Suspense>
   )
 }

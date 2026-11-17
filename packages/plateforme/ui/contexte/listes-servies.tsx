@@ -34,6 +34,7 @@ function date(servie: string): string {
 
 function legende(une: Legende): string {
   if (une.genre === "nouveautes") return LIGNES_SERVIES.depuis(date(une.depuis))
+  if (une.genre === "equipe") return LIGNES_SERVIES.equipe(une.nom, une.responsables)
   return LIGNES_SERVIES[une.genre]
 }
 
@@ -68,6 +69,14 @@ function Ligne({ ligne, ...navigation }: Navigation & { ligne: LigneServie }): R
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={avecLesCommentaires(LIGNES_SERVIES.recent(ligne.nature, date(ligne.date)), ligne)} {...navigation} />
     case "index":
       return <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={ligne.resume} {...navigation} />
+    case "invite":
+      // Le résumé dit quand se servir du contenu : sous son lien, sur sa propre ligne.
+      return (
+        <>
+          <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={ligne.dessous > 0 ? LIGNES_SERVIES.dessous(ligne.dessous) : ""} {...navigation} />
+          {ligne.resume !== "" && <span className="block text-mute">{ligne.resume}</span>}
+        </>
+      )
   }
 }
 

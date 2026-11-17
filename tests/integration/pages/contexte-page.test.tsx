@@ -55,6 +55,10 @@ const APERCU = {
   candidates: [],
 }
 
+/** L'adresse de la page sans paramètre, puis avec une demande à tester. */
+const SANS_DEMANDE = { searchParams: Promise.resolve({}) }
+const avec = (q: string | string[]) => ({ searchParams: Promise.resolve({ q }) })
+
 /** Rend sous un `act` attendu : l'écran, suspendu sur ses lectures, se rend dans le même tour. */
 async function montrer(page: ReactNode) {
   await act(async () => {
@@ -85,7 +89,7 @@ describe("/context page session (AC-e2)", () => {
   it("should send a visitor without a session to /login, reading nothing, and stay out of the index", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code: "unauthenticated" } })
 
-    await expect(ContextePage()).rejects.toThrow("NEXT_REDIRECT:/login")
+    await expect(ContextePage(SANS_DEMANDE)).rejects.toThrow("NEXT_REDIRECT:/login")
     expect(previewContext).not.toHaveBeenCalled()
     expect(metadata).toMatchObject({ title: "Contexte", robots: { index: false } })
   })
@@ -94,14 +98,14 @@ describe("/context page session (AC-e2)", () => {
   it("should send unknown_org to /no-organization, reading nothing", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ error: { code: "unknown_org" } })
 
-    await expect(ContextePage()).rejects.toThrow("NEXT_REDIRECT:/no-organization")
+    await expect(ContextePage(SANS_DEMANDE)).rejects.toThrow("NEXT_REDIRECT:/no-organization")
     expect(previewContext).not.toHaveBeenCalled()
   })
 
   it("should say once that the view could not be read when the identity cannot be resolved, « Réessayer » on /context", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(null)
 
-    await montrer(await ContextePage())
+    await montrer(await ContextePage(SANS_DEMANDE))
 
     expect(screen.getByRole("heading", { level: 1, name: "Contexte" })).toBeInTheDocument()
     expect(screen.getAllByRole("alert")).toHaveLength(1)
@@ -117,9 +121,77 @@ describe("/context page session (AC-e2)", () => {
   })
 })
 
+describe("/context page tests a request", () => {
+  const ROUTAGE = {
+    ...APERCU,
+    served: { path: "ventes/relance_devis", revision: 3, score: 0.82 },
+    candidates: [
+      { path: "ventes/relance_devis", title: "Relancer les devis en attente", kind: "procedure", score: 0.82 },
+      { path: "ventes/relance_prospects", title: "Relancer les prospects", kind: "procedure", score: 0.5 },
+    ],
+  }
+
+  it("should pass the request of the address to the preview, and show what the routing found and the exact text, open", async () => {
+    vi.mocked(previewContext).mockResolvedValue(ROUTAGE)
+
+    await montrer(await ContextePage(avec("  relance les devis en attente ")))
+
+    expect(previewContext).toHaveBeenCalledWith(SESSION.db, IDENTITE, { phrase: "relance les devis en attente" })
+    const champ = screen.getByRole("textbox", { name: "Tester une demande" })
+    expect([champ.getAttribute("name"), champ.getAttribute("maxlength"), (champ as HTMLInputElement).value, champ.closest("form")?.getAttribute("method"), champ.closest("form")?.getAttribute("action")]).toEqual([
+      "q",
+      "2000",
+      "relance les devis en attente",
+      "get",
+      "/context",
+    ])
+    expect(screen.getByText(/^Ce que votre assistant recevrait pour : « relance les devis en attente »/)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Revenir au contexte sans demande" })).toHaveAttribute("href", "/context")
+    const routage = partie("Procédures pour cette demande")
+    expect(routage.getByText(/^Procédure retenue : /).textContent).toBe("Procédure retenue : Relancer les devis en attente — score 0,82")
+    expect(routage.getByRole("link", { name: "Relancer les devis en attente" })).toHaveAttribute("href", "/n/ventes/relance_devis")
+    expect(within(routage.getByRole("list", { name: "Procédures proches" })).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual(["Relancer les prospects — score 0,50"])
+    const exact = screen.getByRole("group", { name: "Texte exact envoyé à l'assistant" })
+    expect(exact).toHaveAttribute("open")
+    expect(exact.querySelector("summary")?.textContent).toMatch(new RegExp(`${TEXTE.length} caractères sur 20\\s000$`))
+    expect(exact.querySelector("pre")?.textContent).toBe(TEXTE)
+    // L'explication se replie pendant un test : le résultat vient d'abord.
+    expect(screen.getByRole("group", { name: "À quoi sert cette page" })).not.toHaveAttribute("open")
+  })
+
+  it("should test nothing for a request the schema refuses, and keep the exact text folded without a request", async () => {
+    const verdicts: Record<string, unknown> = {}
+    for (const [cas, q] of Object.entries({ trop: "x".repeat(2_001), vide: "   ", liste: ["a", "b"] })) {
+      vi.mocked(previewContext).mockClear()
+      cleanup()
+      await montrer(await ContextePage(avec(q)))
+      verdicts[cas] = {
+        lu: vi.mocked(previewContext).mock.calls[0]?.[2],
+        legende: screen.queryByText(/^Ce que votre assistant recevrait pour/) !== null,
+        routage: screen.queryByRole("region", { name: "Procédures pour cette demande" }) !== null,
+        ouvert: screen.getByRole("group", { name: "Texte exact envoyé à l'assistant" }).hasAttribute("open"),
+        champ: screen.getByRole<HTMLInputElement>("textbox", { name: "Tester une demande" }).value,
+      }
+    }
+
+    const rien = { lu: {}, legende: false, routage: false, ouvert: false, champ: "" }
+    expect(verdicts).toEqual({ trop: rien, vide: rien, liste: rien })
+  })
+
+  it("should say that no procedure is kept when the routing decides none", async () => {
+    vi.mocked(previewContext).mockResolvedValue({ ...APERCU, served: null, candidates: [] })
+
+    await montrer(await ContextePage(avec("bonjour")))
+
+    const routage = partie("Procédures pour cette demande")
+    expect(routage.getByText("Aucune procédure retenue")).toBeInTheDocument()
+    expect(routage.queryByRole("list")).toBeNull()
+  })
+})
+
 describe("/context page reads (AC-e2, AC-f7)", () => {
   it("should read the preview without a phrase, then each served Contexte by its path, with the session client, writing in place the one the service lets the person write", async () => {
-    await montrer(await ContextePage())
+    await montrer(await ContextePage(SANS_DEMANDE))
 
     expect(previewContext).toHaveBeenCalledWith(SESSION.db, IDENTITE, {})
     expect(vi.mocked(loadNode).mock.calls.map(([db, identite, lu]) => [db, identite, lu.path])).toEqual([
@@ -154,7 +226,7 @@ describe("/context page reads (AC-e2, AC-f7)", () => {
       return vueDuNoeud({ id: `n-${path}`, path, kind: "context", level: 1 })
     })
 
-    await montrer(await ContextePage())
+    await montrer(await ContextePage(SANS_DEMANDE))
 
     expect(vi.mocked(loadNode).mock.calls.map(([, , lu]) => lu.path)).toEqual(["contexte", "ventes/contexte", "conseil/contexte", "support/contexte"])
     expect(partie("Contexte : équipe conseil").queryByRole("alert")).toBeNull()
@@ -165,7 +237,7 @@ describe("/context page reads (AC-e2, AC-f7)", () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     vi.mocked(previewContext).mockRejectedValue(new PlatformError("internal", "Internal error."))
 
-    await montrer(await ContextePage())
+    await montrer(await ContextePage(SANS_DEMANDE))
 
     expect(screen.getByRole("alert")).toHaveTextContent(`L'aperçu n'a pas pu être calculé.${ECHEC}`)
     expect(screen.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/context")

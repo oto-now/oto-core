@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest"
 import { workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextParts, type ContextBody, type PartFacts } from "../../packages/plateforme/server/context/blocks/contexts"
+import { guestsText } from "../../packages/plateforme/server/context/blocks/guests"
 import { orgAddress } from "../../packages/plateforme/server/context/blocks/org"
 import { recentText } from "../../packages/plateforme/server/context/blocks/recent"
 import { CONTEXT_BUDGET, renderContext, type ContextBlock } from "../../packages/plateforme/server/context/engine"
@@ -232,12 +233,13 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 describe("How this workspace works (E05-S12, AC-10)", () => {
   // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB) ;
   // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus ; la règle des commentaires, une ligne,
-  // moins de 300 de plus.
-  it("should hold 19 lines and 3,700 characters at most with a 10-character prefix, the same for everyone", () => {
+  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus.
+  it("should hold 20 lines and 3,950 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
-    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(19)
-    expect(rules.length).toBeLessThanOrEqual(3_700)
+    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(20)
+    expect(rules.length).toBeLessThanOrEqual(3_950)
+    expect(rules.split("\n")[3]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
     expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
     expect(rules).toContain("A procedure is a page of numbered steps")
     expect(rules).toContain("A good procedure has a part « When to use it »")
@@ -251,7 +253,7 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     const address = orgAddress("https://demo.example.test/api/mcp")
     const withAddress = workspaceRules("abcdefghij", address)
     expect(withAddress.split("\n")).toEqual([rules.split("\n")[0], `- ${address}`, ...rules.split("\n").slice(1)])
-    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(20)
+    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(21)
   })
 })
 
@@ -516,5 +518,42 @@ describe("the end of the text read back (AC-14)", () => {
       morceauxDuContexte(texte)
       expect(performance.now() - debut).toBeLessThan(1_000)
     }
+  })
+})
+
+describe("the guest view read back by the screen", () => {
+  const teams = [
+    { id: "t-f", slug: "finance", name: "Finance", leads: [], entries: [{ path: "finance/mandat", title: "Mandat SEPA", summary: "Quand un client paie par prélèvement.", kind: "page" as const, under: 0 }] },
+    {
+      id: "t-s",
+      slug: "support",
+      name: "Support",
+      leads: ["Paul Girard", "Marc Petit"],
+      entries: [{ path: "support/dossier", title: "Dossier — fiches", summary: "Les fiches du support.", kind: "page" as const, under: 1234 }],
+    },
+  ]
+
+  it("should read each team with its leads and each entry point with its count, in the part anchored guest-views, and rebuild the served text", () => {
+    const { text } = guestsText(teams, "demo")
+    const { parties } = confronter([{ name: "code", text: "ctx: XXXX-XXXX" }, { name: "guests", text }], CONTEXT_BUDGET)
+
+    expect(parties[1].ancre).toBe("guest-views")
+    expect(morceauxDuBloc("guests", parties[1].texte)).toEqual([
+      { genre: "liste", legende: { genre: "equipe", nom: "Finance", responsables: "" }, lignes: [{ genre: "invite", chemin: "finance/mandat", titre: "Mandat SEPA", resume: "Quand un client paie par prélèvement.", dessous: 0 }] },
+      {
+        genre: "liste",
+        legende: { genre: "equipe", nom: "Support", responsables: "Paul Girard, Marc Petit" },
+        // Un titre qui porte le séparateur laisse la suite au résumé, comme une ligne d'index.
+        lignes: [{ genre: "invite", chemin: "support/dossier", titre: "Dossier", resume: "fiches — Les fiches du support.", dessous: 1234 }],
+      },
+    ])
+  })
+
+  it("should keep as served a block whose lines have another form: the last tier, one line per team", () => {
+    const many = { ...teams[0], entries: Array.from({ length: 400 }, (_, rank) => ({ path: `finance/page_${rank}`, title: `Page ${rank}`, summary: "s", kind: "page" as const, under: 0 })) }
+    const { text, tier } = guestsText([many], "demo")
+
+    expect(tier).toBe(4)
+    expect(morceauxDuBloc("guests", text)).toEqual([{ genre: "brut", texte: "### Team Finance. 400 contents shared with you: search them with demo_find." }])
   })
 })

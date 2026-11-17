@@ -57,6 +57,7 @@ export function aQuoiSert(portee: Portee): string {
  */
 export const NOMS_DES_BLOCS: Readonly<Record<string, string>> = {
   code: "Règles Oto",
+  guests: "Partagé par d'autres équipes",
   "recent content": "Contenus récents et nouveautés",
 }
 
@@ -125,9 +126,29 @@ export const EXPLICATION_DU_CONTEXTE = {
     "l'adresse de cet Oto et ses règles, les mêmes pour tous (non montrées ici) ;",
     "les procédures les plus proches de votre demande, la meilleure en tête quand Oto en reconnaît clairement une, que l'assistant lit avant d'en suivre les étapes, et les pages et tableaux proches (non montrés ici) ;",
     "le Contexte de Tout le monde, puis le vôtre (Privé), puis celui de chacune de vos équipes : chacun s'ouvre sur quelques faits (l'organisation, vous, l'équipe et ses connecteurs), puis son texte, puis la liste des contenus rangés dessous et des pages qu'il cite, par leur titre et leur résumé, sans leur contenu ;",
+    "ce que d'autres équipes partagent avec vous, calculé d'après les partages : votre assistant sait ce qu'il peut lire dans les équipes dont vous n'êtes pas membre ;",
     "vos contenus récents, les pages et tableaux que vous avez lus ou écrits ces derniers temps, avec les nouveautés depuis votre dernière conversation (contenus publiés, marqués comme tels, et connecteurs activés).",
   ],
   plafond: "Le tout a une longueur maximale : ce qui dépasse est coupé, et le texte le signale.",
+} as const
+
+/**
+ * « Tester une demande » sur l'écran « Contexte » : le champ, ce que la demande testée donne (la procédure retenue, les
+ * proches, leur score), et le texte exact envoyé à l'assistant avec sa taille dans le plafond.
+ */
+export const TEST_D_UNE_DEMANDE = {
+  champ: "Tester une demande",
+  indice: "Ex. : relance les devis en attente",
+  tester: "Tester",
+  legende: (demande: string) => `Ce que votre assistant recevrait pour : « ${demande} »`,
+  revenir: "Revenir au contexte sans demande",
+  routage: "Procédures pour cette demande",
+  retenue: "Procédure retenue",
+  aucune: "Aucune procédure retenue",
+  proches: "Procédures proches",
+  score: (score: number) => `score ${score.toFixed(2).replace(".", ",")}`,
+  texteExact: "Texte exact envoyé à l'assistant",
+  taille: (caracteres: string, plafond: string) => `${caracteres} caractères sur ${plafond}`,
 } as const
 
 /** La nature d'un contenu récent ou nouveau servi (`page`, `table`, `procedure`, `context`) ; une autre, telle que servie. */
@@ -153,6 +174,10 @@ export const LIGNES_SERVIES = {
   pourLAssistant: (nombre: number) => `${accorde(nombre, "fil", "fils")} en attente d'un assistant`,
   children: "Rangés sous ce contexte",
   linked: "Pages citées",
+  /** L'équipe d'une vue invité, et ses responsables quand elle en nomme. */
+  equipe: (nom: string, responsables: string) => (responsables === "" ? `Équipe ${nom}` : `Équipe ${nom} · Responsables : ${responsables}`),
+  /** Les contenus lisibles sous un dossier partagé. */
+  dessous: (nombre: number) => `et ${accorde(nombre, "contenu", "contenus")} dessous`,
   suite: "La suite de ce contexte est lue à la demande.",
   nonCharge: "Non chargé : l'assistant le lira à la demande.",
   coupe: (nom: string) => `${nom} (coupé)`,

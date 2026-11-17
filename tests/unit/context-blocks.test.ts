@@ -10,6 +10,7 @@
 // membre ; le service prouve qu'il les filtre (`security-patterns.md § Droits dans le service`).
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { candidate } from "../integration/fixtures/acme"
+import { SERVED_GUESTS } from "../../packages/plateforme/schemas"
 import { buildContext, previewContext } from "../../packages/plateforme/server/context"
 import { codeBlock, workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextBodies } from "../../packages/plateforme/server/context/blocks/contexts"
@@ -850,7 +851,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
 })
 
 describe.skipIf(!sqlConfigured)(portable("filtering by the service (E03-S08, AC9)"), { timeout: REAL_BASE_TIMEOUT }, () => {
-  it("should serve Paul no ventes/ path in any block, from nodes, versions, blocks, links and journal lines the database returns", async () => {
+  it("should serve Paul no ventes/ path he does not read in any block, from nodes, versions, blocks, links and journal lines the database returns", async () => {
     const tables = oTables([
       { path: "contexte/offres", owner: { kind: "team", teamId: TEAMS.ventes.id, userId: null }, title: "Offres de Ventes" },
       { path: "ventes/relance", kind: "procedure", summary: "Relance les devis." },
@@ -881,7 +882,10 @@ describe.skipIf(!sqlConfigured)(portable("filtering by the service (E03-S08, AC9
     const preview = (await previewContext(db, paul, {})).text
     const built = (await buildContext(db, paul, {}, { userAgent: null })).text
     for (const text of [built, preview]) {
-      expect(text).not.toMatch(/ventes\//)
+      // La vue invité nomme le seul contenu de Ventes que Paul lit : le dossier que possède Support, et ce qu'il porte.
+      const guests = section(text, SERVED_GUESTS.title)
+      expect(guests?.split("\n").slice(2)).toEqual(["### Team Ventes. Lead: Claire Morel.", "- ventes/zone (+1 under it) — ventes/zone — Summary of ventes/zone."])
+      expect(text.replace(guests ?? "", "")).not.toMatch(/ventes\//)
       expect(text).not.toContain("contexte/offres")
       expect(section(text, "## Context: everyone")).toBe(
         `## Context: everyone (contexte)\n${orgFacts(paul.org)}\nLes pages utiles sont liées ci-dessous.\n\nLinked pages:\n- support/faq — support/faq — Summary of support/faq.`,
