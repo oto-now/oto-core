@@ -17,13 +17,17 @@ const TEAM_CONNECTORS_HEADER =
   "Connectors (this team runs a call when the procedure or the call names it, or when it is your only team with an account; if several are, ask the user which one):"
 const EVERYONE_CONNECTORS_HEADER = "Connectors (when no team of yours runs the call):"
 
+/** La ligne de faits d'une équipe : son nom, puis ses responsables nommés ; reprise par la vue invité (`guests.ts`). */
+export function teamLine(name: string, leads: readonly string[]): string {
+  return `Team ${name}.${leads.length > 0 ? ` Lead: ${leads.join(", ")}.` : ""}`
+}
+
 /**
- * Les responsables de chaque équipe de la personne (`team_members.role`), par leur nom de profil ; sans nom
+ * Les responsables de chacune des équipes données (`team_members.role`), par leur nom de profil ; sans nom
  * de profil, un responsable n'est pas nommé. Une lecture pour toutes les équipes (leur liste en un
- * paramètre lié), aucune sans équipe.
+ * paramètre lié), aucune sans équipe. Celles de la personne ici, celles qui l'invitent dans `guests.ts`.
  */
-async function leadsByTeam(db: PlatformDb, identity: Identity): Promise<Map<string, string[]>> {
-  const teamIds = identity.teams.map((team) => team.id)
+export async function leadsByTeam(db: PlatformDb, orgId: string, teamIds: readonly string[]): Promise<Map<string, string[]>> {
   if (teamIds.length === 0) return new Map()
   const rows = await inTransaction(
     db,
@@ -31,7 +35,7 @@ async function leadsByTeam(db: PlatformDb, identity: Identity): Promise<Map<stri
     (sql) => sql<{ team_id: string; user_id: string; profile: unknown }[]>`
       select tm.team_id, tm.user_id, m.profile
         from platform.team_members tm
-        join platform.members m on m.user_id = tm.user_id and m.org_id = ${identity.org.id}
+        join platform.members m on m.user_id = tm.user_id and m.org_id = ${orgId}
        where tm.team_id = any(${teamIds}::uuid[]) and tm.role = 'lead'`,
   )
   const names = new Map<string, string>()
@@ -59,13 +63,10 @@ export type TeamFacts = { teams: string[]; teamConnectors: string[][]; connector
  * de l'organisation (compte de l'organisation : le mode du compte se sait avant l'envoi, N17, banc E04 F5).
  */
 export async function teamFacts(db: PlatformDb, identity: Identity): Promise<TeamFacts> {
-  const [leads, connectors] = await Promise.all([leadsByTeam(db, identity), teamConnectorLines(db, identity)])
+  const [leads, connectors] = await Promise.all([leadsByTeam(db, identity.org.id, identity.teams.map((team) => team.id)), teamConnectorLines(db, identity)])
   const headed = (header: string, lines: readonly string[]) => (lines.length > 0 ? [header, ...lines] : [])
   return {
-    teams: identity.teams.map((team) => {
-      const names = leads.get(team.id) ?? []
-      return `Team ${team.name}.${names.length > 0 ? ` Lead: ${names.join(", ")}.` : ""}`
-    }),
+    teams: identity.teams.map((team) => teamLine(team.name, leads.get(team.id) ?? [])),
     teamConnectors: identity.teams.map((team) => headed(TEAM_CONNECTORS_HEADER, connectors.teams.get(team.id) ?? [])),
     connectors: headed(EVERYONE_CONNECTORS_HEADER, connectors.everyone),
   }
