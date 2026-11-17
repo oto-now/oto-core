@@ -145,6 +145,10 @@ function simulerLAPI(...reponses: Reponse[]) {
   return appels
 }
 
+/** `GET trash/impact` : personne d'autre ne lit le contenu ; puis un contenu partagé hors de son équipe. */
+const SANS_PARTAGE: Reponse = { data: { path: "conseil", shared: { teams: [], people: 0, org: false } } }
+const partage = (shared: { teams: { name: string; level: string }[]; people: number; org: boolean }): Reponse => ({ data: { path: "conseil", shared } })
+
 const REFUS: Reponse = { error: { code: "forbidden", message: "Only a writer of ventes can write here: ask Ada." } }
 
 type Changement = MoveImpact["gained"][number]
@@ -896,23 +900,28 @@ describe("RailApplication, duplicating and deleting (E05-S10, b2, AC-b10, AC-b11
     expect(hote.naviguer).not.toHaveBeenCalled()
   })
 
-  it("should ask before deleting, saying how many sub-contents go with it, send nothing on « Annuler », then put it in the bin, open its parent and focus the line before it", async () => {
-    const appels = simulerLAPI({ data: { path: "conseil", count: 2 } })
+  it("should ask before deleting, saying how many sub-contents go with it and who loses access, send nothing on « Annuler », then put it in the bin, open its parent and focus the line before it", async () => {
+    const appels = simulerLAPI(SANS_PARTAGE, partage({ teams: [{ name: "Support", level: "read" }, { name: "Ventes", level: "write" }], people: 2, org: false }), { data: { path: "conseil", count: 2 } })
+    const envois = () => appels.filter((appel) => appel.methode === "POST")
     render(railA("/n/conseil/grille"))
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    const question = within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    const question = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
     expect(question.getByText("Son sous-contenu part avec lui.")).toBeInTheDocument()
+    // Personne d'autre ne le lit : la question d'avant, sans phrase de plus.
+    expect(question.queryByText(/plus accès/)).toBeNull()
     fireEvent.click(question.getByRole("button", { name: "Annuler" }))
-    expect(appels).toEqual([])
+    expect(appels).toEqual([{ url: "/api/platform/trash/impact?path=conseil", methode: "GET", corps: undefined }])
 
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" })).getByRole("button", { name: "Supprimer" }))
+    const partagee = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    expect(partagee.getByText("Support, Ventes et 2 personnes n'y auront plus accès.")).toBeInTheDocument()
+    fireEvent.click(partagee.getByRole("button", { name: "Supprimer" }))
 
     // La page ouverte (sa grille) partie avec lui : le parent s'ouvre, la racine menant au Contexte.
     await waitFor(() => expect(hote.naviguer).toHaveBeenCalledWith("/n/guide"))
-    expect(appels).toEqual([{ url: "/api/platform/trash", methode: "POST", corps: { path: "conseil" } }])
+    expect(envois()).toEqual([{ url: "/api/platform/trash", methode: "POST", corps: { path: "conseil" } }])
     expect(hote.rafraichir).toHaveBeenCalledTimes(1)
     expect(screen.getByText("« Conseil » est à la corbeille.")).toHaveAttribute("role", "status")
     await waitFor(() => expect(lien("Contexte · Tout le monde")).toHaveFocus())
@@ -920,11 +929,14 @@ describe("RailApplication, duplicating and deleting (E05-S10, b2, AC-b10, AC-b11
 
   // Le chemin vers la corbeille, depuis le menu du compte (E05-S11, AC-e22) : `RailApplication menus`.
   it("should say a refused deletion in the rail and open nothing", async () => {
-    simulerLAPI({ error: { code: "conflict", message: "A content was put under conseil meanwhile." } })
+    // La lecture du partage refusée : la question d'avant, la suppression reste décidée par le service.
+    simulerLAPI(REFUS, { error: { code: "conflict", message: "A content was put under conseil meanwhile." } })
     render(railA("/trash"))
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" })).getByRole("button", { name: "Supprimer" }))
+    const question = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    expect(question.queryByText(/plus accès/)).toBeNull()
+    fireEvent.click(question.getByRole("button", { name: "Supprimer" }))
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Un contenu vient d'être rangé dessous : rien n'est parti. Réessayez.")
     expect(hote.naviguer).not.toHaveBeenCalled()
@@ -1069,11 +1081,11 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
   })
 
   it("should give the focus back to the Contexte line once its first child is in the bin (AC-27)", async () => {
-    simulerLAPI({ data: { path: "contexte/tarifs", count: 0 } })
+    simulerLAPI(SANS_PARTAGE, { data: { path: "contexte/tarifs", count: 0 } })
     render(sousContexte("/n/contexte/relance"))
     fireEvent.click(within(rail()).getByRole("button", { name: "Autres actions sur Tarifs" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Tarifs » ?" })).getByRole("button", { name: "Supprimer" }))
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Supprimer « Tarifs » ?" })).getByRole("button", { name: "Supprimer" }))
 
     await waitFor(() => expect(lien("Contexte · Tout le monde")).toHaveFocus())
     expect(hote.naviguer).not.toHaveBeenCalled()

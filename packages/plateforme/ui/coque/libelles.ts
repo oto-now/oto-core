@@ -139,6 +139,13 @@ export const GESTES_DU_RAIL = {
   confirmerLaSuppression: (nom: string) => `Supprimer « ${nom} » ?`,
   corbeille: "Il va à la corbeille : il disparaît du rail, des recherches et des assistants. La Corbeille le restaure à sa place jusqu'à sa purge.",
   partentAvec: (nombre: number) => (nombre > 1 ? `Ses ${nombre} sous-contenus partent avec lui.` : "Son sous-contenu part avec lui."),
+  /** Qui perd l'accès, sujet d'abord (`phraseDuPartage`) : un sujet seul, ou plusieurs. */
+  touteLOrganisation: "toute l'organisation",
+  personnes: (nombre: number) => `${nombre} ${nombre > 1 ? "personnes" : "personne"}`,
+  perdLAcces: (sujet: string) => `${sujet} n'y aura plus accès.`,
+  perdentLAcces: (sujets: string) => `${sujets} n'y auront plus accès.`,
+  /** Annoncé pendant la lecture de qui perd l'accès, avant la question. */
+  lectureDuPartage: "Vérification du partage…",
   suppressionEnCours: "Suppression…",
   supprime: (nom: string) => `« ${nom} » est à la corbeille.`,
 } as const

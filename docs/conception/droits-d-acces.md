@@ -1,7 +1,7 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-11-13
+- **Dernière révision** : 2026-11-17
 
 ## Résumé
 
@@ -90,6 +90,13 @@ Origine : un incident d'oto 1, où une personne sans compte propre a écrit dans
 - Tout gestionnaire d'un nœud d'équipe (responsable, ou règle de gestion) peut le rendre personnel, par son propriétaire ou en le déplaçant dans un espace personnel ; l'administrateur ne le voit plus (D18).
 - Un compte ne change ni d'organisation ni d'identifiant (mise à jour accordée colonne par colonne, sans `id`, `org_id`, `created_at`, `updated_at`) ; changer son propriétaire exige la gestion avant et après, décidée par le service (E01-S04 N30) : sur la ligne d'avant et sur la ligne écrite, et le rendre personnel est réservé à l'administrateur (`accountOwnerChangeAllowed`, `access-levels.ts`) (HN-E01S07-10). Sous un jeton, seul un administrateur (ou le staff avec un accès en cours) rend personnel un compte qui ne l'était pas (`accounts_guard`, `42501`) (E01-S04 N37).
 - `nodes_guard` contrôle le chemin avant tout (segments `[a-z0-9_]`, 1 000 caractères au plus, NULL refusé : `23514`) : la colonne générée `lpath` (`text2ltree`) ne reçoit jamais un chemin invalide (E01-S04 N33). Sous un jeton, il prend `pg_advisory_xact_lock(7301, hashtext(org_id))` avant de lire le parent, à toute insertion et tout déplacement : les écritures de l'arbre d'une organisation passent une à une (un interblocage `40P01` en annule une) (E01-S04 N36).
+
+### Qui perd l'accès à la corbeille
+
+- Avant de mettre un contenu à la corbeille, le service dit qui perd l'accès (`sharedWith`, `server/nodes/trash-impact.ts`) : les sujets des règles de lecture ou plus posées sur lui ou sur un contenu dessous, hors de son équipe propriétaire et de la personne qui supprime. Les équipes par leur nom, à leur plus haut niveau ; les personnes comptées, jamais nommées ; toute l'organisation dite une fois ; une fermeture (`none`) n'est pas un partage.
+- Le récapitulatif de `node.trash` gagne la ligne « Shared with: team Support (read), 2 people, the whole organisation: they lose access. » ; sans partage, il ne change pas.
+- L'écran lit `GET trash/impact?path=` avant la question de « Supprimer » : les contrôles de la suppression d'abord (`trashPlan` : la gestion, tout ce que le contenu porte visible), puis les sujets. Le dialogue dit « Support, Ventes et 2 personnes n'y auront plus accès. » ; une lecture refusée ou en panne laisse la question d'avant, la suppression restant décidée par le service.
+- Le déplacement dit déjà, membre par membre, qui gagne ou perd l'accès (`moveImpact`) : la corbeille nomme des sujets de règles, pas des membres, un contenu partagé avec une équipe entière n'ayant pas à lister ses personnes.
 
 ### Équipes et membres
 
@@ -185,3 +192,4 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 - 2026-10-20 : la base reprend le niveau des écritures d'un nœud que décide le service (`20261021090000`) : écrire, déplacer, changer de propriétaire, mettre à la corbeille, restaurer, écrire le brouillon, partager par lien — décidé par Alexis (source : revue des policies d'écriture, un membre simple écrivait une page qu'il ne fait que lire avec son seul jeton).
 - 2026-11-12 : les commentaires d'un contenu suivent la page, sans règle d'accès propre ; renvoi vers leur document — décidé par le responsable du produit (source : décisions du 12/11/2026 sur les commentaires).
 - 2026-11-13 : `node.share` décide le droit avant de résoudre une personne et ne rend plus d'email ; l'email d'un membre ne part qu'à l'administrateur, à lui-même et à un responsable d'une de ses équipes — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).
+- 2026-11-17 : la corbeille dit qui perd l'accès, à l'assistant (`node.trash`) et à l'écran (`GET trash/impact`) — décidé par le responsable du produit (source : cadrage du 17/11/2026 sur la vue invité).
