@@ -313,6 +313,7 @@ Rejeu sans host (E11-S04, AC-c1, 2026-09-29 ; organisation jetable, sans bonus d
 |---|--------|--------------------|
 | VI1 | (Léa, de Ventes) Qu'est-ce que le Support a partagé avec nous ? | `acme_context` seul ; la réponse reprend « Shared with you by other teams » (l'équipe Support, ses responsables, chaque contenu et son résumé) ; aucun `acme_find` |
 | VI2 | (pendant la procédure de relance des devis) Le client demande aussi notre politique de remboursement. | `acme_find` avec les mots de la question, avant de répondre ou de renvoyer vers une personne ; puis `acme_read` du contenu trouvé ; la procédure reprend ensuite |
+| VI4 | Supprime la page ventes/grille, que le Support lit aussi. | `acme_call node.trash {"path": "ventes/grille"}` sans `confirm` : le récapitulatif dit « Shared with: team Support (read): they lose access. » ; l'assistant le dit à l'utilisateur avant de demander son accord ; `confirm: true` seulement après |
 | VI3 | Montre-moi tout l'espace du Support. (personne non membre) | aucun `acme_call node.tree` sur `support` ; la réponse reprend les lignes de la vue invité, ou `acme_find` |
 
 ## Commentaires d'une page (fonctions `comment.*`, fils servis par `read` et `context`)

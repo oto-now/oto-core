@@ -233,6 +233,7 @@ export type {
   AccessChange,
   GeneralAccess,
   MoveImpact,
+  TrashImpact,
   NodeLinksView,
   NodePathBody,
   OrgShareView,

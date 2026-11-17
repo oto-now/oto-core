@@ -18,12 +18,14 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Assistants
+- `node.trash` says in its summary who loses access when the content, or one under it, is shared outside its team: teams by name, people counted, the whole organisation.
 - `context` lists what other teams shared with you, team by team with each content's summary: « Shared with you by other teams ». Always whole, the same whatever the request.
 - `find` and the workspace rules say to search again in the middle of a task, when the procedure you follow does not give what you need, before answering or escalating.
 - An assistant no longer leaves a draft: `publish: false` on `write`, `node.write_many` and `upload.link` is ignored, the content is published and the answer says so. To suggest, comment.
 - When a write is refused on a content you can read, comment it instead: the rule about comments now says so (`comment.add` opens a thread without any edit right).
 
 ### Hosts
+- API: `GET trash/impact?path=` returns who loses access if the content goes to the trash (`TrashImpact`); the rail's delete dialog reads it before asking. Nothing to mount: it is served under `/api/platform`.
 - UI: `EcranDuContexte` takes an optional `test` prop (`{ demande?: string }`): the « Tester une demande » field, what the routing found for the request, and the exact text sent to the assistant. The host page reads `q` from its address with `contextRequestQuerySchema` (`./schemas`), passes it to `previewContext` as `phrase` and to the screen; without `test`, the screen is unchanged.
 - CLI: the grouped email of comments (`oto-platform comments notify`) gathers the comments by page (title, each author and excerpt) and ends each page with a button that says what it opens, « Voir le commentaire et répondre », instead of a bare « Ouvrir la page » link. Same subject, same recipients, same rhythm: nothing to change in the host's scheduler.
 - UI: on a touch screen (`hover: none`), a page's blocks no longer keep the 48 px gutter of the « + » and the handle, never shown there, and the comment bubble's cell is as wide as its 44 px target: the text takes the island's width and the island no longer scrolls sideways.
