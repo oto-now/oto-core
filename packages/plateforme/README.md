@@ -620,7 +620,7 @@ registerConnectors([messagerie.connector], {
   administrateur le refuse), renomme et décrit un compte qu'il gère (`PATCH admin/accounts/<id>`, `{ label?,
   description? }`), le réactive (`POST admin/accounts/<id>/enable`) et le teste. Services de `/server` :
   `updateAccount`, `enableAccount`, `probeConnector`. Base : migration
-  `20261114120000_platform_ecran_connecteurs.sql`.
+  `20261117220000_v1_8_0.sql` (sa première partie).
 - **Compte** : à l'écran Connecteurs (un connecteur déclaré y prend des comptes réels, avec leur formulaire), par
   `admin_connector` `create_account` avec `mode: "reel"`, ou par `createAccount` de `/server`. Un compte simulé d'un connecteur réel est refusé
   (`invalid_arguments`), un compte réel ou de bac à sable d'un connecteur simulé aussi (`unavailable_in_v1`).

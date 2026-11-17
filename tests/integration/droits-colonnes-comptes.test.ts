@@ -14,7 +14,7 @@ import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../h
 const VERSION = "20261017090000"
 const MARK_VERSION = "20261017150000"
 const SERVER_VERSION = "20261019130000"
-const SCREEN_VERSION = "20261114120000"
+const SCREEN_VERSION = "20261117220000"
 const VERSIONS = [VERSION, MARK_VERSION, SERVER_VERSION, SCREEN_VERSION]
 const missing = await pendingMigrations()
 const pending = VERSIONS.some((version) => missing.includes(version))
