@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-17] — Email des commentaires : un bloc par page, un lien qui dit ce qu'il ouvre
+**Quoi :** l'email groupé (`commentsDigestMail`, `cli/comments-mail.mjs`) réunit les commentaires par page : le titre de la page, chaque commentaire avec son auteur en gras et son extrait en citation, puis un bouton « Voir le commentaire et répondre » (« les commentaires » au-delà d'un) à la place du lien « Ouvrir la page ». La version texte suit la même structure. Objet, destinataires et rythme inchangés ; le lien ouvre toujours la page, sans ancre de fil.
+**Pourquoi :** relecture de l'aperçu par le responsable du produit le 17/11/2026 : « Ouvrir la page » ne disait pas qu'on y lit le commentaire et qu'on y répond, et les commentaires d'une même page se suivaient sans structure.
+**Fichiers :** `packages/plateforme/cli/comments-mail.mjs`, `tests/unit/commentaires-email.test.ts`, `tests/integration/commentaires-email.test.ts`, `docs/conception/commentaires.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-17] — Règles servies : commenter quand l'écriture est refusée
 **Quoi :** la règle des commentaires servie à chaque session (`workspaceRules`, `server/context/blocks/code.ts`) dit qu'un contenu qu'on lit se commente aussi quand une écriture y est refusée (« or when a write is refused »). Les règles restent sous 3 700 caractères et 19 lignes.
 **Pourquoi :** un assistant qui n'a que la lecture d'une page ne lisait nulle part quoi faire d'un refus d'écriture, sinon demander à qui de droit ; le commentaire est le geste prévu. Décision du responsable du produit du 17/11/2026.
