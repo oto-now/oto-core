@@ -47,7 +47,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 
 ### Télécharger
 
-- « Télécharger » est offert à qui lit un nœud publié, version publiée seule ; il ne manque qu'à un nœud gardé en brouillon par un assistant (HN-E11S05-9). « Télécharger en .csv » exporte tout le tableau, comme le rail, même sous un filtre ou une recherche (HN-E11S05-8). Un refus se dit par `messageDErreur(erreur, EXPORTS.refus)` (HN-E11S05-25). Exports non journalisés : D138, [journal et retours](journal-et-retours.md).
+- « Télécharger » est offert à qui lit un nœud publié, version publiée seule ; il ne manque qu'à un nœud jamais publié (HN-E11S05-9). « Télécharger en .csv » exporte tout le tableau, comme le rail, même sous un filtre ou une recherche (HN-E11S05-8). Un refus se dit par `messageDErreur(erreur, EXPORTS.refus)` (HN-E11S05-25). Exports non journalisés : D138, [journal et retours](journal-et-retours.md).
 - Sur une page publique, le fichier se compose de la vue déjà chargée (500 lignes au plus, dit par le libellé), au rendu serveur, et part sans requête au clic (HN-E11S05-10) ; la borne est `PUBLIC_TABLE_ROWS_MAX = 500`, dans `schemas/node-gestures.ts`, lue par la page publique et son libellé (HN-E11S05-23) ; le séparateur du CSV suit la langue de l'organisation, servie par `readPublicNode` (HN-E11S05-11), et `PublicNodeView.language` est typé `Language` (HN-E11S05-24). La page publique d'un tableau : D103, [partage public](partage-public.md).
 
 ### Gestes sur un nœud

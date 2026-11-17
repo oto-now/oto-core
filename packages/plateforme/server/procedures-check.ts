@@ -256,7 +256,7 @@ export function procedurePublicationError(path: string, refusals: readonly Proce
     `Publication of ${path} refused: ${formatCount(refusals.length)} problem(s). The draft is kept; nothing was published.`,
     problems,
     `Fix them with ${prefix}_write (ops on the sections), then publish again. Format and rules: ${prefix}_read {"path": "write.procedure"}.`,
-    "Writing it in several calls? Pass publish: false until the last one.",
+    "Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls.",
   ].join("\n")
   return new PlatformError("invalid_arguments", message, { refusals: [...refusals] })
 }
