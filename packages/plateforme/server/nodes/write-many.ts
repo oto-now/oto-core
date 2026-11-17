@@ -6,6 +6,7 @@ import { writeManyArgsSchema } from "../../schemas/nodes"
 import { defineFunction } from "../catalog/define"
 import { isPlatformError } from "../errors"
 import { cut } from "../journal"
+import { publishedAnywayLine, withoutDraftRequest } from "./publish-always"
 import { writeNodeLazily } from "./write-lazy"
 import type { WriteOrigin } from "./write-result"
 
@@ -30,7 +31,7 @@ export const nodeWriteMany = defineFunction({
   class: "write",
   origin: "paquet",
   description:
-    "Writes several pages, procedures or tables in one call, each exactly as write would (create or edit, ops, publish), in the given order, 50 at most: use it to import many markdown files or to write a whole folder, a parent before its children. Each page is written whole or not at all; a refused page does not stop the others, and the result gives one line per page. For a markdown file, give title and summary, and ops [{op: set_markdown, text}] with its body.",
+    "Writes several pages, procedures or tables in one call, each exactly as write would (create or edit, ops), in the given order, 50 at most: use it to import many markdown files or to write a whole folder, a parent before its children. Each page is written whole or not at all; a refused page does not stop the others, and the result gives one line per page. For a markdown file, give title and summary, and ops [{op: set_markdown, text}] with its body.",
   schema: writeManyArgsSchema,
   examples: [
     {
@@ -50,9 +51,13 @@ export const nodeWriteMany = defineFunction({
     const lines: string[] = []
     let teamId: string | null = null
     let stopped: string | null = null
+    // Comme `write` : `publish: false` d'une page est retiré, et le résultat le dit une fois (`publish-always.ts`).
+    let draftAsked = false
     for (const [rank, page] of args.pages.entries()) {
       try {
-        const output = await writeNodeLazily(context.db, context.identity, page, origin)
+        const { input: body, asked } = withoutDraftRequest(page)
+        draftAsked ||= asked
+        const output = await writeNodeLazily(context.db, context.identity, body, origin)
         const data = output.data ?? {}
         const path = typeof data.path === "string" ? data.path : page.path
         outcomes.push({ path, status: data.has_draft === true ? "draft" : "published", ...(typeof data.revision === "number" ? { revision: data.revision } : {}) })
@@ -74,6 +79,7 @@ export const nodeWriteMany = defineFunction({
     const refused = outcomes.filter((outcome) => outcome.status === "refused").length
     const pages = args.pages.length
     const head = `${outcomes.length - refused} of ${pages} ${pages === 1 ? "page" : "pages"} written, ${refused} refused.`
-    return { text: [head, ...lines, ...(stopped ? [stopped] : [])].join("\n"), data: { pages: outcomes, ...(stopped ? { stopped: true } : {}) }, teamId }
+    const said = draftAsked ? [publishedAnywayLine(context.identity.org.prefix)] : []
+    return { text: [head, ...lines, ...(stopped ? [stopped] : []), ...said].join("\n"), data: { pages: outcomes, ...(stopped ? { stopped: true } : {}) }, teamId }
   },
 })

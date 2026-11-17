@@ -18,6 +18,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Assistants
+- An assistant no longer leaves a draft: `publish: false` on `write`, `node.write_many` and `upload.link` is ignored, the content is published and the answer says so. To suggest, comment.
 - When a write is refused on a content you can read, comment it instead: the rule about comments now says so (`comment.add` opens a thread without any edit right).
 
 ### Hosts

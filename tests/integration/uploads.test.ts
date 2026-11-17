@@ -10,7 +10,7 @@
 // RLS). Suite portable.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
-import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
+import { resolveIdentity, writeNode, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { UPLOAD_RULE } from "../../packages/plateforme/schemas"
 import { HTML_CONTENT_SECURITY_POLICY } from "../../packages/plateforme/server/files/html"
 import { memoryFileStore, type MemoryFileStore } from "../../packages/plateforme/server/files/memory"
@@ -316,17 +316,19 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       })
     })
 
-    it("should attach a file at the end of a page, as a draft with publish false", async () => {
+    it("should attach a file at the end of a page and publish it, saying so when the link asked publish false", async () => {
       const claire = await conversation(as("claire"))
       const path = `ventes/f_ajout_${hex(3)}`
       expect((await claire.write({ path, title: "Ajout", summary: "Une page.", ops: [{ op: "add_section", section: "Pièces", text: "Voici le rapport." }] })).isError).toBe(false)
-      const token = tokenOf((await claire.link({ path, kind: "file", mode: "attach", name: "export.csv", base_revision: 1, publish: false })).text)
+      const linked = await claire.link({ path, kind: "file", mode: "attach", name: "export.csv", base_revision: 1, publish: false })
+      const token = tokenOf(linked.text)
 
       const sent = await send(token, "Nom;Ville\nA;B\n")
 
-      expect(sent.text.split("\n")[0]).toBe(`Uploaded to ${path}: revision 1, unpublished draft.`)
-      expect((await blocksOf(path, "draft")).map((block) => block.type)).toEqual(["heading", "paragraph", "file"])
-      expect((await blocksOf(path, "published")).map((block) => block.type)).toEqual(["heading", "paragraph"])
+      expect(linked.text.split("\n").at(-1)).toBe(`publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with ${o.org.prefix}_call comment.add.`)
+      expect(sent.text.split("\n")[0]).toBe(`Uploaded to ${path}: revision 2, published.`)
+      expect((await blocksOf(path, "published")).map((block) => block.type)).toEqual(["heading", "paragraph", "file"])
+      expect(await blocksOf(path, "draft")).toEqual([])
     })
 
     it("should create a page from a markdown file, BOM and CRLF read, tolerant mode counted, then replace its whole content", async () => {
@@ -659,7 +661,6 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
     it("should remove the page a failed create made, so a new link creates it, and keep a page that received something meanwhile or is not its own (FB-0012)", async () => {
       const lea = await conversation(as("lea"))
-      const claire = await conversation(as("claire"))
       const [path, name] = [`ventes/f_retire_${hex(3)}`, `rapport_${hex(3)}.pdf`]
       const errors = vi.spyOn(console, "error").mockImplementation(() => undefined)
       source.fetched = { bytes: bytesOf("%PDF-1.4 rapport"), type: null }
@@ -674,7 +675,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       // Ce que la page reçoit pendant l'envoi : chaque cas n'est écarté que par une condition du retrait, et la page reste.
       const meanwhile: Record<string, (at: string) => Promise<string>> = {
         subpage: (at) => wrote(lea.write({ path: `${at}/annexe`, title: "Annexe", summary: "Une annexe.", ops: [{ op: "add_section", section: "A", text: "T." }] })),
-        block: (at) => wrote(claire.write({ path: at, base_revision: 0, publish: false, ops: [{ op: "add_section", section: "A", text: "Le brouillon de Claire." }] })),
+        // Un brouillon d'écran : la porte d'un assistant publierait, et la révision écarterait la page à sa place.
+        block: (at) => writeNode(as("claire").db, as("claire").identity, { path: at, base_revision: 0, publish: false, ops: [{ op: "add_section", section: "A", text: "Le brouillon de Claire." }] }, { kind: "human" }).then(() => "done"),
         // La page d'une autre personne : aucun geste d'un service ne change `created_by`, la base le pose.
         creator: (at) => changed(fx.admin`update platform.nodes set created_by = ${o.people.claire.id} where org_id = ${o.org.id} and path = ${at}`),
         revision: (at) => changed(fx.admin`update platform.nodes set revision = 1 where org_id = ${o.org.id} and path = ${at}`),

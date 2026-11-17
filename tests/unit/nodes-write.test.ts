@@ -564,7 +564,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       const context: FunctionContext = { db: await ref.db("lea"), identity: who("lea"), ctx: null }
       const pages = [
         { path: "ventes/absent/page", kind: "page", title: "Page", summary: "Sous un parent absent." },
-        { path: "ventes/fiches", kind: "page", title: "Fiches", summary: "Les fiches." },
+        { path: "ventes/fiches", kind: "page", title: "Fiches", summary: "Les fiches.", publish: false },
         { path: "ventes/fiches/garantie", kind: "page", title: "Garantie", summary: "La garantie.", ops: [{ op: "set_markdown", text: "---\ntitle: Garantie\n---\n\n## Durée\n\nDeux ans." }] },
       ]
       // `run` reçoit des arguments que `call` a validés ; son type commun du catalogue les efface (`never`).
@@ -574,6 +574,8 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
         expect.stringMatching(/^1\. ventes\/absent\/page refused \(not_found\): Cannot create ventes\/absent\/page: its parent ventes\/absent does not exist\./),
         "2. Published ventes/fiches revision 1 (0 sections, 0 blocks). Next write: base_revision 1.",
         expect.stringMatching(/^3\. Published ventes\/fiches\/garantie revision 1 \(1 section, 2 blocks\): replaced the whole body \(1 section, [0-9]+ characters\)\. Next write: base_revision 1\.$/),
+        // Un assistant ne laisse plus de brouillon : `publish: false` d'une page est retiré, dit une fois.
+        "publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with acme_call comment.add.",
       ])
       expect(many.data?.pages).toEqual([
         { path: "ventes/absent/page", status: "refused", code: "not_found", message: expect.any(String) },

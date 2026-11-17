@@ -1,7 +1,7 @@
 # Outils MCP
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-13 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
+- **Dernière révision** : 2026-11-17 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
 
 ## Résumé
 
@@ -132,7 +132,8 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - **Copier les données dans `view.data`** : doublait `structuredContent`, lu en entier par Claude Code, et atteignait `MAX_DATA_CHARS` deux fois plus tôt ; écarté pour une vue qui ne porte que son nom.
 - **Deux bundles (paquet, ERP)** : deux widgets, donc un choix d'outil par fonction ; écarté sans mesure. **Vite en dépendance du paquet** : chaque hôte l'aurait téléchargé, même sans vue de l'ERP ; écarté pour des dépendances paires facultatives.
 - **Suite appelée par le widget** : une suite n'a pas d'arguments, l'appel serait refusé ; écartée pour un message à l'assistant, qui garde aussi la confirmation en deux temps.
-- **Exceptions au gel, sans client** (stade R&D) : en 1.1.0, les descriptions de `write` et des fonctions de tableau ont été réécrites en place et non seulement allongées, les hosts rafraîchissant la liste à la mise à jour (fiche D131, stories E11-S01, E11-S03) ; le défaut de `publish` de `write` est passé de `false` à `true`, `publish: false` gardant le sens d'avant (fiche D135, story E11-S02). Toute exception future demande la même absence de client.
+- **Exceptions au gel, sans client** (stade R&D) : en 1.1.0, les descriptions de `write` et des fonctions de tableau ont été réécrites en place et non seulement allongées, les hosts rafraîchissant la liste à la mise à jour (fiche D131, stories E11-S01, E11-S03) ; le défaut de `publish` de `write` est passé de `false` à `true`, `publish: false` gardant le sens d'avant (fiche D135, story E11-S02). Hors l'exception qui suit, toute exception demande la même absence de client.
+- **Exception au gel du 17/11/2026, avec des clients** : `publish: false` de `write`, de `node.write_many` et d'`upload.link` n'a plus d'effet ([nœuds et arbre](noeuds-et-arbre.md)). Le champ reste au schéma et aucun appel existant n'est refusé : l'écriture est publiée et la réponse le dit ; la description de `write` et celles des deux champs `publish` sont réécrites en place. Admise parce qu'elle ne casse aucun appel et que le brouillon d'assistant gênait les clients eux-mêmes ; refuser `publish: false` aurait été une rupture, écartée.
 - **Un septième outil `act` pour les fonctions qui engagent** : écarté le 17/10 par Alexis. La paire se lit par le nom servi, pas par un outil. Coût accepté : « toujours autoriser `call` » couvre aussi un envoi ; la garde des fonctions sensibles reste leurs deux temps (`confirm`).
 - Coût accepté : tout passe par six schémas génériques (la qualité des descriptions de fonctions servies par `read` devient critique), et le préfixe est irréversible (une erreur de nommage se paie par une nouvelle organisation). Aucun push : une nouveauté n'atteint le modèle qu'à la conversation suivante ou au prochain appel.
 
@@ -171,3 +172,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-10-19 : les jetons des arguments se résolvent avant le schéma de l'outil (chemin, requête, phrase ; `call` selon l'origine de la fonction) — écrit (pseudonymisation, J2).
 - 2026-11-12 : les commentaires d'un contenu passent par cinq fonctions de `call`, par `read` et par `context`, sans rien changer aux six outils ; renvoi vers leur document — décidé par le responsable du produit (source : décisions du 12/11/2026 sur les commentaires).
 - 2026-11-13 : un hôte déclare en liste fermée ce qu'un assistant reçoit (`registerHostSurface` : fonctions du paquet, capacités MCP facultatives, téléchargement d'une adresse fournie) ; suites et descriptions des outils suivent ce qui est servi — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).
+- 2026-11-17 : `publish: false` n'a plus d'effet aux portes d'un assistant, exception au gel prise avec des clients, sans appel refusé — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).

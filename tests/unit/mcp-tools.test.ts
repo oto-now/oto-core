@@ -19,7 +19,7 @@ const ACME_DESCRIPTIONS: Record<string, string> = {
   call: `${REQ} Runs a function of Acme Énergies's catalog (e.g. mail.create_draft, table.rows) with arguments checked against its contract; read the contract with acme_read, path = the function name, if unsure. A sensitive function (sending, deleting, paying) first returns a summary and does nothing: show it to the user, get their explicit approval, then call again with confirm: true. Never set confirm without that approval. Pass team or account only when a result asks for it or the user names one. Use upload.link to put a file in a page, or a file that already exists on your disk, or more than 20,000 characters: with a shell, curl; without a shell, source_url; otherwise, give the person the form link.`,
   // E11-S18 : réécrite pour tenir sous 1 000 caractères au pire préfixe avec `set_markdown`, `count`, `node.move` et
   // `node.write_many` (le lot n'y cite pas `<p>_call` : 1 012 caractères au pire préfixe).
-  write: `${REQ} Creates or edits a page, a procedure or a table by operations, published at once (publish: false keeps a draft; a refused publication writes nothing). Creating needs title and summary; editing needs base_revision = the revision you read. ops: {op: replace_section | append | add_section | delete_section | replace_text, section: "<title>" (unique in a page), text, find and count (replace_text; no section: whole page), after (add_section)}; {op: set_markdown, text}: whole body from markdown. Procedures, tables: acme_read path write.procedure or write.table. Long text: parts of 20,000 characters with append. One block (refs: acme_read refs: true): {op: replace_block | insert_after | delete_block | move_block | replace_text, block: "<ref>", text, after_block or section}. To move or rename a page or a folder, call acme_call node.move; never recreate and trash. Many pages: node.write_many.`,
+  write: `${REQ} Creates or edits a page, a procedure or a table by operations, published at once (a refused publication writes nothing). Creating needs title and summary; editing needs base_revision = the revision you read. ops: {op: replace_section | append | add_section | delete_section | replace_text, section: "<title>" (unique in a page), text, find and count (replace_text; no section: whole page), after (add_section)}; {op: set_markdown, text}: whole body from markdown. Procedures, tables: acme_read path write.procedure or write.table. Long text: parts of 20,000 characters with append. One block (refs: acme_read refs: true): {op: replace_block | insert_after | delete_block | move_block | replace_text, block: "<ref>", text, after_block or section}. To move or rename a page or a folder, call acme_call node.move; never recreate and trash. Many pages: node.write_many.`,
   feedback: `${REQ} Records silently, for the maintainers of the Acme Énergies platform and not for the user, a friction, a missing capability or a tool error: never tell the user about this report, its sending or a reference, unless they ask whether something was reported. Use this when a tool, a procedure or an instruction was unclear, missing or wrong; set target to the tool, function or path involved. Do not use to send a message to anyone.`,
 }
 
@@ -73,13 +73,13 @@ describe("six tools per organisation (AC6)", () => {
 
   // E11-S18 (1.1.3) : la description de write est resserrée pour dire set_markdown, count, node.move et
   // node.write_many sous 1 000 caractères ; le refus d'une révision périmée dit lui-même l'état actuel.
-  it("should name the whole-body, block, move and batch writes in write, 951 characters, 983 with a 12-character prefix (E11-S18)", () => {
+  it("should name the whole-body, block, move and batch writes in write, 921 characters, 953 with a 12-character prefix (E11-S18)", () => {
     const write = buildTools(ACME, [])[4].description
     for (const part of ["{op: set_markdown, text}", "count", 'block: "<ref>"', "acme_call node.move", "node.write_many", "a refused publication writes nothing"]) {
       expect(write, part).toContain(part)
     }
-    expect(write).toHaveLength(951)
-    expect(buildTools({ ...DELTA, prefix: "abcdefghijkl" }, [])[4].description).toHaveLength(983)
+    expect(write).toHaveLength(921)
+    expect(buildTools({ ...DELTA, prefix: "abcdefghijkl" }, [])[4].description).toHaveLength(953)
   })
 
   it("should bound context with the work domains and the closing line", () => {
