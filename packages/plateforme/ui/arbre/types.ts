@@ -19,8 +19,11 @@ export type SectionDArbre = { titre: string; noeuds: NoeudDArbre[] }
  */
 export type SectionCle = SectionDArbre & {
   cle: string
-  /** La section d'une équipe dont la personne n'est pas membre : elle y voit ce que l'équipe partage avec elle. */
-  invite?: true
+  /**
+   * La section d'une équipe quand l'hôte dit les équipes de la personne : `true`, elle n'en est pas membre et y voit ce
+   * que l'équipe partage avec elle ; `false`, elle en est membre ; absente quand l'hôte ne le dit pas.
+   */
+  invite?: boolean
 }
 
 /** Même forme que le retour des actions (`ActionResult`) : l'écran reçoit des données ou un message. */

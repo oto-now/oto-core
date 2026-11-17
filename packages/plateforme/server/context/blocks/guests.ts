@@ -29,7 +29,8 @@ type Summaries = "whole" | "short" | "none"
 function shortened(summary: string): string {
   if (summary.length <= GUEST_SUMMARY_MAX) return summary
   const cut = clip(summary, GUEST_SUMMARY_MAX)
-  const space = cut.lastIndexOf(" ")
+  // Un mot qui finit juste à la borne est entier : seul un mot coupé est retiré.
+  const space = summary[cut.length] === " " ? -1 : cut.lastIndexOf(" ")
   return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}${SERVED_GUESTS.cutMark}`
 }
 

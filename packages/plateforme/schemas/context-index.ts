@@ -87,7 +87,17 @@ export const SERVED_BUDGET = {
 export const SERVED_RELATED = {
   title: "## Pages and tables close to the request",
   item: "- ",
+  /** `- <chemin> (<genre>, score <s>): <titre>. <résumé>` : ce qui sépare le chemin, le genre, le score, le titre et le résumé. */
+  kindStart: " (",
+  score: ", score ",
+  textStart: "): ",
+  summaryStart: ". ",
+  /** Le début de la consigne de lecture, dernière ligne du bloc. */
+  readHint: "Read one with ",
 } as const
+
+/** La ligne de faits d'une équipe (`teamLine`) : `Team <nom>.`, ou `Team <nom>. Lead: <responsables>.` */
+export const SERVED_TEAM = { start: "Team ", leads: ". Lead: ", end: "." } as const
 
 /**
  * Le bloc de la vue invité (`blocks/guests.ts`) : le titre, une consigne (`You are not a member … Read one with <p>_read;

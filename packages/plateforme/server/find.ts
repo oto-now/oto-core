@@ -9,7 +9,7 @@
 // nœuds (→ `search_content`), « its "Étapes" section », la ligne « The best match is weak » (N14).
 // Repris d'Oto (`oto_mcp/search.py` l. 63-65 et 223-235) : un extrait sur une ligne, une liste coupée
 // qui le dit (N15, N16). Retiré : fusion de sources, sémantique, `limit` en argument, projets.
-import { blockRef, orderBlocks, sectionOfBlock } from "../schemas"
+import { blockRef, orderBlocks, sectionOfBlock, SERVED_RELATED } from "../schemas"
 import { ACCESS_LEVELS, nodeLevels } from "./access"
 import type { CatalogFunction } from "./catalog/define"
 import { findFunction, isActive, looksLikeFunction, searchFunctions } from "./catalog/registry"
@@ -212,7 +212,8 @@ function nodeLines(node: NodeMatch, index: number, prefix: string): string[] {
 
 /** Un nœud en une ligne : chemin, genre, score, titre et début du résumé ; les suivants de `find`, les contenus proches de `context`. */
 export function otherLine(node: Pick<NodeMatch, "path" | "kind" | "title" | "summary" | "score">): string {
-  return `- ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${cut(`${oneLine(node.title)}. ${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
+  const { item, kindStart, score, textStart, summaryStart } = SERVED_RELATED
+  return `${item}${node.path}${kindStart}${node.kind}${score}${formatScore(node.score)}${textStart}${cut(`${oneLine(node.title)}${summaryStart}${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
 }
 
 /**

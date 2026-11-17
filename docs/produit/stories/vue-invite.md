@@ -301,10 +301,30 @@ captures.
 
 ## Post-implémentation
 
+Lots 1 à 6 livrés ; lot 7 (le compte rendu d'une équipe invitée) reporté, non commencé.
+
 ### Écarts avec la conception
+- Résumé d'une ligne : la base refuse un résumé vide (`nodes_summary_check`), la branche « sans résumé » est retirée.
+- Rail et Contexte : l'intertitre est « Partagé avec vous », plus court que celui du cadrage, qui passait sur deux lignes.
+- Points d'entrée : les contenus publiés seuls ; sous un dossier jamais publié, chaque contenu publié qu'il porte
+  (`docs/conception/contexte-servi.md`).
+- Dialogue des partages : pas de bouton « Régler le partage », chaque contenu est un lien vers sa page.
+- `team.shares` : l'équipe par son dossier ou par son nom ; rien n'est rendu que l'appelant ne lise lui-même, la cible
+  d'un lien part sous le chemin que la source écrit (`docs/conception/droits-d-acces.md`).
+- « Partages de l'équipe… » n'est offert aux membres que si l'hôte passe `equipesDeLaPersonne` ; sinon à qui administre.
+- Une seule transaction pour la vue invité et pour les partages : non fait, les services d'accès (`nodeLevels`,
+  `teamRoster`, `leadsByTeam`) ouvrent chacun la leur et ne prennent pas une transaction ouverte.
 
 ### Composants créés
 | Composant/Hook/Action | Path | Notes |
 |----------------------|------|-------|
+| `guestTeams`, `guestTeamsOf` | `packages/plateforme/server/nodes/guest-entries.ts` | la vue invité d'une personne, ou d'une liste de contenus lisibles |
+| `guestsBlock`, `guestsText` | `packages/plateforme/server/context/blocks/guests.ts` | le bloc `guests` de `context`, ses quatre paliers |
+| `trashImpact`, `sharedWith` | `packages/plateforme/server/nodes/trash.ts`, `trash-impact.ts` | qui perd l'accès à une suppression |
+| `teamShares`, `teamSharesFunction` | `packages/plateforme/server/team-shares.ts` | les partages d'une équipe, la fonction `team.shares` |
+| `teamReadLevels` | `packages/plateforme/server/access.ts` | le niveau d'un simple membre d'une équipe, en un lot |
+| `TesterUneDemande` | `packages/plateforme/ui/contexte/test-d-une-demande.tsx` | le champ, le routage et le texte exact |
+| `PartagesDeLEquipe` | `packages/plateforme/ui/equipes/partages-de-l-equipe.tsx` | le dialogue « Les partages de … » |
+| `SERVED_GUESTS`, `SERVED_TEAM` | `packages/plateforme/schemas/context-index.ts` | les formats servis que l'écran relit |
 
 ### Notes

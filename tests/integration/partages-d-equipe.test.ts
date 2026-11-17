@@ -5,6 +5,7 @@
 // service, avant toute lecture. O de référence : Ventes (Claire la mène, Léa en est), Support (Paul le mène), Ada
 // administre sans équipe.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { runCall } from "../../packages/plateforme/server/calls"
 import type { FunctionContext } from "../../packages/plateforme/server/catalog/define"
 import { teamShares, teamSharesFunction } from "../../packages/plateforme/server/team-shares"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
@@ -32,6 +33,8 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
         { path: "support/faq", title: "FAQ" },
         { path: "ventes/devis", title: "Devis" },
         { path: "ventes/tarifs", title: "Tarifs" },
+        { path: "ventes/cache", title: "Cache" },
+        { path: "support/reserve", title: "Réserve" },
       ],
       rules: [
         // Reçu de Support : un dossier et une page ; un contenu sous le dossier n'est pas un second point d'entrée.
@@ -45,12 +48,22 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
         // Ni un membre de l'équipe, ni une fermeture ne sont un partage hors d'elle.
         { node: "ventes/devis", user: "lea", level: "manage" },
         { node: "ventes/x", team: "support", level: "none" },
+        // Fermés à Léa seule : un contenu de son équipe partagé hors d'elle, et un contenu reçu de Support.
+        { node: "ventes/cache", team: "support", level: "read" },
+        { node: "ventes/cache", user: "lea", level: "none" },
+        { node: "support/reserve", team: "ventes", level: "read" },
+        { node: "support/reserve", user: "lea", level: "none" },
       ],
     })
     const [block] = await ref.addBlocks("ventes/devis", "published", [{ type: "paragraph", text: "Voir les notes et la FAQ." }])
     const link = (target: string) => ({ org_id: ref.org.id, source_node_id: ref.nodeId("ventes/devis"), source_block_id: block, target_path: target, target_node_id: ref.nodeId(target) })
     // Les notes privées de Claire : aucun membre de Ventes ne les ouvre ; la FAQ, partagée avec Ventes, s'ouvre.
     await seed.admin`insert into platform.links ${seed.admin([link("private/claire/notes"), link("support/faq")])}`
+    // Un lien d'un contenu fermé à Léa, écrit sous l'ancien chemin de sa cible.
+    const [hidden] = await ref.addBlocks("ventes/cache", "published", [{ type: "paragraph", text: "Voir les anciennes notes." }])
+    await seed.admin`insert into platform.links ${seed.admin([
+      { org_id: ref.org.id, source_node_id: ref.nodeId("ventes/cache"), source_block_id: hidden, target_path: "private/claire/ancien", target_node_id: ref.nodeId("private/claire/notes") },
+    ])}`
   }, SETUP_TIMEOUT)
 
   afterAll(async () => {
@@ -61,7 +74,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
     vi.restoreAllMocks()
   })
 
-  it("should give a member what the team shares outside, what other teams share with it, and the links its members cannot open", async () => {
+  it("should give a member what the team shares outside, what other teams share with it, and the links its members cannot open, nothing of a content closed to her", async () => {
     const shares = await teamShares(await ref.db("lea"), ref.identityOf("lea"), "ventes")
 
     expect(shares).toEqual({
@@ -71,13 +84,12 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
           path: "ventes/devis",
           title: "Devis",
           kind: "page",
-          manage: true,
           subjects: [
             { kind: "team", name: "Support", level: "read" },
             { kind: "user", name: "Paul Girard", level: "write" },
           ],
         },
-        { path: "ventes/tarifs", title: "Tarifs", kind: "page", manage: false, subjects: [{ kind: "org", name: "", level: "read" }] },
+        { path: "ventes/tarifs", title: "Tarifs", kind: "page", subjects: [{ kind: "org", name: "", level: "read" }] },
       ],
       received: [
         {
@@ -94,16 +106,21 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
     })
   })
 
-  it("should refuse before any read who is neither a member of the team nor an administrator, and answer an administrator as a member, an unknown team as not found", async () => {
+  it("should refuse before any read who is neither a member of the team nor an administrator, answer an administrator with what she reads, a team by its name, and name the teams for an unknown one", async () => {
     const paul = spyDb(asCaller(ref.people.paul.id, ref.people.paul.email))
     const refused = await settle(teamShares(paul.db, ref.identityOf("paul"), "ventes"))
     const ada = await teamShares(await ref.db("ada"), ref.identityOf("ada"), "ventes")
     const unknown = await settle(teamShares(await ref.db("ada"), ref.identityOf("ada"), "absente"))
+    const byName = await teamShares(await ref.db("lea"), ref.identityOf("lea"), "Ventes")
 
     expect(refused.error).toMatchObject({ code: "forbidden", message: "The shares of team ventes are reserved to its members and to the administrators. Ask a member of the team, or an administrator." })
     expect(paul.sent).toEqual([])
-    expect([ada.opened.map((node) => node.path), ada.received.map((from) => from.team.name), ada.brokenTotal]).toEqual([["ventes/devis", "ventes/tarifs"], ["Support"], 1])
-    expect(unknown.error).toMatchObject({ code: "not_found" })
+    // Ada lit ce qui est fermé à Léa ; la cible d'un lien part sous le chemin que la source écrit.
+    expect(ada.opened.map((node) => node.path)).toEqual(["ventes/cache", "ventes/devis", "ventes/tarifs"])
+    expect(ada.received.map((from) => from.entries.map((entry) => entry.path))).toEqual([["support/dossier", "support/faq", "support/reserve"]])
+    expect(ada.brokenLinks.map((link) => `${link.from.path} > ${link.to.path}`)).toEqual(["ventes/cache > private/claire/ancien", "ventes/devis > private/claire/notes"])
+    expect(byName.team).toEqual({ slug: "ventes", name: "Ventes" })
+    expect(unknown.error).toMatchObject({ code: "not_found", message: expect.stringMatching(/^No team absente in .+\. Teams: .*ventes.*\.$/) })
   })
 
   it("should give as received what a plain member of the team reads in the other teams, as the rail and context show it: shared with the team, with the whole organisation, or owned by it", async () => {
@@ -114,6 +131,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
         team: { slug: "ventes", name: "Ventes" },
         entries: [
           // Partagé avec Support, puis avec toute l'organisation, puis le dossier de Ventes que possède Support.
+          { path: "ventes/cache", title: "Cache", kind: "page", under: 0 },
           { path: "ventes/devis", title: "Devis", kind: "page", under: 1 },
           { path: "ventes/tarifs", title: "Tarifs", kind: "page", under: 0 },
           { path: "ventes/zone", title: "ventes/zone", kind: "page", under: 1 },
@@ -140,6 +158,12 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "shares of a team on a real data
       "- ventes/devis links to private/claire/notes",
     ])
     expect(served.data).toEqual({ team: "ventes", opened: 2, received: 2, broken_links: 1 })
+    // Par `call`, comme un assistant l'appelle : la fonction est au catalogue, l'équipe nommée par son nom.
+    const called = await runCall(
+      { db: await ref.db("lea"), identity: ref.identityOf("lea"), ctxCode: null, origin: "https://exemple.test", activeConnectors: async () => new Set<string>() },
+      { function: "team.shares", arguments: { team: "Ventes" } },
+    )
+    expect(called.text).toContain("Shares of team Ventes (generated from access rights).")
     expect(several.error).toMatchObject({
       code: "invalid_arguments",
       message: 'You belong to several teams: ventes (Ventes), support (Support). Show this list to the user and ask which team, then call again with "team".',

@@ -274,7 +274,7 @@ export type { TableImportArgs, TableImportBody } from "./table-write"
 // M71 : les listes d'index d'une partie de Contexte servie, écrites par le service, relues par la vue « Contexte ».
 export { CONTEXT_INDEX } from "./context-index"
 // E05-S13 (AC-16) : les formats des blocs servis que la vue « Contexte » relit pour les dire en français.
-export { SERVED_BUDGET, SERVED_GUESTS, SERVED_RECENT, SERVED_RELATED, SERVED_RULES } from "./context-index"
+export { SERVED_BUDGET, SERVED_GUESTS, SERVED_RECENT, SERVED_RELATED, SERVED_RULES, SERVED_TEAM } from "./context-index"
 // La demande testée sur l'écran « Contexte » : le paramètre `q` de son adresse.
 export { CONTEXT_REQUEST_MAX, contextRequestQuerySchema } from "./context-request"
 // E11-S07 : le préfixe de l'API des écrans, contrat de montage entre l'hôte et le paquet.

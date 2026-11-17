@@ -6,6 +6,7 @@
 // équipe », une ligne de faits en tête de la partie de chaque équipe (`contexts.ts`). E05-S13 (fiche D128) :
 // plusieurs responsables (« Lead: A, B. »), plus d'équipe par défaut, les connecteurs dans la partie de
 // chaque équipe qui a un compte, les autres dans celle de Tout le monde.
+import { SERVED_TEAM } from "../../../schemas"
 import { teamConnectorLines } from "../../connectors/lines"
 import type { PlatformDb } from "../../db"
 import { leadNames } from "../../directory"
@@ -19,7 +20,8 @@ const EVERYONE_CONNECTORS_HEADER = "Connectors (when no team of yours runs the c
 
 /** La ligne de faits d'une équipe : son nom, puis ses responsables nommés ; reprise par la vue invité (`guests.ts`). */
 export function teamLine(name: string, leads: readonly string[]): string {
-  return `Team ${name}.${leads.length > 0 ? ` Lead: ${leads.join(", ")}.` : ""}`
+  const { start, leads: lead, end } = SERVED_TEAM
+  return `${start}${name}${leads.length > 0 ? `${lead}${leads.join(", ")}` : ""}${end}`
 }
 
 /**

@@ -3,6 +3,7 @@
 // lecture, des règles d'accès, des contenus et des liens. Réservé aux membres de l'équipe et aux administrateurs, décidé
 // avant toute lecture. Lu par `GET teams/<slug>/shares` (le dialogue « Les partages de … ») et par la fonction
 // `team.shares`. Sans lui, une équipe ne voit nulle part ce qu'elle partage, et tient ce catalogue à la main.
+import { normalizeTitle } from "../schemas/nodes"
 import { BROKEN_LINKS_MAX, teamSharesArgsSchema, type ShareLevel, type ShareSubject, type TeamShares, type TeamSharesArgs } from "../schemas/team-shares"
 import { ACCESS_LEVELS, isOrgAdmin, nodeLevels, teamReadLevels, type AccessLevel } from "./access"
 import { defineFunction, type FunctionContext, type FunctionOutput } from "./catalog/define"
@@ -18,11 +19,11 @@ const RANK: Record<ShareLevel, number> = { read: 1, write: 2, manage: 3 }
 
 type RuleRow = { node_id: string; path: string; title: string; kind: string; team_id: string | null; user_id: string | null; org: boolean; level: ShareLevel }
 type NodeRow = { id: string; path: string; title: string; summary: string; kind: string }
-type LinkRow = { from_path: string; from_title: string; to_id: string; to_path: string; to_title: string }
+type LinkRow = { from_id: string; from_path: string; from_title: string; to_id: string; target_path: string; to_title: string }
 
 /** Le refus d'un appelant ni membre ni administrateur : sans lecture, donc sans dire si l'équipe existe. */
-function reserved(slug: string): PlatformError {
-  return new PlatformError("forbidden", `The shares of team ${slug} are reserved to its members and to the administrators. Ask a member of the team, or an administrator.`)
+function reserved(given: string): PlatformError {
+  return new PlatformError("forbidden", `The shares of team ${given} are reserved to its members and to the administrators. Ask a member of the team, or an administrator.`)
 }
 
 type Facts = { rules: RuleRow[]; nodes: NodeRow[]; links: LinkRow[] }
@@ -40,7 +41,7 @@ function readFacts(db: PlatformDb, orgId: string, team: { id: string; slug: stri
       select id, path, title, summary, kind from platform.nodes
        where org_id = ${orgId} and deleted_at is null and status = 'published' and split_part(path, '/', 1) = any(${[...otherSlugs]}::text[])`
     const links = await sql<LinkRow[]>`
-      select s.path as from_path, s.title as from_title, t.id as to_id, t.path as to_path, t.title as to_title
+      select s.id as from_id, s.path as from_path, s.title as from_title, t.id as to_id, l.target_path, t.title as to_title
         from platform.links l
         join platform.nodes s on s.id = l.source_node_id
         join platform.nodes t on t.id = l.target_node_id
@@ -68,18 +69,25 @@ function subjectsOf(rules: readonly RuleRow[], teamId: string, names: Names): Sh
   return [...best.values()].sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name, "fr"))
 }
 
+/** L'équipe que nomme `given`, par son dossier ou par son nom, sans casse ni accent ; `undefined` sans correspondance. */
+function named<T extends { slug: string; name: string }>(teams: readonly T[], given: string): T | undefined {
+  return teams.find((team) => team.slug === given) ?? teams.find((team) => normalizeTitle(team.name) === normalizeTitle(given))
+}
+
 /**
- * Les partages de l'équipe `slug`. Le droit d'abord, sans lecture : ses membres (`identity.teams`) et les
- * administrateurs. Puis l'annuaire, les faits en une transaction, et les niveaux en lots : ceux de l'appelant (ce qu'il
- * lit, ce qu'il gère) et ceux d'un membre de la seule équipe (ce que l'équipe reçoit, les liens qu'elle n'ouvre pas).
- * Ce que d'autres équipes partagent avec elle est la vue invité d'un tel membre (`guestTeamsOf`) : les lignes que le
- * rail et `context` lui montrent, un partage avec toute l'organisation compris.
+ * Les partages de l'équipe que nomme `given` (son dossier, ou son nom). Le droit d'abord, sans lecture : ses membres
+ * (`identity.teams`) et les administrateurs. Puis l'annuaire, les faits (une transaction), et les niveaux en
+ * lots : ceux de l'appelant et ceux d'un membre de la seule équipe. Rien n'est rendu que l'appelant ne lise : ni un
+ * contenu de l'équipe, ni un contenu reçu, ni la source d'un lien ; d'une cible qu'il ne lit pas, le chemin tel que la
+ * source l'écrit, jamais son titre. Ce que d'autres équipes partagent avec elle est la vue invité d'un simple membre
+ * (`guestTeamsOf`) : les lignes que le rail et `context` lui montrent, un partage avec toute l'organisation compris.
  */
-export async function teamShares(db: PlatformDb, identity: Identity, slug: string): Promise<TeamShares> {
-  if (!isOrgAdmin(identity) && !identity.teams.some((team) => team.slug === slug)) throw reserved(slug)
+export async function teamShares(db: PlatformDb, identity: Identity, given: string): Promise<TeamShares> {
+  const own = named(identity.teams, given)
+  if (!isOrgAdmin(identity) && !own) throw reserved(given)
   const [roster, directory] = await Promise.all([teamRoster(db, identity.org.id), memberDirectory(db, identity.org.id)])
-  const team = roster.teams.find((one) => one.slug === slug)
-  if (!team) throw new PlatformError("not_found", `No team ${slug} in ${identity.org.name}.`)
+  const team = own ? roster.teams.find((one) => one.id === own.id) : named(roster.teams, given)
+  if (!team) throw new PlatformError("not_found", `No team ${given} in ${identity.org.name}. Teams: ${boundedList(roster.teams.map((one) => one.slug))}.`)
   const names: Names = {
     teams: new Map(roster.teams.map((one) => [one.id, one])),
     people: new Map(directory.map((person) => [person.userId, person.name])),
@@ -87,34 +95,36 @@ export async function teamShares(db: PlatformDb, identity: Identity, slug: strin
   }
   const others = roster.teams.filter((one) => one.id !== team.id)
   const facts = await readFacts(db, identity.org.id, team, others.map((one) => one.slug))
-  const mine = facts.rules
-  const [own, theirs] = await Promise.all([
-    nodeLevels(db, identity, [...new Set(mine.map((rule) => rule.node_id)), ...facts.links.map((link) => link.to_id)]),
-    teamReadLevels(db, identity, team.id, [...new Set([...facts.nodes.map((node) => node.id), ...facts.links.map((link) => link.to_id)])]),
+  const outside = [...new Set([...facts.nodes.map((node) => node.id), ...facts.links.map((link) => link.to_id)])]
+  const [mine, theirs] = await Promise.all([
+    nodeLevels(db, identity, [...new Set([...facts.rules.map((rule) => rule.node_id), ...facts.links.map((link) => link.from_id), ...outside])]),
+    teamReadLevels(db, identity, team.id, outside),
   ])
   const reads = (levels: ReadonlyMap<string, AccessLevel>) => (id: string) => (levels.get(id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read
 
-  const opened = [...new Set(mine.map((rule) => rule.node_id))]
-    .filter(reads(own))
+  const opened = [...new Set(facts.rules.map((rule) => rule.node_id))]
+    .filter(reads(mine))
     .flatMap((id) => {
-      const rules = mine.filter((rule) => rule.node_id === id)
+      const rules = facts.rules.filter((rule) => rule.node_id === id)
       const subjects = subjectsOf(rules, team.id, names)
       const [{ path, title, kind }] = rules
-      return subjects.length > 0 ? [{ path, title, kind: kindOf(kind), manage: (own.get(id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.manage, subjects }] : []
+      return subjects.length > 0 ? [{ path, title, kind: kindOf(kind), subjects }] : []
     })
     .sort(comparePaths)
-  const broken = facts.links.filter((link) => !reads(theirs)(link.to_id)).sort((a, b) => comparePaths({ path: a.from_path }, { path: b.from_path }) || comparePaths({ path: a.to_path }, { path: b.to_path }))
+  const broken = facts.links
+    .filter((link) => reads(mine)(link.from_id) && !reads(theirs)(link.to_id))
+    .sort((a, b) => comparePaths({ path: a.from_path }, { path: b.from_path }) || comparePaths({ path: a.target_path }, { path: b.target_path }))
   return {
     team: { slug: team.slug, name: team.name },
     opened,
-    received: guestTeamsOf(others, facts.nodes.filter((node) => reads(theirs)(node.id))).map((from) => ({
+    received: guestTeamsOf(others, facts.nodes.filter((node) => reads(theirs)(node.id) && reads(mine)(node.id))).map((from) => ({
       team: { slug: from.slug, name: from.name },
       entries: from.entries.map(({ path, title, kind, under }) => ({ path, title, kind, under })),
     })),
     brokenLinks: broken.slice(0, BROKEN_LINKS_MAX).map((link) => ({
       from: { path: link.from_path, title: link.from_title },
-      // Le chemin est déjà écrit dans le contenu source ; le titre ne part qu'à qui lit la cible.
-      to: { path: link.to_path, title: reads(own)(link.to_id) ? link.to_title : null },
+      // Le chemin tel que la source l'écrit ; le titre ne part qu'à qui lit la cible.
+      to: { path: link.target_path, title: reads(mine)(link.to_id) ? link.to_title : null },
     })),
     brokenTotal: broken.length,
   }

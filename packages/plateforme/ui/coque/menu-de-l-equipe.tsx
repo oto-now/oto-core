@@ -115,7 +115,7 @@ function usePartagesDeLEquipe(slug: string) {
 
 function PartagesDeLaSection({ slug, nom, prefixe, onFermer }: Pick<PanneauProps, "slug" | "nom" | "prefixe" | "onFermer">) {
   const { lecture, relire } = usePartagesDeLEquipe(slug)
-  const mots = { titre: `Les partages de ${nom}`, chargement: MENU_DE_L_EQUIPE.chargementDesPartages, echec: MENU_DE_L_EQUIPE.echecDesPartages }
+  const mots = { titre: MENU_DE_L_EQUIPE.titreDesPartages(nom), chargement: MENU_DE_L_EQUIPE.chargementDesPartages, echec: MENU_DE_L_EQUIPE.echecDesPartages }
   const attente = <DialogueDAttente mots={mots} erreur={lecture.etat === "erreur" ? lecture.message : null} relire={relire} onFermer={onFermer} />
   if (lecture.etat !== "pret") return attente
   return (

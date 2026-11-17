@@ -46,8 +46,8 @@ function racineDe(section: SectionCle, handle: string | null): string | null {
  */
 function menuDeLaSection(section: SectionCle, administre: boolean, prefixe: string) {
   if (section.cle === "") return administre ? <MenuDeToutLeMonde nom={section.titre} /> : undefined
-  // Les partages d'une équipe : pour ses membres (une section qui n'est pas « invitée ») et qui administre.
-  return section.cle === PERSO ? undefined : <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} partages={administre || !section.invite} />
+  // Les partages d'une équipe : pour qui administre, et pour ses membres quand l'hôte dit les équipes de la personne.
+  return section.cle === PERSO ? undefined : <MenuDeLEquipe slug={section.cle} nom={section.titre} administre={administre} prefixe={prefixe} partages={administre || section.invite === false} />
 }
 
 /** La clé du pli d'une section dans ce navigateur : sa clé, « org » pour Tout le monde (dont la clé est vide). */
