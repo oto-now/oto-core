@@ -48,10 +48,10 @@ export function chargeDeLaSaisie(saisie: SaisieDesChamps, formulaire: ConnectorA
   return Object.keys(charge).length > 0 ? charge : null
 }
 
-/** Un champ du secret : jamais prérempli ; posé, il le dit et propose de l'effacer. */
-function ChampDuSecret({ champ, pose }: { champ: Champ; pose: boolean }) {
+/** Un champ du secret : jamais prérempli ; posé, il le dit et propose de l'effacer ; à la création, il ne dit rien. */
+function ChampDuSecret({ champ, pose, existe }: { champ: Champ; pose: boolean; existe: boolean }) {
   const { register } = useFormContext<SaisieDesChamps>()
-  const indice = pose ? "Posé. Laissez vide pour le garder." : "Non posé."
+  const indice = pose ? "Posé. Laissez vide pour le garder." : existe ? "Non posé." : undefined
   return (
     <div className="flex flex-col gap-1">
       <Field label={champ.label} hint={indice}>
@@ -85,17 +85,17 @@ export function ChampsDuCompte({ formulaire, compte }: { formulaire: ConnectorAc
   const poses = compte?.secret?.fields ?? []
   return (
     <>
-      <ListeDesChamps champs={formulaire.fields} poses={poses} />
+      <ListeDesChamps champs={formulaire.fields} poses={poses} existe={compte !== undefined} />
       <ListeDesReglages reglages={formulaire.settings} />
     </>
   )
 }
 
-function ListeDesChamps({ champs, poses }: { champs: Champ[]; poses: string[] }) {
+function ListeDesChamps({ champs, poses, existe }: { champs: Champ[]; poses: string[]; existe: boolean }) {
   return (
     <>
       {champs.map((champ) => (
-        <ChampDuSecret key={champ.name} champ={champ} pose={poses.includes(champ.name)} />
+        <ChampDuSecret key={champ.name} champ={champ} pose={poses.includes(champ.name)} existe={existe} />
       ))}
     </>
   )

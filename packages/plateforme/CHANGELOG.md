@@ -17,6 +17,12 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- UI: the Connectors screen is one list for everyone: every account the person sees (`listOrgAccounts`), called a connector, with its access, its state in one word, filters and a search kept in the address, its detail in a drawer, and the sharing panel of a page for any account the person manages. `EcranConnecteurs` takes `moi` (the viewer's user id) and `vue` (`vueDesConnecteurs(query)`: `?filter=`, `?q=`, `?connector=`), both required: a type error until set; `DonneesDesConnecteurs` replaces `options`, `impacts` and `limites` by `sujets` (teams and members, required) and `administration` (`impacts`, `limites`; administrators only); `DonneesDeMesComptes` and `partageable` are removed, `comptesAuxPartagesLus` selects the accounts whose rules the page reads. Update your page, or copy the reference host's `src/app/(dashboard)/admin/connectors/page.tsx`.
+- Install: a page that reads the declared connectors (`listConnectorsForOrg`, `connectorAccountForms`) must import the host's declarations for their side effect, as the reference `admin/connectors/page.tsx` now does (`import "@/lib/fonctions-metier"`): a serverless bundle that does not import them renders the screen with the package's connectors only.
+- UI: the Connectors screen uses the engine's two lots: an « Ajouter un connecteur » window in two steps (the tools the person may add, then the key, tested before the account is created), « Tester », « Modifier le nom » and « Réactiver » in the detail, the states « Fonctionne » and « Test en échec » (a failure said in French by its code), and tools closed, closed in advance or reopened by an administrator. `DonneesDesConnecteurs` gains `proprietaires` (required: a type error until set), what `accountOwnerChoices(db, identity)` returns: add it to the page's reads, as the reference page does; a team lead is then offered their teams.
+- Schemas: `AccountView.owner` carries `userId` and `userName` for a personal account, as `listOrgAccounts` and `listOwnAccounts` render it (`Server:`).
+
 ## 1.8.0 — 2026-11-18
 
 ### Assistants

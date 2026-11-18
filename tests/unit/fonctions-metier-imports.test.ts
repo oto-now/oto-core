@@ -25,24 +25,33 @@ const mountsGate = (text: string) => /from\s+["']@otomata_tech\/oto_platform\/(?
 /** Une route qui inscrit les fonctions de l'ERP : l'import de `@/lib/fonctions-metier` pour son effet. */
 const registersErp = (text: string) => /^import\s+["']@\/lib\/fonctions-metier["']/m.test(text)
 
-/** Les `route.ts` sous `dir`, récursivement. */
-function routeFiles(dir: string): string[] {
+/** Une page qui lit les connecteurs que l'hôte déclare : leur catalogue ou leurs formulaires. */
+const readsConnectors = (text: string) => /\b(?:connectorAccountForms|listConnectorsForOrg)\(/.test(text)
+
+/** Les fichiers nommés `name` sous `dir`, récursivement. */
+function filesNamed(dir: string, name: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) return routeFiles(full)
-    return entry.name === "route.ts" ? [path.relative(root, full).split(path.sep).join("/")] : []
+    if (entry.isDirectory()) return filesNamed(full, name)
+    return entry.name === name ? [path.relative(root, full).split(path.sep).join("/")] : []
   })
 }
+
+const read = (file: string) => ({ file, text: fs.readFileSync(path.join(root, file), "utf8") })
 
 describe("ERP functions of the host (E08-S05)", () => {
   // Délai explicite : le fichier de l'hôte charge toute la face `server`, de 4,6 s au calme à 23 s sous la
   // charge des agents, lancé à froid (2026-09-25).
   it("should import them in every API route that mounts a gate of the package, and register none in the base application (AC12)", { timeout: 60_000 }, async () => {
-    const routes = routeFiles(path.join(root, "src/app/api")).map((file) => ({ file, text: fs.readFileSync(path.join(root, file), "utf8") }))
+    const routes = filesNamed(path.join(root, "src/app/api"), "route.ts").map(read)
     expect(routes.filter((route) => mountsGate(route.text)).map((route) => route.file)).toEqual(expect.arrayContaining(GATES))
     expect(routes.filter((route) => mountsGate(route.text) && !registersErp(route.text)).map((route) => route.file)).toEqual([])
     // La garde voit une route qui oublie l'import.
     expect(registersErp('import { handleMcpPost } from "@otomata_tech/oto_platform/mcp"\n')).toBe(false)
+    // Une page qui lit les connecteurs déclarés les inscrit aussi : son bundle n'a pas ceux des routes.
+    const pages = filesNamed(path.join(root, "src/app"), "page.tsx").map(read).filter((page) => readsConnectors(page.text))
+    expect(pages.map((page) => page.file)).toEqual(["src/app/(dashboard)/admin/connectors/page.tsx"])
+    expect(pages.filter((page) => !registersErp(page.text)).map((page) => page.file)).toEqual([])
 
     // Une fonction inscrite avant : le fichier de l'application de base la remplace par sa liste, vide.
     registerFunctions([

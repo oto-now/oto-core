@@ -21,6 +21,12 @@
 .oto-dot[data-state="review"] { background: var(--st-review); }
 .oto-dot[data-state="failed"] { background: var(--st-fail); }
 
+/* Le mot d'un état, à côté de son point : la couleur de texte de l'état (`-text`, ≥ 4,5:1 sur --card, `oto.css`
+   section 5). Le mot reste écrit : la couleur ne fait que l'accompagner. */
+.oto-etat[data-state="ok"]     { color: var(--st-ok-text); }
+.oto-etat[data-state="review"] { color: var(--st-review-text); }
+.oto-etat[data-state="failed"] { color: var(--st-fail-text); }
+
 /* ── le mouvement : `oto-halo` propage une onde depuis le point, une variation d'opacité ne se verrait pas sur 6 px. */
 .oto-dot[data-state="thinking"] { color: var(--st-think); animation: oto-halo 1600ms var(--ease-standard) infinite; }
 .oto-dot[data-state="live"]     { color: var(--st-live);  animation: oto-halo 2600ms var(--ease-standard) infinite; }

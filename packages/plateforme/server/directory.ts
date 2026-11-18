@@ -6,7 +6,7 @@
 //
 // Face SQL (E01-S10, partie e1a) : chaque lecture passe par `db.tx`, sous l'appelant de la session ;
 // elle rend toutes ses lignes (aucun `max_rows`, donc aucune page).
-import type { MemberRoleView, NodeRulesView } from "../schemas"
+import type { AccountView, MemberRoleView, NodeRulesView } from "../schemas"
 import type { PlatformDb } from "./db"
 import { fromDatabaseError, inTransaction } from "./errors"
 import { memberRole, teamRole } from "./identity"
@@ -54,6 +54,22 @@ type DirectoryRow = {
  */
 export async function memberDirectory(db: PlatformDb, orgId: string): Promise<DirectoryEntry[]> {
   return inTransaction(db, "memberDirectory: member_directory", (sql) => memberDirectoryIn(sql, orgId))
+}
+
+/**
+ * Les noms des personnes des comptes personnels de `rows`, par identifiant : l'annuaire ne se lit que si l'un d'eux est
+ * personnel. La vue d'un compte y nomme son propriétaire (`accountView`).
+ */
+export async function ownerNames(db: PlatformDb, orgId: string, rows: readonly { owner_kind: string }[]): Promise<Map<string, string>> {
+  const directory = rows.some((row) => row.owner_kind === "user") ? await memberDirectory(db, orgId) : []
+  return new Map(directory.map((person) => [person.userId, person.name]))
+}
+
+/** Le propriétaire d'un compte tel que l'écran le lit : l'équipe nommée, ou la personne d'un compte personnel et son nom (`ownerNames`). */
+export function ownerView(kind: "org" | "team" | "user", row: { team_name: string | null; owner_user_id: string | null }, names: ReadonlyMap<string, string>): AccountView["owner"] {
+  if (kind === "team" && row.team_name !== null) return { kind, teamName: row.team_name }
+  if (kind === "user" && row.owner_user_id !== null) return { kind, userId: row.owner_user_id, userName: names.get(row.owner_user_id) ?? null }
+  return { kind }
 }
 
 /**
