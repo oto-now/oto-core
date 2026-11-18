@@ -51,6 +51,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   listMembers: vi.fn(),
   listAccountRules: vi.fn(),
   listTeams: vi.fn(),
+  accountOwnerChoices: vi.fn(async () => ({ user: true, org: false, teams: [] })),
   deactivationImpact: vi.fn(),
   listShares: vi.fn(),
   loadNode: vi.fn(),
@@ -123,7 +124,7 @@ beforeEach(() => {
     contact: null,
   })
   vi.mocked(listConnectorsForOrg).mockResolvedValue([
-    { connector: "mail", label: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [], closedBy: null },
+    { connector: "mail", label: "mail", state: "active", activatedAt: "2026-09-24T10:00:00.000Z", activatedBy: null, functions: [], closedBy: null, accountModes: ["simule"] },
   ])
   vi.mocked(listOrgAccounts).mockResolvedValue([])
   vi.mocked(listMembers).mockResolvedValue([])

@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "child_process"
 import fs from "fs"
 import os from "os"
 import path from "path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { lireLaListe, lireLeRecu, ligneVerified } from "../../scripts/commit-depuis-export.mjs"
 import { arbreDeCodeDuCommit, arbreDeCodeDuDossier } from "../../scripts/lib/arbre-de-code.mjs"
 import { empreinteDesMigrations } from "../../scripts/lib/empreinte-des-migrations.mjs"
@@ -92,6 +92,11 @@ function lancer(cas: ReturnType<typeof monter>, args = ["--depot", cas.depot, "-
   })
   return { status: result.status, output: result.stdout + result.stderr, sha: /^Commit ([0-9a-f]{40})/m.exec(result.stdout)?.[1] }
 }
+
+// Chaque test lance git et node sans rendre la main : un tour de boucle d'événements entre deux tests laisse Vitest
+// traiter ses appels internes (`onTaskUpdate`, expirés passé 60 s cumulées). Le fichier a duré 131 s dans un
+// `pnpm verify` complet sur la machine chargée.
+afterEach(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
 
 // Des dizaines de lancements de git par cas, plus node : d'une à dix secondes au calme, plus de trente pour les cas
 // d'une branche de travail sur la machine partagée quand elle est chargée ; 60 s.

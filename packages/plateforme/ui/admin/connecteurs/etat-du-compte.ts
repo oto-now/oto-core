@@ -2,7 +2,7 @@
 // répare pour qui peut le faire. Fonction pure, lue par la liste et par le détail : sans elle, chacun recomposait l'état
 // depuis le mode, la marque, le secret et le consentement. Module sans « use client » : l'écran, rendu par le serveur,
 // l'appelle.
-import type { AccountProbe, AccountView, ConnectorAccountForm } from "../../../schemas"
+import type { AccountView, ConnectorAccountForm, ProbeFailureCode } from "../../../schemas"
 import { dateLisible } from "../../format/dates"
 
 /** Comment se connecte un compte d'un connecteur : saisi à la main, par consentement, ou branché chez le tiers. */
@@ -87,28 +87,42 @@ function aTerminer(compte: AccountView, formulaire: ConnectorAccountForm | undef
   return { ...base, precision: "Aucune clé saisie.", geste: droits.gere && formulaire ? "saisir" : null }
 }
 
-/**
- * Le dernier test gardé, s'il porte sur la clé en place : pour une clé saisie, un test plus ancien qu'elle ne compte
- * plus. Un compte connecté chez le tiers garde son test : la date de son secret avance à chaque jeton renouvelé.
- */
-function dernierTest(compte: AccountView, formulaire: ConnectorAccountForm | undefined): AccountProbe | null {
-  const test = compte.lastProbe
-  const cle = compte.secret?.updatedAt
-  return test && cle && connexionDe(formulaire) === "saisie" && Date.parse(test.at) < Date.parse(cle) ? null : test
+/** Pourquoi un test a échoué, par le code du moteur (`PROBE_FAILURE_CODES`) : une phrase par cas, sa phrase anglaise restant en détail. */
+const RAISONS_DU_TEST: Readonly<Record<ProbeFailureCode, string>> = {
+  credential_rejected: "Le service a refusé la clé.",
+  quota_exhausted: "Les crédits de ce compte sont épuisés.",
+  balance_low: "Le solde de ce compte est trop bas.",
+  rate_limited: "Le service a reçu trop de demandes. Réessayez dans un instant.",
+  timeout: "Le service n'a pas répondu à temps.",
+  unreachable: "Le service est injoignable.",
+  upstream_error: "Le service a répondu par une erreur.",
+  unexpected_answer: "Le service a rendu une réponse inattendue.",
+  account_not_ready: "Le connecteur n'est pas prêt : sa clé ou sa connexion manque.",
+  other: "Le test a échoué.",
 }
 
-/** La raison du dernier test, s'il a échoué : le détail la montre quel que soit l'état (désactivé, à terminer). */
-export function echecDuDernierTest(compte: AccountView, formulaire: ConnectorAccountForm | undefined): string | null {
-  const test = dernierTest(compte, formulaire)
+/** La phrase d'un test en échec ; un code absent, ou que cette version de l'écran ne connaît pas, se dit sans raison. */
+export function raisonDuTest(code: ProbeFailureCode | null): string {
+  const raisons: Readonly<Record<string, string | undefined>> = RAISONS_DU_TEST
+  return (code ? raisons[code] : undefined) ?? RAISONS_DU_TEST.other
+}
+
+/** La phrase du moteur sur le dernier test, s'il a échoué : le détail la montre quel que soit l'état (désactivé, à terminer). */
+export function echecDuDernierTest(compte: AccountView): string | null {
+  const test = compte.lastProbe
   return test && !test.healthy ? test.reason : null
 }
 
-/** Ce que dit le dernier test : « Fonctionne », avec sa date et le solde lu, ou « Test en échec ». */
-function teste(compte: AccountView, formulaire: ConnectorAccountForm | undefined): EtatDuCompte | null {
-  const test = dernierTest(compte, formulaire)
+/**
+ * Ce que dit le dernier test gardé : « Fonctionne », avec sa date et le solde lu, ou « Test en échec » et sa raison.
+ * Le moteur l'efface quand une clé saisie ou ses réglages changent ; une reconnexion chez le tiers le garde jusqu'au test
+ * suivant.
+ */
+function teste(compte: AccountView): EtatDuCompte | null {
+  const test = compte.lastProbe
   if (!test) return null
   const date = dateLisible(test.at)
-  if (!test.healthy) return { code: "test_en_echec", mot: "Test en échec", precision: date ? `Le test du ${date} a échoué.` : "Le dernier test a échoué.", point: "failed", demandeUnGeste: true, geste: null }
+  if (!test.healthy) return { code: "test_en_echec", mot: "Test en échec", precision: `${raisonDuTest(test.code)}${date ? ` Testé le ${date}.` : ""}`, point: "failed", demandeUnGeste: true, geste: null }
   const solde = test.balance && test.balance.value !== null ? ` Solde : ${test.balance.value.toLocaleString("fr-FR")} ${test.balance.unit}.` : ""
   return { code: "fonctionne", mot: "Fonctionne", precision: `${date ? `Testé le ${date}.` : "Testé."}${solde}`, point: "ok", demandeUnGeste: false, geste: null }
 }
@@ -126,7 +140,7 @@ export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountFo
   return (
     marque(compte, formulaire, { gere, aMoi }) ??
     aTerminer(compte, formulaire, { gere, aMoi }) ??
-    teste(compte, formulaire) ?? {
+    teste(compte) ?? {
       code: "non_teste",
       mot: "Non testé",
       precision: compte.mode === "simule" ? "Connecteur simulé : rien ne sort du serveur." : null,

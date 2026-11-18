@@ -76,10 +76,10 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     return { call: (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args }), prefix: mcp.prefix }
   }
 
-  /** Une page créée par `write` en brouillon (`publish: false`, révision 0 ; `write` publie par défaut, D135), et son identifiant. */
-  async function page(mcp: Awaited<ReturnType<typeof session>>, path: string): Promise<string> {
-    const created = await mcp.call("write", { path, title: `Page ${path}`, summary: "Page de test.", ops: [{ op: "add_section", section: "Pièces", text: "Intro." }], publish: false })
-    expect(created.isError, created.text).toBe(false)
+  /** Une page de Claire gardée en brouillon (révision 0) par le service : la porte d'un assistant publie toujours. Son identifiant. */
+  async function page(path: string): Promise<string> {
+    const { db, identity } = as("claire")
+    await writeNode(db, identity, { path, title: `Page ${path}`, summary: "Page de test.", ops: [{ op: "add_section", section: "Pièces", text: "Intro." }], publish: false }, { kind: "agent", ctx: null })
     const [row] = await fx.admin<{ id: string }[]>`select id from platform.nodes where org_id = ${o.org.id} and path = ${path}`
     return row.id
   }
@@ -104,7 +104,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     it("should read back both forms from any origin, at the old address too, on the page that holds them, take the file from its row, and serve them on the origin of the request", async () => {
       const claire = await session("claire")
       const path = `ventes/d_formes_${hex(3)}`
-      const node = await page(claire, path)
+      const node = await page(path)
       const image = await attached(node, "plan.png", bytesOf("png"))
       const report = await attached(node, "rapport mars.pdf", null, { size: 1_200 })
       const text = [`![Plan du site](https://ailleurs.example.invalid/api/platform/files/${image.toUpperCase()})`, `[le rapport (3 bytes, zip)](/f/${report})`].join("\n\n")
@@ -125,8 +125,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     it("should refuse a file of another page, a pending file and an unknown file with the text of AC-d3, a file cited on creation, and keep a html fence as code", async () => {
       const claire = await session("claire")
       const path = `ventes/d_refus_${hex(3)}`
-      const node = await page(claire, path)
-      const other = await page(claire, `ventes/d_autre_${hex(3)}`)
+      const node = await page(path)
+      const other = await page(`ventes/d_autre_${hex(3)}`)
       const elsewhere = await attached(other, "ailleurs.pdf", null)
       const pending = await attached(node, "en_cours.pdf", null, { status: "pending" })
       const unknown = "0b6f3c1e-5a2d-4c8e-9f10-2b3c4d5e6f70"
@@ -149,10 +149,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     })
 
     it("should keep in a code block, in the tolerant mode of the screen, a file that is not attached to the page", async () => {
-      const claire = await session("claire")
       const path = `ventes/d_tolerant_${hex(3)}`
-      const node = await page(claire, path)
-      const other = await page(claire, `ventes/d_source_${hex(3)}`)
+      const node = await page(path)
+      const other = await page(`ventes/d_source_${hex(3)}`)
       const elsewhere = await attached(other, "source.pdf", null, { size: 10 })
       const { db, identity } = as("claire")
 
@@ -170,7 +169,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     it("should refuse a file block whose file was cited only by an image and has no ready row, and keep it in a code block in tolerant mode", async () => {
       const claire = await session("claire")
       const path = `ventes/d_sans_meta_${hex(3)}`
-      const node = await page(claire, path)
+      const node = await page(path)
       // Une image qui cite une copie encore `pending` (AC-e3), posée en administration : le fichier est déjà cité, sans
       // bloc `file` qui en porterait les métadonnées.
       const pending = await attached(node, "plan.png", null, { status: "pending" })
@@ -192,7 +191,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       vi.stubGlobal("fetch", memory.fetch)
       const lea = await session("lea")
       const path = `ventes/d_texte_${hex(3)}`
-      const node = await page(await session("claire"), path)
+      const node = await page(path)
       const notes = await attached(node, "notes.md", bytesOf("## Été\n\n```sh\nls\n```"))
       const report = await attached(node, "rapport.html", bytesOf("<h1>Rapport</h1>"))
 
@@ -207,8 +206,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       vi.stubGlobal("fetch", memory.fetch)
       const claire = await session("claire")
       const path = `ventes/d_refus_texte_${hex(3)}`
-      const node = await page(claire, path)
-      const other = await page(claire, `ventes/d_autre_texte_${hex(3)}`)
+      const node = await page(path)
+      const other = await page(`ventes/d_autre_texte_${hex(3)}`)
       const notes = await attached(node, "notes.md", bytesOf("notes"))
       const pdf = await attached(node, "rapport.pdf", bytesOf("%PDF"))
       const pending = await attached(node, "en_cours.md", bytesOf("x"), { status: "pending" })
@@ -232,7 +231,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       vi.stubGlobal("fetch", memory.fetch)
       const claire = await session("claire")
       const path = `ventes/d_long_${hex(3)}`
-      const node = await page(claire, path)
+      const node = await page(path)
       const lines = Array.from({ length: 1_500 }, (_, index) => `ligne ${String(index).padStart(4, "0")} ${"x".repeat(40)}`)
       const long = await attached(node, "journal.txt", bytesOf(lines.join("\n")))
 
@@ -266,7 +265,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const claire = await session("claire")
       const word = `bilan${hex(4)}`
       const path = `ventes/d_trouve_${hex(3)}`
-      const node = await page(claire, path)
+      const node = await page(path)
       // Le mot seul avant l'extension : le parseur de la recherche lirait « <mot>.pdf » comme un seul jeton.
       const file = await attached(node, `${word} trimestre.pdf`, null, { size: 42 })
       await claire.call("write", { path, base_revision: 0, ops: [{ op: "append", section: "Pièces", text: `[x](/api/platform/files/${file})` }], publish: true })

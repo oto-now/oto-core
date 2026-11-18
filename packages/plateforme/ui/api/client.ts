@@ -98,17 +98,31 @@ export async function lireUnFichier(adresse: string): Promise<ArrayBuffer | null
   }
 }
 
+/** Une connexion suspendue (certificat en cours d'émission) ne se résout ni ne rejette : passé ce délai, elle compte comme un échec. */
+const SONDE_DELAI_MS = 5000
+
 /**
  * Une adresse d'une autre origine répond-elle (l'adresse d'une organisation qui vient d'être créée, dont le nom ou le
  * certificat peut ne pas être encore servi) ? `no-cors` : la réponse est opaque, seule compte la connexion ; sans
- * session ni cache. `false` : la connexion a échoué.
+ * session ni cache. `false` : la connexion a échoué, ou n'a pas abouti dans le délai. La course contre le minuteur, en
+ * plus de l'abandon : un `fetch` qui ignorerait le signal ne suspend pas la sonde.
  */
 export async function adresseRepond(adresse: string): Promise<boolean> {
+  const abandon = new AbortController()
+  let minuteur: ReturnType<typeof setTimeout> | undefined
+  const delai = new Promise<never>((_, rejeter) => {
+    minuteur = setTimeout(() => {
+      abandon.abort()
+      rejeter(new Error("timeout"))
+    }, SONDE_DELAI_MS)
+  })
   try {
-    await fetch(adresse, { mode: "no-cors", credentials: "omit", cache: "no-store" })
+    await Promise.race([fetch(adresse, { mode: "no-cors", credentials: "omit", cache: "no-store", signal: abandon.signal }), delai])
     return true
   } catch {
     return false
+  } finally {
+    clearTimeout(minuteur)
   }
 }
 

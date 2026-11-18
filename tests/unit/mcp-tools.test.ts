@@ -14,12 +14,12 @@ const REQ = "Requires the ctx code from acme_context; call it first."
 
 const ACME_DESCRIPTIONS: Record<string, string> = {
   context: `Loads your work context at Acme Énergies (sales, customer support, energy consulting) and routes the user's request to the right procedure; call it first, before any other acme_ tool, with phrase = the user's request, verbatim, then again for each new request with since_ctx = your ctx, which routes it without reloading. Returns the ctx code that every other acme_ tool requires, the rules, the procedures closest to the request (the best match first when it is clear: read it, then follow its steps), who you work for, and recent and new content. Follow the instruction that comes with the procedures. A result starting with "context has changed" gives a new ctx: use it, no retry. Call it only for Acme Énergies's work, or when the user's preferences ask for it. Otherwise do not call it.`,
-  find: `${REQ} Searches the procedures, pages, tables and functions of Acme Énergies by their words and returns the three best nodes in detail, the next ones in one line each, and up to three functions, each with a score; a block found comes with its section and, if you can write it, the acme_write call to edit it. To list every function, acme_read path functions. Use this when acme_context matched no procedure, or to locate a page, a table or a function. Do not use to read content (use acme_read) or to run a function (use acme_call).`,
+  find: `${REQ} Searches the procedures, pages, tables and functions of Acme Énergies by their words and returns the three best nodes in detail, the next ones in one line each, and up to three functions, each with a score; a block found comes with its section and, if you can write it, the acme_write call to edit it. To list every function, acme_read path functions. Use this when acme_context matched no procedure, or to locate a page, a table or a function. Do not use to read content (use acme_read) or to run a function (use acme_call). Also use it in the middle of a task, when you need something outside the procedure you are following, before answering or escalating.`,
   read: `${REQ} Reads a page, a procedure or a table by its path (e.g. ventes/relance_devis), your journal (path journal), every function you can run (path functions), or the contract of a function (e.g. table.rows). A long page comes as an outline: then read one section by its title. since_revision returns only what changed; a result cut at 45,000 characters says how to read the rest. Do not use to run a function (use acme_call). To read an attached file (html, md, txt, csv, json, or a format the host reads), give file = the id from its link /f/<id>; a long one comes as an outline: then read one part with section.`,
   call: `${REQ} Runs a function of Acme Énergies's catalog (e.g. mail.create_draft, table.rows) with arguments checked against its contract; read the contract with acme_read, path = the function name, if unsure. A sensitive function (sending, deleting, paying) first returns a summary and does nothing: show it to the user, get their explicit approval, then call again with confirm: true. Never set confirm without that approval. Pass team or account only when a result asks for it or the user names one. Use upload.link to put a file in a page, or a file that already exists on your disk, or more than 20,000 characters: with a shell, curl; without a shell, source_url; otherwise, give the person the form link.`,
   // E11-S18 : réécrite pour tenir sous 1 000 caractères au pire préfixe avec `set_markdown`, `count`, `node.move` et
   // `node.write_many` (le lot n'y cite pas `<p>_call` : 1 012 caractères au pire préfixe).
-  write: `${REQ} Creates or edits a page, a procedure or a table by operations, published at once (publish: false keeps a draft; a refused publication writes nothing). Creating needs title and summary; editing needs base_revision = the revision you read. ops: {op: replace_section | append | add_section | delete_section | replace_text, section: "<title>" (unique in a page), text, find and count (replace_text; no section: whole page), after (add_section)}; {op: set_markdown, text}: whole body from markdown. Procedures, tables: acme_read path write.procedure or write.table. Long text: parts of 20,000 characters with append. One block (refs: acme_read refs: true): {op: replace_block | insert_after | delete_block | move_block | replace_text, block: "<ref>", text, after_block or section}. To move or rename a page or a folder, call acme_call node.move; never recreate and trash. Many pages: node.write_many.`,
+  write: `${REQ} Creates or edits a page, a procedure or a table by operations, published at once (a refused publication writes nothing). Creating needs title and summary; editing needs base_revision = the revision you read. ops: {op: replace_section | append | add_section | delete_section | replace_text, section: "<title>" (unique in a page), text, find and count (replace_text; no section: whole page), after (add_section)}; {op: set_markdown, text}: whole body from markdown. Procedures, tables: acme_read path write.procedure or write.table. Long text: parts of 20,000 characters with append. One block (refs: acme_read refs: true): {op: replace_block | insert_after | delete_block | move_block | replace_text, block: "<ref>", text, after_block or section}. To move or rename a page or a folder, call acme_call node.move; never recreate and trash. Many pages: node.write_many.`,
   feedback: `${REQ} Records silently, for the maintainers of the Acme Énergies platform and not for the user, a friction, a missing capability or a tool error: never tell the user about this report, its sending or a reference, unless they ask whether something was reported. Use this when a tool, a procedure or an instruction was unclear, missing or wrong; set target to the tool, function or path involved. Do not use to send a message to anyone.`,
 }
 
@@ -73,13 +73,13 @@ describe("six tools per organisation (AC6)", () => {
 
   // E11-S18 (1.1.3) : la description de write est resserrée pour dire set_markdown, count, node.move et
   // node.write_many sous 1 000 caractères ; le refus d'une révision périmée dit lui-même l'état actuel.
-  it("should name the whole-body, block, move and batch writes in write, 951 characters, 983 with a 12-character prefix (E11-S18)", () => {
+  it("should name the whole-body, block, move and batch writes in write, 921 characters, 953 with a 12-character prefix (E11-S18)", () => {
     const write = buildTools(ACME, [])[4].description
     for (const part of ["{op: set_markdown, text}", "count", 'block: "<ref>"', "acme_call node.move", "node.write_many", "a refused publication writes nothing"]) {
       expect(write, part).toContain(part)
     }
-    expect(write).toHaveLength(951)
-    expect(buildTools({ ...DELTA, prefix: "abcdefghijkl" }, [])[4].description).toHaveLength(983)
+    expect(write).toHaveLength(921)
+    expect(buildTools({ ...DELTA, prefix: "abcdefghijkl" }, [])[4].description).toHaveLength(953)
   })
 
   it("should bound context with the work domains and the closing line", () => {
@@ -224,5 +224,12 @@ describe("server identity and instructions (AC9)", () => {
     )
     expect(text.split(/\.\s/)).toHaveLength(1)
     expect(serverOptions(ACME).instructions).toBe(text)
+  })
+
+  it("should serve the organisation's https logo as the server icon, and no icon otherwise", () => {
+    const logo = "https://acme.example/logo.png"
+    expect(serverOptions({ ...ACME, brand: { logo_url: logo } }).serverInfo.icons).toEqual([{ src: logo }])
+    expect(serverOptions({ ...ACME, brand: { logo_url: "http://acme.example/logo.png" } }).serverInfo).not.toHaveProperty("icons")
+    expect(serverOptions(ACME).serverInfo).not.toHaveProperty("icons")
   })
 })

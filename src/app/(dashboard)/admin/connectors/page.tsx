@@ -3,6 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import type { AccountView } from "@otomata_tech/oto_platform/schemas"
 import {
+  accountOwnerChoices,
   connectorAccountForms,
   deactivationImpact,
   isOrgAdmin,
@@ -31,7 +32,7 @@ import { ADRESSES } from "../adresses"
 
 // « Connecteurs » : une seule vue pour tout membre. La page lit les comptes que la personne voit (`listOrgAccounts` :
 // les siens, ceux de ses équipes, de l'organisation, ceux qu'un autre partage avec elle), le catalogue, les équipes,
-// le formulaire de compte de chaque connecteur réel déclaré, puis les partages de ses propres comptes et du compte que
+// le formulaire de compte de chaque connecteur réel déclaré, pour qui la personne peut en ajouter un (`accountOwnerChoices`), puis les partages de ses propres comptes et du compte que
 // l'adresse ouvre (`comptesAuxPartagesLus`, `listAccountRules`), avec les personnes à qui le partager. Qui administre
 // l'organisation de l'adresse, décidé ici par `isOrgAdmin`, y lit en plus l'impact de la désactivation de chaque
 // connecteur actif et les capacités. Chaque service redécide son droit ; tout se lit avec le jeton de la session.
@@ -62,8 +63,13 @@ async function administration(db: PlatformDb, identity: Identity, connectors: Do
 }
 
 async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {
-  // Trois lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
-  const [accounts, connectors, teams] = await Promise.all([listOrgAccounts(db, identity), listConnectorsForOrg(db, identity), listTeams(db, identity)])
+  // Quatre lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
+  const [accounts, connectors, teams, proprietaires] = await Promise.all([
+    listOrgAccounts(db, identity),
+    listConnectorsForOrg(db, identity),
+    listTeams(db, identity),
+    accountOwnerChoices(db, identity),
+  ])
   // L'annuaire ne sert qu'au partage du compte ouvert, pour qui le gère : hors de là, il ne se lit pas.
   const partageOuvert = accounts.some((compte) => compte.id === ouvert && compte.viewerLevel === "manage")
   const [partages, members, reserve] = await Promise.all([
@@ -77,6 +83,7 @@ async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): 
     formulaires: connectorAccountForms(),
     partages,
     sujets: { equipes: teams.map(({ id, name }) => ({ id, nom: name })), personnes: members.map(({ userId, name }) => ({ id: userId, nom: name })) },
+    proprietaires,
     administration: reserve,
   }
 }

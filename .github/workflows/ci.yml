@@ -20,7 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Toutes les étiquettes : `check:migrations` vérifie qu'un retrait déclaré (`-- retrait: … ; plus lu depuis vX.Y.Z`)
+      # nomme une version étiquetée, lue par `git tag` (database-patterns.md § Expand/contract sur base partagée).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -84,7 +88,7 @@ jobs:
         run: node scripts/ci/recu.mjs --depuis "$DEPUIS" --jusqua "$JUSQUA" --avertir
 
   # AC10, AC12, AC13 : sur un postgres:16 vierge (sa distribution porte moddatetime, que le Postgres
-  # managé de Scaleway refuse), `db prepare` deux fois, la ligne de base par la CLI Supabase, puis la
+  # managé de Scaleway refuse), `db prepare` deux fois, la ligne de base par `psql`, puis la
   # fumée : ni moddatetime ni auth.users, et Léa ne lit que les nœuds de son organisation. Puis
   # (E01-S10, AC-a7, AC-f5) toute la suite Vitest, tests unitaires compris, sans aucune variable
   # Supabase : les suites portables passent sur ce Postgres nu, celles de Supabase se sautent. Le job
@@ -120,10 +124,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
       # La première par PLATFORM_ADMIN_DATABASE_URL, la seconde par --db-url sans mot de passe : les deux
       # adresses que la CLI admet (`cli/admin-url.mjs`).
       - name: db prepare, twice; the second changes nothing
@@ -134,12 +134,16 @@ jobs:
           node packages/plateforme/cli/bin.mjs db prepare --db-url "$DB_URL" | tee "$RUNNER_TEMP/second.txt"
           if grep -E ': (créée?|accordé)' "$RUNNER_TEMP/second.txt"; then exit 1; fi
 
-      # La CLI Supabase ignore `sslmode=disable` dans `--db-url` et refuse un Postgres sans TLS ;
-      # `PGSSLMODE` l'y fait passer (rejeu local du 2026-09-27, CLI 2.108).
-      - name: Baseline by the Supabase CLI
-        env:
-          PGSSLMODE: disable
-        run: supabase db push --db-url "$DB_URL" --yes
+      # Sans la CLI Supabase : le job prouve un Postgres nu, et son installation en « latest » interrogeait
+      # l'API GitHub sans jeton (échecs « rate limit exceeded » avant tout test). Chaque fichier passe par
+      # `psql`, dans l'ordre de son nom, chacun dans sa transaction ; la première erreur arrête le job.
+      - name: Baseline by psql, file by file
+        run: |
+          for fichier in supabase/migrations/*.sql; do
+            echo "::group::$fichier"
+            docker exec -i ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 --single-transaction < "$fichier"
+            echo "::endgroup::"
+          done
 
       - name: Smoke
         run: docker exec -i ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 < scripts/ci/bare-postgres-smoke.sql

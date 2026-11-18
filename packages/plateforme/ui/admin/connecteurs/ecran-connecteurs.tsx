@@ -5,14 +5,14 @@
 // l'adresse (`detail-du-connecteur.tsx`), où qui le gère le partage comme une page, remplace sa clé, lit le journal de
 // ses partages et le désactive ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ; l'issue du retour d'un
 // consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les outils ouverts, ceux qu'il a
-// fermés, qu'il ferme ou rouvre ; un outil jamais utilisé s'ouvre au premier ajout. Server Component : il calcule les
+// fermés, qu'il ferme ou rouvre ; un outil jamais utilisé s'ouvre au premier ajout, ou se ferme d'avance. Server Component : il calcule les
 // lignes (`lignes-des-connecteurs.ts`) et le catalogue de l'ajout (`catalogue-des-connecteurs.ts`), et ne passe à ses
 // îlots clients que des données.
 //
 // Les mots « activation », « compte » et « secret » ne s'écrivent plus pour un membre (`connecteurs-et-comptes.md`
 // § Écran Connecteurs). L'écran masque un geste, le service le décide.
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
-import { limitReached, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
+import { limitReached, type AccountOwnerChoices, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Alert } from "../../ds/react/primitives"
@@ -25,7 +25,7 @@ import { LimiteAtteinte } from "../../limites/limite-atteinte"
 import { EnTeteDAdministration } from "../en-tete"
 import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
-import { questionDeDesactivation } from "../textes"
+import { questionDeDesactivation, questionDeFermetureDAvance } from "../textes"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter } from "./catalogue-des-connecteurs"
@@ -46,6 +46,8 @@ export type DonneesDesConnecteurs = {
   partages: Partial<Record<string, PartagesDuCompte>>
   /** Les équipes et les personnes de l'organisation, à qui partager un connecteur. */
   sujets: SujetsDeRegle
+  /** Pour qui la personne peut ajouter un connecteur (`accountOwnerChoices`) : elle-même, l'organisation, ses équipes. */
+  proprietaires: AccountOwnerChoices
   /**
    * Pour qui administre l'organisation : ce que la désactivation de chaque connecteur actif arrête (AC5), et ses
    * capacités (`orgLimitsView`, E12-S02 ; absentes : aucune activation grisée). Absent pour un membre.
@@ -136,6 +138,8 @@ type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationIm
 function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurProps) {
   const nom = connecteur.label
   const ressource = `admin/connectors/${encodeURIComponent(connecteur.connector)}/activation`
+  // Fermé : la ligne garde qui l'a fermé, même inconnu. Jamais fermé, un outil se ferme, ouvert ou pas encore utilisé.
+  const ferme = connecteur.state !== "active" && connecteur.closedBy !== null
   // `flex-wrap` : la question d'une désactivation, ou un refus, passe sous la ligne au lieu de l'écraser.
   return (
     <Row className="flex-wrap gap-3" lead={<Icon as={Plug} size="sm" />}>
@@ -144,16 +148,16 @@ function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurPro
         <span className="oto-caption">{pluriel(connecteur.functions.length, "fonction", "fonctions")}</span>
       </div>
       <span className="oto-caption">{etat(connecteur)}</span>
-      {connecteur.state === "active" && (
+      {!ferme && (
         <ActionPlateforme
           libelle="Fermer"
           nomAccessible={`Fermer ${nom}`}
           requete={{ methode: "DELETE", ressource }}
-          confirmation={{ question: questionDeDesactivation(nom, impact), libelleConfirmer: "Fermer" }}
+          confirmation={{ question: connecteur.state === "active" ? questionDeDesactivation(nom, impact) : questionDeFermetureDAvance(nom), libelleConfirmer: "Fermer" }}
           ancre={ANCRE_DES_CONNECTEURS}
         />
       )}
-      {connecteur.state !== "active" && connecteur.closedBy && <Activation nom={nom} ressource={ressource} limites={limites} />}
+      {ferme && <Activation nom={nom} ressource={ressource} limites={limites} />}
     </Row>
   )
 }
@@ -176,12 +180,12 @@ function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
   )
 }
 
-/** « Ajouter un connecteur » : le catalogue de la personne, ses équipes si elle administre, et les noms qu'elle porte déjà. */
+/** « Ajouter un connecteur » : le catalogue de la personne, les équipes qu'elle peut doter, et les noms qu'elle porte déjà. */
 function Ajout({ donnees, moi, ici }: { donnees: DonneesDesConnecteurs; moi: string; ici: string }) {
   return (
     <AjoutDUnConnecteur
-      outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.administration !== undefined)}
-      equipes={donnees.sujets.equipes.map((equipe) => ({ id: equipe.id, name: equipe.nom }))}
+      outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.proprietaires)}
+      equipes={donnees.proprietaires.teams}
       mesNoms={donnees.accounts.filter((compte) => estAMoi(compte, moi)).map((compte) => compte.label)}
       ici={ici}
     />

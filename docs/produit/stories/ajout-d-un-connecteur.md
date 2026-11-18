@@ -114,11 +114,10 @@ premier lot, avec une seule migration.
 
 **Ce que le lot ne donne pas, demandé le 2026-11-14.** L'écran s'en passe par les règles ci-dessous.
 
-- **La raison d'un test reste une phrase en anglais**, écrite pour l'assistant, sans code d'une liste fermée. L'écran
-  dit donc l'état par la marque quand le test en pose une (« Clé refusée », « Crédits épuisés »), sinon « Test en
-  échec », et montre la phrase du moteur telle quelle, en détail.
-- **`lastProbe` n'est pas remis à zéro quand la clé change** : l'écran compare sa date à celle du secret, et un test
-  plus ancien que la clé ne compte plus.
+- **La raison d'un test** : reçue au second lot (2026-11-16), en un code d'une liste fermée. L'écran dit l'état par la
+  marque quand le test en pose une (« Clé refusée », « Crédits épuisés »), sinon « Test en échec » et une phrase par
+  code ; la phrase du moteur reste en détail.
+- **`lastProbe` remis à zéro quand la clé change** : reçu au second lot ; l'écran ne compare plus de dates.
 - **La route du secret ne refuse pas un compte désactivé** d'après le code ; à prouver par un test avant de proposer
   « poser une nouvelle clé, tester, puis réactiver ».
 
@@ -219,7 +218,7 @@ d'organisation en erreur.
 
 - [ ] **Given** un connecteur qui a une sonde **When** qui le gère choisit « Tester » dans le détail **Then** l'état
   devient « Fonctionne », avec la date du test et le solde quand la sonde le lit, ou « Test en échec » avec sa raison ;
-  l'état vient du dernier test gardé (`lastProbe`), et un test plus ancien que la clé ne compte plus (3)
+  l'état vient du dernier test gardé (`lastProbe`), que le moteur efface quand la clé change (3)
 - [ ] **Given** un connecteur sans sonde **When** le détail s'affiche **Then** « Tester » est absent, l'état est « Non
   testé » et le détail propose de copier une demande à coller dans l'assistant
 - [ ] **Given** une personne qui ne gère pas le compte **When** le détail s'affiche **Then** « Tester » est absent
@@ -336,8 +335,8 @@ Relevé du 2026-11-12 :
 
 - **Un test raté sans marque se dit « Test en échec »** : le dernier test peut échouer pour une autre raison que la
   clé (service injoignable, réglage faux). « Clé refusée » reste le mot de la marque, qu'un appel ou un test la pose.
-- **Un dernier test plus ancien que la clé ne compte plus** : l'état redevient « Non testé », comme pour un refus plus
-  ancien que la clé (`ecran-connecteurs.md`).
+- **Un dernier test ne survit pas à sa clé** : le moteur l'efface quand une clé saisie ou ses réglages changent, et
+  l'état redevient « Non testé ». Une reconnexion chez le tiers le garde jusqu'au test suivant.
 
 ## Actions JB
 
@@ -351,10 +350,10 @@ Relevé du 2026-11-12 :
 - **Non livré, faute de moteur** (lot 2) : les catégories, la phrase d'une carte, « Où trouver ma clé ? », « Bon à savoir », l'aide par champ, les avertissements d'une description.
 - **Non livré, sans destination** : « Demander un connecteur » (aucune route ne reçoit une demande) ; « copier une demande à coller dans l'assistant » pour un outil sans sonde : le détail dit seulement « Pas de test automatique pour cet outil : essayez-le dans votre assistant. ».
 - **Fichiers** : `ui/admin/connecteurs/{ajout-d-un-connecteur,formulaire-d-ajout,test-de-connexion,modification-du-connecteur}.tsx`, `{catalogue-des-connecteurs,refus-des-connecteurs}.ts` (nouveaux ou réécrits) ; `detail-du-connecteur.tsx`, `ecran-connecteurs.tsx`, `etat-du-compte.ts`, `lignes-des-connecteurs.ts`, `liste-des-connecteurs.tsx`, `ui/admin/textes.ts` (modifiés) ; `creation-de-compte.tsx` (retiré). Le catalogue vit dans `catalogue-des-connecteurs.ts`, sans `.tsx` propre : l'écran, rendu par le serveur, le calcule. `champs-du-compte.tsx` ne dit plus « Non posé. » à l'ajout ; la page de l'hôte importe ses déclarations (`@/lib/fonctions-metier`).
-- **Choix d'implémentation** : une suite qui échoue après la création (clé, description, test) se dit dans la fenêtre avec sa raison, puis « Ouvrir le connecteur » mène au détail. Un outil sans formulaire se crée réel, puis simulé quand le service répond `unavailable_in_v1` : l'écran ne sait pas lequel il est. La recherche et l'outil choisi sont un état de la fenêtre, non de l'adresse. Le nom proposé n'évite que les connecteurs personnels de la personne ; pour l'organisation ou une équipe, le refus du moteur le dit sous le champ.
+- **Choix d'implémentation** : une suite qui échoue après la création (clé, description, test) se dit dans la fenêtre avec sa raison, puis « Ouvrir le connecteur » mène au détail. Un outil sans formulaire se crée au mode que son connecteur admet (`accountModes`). La recherche et l'outil choisi sont un état de la fenêtre, non de l'adresse. Le nom proposé n'évite que les connecteurs personnels de la personne ; pour l'organisation ou une équipe, le refus du moteur le dit sous le champ.
 - **Tests** : `tests/unit/catalogue-des-connecteurs.test.ts` (nouveau), `tests/unit/lignes-des-connecteurs.test.ts` (états du dernier test), `tests/integration/components/ecran-connecteurs.test.tsx` (détail, ajout, îlot), `tests/integration/pages/admin-config-pages.test.tsx`. Sur une vraie base : les services du lot sont couverts par les tests du moteur (`tests/integration/ecran-connecteurs-services.test.ts`) ; la clé posée sur un compte désactivé est lue dans le code de `setAccountSecret`, sans test propre.
 - **Revue** : une revue isolée a demandé onze corrections, faites : la même clé ne part plus deux fois à la sonde ; « Ajouter quand même » est un bouton distinct, qui ne vaut que pour la clé qui a échoué ; les suites de la création se disent avec leur raison ; un outil servi par la clé de l'hôte s'ajoute ; la raison d'un test en échec se lit même désactivé ; un compte connecté chez le tiers garde son test ; le focus revient au bouton après « Modifier le nom » et après la saisie de la clé ; les gestes réservés à qui gère ont leur test de droit ; « ni à chaque frappe » et « sans accent » sont prouvés ; la conception décrit l'état présent. Restent signalés, non appliqués : le squelette commun de `SaisieDuCompte` et `ModificationDuConnecteur` ; le champ « Description » écrit dans deux formulaires ; « Connexion réussie. » qui reste affiché après un remplacement de clé ; une sélection par classe dans un test ; `prise-des-connecteurs.md` qui cite encore `creation-de-compte.tsx`.
 - **Livré autrement que le critère** : « Réactiver » part sans question (geste réversible), la clé restant remplaçable et testable dans le détail avant ; la carte d'un outil fermé dit « Fermé par un administrateur » sans le nommer (une ligne fermée avant le lot nommerait celui qui l'avait activée) ; « Ajouter » avec une clé vide crée un connecteur « À terminer » ; la recherche du catalogue porte sur le nom seul, la phrase d'une carte n'existant pas encore.
-- **À demander au mainteneur du moteur** : un code pour la raison d'un test ; une donnée qui dise un connecteur simulé ; `closedBy` non nul pour un outil fermé dont l'auteur n'est plus membre ; fermer d'avance un outil jamais utilisé ; les équipes qu'une personne dirige, pour proposer l'ajout à leurs responsables.
-- **Écarts avec la maquette**, relevés le 2026-11-15 : la fenêtre « Choisir » n'a ni pastilles de catégorie ni phrase par carte, et « Coller la clé » n'a pas sa colonne d'aide (second lot du moteur) ; pas de lien « Demander un connecteur » ; le formulaire porte « Pour qui » pour un administrateur, absent de la maquette ; le message d'un test réussi ne dit pas ce que la clé lit (le moteur ne le rend pas).
+- **Demandé au mainteneur du moteur, reçu au second lot (2026-11-16) et branché** : un code pour la raison d'un test ; le mode de compte qu'un connecteur admet ; un outil fermé sans auteur connu, rendu fermé ; la fermeture d'avance d'un outil jamais utilisé ; pour qui la personne peut ajouter, responsables d'équipe compris ; le dernier test effacé quand la clé change.
+- **Écarts avec la maquette**, relevés le 2026-11-15 : la fenêtre « Choisir » n'a ni pastilles de catégorie ni phrase par carte, et « Coller la clé » n'a pas sa colonne d'aide (points 5, 6 et 8 de la demande au moteur, hors de ses deux lots) ; pas de lien « Demander un connecteur » ; le formulaire porte « Pour qui » pour un administrateur ou un responsable d'équipe, absent de la maquette ; le message d'un test réussi ne dit pas ce que la clé lit (le moteur ne le rend pas).
 - **Contrôle visuel** : fait le 2026-11-15 sur l'application locale, en deux passages (le premier sans la maquette à côté, le second avec : la fenêtre et le formulaire ont été repris, cartes sur trois colonnes, grande recherche, retour au catalogue, tuile et nom de l'outil, mots de la maquette sous le nom et la description, pied avec le cadenas et les boutons à droite), avec huit connecteurs partagés déclarés pour l'occasion : les deux thèmes en largeur de bureau, le thème clair en largeur de téléphone ; la liste, la fenêtre d'ajout (catalogue, clé testée, question, suites d'une création), le détail, le partage, le test d'un connecteur. Il a donné cinq retouches : la page de l'hôte importe les déclarations de l'hôte (sans cela, elle ne montrait que le connecteur simulé) ; l'îlot de l'administrateur dit le nombre de fonctions d'un outil, non leur liste ; un champ de clé ne dit plus « Non posé. » à l'ajout ; « Tester » attend que la clé soit saisie ; les trois comptes d'actions tiennent sur une ligne.

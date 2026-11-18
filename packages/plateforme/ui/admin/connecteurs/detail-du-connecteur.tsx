@@ -54,7 +54,7 @@ type Detail = {
 function Etat({ compte, formulaire, etat, ici }: Detail) {
   const chezLeTiers = etat.geste === "connecter" || etat.geste === "reconnecter"
   const gereUnReel = compte.viewerLevel === "manage" && compte.mode === "reel" && formulaire !== undefined
-  const echec = echecDuDernierTest(compte, formulaire)
+  const echec = echecDuDernierTest(compte)
   return (
     <Section titre="État" id={ANCRE_DE_L_ETAT}>
       <div className="flex flex-wrap items-start justify-between gap-3">

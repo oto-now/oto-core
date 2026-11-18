@@ -2,14 +2,17 @@
 // L'écran Connecteurs, lot 1, sur une vraie base (`connecteurs-et-comptes.md` § Écran Connecteurs, oto-core#103) : le
 // compte personnel créé par un membre, l'activation implicite et le connecteur fermé, les propriétaires admis par les
 // `modes` et par les capacités de l'hôte, le libellé et la description, la réactivation, la sonde d'un compte gardée et
-// la sonde à blanc. Chaque personne par `fx.as` ; la connexion d'administration ne sert qu'à poser et relire.
-import { randomBytes } from "crypto"
+// la sonde à blanc ; puis le lot 2 : le code d'un test, son effacement quand la clé change, l'auteur d'une fermeture,
+// la fermeture d'avance, les modes admis et pour qui la personne crée un compte. Chaque personne par `fx.as` ; la
+// connexion d'administration ne sert qu'à poser et relire.
+import { randomBytes, randomUUID } from "crypto"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import { connectorAccountForms, setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
 import { disableAccount, enableAccount, updateAccount } from "../../packages/plateforme/server/connectors/account-changes"
 import { createAccount, listOwnAccounts } from "../../packages/plateforme/server/connectors/accounts"
-import { deactivateConnector, listConnectorsForOrg } from "../../packages/plateforme/server/connectors/activations"
+import { accountOwnerChoices } from "../../packages/plateforme/server/connectors/creation-right"
+import { activateConnector, deactivateConnector, listConnectorsForOrg } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { forgetRecentProbes, probeAccount, probeConnector } from "../../packages/plateforme/server/connectors/probe"
@@ -23,8 +26,11 @@ import { hex, REFERENCE_PEOPLE, type ReferencePerson } from "../helpers/platefor
 import { createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, testAdminSql, type SqlFixtures, type SqlReferenceOrg } from "../helpers/sql"
 
 /** La migration de l'écran : description, dernier test, libellé par propriétaire, activation implicite. */
-const VERSION = "20261114120000"
-const pending = (await pendingMigrations()).includes(VERSION)
+const VERSION = "20261117220000"
+/** La migration du lot 2 : le code d'un test et son effacement, l'auteur d'une fermeture. */
+const LOT2 = "20261117220000"
+const missing = (await pendingMigrations()).filter((version) => [VERSION, LOT2].includes(version))
+const pending = missing.length > 0
 
 const NETWORK_TIMEOUT = 120_000
 const SETUP_TIMEOUT = 180_000
@@ -62,7 +68,7 @@ function stubTiers(scopes: string[]) {
 const suite = !sqlConfigured
   ? `connectors screen, lot 1 (${SQL_SKIP_REASON})`
   : pending
-    ? `connectors screen, lot 1 (${pendingReason([VERSION])})`
+    ? `connectors screen, lot 1 (${pendingReason(missing)})`
     : "connectors screen, lot 1, on a real database"
 
 describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, () => {
@@ -80,6 +86,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
   const activationOf = async (connector: string) =>
     (await fx.admin<{ state: string; activated_by: string }[]>`
       select state, activated_by from platform.connector_activations where org_id = ${o.org.id} and connector = ${connector}`)[0] ?? null
+  const closerOf = async (connector: string) =>
+    (await fx.admin<{ closed_by: string | null }[]>`
+      select closed_by from platform.connector_activations where org_id = ${o.org.id} and connector = ${connector}`)[0]?.closed_by
   const forgetActivation = (connector: string) => fx.admin`delete from platform.connector_activations where org_id = ${o.org.id} and connector = ${connector}`
   const accountCount = async () => (await fx.admin<{ n: number }[]>`select count(*)::int as n from platform.accounts where org_id = ${o.org.id}`)[0].n
 
@@ -234,11 +243,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       await disableAccount(lea.db, lea.identity, { account_id: account.id })
       stubTiers(["contacts:read"])
       const probe = await probeAccount(lea.db, lea.identity, { account_id: account.id })
-      expect(probe).toEqual({ at: expect.any(String), healthy: true, reason: null, balance: null })
+      expect(probe).toEqual({ at: expect.any(String), healthy: true, code: null, reason: null, balance: null })
       const view = (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
       expect(view).toMatchObject({ status: "disabled", lastProbe: probe })
       stubTiers([])
-      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id })).toMatchObject({ healthy: false, reason: "Crm answered without scopes." })
+      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id })).toMatchObject({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes." })
     })
 
     it("should probe a key before the account exists, for any member, writing nothing, and refuse what cannot be probed", async () => {
@@ -246,7 +255,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       const before = await accountCount()
       const send = stubTiers(["contacts:read"])
       const key = `k_${hex(8)}`
-      expect(await probeConnector(paul.db, paul.identity, { connector: LIVE, input: { fields: { api_key: key } } })).toEqual({ healthy: true, reason: null, balance: null })
+      expect(await probeConnector(paul.db, paul.identity, { connector: LIVE, input: { fields: { api_key: key } } })).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(new Headers(send.mock.calls[0][1].headers).get("authorization")).toBe(`Bearer ${key}`)
       expect(await accountCount()).toBe(before)
 
@@ -276,6 +285,81 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       // Une autre personne garde ses dix tests.
       const lea = as("lea")
       expect((await probeConnector(lea.db, lea.identity, { connector: LIVE, input: { fields: { api_key: "k" } } })).healthy).toBe(true)
+    })
+  })
+  describe("lot 2", () => {
+    it("should forget the last probe when the key of the account changes, never when its probe runs again", async () => {
+      const lea = as("lea")
+      const account = await personal("lea")
+      await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
+      stubTiers([])
+      const failed = await probeAccount(lea.db, lea.identity, { account_id: account.id })
+      expect(failed).toMatchObject({ healthy: false, code: "unexpected_answer" })
+      const seen = async () => (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
+      expect((await seen())?.lastProbe).toEqual(failed)
+      await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
+      expect((await seen())?.lastProbe).toBeNull()
+      const [{ health }] = await fx.admin<{ health: Record<string, unknown> | null }[]>`select health from platform.accounts where id = ${account.id}`
+      expect(Object.keys(health ?? {})).not.toContain("last_probe")
+    })
+
+    it("should name who closed a connector on its own column, an unknown closer as { userId: null, name: null }, and reopen it without one", async () => {
+      const ada = as("ada")
+      const lea = as("lea")
+      await activateConnector(ada.db, ada.identity, { connector: FRESH })
+      const closed = await deactivateConnector(ada.db, ada.identity, { connector: FRESH })
+      expect(closed).toMatchObject({ state: "inactive", closedBy: { userId: o.people.ada.id, name: "Ada Martin" }, accountModes: ["reel"] })
+      expect(await closerOf(FRESH)).toBe(o.people.ada.id)
+      // Fermé avant le lot 2 (aucun auteur de fermeture gardé), ou par une personne qui n'est plus membre : un auteur inconnu.
+      for (const closer of [null, randomUUID()]) {
+        await fx.admin`update platform.connector_activations set closed_by = ${closer} where org_id = ${o.org.id} and connector = ${FRESH}`
+        const [seen] = (await listConnectorsForOrg(lea.db, lea.identity)).filter((connector) => connector.connector === FRESH)
+        expect(seen, String(closer)).toMatchObject({ state: "inactive", closedBy: { userId: null, name: null } })
+      }
+      const reopened = await activateConnector(ada.db, ada.identity, { connector: FRESH })
+      expect(reopened).toMatchObject({ state: "active", closedBy: null, activatedBy: { userId: o.people.ada.id } })
+      expect(await closerOf(FRESH)).toBeNull()
+      await forgetActivation(FRESH)
+    })
+
+    it("should let an administrator close a connector never activated, which no member's account then opens", async () => {
+      const ada = as("ada")
+      expect(await activationOf(SPARE)).toBeNull()
+      const closed = await deactivateConnector(ada.db, ada.identity, { connector: SPARE })
+      expect(closed).toMatchObject({ state: "inactive", activatedAt: null, activatedBy: null, closedBy: { userId: o.people.ada.id, name: "Ada Martin" } })
+      expect([await activationOf(SPARE), await closerOf(SPARE)]).toEqual([{ state: "inactive", activated_by: o.people.ada.id }, o.people.ada.id])
+      // Fermé d'avance : le premier compte d'un membre ne l'ouvre pas.
+      expect(said(await refusal(personal("lea", `Perso ${hex(3)}`, SPARE)))).toMatchObject({ code: "not_enabled", details: { reason: "closed" } })
+      // Déjà fermé : rien ne change.
+      expect((await deactivateConnector(ada.db, ada.identity, { connector: SPARE })).closedBy).toEqual(closed.closedBy)
+      const lea = as("lea")
+      expect((await refusal(deactivateConnector(lea.db, lea.identity, { connector: FRESH }))).code).toBe("forbidden")
+      await forgetActivation(SPARE)
+    })
+
+    it("should say the account modes each connector admits", async () => {
+      const lea = as("lea")
+      const modes = new Map((await listConnectorsForOrg(lea.db, lea.identity)).map((connector) => [connector.connector, connector.accountModes]))
+      expect([modes.get("mail"), modes.get(LIVE)]).toEqual([["simule"], ["reel"]])
+    })
+
+    it("should say for whom each person may create an account, as the creation decides it", async () => {
+      const choices = async (who: ReferencePerson) => {
+        const { db, identity } = as(who)
+        return accountOwnerChoices(db, identity)
+      }
+      const ventes = { id: o.teams.ventes, name: "Ventes" }
+      const support = { id: o.teams.support, name: "Support" }
+      expect(await choices("lea")).toEqual({ user: true, org: false, teams: [] })
+      expect(await choices("claire")).toEqual({ user: true, org: false, teams: [ventes] })
+      const ada = await choices("ada")
+      expect(ada).toMatchObject({ user: true, org: true })
+      expect(ada.teams).toEqual(expect.arrayContaining([support, ventes]))
+      // La création suit la même règle : Claire crée pour Ventes, pas pour Support.
+      const claire = as("claire")
+      const team = (teamId: string) => createAccount(claire.db, claire.identity, { connector: LIVE, owner_kind: "team", team_id: teamId, label: `Équipe ${hex(3)}`, mode: "reel" })
+      expect((await team(o.teams.ventes)).owner.kind).toBe("team")
+      expect((await refusal(team(o.teams.support))).code).toBe("forbidden")
     })
   })
 })

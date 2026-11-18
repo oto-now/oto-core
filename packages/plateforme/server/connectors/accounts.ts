@@ -15,6 +15,7 @@
 import {
   ACCOUNT_LEVEL_NAMES,
   connectorRefSchema,
+  PROBE_FAILURE_CODES,
   createAccountSchema,
   type AccountLevelName,
   type AccountMark,
@@ -22,6 +23,7 @@ import {
   type AccountMode,
   type AccountProbe,
   type AccountView,
+  type ProbeFailureCode,
 } from "../../schemas"
 import {
   ACCOUNT_LEVELS,
@@ -29,15 +31,13 @@ import {
   accountLevels,
   administrators,
   describeOwner,
-  isOrgAdmin,
-  leadsTeam,
   type AccountLevel,
   type Owner,
 } from "../access"
 import { declaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
-import { leadNames, leadWord, memberDirectory, ownerNames, teamsWithLeads } from "../directory"
+import { leadNames, leadWord, memberDirectory, ownerNames, ownerView, teamsWithLeads } from "../directory"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
@@ -45,8 +45,9 @@ import type { Tx } from "../sql"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
 import { requireAdmittedOwner } from "./account-owners"
 import { closedConnector, openConnectorForAccount, requireActivable } from "./activations"
+import { mayCreateAccountFor } from "./creation-right"
 import { keepDeclaredConnector } from "./declaration"
-import { accountMode, isSimulatedConnector, modeLabel } from "./modes"
+import { accountMode, creatableModes, isSimulatedConnector, modeLabel } from "./modes"
 
 /**
  * Niveau sur un compte tel que le lit le modèle : 1 lecture, 2 écriture, 3 sensible, 4 gestion (`ACCOUNT_LEVELS`) ; les
@@ -98,6 +99,12 @@ export function markOf(value: unknown): AccountMark | null {
   throw new PlatformError("internal", "Internal error.")
 }
 
+/** Le code d'un test gardé : celui de la liste fermée ; absent (un test gardé avant les codes), `other` s'il a échoué. */
+function probeCodeOf(healthy: boolean, code: unknown): ProbeFailureCode | null | undefined {
+  if (code === undefined || code === null) return healthy ? null : "other"
+  return healthy ? undefined : PROBE_FAILURE_CODES.find((known) => known === code)
+}
+
 /**
  * Le dernier test lu en base (`health -> 'last_probe'`, écrit par `platform.record_account_probe` seule, date en UTC) ;
  * `null` : jamais testé. Une autre forme ne vient que d'une écriture hors de la fonction : panne nommée.
@@ -114,11 +121,13 @@ export function lastProbeOf(value: unknown): AccountProbe | null {
     !Number.isNaN(Date.parse(probe.at)) &&
     typeof probe.healthy === "boolean" &&
     (probe.reason === null || typeof probe.reason === "string") &&
+    probeCodeOf(probe.healthy, probe.code) !== undefined &&
     balanceOk
   ) {
     return {
       at: new Date(probe.at).toISOString(),
       healthy: probe.healthy,
+      code: probeCodeOf(probe.healthy, probe.code) ?? null,
       reason: probe.reason,
       balance: balance ? { value: balance.value as number | null, unit: balance.unit as string, min: balance.min as number } : null,
     }
@@ -220,15 +229,13 @@ export async function connectorAccounts(db: PlatformDb, identity: Identity, conn
 }
 
 /**
- * Qui crée quoi (AC5, AC7), décidé avant l'insertion : un administrateur (`isOrgAdmin`), des comptes
- * d'organisation et d'équipe ; chaque responsable (`leadsTeam`, E05-S13 : une équipe peut en avoir
- * plusieurs), ceux de son équipe ; chacun, son propre compte personnel (N15).
+ * La règle de la création (`mayCreateAccountFor`) appliquée avant l'insertion : l'équipe visée doit exister dans
+ * l'organisation, et un refus nomme qui peut créer.
  */
 async function requireCreationRight(db: PlatformDb, identity: Identity, account: { owner_kind: string; team_id?: string }): Promise<void> {
   if (account.owner_kind === "user") return
-  const isAdmin = isOrgAdmin(identity)
   if (account.owner_kind === "org") {
-    if (isAdmin) return
+    if (mayCreateAccountFor(identity, { kind: "org" })) return
     const who = administrators(identity, await memberDirectory(db, identity.org.id))
     throw new PlatformError("forbidden", `Creating an organisation account is reserved to ${who}.`)
   }
@@ -241,26 +248,22 @@ async function requireCreationRight(db: PlatformDb, identity: Identity, account:
   const teamId = account.team_id
   const [team] = await inTransaction(db, "createAccount: teams", (sql) => teamsWithLeads(sql, identity.org.id, teamId))
   if (!team) throw new PlatformError("invalid_arguments", `Unknown team ${account.team_id} in ${identity.org.name}.`)
-  if (isAdmin || leadsTeam(identity, account.team_id)) return
+  if (mayCreateAccountFor(identity, { kind: "team", teamId })) return
   const directory = await memberDirectory(db, identity.org.id)
   const names = leadNames(team.leads, (userId) => directory.find((person) => person.userId === userId)?.name)
   const leads = names.length > 0 ? `its ${leadWord(names.length)} (${names.join(", ")}) and ` : ""
   throw new PlatformError("forbidden", `Creating an account for team ${team.name} is reserved to ${leads}${administrators(identity, directory)}.`)
 }
 
-/**
- * Le mode qu'un compte du connecteur admet (H85) : `simule` pour un connecteur simulé, `reel` pour un connecteur
- * réel (son secret se pose ensuite, `setAccountSecret`) ; `sandbox` n'est pas encore admis.
- */
+/** Refuse un mode que le connecteur n'admet pas (`creatableModes`), en disant lequel prendre. */
 function requireCreatableMode(connector: string, mode: AccountMode): void {
+  if (creatableModes(connector).includes(mode)) return
   if (isSimulatedConnector(connector)) {
-    if (mode === "simule") return
     throw new PlatformError(
       "unavailable_in_v1",
       `${connector} is simulated in this version: its accounts are simulated, a ${modeLabel(mode)} account is not available. Create it with mode simule.`,
     )
   }
-  if (mode === "reel") return
   if (mode === "sandbox") {
     throw new PlatformError("unavailable_in_v1", `Sandbox accounts are not available yet. Create a live account of ${connector} with mode reel.`)
   }
@@ -353,21 +356,13 @@ function accountStatus(value: string): AccountView["status"] {
   return value === "active" || value === "disabled" ? value : "error"
 }
 
-/** Le propriétaire tel que l'écran le lit : l'équipe nommée, ou la personne d'un compte personnel et son nom dans l'annuaire. */
-function ownerView(row: AccountRow, names: ReadonlyMap<string, string>): AccountView["owner"] {
-  const { kind } = accountOwner(row)
-  if (kind === "team" && row.team_name !== null) return { kind, teamName: row.team_name }
-  if (kind === "user" && row.owner_user_id !== null) return { kind, userId: row.owner_user_id, userName: names.get(row.owner_user_id) ?? null }
-  return { kind }
-}
-
 /** La vue d'un compte au niveau `level` ; `names` nomme la personne d'un compte personnel (`ownerNames`). */
 export function accountView(row: AccountRow, level: AccountLevel, names: ReadonlyMap<string, string>): AccountView {
   return {
     id: row.id,
     label: row.label,
     connector: row.connector,
-    owner: ownerView(row, names),
+    owner: ownerView(accountOwner(row).kind, row, names),
     mode: accountMode(row.mode),
     status: accountStatus(row.status),
     secret: { fields: row.secret_fields, updatedAt: row.secret_updated_at },

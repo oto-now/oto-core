@@ -29,6 +29,7 @@ const MAIL: OrgConnector = {
   connector: "mail",
   label: "mail",
   closedBy: null,
+  accountModes: ["simule"],
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
   activatedBy: { userId: "user-claire", name: "Claire Morel" },
@@ -41,6 +42,7 @@ const CRM: OrgConnector = {
   connector: "crm",
   label: "Crm Pro",
   closedBy: null,
+  accountModes: ["reel"],
   state: "active",
   activatedAt: "2026-09-24T10:00:00.000Z",
   activatedBy: null,
@@ -92,7 +94,14 @@ const DONNEES: DonneesDesConnecteurs = {
       { id: "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c03", nom: "Nadia Finet" },
     ],
   },
+  proprietaires: { user: true, org: false, teams: [] },
 }
+const EQUIPES = [
+  { id: FINANCE, name: "Finance" },
+  { id: VENTES, name: "Ventes" },
+]
+/** Qui administre crée pour l'organisation et pour chaque équipe. */
+const ADMINISTRE: Partial<DonneesDesConnecteurs> = { administration: { impacts: {} }, proprietaires: { user: true, org: true, teams: EQUIPES } }
 
 const fetchMock = vi.fn<typeof fetch>()
 const rafraichir = vi.fn()
@@ -341,11 +350,11 @@ describe("EcranConnecteurs, the detail of a connector", () => {
   })
 
   it("should test a connector for who manages it, say a failed test and too many tests, and offer no test under that level", async () => {
-    fetchMock.mockImplementation(async () => reponse(200, { data: { probe: { at: "2026-11-14T09:00:00.000Z", healthy: false, reason: "Crm refused the key. (key_rejected)", balance: null } } }))
+    fetchMock.mockImplementation(async () => reponse(200, { data: { probe: { at: "2026-11-14T09:00:00.000Z", healthy: false, code: "credential_rejected", reason: "Crm refused the key. (key_rejected)", balance: null } } }))
     const { unmount } = rendre({}, { vue: { compte: BANQUE.id } })
     const detail = detailDe(BANQUE)
     fireEvent.click(detail.getByRole("button", { name: "Tester Banque" }))
-    expect(await detail.findByText("Le test a échoué.")).toBeInTheDocument()
+    expect(await detail.findByText("Le service a refusé la clé.")).toBeInTheDocument()
     expect(rafraichir).toHaveBeenCalledTimes(1)
     expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/probe`, methode: "POST", corps: {} }])
 
@@ -360,9 +369,11 @@ describe("EcranConnecteurs, the detail of a connector", () => {
   })
 
   it("should say the last test kept on the account: its failure with the reason of the engine, and that a tool has no automatic test", () => {
-    const teste = { ...BANQUE, lastProbe: { at: "2026-11-14T09:00:00.000Z", healthy: false, reason: "Crm is unreachable.", balance: null } }
+    const teste: AccountView = { ...BANQUE, lastProbe: { at: "2026-11-14T09:00:00.000Z", healthy: false, code: "unreachable", reason: "Crm is unreachable.", balance: null } }
     const { unmount } = rendre({ accounts: [teste] }, { vue: { compte: BANQUE.id } })
     expect(ligneDe("Banque").getByText("Test en échec")).toBeInTheDocument()
+    // La raison se dit en français par le code du moteur ; sa phrase reste lisible, repliée.
+    expect(detailDe(BANQUE).getByText("Le service est injoignable. Testé le 14 novembre 2026.")).toBeInTheDocument()
     expect(detailDe(BANQUE).getByText("Crm is unreachable.")).toBeInTheDocument()
     unmount()
 
@@ -541,7 +552,7 @@ describe("EcranConnecteurs, adding a connector", () => {
   const CREE = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d60"
   // Une clé de test composée à l'exécution : aucun faux secret en littéral.
   const CLE = ["cle", "de", "test"].join("-")
-  const SAINE = { healthy: true, reason: null, balance: null }
+  const SAINE = { healthy: true, code: null, reason: null, balance: null }
 
   /** Les réponses de l'API par méthode et ressource ; une route inattendue lève. */
   const parRoute = (routes: Record<string, () => Response>) =>
@@ -636,7 +647,7 @@ describe("EcranConnecteurs, adding a connector", () => {
 
   it("should ask « Ajouter quand même ? » after a failed test, create only from that question and only for the key that failed, and say a name already taken, the entry kept", async () => {
     const creation = vi.fn(() => reponse(409, { error: { code: "conflict", details: { reason: "label_taken" } } }))
-    const sonde = vi.fn(() => reponse(200, { data: { probe: { healthy: false, reason: "Crm refused the key. (key_rejected)", balance: null } } }))
+    const sonde = vi.fn(() => reponse(200, { data: { probe: { healthy: false, code: "credential_rejected", reason: "Crm refused the key. (key_rejected)", balance: null } } }))
     parRoute({ "POST admin/connectors/crm/probe": sonde, "POST admin/accounts": creation })
     rendre()
     const fenetre = ouvrirLaFenetre()
@@ -706,11 +717,9 @@ describe("EcranConnecteurs, adding a connector", () => {
   })
 
   it("should let an administrator add a connector for a team, of a tool without a form too, and never propose themselves for it", async () => {
-    // « mail » n'a pas de formulaire : l'écran le crée réel, et le service répond qu'il est simulé.
-    const creation = vi.fn<() => Response>()
-    creation.mockReturnValueOnce(reponse(400, { error: { code: "unavailable_in_v1" } })).mockReturnValueOnce(reponse(201, { data: { account: { id: CREE, label: "mail" } } }))
-    parRoute({ "POST admin/accounts": creation })
-    rendre({ connectors: [MAIL, CRM, MS], administration: { impacts: {} } })
+    // « mail » n'a pas de formulaire : son compte se crée au mode que le connecteur admet, simulé, en un seul appel.
+    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail" } } }) })
+    rendre({ connectors: [MAIL, CRM, MS], ...ADMINISTRE })
     const fenetre = ouvrirLaFenetre()
     expect(cartes(fenetre)).toEqual(["Crm Pro", "mail", "Microsoft 365"])
     fireEvent.click(fenetre.getByRole("button", { name: "mail" }))
@@ -721,10 +730,33 @@ describe("EcranConnecteurs, adding a connector", () => {
     choisirDansLaListe(formulaire.getByLabelText("Équipe"), "Finance")
     fireEvent.click(formulaire.getByRole("button", { name: "Ajouter" }))
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
-    expect(envois().map((envoi) => envoi.corps)).toEqual([
-      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "reel" },
-      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" },
-    ])
+    expect(envois().map((envoi) => envoi.corps)).toEqual([{ connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" }])
+  })
+
+  it("should let a team lead add a connector for themselves or for the team they lead, never for the organisation nor another team", async () => {
+    rendre({ connectors: [MAIL, CRM], proprietaires: { user: true, org: false, teams: [{ id: FINANCE, name: "Finance" }] } })
+    const fenetre = ouvrirLaFenetre()
+    expect(cartes(fenetre)).toEqual(["Crm Pro", "mail"])
+    fireEvent.click(fenetre.getByRole("button", { name: "Crm Pro" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    const pourQui = within(formulaire.getByRole("group", { name: "Pour qui" }))
+    expect(pourQui.getAllByRole("radio").map((choix) => choix.getAttribute("value"))).toEqual(["user", "team"])
+    fireEvent.click(pourQui.getByLabelText("Une équipe"))
+    expect(libellesDesChoix(formulaire.getByLabelText("Équipe"))).toEqual(["Choisir une équipe", "Finance"])
+    fireEvent.click(fenetre.getByRole("button", { name: "Tous les outils" }))
+
+    // « mail » ne se porte que par une équipe ou l'organisation : sans autre choix, l'équipe se demande quand même.
+    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail" } } }) })
+    fireEvent.click(fenetre.getByRole("button", { name: "mail" }))
+    const pourLEquipe = within(fenetre.getByRole("form", { name: "Ajouter mail" }))
+    expect(pourLEquipe.queryByRole("group", { name: "Pour qui" })).toBeNull()
+    fireEvent.click(pourLEquipe.getByRole("button", { name: "Ajouter" }))
+    expect(await pourLEquipe.findByText("Choisissez une équipe.")).toBeInTheDocument()
+    expect(envois()).toEqual([])
+    choisirDansLaListe(pourLEquipe.getByLabelText("Équipe"), "Finance")
+    fireEvent.click(pourLEquipe.getByRole("button", { name: "Ajouter" }))
+    await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
+    expect(envois().map((envoi) => envoi.corps)).toEqual([{ connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" }])
   })
 
   it("should say the outcome of a return from the third party", () => {
@@ -740,18 +772,30 @@ describe("EcranConnecteurs, adding a connector", () => {
 describe("EcranConnecteurs, the tools of the organisation (administrator)", () => {
   const FERME: OrgConnector = { ...MAIL, state: "inactive", activatedAt: null, activatedBy: null, closedBy: { userId: "user-claire", name: "Claire Morel" } }
   const JAMAIS: OrgConnector = { ...MAIL, connector: "agenda", label: "Agenda", state: "inactive", activatedAt: null, activatedBy: null, functions: [] }
+  // Fermé par une personne partie, ou avant que la fermeture garde son auteur : fermé quand même.
+  const SANS_AUTEUR: OrgConnector = { ...FERME, connector: "paie", label: "Paie", functions: [], closedBy: { userId: null, name: null } }
 
-  it("should say each tool open, closed and by whom, or never used, and open a closed one again without a question", async () => {
-    fetchMock.mockResolvedValue(reponse(200, { data: { connector: MAIL } }))
-    rendre({ connectors: [FERME, CRM, JAMAIS], administration: { impacts: {} } })
+  it("should say each tool open, closed and by whom, or never used, close any tool not closed and open a closed one again without a question", async () => {
+    // Deux gestes dans ce test : une réponse neuve à chaque appel, son corps ne se lit qu'une fois.
+    fetchMock.mockImplementation(async () => reponse(200, { data: { connector: MAIL } }))
+    rendre({ connectors: [FERME, CRM, JAMAIS, SANS_AUTEUR], administration: { impacts: {} } })
     const ilot = within(screen.getByRole("region", { name: "Outils de l'organisation" }))
-    expect(ilot.getByText("3 outils")).toBeInTheDocument()
+    expect(ilot.getByText("4 outils")).toBeInTheDocument()
     expect(ilot.getByText("2 fonctions")).toBeInTheDocument()
     expect(ilot.getByText("Ouvert depuis le 24 septembre 2026")).toBeInTheDocument()
     expect(ilot.getByText("Fermé par Claire Morel")).toBeInTheDocument()
-    // Un outil jamais utilisé s'ouvre au premier ajout : aucun geste.
+    expect(ilot.getByText("Fermé par un administrateur")).toBeInTheDocument()
+    // Un outil jamais utilisé s'ouvre au premier ajout : il se ferme d'avance.
     expect(ilot.getByText("S'ouvre au premier ajout")).toBeInTheDocument()
-    expect(ilot.getAllByRole("button").map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)).toEqual(["Rouvrir mail", "Fermer Crm Pro"])
+    expect(ilot.getAllByRole("button").map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)).toEqual(["Rouvrir mail", "Fermer Crm Pro", "Fermer Agenda", "Rouvrir Paie"])
+    // Rien ne s'arrête à fermer un outil jamais utilisé : sa question le dit, et ce que rouvrir fera.
+    fireEvent.click(ilot.getByRole("button", { name: "Fermer Agenda" }))
+    const davance = "Fermer « Agenda » d'avance ? Plus personne ne pourra l'ajouter. Le rouvrir l'ouvrira pour toute l'organisation."
+    fireEvent.click(within(screen.getByRole("group", { name: davance })).getByRole("button", { name: "Fermer" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/agenda/activation", methode: "DELETE" }])
+    fetchMock.mockClear()
+    rafraichir.mockClear()
     fireEvent.click(ilot.getByRole("button", { name: "Rouvrir mail" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "POST", corps: {} }])

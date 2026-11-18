@@ -1,7 +1,7 @@
 # Lecture et écriture des pages
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-11-17
 
 ## Résumé
 
@@ -68,7 +68,7 @@ Un assistant lit et écrit du texte : les six outils ne transportent que du mark
 - E03-S03 N20 : provenance d'un bloc écrit : `{origin: "agent", by, ctx, at}` par le MCP, `{origin: "human", by, at}` par l'API ; révision + 1 quand type, texte, données ou clé changent, inchangée sur un déplacement seul.
 - E03-S03 N22 : publication en trois temps (préparer, `publish_node`, dériver), avec des branches explicites par genre.
 - HN-E11S18-1 : « assistant » = toute écriture de porte `agent` : `write` du MCP, `upload.link`, la création du tableau de `table.import`, `node.write_many`. Toute l'écriture (création du nœud, brouillon, publication, adresse qui suit le titre, ligne du `ctx` de l'auteur) tient dans une transaction ; tout refus l'annule (décision de JB, amende ADR-011 § 3). L'écran garde son brouillon (il sauve la frappe d'une personne) ; `admin_node publish` publie un brouillon qui existe déjà : inchangé.
-- E03-S03 N28 : `write` publie par défaut, `publish: false` garde un brouillon ; un refus de publication rend `isError` avec son code et, à l'écran, garde le brouillon ; le refus d'une procédure finit par « Writing it in several calls? Pass publish: false until the last one. »
+- E03-S03 N28 : `write` publie toujours ; `publish: false` d'un assistant est retiré à sa porte, et la réponse finit par « publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with <p>_call comment.add. » ([nœuds et arbre](noeuds-et-arbre.md)) ; un refus de publication rend `isError` avec son code et, à l'écran, garde le brouillon ; le refus d'une procédure finit par « Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls. »
 - HN-E11S18-2 : les transactions des services appelés reprennent celle de l'écriture (`db.tx` sous la même session), sans point de sauvegarde : une erreur de la base (une course) interrompt la transaction, et le refus qui la relirait y devient une panne (`internal`) ; l'écriture, annulée entière, se rejoue alors une fois et dit l'état d'après la course (`stale_revision` avec l'état courant). Rejouée après une course sur le tampon du brouillon, une publication sans opérations publie le brouillon partagé tel que l'autre l'a laissé. Un service qui, pour l'écran, rattrape une erreur de base (purge d'après publication, `followTitle`) perd sous elle toute l'écriture : exception écrite de `supabase-patterns.md § Couplage à Supabase` ; `finishTablePublication` reste dans `publishNode`, partagé avec l'écran.
 - HN-E11S18-3 : les textes de refus des services (« The draft is kept; nothing was published. » et le renvoi à `node.discard_draft`) sont réécrits par `write-atomic.ts`, seul point : « Nothing was written. » ; quand un brouillon écrit avant l'appel reste, relu après l'annulation, « Nothing was written; the draft saved before this call stays. » et le renvoi gardé. `needs_confirmation` y reçoit l'appel à refaire (le même appel, `header` augmenté de `"confirm_remove": true`).
 - HN-E11S18-4 : ce qu'a fait l'écriture suit « Published … (<n> sections, <m> blocks) » après deux-points ; pour un tableau, ses fragments précèdent le résumé de l'en-tête publié ; la réponse de `publish: false` est inchangée. HN-E11S02-27 ([nœuds et arbre](noeuds-et-arbre.md)) : la ligne de publication donne « Next write: base_revision N. ».
@@ -112,3 +112,4 @@ Aucune à ce jour.
 - 2026-09-24 : `read` en markdown rendu des blocs, `write` par section et par bloc, liens extraits à la publication — décidé par JB (source : ADR-011 § 4, § 5, § 7 ; story E03-S03).
 - 2026-09-30 : une écriture d'assistant est entière ou rien ; `set_markdown`, `replace_text` sur toute la page avec `count`, `node.write_many`, frontmatter YAML, coupe au mot ; l'écran écrit jusqu'à 1 000 opérations — décidé par JB (source : story E11-S18, fiche D153).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-011 § 4, § 5 et § 7, la fiche D153 et les choix H54, H57, E03-S03, E11-S18 — décidé par Alexis, accord de JB.
+- 2026-11-17 : `publish: false` d'un assistant n'a plus d'effet, et le refus d'une procédure ne le conseille plus — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).

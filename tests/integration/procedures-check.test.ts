@@ -46,7 +46,7 @@ function stored(inputs: BlockInput[]): DocBlock[] {
 const unknown = (name: string) => `unknown function « ${name} »; acme_find with type function lists the functions`
 const FOOTER = 'Fix them with acme_write (ops on the sections), then publish again. Format and rules: acme_read {"path": "write.procedure"}.'
 /** La dernière ligne d'un refus : `write` publie par défaut (E11-S02, AC-b2, N28). */
-const SEVERAL = "Writing it in several calls? Pass publish: false until the last one."
+const SEVERAL = "Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls."
 
 describe.skipIf(!sqlConfigured)(
   sqlConfigured ? "checkProcedureBlocks on a real database, portable" : `checkProcedureBlocks on a real database, portable (${SQL_SKIP_REASON})`,

@@ -82,6 +82,19 @@ function enAttente(noeud: unknown, vus = new Set<unknown>()): Promise<unknown>[]
   return Object.values(noeud).flatMap((valeur) => enAttente(valeur, vus))
 }
 
+/** La valeur de la prop `nom`, où qu'elle soit dans l'arbre rendu ; `undefined` si aucun élément ne la porte. */
+function propRendue(noeud: unknown, nom: string, vus = new Set<unknown>()): unknown {
+  if (noeud === null || typeof noeud !== "object" || vus.has(noeud)) return undefined
+  vus.add(noeud)
+  if (isValidElement<Record<string, unknown>>(noeud) && nom in noeud.props) return noeud.props[nom]
+  const enfants = Array.isArray(noeud) ? noeud : Object.values(isValidElement(noeud) ? (noeud.props as object) : noeud)
+  for (const enfant of enfants) {
+    const trouvee = propRendue(enfant, nom, vus)
+    if (trouvee !== undefined) return trouvee
+  }
+  return undefined
+}
+
 type Mesure = { instructions: number; transactions: number; ms: number }
 
 /** L'écran que la page rend : le nœud lu, tel que l'écran le reçoit. */
@@ -143,6 +156,12 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("r
     expect(mesure.attendus).toContainEqual({ data: expect.objectContaining({ links_out_total: 2 }) })
     expect(mesure.instructions).toBeLessThanOrEqual(PLAFONDS.page.instructions)
     expect(mesure.transactions).toBeLessThanOrEqual(PLAFONDS.page.transactions)
+  })
+
+  it("should name the teams of the person to the rail, which sets apart the teams she is only a guest of", async () => {
+    vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ data: { identity, session: { user: { id: o.people.ada.id, email: o.people.ada.email }, accessToken: "", host: o.host, db: fx.as(o.people.ada) } } })
+
+    expect(propRendue(await DashboardLayout({ children: null }), "equipesDeLaPersonne")).toEqual(identity.teams.map((team) => team.slug))
   })
 
   it("should display a procedure within its query budget", async () => {

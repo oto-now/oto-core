@@ -1,9 +1,9 @@
 // @vitest-environment node
 // `read` et `write` sur une vraie base (E03-S03), les deux seuls tests de la story dont la base est le
 // sujet : AC38, bout en bout par `InMemoryTransport` sous le jeton de chaque personne (`open_draft`,
-// blocs sous leurs invariants et leurs droits de colonne, `publish_node`, `links`) ; AC25, part de la
-// base : deux personnes écrivent deux blocs différents du même brouillon en même temps (ADR-011,
-// Conséquences). Organisation de référence jetable (H120), sessions par `fx.sessionFor`. Suite portable
+// blocs sous leurs invariants et leurs droits de colonne, `publish_node`, `links`). La porte d'un assistant
+// publie toujours : le brouillon partagé au bloc (AC25) se prouve par le service (`tests/unit/nodes-store.test.ts`).
+// Organisation de référence jetable (H120), sessions par `fx.sessionFor`. Suite portable
 // (E11-S14) : personnes sans compte, jetons signés localement (`tests/helpers/session-locale.ts`) ;
 // depuis E01-S10 f2, les relectures passent par la connexion d'administration, plus par PostgREST.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -63,7 +63,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
 
     it("should write a report as an assistant writes it, publish it and read it back identically, and name a refusal (E10-S04)", async () => {
       const lea = await session("lea", `md-${hex(4)}`)
-      const claire = await session("claire", `md-${hex(4)}`)
       const path = `ventes/cr_md_${hex(3)}`
       const body = [
         "Réunion du **lundi** : ~~report~~ maintenu.<br>Voir [[ventes/devis]].",
@@ -73,8 +72,8 @@ describe.skipIf(!sqlConfigured || privatePending)(
         "### Détail\n\nTexte.\n\n#### Précision\n\n##### Note\n\n###### Fin",
         "<details>\n<summary>Notes brutes</summary>\n\nTout ce qui a été dit.\n\n</details>",
       ].join("\n\n")
-      await lea.call("write", { path, title: "CR markdown", summary: "Compte rendu en markdown.", ops: [{ op: "add_section", section: "Réunion", text: body }], publish: false })
-      expect((await claire.call("write", { path, base_revision: 0, publish: true })).text).toMatch(new RegExp(`^Published ${path} revision 1 `))
+      const written = await lea.call("write", { path, title: "CR markdown", summary: "Compte rendu en markdown.", ops: [{ op: "add_section", section: "Réunion", text: body }] })
+      expect(written.text).toMatch(new RegExp(`^Published ${path} revision 1 `))
       expect((await lea.call("read", { path, section: "Réunion" })).text).toContain(`\n\n## Réunion\n\n${body}\n\nTo edit`)
 
       const refused = await lea.answer("write", { path, base_revision: 1, ops: [{ op: "append", section: "Réunion", text: "| a | b |\n| --- | --- |\n| x | y | z |" }] })
@@ -82,29 +81,26 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(refused.text).toContain("line 3: this row has 3 cells; the header has 2.")
     })
 
-    it("should chain context, write, publish, read with references, write one block and read the draft, journaled per call (AC38)", async () => {
+    it("should chain context, write, read with references, write one block and read it back, journaled per call (AC38)", async () => {
       const agent = `rw-${hex(4)}`
       const lea = await session("lea", agent)
-      const claire = await session("claire", agent)
       const path = `ventes/cr_${hex(3)}`
       const created = await lea.call("write", {
         path,
         title: "CR de la réunion",
         summary: "Compte rendu de test.",
         ops: [{ op: "add_section", section: "Décisions", text: "Lancer la pré-étude.\n\nRelancer Acme." }],
-        publish: false,
       })
-      expect(created.text.split("\n")[0]).toMatch(new RegExp(`^Draft of ${path} created \\(revision 0\\): added « Décisions »`))
-      expect((await claire.call("write", { path, base_revision: 0, publish: true })).text).toBe(`Published ${path} revision 1 (1 section, 3 blocks). Next write: base_revision 1.`)
+      expect(created.text).toMatch(new RegExp(`^Published ${path} revision 1 \\(1 section, 3 blocks\\): added « Décisions »`))
 
       const section = await lea.call("read", { path, section: "Décisions", refs: true })
       const blockRef = /<!-- ref: (\S+) -->\nRelancer Acme\./.exec(section.text)?.[1]
       expect(blockRef).toBeTruthy()
-      await lea.call("write", { path, base_revision: 1, ops: [{ op: "replace_block", block: blockRef, text: "Relancer Acme vendredi." }], publish: false })
-      const draft = await lea.call("read", { path, draft: true })
-      expect(draft.text).toContain("\n\n## Décisions\n\nLancer la pré-étude.\n\nRelancer Acme vendredi.")
+      await lea.call("write", { path, base_revision: 1, ops: [{ op: "replace_block", block: blockRef, text: "Relancer Acme vendredi." }] })
+      const reread = await lea.call("read", { path })
+      expect(reread.text).toContain("\n\n## Décisions\n\nLancer la pré-étude.\n\nRelancer Acme vendredi.")
       const node = await fx.nodeId(ref.org.id, path)
-      const blocks = await admin<{ id: string }[]>`select id, text, revision, provenance from platform.blocks where node_id = ${node} and state = 'draft'`
+      const blocks = await admin<{ id: string }[]>`select id, text, revision, provenance from platform.blocks where node_id = ${node} and state = 'published'`
       // La provenance posée par l'adaptateur MCP : l'assistant de Léa, avec le `ctx` de la conversation (AC28).
       expect(blocks.find((block) => block.id.startsWith(String(blockRef)))).toMatchObject({
         text: "Relancer Acme vendredi.",
@@ -112,7 +108,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
         provenance: { origin: "agent", by: ref.people.lea.id, ctx: lea.code },
       })
 
-      await Promise.all([lea.flush(), claire.flush()])
+      await lea.flush()
       const lines = await admin<{ user_id: string | null; tool: string | null; target: string | null; team_id: string | null; is_error: boolean }[]>`
         select user_id, tool, target, team_id, is_error from platform.journal
         where org_id = ${ref.org.id} and user_agent = ${agent} and method = 'tools/call' order by id`
@@ -122,11 +118,12 @@ describe.skipIf(!sqlConfigured || privatePending)(
           .filter((line) => line.user_id === ref.people[person].id && line.tool !== `${ref.org.prefix}_context`)
           .map((line) => [line.tool, line.target, line.team_id, line.is_error])
       const expected = (tools: string[]) => tools.map((tool) => [`${ref.org.prefix}_${tool}`, path, ref.teams.ventes, false])
-      expect([of("lea"), of("claire")]).toEqual([expected(["write", "read", "write", "read"]), expected(["write"])])
+      expect(of("lea")).toEqual(expected(["write", "read", "write", "read"]))
     })
 
-    // E11-S02 (AC-b1, AC-a2) : écrire publie, au niveau écriture ; `publish: false` garde un brouillon.
-    it("should publish a write without publish, keep a draft with publish: false, and publish a table header at the write level", async () => {
+    // E11-S02 (AC-b1, AC-a2) : écrire publie, au niveau écriture ; un assistant ne laisse plus de brouillon : `publish: false`
+    // est retiré à sa porte, et la réponse le dit.
+    it("should publish a write without publish, publish one that asks publish: false and say so, and publish a table header at the write level", async () => {
       const lea = await session("lea", `pub-${hex(4)}`)
       const path = `ventes/faq_${hex(3)}`
       const created = await lea.call("write", { path, title: "FAQ", summary: "Questions fréquentes.", ops: [{ op: "add_section", section: "Livraison", text: "Sous huit jours." }] })
@@ -135,8 +132,12 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(created.text).toBe(`Published ${path} revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.`)
       expect(created.result.structuredContent).toMatchObject({ status: "published", revision: 1 })
       const drafted = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Livraison", text: "Hors week-end." }], publish: false })
-      expect(drafted.text.split("\n")[1]).toBe(`Publish it with ${ref.org.prefix}_write {"path": "${path}", "base_revision": 1, "publish": true}.`)
-      expect(drafted.result.structuredContent).toMatchObject({ status: "published", revision: 1, has_draft: true })
+      expect(drafted.text.split("\n")).toEqual([
+        `Published ${path} revision 2 (1 section, 3 blocks): appended to « Livraison » (+14 → 46 characters). Next write: base_revision 2.`,
+        `publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with ${ref.org.prefix}_call comment.add.`,
+      ])
+      expect(drafted.result.structuredContent).toMatchObject({ status: "published", revision: 2, has_draft: false })
+      expect((await admin`select 1 from platform.node_drafts where node_id = ${await fx.nodeId(ref.org.id, path)}`).length).toBe(0)
 
       const table = `ventes/salons_${hex(3)}`
       const header = { columns: [{ name: "nom", type: "text" }], key: "nom" }
@@ -145,24 +146,6 @@ describe.skipIf(!sqlConfigured || privatePending)(
       const changed = await lea.call("write", { path: table, base_revision: 1, header: { columns: [{ name: "ville", type: "text" }], closed: true } })
       expect(changed.text).toBe(`Published ${table} revision 2: added ville; closed. Next write: base_revision 2.`)
       expect((await lea.call("read", { path: table })).text).toContain("\naccess: write (write and publish; sharing, moving and deleting are reserved to team Ventes (lead: Claire Morel))\n")
-    })
-
-    it("should keep both changes when two people write two different blocks of the same draft at once (AC25)", async () => {
-      const path = `ventes/devis_${hex(3)}`
-      const node = await fx.createNode(ref.org.id, { parentId: ref.nodes.ventes, path, title: "Devis" })
-      await fx.publishBlocks(node, [{ type: "paragraph", text: "Premier." }, { type: "paragraph", text: "Second." }])
-      const [first, second] = await fx.draftBlocks(node, [{ type: "paragraph", text: "Premier." }, { type: "paragraph", text: "Second." }], { title: "Devis en cours" })
-      const agent = `rw-${hex(4)}`
-      const [lea, claire] = await Promise.all([session("lea", agent), session("claire", agent)])
-      await Promise.all([
-        lea.call("write", { path, base_revision: 1, ops: [{ op: "replace_block", block: first.slice(0, 8), text: "Premier, par Léa." }], publish: false }),
-        claire.call("write", { path, base_revision: 1, ops: [{ op: "replace_block", block: second.slice(0, 8), text: "Second, par Claire." }], publish: false }),
-      ])
-      const blocks = await admin<{ id: string; text: string | null }[]>`select id, text from platform.blocks where node_id = ${node} and state = 'draft' order by position`
-      expect(blocks.map((block) => [block.id, block.text])).toEqual([
-        [first, "Premier, par Léa."],
-        [second, "Second, par Claire."],
-      ])
     })
   },
 )

@@ -24,6 +24,7 @@ import { tableRelease } from "../tables/release"
 import { tableRows } from "../tables/rows"
 import { tableSchema } from "../tables/schema"
 import { tableWrite } from "../tables/write"
+import { teamSharesFunction } from "../team-shares"
 import { nodeExportTree, nodeImportTree } from "../transfer/functions"
 import { nodeCheck, nodeTree } from "../transfer/inspect"
 import { argumentsJsonSchema } from "./arguments"
@@ -84,6 +85,7 @@ export function packageFunctions(): CatalogFunction[] {
     commentEdit,
     commentDelete,
     commentResolve,
+    teamSharesFunction,
   ]
 }
 

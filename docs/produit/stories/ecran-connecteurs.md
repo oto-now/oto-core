@@ -292,7 +292,7 @@ Relevés le 2026-11-15, la maquette remise à côté des captures de l'écran.
 - **L'en-tête de la page** est celui de la coque (`EnTeteDAdministration`) : le sous-titre s'y lit à droite, sous le bouton, et non sous le titre ; la liste n'est pas dans une carte qui porterait aussi le titre.
 - **Les lignes** ont la hauteur du tableau du design system, plus basse que celle de la maquette.
 - **Sous la liste**, l'îlot « Outils de l'organisation » de l'administrateur n'est pas sur la maquette.
-- **Le détail** n'a pas de menu « ⋯ » : « Désactiver » et « Réactiver » sont des boutons en bas du tiroir. Sa section « Ce que l'assistant peut faire » n'a ni la phrase de l'outil (second lot du moteur) ni la promesse d'un accord avant une action sensible (la règle appartient au moteur).
+- **Le détail** n'a pas de menu « ⋯ » : « Désactiver » et « Réactiver » sont des boutons en bas du tiroir. Sa section « Ce que l'assistant peut faire » n'a ni la phrase de l'outil (point de la demande au moteur resté hors de ses deux lots) ni la promesse d'un accord avant une action sensible (la règle appartient au moteur).
 - Le panneau de partage s'ouvre dans un dialogue au-dessus du tiroir, et non dans un panneau accroché au bouton : le tiroir est déjà un dialogue, étroit, en bas de l'écran sur un téléphone.
 - Le détail ne montre pas l'activité (dernière utilisation, nombre d'appels) : le moteur ne la sert pas.
 - La page vide ne propose pas de raccourcis vers des outils nommés : le catalogue arrive avec `ajout-d-un-connecteur.md`.

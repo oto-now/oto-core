@@ -15,8 +15,10 @@ import { withServerSession } from "../../packages/plateforme/server/sql"
 const VERSION = "20261019130000"
 const DELETES = "20261019140000"
 /** L'écran Connecteurs (`record_account_probe`, libellé et description écrits par le serveur). */
-const SCREEN = "20261114120000"
-const missing = (await pendingMigrations()).filter((version) => [VERSION, DELETES, SCREEN].includes(version))
+const SCREEN = "20261117220000"
+/** L'écran Connecteurs, lot 2 (le code d'un test, son effacement, qui a fermé un connecteur). */
+const SCREEN_LOT2 = "20261117220000"
+const missing = (await pendingMigrations()).filter((version) => [VERSION, DELETES, SCREEN, SCREEN_LOT2].includes(version))
 const pending = missing.length > 0
 
 /**
@@ -82,6 +84,8 @@ const RESERVED: Record<string, string> = {
   "platform.mark_account(uuid,text)": "the refusal of the third party",
   "platform.mark_files_ready(uuid,uuid[])": "the object read in the storage",
   "platform.record_account_probe(uuid,boolean,text,jsonb)": "the answer of the third party to the probe",
+  "platform.record_account_probe(uuid,boolean,text,text,jsonb)": "the answer of the third party to the probe, with the code of its reason",
+  "platform.forget_account_probe(uuid)": "the change of the account's key, decided by the server",
   "platform.pseudonym_org(uuid,text,text)": "the salt and the witness of the server's key",
   "platform.purge_transit_files(uuid)": "the transit files of others, which the caller cannot see",
   "platform.signup_org(text,text,text,text[])": "the addresses given by the host",
@@ -94,7 +98,7 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   // Les commentaires d'une page (`20261112090000`) : l'état d'un fil, le texte d'un commentaire par son auteur.
   comment_threads: ["status", "resolved_by", "resolved_at"],
   comments: ["text", "mentions", "edited_at", "to_assistant"],
-  connector_activations: ["org_id", "connector", "state", "activated_by", "created_at", "updated_at"],
+  connector_activations: ["org_id", "connector", "state", "activated_by", "closed_by", "created_at", "updated_at"],
   ctx: ["contexts"],
   feedback: ["state", "resolution", "handled_by", "handled_at"],
   invitations: ["revoked_at"],

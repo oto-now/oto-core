@@ -120,7 +120,8 @@ export function checkedSettings(declared: DeclaredConnector, given: Record<strin
  * avant l'écriture. La saisie fusionne avec ce qui est posé : un champ ou un réglage absent est gardé, `null` ou vide
  * l'efface. Champs et réglages sont contrôlés contre la déclaration du connecteur ; les champs sont chiffrés ensemble,
  * et le jeton d'un échange est effacé (il découlait de l'ancienne saisie). Une saisie concurrente entre la lecture et
- * l'écriture est refusée (`stale_revision`). Rien du secret n'est rendu. Refus : inconnu ou invisible (`not_found`),
+ * l'écriture est refusée (`stale_revision`). Le dernier test du compte (`lastProbe`) s'efface : il portait sur l'ancienne
+ * saisie ; un jeton renouvelé (consentement, échange) n'y touche pas. Rien du secret n'est rendu. Refus : inconnu ou invisible (`not_found`),
  * non géré (`forbidden`), compte simulé, connecteur non déclaré, champ ou réglage inconnu ou invalide, champ que
  * fournit l'hôte (`holder: host`), identifiant chez un tiers (`linked_id`) (`invalid_arguments`).
  */
@@ -148,12 +149,17 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
   const nextSettings = mergeCredential(current?.settings ?? {}, settings)
   const ciphertext = Object.keys(fields).length > 0 ? encryptCredential(id, fields) : null
   const version = current?.secret_updated_at ?? null
-  const updated = await inTransaction(db, "setAccountSecret: accounts update", (sql) => sql`
-    update platform.accounts
-       set secret_ciphertext = ${ciphertext}, secret_fields = ${Object.keys(fields).sort()}::text[], settings = ${sql.json(nextSettings)},
-           secret_updated_at = now(), token_ciphertext = null, token_expires_at = null
-     where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
-     returning id`, "server")
+  // Le dernier test portait sur l'ancienne saisie : il s'efface avec elle, dans la même transaction (`lastProbe` à `null`).
+  const updated = await inTransaction(db, "setAccountSecret: accounts update", async (sql) => {
+    const written = await sql`
+      update platform.accounts
+         set secret_ciphertext = ${ciphertext}, secret_fields = ${Object.keys(fields).sort()}::text[], settings = ${sql.json(nextSettings)},
+             secret_updated_at = now(), token_ciphertext = null, token_expires_at = null
+       where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz
+       returning id`
+    if (written.length > 0) await sql`select platform.forget_account_probe(${id})`
+    return written
+  }, "server")
   // Aucune ligne après la décision : une autre saisie a été écrite depuis la lecture qui fonde la fusion.
   if (updated.length === 0) {
     console.error(`[platform] setAccountSecret: account ${id} changed since its secret was read`)

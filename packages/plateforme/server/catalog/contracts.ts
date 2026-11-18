@@ -34,7 +34,7 @@ const writeProcedure: Contract = {
     description: [
       `A procedure is a node of kind procedure, read and written like a page: a title, a summary of 1 to 200 characters that says what it does and how people ask for it (${p}_context matches requests on the title and the summary), then blocks: headings, paragraphs, lists, callouts, and call blocks that hold the exact calls to make.`,
       `Recommended: a heading « Étapes » followed by numbered steps, each step that calls a function followed by its call block; headings « Quand l'utiliser » and « Règles » when useful. No section is required: call blocks are checked wherever they are.`,
-      `A procedure has no header (header is for tables only). Create it with kind "procedure", a title and a summary; each write publishes it. Publishing checks every block first and, if anything is wrong, lists every problem at once with where its block is: nothing is written, and a draft saved before with publish: false stays as it was. Writing it in several calls: pass publish: false until the last one.`,
+      `A procedure has no header (header is for tables only). Create it with kind "procedure", a title and a summary; each write publishes it. Publishing checks every block first and, if anything is wrong, lists every problem at once with where its block is: nothing is written. Writing it in several calls: each call is published, so write complete call blocks only, and add the other steps in later calls.`,
       "A procedure never goes under another procedure: only the main procedure is a procedure, routed and listed; each of its sub-steps is a page (kind page) under it, which its steps link to with [[path]].",
     ],
     parts: [
@@ -91,7 +91,7 @@ const writeTable: Contract = {
     summary: `the header of ${p}_write for a table (not a function; nothing to call).`,
     description: [
       `A table is a node of kind table: its header declares the typed columns, the key column whose value addresses each row, the work queue of the rows (lifecycle), whether new rows can be created (closed) and whether each new value needs its proof (proof). Create it with ${p}_write, kind "table", a title, a summary and header; change it with ${p}_write, base_revision and header. Its rows are written with ${p}_call table.write, never with ${p}_write.`,
-      "header holds changes, never the whole header: what it does not name stays as it is. The draft keeps the complete target header, checked at every write; publishing (the default) applies it after checking the rows already there.",
+      "header holds changes, never the whole header: what it does not name stays as it is. The complete target header is checked at every write, then published after checking the rows already there.",
       // E10-S01 (AC-c2) : un fichier donné par la personne, ce qu'il devient.
       "A CSV or a spreadsheet the user gives you becomes a table: use table.import, in pieces of 40,000 characters, each starting with the header line.",
       // E11-S18 (AC-9, AC-11, AC-12) : l'opération qui l'écrit, le frontmatter, plusieurs fichiers.
@@ -113,7 +113,7 @@ const writeTable: Contract = {
           "7. A header change never rewrites a row: making a column required, removing an option or shortening max_length only warns, with the number of rows concerned and sample keys.",
           '8. Removing a column that holds values takes two steps: publishing answers needs_confirmation with the rows it would erase, and nothing is written; ask the user, and only after their explicit agreement call again with the same header plus "confirm_remove": true. confirm_remove only applies when the write publishes and is never saved; 2,000 rows at most are erased per publication.',
           "9. Header changes that check the rows work on tables of 5,000 rows at most.",
-          `10. A header refused on publish is not written. A header saved with publish: false stays in the draft, and every later header write starts from it; to go back to the published header, discard the draft: ${p}_call node.discard_draft {"path": "<path>"}.`,
+          `10. A header refused on publish is not written. When read shows a pending header (an older draft), every later header write starts from it; to go back to the published header, discard the draft: ${p}_call node.discard_draft {"path": "<path>"}.`,
         ],
       },
     ],
@@ -129,7 +129,7 @@ const writeTable: Contract = {
     refusals: [
       "On create: no header, a new column without type, an unknown key or type, or a header the checks refuse (key missing or of type enum, states different from the options…); the refusal lists the problems found and nothing is written.",
       "A column with rename, new_name, renamed_to or old_name: columns cannot be renamed.",
-      "On write: remove_columns naming an unknown column or the key, a name both in columns and remove_columns, a column named twice in columns, confirm_remove with publish: false, an unknown key; nothing is written.",
+      "On write: remove_columns naming an unknown column or the key, a name both in columns and remove_columns, a column named twice in columns, an unknown key; nothing is written.",
       "On publish: a type change on a column that holds values (conflict); nothing is written.",
       "On publish: removing a column that holds values without confirm_remove (needs_confirmation, with the rows it would erase and the call to make again); nothing is written.",
       "On publish: more than 2,000 rows to erase, or changes that check the rows of a table of more than 5,000 rows (too_large); nothing is written.",

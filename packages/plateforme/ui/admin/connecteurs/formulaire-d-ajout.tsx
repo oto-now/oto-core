@@ -50,17 +50,6 @@ function cleAEssayer(saisie: SaisieDesChamps, formulaire: ConnectorAccountForm):
   return { fields, ...(Object.keys(settings).length > 0 ? { settings } : {}) }
 }
 
-/**
- * Crée le compte. Un outil sans formulaire est réel (servi par la clé de l'hôte) ou simulé, ce que l'écran ne sait pas :
- * il le crée réel, et le recrée simulé quand le service répond qu'un compte réel n'existe pas pour lui
- * (`unavailable_in_v1`).
- */
-async function creerLeCompte(compte: z.input<typeof createAccountSchema>, sansFormulaire: boolean) {
-  const creer = (mode: "reel" | "simule") => appelerPlateforme<{ account: { id: string; label: string } }>({ methode: "POST", ressource: "admin/accounts", corps: { ...compte, mode } })
-  const reel = await creer("reel")
-  return sansFormulaire && reel.erreur?.code === "unavailable_in_v1" ? creer("simule") : reel
-}
-
 function ChoixDeLEquipe({ equipes, erreur }: { equipes: readonly Equipe[]; erreur?: string }) {
   const { register } = useFormContext<Saisie>()
   return (
@@ -77,20 +66,25 @@ function ChoixDeLEquipe({ equipes, erreur }: { equipes: readonly Equipe[]; erreu
   )
 }
 
-/** Pour qui est le connecteur, quand la personne a le choix ; une équipe ne se propose que s'il en existe une. */
+/**
+ * Pour qui est le connecteur : le choix quand la personne en a un, et l'équipe dès que le connecteur est pour une équipe,
+ * même sans autre choix (un outil que seule une équipe ou l'organisation porte, ajouté par qui dirige une équipe).
+ */
 function ChoixDuProprietaire({ proprietaires, equipes, erreur }: { proprietaires: OutilAAjouter["proprietaires"]; equipes: readonly Equipe[]; erreur?: string }) {
   const { register } = useFormContext<Saisie>()
   const genre = useWatch<Saisie, "owner_kind">({ name: "owner_kind" })
   return (
     <>
-      <fieldset className="oto-radio-group" data-orientation="horizontal">
-        <legend>Pour qui</legend>
-        {proprietaires
-          .filter((un) => un !== "team" || equipes.length > 0)
-          .map((un) => (
-            <Radio key={un} value={un} label={PROPRIETAIRES[un]} {...register("owner_kind")} />
-          ))}
-      </fieldset>
+      {proprietaires.length > 1 && (
+        <fieldset className="oto-radio-group" data-orientation="horizontal">
+          <legend>Pour qui</legend>
+          {proprietaires
+            .filter((un) => un !== "team" || equipes.length > 0)
+            .map((un) => (
+              <Radio key={un} value={un} label={PROPRIETAIRES[un]} {...register("owner_kind")} />
+            ))}
+        </fieldset>
+      )}
       {genre === "team" && <ChoixDeLEquipe equipes={equipes} erreur={erreur} />}
     </>
   )
@@ -167,7 +161,7 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
   }
 
   async function creer({ secret, effacer, settings, description = "", ...compte }: Saisie) {
-    const cree = await creerLeCompte(compte, formulaire === null)
+    const cree = await appelerPlateforme<{ account: { id: string; label: string } }>({ methode: "POST", ressource: "admin/accounts", corps: { ...compte, mode: outil.mode } })
     if (cree.erreur) {
       if (estNomPris(cree.erreur)) form.setError("label", { type: "server", message: NOM_PRIS }, { shouldFocus: true })
       else form.setError("root", { type: "server", message: refusDuConnecteur(cree.erreur) })
@@ -220,7 +214,9 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
         <Field label="Description (facultatif)" hint="Dites quand l'utiliser : l'assistant la lit pour choisir entre deux connecteurs.">
           <Textarea maxLength={ACCOUNT_DESCRIPTION_MAX} {...form.register("description")} />
         </Field>
-        {outil.proprietaires.length > 1 && <ChoixDuProprietaire proprietaires={outil.proprietaires} equipes={equipes} erreur={errors.team_id ? EQUIPE_MANQUANTE : undefined} />}
+        {(outil.proprietaires.length > 1 || outil.proprietaires[0] === "team") && (
+          <ChoixDuProprietaire proprietaires={outil.proprietaires} equipes={equipes} erreur={errors.team_id ? EQUIPE_MANQUANTE : undefined} />
+        )}
         {errors.root?.message && <Alert tone="fail" title={errors.root.message} />}
         {question && (
           <div role="group" aria-label="Ajouter quand même ?" className="flex flex-wrap items-center gap-3">

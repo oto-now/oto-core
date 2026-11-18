@@ -2,14 +2,15 @@
 
 // Le test d'une connexion (écran Connecteurs) : la clé essayée avant l'ajout (`POST admin/connectors/<nom>/probe`, qui
 // n'écrit rien) et « Tester » dans le détail d'un connecteur (`POST admin/accounts/<id>/probe`, dont le résultat est
-// gardé sur le compte). L'issue se dit en français ; la raison d'un échec, que le moteur écrit en anglais pour
-// l'assistant, se montre telle quelle, repliée. Un test refusé par la route (trop de tests, outil fermé) se dit par sa
-// raison (`refusDuConnecteur`).
+// gardé sur le compte). L'issue se dit en français, un échec par le code du moteur (`raisonDuTest`) ; sa phrase, que
+// le moteur écrit en anglais pour l'assistant, se montre telle quelle, repliée. Un test refusé par la route (trop de
+// tests, outil fermé) se dit par sa raison (`refusDuConnecteur`).
 import { useRef, useState } from "react"
 import type { AccountHealth, AccountProbe, ConnectorProbeInput } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { Button } from "../../ds/react/primitives"
 import { useRafraichir } from "../../hote/rafraichir"
+import { raisonDuTest } from "./etat-du-compte"
 import { refusDuConnecteur } from "./refus-des-connecteurs"
 
 /** L'issue d'un test : rien encore, en cours, réussi, échoué (avec la phrase du moteur), ou refusé par la route. */
@@ -19,7 +20,7 @@ const AUCUN: Essai = { etat: "aucun", texte: "", detail: null }
 const EN_COURS: Essai = { etat: "en_cours", texte: "Test de la connexion…", detail: null }
 
 const issueDe = (sonde: AccountHealth): Essai =>
-  sonde.healthy ? { etat: "reussi", texte: "Connexion réussie.", detail: null } : { etat: "echoue", texte: "Le test a échoué.", detail: sonde.reason }
+  sonde.healthy ? { etat: "reussi", texte: "Connexion réussie.", detail: null } : { etat: "echoue", texte: raisonDuTest(sonde.code), detail: sonde.reason }
 
 /** Un test raté ou refusé : l'ajout demande alors « Ajouter quand même ». */
 export const essaiRate = (essai: Essai) => essai.etat === "echoue" || essai.etat === "refuse"

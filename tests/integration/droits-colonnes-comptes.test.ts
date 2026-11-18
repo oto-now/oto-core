@@ -14,7 +14,7 @@ import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type TestSql } from "../h
 const VERSION = "20261017090000"
 const MARK_VERSION = "20261017150000"
 const SERVER_VERSION = "20261019130000"
-const SCREEN_VERSION = "20261114120000"
+const SCREEN_VERSION = "20261117220000"
 const VERSIONS = [VERSION, MARK_VERSION, SERVER_VERSION, SCREEN_VERSION]
 const missing = await pendingMigrations()
 const pending = VERSIONS.some((version) => missing.includes(version))
@@ -29,7 +29,7 @@ const NOT_INSERTED: Record<string, string> = {
   updated_at: "set by the database",
   linked_id: "written only by platform.link_hosted_account (a person connects their own account)",
   linked_at: "written only by platform.link_hosted_account, with linked_id",
-  health: "written only by platform.mark_account and platform.record_account_probe (the mark and the last probe of an account); a new account takes its default",
+  health: "written only by platform.mark_account, platform.record_account_probe and platform.forget_account_probe (the mark and the last probe of an account); a new account takes its default",
   description: "a new account has none: set afterwards by whoever manages it (updateAccount), under platform_server",
   status: BY_THE_SERVER,
   status_reason: BY_THE_SERVER,
@@ -70,7 +70,7 @@ const NOT_READ: Record<string, string> = {
 const NEVER = ["linked_id", "linked_at"]
 
 /** Colonnes qu'`authenticated` lit sans les écrire : une seule fonction les écrit. */
-const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account and platform.record_account_probe" }
+const WRITTEN_BY_FUNCTION: Record<string, string> = { health: "platform.mark_account, platform.record_account_probe and platform.forget_account_probe" }
 
 type Privileges = { column_name: string; can_insert: boolean; can_select: boolean; can_update: boolean; server_updates: boolean }
 

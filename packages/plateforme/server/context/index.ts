@@ -31,6 +31,7 @@ import type { ToolOutput } from "../tool-output"
 import { token } from "../pseudonym/token"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
+import { guestsBlock } from "./blocks/guests"
 import { orgAddress, orgFacts } from "./blocks/org"
 import { personFacts } from "./blocks/person"
 import { recentBlock } from "./blocks/recent"
@@ -59,9 +60,10 @@ const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision
  * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
  * routage (les procédures proches de la demande), puis les contenus proches, passent avant les Contextes, puis les
  * contenus récents et les nouveautés (un seul bloc depuis le 2026-10-27, à la plus basse des deux priorités qu'il
- * remplace). Sans elle, onze Contextes d'équipe faisaient couper ce qui est affiché après eux.
+ * remplace). Sans elle, onze Contextes d'équipe faisaient couper ce qui est affiché après eux. La vue invité
+ * (`blocks/guests.ts`), affichée après les Contextes, passe juste après les règles : elle n'est jamais coupée.
  */
-const PRIORITY = { code: 0, related: 2, contexts: 10, recent: 101 } as const
+const PRIORITY = { code: 0, guests: 1, related: 2, contexts: 10, recent: 101 } as const
 
 /** Sans conversation antérieure, les nouveautés remontent à 14 jours (H34). */
 const NEWS_WINDOW_DAYS = 14
@@ -191,14 +193,15 @@ type Assembled = { code: string; text: string; report: BlockReport[]; routing: R
  * les faits des équipes, les Contextes, et les contenus récents avec les nouveautés, chaque branche enchaînant ses
  * propres lectures ; puis les blocs dans l'ordre de P39 — code (l'adresse d'Oto, les règles, les procédures proches de la
  * demande), contenus proches, une partie par Contexte (Tout le monde, Privé, équipes, chacune ouverte par sa ligne de
- * faits, E05-S12 D109), contenus récents et nouveautés —, rendus dans le budget. Depuis le 2026-10-27 (JB) : ni étapes
+ * faits, E05-S12 D109), la vue invité (ce que d'autres équipes ont ouvert à la personne), contenus récents et
+ * nouveautés —, rendus dans le budget. Depuis le 2026-10-27 (JB) : ni étapes
  * d'une procédure, ni procédures utiles ; nouveautés et contenus récents en un bloc. Contextes illisibles : leurs parties
  * et un pointeur ; bloc dynamique illisible : omis (AC13).
  */
 export async function assembleContext(db: PlatformDb, identity: Identity, assembly: Assembly): Promise<Assembled> {
   const phrase = assembly.phrase?.trim() || undefined
   const { since } = assembly
-  const [code, routing, teams, bodies, recent] = await Promise.all([
+  const [code, routing, teams, bodies, recent, guests] = await Promise.all([
     assembly.code,
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
     teamFacts(db, identity),
@@ -207,6 +210,7 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
       return null
     }),
     orOmitted(() => recentBlock(db, identity, since), "recent content"),
+    orOmitted(() => guestsBlock(db, identity), "guest views"),
   ])
   const { candidates, served, kind, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
@@ -216,6 +220,7 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
     { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
     ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
     ...contextParts(identity, facts, bodies, phrase).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
+    ...withPriority(guests, PRIORITY.guests),
     ...withPriority(recent, PRIORITY.recent),
   ]
   return { code, routing, phrase, whole: wholeWeights(blocks), ...renderContext(blocks, assembly.budget, prefix) }

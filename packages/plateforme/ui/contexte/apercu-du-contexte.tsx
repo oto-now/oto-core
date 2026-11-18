@@ -42,6 +42,9 @@ export type DonneesDeLApercu = {
   budget: number
   /** Le poids sans plafond de chaque bloc et leur total (`WholeWeights`, 2026-10-20) : la jauge du budget ; absent d'un hôte qui ne le sert pas. */
   whole?: { total: number; blocks: readonly { name: string; chars: number }[] }
+  /** Ce que le routage a trouvé pour la demande testée (`ContextPreview`) : la procédure décidée, puis les candidates ; absents d'un hôte qui ne les sert pas. */
+  served?: { path: string; score: number } | null
+  candidates?: readonly { path: string; title: string; score: number }[]
 }
 
 type ApercuDuContexteProps = {

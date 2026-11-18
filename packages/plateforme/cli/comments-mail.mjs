@@ -1,7 +1,7 @@
 /**
  * L'email groupé des commentaires d'une page (parcours 5.4), en fonctions pures : qui un commentaire prévient, quand
  * une personne peut recevoir son email suivant, l'adresse d'où s'ouvrent ses liens, et le modèle en français (objet,
- * texte, HTML) à la marque de l'organisation. La partie base et l'envoi sont dans `comments-notify.mjs`. En `.mjs`
+ * texte, HTML, un bloc par page commentée) à la marque de l'organisation. La partie base et l'envoi sont dans `comments-notify.mjs`. En `.mjs`
  * sous `cli/` : la commande de l'hôte les charge sans compilation, ce qu'elle ne peut pas d'un module de `server/`.
  * Sans ce module, la règle « un email par personne et par heure » et le choix des destinataires ne se testeraient que
  * sur une base.
@@ -140,18 +140,53 @@ function safeLogo(logoUrl) {
 }
 
 /**
- * L'email groupé d'une personne, en français : l'objet, puis une ligne par commentaire (titre de la page, auteur,
- * extrait du texte, lien qui ouvre la page), au nom et au logo de l'organisation. Aucun contenu de la page n'y entre,
- * et du commentaire son seul extrait. Fonction pure : le HTML échappe tout ce qu'il reçoit.
+ * Les commentaires d'un email réunis par page, dans l'ordre où chaque page paraît d'abord : une page commentée trois
+ * fois se lit en un bloc et s'ouvre d'un seul lien.
+ * @param {readonly DigestLine[]} lines
+ * @returns {{ title: string, path: string, comments: { author: string, quote: string }[] }[]}
+ */
+function byPage(lines) {
+  /** @type {Map<string, { title: string, path: string, comments: { author: string, quote: string }[] }>} */
+  const pages = new Map()
+  for (const line of lines) {
+    const page = pages.get(line.path) ?? { title: line.title, path: line.path, comments: [] }
+    page.comments.push({ author: authorLabel(line), quote: excerpt(line.text) })
+    pages.set(line.path, page)
+  }
+  return [...pages.values()]
+}
+
+/** Ce que dit le lien d'une page : il ouvre la page, où ses commentaires se lisent et où l'on y répond. */
+const openLabel = (/** @type {number} */ count) => (count === 1 ? 'Voir le commentaire et répondre' : 'Voir les commentaires et répondre')
+
+const STYLES = {
+  page: 'margin:0 0 24px;padding:20px 0 0;border-top:1px solid #e4e4e7',
+  title: 'margin:0 0 12px;font-size:17px;line-height:1.3',
+  author: 'margin:0 0 4px;font-weight:bold',
+  quote: 'margin:0 0 16px;padding:0 0 0 12px;border-left:3px solid #d4d4d8;color:#3f3f46',
+}
+
+/**
+ * L'email groupé d'une personne, en français : l'objet, puis un bloc par page commentée (son titre, chaque commentaire
+ * avec son auteur et un extrait de son texte, un bouton qui ouvre la page pour les voir et y répondre), au nom et au
+ * logo de l'organisation. Aucun contenu de la page n'y entre, et du commentaire son seul extrait. Fonction pure : le
+ * HTML échappe tout ce qu'il reçoit.
  * @param {{ to: string, orgName: string, logoUrl: unknown, origin: string, lines: readonly DigestLine[] }} input
  * @returns {{ to: string, subject: string, text: string, html: string }}
  */
 export function commentsDigestMail({ to, orgName, logoUrl, origin, lines }) {
   const count = lines.length
-  const intro = `${count === 1 ? '1 nouveau commentaire vous concerne' : `${count} nouveaux commentaires vous concernent`} sur les pages de l'organisation ${orgName} :`
+  const intro = `${count === 1 ? '1 nouveau commentaire vous concerne' : `${count} nouveaux commentaires vous concernent`} sur les pages de l'organisation ${orgName}.`
   const note = "Vous recevez au plus un email par heure : il réunit les commentaires arrivés depuis le précédent."
-  const shown = lines.map((line) => ({ title: line.title, author: authorLabel(line), quote: excerpt(line.text), url: pageUrl(origin, line.path) }))
-  const text = ['Bonjour,', '', intro, '', ...shown.flatMap((line) => [`- ${line.title}, par ${line.author} : « ${line.quote} »`, `  ${line.url}`, '']), note].join('\n')
+  const pages = byPage(lines).map((page) => ({ ...page, url: pageUrl(origin, page.path), open: openLabel(page.comments.length) }))
+  const text = [
+    'Bonjour,',
+    '',
+    intro,
+    '',
+    ...pages.flatMap((page) => [page.title, ...page.comments.map((comment) => `- ${comment.author} : « ${comment.quote} »`), `${page.open} : ${page.url}`, '']),
+    note,
+  ].join('\n')
   const logo = safeLogo(logoUrl)
   const html = [
     '<!doctype html>',
@@ -164,10 +199,13 @@ export function commentsDigestMail({ to, orgName, logoUrl, origin, lines }) {
     `<h1 style="margin:0 0 24px;font-size:22px;line-height:1.3">${escapeHtml(orgName)}</h1>`,
     '<p style="margin:0 0 16px">Bonjour,</p>',
     `<p style="margin:0 0 24px">${escapeHtml(intro)}</p>`,
-    ...shown.map(
-      (line) =>
-        `<p style="margin:0 0 24px"><strong>${escapeHtml(line.title)}</strong>, par ${escapeHtml(line.author)}<br>« ${escapeHtml(line.quote)} »<br><a href="${escapeHtml(line.url)}">Ouvrir la page</a></p>`,
-    ),
+    ...pages.flatMap((page) => [
+      `<div style="${STYLES.page}">`,
+      `<h2 style="${STYLES.title}">${escapeHtml(page.title)}</h2>`,
+      ...page.comments.flatMap((comment) => [`<p style="${STYLES.author}">${escapeHtml(comment.author)}</p>`, `<p style="${STYLES.quote}">« ${escapeHtml(comment.quote)} »</p>`]),
+      `<p style="margin:0"><a href="${escapeHtml(page.url)}" style="${MAIL_STYLES.button}">${escapeHtml(page.open)}</a></p>`,
+      '</div>',
+    ]),
     `<p style="${MAIL_STYLES.note}">${escapeHtml(note)}</p>`,
     '</div>',
     '</body>',

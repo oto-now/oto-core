@@ -137,7 +137,7 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: Outil
 type AjoutDUnConnecteurProps = {
   /** Les outils que la personne peut ajouter (`outilsAAjouter`). */
   outils: OutilAAjouter[]
-  /** Les équipes de l'organisation, pour qui administre. */
+  /** Les équipes pour lesquelles la personne peut ajouter un connecteur. */
   equipes: { id: string; name: string }[]
   /** Les noms des connecteurs personnels de la personne : le nom proposé n'en reprend aucun. */
   mesNoms: string[]

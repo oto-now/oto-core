@@ -28,6 +28,15 @@ export function isSimulatedConnector(connector: string): boolean {
 }
 
 /**
+ * Les modes qu'un compte du connecteur admet à la création (H85) : `simule` pour un connecteur simulé, `reel` pour un
+ * connecteur réel (son secret se pose ensuite, `setAccountSecret`) ; `sandbox` n'est pas encore admis. Servi à l'écran
+ * (`OrgConnector.accountModes`) et appliqué par la création d'un compte (`requireCreatableMode`).
+ */
+export function creatableModes(connector: string): AccountMode[] {
+  return isSimulatedConnector(connector) ? ["simule"] : ["reel"]
+}
+
+/**
  * Un connecteur simulé ne court que sur un compte simulé (H85) : un compte réel ou de bac à sable, posé par
  * l'outillage, est refusé avant toute écriture (E03-S04, AC12).
  */

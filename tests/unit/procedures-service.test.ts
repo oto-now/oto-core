@@ -34,7 +34,7 @@ const DRAFT_ARGS = { to: "<email du contact>", subject: "Suite à notre échange
 /** La consigne qui clôt un refus, au préfixe de l'organisation (jetable sur la base réelle). */
 // La dernière ligne dit comment écrire en plusieurs appels, `write` publiant par défaut (E11-S02, AC-b2).
 const footer = (prefix: string) =>
-  `Fix them with ${prefix}_write (ops on the sections), then publish again. Format and rules: ${prefix}_read {"path": "write.procedure"}.\nWriting it in several calls? Pass publish: false until the last one.`
+  `Fix them with ${prefix}_write (ops on the sections), then publish again. Format and rules: ${prefix}_read {"path": "write.procedure"}.\nWriting it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls.`
 /** Une procédure de P au chemin d'une de O : une lecture qui oublierait l'organisation la listerait. */
 const OTHER_PROCEDURE = "other:node:proc"
 /** Les tables qu'une publication écrit. */

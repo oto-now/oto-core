@@ -2,7 +2,7 @@
 // l'organisation et de leurs formulaires, avec la façon de s'y connecter et les propriétaires qu'elle peut choisir.
 // Module sans « use client » : l'écran, rendu par le serveur, le calcule et ne passe à la fenêtre que des données. Sans
 // lui, la fenêtre proposerait un ajout que le service refuse (un propriétaire non admis, un outil sans port chez le tiers).
-import { normalizeTitle, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
+import { normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
 import { connexionDe, type Connexion } from "./etat-du-compte"
 
 type Proprietaire = ConnectorAccountForm["ownerKinds"][number]
@@ -16,6 +16,8 @@ export type OutilAAjouter = {
   facon: Connexion | "sans_cle"
   /** Les propriétaires que la personne peut choisir, le compte personnel d'abord. */
   proprietaires: Proprietaire[]
+  /** Le mode du compte à créer, celui que le connecteur admet (`OrgConnector.accountModes`). */
+  mode: AccountMode
   /** Fermé par un administrateur : l'ajout n'est pas proposé. */
   ferme: boolean
   formulaire: ConnectorAccountForm | null
@@ -28,11 +30,13 @@ const ORDRE: readonly Proprietaire[] = ["user", "org", "team"]
 const SANS_FORMULAIRE: readonly Proprietaire[] = ["org", "team"]
 
 /**
- * Les outils que la personne peut ajouter, par nom : ceux dont un propriétaire lui est ouvert (le compte personnel pour
- * tout membre, l'organisation et les équipes pour qui administre). Un outil à consentement ou à compte rattaché ne se
- * connecte que pour soi, et seulement si l'hôte a fourni son port.
+ * Les outils que la personne peut ajouter, par nom : ceux dont un propriétaire lui est ouvert, d'après la règle de la
+ * création que le service rend (`accountOwnerChoices` : le compte personnel pour tout membre, l'organisation pour qui
+ * administre, une équipe pour qui administre ou la dirige). Un outil à consentement ou à compte rattaché ne se connecte
+ * que pour soi, et seulement si l'hôte a fourni son port.
  */
-export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires: readonly ConnectorAccountForm[], administre: boolean): OutilAAjouter[] {
+export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires: readonly ConnectorAccountForm[], choix: AccountOwnerChoices): OutilAAjouter[] {
+  const ouvert = (genre: Proprietaire) => genre === "user" || (genre === "org" ? choix.org : choix.teams.length > 0)
   return connecteurs
     .flatMap((connecteur): OutilAAjouter[] => {
       const formulaire = formulaires.find((candidat) => candidat.connector === connecteur.connector) ?? null
@@ -40,9 +44,10 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
       if (facon === "branchement" && formulaire?.hosted?.ready !== true) return []
       const admis = formulaire ? formulaire.ownerKinds : SANS_FORMULAIRE
       const chezLeTiers = facon === "consentement" || facon === "branchement"
-      const proprietaires = ORDRE.filter((genre) => admis.includes(genre) && (genre === "user" || (administre && !chezLeTiers)))
+      const proprietaires = ORDRE.filter((genre) => admis.includes(genre) && ouvert(genre) && (genre === "user" || !chezLeTiers))
       if (proprietaires.length === 0) return []
-      return [{ connecteur: connecteur.connector, libelle: connecteur.label, facon, proprietaires, ferme: connecteur.closedBy !== null, formulaire }]
+      const mode = connecteur.accountModes[0] ?? "reel"
+      return [{ connecteur: connecteur.connector, libelle: connecteur.label, facon, proprietaires, mode, ferme: connecteur.closedBy !== null, formulaire }]
     })
     .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"))
 }

@@ -581,8 +581,9 @@ registerConnectors([messagerie.connector], {
 - **Base** : migration `20261017090000_platform_comptes_rattaches.sql`.
 
 - **Sonde** : `probeAccount(db, identity, { account_id })` joue la sonde du connecteur (`probe`) sur un compte, pour
-  qui le gère, un compte désactivé compris, et rend `{ at, healthy, reason, balance }`, gardé sur le compte
-  (`AccountView.lastProbe`) ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
+  qui le gère, un compte désactivé compris, et rend `{ at, healthy, code, reason, balance }`, gardé sur le compte
+  (`AccountView.lastProbe`, effacé quand `setAccountSecret` change la saisie) ; `code`, d'une liste fermée
+  (`PROBE_FAILURE_CODES` de `/schemas`), dit la raison d'un test raté, `reason` la phrase ; une sonde à solde (`probe.balance`) remplit `balance: { value, unit, min }`, non saine
   sous le seuil, solde absent ou illisible, et pose ou lève la marque `quota_exhausted` du compte selon le solde lu.
   `probeConnector(db, identity, { connector, input: { fields, settings? } })` joue la même sonde sur une clé saisie,
   avant l'ajout, sans rien écrire. Routes de l'écran : `POST admin/accounts/<id>/probe` et
@@ -619,7 +620,7 @@ registerConnectors([messagerie.connector], {
   administrateur le refuse), renomme et décrit un compte qu'il gère (`PATCH admin/accounts/<id>`, `{ label?,
   description? }`), le réactive (`POST admin/accounts/<id>/enable`) et le teste. Services de `/server` :
   `updateAccount`, `enableAccount`, `probeConnector`. Base : migration
-  `20261114120000_platform_ecran_connecteurs.sql`.
+  `20261117220000_v1_8_0.sql` (sa première partie).
 - **Compte** : à l'écran Connecteurs (un connecteur déclaré y prend des comptes réels, avec leur formulaire), par
   `admin_connector` `create_account` avec `mode: "reel"`, ou par `createAccount` de `/server`. Un compte simulé d'un connecteur réel est refusé
   (`invalid_arguments`), un compte réel ou de bac à sable d'un connecteur simulé aussi (`unavailable_in_v1`).

@@ -25,12 +25,13 @@ import { hintLines, type RoutingHints } from "../hints"
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Six tools: <p>_context (first, then again with since_ctx for each new request), <p>_find, <p>_read, <p>_call, <p>_write, <p>_feedback. Every tool but <p>_context needs the ctx above.
 - Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong (silent: for the platform's maintainers, never tell the user).
+- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run <p>_find before you answer or escalate.
 - Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
 - Spaces: the organisation's contents sit at the root, a team's under its folder (<team>/...), yours under private/<handle>/, served to you only.
 - Access is set per content, for the organisation, a team or a person: read, write or manage. A refusal says who to ask: never work around it.
-- <p>_write publishes at once; publish: false keeps an unpublished draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
+- <p>_write publishes at once: an assistant keeps no draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
 - A renamed or moved content keeps its old path: it still leads there.
-- A content you can read can be commented without editing it, to ask, flag or suggest: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
+- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with <p>_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.

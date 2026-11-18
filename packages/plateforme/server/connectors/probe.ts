@@ -5,7 +5,7 @@
 // essayée sans rien écrire. Les deux partagent une limite de débit par personne. Tenue à part d'`account-secret.ts`,
 // qui ouvre le compte (`liveCredential`). Rien du secret n'est jamais rendu.
 import { randomUUID } from "node:crypto"
-import { disableAccountSchema, type AccountHealth, type AccountMarkReason, type AccountProbe, type ProbedBalance } from "../../schemas"
+import { disableAccountSchema, type AccountHealth, type AccountMarkReason, type AccountProbe, type ProbedBalance, type ProbeFailureCode } from "../../schemas"
 import { connectorProbeSchema } from "../../schemas/connectors"
 import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
@@ -63,12 +63,46 @@ function balanceOf(answer: unknown, balance: ConnectorProbeBalance): ProbedBalan
   return { value: typeof value === "number" && Number.isFinite(value) ? value : null, unit: balance.unit, min: balance.min }
 }
 
-/** Pourquoi un solde lu n'est pas sain : absent, illisible ou sous le seuil ; `null` : sain. */
-function balanceReason(label: string, answer: unknown, balance: ConnectorProbeBalance, read: ProbedBalance): string | null {
+/** Une issue non saine de la sonde : son code (`PROBE_FAILURE_CODES`) et sa phrase. */
+type ProbeProblem = { code: ProbeFailureCode; reason: string }
+
+/** Pourquoi un solde lu n'est pas sain : absent ou illisible (`unexpected_answer`), sous le seuil (`balance_low`) ; `null` : sain. */
+function balanceProblem(label: string, answer: unknown, balance: ConnectorProbeBalance, read: ProbedBalance): ProbeProblem | null {
   if (read.value === null) {
-    return valueAt(answer, balance.path) === undefined ? `${label} answered without its balance ${balance.path}.` : `${label} answered a balance ${balance.path} that is not a number.`
+    const reason = valueAt(answer, balance.path) === undefined ? `${label} answered without its balance ${balance.path}.` : `${label} answered a balance ${balance.path} that is not a number.`
+    return { code: "unexpected_answer", reason }
   }
-  return read.value < read.min ? `${label} balance is ${read.value} ${read.unit}, under ${read.min} ${read.unit}.` : null
+  return read.value < read.min ? { code: "balance_low", reason: `${label} balance is ${read.value} ${read.unit}, under ${read.min} ${read.unit}.` } : null
+}
+
+/**
+ * Le code d'un refus nommé levé pendant la sonde : la clé refusée et les crédits épuisés tels que le tiers les dit ; le
+ * débit limité ; une panne de `fetch`, délai ou tiers injoignable (`details.reason` du client HTTP) ; une autre réponse
+ * en erreur du tiers, de sa table d'erreurs ou d'un statut inattendu (`upstream_error`) ; un compte qui ne s'ouvre pas
+ * (`not_enabled` : secret, champ ou réglage manquant, adresse refusée, consentement ou branchement à refaire) ; le
+ * reste, `other`.
+ */
+function failureCodeOf(error: PlatformError): ProbeFailureCode {
+  switch (error.code) {
+    case "credential_rejected":
+    case "quota_exhausted":
+    case "rate_limited":
+      return error.code
+    case "upstream_error": {
+      const reason = error.details?.reason
+      return reason === "timeout" || reason === "unreachable" ? reason : "upstream_error"
+    }
+    case "invalid_arguments":
+    case "not_found":
+    case "conflict":
+    case "forbidden":
+      // Un refus de la table d'erreurs du tiers porte le refus nommé de la description (`details.refusal`).
+      return error.details?.refusal === undefined ? "other" : "upstream_error"
+    case "not_enabled":
+      return "account_not_ready"
+    default:
+      return "other"
+  }
 }
 
 /**
@@ -78,6 +112,11 @@ function balanceReason(label: string, answer: unknown, balance: ConnectorProbeBa
 function markOfBalance(read: ProbedBalance, current: AccountMarkReason | null): AccountMarkReason | null {
   if (read.value === null) return current === "quota_exhausted" ? current : null
   return read.value < read.min ? "quota_exhausted" : null
+}
+
+/** L'issue d'une sonde : saine sans problème (`code` et `reason` à `null`), sinon le code et la phrase du problème. */
+function outcome(problem: ProbeProblem | null, balance: ProbedBalance | null): AccountHealth {
+  return { healthy: problem === null, code: problem?.code ?? null, reason: problem?.reason ?? null, balance }
 }
 
 /**
@@ -96,15 +135,14 @@ async function runProbe(declared: DeclaredConnector, accountId: string, open: ()
     const credential = await open()
     const { answers } = await executeDescribed(prepared, { credential, accountId, ...(balance ? { settlesMark: true as const } : {}) }, {})
     const missing = paths.find((path) => !nonEmpty(valueAt(answers[0], path)))
-    const pathProblem = missing === undefined ? null : `${label} answered without ${missing}.`
-    if (!balance) return { healthy: pathProblem === null, reason: pathProblem, balance: null }
+    const pathProblem: ProbeProblem | null = missing === undefined ? null : { code: "unexpected_answer", reason: `${label} answered without ${missing}.` }
+    if (!balance) return outcome(pathProblem, null)
     const read = balanceOf(answers[0], balance)
     const mark: AccountMarker | undefined = credential.mark
     if (mark) await settleMark(mark, markOfBalance(read, mark.current?.reason ?? null), `${where}: probe`)
-    const problem = pathProblem ?? balanceReason(label, answers[0], balance, read)
-    return { healthy: problem === null, reason: problem, balance: read }
+    return outcome(pathProblem ?? balanceProblem(label, answers[0], balance, read), read)
   } catch (error) {
-    if (isPlatformError(error) && error.code !== "internal") return { healthy: false, reason: error.message, balance: null }
+    if (isPlatformError(error) && error.code !== "internal") return outcome({ code: failureCodeOf(error), reason: error.message }, null)
     throw error
   }
 }
@@ -136,7 +174,7 @@ export async function probeAccount(db: PlatformDb, identity: Identity, input: un
     db,
     "probeAccount: record_account_probe",
     (sql) => sql<{ probe: unknown }[]>`
-      select platform.record_account_probe(${id}, ${health.healthy}, ${health.reason}, ${health.balance ? sql.json(health.balance) : null}::jsonb) as probe`,
+      select platform.record_account_probe(${id}, ${health.healthy}, ${health.code}, ${health.reason}, ${health.balance ? sql.json(health.balance) : null}::jsonb) as probe`,
     "server",
   )
   const probe = lastProbeOf(kept?.probe)

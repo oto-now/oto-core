@@ -25,14 +25,19 @@ let recus: Record<string, unknown>[] = []
 let sondes: string[] = []
 
 /** L'API simulée : ce que rend un aperçu, ce que rendent les créations dans l'ordre, et si l'adresse sondée répond. */
-function api({ apercu = apercuDe("atelier.oto.test"), creations = [], repond = true }: { apercu?: () => Response; creations?: (() => Response)[]; repond?: boolean }) {
+/** `repond` : l'adresse répond (`true`), refuse la connexion (`false`), ou la laisse suspendue (`"suspendue"`, une promesse qui ne se règle jamais, même abandonnée). */
+type Sonde = boolean | "suspendue"
+
+function api({ apercu = apercuDe("atelier.oto.test"), creations = [], repond = true }: { apercu?: () => Response; creations?: (() => Response)[]; repond?: Sonde | (() => Sonde) }) {
   const suite = [...creations]
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (adresse, init) => {
       if (!String(adresse).startsWith("/api/platform/")) {
         sondes.push(String(adresse))
-        if (!repond) throw new TypeError("Failed to fetch")
+        const issue = typeof repond === "function" ? repond() : repond
+        if (issue === "suspendue") return new Promise<Response>(() => {})
+        if (!issue) throw new TypeError("Failed to fetch")
         return new Response(null)
       }
       const corps = JSON.parse(String(init?.body)) as Record<string, unknown>
@@ -226,20 +231,32 @@ describe("DepartVersLOrganisation", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://atelier.oto.test/"))
   })
 
-  it("should stop after two minutes without an answer, say so, and probe again on « Réessayer »", async () => {
+  it("should say the delay after two minutes without an answer, give the link, and keep probing", async () => {
     vi.useFakeTimers()
-    api({ repond: false })
+    let enLigne = false
+    api({ repond: () => enLigne })
     render(<DepartVersLOrganisation adresse="https://atelier.oto.test/" />)
     await act(() => vi.advanceTimersByTimeAsync(121_000))
-    expect(sondes).toHaveLength(40)
-    expect(screen.getByText("La mise en ligne prend plus de temps que prévu. Votre organisation est bien créée.")).toBeInTheDocument()
+    expect(screen.getByText(/La mise en ligne prend plus de temps que prévu/)).toBeInTheDocument()
     expect(screen.queryByRole("progressbar")).toBeNull()
     expect(screen.getByRole("link", { name: "Ouvrir atelier.oto.test" })).toHaveAttribute("href", "https://atelier.oto.test/")
 
-    fireEvent.click(screen.getByRole("button", { name: "Réessayer" }))
-    await act(() => vi.advanceTimersByTimeAsync(100))
-    expect(sondes).toHaveLength(41)
-    expect(screen.getByRole("progressbar")).toBeInTheDocument()
+    const avant = sondes.length
+    enLigne = true
+    await act(() => vi.advanceTimersByTimeAsync(4_000))
+    expect(sondes.length).toBeGreaterThan(avant)
+    expect(assign).toHaveBeenCalledWith("https://atelier.oto.test/")
+  })
+
+  it("should count a hanging connection as a failure: the next probe leaves, and the delay is still said", async () => {
+    vi.useFakeTimers()
+    api({ repond: "suspendue" })
+    render(<DepartVersLOrganisation adresse="https://atelier.oto.test/" />)
+    await act(() => vi.advanceTimersByTimeAsync(9_000))
+    // Une sonde bornée à 5 s, puis 3 s d'attente : la deuxième part à 8 s.
+    expect(sondes).toHaveLength(2)
+    await act(() => vi.advanceTimersByTimeAsync(120_000))
+    expect(screen.getByText(/La mise en ligne prend plus de temps que prévu/)).toBeInTheDocument()
     expect(assign).not.toHaveBeenCalled()
   })
 })

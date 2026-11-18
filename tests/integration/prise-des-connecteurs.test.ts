@@ -68,7 +68,7 @@ const codeOf = (run: Promise<unknown>) =>
 const newSecret = () => `key_${randomBytes(16).toString("hex")}`
 
 /** L'issue d'un test de compte, sans sa date (gardée sur le compte, `lastProbe`). */
-const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, reason: probe.reason, balance: probe.balance })
+const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, code: probe.code, reason: probe.reason, balance: probe.balance })
 
 /** Le tiers simulé : une liste d'un contact ; chaque requête est gardée pour relire son en-tête d'authentification. */
 function stubTiers(answer: unknown = { items: [{ id: "c-1", name: "Ada" }], has_more: false, next_cursor: null }) {
@@ -310,18 +310,20 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       await setAccountSecret(ada.db, ada.identity, { account_id: live.id, input: { secret: { api_key: secret } } })
       const probe = async () => outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))
       const tiers = stubTiers({ company: "Acme", scopes: ["contacts:read"] })
-      expect(await probe()).toEqual({ healthy: true, reason: null, balance: null })
+      expect(await probe()).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(tiers.authorizations()).toEqual([`Bearer ${secret}`])
       stubTiers({ company: "Acme", scopes: [] })
-      expect(await probe()).toEqual({ healthy: false, reason: "Crm answered without scopes.", balance: null })
+      expect(await probe()).toEqual({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes.", balance: null })
       const errors = vi.spyOn(console, "error").mockImplementation(() => {})
       vi.stubGlobal("fetch", vi.fn<Fetch>(async () => new Response(JSON.stringify({ echo: secret }), { status: 401 })))
       const refused = await probe()
-      expect(refused).toEqual({ healthy: false, reason: "Crm refused access: the key is invalid or lacks the scope. (access_rejected)", balance: null })
+      // Un refus de la table d'erreurs qui ne marque pas le compte : une réponse en erreur du tiers, pas une clé refusée.
+      expect(refused).toEqual({ healthy: false, code: "upstream_error", reason: "Crm refused access: the key is invalid or lacks the scope. (access_rejected)", balance: null })
       expect(`${JSON.stringify(refused)} ${loggedText(errors)}`).not.toContain(secret)
       const bare = await orgAccount("reel")
       expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }))).toEqual({
         healthy: false,
+        code: "account_not_ready",
         reason: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
         balance: null,
       })
@@ -336,14 +338,14 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         vi.spyOn(console, "error").mockImplementation(() => {})
         const sent = vi.spyOn(AbortSignal, "timeout")
         stubTiers({ company: "Acme", scopes: ["contacts:read"] })
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: true, reason: null, balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
         vi.stubGlobal(
           "fetch",
           vi.fn<Fetch>(async () => {
             throw Object.assign(new Error("aborted"), { name: "TimeoutError" })
           }),
         )
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: false, reason: "Crm did not answer within 2 s. Retry later.", balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: false, code: "timeout", reason: "Crm did not answer within 2 s. Retry later.", balance: null })
         expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000, 2_000])
       } finally {
         registerConnectors([describedConnector(LIVE), describedConnector(FRESH)])
