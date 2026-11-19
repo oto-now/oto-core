@@ -312,11 +312,9 @@
   color: var(--rail-on-fg);
 }
 
-/* ── le pli d'une section : la bascule reste à l'écran dans les deux états (une section n'a pas de glyphe à échanger, et repliée rien d'autre ne la rouvrirait) ; la rotation dit l'état, comme dans l'arbre. */
+/* ── le pli d'une section : la bascule reste à l'écran dans les deux états, comme dans l'arbre ; la rotation dit l'état. */
 .oto-rail-section > .oto-rail-branch { color: var(--rail-mute); }
 .oto-rail-section > .oto-rail-branch:hover { color: var(--rail-fg); }
-/* (0,3,0) contre l'`opacity: 0` de `.oto-rail-chevron` (0,1,0) : la spécificité tranche, pas l'ordre. */
-.oto-rail-section > .oto-rail-branch > .oto-rail-chevron { opacity: 1; }
 .oto-rail-section[data-expanded] > .oto-rail-branch > .oto-rail-chevron { rotate: 90deg; }
 
 /* L'arbre du rail : la bascule de dépliage est la sœur du lien dans la rangée, jamais dedans (un contenu interactif dans un lien est du HTML invalide) ; même géométrie, deux cibles distinctes au clavier. */
@@ -362,7 +360,7 @@
 .oto-rail-resize:focus-visible { background: var(--rail-bd); }
 .oto-rail-resize:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
-/* La bascule de dépliage : le glyphe de type et le chevron partagent une cellule, le type au repos, le chevron au survol ; une colonne de chevrons ne dirait rien de ce qu'il y a dedans. */
+/* La bascule de dépliage : le chevron seul, toujours visible, dans une colonne devant le glyphe de type, que le lien porte ; une ligne sans sous-pages garde la place de la colonne (`--rail-chevron-col`). Au survol seulement, rien ne disait qu'une page avait des sous-pages. */
 .oto-rail-branch {
   position: relative;
   flex: 0 0 auto;
@@ -378,8 +376,10 @@
   cursor: pointer;
 }
 
-/* La bascule remplace le créneau du glyphe, elle ne s'ajoute pas devant : une branche et une feuille sœurs restent alignées ; la bascule prend le rembourrage et le glyphe, le lien repart de zéro. */
+/* La bascule prend le rembourrage et la colonne du chevron, le lien repart de zéro avec son glyphe ; une feuille de l'arbre décale son lien d'autant, pour qu'une branche et une feuille sœurs restent alignées. */
+.oto-rail-tree { --rail-chevron-col: calc(var(--space-2) + 14px + var(--space-2)); }
 .oto-rail-row[data-branch] { gap: var(--space-2); }
+.oto-rail-tree .oto-rail-row:not([data-branch]) > .oto-rail-item { padding-inline-start: var(--rail-chevron-col); }
 
 /* L'aplat passe à la rangée, sinon sur une branche il commencerait après la bascule et laisserait le glyphe sur le rail nu ; `[data-branch] > .oto-rail-item` (0,3,0) bat `[aria-current]` et `:hover` (0,2,0), sans `!important`. */
 .oto-rail-row[data-branch] { border-radius: var(--r-btn); }
@@ -404,7 +404,7 @@
   color: var(--rail-branch-fg);
   /* `auto` et non 20 px : la largeur suit le glyphe réel, quelle que soit la taille d'icône posée. */
   inline-size: auto;
-  /* le glyphe se cale à l'abscisse de celui d'une feuille, au début, pas centré dans un carré */
+  /* le chevron se cale au début de sa colonne, pas centré dans un carré */
   justify-items: start;
   padding-inline-start: var(--space-2);
 }
@@ -415,20 +415,15 @@
 }
 .oto-rail-branch > .oto-icon {
   grid-area: 1 / 1;
-  transition: opacity var(--dur-fast) var(--ease-out);
 }
-/* Le chevron est en `xs`, comme le glyphe de type qu'il remplace dans la même cellule : en `sm`, le libellé d'une branche ne retombait pas sur celui d'une feuille. */
+/* Le chevron est en `xs` (14 px, la largeur que compte `--rail-chevron-col`). */
 .oto-rail-chevron {
-  opacity: 0;
   /* `currentColor` et non `--rail-fg` : la bascule porte l'encre de sa rangée, et une encre de rail fixe serait illisible sur la pastille safran. */
   color: currentColor;
-  transition: opacity var(--dur-fast) var(--ease-out), rotate var(--dur-fast) var(--ease-out);
+  transition: rotate var(--dur-fast) var(--ease-out);
 }
-/* `:focus-visible` en plus du survol : sans lui, le clavier ne voyait jamais le chevron qu'il venait d'atteindre. */
-.oto-rail-row[data-branch]:hover .oto-rail-branch > .oto-icon:not(.oto-rail-chevron),
-.oto-rail-branch:focus-visible > .oto-icon:not(.oto-rail-chevron) { opacity: 0; }
-.oto-rail-row[data-branch]:hover .oto-rail-chevron,
-.oto-rail-branch:focus-visible .oto-rail-chevron { opacity: 1; }
+/* Au clavier, le chevron atteint s'éclaircit et prend l'anneau, comme le titre d'une section : il ne se révèle plus, il était déjà là. */
+.oto-rail-row[data-branch] > .oto-rail-branch:focus-visible { color: var(--rail-fg); outline: none; box-shadow: var(--focus-ring); }
 .oto-rail-row[data-expanded] .oto-rail-chevron { rotate: 90deg; }
 
 /* Les actions de la rangée, « ⋯ » et « + », par-dessus le libellé et hors du flux (dans le flux, elles prenaient 48 px au nom en permanence) : `pointer-events: none` au repos (sinon elles avaleraient les clics de navigation), un fond opaque et un dégradé à gauche, sinon le nom serait tranché net ; révélées au survol de la rangée et au focus clavier. */

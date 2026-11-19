@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — Rail : la flèche de dépliage visible en permanence
+**Quoi :** dans l'arbre du rail, la bascule d'une page qui a des sous-pages ne porte plus que le chevron, toujours visible, dans une colonne devant le glyphe de type ; le glyphe passe dans le lien, sur toutes les lignes ; une feuille garde la colonne vide (`--rail-chevron-col`), pour l'alignement. Au clavier, le chevron atteint prend l'anneau du rail.
+**Pourquoi :** retour RET-013 : rien ne disait qu'une page avait des sous-pages sans la survoler.
+**Fichiers :** `packages/plateforme/ui/ds/react/rail-tree.tsx`, `packages/plateforme/ui/ds/app/islands.css`, `tests/integration/components/rail-tree.test.tsx`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-19] — Connecteurs : description et domaine de l'outil, acceptés à la déclaration
 **Quoi :** `ConnectorDefinition` gagne `description` (1 à 2 000 caractères) et `logoDomain` (domaine en minuscules, sans schéma, port ni chemin), facultatifs, contrôlés par `registerConnectors` avec des refus nommés (`presentation-declaration.ts`). La description est servie à l'assistant dans le contrat de chaque fonction du connecteur (`read <fonction>`) et, sa première phrase, en tête du connecteur dans `read functions` ; `listConnectorsForOrg` rend les deux (`OrgConnector.description`, `logoDomain`). Doc `connecteurs-et-comptes.md` § Moteur des connecteurs décrits et § Écart avec le code.
 **Pourquoi :** la bibliothèque `connectors` ajoute `connector.description` et `connector.logo_domain` à son format (décision Q5 de `docs/conception/custom-api.md`, oto-now/connectors#244) ; le paquet doit les accepter et les contrôler avant qu'elle ne les publie.
