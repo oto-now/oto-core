@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { RAIL } from "../../../packages/plateforme/ui/coque/libelles"
-import { amenerEnVue, defilementEnLargeur } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
+import { amenerEnVue, defilementEnLargeur, suitUnGesteDuRail } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
 import { PoigneeDuRail } from "../../../packages/plateforme/ui/coque/poignee-du-rail"
 
 function monter() {
@@ -70,11 +70,35 @@ describe("amenerEnVue", () => {
     expect(conteneur.scrollLeft).toBe(0)
   })
 
+  // #92 : la page ouverte par un clic dans l'arbre était sous les yeux ; le rail ne glisse plus de côté.
+  it("should scroll only down, never sideways, for a line opened from the tree, even one that overflows", () => {
+    const { conteneur, element } = cadre(boite(120, 600, 300, 28))
+    const arbre = document.createElement("ul")
+    arbre.className = "oto-rail-tree"
+    const imbrique = document.createElement("ul")
+    imbrique.className = "oto-rail-tree"
+    imbrique.style.paddingInlineStart = "16px"
+    imbrique.append(element)
+    arbre.append(imbrique)
+    conteneur.append(arbre)
+    conteneur.scrollLeft = 5
+    amenerEnVue(conteneur, element, false)
+    expect([conteneur.scrollTop, conteneur.scrollLeft]).toEqual([236, 5])
+    amenerEnVue(conteneur, element)
+    expect(conteneur.scrollLeft).toBe(16)
+  })
+
   it("should not scroll for a line already in view", () => {
     const { conteneur, element } = cadre(boite(16, 100, 200, 28))
     amenerEnVue(conteneur, element)
     expect(conteneur.scrollTop).toBe(0)
     expect(conteneur.scrollLeft).toBe(0)
+  })
+})
+
+describe("suitUnGesteDuRail", () => {
+  it("should hold a gesture in the tree for the navigation of the next ten seconds, and none without a gesture", () => {
+    expect([suitUnGesteDuRail(1_000, 1_500), suitUnGesteDuRail(1_000, 10_999), suitUnGesteDuRail(1_000, 11_000), suitUnGesteDuRail(0, 500)]).toEqual([true, true, false, false])
   })
 })
 
