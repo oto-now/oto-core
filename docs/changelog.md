@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — `read` : le plan d'une page nomme ses fichiers joints
+**Quoi :** le plan d'une page, demandé (`outline: true`) ou servi d'office au-delà de 12 000 caractères, se termine par la liste de ses fichiers joints (`fileLines`, `server/nodes/read-body.ts`) : « files (n): », une ligne par bloc `file` telle que la page la sert, suivie de sa section (« in « Titre » », ou « at the start of the page »), 20 au plus (`OUTLINE_FILES_MAX`) puis « … and n more », et l'appel qui en lit le texte. Une page sans fichier joint garde son plan à l'identique. Aucun champ de données ajouté : le texte servi porte la liste.
+**Pourquoi :** retour d'un assistant en usage : sur une page longue, il ne recevait que les titres et ignorait qu'elle portait des fichiers, sauf à lire chaque section.
+**Problèmes :** `pnpm verify` échouait sur `main` (registre des composants à 401 lignes pour `check:framework`, plafond 400) : une ligne d'attente d'une section vide en est retirée.
+**Fichiers :** `packages/plateforme/server/nodes/{read-body,limits}.ts`, `tests/unit/nodes-read.test.ts`, `docs/conception/lecture-et-ecriture-des-pages.md`, `packages/plateforme/CHANGELOG.md`, `.method/conventions/component-registry.md`.
+
 ## [2026-11-19] — Connecteurs : description et domaine de l'outil, acceptés à la déclaration
 **Quoi :** `ConnectorDefinition` gagne `description` (1 à 2 000 caractères) et `logoDomain` (domaine en minuscules, sans schéma, port ni chemin), facultatifs, contrôlés par `registerConnectors` avec des refus nommés (`presentation-declaration.ts`). La description est servie à l'assistant dans le contrat de chaque fonction du connecteur (`read <fonction>`) et, sa première phrase, en tête du connecteur dans `read functions` ; `listConnectorsForOrg` rend les deux (`OrgConnector.description`, `logoDomain`). Doc `connecteurs-et-comptes.md` § Moteur des connecteurs décrits et § Écart avec le code.
 **Pourquoi :** la bibliothèque `connectors` ajoute `connector.description` et `connector.logo_domain` à son format (décision Q5 de `docs/conception/custom-api.md`, oto-now/connectors#244) ; le paquet doit les accepter et les contrôler avant qu'elle ne les publie.

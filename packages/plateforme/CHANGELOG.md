@@ -20,6 +20,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ### Assistants
 - Platform team: `admin_org overview` lists every organisation of the platform, platform access or not: members, teams, calls over 30 days, active connectors, accounts.
 - Platform team: `admin_org members {org}` reads the members, roles and accounts by connector and owner of any organisation, never a key nor a label.
+- The outline `read` serves for a long page, or on `outline`, also names the page's attached files, each with its section and how to read its text.
 - Reading a function of a declared connector that describes itself gives that description too (« About the connector … »), and `read functions` its first sentence atop the connector.
 
 ### Hosts

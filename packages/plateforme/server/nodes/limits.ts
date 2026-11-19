@@ -24,6 +24,9 @@ export const CHILDREN_SHOWN = 50
 /** Titres cités au plus dans un refus, puis « and <n> more ». */
 export const LISTED_MAX = 50
 
+/** Fichiers joints nommés au plus sous le plan d'une page, puis « and <n> more » (`lecture-des-fichiers.md` : la borne de l'aperçu). */
+export const OUTLINE_FILES_MAX = 20
+
 /** Entrées du plan en champs de `read` (N2). */
 export const OUTLINE_DATA_MAX = 100
 
