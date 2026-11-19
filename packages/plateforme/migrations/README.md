@@ -445,26 +445,31 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   2. `20261113090000_platform_contact_reserve.sql` (contact d'une organisation) : `org_contact`, re-versionnée à
      signature identique, ne rend plus de ligne qu'à un membre de l'organisation ou à l'équipe plateforme ; un
      non-membre n'en reçoit aucune. Privilèges redits ; aucune table, colonne, policy ni index ; rien à relancer avant.
-- `20261114120000_platform_ecran_connecteurs.sql` (écran Connecteurs, lot 1, oto-core#103 ; connecteurs et comptes,
-  § Écran Connecteurs) : la colonne `accounts.description` (200 caractères au plus, lue par `authenticated`, jamais
-  insérée par lui) ; `UPDATE(label, description)` à `platform_server`, qui renomme et décrit un compte une fois décidé
-  qui le gère ; `platform.record_account_probe`, `security definer` réservée au rôle du serveur, qui range le dernier
-  test d'un compte dans `health.last_probe` ; la policy `connector_activations_insert_server` (activation implicite au
-  premier compte d'un connecteur jamais activé, une ligne active au nom de l'appelant) ; l'index unique
-  `uq_accounts_org_id_label` (organisation, libellé) remplacé par `uq_accounts_owner_label` (organisation,
-  propriétaire, libellé, `nulls not distinct`), plus large : il admet toute ligne qu'admettait l'ancien. Le seul
-  retrait d'index admis par `check:migrations` : un index unique remplacé dans le même fichier par un index unique de la
-  même table dont les clés couvrent les siennes et en ajoutent. Une colonne, une fonction, une policy, un index
-  remplacé ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant le tag.
-- `20261116161500_platform_ecran_connecteurs_lot2.sql` (écran Connecteurs, lot 2, oto-core#103 ; connecteurs et comptes,
-  § Écran Connecteurs) : la colonne `connector_activations.closed_by` (qui a fermé un connecteur ; nulle sur une ligne
-  active ou fermée avant ce fichier, aucune ligne réécrite) ; `forget_user`, re-versionnée à signature identique, l'efface
-  comme `activated_by` ; `platform.record_account_probe` à cinq arguments (le code de la raison d'un test, rangé sous
-  `code`), celle à quatre restant, plus appelée par le paquet ; `platform.forget_account_probe`, qui retire le dernier
-  test d'un compte quand sa saisie change. Les deux fonctions neuves sont `security definer`, réservées au rôle du
-  serveur. Une colonne, trois fonctions ; rien à relancer avant. Fichier de développement, à réunir avec les autres de
-  la version avant le tag.
-- `20261116214500_platform_espace_ecrit.sql` (l'espace écrit sur le nœud, décidé avec JB le 03/11 ; droits d'accès,
+- `20261117220000_v1_8_0.sql` (version 1.8.0 ; un seul fichier de migration par version publiée, fiche D124) : les
+  deux migrations ajoutées depuis 1.7.0, écrites une par lot pendant le développement puis réunies avant le tag, au
+  contenu identique, dans l'ordre de leurs horodatages ; une bannière nomme le fichier d'origine de chaque partie, et
+  chaque partie garde son bloc `-- ROLLBACK:` à sa fin (aucune ligne changée) : pour défaire, les parties dans l'ordre
+  inverse. Aucune version publiée ne portait les deux fichiers d'origine (§ « Hôtes qui avaient appliqué une migration
+  de la 1.8.0 »).
+  1. `20261114120000_platform_ecran_connecteurs.sql` (écran Connecteurs, lot 1 ; connecteurs et comptes,
+     § Écran Connecteurs) : la colonne `accounts.description` (200 caractères au plus, lue par `authenticated`, jamais
+     insérée par lui) ; `UPDATE(label, description)` à `platform_server`, qui renomme et décrit un compte une fois décidé
+     qui le gère ; `platform.record_account_probe`, `security definer` réservée au rôle du serveur, qui range le dernier
+     test d'un compte dans `health.last_probe` ; la policy `connector_activations_insert_server` (activation implicite au
+     premier compte d'un connecteur jamais activé, une ligne active au nom de l'appelant) ; l'index unique
+     `uq_accounts_org_id_label` (organisation, libellé) remplacé par `uq_accounts_owner_label` (organisation,
+     propriétaire, libellé, `nulls not distinct`), plus large : il admet toute ligne qu'admettait l'ancien. Le seul
+     retrait d'index admis par `check:migrations` : un index unique remplacé dans le même fichier par un index unique de la
+     même table dont les clés couvrent les siennes et en ajoutent. Une colonne, une fonction, une policy, un index
+     remplacé ; rien à relancer avant.
+  2. `20261116161500_platform_ecran_connecteurs_lot2.sql` (écran Connecteurs, lot 2 ; connecteurs et comptes,
+     § Écran Connecteurs) : la colonne `connector_activations.closed_by` (qui a fermé un connecteur ; nulle sur une ligne
+     active ou fermée avant ce fichier, aucune ligne réécrite) ; `forget_user`, re-versionnée à signature identique, l'efface
+     comme `activated_by` ; `platform.record_account_probe` à cinq arguments (le code de la raison d'un test, rangé sous
+     `code`), celle à quatre restant, plus appelée par le paquet ; `platform.forget_account_probe`, qui retire le dernier
+     test d'un compte quand sa saisie change. Les deux fonctions neuves sont `security definer`, réservées au rôle du
+     serveur. Une colonne, trois fonctions ; rien à relancer avant.
+- `20261119090000_platform_espace_ecrit.sql` (l'espace écrit sur le nœud, décidé avec JB le 03/11 ; droits d'accès,
   § Propriétaires, déplacements, personnel) : chaque nœud reçoit, figé dans `owner_kind`, `owner_team_id` et
   `owner_user_id`, le propriétaire qu'il héritait (aucune visibilité ne change, `updated_at` gardé) ; contrainte
   `nodes_owner_written_check` (propriétaire toujours écrit) ; déclencheur `nodes_owner_at_creation` (un ajout sans
@@ -473,6 +478,13 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   nœud et le haut de son espace ; `node_level_of` re-versionnée à signature identique (le propriétaire lu sur le nœud, le
   plancher d'un espace personnel au haut de cet espace) ; `duplicate_subtree` re-versionnée (la copie prend l'espace de sa
   source). Le paquet de la même version calcule pareil (`nodeLevelOf`) et choisit l'espace d'une création (`write`).
+  La reprise coupe `set_updated_at` et `nodes_guard` le temps de son UPDATE (un membre retiré garde son espace
+  personnel, que la garde refuserait de recopier), puis rend leur mode aux contraintes (seule la clé différée de
+  `owner_team_id` passe en immédiat, le temps de rallumer les déclencheurs) ; elle réécrit tous les nœuds sans
+  propriétaire en une transaction qui bloque les écritures sur `nodes`. Deux versions du paquet sur une même base
+  (canari et production) ne tiennent pas autour d'elle : l'ancien paquet sur base migrée échoue sur `transfer_owner`
+  `inherit` (23514), le nouveau sur base non migrée refuse toute création privée par défaut (42501) ; migration, puis
+  paquet sur tous les hôtes de la base à la fois.
   Privilèges redits ; aucune table, colonne, policy ni index. Fichier de développement, à réunir avec les autres de
   la version avant le tag.
 
@@ -687,6 +699,29 @@ appliquer. Comme pour la 1.6.0 (§ précédent), par qui exploite la base, jamai
   ```bash
   npx supabase migration repair --db-url "$DB_URL" --status reverted 20261112090000 20261113090000
   npx supabase migration repair --db-url "$DB_URL" --status applied 20261113180000
+  npx supabase migration list --db-url "$DB_URL"
+  npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
+  ```
+
+- **La première seulement** : appliquer d'abord, à la main, la partie 2 du fichier de version (sa bannière nomme son
+  fichier d'origine), puis le cas précédent.
+
+Les copies des deux dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
+
+## Hôtes qui avaient appliqué une migration de la 1.8.0
+
+Les deux fichiers d'origine de `20261117220000_v1_8_0.sql` (`20261114120000`, `20261116161500`) n'ont été publiés par
+aucune version : seule une base de développement, une base d'essai d'un hôte, ou le projet de test de ce dépôt, a pu en
+appliquer. Comme pour la 1.7.0 (§ précédent), par qui exploite la base, jamais par la CI, à la racine d'un dépôt dont
+`supabase/migrations/` porte `20261117220000_v1_8_0.sql` et plus aucun des deux fichiers, `DB_URL` posée comme au
+§ « marquer la ligne de base V1 appliquée » :
+
+- **Base locale de test** : `pnpm db:local --reset` la recrée, rien d'autre.
+- **Les deux appliquées** (`supabase migration list` les montre côté base) : seul l'historique change.
+
+  ```bash
+  npx supabase migration repair --db-url "$DB_URL" --status reverted 20261114120000 20261116161500
+  npx supabase migration repair --db-url "$DB_URL" --status applied 20261117220000
   npx supabase migration list --db-url "$DB_URL"
   npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
   ```

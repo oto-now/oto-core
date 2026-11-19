@@ -1,21 +1,28 @@
 // @vitest-environment node
 // L'espace d'un nœud écrit sur lui (`droits-d-acces.md` § Propriétaires, déplacements, personnel ; décidé avec JB le
-// 03/11, migration 20261116214500) sur une vraie base : une écriture d'assistant qui ne nomme aucun espace partagé tombe
+// 03/11, migration 20261119090000) sur une vraie base : une écriture d'assistant qui ne nomme aucun espace partagé tombe
 // dans le Privé de son auteur, et sa réponse le dit ; `space: "everyone"` crée dans Tout le monde ; un dossier d'équipe
 // ou un Privé nomme son espace ; sous une session, la base n'admet que l'espace du parent ou le Privé de l'auteur ; un
-// déplacement ou une copie ne partagent rien. Portable : O de `seedReferenceOrg`, sessions `asCaller`.
+// déplacement ou une copie ne partagent rien. Les autres portes de création (`node.import_tree`, `table.import`, le dépôt
+// par lien) suivent la même règle ; `space` sur un nœud existant d'un autre espace est refusé. Portable : O de
+// `seedReferenceOrg`, sessions `asCaller`.
+import { strToU8, zipSync } from "fflate"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { nodeLevel } from "../../packages/plateforme/server/access"
 import { duplicateNode } from "../../packages/plateforme/server/nodes/duplicate"
 import { moveNode } from "../../packages/plateforme/server/nodes/move"
 import { writeNode, type WriteOrigin } from "../../packages/plateforme/server/nodes/write"
+import { tableImport } from "../../packages/plateforme/server/tables/import"
+import { importPlan } from "../../packages/plateforme/server/transfer/formats"
+import { runImport } from "../../packages/plateforme/server/transfer/import"
+import { writeUpload, type UploadTicket } from "../../packages/plateforme/server/uploads-write"
 import type { Person } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
 
 const SETUP_TIMEOUT = 180_000
 const NETWORK_TIMEOUT = 60_000
-const SUITE = "the space written on a node at its creation (20261116214500)"
+const SUITE = "the space written on a node at its creation (20261119090000)"
 const AGENT: WriteOrigin = { kind: "agent", ctx: null }
 
 describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_REASON})`, { timeout: NETWORK_TIMEOUT }, () => {
@@ -33,6 +40,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
 
   const dbOf = (person: Person) => asCaller(ref.people[person].id, ref.people[person].email)
   const write = (person: Person, input: Record<string, unknown>, origin: WriteOrigin = AGENT) => writeNode(dbOf(person), ref.identityOf(person), input, origin)
+  const context = (person: Person) => ({ db: dbOf(person), identity: ref.identityOf(person), ctx: null, origin: "https://acme.test" })
   const page = (path: string, extra: Record<string, unknown> = {}) => ({ path, title: "Page", summary: "Une page.", ...extra })
 
   async function ownerAt(path: string) {
@@ -113,5 +121,93 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       expect(await levels("claire", (await ownerAt(path))!.id)).toEqual([0, 0])
     }
     expect(await levels("claire", (await ownerAt("annonces/note_publique"))!.id)).toEqual([2, 2])
+  })
+
+  it("should put the top nodes node.import_tree creates under the shared space in the author's private space, their children with them", async () => {
+    const zip = zipSync({ "Base/Fiches.md": strToU8("# Fiches\n\nLes fiches."), "Base/Fiches/Garantie.md": strToU8("# Garantie\n\nDeux ans.") })
+    const plan = importPlan("zip", zip, "base.zip")
+    const args = { source_url: "https://exemple.test/base.zip", parent: "annonces", source: "base.zip" }
+    const done = await runImport(context("ada") as never, plan, args as never)
+    expect(done.roots).toEqual(["annonces/base"])
+    for (const path of ["annonces/base", "annonces/base/fiches", "annonces/base/fiches/garantie"]) {
+      expect(await ownerAt(path)).toMatchObject({ owner_kind: "user", owner_user_id: ref.people.ada.id })
+    }
+    expect(await levels("claire", (await ownerAt("annonces/base"))!.id)).toEqual([0, 0])
+  })
+
+  it("should put a table table.import creates under the shared space in the author's private space", async () => {
+    const args = { table: "annonces/clients", csv: "Nom;Ville\nAtelier;Valbrune", create: { title: "Clients", summary: "Les clients." } }
+    await tableImport.run(context("ada") as never, args as never)
+    expect(await ownerAt("annonces/clients")).toMatchObject({ owner_kind: "user", owner_user_id: ref.people.ada.id })
+    expect(await levels("claire", (await ownerAt("annonces/clients"))!.id)).toEqual([0, 0])
+  })
+
+  it("should put a page an upload link creates under the shared space in the author's private space", async () => {
+    const ticket: UploadTicket = {
+      userId: ref.people.ada.id,
+      email: ref.people.ada.email,
+      ctx: null,
+      kind: "md",
+      mode: "create",
+      path: "annonces/depose",
+      name: "depose.md",
+      title: "Déposé",
+      summary: "Une page déposée.",
+      key: null,
+      baseRevision: null,
+      publish: null,
+    }
+    await writeUpload(dbOf("ada"), ref.identityOf("ada"), ticket, { bytes: strToU8("# Déposé\n\nUn texte."), origin: "https://acme.test" })
+    expect(await ownerAt("annonces/depose")).toMatchObject({ owner_kind: "user", owner_user_id: ref.people.ada.id })
+  })
+
+  it("should refuse a content without a space to an author with no private space, writing nothing", async () => {
+    const identity = ref.identityOf("ada")
+    const handleless = { ...identity, member: { ...identity.member, profile: { ...identity.member.profile, handle: undefined } } }
+    await expect(writeNode(dbOf("ada"), handleless, page("annonces/sans_espace"), AGENT)).rejects.toMatchObject({
+      code: "invalid_arguments",
+      message: expect.stringMatching(/^You have no private space in .+, where a content written without a space goes: pass space "everyone"/),
+    })
+    expect(await ownerAt("annonces/sans_espace")).toBeUndefined()
+    // Nommer Tout le monde reste possible sans Privé.
+    await writeNode(dbOf("ada"), handleless, page("annonces/pour_tous", { space: "everyone" }), AGENT)
+    expect(await ownerAt("annonces/pour_tous")).toMatchObject({ owner_kind: "org" })
+  })
+
+  it("should refuse space on an existing node of another space, writing nothing", async () => {
+    const revisionAt = async (path: string) => {
+      const [row] = await seed.admin<{ revision: number; title: string }[]>`
+        select revision, title from platform.nodes where org_id = ${ref.org.id} and path = ${path}`
+      return row
+    }
+    const cases: [Person, string, "everyone" | "private"][] = [
+      ["ada", "annonces/note_publique", "private"],
+      ["lea", "ventes/devis/brouillon", "private"],
+      ["lea", "ventes/devis/brouillon", "everyone"],
+      ["lea", "private/lea/idee", "everyone"],
+    ]
+    for (const [person, path, space] of cases) {
+      const before = await revisionAt(path)
+      const refused = write(person, { path, base_revision: before?.revision, title: "Renommée", space })
+      await expect(refused).rejects.toMatchObject({ code: "invalid_arguments", message: expect.stringContaining(`${path} already exists, in another space`) })
+      expect(await revisionAt(path)).toEqual(before)
+    }
+  })
+
+  it("should give the same level in the service and in the database on a private content under a shared folder", async () => {
+    // Le Privé de Léa sous le dossier de l'équipe Ventes : Claire, responsable de l'équipe, ne le voit pas plus que Marc.
+    const team = (await ownerAt("ventes/devis/a_moi"))!.id
+    expect([await levels("lea", team), await levels("claire", team), await levels("marc", team)]).toEqual([
+      [3, 3],
+      [0, 0],
+      [0, 0],
+    ])
+    // Le Privé d'Ada sous `annonces`, ouvert en écriture à toute l'organisation par le cas précédent.
+    const open = (await ownerAt("annonces/cr_associes"))!.id
+    expect([await levels("ada", open), await levels("claire", open), await levels("marc", open)]).toEqual([
+      [3, 3],
+      [0, 0],
+      [0, 0],
+    ])
   })
 })

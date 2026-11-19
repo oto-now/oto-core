@@ -80,7 +80,7 @@ describe("grouped email of the comments", () => {
     ])
   })
 
-  it("should carry one line per comment (page, author, excerpt, link to the page) and nothing else of the comment (AC6)", () => {
+  it("should gather the comments by page (title, each author and excerpt, one link that says what it opens) and carry nothing else of a comment (AC6)", () => {
     const long = `${"Un très long commentaire. ".repeat(20)}FIN-DU-TEXTE`
     const mail = commentsDigestMail({
       ...input,
@@ -91,16 +91,17 @@ describe("grouped email of the comments", () => {
     expect(mail.text.split("\n")).toEqual([
       "Bonjour,",
       "",
-      "3 nouveaux commentaires vous concernent sur les pages de l'organisation Acme & Fils :",
+      "3 nouveaux commentaires vous concernent sur les pages de l'organisation Acme & Fils.",
       "",
-      "- Offre <tarifaire>, par Léa Roux : « Le tarif est-il à jour ? »",
-      "  https://acme.example.invalid/n/ventes/offre",
+      // Une page commentée deux fois se lit en un bloc, à la place de son premier commentaire.
+      "Offre <tarifaire>",
+      "- Léa Roux : « Le tarif est-il à jour ? »",
+      "- Ancien membre : « Le tarif est-il à jour ? »",
+      "Voir les commentaires et répondre : https://acme.example.invalid/n/ventes/offre",
       "",
-      `- Devis, par Assistant de Marc Petit : « ${excerpt(long)} »`,
-      "  https://acme.example.invalid/n/ventes/devis/modele",
-      "",
-      "- Offre <tarifaire>, par Ancien membre : « Le tarif est-il à jour ? »",
-      "  https://acme.example.invalid/n/ventes/offre",
+      "Devis",
+      `- Assistant de Marc Petit : « ${excerpt(long)} »`,
+      "Voir le commentaire et répondre : https://acme.example.invalid/n/ventes/devis/modele",
       "",
       "Vous recevez au plus un email par heure : il réunit les commentaires arrivés depuis le précédent.",
     ])
@@ -110,9 +111,11 @@ describe("grouped email of the comments", () => {
   it("should escape what it puts in the HTML, and show a logo only from an https address", () => {
     const html = (logoUrl: unknown) => commentsDigestMail({ ...input, logoUrl, lines: [{ ...line, text: `<script>alert("x")</script>` }] }).html
 
-    expect(html(input.logoUrl)).toContain("<strong>Offre &lt;tarifaire&gt;</strong>, par Léa Roux<br>« &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; »")
+    expect(html(input.logoUrl)).toContain(">Offre &lt;tarifaire&gt;</h2>")
+    expect(html(input.logoUrl)).toContain(">Léa Roux</p>")
+    expect(html(input.logoUrl)).toContain(">« &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; »</p>")
     expect(html(input.logoUrl)).toContain('<h1 style="margin:0 0 24px;font-size:22px;line-height:1.3">Acme &amp; Fils</h1>')
-    expect(html(input.logoUrl)).toContain('<a href="https://acme.example.invalid/n/ventes/offre">Ouvrir la page</a>')
+    expect(html(input.logoUrl)).toMatch(/<a href="https:\/\/acme\.example\.invalid\/n\/ventes\/offre" style="[^"]+">Voir le commentaire et répondre<\/a>/)
     expect([input.logoUrl, "http://cdn.example.invalid/logo.png", "javascript:alert(1)", null].map((logo) => html(logo).includes("<img"))).toEqual([true, false, false, false])
   })
 })

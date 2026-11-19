@@ -10,11 +10,13 @@
 // dans le rail. Écrit dans le style du menu d'oto-frontend, qui avait retiré ces gestes faute de service.
 // E10-S01 (AC-a5, AC-b6) : « Télécharger en .md » d'une page, d'une procédure ou d'un Contexte, « Télécharger en
 // .csv » d'un tableau, par `GET nodes/export` et `GET tables/export` ; le fichier rendu part au navigateur.
+// 1.8.0 : avant la question de « Supprimer », `GET trash/impact` dit qui perd l'accès (un contenu partagé hors de son
+// équipe) ; une lecture refusée ou en panne laisse la question d'avant, le service contrôlant la suppression.
 import { useEffect, useState, type ReactNode } from "react"
 import { Copy } from "@phosphor-icons/react/dist/csr/Copy"
 import { DownloadSimple } from "@phosphor-icons/react/dist/csr/DownloadSimple"
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash"
-import { nodePathBodySchema, type NodeKind } from "../../schemas"
+import { nodePathBodySchema, type NodeKind, type TrashImpact } from "../../schemas"
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
 import { telechargerLExport } from "../api/telecharger"
@@ -31,6 +33,29 @@ import { useAdresseCourante } from "./noeud-ouvert"
 
 /** Une ligne du rail ; `genre` choisit son export (E10-S01). */
 type Cible = { chemin: string; nom: string; genre?: NodeKind }
+
+/** La suppression demandée : la ligne, et qui perd l'accès quand le service a pu le dire. */
+type Suppression = Cible & { partage: TrashImpact["shared"] | null }
+
+/**
+ * « Support, Ventes et 2 personnes n'y auront plus accès. » : les équipes par leur nom, toute l'organisation, puis les
+ * personnes, comptées ; liste à la française, verbe au pluriel dès deux sujets ou plus d'une personne ; `null` sans partage.
+ */
+export function phraseDuPartage({ teams, people, org }: TrashImpact["shared"]): string | null {
+  const sujets = [...teams.map((equipe) => equipe.name), ...(org ? [GESTES_DU_RAIL.touteLOrganisation] : []), ...(people > 0 ? [GESTES_DU_RAIL.personnes(people)] : [])]
+  if (sujets.length === 0) return null
+  const liste = sujets.length === 1 ? sujets[0] : `${sujets.slice(0, -1).join(", ")} et ${sujets.at(-1)}`
+  const phrase = sujets.length > 1 || (teams.length === 0 && !org && people > 1) ? GESTES_DU_RAIL.perdentLAcces(liste) : GESTES_DU_RAIL.perdLAcces(liste)
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`
+}
+
+/** Qui perd l'accès si ce contenu part, lu avant la question ; `null` quand la lecture est refusée ou en panne. */
+async function lireLePartage(chemin: string): Promise<TrashImpact["shared"] | null> {
+  const requete = nodePathBodySchema.safeParse({ path: chemin })
+  if (!requete.success) return null
+  const reponse = await appelerPlateforme<TrashImpact>({ methode: "GET", ressource: `trash/impact?${new URLSearchParams(requete.data)}` })
+  return reponse.erreur ? null : reponse.data.shared
+}
 
 /** Les refus qui ont leur phrase : les droits de chaque geste (HN-E05S10e-3, HN-E05S10e-6), et la course de « Supprimer » (HN-E05S10e-24). */
 const REFUS = {
@@ -76,7 +101,7 @@ export function useGestesDuRail({ prefixe, sousContenus, precedente }: Lecture):
   // L'adresse de la page ouverte, un ancien chemin reconnu (AC-b12) : supprimée, elle ne reste pas ouverte.
   const adresse = useAdresseCourante(prefixe)
   const rafraichir = useRafraichir()
-  const [aSupprimer, setASupprimer] = useState<Cible | null>(null)
+  const [aSupprimer, setASupprimer] = useState<Suppression | null>(null)
   const [enCours, setEnCours] = useState<string | null>(null)
   const [refus, setRefus] = useState<string | null>(null)
   const [annonce, setAnnonce] = useState("")
@@ -106,6 +131,14 @@ export function useGestesDuRail({ prefixe, sousContenus, precedente }: Lecture):
     }
     naviguer(`${prefixe}${reponse.data.path}`)
     rafraichir()
+  }
+
+  /** La question de « Supprimer », après la lecture de qui perd l'accès. */
+  async function demanderLaSuppression(cible: Cible) {
+    commencer(GESTES_DU_RAIL.lectureDuPartage)
+    const partage = await lireLePartage(cible.chemin)
+    setEnCours(null)
+    setASupprimer({ ...cible, partage })
   }
 
   async function supprimer(cible: Cible) {
@@ -139,6 +172,7 @@ export function useGestesDuRail({ prefixe, sousContenus, precedente }: Lecture):
   ]
 
   const nombre = aSupprimer ? sousContenus(aSupprimer.chemin) : 0
+  const perdent = aSupprimer?.partage ? phraseDuPartage(aSupprimer.partage) : null
   const retour = (
     <>
       {/* Montée vide : l'envoi, puis la suppression faite, s'annoncent. */}
@@ -157,6 +191,7 @@ export function useGestesDuRail({ prefixe, sousContenus, precedente }: Lecture):
         >
           <p>{GESTES_DU_RAIL.corbeille}</p>
           {nombre > 0 && <p>{GESTES_DU_RAIL.partentAvec(nombre)}</p>}
+          {perdent && <p>{perdent}</p>}
         </ConfirmDialog>
       )}
     </>
@@ -167,7 +202,7 @@ export function useGestesDuRail({ prefixe, sousContenus, precedente }: Lecture):
       { label: GESTES_DU_RAIL.dupliquer, icon: <AnimatedIcon as={Copy} size="xs" />, onSelect: () => void dupliquer(cible) },
       ...exportPour(cible),
       { separator: true },
-      { label: GESTES_DU_RAIL.supprimer, icon: <AnimatedIcon as={Trash} size="xs" />, destructive: true, onSelect: () => setASupprimer(cible) },
+      { label: GESTES_DU_RAIL.supprimer, icon: <AnimatedIcon as={Trash} size="xs" />, destructive: true, onSelect: () => void demanderLaSuppression(cible) },
     ],
     exportPour,
     retour,

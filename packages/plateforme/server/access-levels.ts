@@ -161,7 +161,7 @@ function placedOwner(chain: NodeChain, lineage: readonly NodeFact[]): PlacedOwne
     // la plus proche, que le plancher compte de toute façon (HN-E01S07-4).
     return { owner: { kind, teamId, userId }, depth: holder ? nodeDepth(holder.path) : 0 }
   }
-  // Le plus proche qui porte un propriétaire (le nœud lui-même depuis que l'espace est écrit, migration 20261116214500),
+  // Le plus proche qui porte un propriétaire (le nœud lui-même depuis que l'espace est écrit, migration 20261119090000),
   // puis le haut de son espace : les ancêtres contigus qui portent le même propriétaire.
   const byDepth = [...lineage].sort((a, b) => nodeDepth(b.path) - nodeDepth(a.path))
   const index = byDepth.findIndex((n) => n.owner !== null)

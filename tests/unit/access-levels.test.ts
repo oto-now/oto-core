@@ -145,7 +145,7 @@ describe("nodeLevelOf", () => {
     expect(level("lea", "private/claire/notes", [{ node: "private/claire", user: "lea", level: "read" }])).toBe(1)
   })
 
-  // 20261116214500 : l'espace écrit sur chaque nœud ; le plancher d'un Privé reste le haut de l'espace (les ancêtres
+  // 20261119090000 : l'espace écrit sur chaque nœud ; le plancher d'un Privé reste le haut de l'espace (les ancêtres
   // contigus qui portent la même personne), et un Privé rangé sous un dossier partagé n'en reçoit aucune règle.
   it("should count in a personal space whose owner is written on every node the rules from the top of that space down", () => {
     const lea = { kind: "user" as const, teamId: null, userId: PEOPLE.lea.id }

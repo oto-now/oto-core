@@ -3,35 +3,39 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import type { AccountView } from "@otomata_tech/oto_platform/schemas"
 import {
+  accountOwnerChoices,
   connectorAccountForms,
   deactivationImpact,
   isOrgAdmin,
   listAccountRules,
   listConnectorsForOrg,
+  listMembers,
   listOrgAccounts,
-  listOwnAccounts,
   listTeams,
   orgLimitsView,
   type Identity,
   type PlatformDb,
 } from "@otomata_tech/oto_platform/server"
 import {
+  comptesAuxPartagesLus,
   EcranConnecteurs,
   issueDuConsentement,
-  partageable,
   resultatDe,
-  type DonneesDeMesComptes,
+  vueDesConnecteurs,
   type DonneesDesConnecteurs,
   type EcranConnecteursProps,
 } from "@otomata_tech/oto_platform/ui"
+// Pour son effet : la page lit les connecteurs que l'hôte déclare, et son bundle n'a pas ceux des routes.
+import "@/lib/fonctions-metier"
 import { getPlatformIdentitySafely } from "@/lib/plateforme/session"
 import { ADRESSES } from "../adresses"
 
-// « Connecteurs » (E08-S03 ; ouvert aux membres) : qui administre l'organisation de l'adresse, décidé ici par
-// `isOrgAdmin` (AC1, N1), y lit le catalogue, les comptes de l'organisation et les équipes, l'impact de la désactivation
-// de chaque connecteur actif et le formulaire de compte de chaque connecteur réel déclaré ; un autre membre, ses seuls
-// comptes personnels (`listOwnAccounts`). Pour chacun, les partages de chaque compte personnel qu'il gère
-// (`partageable`, `listAccountRules`). Chaque service redécide son droit ; tout se lit avec le jeton de la session.
+// « Connecteurs » : une seule vue pour tout membre. La page lit les comptes que la personne voit (`listOrgAccounts` :
+// les siens, ceux de ses équipes, de l'organisation, ceux qu'un autre partage avec elle), le catalogue, les équipes,
+// le formulaire de compte de chaque connecteur réel déclaré, pour qui la personne peut en ajouter un (`accountOwnerChoices`), puis les partages de ses propres comptes et du compte que
+// l'adresse ouvre (`comptesAuxPartagesLus`, `listAccountRules`), avec les personnes à qui le partager. Qui administre
+// l'organisation de l'adresse, décidé ici par `isOrgAdmin`, y lit en plus l'impact de la désactivation de chaque
+// connecteur actif et les capacités. Chaque service redécide son droit ; tout se lit avec le jeton de la session.
 // L'écran écrit par `/api/platform/admin/*`, partages compris (`admin/account-rules`), et connecte un compte à
 // consentement par `/api/platform/connector-consent`, dont le retour ramène ici avec son issue en query.
 export const metadata: Metadata = {
@@ -42,45 +46,45 @@ export const metadata: Metadata = {
 const ECHEC = { error: "Une erreur est survenue. Réessayez." } as const
 const ICI = "/admin/connectors"
 
-/** Les partages de chaque compte personnel que la personne gère, en parallèle : ses comptes, peu nombreux. */
-async function partagesDe(db: PlatformDb, identity: Identity, accounts: AccountView[]): Promise<DonneesDesConnecteurs["partages"]> {
-  const lus = await Promise.all(accounts.filter(partageable).map(async ({ id }) => [id, await listAccountRules(db, identity, id)] as const))
+/** Les partages des comptes de la personne, et du compte ouvert si elle le gère, en parallèle : peu nombreux. */
+async function partagesDe(db: PlatformDb, identity: Identity, accounts: AccountView[], ouvert: string | null): Promise<DonneesDesConnecteurs["partages"]> {
+  const lus = await Promise.all(comptesAuxPartagesLus(accounts, identity.user.id, ouvert).map(async ({ id }) => [id, await listAccountRules(db, identity, id)] as const))
   return Object.fromEntries(lus)
 }
 
-async function lire(db: PlatformDb, identity: Identity): Promise<DonneesDesConnecteurs> {
-  // Trois lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
-  // Les capacités (E12-S02) : leur panne ne grise rien, le service refuse quand même.
-  const [connectors, accounts, teams, limites] = await Promise.all([
-    listConnectorsForOrg(db, identity),
-    listOrgAccounts(db, identity),
-    listTeams(db, identity),
+/** Ce que seul un administrateur lit : l'impact de chaque désactivation possible, et les capacités (E12-S02), dont la panne ne grise rien. */
+async function administration(db: PlatformDb, identity: Identity, connectors: DonneesDesConnecteurs["connectors"]): Promise<DonneesDesConnecteurs["administration"]> {
+  const actifs = connectors.filter((connecteur) => connecteur.state === "active")
+  const [impacts, limites] = await Promise.all([
+    Promise.all(actifs.map(async ({ connector }) => [connector, await deactivationImpact(db, identity, connector)] as const)),
     orgLimitsView(db, identity).catch(() => undefined),
   ])
-  const actifs = connectors.filter((connecteur) => connecteur.state === "active")
-  const [impacts, partages] = await Promise.all([
-    Promise.all(actifs.map(async ({ connector }) => [connector, await deactivationImpact(db, identity, connector)] as const)),
-    partagesDe(db, identity, accounts),
-  ])
-  return {
-    connectors,
-    impacts: Object.fromEntries(impacts),
-    accounts,
-    options: { teams: teams.map(({ id, name }) => ({ id, name })) },
-    limites,
-    formulaires: connectorAccountForms(),
-    partages,
-  }
+  return { impacts: Object.fromEntries(impacts), limites }
 }
 
-/** La vue d'un membre qui n'administre pas : ses comptes personnels, leurs partages, les équipes à qui partager. */
-async function lireMesComptes(db: PlatformDb, identity: Identity): Promise<DonneesDeMesComptes> {
-  const [accounts, teams] = await Promise.all([listOwnAccounts(db, identity), listTeams(db, identity)])
+async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {
+  // Quatre lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
+  const [accounts, connectors, teams, proprietaires] = await Promise.all([
+    listOrgAccounts(db, identity),
+    listConnectorsForOrg(db, identity),
+    listTeams(db, identity),
+    accountOwnerChoices(db, identity),
+  ])
+  // L'annuaire ne sert qu'au partage du compte ouvert, pour qui le gère : hors de là, il ne se lit pas.
+  const partageOuvert = accounts.some((compte) => compte.id === ouvert && compte.viewerLevel === "manage")
+  const [partages, members, reserve] = await Promise.all([
+    partagesDe(db, identity, accounts, ouvert),
+    partageOuvert ? listMembers(db, identity) : [],
+    isOrgAdmin(identity) ? administration(db, identity, connectors) : undefined,
+  ])
   return {
     accounts,
-    options: { teams: teams.map(({ id, name }) => ({ id, name })) },
+    connectors,
     formulaires: connectorAccountForms(),
-    partages: await partagesDe(db, identity, accounts),
+    partages,
+    sujets: { equipes: teams.map(({ id, name }) => ({ id, nom: name })), personnes: members.map(({ userId, name }) => ({ id: userId, nom: name })) },
+    proprietaires,
+    administration: reserve,
   }
 }
 
@@ -91,13 +95,19 @@ export default async function ConnecteursPage({ searchParams }: { searchParams?:
   if (identite?.error?.code === "unauthenticated") redirect("/login")
   if (identite?.error) redirect("/no-organization")
 
-  const administre = identite ? isOrgAdmin(identite.data.identity) : false
+  const query = searchParams ? await searchParams : {}
+  const vue = vueDesConnecteurs(query)
   let resultat: EcranConnecteursProps["resultat"] = ECHEC
-  if (identite) {
-    const { db } = identite.data.session
-    const { identity } = identite.data
-    resultat = await resultatDe(administre ? lire(db, identity) : lireMesComptes(db, identity))
-  }
-  const consentement = searchParams ? issueDuConsentement(await searchParams) : undefined
-  return <EcranConnecteurs resultat={resultat} Lien={Link} ici={ICI} fil={{ adresses: ADRESSES, administre }} consentement={consentement} />
+  if (identite) resultat = await resultatDe(lire(identite.data.session.db, identite.data.identity, vue.compte))
+  return (
+    <EcranConnecteurs
+      resultat={resultat}
+      moi={identite?.data.identity.user.id ?? ""}
+      vue={vue}
+      Lien={Link}
+      ici={ICI}
+      fil={{ adresses: ADRESSES, administre: identite ? isOrgAdmin(identite.data.identity) : false }}
+      consentement={issueDuConsentement(query)}
+    />
+  )
 }

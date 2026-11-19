@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { accountLevel } from "../../packages/plateforme/server/access"
-import { listOwnAccounts, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
+import { listOrgAccounts, listOwnAccounts, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { callFunction } from "../../packages/plateforme/server/function-call"
@@ -279,6 +279,24 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const own = await listOwnAccounts(paul.db, paul.identity)
     expect(own.map((account) => [account.label, account.owner.kind, account.viewerLevel])).toEqual([[mine.label, "user", "manage"]])
     expect((await listOwnAccounts(stranger.db, stranger.identity)).map((account) => account.id)).not.toContain(mine.id)
+  })
+
+  // L'écran Connecteurs en une seule liste : le compte d'un autre partagé avec l'appelant porte sa personne et son nom,
+  // un compte personnel qu'on ne lui partage pas n'est ni servi ni nommé.
+  it("should name the owner of each personal account the caller sees, and never serve one that is not shared with them", async () => {
+    const mine = await personalAccount(o.people.paul, "Paul liste")
+    const hers = await personalAccount(o.people.lea, "Léa liste")
+    const closed = await personalAccount(o.people.lea, "Léa fermé")
+    await setAccountRule(lea.db, lea.identity, { accountId: hers.id, subject: { kind: "user", id: o.people.paul.id }, level: "read" })
+
+    const seen = await listOrgAccounts(paul.db, paul.identity)
+    const personal = seen.filter((account) => [mine.id, hers.id, closed.id].includes(account.id))
+    expect(personal.map((account) => [account.label, account.owner, account.viewerLevel]).sort()).toEqual(
+      [
+        [mine.label, { kind: "user", userId: o.people.paul.id, userName: paul.identity.user.name }, "manage"],
+        [hers.label, { kind: "user", userId: o.people.lea.id, userName: "Léa Roux" }, "read"],
+      ].sort(),
+    )
   })
 
   // Décidé le 19/10 (#68), l'exemple de la décision : Léa partage son compte personnel en lecture à Ventes, dont

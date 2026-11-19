@@ -12,6 +12,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
+import { trashImpact } from "../../packages/plateforme/server/nodes/trash"
 import { writeNode } from "../../packages/plateforme/server/nodes/write"
 import { LEASE_ACTIVE, LEASE_EXPIRED, PROSPECTS } from "../factories/table-fixture"
 import { seedTableFixture } from "../factories/table-fixture-sql"
@@ -19,7 +20,7 @@ import { acmeIdentity, draftsAt, freshTable, nodeAt, tableRows } from "../factor
 import { loggedText } from "../helpers/logs"
 import { connectDeps } from "../helpers/mcp"
 import { DISCARD_DRAFT_VERSION, pendingMigrations, pendingReason } from "../helpers/pending-migrations"
-import { ORG, PEOPLE, type Person } from "../helpers/reference-org"
+import { ORG, PEOPLE, TEAMS, type Person } from "../helpers/reference-org"
 import type { ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { portable, seedWithAdmin, spyDb, sqlConfigured, writesOf, type SeededData, type SpyOptions } from "../helpers/sql"
 
@@ -283,6 +284,58 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
       await expect(readNode(await ref.db("claire"), acmeIdentity(ref, "claire"), { path: "ventes/essai_s02" })).rejects.toMatchObject({ code: "not_found" })
     })
 
+    it("should say who loses access when the content, or one under it, is shared outside its team, to the assistant and to the screen, and nothing otherwise", async () => {
+      await write("claire", { path: "ventes/partage_s02", title: "Partagé", summary: "Une page partagée." })
+      await write("claire", { path: "ventes/partage_s02/annexe", title: "Annexe", summary: "Dessous." })
+      await write("claire", { path: "ventes/seul_s02", title: "Seul", summary: "Une page de l'équipe seule." })
+      const [page, annexe] = [await realId("ventes/partage_s02"), await realId("ventes/partage_s02/annexe")]
+      const rule = (node: string, subject: { team?: string; user?: string; org?: true }, level: string) => ({
+        org_id: ref.org.id,
+        node_id: node,
+        subject_team_id: subject.team ?? null,
+        subject_user_id: subject.user ?? null,
+        subject_org: subject.org ?? false,
+        level,
+      })
+      await seed.admin`insert into platform.access_rules ${seed.admin([
+        rule(page, { team: ref.id(TEAMS.support.id) }, "read"),
+        // L'équipe propriétaire et la personne qui supprime ne perdent rien : elles ne sont pas dites.
+        rule(page, { team: ref.id(TEAMS.ventes.id) }, "manage"),
+        rule(page, { user: ref.people.claire.id }, "manage"),
+        rule(page, { user: ref.people.paul.id }, "read"),
+        // Une fermeture n'est pas un partage.
+        rule(page, { user: ref.people.marc.id }, "none"),
+        // Sous lui : une personne de plus, et toute l'organisation.
+        rule(annexe, { user: ref.people.lea.id }, "write"),
+        rule(annexe, { org: true }, "read"),
+      ])}`
+      const shared = { teams: [{ name: "Support", level: "read" }], people: 2, org: true }
+
+      const recap = await call("claire", { function: "node.trash", arguments: { path: "ventes/partage_s02" } })
+      const alone = await call("claire", { function: "node.trash", arguments: { path: "ventes/seul_s02" } })
+      const claire = acmeIdentity(ref, "claire")
+      const impact = await trashImpact(await ref.db("claire"), claire, { path: "ventes/partage_s02" })
+      // La lecture de l'écran suit les contrôles de la suppression : la gestion, puis un chemin connu.
+      const lea = await settle(trashImpact(await ref.db("lea"), acmeIdentity(ref, "lea"), { path: "ventes/seul_s02" }))
+      const unknown = await settle(trashImpact(await ref.db("claire"), claire, { path: "ventes/absent_s02" }))
+
+      expect(recap.result?.text.split("\n")).toEqual([
+        "About to move ventes/partage_s02 (page « Partagé ») to the trash, with 1 page under it:",
+        "- ventes/partage_s02/annexe",
+        "Shared with: team Support (read), 2 people, the whole organisation: they lose access.",
+        RESTORE,
+        "",
+        NOTHING_SENT,
+      ])
+      expect(writesOf(recap.sent)).toEqual([])
+      expect(alone.result?.text).toBe(["About to move ventes/seul_s02 (page « Seul ») to the trash.", RESTORE, "", NOTHING_SENT].join("\n"))
+      expect(impact).toEqual({ path: "ventes/partage_s02", shared })
+      expect([lea.error, unknown.error]).toMatchObject([
+        { code: "forbidden", message: "Deleting ventes/seul_s02 is reserved to team Ventes (lead: Claire Morel). Ask them to delete it." },
+        { code: "not_found" },
+      ])
+    })
+
     it("should refuse a team folder, and a writer who does not manage the node, at both steps, before any write (AC-e3)", async () => {
       for (const confirm of [false, true]) {
         const folder = await call("claire", { function: "node.trash", arguments: { path: "ventes" }, confirm })
@@ -442,14 +495,14 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
       expect(calls[1].args).toMatchObject({ confirm: true, _outcome: { deleted: 2, review: 1 } })
     })
 
-    it("should publish a write of an assistant by default, and keep a draft with publish: false (AC-b1)", async () => {
+    it("should publish a write of an assistant by default, and one that asks publish: false, saying so (AC-b1)", async () => {
       const claire = await session("claire")
       const created = await claire.tool("write", { path: "ventes/faq_mcp_s02", title: "FAQ", summary: "Questions fréquentes.", ops: [{ op: "add_section", section: "Livraison", text: "Sous huit jours." }] })
       // E11-S18 (AC-4) : une ligne, la publication et ce que l'écriture a fait.
       expect(created.text).toBe("Published ventes/faq_mcp_s02 revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.")
       const drafted = await claire.tool("write", { path: "ventes/faq_mcp_s02", base_revision: 1, ops: [{ op: "append", section: "Livraison", text: "Hors week-end." }], publish: false })
-      expect(drafted.text.split("\n")[1]).toBe('Publish it with acme_write {"path": "ventes/faq_mcp_s02", "base_revision": 1, "publish": true}.')
-      expect(drafted.result.structuredContent).toMatchObject({ status: "published", revision: 1, has_draft: true })
+      expect(drafted.text.split("\n")[1]).toBe("publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with acme_call comment.add.")
+      expect(drafted.result.structuredContent).toMatchObject({ status: "published", revision: 2, has_draft: false })
     })
   })
 })

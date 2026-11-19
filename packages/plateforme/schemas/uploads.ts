@@ -60,7 +60,7 @@ export const uploadLinkSchema = z
     summary: oneLine.optional().describe("One-line summary of the page or table to create, 200 characters max; required for mode create (default: none)."),
     base_revision: z.number().int().min(0).optional().describe("Revision you read of the existing page or table; required for attach, replace and merge (default: none)."),
     key: oneLine.optional().describe("csv only: the column that identifies a row, as named on the header line (default: the key of the table; with create, the first text, whole-number, email or date column whose values are all present and distinct)."),
-    publish: z.boolean().optional().describe("file and md only: false keeps an unpublished draft (default true: published at once)."),
+    publish: z.boolean().optional().describe("file and md only; no longer used: the file is published when it arrives, and false is ignored (default true)."),
     source_url: z
       .string()
       .trim()

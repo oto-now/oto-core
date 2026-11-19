@@ -52,7 +52,7 @@ const NODE_SQL_COLUMNS = NODE_COLUMNS.split(", ")
 
 /**
  * Le nœud neuf (AC19) : brouillon à la révision 0, son espace écrit (`owner`, le Privé de son auteur ; `null` : la base
- * recopie celui du parent, migration 20261116214500), `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
+ * recopie celui du parent, migration 20261119090000), `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
  * encore, ou ancien chemin d'un autre nœud depuis M02) → le refus « not available » (N31) ; `23503` →
  * le parent a disparu. La ligne rendue est celle que rendait PostgREST (`to_json` : dates en texte, à la
  * microseconde), les colonnes de `NODE_COLUMNS`.

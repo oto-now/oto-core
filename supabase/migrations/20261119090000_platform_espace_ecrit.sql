@@ -24,8 +24,12 @@
 --    Privée rangée dans un dossier de Tout le monde reste Privée).
 -- Privilèges redits à l'identique. Un seul bloc ROLLBACK en fin de fichier.
 
--- 1. L'espace calculé, figé.
+-- 1. L'espace calculé, figé. `nodes_guard` est coupé avec `set_updated_at` : il exige d'un propriétaire changé qu'il soit
+--    membre de l'organisation, alors qu'un membre retiré garde son espace personnel (`private/<handle>`) et que ses nœuds
+--    sans propriétaire en reçoivent la copie. L'UPDATE n'écrit que les trois colonnes du propriétaire, recopiées d'un
+--    ancêtre que la garde a déjà admis ; chemin, parent et structure ne bougent pas.
 ALTER TABLE platform.nodes DISABLE TRIGGER set_updated_at;
+ALTER TABLE platform.nodes DISABLE TRIGGER nodes_guard;
 
 UPDATE platform.nodes n
    SET owner_kind = o.owner_kind, owner_team_id = o.owner_team_id, owner_user_id = o.owner_user_id
@@ -40,10 +44,15 @@ UPDATE platform.nodes n
          where h.owner_kind is null) o
  WHERE n.id = o.id;
 
--- Les clés différées de `owner_team_id` jouent ici : `ENABLE TRIGGER` refuse une table qui a des événements en attente.
-SET CONSTRAINTS ALL IMMEDIATE;
+-- La clé différée de `owner_team_id` joue ici : `ENABLE TRIGGER` refuse une table qui a des événements en attente. Elle
+-- seule, puis rendue différée : le reste du fichier, et ce qui le suit une fois les migrations de la version réunies,
+-- garde le mode de chaque contrainte.
+SET CONSTRAINTS platform.nodes_owner_team_id_fkey IMMEDIATE;
 
+ALTER TABLE platform.nodes ENABLE TRIGGER nodes_guard;
 ALTER TABLE platform.nodes ENABLE TRIGGER set_updated_at;
+
+SET CONSTRAINTS platform.nodes_owner_team_id_fkey DEFERRED;
 
 -- 2. Un nœud porte toujours son propriétaire.
 ALTER TABLE platform.nodes ADD CONSTRAINT nodes_owner_written_check CHECK ((owner_kind IS NOT NULL));
@@ -139,7 +148,7 @@ begin
                          where g.org_id = p_org and g.user_id = v_uid and g.revoked_at is null)) then
     return 0;
   end if;
-  -- L'espace est écrit sur le nœud (migration 20261116214500) : plus aucun propriétaire ne se lit sur un ancêtre. Dans un
+  -- L'espace est écrit sur le nœud (migration 20261119090000) : plus aucun propriétaire ne se lit sur un ancêtre. Dans un
   -- espace personnel, seules comptent les règles posées sur le haut de l'espace (le nœud le moins profond de la suite
   -- d'ancêtres qui portent la même personne, `private/<handle>` pour l'espace d'origine) ou en dessous : une règle posée
   -- plus haut (`private`, la racine, le dossier où un contenu Privé est rangé) n'y ouvre rien et n'en ferme pas le

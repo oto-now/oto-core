@@ -90,7 +90,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   }
 
   /** Une page publiée par `author`, en révision 1, à trois sections : son identifiant. */
-  /** `space` : l'espace d'une page créée hors d'un dossier d'équipe, le Privé de l'auteur sans lui (20261116214500). */
+  /** `space` : l'espace d'une page créée hors d'un dossier d'équipe, le Privé de l'auteur sans lui (20261119090000). */
   async function page(path: string, author: Person = "claire", space?: "everyone"): Promise<string> {
     const writer = await session(author)
     const ops = ["Lundi", "Mardi", "Mercredi"].map((section) => ({ op: "add_section", section, text: `Appel du ${section.toLowerCase()}.` }))

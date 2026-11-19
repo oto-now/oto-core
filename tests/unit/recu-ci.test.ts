@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "child_process"
 import fs from "fs"
 import os from "os"
 import path from "path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { commitsAVerifier, verdict } from "../../scripts/ci/recu.mjs"
 import { arbreDeCodeDuCommit } from "../../scripts/lib/arbre-de-code.mjs"
 
@@ -62,7 +62,13 @@ const lancer = (depot: string, ...args: string[]) => {
   return { status: result.status, output: result.stdout + result.stderr }
 }
 
-describe("receipt of pushed commits", { timeout: 30_000 }, () => {
+// Chaque test lance git et node sans rendre la main : un tour de boucle d'événements entre deux tests laisse Vitest
+// traiter ses appels internes (`onTaskUpdate`, expirés passé 60 s cumulées). Le fichier a duré 70 s dans un
+// `pnpm verify` complet sur la machine chargée, contre 11 s lancé seul.
+afterEach(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
+// 60 s : un test a dépassé 30 s dans un `pnpm verify` complet sur la machine chargée ; le plafond d'un test synchrone.
+describe("receipt of pushed commits", { timeout: 60_000 }, () => {
   // Un seul dépôt pour le bloc : aucun test n'y écrit (le verdict se calcule dans un dépôt jetable, objets lus
   // chez lui), et le monter coûtait environ 5 s par test, une quarantaine de lancements de git (fichier de 29 à
   // 11 s, lancé seul le 2026-10-21).

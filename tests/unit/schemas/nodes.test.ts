@@ -74,7 +74,7 @@ const E03_S01: Record<"read" | "write", Json> = {
         propertyNames: { type: "string" },
         additionalProperties: {},
       },
-      publish: { description: "false: save a draft without publishing it (default true: the write is published at once).", type: "boolean" },
+      publish: { description: "No longer used: every write is published at once, and false is ignored (default true).", type: "boolean" },
     },
     required: ["ctx", "path"],
   },
@@ -154,7 +154,7 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     delete fields.count
     expect(items.required).toEqual(["op"])
     items.required = ["op", "section"]
-    // 20261116214500 : `space` place un nœud créé, par addition.
+    // 20261119090000 : `space` place un nœud créé, par addition.
     expect(at(properties, "space").enum).toEqual(["everyone", "private"])
     delete properties.space
     expect(write).toEqual(E03_S01.write)

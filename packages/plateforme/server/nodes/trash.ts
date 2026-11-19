@@ -8,7 +8,7 @@
 // l'écriture sur l'ancêtre qui le reçoit. Sans lui, un contenu ne se supprime pas depuis l'écran.
 // E11-S02 (lot e) : `node.trash`, la même corbeille derrière `call`, en deux temps ; son récapitulatif rejoue
 // la décision (`trashPlan`) sans rien écrire.
-import { nodePathBodySchema, type TrashItem } from "../../schemas"
+import { nodePathBodySchema, type TrashImpact, type TrashItem } from "../../schemas"
 import { nodePathArgsSchema } from "../../schemas/node-gestures"
 import { ACCESS_LEVELS, ancestorPaths, describeOwner, nodeDecisions, nodeLevel, nodeLevels, requireNodeLevel, reservedTo } from "../access"
 import { defineFunction, type FunctionContext, type FunctionSummary } from "../catalog/define"
@@ -22,6 +22,7 @@ import { purgeExpiredExports } from "../transfer/files"
 import { findNode, NODE_SQL_COLUMNS, unknownNode, type NodeRow } from "./lookup"
 import { structureOf } from "./move"
 import { freePath, lastSegment } from "./segments"
+import { sharedWith, sharedWithLine } from "./trash-impact"
 import { ownerOf, teamOf } from "./view"
 
 /** Jours passés à la corbeille avant la purge (AC-b11). */
@@ -255,12 +256,29 @@ function underIt(count: number): string {
   return `with ${count} ${count === 1 ? "page" : "pages"} under it`
 }
 
-/** Le récapitulatif d'AC-e1 : les contrôles de `trashNode` (`trashPlan`), sans rien écrire ; 20 chemins au plus. */
+/**
+ * Qui perd l'accès si ce contenu part à la corbeille (`GET trash/impact`, le dialogue de suppression de l'écran) : les
+ * contrôles de `trashNode` d'abord (`trashPlan` : la gestion, tout ce qu'il porte visible), sans rien écrire.
+ */
+export async function trashImpact(db: PlatformDb, identity: Identity, input: unknown): Promise<TrashImpact> {
+  const parsed = nodePathBodySchema.safeParse(input)
+  if (!parsed.success) throw invalidInput(parsed.error)
+  const { node, descendants } = await trashPlan(db, identity, parsed.data.path)
+  const ownerTeamId = teamOf(await ownerOf(db, node.id))
+  return { path: node.path, shared: await sharedWith(db, identity, { nodeIds: [node.id, ...descendants.map((row) => row.id)], ownerTeamId }) }
+}
+
+/**
+ * Le récapitulatif d'AC-e1 : les contrôles de `trashNode` (`trashPlan`), sans rien écrire ; 20 chemins au plus ; puis qui
+ * perd l'accès, quand le contenu ou un contenu dessous est partagé hors de son équipe.
+ */
 async function summarizeTrash(context: FunctionContext, args: { path: string }): Promise<FunctionSummary> {
   const { node, descendants } = await trashPlan(context.db, context.identity, args.path)
   const listed = descendants.length > 0 ? [boundedList(descendants.map((row) => `- ${row.path}`), "\n")] : []
   const under = descendants.length > 0 ? `, ${underIt(descendants.length)}:` : "."
-  const text = [`About to move ${node.path} (${node.kind} « ${node.title} ») to the trash${under}`, ...listed, restoreHint(context)]
+  const ownerTeamId = teamOf(await ownerOf(context.db, node.id))
+  const shared = sharedWithLine(await sharedWith(context.db, context.identity, { nodeIds: [node.id, ...descendants.map((row) => row.id)], ownerTeamId }))
+  const text = [`About to move ${node.path} (${node.kind} « ${node.title} ») to the trash${under}`, ...listed, ...(shared ? [shared] : []), restoreHint(context)]
   return { text: text.join("\n"), data: { path: node.path, kind: node.kind, title: node.title, pages_under: descendants.length } }
 }
 

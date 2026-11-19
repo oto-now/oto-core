@@ -53,7 +53,7 @@ describe.skipIf(!ready)(ready ? SUITE : `${SUITE} (${skipReason})`, { timeout: N
     return [...(await seed.admin`select owner_kind, owner_team_id, owner_user_id from platform.nodes where id = ${nodeId}`)]
   }
 
-  it("should let a lead who does not administer make a team node personal by its owner, hidden then from the administrator, a move into her space keeping its team (fiche D18 B, 20261116214500)", async () => {
+  it("should let a lead who does not administer make a team node personal by its owner, hidden then from the administrator, a move into her space keeping its team (fiche D18 B, 20261119090000)", async () => {
     const claire = ref.people.claire.id
     const [devis, tarifs] = ["ventes/devis", "ventes/tarifs"].map((path) => ref.nodeId(path))
     // Le service : Claire mène Ventes, sans administrer O ; déplacée dans son espace, `ventes/devis` garde l'équipe (l'espace

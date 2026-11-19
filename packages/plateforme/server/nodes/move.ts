@@ -142,8 +142,8 @@ async function decide(db: PlatformDb, identity: Identity, request: MoveNodeInput
   if (found.level < ACCESS_LEVELS.manage) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, action)
   if (request.new_path.startsWith(`${node.path}/`)) throw underItself(node, request.new_path)
   const parent = await destinationParent(db, identity, node, request.new_path)
-  // Fiche D18 B (M26) : un nœud qui devient personnel par ce déplacement n'est plus réservé à
-  // l'administrateur ; la gestion sur le nœud et l'écriture sur la destination suffisent.
+  // La gestion sur le nœud et l'écriture sur la destination suffisent : un déplacement ne change pas l'espace écrit sur
+  // le nœud (migration 20261119090000), seul un partage ou un transfert le fait.
   return { node, parent, newPath: await freeDestination(db, identity, node, { parent, newPath: request.new_path }) }
 }
 

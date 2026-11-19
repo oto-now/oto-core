@@ -33,6 +33,7 @@ import { find } from "../server/find"
 import type { Identity, IdentityOrg } from "../server/identity"
 import { clip, failedEntry, journalError, openedEntry, servedEntry, type JournalEntry } from "../server/journal"
 import { preferredTheme } from "../server/language"
+import { sayingPublished, withoutDraftRequest } from "../server/nodes/publish-always"
 import { readNode } from "../server/nodes/read"
 import { writeNode } from "../server/nodes/write"
 import { listPrompts, type ProcedurePrompt, unknownPromptMessage } from "../server/prompts"
@@ -125,7 +126,12 @@ const SERVICES: { [K in ToolKey]: Service<K> } = {
     runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
   // `places` : `find` de `replace_text` qui porte un jeton se cherche dans le texte pseudonymisé (pseudonymisation).
-  write: ({ db, identity, entry }, input, ctx) => writeNode(db, identity, input, { kind: "agent", ctx: ctx?.code ?? null, ...(entry ? { places: entry.places } : {}) }),
+  // Un assistant ne laisse plus de brouillon : `publish: false` est retiré, et la réponse le dit (`publish-always.ts`).
+  write: async ({ db, identity, entry }, input, ctx) => {
+    const { input: body, asked } = withoutDraftRequest(input)
+    const output = await writeNode(db, identity, body, { kind: "agent", ctx: ctx?.code ?? null, ...(entry ? { places: entry.places } : {}) })
+    return asked ? sayingPublished(output, identity.org.prefix) : output
+  },
   // `ctx` est toujours validé ici : la garde précède tout outil autre que `context`.
   feedback: ({ db, identity }, input, ctx) => recordFeedback(db, identity, input, ctx?.code ?? null),
 }

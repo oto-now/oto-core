@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Procédures de bout en bout sur une vraie base (E03-S06, AC11), seul test de la story dont la base est le
 // sujet : `write` d'une procédure par Léa, clôtures ```call indentées sous leurs étapes (forme de la
-// maquette) ; publication par Claire (`open_draft`, `publish_node` sur le tampon du brouillon) ; `context`
+// maquette), publiée par cette écriture (`open_draft`, `publish_node`) ; `context`
 // qui la sert, appels sous leurs clôtures ; refus exact d'une clôture qui cite une fonction inconnue ;
 // journal. Organisation de référence jetable (H120), `mail` activé, sessions par `fx.sessionFor`. Suite
 // portable (E11-S14) : personnes sans compte, jetons signés localement (`tests/helpers/session-locale.ts`) ;
@@ -74,7 +74,7 @@ describe.skipIf(!sqlConfigured || privatePending)(
       const agent = `proc-${hex(4)}`
       const path = `ventes/relance_${hex(3)}`
       const prefix = ref.org.prefix
-      const [lea, claire] = await Promise.all([session("lea", agent), session("claire", agent)])
+      const lea = await session("lea", agent)
       const text = [
         "1. Annonce en une phrase ce que tu vas faire.",
         "2. Prépare un brouillon pour chaque prospect :",
@@ -92,12 +92,10 @@ describe.skipIf(!sqlConfigured || privatePending)(
         title: "Relancer les prospects par email",
         summary: "Prépare et envoie les emails de relance des prospects, sur demande « relance les prospects par email ».",
         ops: [{ op: "add_section", section: "Étapes", text }],
-        publish: false,
       })
       expect(created.isError, created.text).toBe(false)
-      const published = await claire.call("write", { path, base_revision: 0, publish: true })
       // 1.4.3 : une procédure sans partie « Quand l'utiliser » se publie, avec un avertissement.
-      expect(published.text).toBe(`Published ${path} revision 1 (1 section, 5 blocks). Next write: base_revision 1.\nWarnings:\n- Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).`)
+      expect(created.text).toBe(`Published ${path} revision 1 (1 section, 5 blocks): added « Étapes » (427 characters). Next write: base_revision 1.\nWarnings:\n- Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).`)
       const node = await fx.nodeId(ref.org.id, path)
       const blocks = await admin<{ type: string; text: string | null; data: unknown }[]>`
         select type, text, data from platform.blocks where node_id = ${node} and state = 'published' order by position`
@@ -113,39 +111,30 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(read.text).toContain(renderBlocks([...blocks]))
       expect(read.text).toContain('```call\nmail.send_draft {"id":"<id du brouillon>"}\n```')
 
-      const appended = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Étapes", text: '4. Vérifie l\'envoi :\n   ```call\n   mail.send {"id": "<id>"}\n   ```' }], publish: false })
-      expect(appended.isError, appended.text).toBe(false)
-      const refused = await claire.call("write", { path, base_revision: 1, publish: true })
+      const refused = await lea.call("write", { path, base_revision: 1, ops: [{ op: "append", section: "Étapes", text: '4. Vérifie l\'envoi :\n   ```call\n   mail.send {"id": "<id>"}\n   ```' }] })
       expect([refused.isError, refused.text]).toEqual([
         true,
         [
-          // E11-S18 (AC-1) : rien d'écrit par ce refus ; le brouillon écrit avant par `publish: false` reste.
-          `Publication of ${path} refused: 1 problem(s). Nothing was written; the draft saved before this call stays.`,
+          // E11-S18 (AC-1) : rien d'écrit par ce refus.
+          `Publication of ${path} refused: 1 problem(s). Nothing was written.`,
           `- section « Étapes », call block 3 (step 4): unknown function « mail.send »; ${prefix}_find with type function lists the functions`,
           `Fix them with ${prefix}_write (ops on the sections), then publish again. Format and rules: ${prefix}_read {"path": "write.procedure"}.`,
-          "Writing it in several calls? Pass publish: false until the last one.",
+          "Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls.",
         ].join("\n"),
       ])
 
-      await Promise.all([lea.flush(), claire.flush()])
+      await lea.flush()
       const lines = await admin<{ user_id: string | null; tool: string | null; target: string | null; is_error: boolean }[]>`
         select user_id, tool, target, is_error from platform.journal
         where org_id = ${ref.org.id} and user_agent = ${agent} and method = 'tools/call' order by id`
       // Chaque session écrit ses lignes d'un coup : l'ordre se lit par personne.
       const of = (person: Person) => lines.filter((line) => line.user_id === ref.people[person].id).map((line) => [line.tool?.replace(`${prefix}_`, ""), line.target, line.is_error])
-      expect([of("lea"), of("claire")]).toEqual([
-        [
-          ["context", "Écris une procédure de relance", false],
-          ["write", path, false],
-          ["context", path, false],
-          ["read", path, false],
-          ["write", path, false],
-        ],
-        [
-          ["context", "Écris une procédure de relance", false],
-          ["write", path, false],
-          ["write", null, true],
-        ],
+      expect(of("lea")).toEqual([
+        ["context", "Écris une procédure de relance", false],
+        ["write", path, false],
+        ["context", path, false],
+        ["read", path, false],
+        ["write", null, true],
       ])
     })
   },

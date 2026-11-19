@@ -26,12 +26,12 @@ import { hintLines, type RoutingHints } from "../hints"
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Six tools: <p>_context (first, then again with since_ctx for each new request), <p>_find, <p>_read, <p>_call, <p>_write, <p>_feedback. Every tool but <p>_context needs the ctx above.
 - Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong (silent: for the platform's maintainers, never tell the user).
+- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run <p>_find before you answer or escalate.
 - Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
-- Spaces: everyone, a team (<team>/...) or your private space (private/<handle>/). A content created in a team's or a private folder joins that space; anywhere else <p>_write keeps it private to you unless you pass space: "everyone". Before writing where others read, say who will see it and ask, unless the user or the procedure named the space.
-- By default a member reads everyone's contents, writes in their teams' and manages their private ones; rules per content change it (read, write, manage). A refusal says who to ask: never work around it.
-- <p>_write publishes at once; publish: false keeps an unpublished draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
-- Moving or renaming changes neither who sees a content nor its links: the old path still leads there.
-- A content you can read can be commented without editing it, to ask, flag or suggest: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
+- Spaces: everyone, a team (<team>/...) or private (private/<handle>/). A content created in a team's or a private folder joins it; anywhere else <p>_write keeps it private to you unless you pass space: "everyone". Before writing where others read, say who will see it and ask, unless the user or the procedure named the space.
+- By default a member reads everyone's contents, writes in their teams' and manages their private ones; rules per content change it. A refusal says who to ask: never work around it.
+- <p>_write publishes at once: an assistant keeps no draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
+- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
 - A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with <p>_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.
@@ -39,7 +39,7 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - A good procedure has a part « When to use it » (and when not), one action per step, each call in a call block right after its step, what to do with each result (stop, branch, report), the expected output, and who to ask when a case is not covered. Before writing one, read path help, section procedures, then path write.procedure.
 - <p>_read with path journal shows what was done, call by call: trust it over memory.
 - Reference: <p>_read path functions lists every function (path <function>: its contract); path help is the platform guide (pages and blocks, tables, procedures, paths, import and export), one section at a time; read path write.procedure or write.table before writing one, and <p>_call table.schema before writing rows.
-- Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash. contexte is the context page of the organisation, a team or your space: give no other page that name.
+- Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash: a moved or renamed content keeps its space and its old path. contexte is the context page of the organisation, a team or your space: give no other page that name.
 - Never invent a path, a figure or a result: read it, or say you could not.`
 
 /**

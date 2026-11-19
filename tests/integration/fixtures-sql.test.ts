@@ -120,7 +120,7 @@ function expectRows(table: string, rows: Row[], seeded: Map<string, Row>): void 
 const OWNER_COLUMNS = ["owner_kind", "owner_team_id", "owner_user_id"] as const
 
 /**
- * Les nœuds simulés, chacun avec le propriétaire que la base écrit à sa création (20261116214500) : la base simulée
+ * Les nœuds simulés, chacun avec le propriétaire que la base écrit à sa création (20261119090000) : la base simulée
  * laisse hérité (NULL) le propriétaire d'un nœud, la vraie y recopie celui de son plus proche ancêtre qui en porte un.
  * Un parent que la fixture ne simule pas (elle n'en porte qu'une partie, parfois sans `parent_id`) se lit dans la
  * base, `seeded`.

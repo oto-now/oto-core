@@ -195,7 +195,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     // pour les refus ci-dessus, quel que soit l'ordre. Le propriétaire
     // se lit sur la ligne (M11b) : le niveau qu'il donne à chacun est celui du calcul pur et de la
     // parité (`access-levels.test.ts` AC1, `access-parity.test.ts`).
-    it("should move a node and its descendants in one update, its owner, written at its creation, following it (20261116214500)", async () => {
+    it("should move a node and its descendants in one update, its owner, written at its creation, following it (20261119090000)", async () => {
       const moving = await fx.createNode(m.org.id, { parentId: m.nodes.ventes, path: "ventes/catalogue", title: "Catalogue" })
       const child = await fx.createNode(m.org.id, { parentId: moving, path: "ventes/catalogue/grille", title: "Grille" })
       expect(await move("ada", moving, m.nodes.support, "support/catalogue")).toHaveLength(1)
@@ -330,7 +330,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         values (${o.org.id}, ${o.spaces.marc}, ${`private/marc/probe_${hex(3)}`}, 'Sonde', 'Sonde.', ${o.people.marc.id}, null, ${o.people.claire.id})`)
       expect(person?.code).toBe("23514")
       expect(person?.message).toContain("nodes_owner_inherited_check")
-      // Depuis 20261116214500, chaque nœud porte son propriétaire : aucun ne redevient hérité, nommé ou non.
+      // Depuis 20261119090000, chaque nœud porte son propriétaire : aucun ne redevient hérité, nommé ou non.
       const named = await failureOf(update(o.nodes.faq, { owner_kind: null }))
       expect(named?.code).toBe("23514")
       expect(await codeOf(update(o.nodes.support, { owner_kind: null }))).toBe("23514")

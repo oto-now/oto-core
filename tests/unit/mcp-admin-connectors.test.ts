@@ -203,6 +203,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
           "- file (built in): always active — file.keep (write)",
           "- job (built in): always active — job.read (read)",
           "- comment (built in): always active — comment.list (read), comment.add (write), comment.edit (write), comment.delete (sensitive), comment.resolve (write)",
+          "- team (built in): always active — team.shares (read)",
           "- application functions: always active — erp.lookup_customer (read)",
         ].join("\n"),
       )
@@ -238,6 +239,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
             { name: "comment.resolve", class: "write" },
           ],
         },
+        { name: "team", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "team.shares", class: "read" }] },
         { name: "application", kind: "application", activable: false, state: "always_active", since: null, functions: [{ name: "erp.lookup_customer", class: "read" }] },
       ])
       // Sans activation, le connecteur activable est dit inactif (HN-E08S06-9).

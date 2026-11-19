@@ -87,4 +87,35 @@ export const SERVED_BUDGET = {
 export const SERVED_RELATED = {
   title: "## Pages and tables close to the request",
   item: "- ",
+  /** `- <chemin> (<genre>, score <s>): <titre>. <résumé>` : ce qui sépare le chemin, le genre, le score, le titre et le résumé. */
+  kindStart: " (",
+  score: ", score ",
+  textStart: "): ",
+  summaryStart: ". ",
+  /** Le début de la consigne de lecture, dernière ligne du bloc. */
+  readHint: "Read one with ",
+} as const
+
+/** La ligne de faits d'une équipe (`teamLine`) : `Team <nom>.`, ou `Team <nom>. Lead: <responsables>.` */
+export const SERVED_TEAM = { start: "Team ", leads: ". Lead: ", end: "." } as const
+
+/**
+ * Le bloc de la vue invité (`blocks/guests.ts`) : le titre, une consigne (`You are not a member … Read one with <p>_read;
+ * search them with <p>_find.`), puis par équipe `### Team <nom>. Lead: <responsables>.` et une ligne par point d'entrée :
+ * `- <chemin> — <titre> — <résumé>` (séparateurs de `CONTEXT_INDEX`), `- <chemin> (+<n> under it) — …` pour un dossier, sans
+ * résumé quand la taille l'a retiré, coupé et fini par `…` quand elle l'a raccourci. Au dernier repli,
+ * la ligne de l'équipe porte seule `<n> contents shared with you: search them with <p>_find.`
+ */
+export const SERVED_GUESTS = {
+  title: "## Shared with you by other teams (generated from access rights)",
+  noticeStart: "You are not a member of these teams: you read only what is listed here and what sits under a listed folder. Read one with ",
+  noticeMiddle: "_read; search them with ",
+  noticeEnd: "_find.",
+  team: "### ",
+  underStart: " (+",
+  underEnd: " under it)",
+  cutMark: "…",
+  countOne: " content shared with you: search it with ",
+  countMany: " contents shared with you: search them with ",
+  countEnd: "_find.",
 } as const

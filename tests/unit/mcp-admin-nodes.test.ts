@@ -249,14 +249,22 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       expect(summary.text.split("\n")[0]).toBe("About to give ventes/tarifs and its 1001 descendants that inherit their owner to team Support.")
     })
 
-    it("should not count an inheriting descendant the caller cannot read (security-patterns.md § Droits dans le service)", async () => {
+    it("should refuse before the summary a transfer that would move a descendant of the same space the caller does not manage", async () => {
       // Une règle `none` pour Claire sur la grille : responsable de Ventes, elle gère ventes/tarifs, sans lire la grille (H66 (1 bis)).
+      // Le transfert écrirait aussi la grille, que `nodes_gesture_guard` lui refuserait : le service refuse avant l'aperçu.
       const hidden = { id: "f0000000-0000-4000-8000-000000000009", org_id: ORGS.acme.id, node_id: NODES["ventes/tarifs/grille"], account_id: null }
       await admin.write({ access_rules: [{ ...hidden, subject_team_id: null, subject_user_id: PERSONS.claire.id, level: "none" }] })
       try {
         const { node } = await session(admin, "claire")
-        const summary = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: "team:support" })
-        expect(summary.text.split("\n")[0]).toBe("About to give ventes/tarifs to team Support.")
+        const before = await nodesOf(admin, seed)
+        for (const confirm of [false, true]) {
+          const refused = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: "team:support", confirm })
+          expect(refused).toMatchObject({
+            isError: true,
+            text: "ventes/tarifs holds 1 content of the same space that you do not manage: the transfer would move them too. Ask an administrator of the organisation.",
+          })
+        }
+        expect(rewritten(before, await nodesOf(admin, seed))).toEqual([])
       } finally {
         await seed.admin`delete from platform.access_rules where id = ${admin.id(hidden.id)}`
       }
@@ -281,7 +289,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       expect(done.text).toBe("ventes/tarifs now belongs to team Support (2 nodes changed owner).")
       const transferred = await nodesOf(mine.admin, mine.seed)
       expect(transferred["ventes/tarifs"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id, owner_user_id: null, updated_by: PERSONS.sam.id })
-      // Le descendant du même propriétaire le suit, écrit dans la même transaction (20261116214500) ; aucun bloc ni
+      // Le descendant du même propriétaire le suit, écrit dans la même transaction (20261119090000) ; aucun bloc ni
       // brouillon n'est touché (ADR-011 § 2).
       expect(transferred["ventes/tarifs/grille"]).toMatchObject({ owner_kind: "team", owner_team_id: TEAMS.support.id })
       expect(rewritten(before, transferred).sort()).toEqual(["ventes/tarifs", "ventes/tarifs/grille"])
@@ -372,6 +380,25 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       expect(refused).toMatchObject({ isError: true, text: "ventes/tarifs changed meanwhile: retry the transfer." })
       expect(codes(deps.journal)).toEqual(["conflict"])
       expect(loggedText(vi.mocked(console.error))).toContain(`[platform] transferOwner: no row written ${tarifs}`)
+    })
+
+    it("should answer conflict and write nothing when a descendant joined the space between the decision and the write", async () => {
+      // Une page créée sous ventes/tarifs juste avant l'écriture : elle hérite de son espace, et la décision ne la comptait pas.
+      const mine = await ownSeed()
+      const before = await nodesOf(mine.admin, mine.seed)
+      let added = false
+      const meanwhile = async (query: SentQuery) => {
+        if (added || query.op !== "update" || query.target !== "nodes") return
+        added = true
+        await mine.admin.write({ nodes: [{ id: "e2000000-0000-4000-8000-000000000001", org_id: ORGS.acme.id, path: "ventes/tarifs/nouvelle" }] })
+      }
+      const { deps, node } = await session(mine.admin, "sam", { before: meanwhile })
+      const refused = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: "team:support", confirm: true })
+      expect(refused).toMatchObject({ isError: true, text: "ventes/tarifs changed meanwhile: retry the transfer." })
+      expect(codes(deps.journal)).toEqual(["conflict"])
+      const after = await nodesOf(mine.admin, mine.seed)
+      expect(rewritten(before, after)).toEqual(["ventes/tarifs/nouvelle"])
+      expect(after["ventes/tarifs"]).toMatchObject({ owner_kind: "team", owner_team_id: before["ventes/tarifs"]?.owner_team_id })
     })
   })
 

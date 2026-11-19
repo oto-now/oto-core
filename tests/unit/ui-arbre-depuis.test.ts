@@ -45,6 +45,29 @@ describe("sectionsDeLArbre (AC1)", () => {
     expect(sectionsDeLArbre([noeud("guide", "page", "Guide")], EQUIPES, "claire")).toEqual([])
   })
 
+  it("should put after Privé, by name and marked, the teams the person is not a member of, when the host names her teams, and change nothing without them", () => {
+    const equipes = [...EQUIPES, { slug: "finance", name: "Finance" }]
+    const arbre = [noeud("guide", "page", "Guide de Démo", [...ARBRE[0].children, noeud("finance/mandat", "page", "Mandat")])]
+
+    const rangees = sectionsDeLArbre(arbre, equipes, "claire", ["ventes"])
+
+    expect(rangees.map((section) => [section.titre, section.invite ?? false])).toEqual([
+      ["Tout le monde", false],
+      ["Ventes", false],
+      ["Privé", false],
+      ["Finance", true],
+      ["Support", true],
+    ])
+    // Sans les équipes de la personne : l'ordre d'avant, aucune section marquée.
+    expect(sectionsDeLArbre(arbre, equipes, "claire").map((section) => [section.titre, section.invite ?? false])).toEqual([
+      ["Tout le monde", false],
+      ["Finance", false],
+      ["Support", false],
+      ["Ventes", false],
+      ["Privé", false],
+    ])
+  })
+
   it("should keep the children of a node, natures mapped", () => {
     expect(noeudsDArbreDepuis([noeud("conseil", "procedure", "Conseil", [noeud("conseil/suivi", "table", "Suivi")])])).toEqual([
       { chemin: "conseil", titre: "Conseil", nature: "procedure", enfants: [{ chemin: "conseil/suivi", titre: "Suivi", nature: "tableau" }] },

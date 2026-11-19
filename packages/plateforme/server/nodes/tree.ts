@@ -27,7 +27,7 @@ function orderSiblings(nodes: TreeNode[], positions: ReadonlyMap<string, number 
  * L'identité de membre (HN-E11S10-5) : ni rôle d'administrateur, ni équipe plateforme, ni accès en cours ;
  * ses niveaux ne dépassent jamais ceux de l'identité réelle (`security-patterns.md § Droits dans le service`).
  */
-function asMember(identity: Identity): Identity {
+export function asMember(identity: Identity): Identity {
   return { ...identity, member: { ...identity.member, role: "member" }, isStaff: false, hasOpenGrant: false }
 }
 
