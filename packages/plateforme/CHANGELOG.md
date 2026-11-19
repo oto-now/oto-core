@@ -17,6 +17,11 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.8.1 — 2026-11-19
+
+### Hosts
+- Server: `connectorAccountForms` gives again a form, the person's own (`ownerKinds: ["user"]`), to a `platform`-only connector where each person connects their own account (`oauth2_user` consent, or `accountIdentity` such as a hosted link): 1.8.0 had dropped it, and with it « Connecter mon compte ». No migration.
+
 ## 1.8.0 — 2026-11-18
 
 ### Assistants
