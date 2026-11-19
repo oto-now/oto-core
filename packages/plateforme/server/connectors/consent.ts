@@ -3,16 +3,17 @@
 // sur l'adresse de retour du paquet, qui échange le code, lit qui a consenti et range les jetons, chiffrés, sur le
 // compte personnel de cette personne (créé, ou reconnecté). La demande en cours tient dans `connector_consents` : le
 // `state` est tiré au hasard (256 bits), la base n'en garde que l'empreinte, il est lié à la personne, à
-// l'organisation et au connecteur, vaut dix minutes et ne sert qu'une fois ; la preuve PKCE en est tirée par la clé du
+// l'organisation, au connecteur et à son accès (pour un connecteur à plusieurs accès), vaut dix minutes et ne sert qu'une fois ; la preuve PKCE en est tirée par la clé du
 // coffre, rien d'autre n'est gardé. L'application OAuth est celle que l'hôte a fournie à `registerConnectors`. Sans ce
 // module, un compte `oauth2_user` ne se connecterait pas. Aucun jeton, code ni secret n'est rendu ni journalisé.
 import { createHash, randomBytes } from "node:crypto"
 import { connectorConsentReturnSchema, connectorConsentSchema } from "../../schemas/connectors"
-import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
+import { declaredConnector, type DeclaredAccess } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
 import { fromDatabaseError, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
+import { requestedAccess } from "./accesses"
 import { applicationMissing } from "./account-secret"
 import { accountRows, labelTaken, summary, type AccountSummary } from "./accounts"
 import type { AccountCredential, StoredToken } from "./auth"
@@ -38,28 +39,40 @@ export function connectorConsentRedirectUri(origin: string): string {
 const stateHash = (state: string) => createHash("sha256").update(state, "utf8").digest("hex")
 const challengeOf = (verifier: string) => createHash("sha256").update(verifier, "ascii").digest("base64url")
 
-/** Un connecteur à consentement déclaré, avec son application OAuth ; sinon le refus nommé. */
-function consentConnector(name: string): DeclaredConnector & { auth: UserConsentAuth; application: OAuthApplication; identity: NonNullable<DeclaredConnector["identity"]> } {
-  const declared = declaredConnector(name)
-  if (!declared || declared.auth.kind !== "user_consent" || !declared.identity) {
-    throw new PlatformError("invalid_arguments", `Connector ${name} does not connect by a person's consent.`)
+/** Un accès à consentement déclaré, avec son application OAuth et l'identité à lire. */
+type ConsentAccess = DeclaredAccess & { auth: UserConsentAuth; application: OAuthApplication; identity: NonNullable<DeclaredAccess["identity"]> }
+
+/**
+ * L'accès à consentement d'un connecteur déclaré, avec son application OAuth : le seul d'un connecteur à un seul accès,
+ * ou celui que la saisie nomme (`access`, exigé pour un connecteur à plusieurs, `requestedAccess`) ; sinon le refus
+ * nommé.
+ */
+function consentConnector(name: string, access: string | undefined): ConsentAccess {
+  const connector = declaredConnector(name)
+  if (!connector) throw new PlatformError("invalid_arguments", `Connector ${name} does not connect by a person's consent.`)
+  const declared = requestedAccess(connector, access)
+  if (declared.auth.kind !== "user_consent" || !declared.identity) {
+    const of = declared.name === null ? `Connector ${name}` : `Access ${declared.name} of ${name}`
+    throw new PlatformError("invalid_arguments", `${of} does not connect by a person's consent.`)
   }
   if (!declared.application) throw applicationMissing(declared.definition.label)
   return { ...declared, auth: declared.auth, application: declared.application, identity: declared.identity }
 }
 
 /**
- * Démarre le consentement de la personne connectée à un connecteur `oauth2_user` et rend l'adresse d'autorisation du
+ * Démarre le consentement de la personne connectée à un connecteur `oauth2_user`, ou à l'accès `oauth2_user` que la
+ * saisie nomme d'un connecteur à plusieurs accès (`access`, gardé avec la demande), et rend l'adresse d'autorisation du
  * tiers, où l'envoyer : scopes de la description (ceux du niveau `full` pour un connecteur à niveaux d'accès, que le
  * paquet n'applique pas encore), `state` à usage unique, preuve PKCE (S256), adresse de retour du paquet à l'adresse
  * de l'organisation (`connectorConsentRedirectUri(origin)`). `return_to` : l'écran de l'hôte où revenir ensuite
  * (l'écran Connecteurs par défaut). Les demandes échues de l'organisation sont purgées au passage. Refus : saisie
- * invalide, connecteur sans consentement (`invalid_arguments`), application OAuth absente (`not_enabled`).
+ * invalide, connecteur ou accès sans consentement, accès absent, inconnu ou de trop (`invalid_arguments`), application
+ * OAuth absente (`not_enabled`).
  */
 export async function startConnectorConsent(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = connectorConsentSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
-  const connector = consentConnector(parsed.data.connector)
+  const connector = consentConnector(parsed.data.connector, parsed.data.access)
   const state = randomBytes(32).toString("base64url")
   const challenge = challengeOf(consentVerifier(state))
   await db
@@ -67,8 +80,8 @@ export async function startConnectorConsent(db: PlatformDb, identity: Identity, 
       await sql`delete from platform.connector_consents where org_id = ${identity.org.id} and expires_at < now()`
       await keepDeclaredConnector(sql, connector.definition.name)
       await sql`
-        insert into platform.connector_consents (state_hash, org_id, user_id, connector, return_to, expires_at)
-        values (${stateHash(state)}, ${identity.org.id}, ${identity.user.id}, ${connector.definition.name}, ${parsed.data.return_to ?? null},
+        insert into platform.connector_consents (state_hash, org_id, user_id, connector, access, return_to, expires_at)
+        values (${stateHash(state)}, ${identity.org.id}, ${identity.user.id}, ${connector.definition.name}, ${connector.name}, ${parsed.data.return_to ?? null},
                 now() + make_interval(mins => ${CONSENT_TTL_MINUTES}))`
     }, "server")
     .catch((error) => {
@@ -78,8 +91,8 @@ export async function startConnectorConsent(db: PlatformDb, identity: Identity, 
   return { url }
 }
 
-/** Une demande de consentement retrouvée et consommée : son connecteur et l'écran où revenir. */
-type PendingConsent = { connector: string; returnTo: string }
+/** Une demande de consentement retrouvée et consommée : son connecteur, son accès et l'écran où revenir. */
+type PendingConsent = { connector: string; access: string | null; returnTo: string }
 
 /** Le refus d'un retour sans demande en cours à son `state` : inconnu, déjà servi, échu, ou d'une autre personne. */
 const unknownConsent = () => new PlatformError("invalid_arguments", "This connection request is unknown, already used or expired. Connect the account again.")
@@ -91,15 +104,15 @@ const unknownConsent = () => new PlatformError("invalid_arguments", "This connec
 async function consumePending(db: PlatformDb, identity: Identity, state: string | undefined): Promise<PendingConsent | null> {
   if (!state) return null
   const rows = await db
-    .tx((sql) => sql<{ connector: string; return_to: string | null }[]>`
+    .tx((sql) => sql<{ connector: string; access: string | null; return_to: string | null }[]>`
       delete from platform.connector_consents
        where state_hash = ${stateHash(state)} and org_id = ${identity.org.id} and user_id = ${identity.user.id} and expires_at > now()
-      returning connector, return_to`)
+      returning connector, access, return_to`)
     .catch((error) => {
       throw fromDatabaseError(error, "completeConnectorConsent: connector_consents")
     })
   const [row] = rows
-  return row ? { connector: row.connector, returnTo: row.return_to ?? CONSENT_DEFAULT_RETURN } : null
+  return row ? { connector: row.connector, access: row.access, returnTo: row.return_to ?? CONSENT_DEFAULT_RETURN } : null
 }
 
 /** Le jeton tout neuf d'un consentement, gardé en mémoire le temps de lire l'identité : rien n'est écrit. */
@@ -129,7 +142,7 @@ function freshCredential(tokens: ConsentTokens, application: OAuthApplication, l
  * Qui a consenti : la valeur non vide au chemin `identity.path` de la réponse de la fonction d'identité, ou de l'adresse
  * d'identité (un `GET` avec le jeton neuf, préparé comme une fonction : `declaration.ts`).
  */
-async function consentingIdentity(connector: ReturnType<typeof consentConnector>, tokens: ConsentTokens, pacingKey: string): Promise<string> {
+async function consentingIdentity(connector: ConsentAccess, tokens: ConsentTokens, pacingKey: string): Promise<string> {
   const { definition, auth } = connector
   const credential = freshCredential(tokens, connector.application, definition.label)
   const { answers } = await executeDescribed(connector.identity, { credential, accountId: pacingKey }, {})
@@ -146,26 +159,33 @@ export function consentLabel(who: string, connector: string): string {
 }
 
 /**
- * Range le consentement sur le compte personnel de la personne : le sien de ce connecteur et de ce libellé s'il
- * existe (une reconnexion : actif de nouveau, raison effacée), sinon un compte neuf, réel. Jetons chiffrés : le jeton
+ * Range le consentement sur le compte personnel de la personne : le sien de ce connecteur, de cet accès et de ce
+ * libellé s'il existe (une reconnexion : actif de nouveau, raison effacée), sinon un compte neuf, réel, qui retient
+ * l'accès (`null` pour un connecteur à un seul accès). Le même libellé sur un compte d'un autre accès est pris
+ * (`conflict`) : un compte ne change jamais d'accès. Jetons chiffrés : le jeton
  * de rafraîchissement dans le secret du compte, le jeton d'accès et son échéance à part, les droits accordés en clair ;
  * écrits sous le rôle du serveur, seul à pouvoir les écrire.
  */
-async function keepConsent(db: PlatformDb, identity: Identity, consent: { connector: string; label: string; tokens: ConsentTokens; scopes: string[] }): Promise<AccountSummary> {
-  const { connector, label, tokens, scopes } = consent
+async function keepConsent(
+  db: PlatformDb,
+  identity: Identity,
+  consent: { connector: string; access: string | null; label: string; tokens: ConsentTokens; scopes: string[] },
+): Promise<AccountSummary> {
+  const { connector, access, label, tokens, scopes } = consent
   const orgId = identity.org.id
   const userId = identity.user.id
   return db
     .tx(async (sql) => {
       const [own] = await sql<{ id: string }[]>`
         select id from platform.accounts
-         where org_id = ${orgId} and connector = ${connector} and owner_kind = 'user' and owner_user_id = ${userId} and lower(label) = lower(${label})`
+         where org_id = ${orgId} and connector = ${connector} and access is not distinct from ${access}::text and owner_kind = 'user'
+           and owner_user_id = ${userId} and lower(label) = lower(${label})`
       let id = own?.id
       if (!id) {
         await keepDeclaredConnector(sql, connector)
         const [created] = await sql<{ id: string }[]>`
-          insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode)
-          values (${orgId}, ${connector}, 'user', null, ${userId}, ${label}, 'reel')
+          insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode, access)
+          values (${orgId}, ${connector}, 'user', null, ${userId}, ${label}, 'reel', ${access})
           returning id`
         id = created.id
       }
@@ -192,8 +212,9 @@ async function keepConsent(db: PlatformDb, identity: Identity, consent: { connec
 /**
  * Le retour du tiers sur l'adresse de retour (`GET connector-consent/callback`) : la demande de ce `state` consommée
  * (à la personne de l'appel, une seule fois), puis le code échangé contre les jetons, l'identité lue pour nommer le
- * compte, et les jetons rangés sur le compte personnel de la personne. Rend le compte et l'écran où revenir, que
- * l'appelant reçoit même sur un refus postérieur à la consommation (`returnTo` du refus, en `details`). Refus : demande
+ * compte, et les jetons rangés sur le compte personnel de la personne, qui retient l'accès de la demande. Rend le
+ * compte et l'écran où revenir, que l'appelant reçoit même sur un refus postérieur à la consommation (`returnTo` du
+ * refus, en `details`). Refus : demande
  * inconnue, servie, échue ou d'une autre personne, consentement refusé par la personne ou le tiers, code refusé
  * (`invalid_arguments`) ; application refusée, identité absente, panne du tiers (`upstream_error`) ; libellé pris par un
  * autre compte (`conflict`). Rien n'est rangé sur un refus.
@@ -208,7 +229,7 @@ export async function completeConnectorConsent(
   const pending = parsed.success ? await consumePending(db, identity, parsed.data.state) : null
   if (!parsed.success || !pending) throw unknownConsent()
   try {
-    const connector = consentConnector(pending.connector)
+    const connector = consentConnector(pending.connector, pending.access ?? undefined)
     const label = connector.definition.label
     const { code, error, state } = parsed.data
     if (error !== undefined) {
@@ -223,7 +244,7 @@ export async function completeConnectorConsent(
     const tokens = await exchangeCode(call, { code, redirectUri: connectorConsentRedirectUri(options.origin), verifier: consentVerifier(state) })
     const who = await consentingIdentity(connector, tokens, pacingKey)
     const name = connector.definition.name
-    const account = await keepConsent(db, identity, { connector: name, label: consentLabel(who, name), tokens, scopes: tokens.scopes ?? connector.auth.scopes })
+    const account = await keepConsent(db, identity, { connector: name, access: connector.name, label: consentLabel(who, name), tokens, scopes: tokens.scopes ?? connector.auth.scopes })
     return { account, returnTo: pending.returnTo }
   } catch (error) {
     if (error instanceof PlatformError) throw new PlatformError(error.code, error.message, { ...error.details, returnTo: pending.returnTo })

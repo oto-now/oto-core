@@ -16,6 +16,8 @@ type ConnexionProps = {
   ressource: "connector-consent" | "hosted-link"
   /** Le nom du connecteur. */
   connecteur: string
+  /** L'accès à consentement d'un connecteur à plusieurs accès ; absent pour un connecteur à un seul. */
+  acces?: string
   /** Le libellé du bouton : « Connecter mon compte Microsoft 365 », « Reconnecter ». */
   libelle: string
   /** Le nom accessible du bouton, quand le libellé ne nomme pas le compte. */
@@ -24,14 +26,15 @@ type ConnexionProps = {
   retour?: string
 }
 
-export function ConnexionParConsentement({ ressource, connecteur, libelle, nomAccessible, retour }: ConnexionProps) {
+export function ConnexionParConsentement({ ressource, connecteur, acces, libelle, nomAccessible, retour }: ConnexionProps) {
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState("")
 
   async function connecter() {
     setErreur("")
     setEnCours(true)
-    const reponse = await appelerPlateforme<{ url: string }>({ methode: "POST", ressource, corps: { connector: connecteur, ...(retour ? { return_to: retour } : {}) } })
+    const corps = { connector: connecteur, ...(acces !== undefined ? { access: acces } : {}), ...(retour ? { return_to: retour } : {}) }
+    const reponse = await appelerPlateforme<{ url: string }>({ methode: "POST", ressource, corps })
     if (reponse.erreur) {
       setErreur(messageDErreur(reponse.erreur))
       setEnCours(false)

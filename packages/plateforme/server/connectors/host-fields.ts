@@ -4,23 +4,23 @@
 // l'appel (`account-secret.ts`, qui l'ajoute aux champs du compte) et par le branchement hébergé (`hosted-link.ts`, qui
 // en exige la présence) ; sans ce module, chacun redirait le partage des champs et le refus d'un champ absent. Aucune
 // valeur n'en sort ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
-import type { DeclaredConnector } from "../catalog/connector-source"
+import type { DeclaredAccess } from "../catalog/connector-source"
 import { PlatformError } from "../errors"
 import type { IdentityOrg } from "../identity"
-import type { ConnectorDefinition } from "./definition"
+import type { ConnectorView } from "./definition"
 
 /** Les champs du credential que l'hôte fournit. */
-export function hostFieldsOf(definition: ConnectorDefinition): ConnectorDefinition["credential"] {
+export function hostFieldsOf(definition: ConnectorView): ConnectorView["credential"] {
   return definition.credential.filter((field) => field.holder === "host")
 }
 
 /** Les noms des champs que garde un compte : tous, sauf ceux de l'hôte. */
-export function accountFieldNames(definition: ConnectorDefinition): string[] {
+export function accountFieldNames(definition: ConnectorView): string[] {
   return definition.credential.filter((field) => field.holder !== "host").map((field) => field.name)
 }
 
 /** Le refus d'un champ de l'hôte qui manque : l'application ne l'a pas fourni, aucune organisation n'y peut rien. */
-function hostFieldMissing(definition: ConnectorDefinition, field: { name: string; label: string }): PlatformError {
+function hostFieldMissing(definition: ConnectorView, field: { name: string; label: string }): PlatformError {
   console.error(`[platform] connector ${definition.name}: host field ${field.name} not given to registerConnectors`)
   return new PlatformError(
     "not_enabled",
@@ -29,7 +29,7 @@ function hostFieldMissing(definition: ConnectorDefinition, field: { name: string
 }
 
 /** Le refus d'une organisation à qui l'hôte ne donne pas sa clé : l'application l'ouvre, pas l'organisation. */
-function hostFieldsClosed(definition: ConnectorDefinition, org: IdentityOrg): PlatformError {
+function hostFieldsClosed(definition: ConnectorView, org: IdentityOrg): PlatformError {
   return new PlatformError(
     "not_enabled",
     `${definition.label} is not open to ${org.name} with the key of this application. Ask whoever runs this application to open it.`,
@@ -38,11 +38,11 @@ function hostFieldsClosed(definition: ConnectorDefinition, org: IdentityOrg): Pl
 }
 
 /**
- * Les champs de l'hôte d'un connecteur, lus par son lecteur à cet appel, pour l'organisation `org` ; `{}` sans champ de
+ * Les champs de l'hôte de l'accès d'un connecteur, lus par son lecteur à cet appel, pour l'organisation `org` ; `{}` sans champ de
  * l'hôte. Un lecteur absent, qui lève, ou qui ne rend pas un champ (ou le rend vide) : `not_enabled`, qui nomme le champ ;
  * un lecteur qui rend `null` : `not_enabled` (`host_closed`), l'hôte ne donnant pas sa clé à cette organisation.
  */
-export function readHostFields(declared: DeclaredConnector, org: IdentityOrg): Record<string, string> {
+export function readHostFields(declared: DeclaredAccess, org: IdentityOrg): Record<string, string> {
   const { definition, hostCredentials } = declared
   const wanted = hostFieldsOf(definition)
   if (wanted.length === 0) return {}

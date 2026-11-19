@@ -10,7 +10,7 @@
 import { PlatformError } from "../errors"
 import { isJsonObject } from "../json"
 import type { AccountCredential, Signer } from "./auth"
-import type { ConnectorDefinition, OAuthApplication } from "./definition"
+import type { ConnectorView, OAuthApplication } from "./definition"
 import { requestToken, type ApiRequest, type Fetch } from "./http"
 import { isScopeList, readAccessLevels } from "./levels"
 import { addressProblem, resolveAddress, type AddressSpec } from "./settings"
@@ -82,7 +82,7 @@ function scopesOf(head: string, auth: Record<string, unknown>): Pick<UserConsent
 }
 
 /** L'identité déclarée : `{ function, path }`, ou `{ url, path, scopes }`, une adresse `https` fixe ; ou le problème. */
-function identityOf(definition: ConnectorDefinition, head: string, identity: unknown): ConsentIdentity | string {
+function identityOf(definition: ConnectorView, head: string, identity: unknown): ConsentIdentity | string {
   const missing = `${head} needs identity {function, path} or {url, path, scopes}: what names who consented.`
   if (!isJsonObject(identity) || typeof identity.path !== "string" || !identity.path) return missing
   if (identity.url === undefined) return typeof identity.function === "string" && identity.scopes === undefined ? { function: identity.function, path: identity.path } : missing
@@ -98,7 +98,7 @@ function identityOf(definition: ConnectorDefinition, head: string, identity: unk
  * `fromToken` dans cette version du paquet (aucune description ne s'en sert) : refusés nommément. L'identité par une
  * fonction se contrôle avec les fonctions (`declaration.ts`) ; celle à une adresse, ici.
  */
-export function prepareUserConsent(definition: ConnectorDefinition, auth: Record<string, unknown>): UserConsentAuth | string {
+export function prepareUserConsent(definition: ConnectorView, auth: Record<string, unknown>): UserConsentAuth | string {
   const head = `${definition.name}: auth oauth2_user`
   if ((definition.settings ?? []).length > 0) return `${head} takes no settings in this version of the package.`
   if (auth.fromToken !== undefined) return `${head}: fromToken is not supported yet by the package.`
@@ -161,7 +161,7 @@ export function authorizationAddress(auth: UserConsentAuth, request: { clientId:
 }
 
 /** Ce qu'il faut pour joindre le point de jeton d'un connecteur. */
-export type TokenEndpointCall = { definition: ConnectorDefinition; auth: UserConsentAuth; application: OAuthApplication; pacingKey: string; fetcher: Fetch }
+export type TokenEndpointCall = { definition: ConnectorView; auth: UserConsentAuth; application: OAuthApplication; pacingKey: string; fetcher: Fetch }
 
 /** Les droits accordés d'une réponse de jeton (`scope`, joints par des espaces) ; absents : `null`. */
 function grantedScopes(answer: Record<string, unknown>): string[] | null {
@@ -247,7 +247,7 @@ export async function consentAccessToken(signer: Signer & { auth: UserConsentAut
 }
 
 /** Le consentement d'un compte ouvert ; absent pour un connecteur `oauth2_user`, une erreur de câblage. */
-function consentOf(credential: AccountCredential, definition: ConnectorDefinition) {
+function consentOf(credential: AccountCredential, definition: ConnectorView) {
   if (credential.consent) return credential.consent
   console.error(`[platform] connector ${definition.name}: oauth2_user account opened without its consent`)
   throw new PlatformError("internal", "Internal error.")

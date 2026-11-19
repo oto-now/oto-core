@@ -11,12 +11,13 @@ import { PlatformError } from "../errors"
 import type { ConnectorAccount } from "./accounts"
 
 /**
- * Un connecteur dont chaque personne connecte le sien (consentement `oauth2_user`, compte rattaché `accountIdentity`) :
- * faute de compte, son refus dit à la personne de connecter le sien plutôt que d'en demander un à un administrateur.
+ * Un connecteur dont chaque personne peut connecter le sien (consentement `oauth2_user`, par son seul accès ou par l'un
+ * de ses accès ; compte rattaché `accountIdentity`) : faute de compte, son refus dit à la personne de connecter le sien
+ * plutôt que d'en demander un à un administrateur.
  */
 export function isPersonalConnector(connector: string): boolean {
   const declared = declaredConnector(connector)
-  return declared?.auth.kind === "user_consent" || declared?.definition.accountIdentity !== undefined
+  return declared?.accesses.some((access) => access.auth.kind === "user_consent") === true || declared?.definition.accountIdentity !== undefined
 }
 
 /**

@@ -4,7 +4,7 @@
 // consentement lue par une fonction. Tenu à part de `declaration.ts`, qui l'appelle une fois les fonctions préparées.
 import { isJsonObject } from "../json"
 import type { PreparedAuth } from "./auth"
-import type { ConnectorDefinition } from "./definition"
+import type { ConnectorDefinition, ConnectorView } from "./definition"
 
 /** Un chemin pointé bien formé : des segments non vides, sans espace (`credits.remaining`, `accounts.0.balance`). */
 export const DOTTED_PATH = /^[^.\s]+(\.[^.\s]+)*$/
@@ -52,7 +52,7 @@ export function probeProblem(definition: ConnectorDefinition): string | null {
  * L'identité d'un consentement (`oauth2_user`) par une fonction : une lecture du connecteur, sans argument requis, comme
  * la sonde (règle 5 de la fabrique). Celle à une adresse est contrôlée avec l'authentification (`oauth-user.ts`).
  */
-export function identityProblem(definition: ConnectorDefinition, auth: PreparedAuth): string | null {
+export function identityProblem(definition: ConnectorView, auth: PreparedAuth): string | null {
   if (auth.kind !== "user_consent" || !("function" in auth.identity)) return null
   const name = auth.identity.function
   const fn = definition.functions.find((candidate) => candidate.name === name)

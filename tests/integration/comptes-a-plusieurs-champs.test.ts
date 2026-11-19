@@ -12,7 +12,7 @@ import { setAccountSecret } from "../../packages/plateforme/server/connectors/ac
 import { listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { decryptCredential } from "../../packages/plateforme/server/connectors/vault"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -34,7 +34,7 @@ const FIELDS = [
   { name: "client_secret", label: "Client secret", secret: true },
 ]
 
-function basicConnector(): ConnectorDefinition {
+function basicConnector(): ConnectorView {
   return {
     ...describedConnector(BASIC),
     baseUrl: undefined,
@@ -45,7 +45,7 @@ function basicConnector(): ConnectorDefinition {
   }
 }
 
-function exchangeConnector(): ConnectorDefinition {
+function exchangeConnector(): ConnectorView {
   return {
     ...describedConnector(EXCHANGE),
     credential: FIELDS,

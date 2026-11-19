@@ -47,7 +47,7 @@ function cleAEssayer(saisie: SaisieDesChamps, formulaire: ConnectorAccountForm):
   }
   if (Object.keys(fields).length === 0) return null
   const settings = Object.fromEntries(formulaire.settings.flatMap(({ name }) => (saisie.settings[name]?.trim() ? [[name, saisie.settings[name].trim()]] : [])))
-  return { fields, ...(Object.keys(settings).length > 0 ? { settings } : {}) }
+  return { fields, ...(Object.keys(settings).length > 0 ? { settings } : {}), ...(formulaire.access ? { access: formulaire.access.name } : {}) }
 }
 
 function ChoixDeLEquipe({ equipes, erreur }: { equipes: readonly Equipe[]; erreur?: string }) {
@@ -161,7 +161,7 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
   }
 
   async function creer({ secret, effacer, settings, description = "", ...compte }: Saisie) {
-    const cree = await appelerPlateforme<{ account: { id: string; label: string } }>({ methode: "POST", ressource: "admin/accounts", corps: { ...compte, mode: outil.mode } })
+    const cree = await appelerPlateforme<{ account: { id: string; label: string } }>({ methode: "POST", ressource: "admin/accounts", corps: { ...compte, mode: outil.mode, ...(outil.acces ? { access: outil.acces.nom } : {}) } })
     if (cree.erreur) {
       if (estNomPris(cree.erreur)) form.setError("label", { type: "server", message: NOM_PRIS }, { shouldFocus: true })
       else form.setError("root", { type: "server", message: refusDuConnecteur(cree.erreur) })

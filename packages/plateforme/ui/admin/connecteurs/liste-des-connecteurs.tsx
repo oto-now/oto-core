@@ -59,7 +59,16 @@ function Geste({ ligne, retour }: { ligne: LigneDeConnecteur; retour: string }) 
   const { Lien } = useHote()
   if (!ligne.geste) return null
   if (ligne.geste.genre === "connexion") {
-    return <ConnexionParConsentement ressource={ligne.geste.ressource} connecteur={ligne.geste.connecteur} libelle={ligne.geste.libelle} nomAccessible={`${ligne.geste.libelle} ${ligne.libelle}`} retour={retour} />
+    return (
+      <ConnexionParConsentement
+        ressource={ligne.geste.ressource}
+        connecteur={ligne.geste.connecteur}
+        acces={ligne.geste.acces}
+        libelle={ligne.geste.libelle}
+        nomAccessible={`${ligne.geste.libelle} ${ligne.libelle}`}
+        retour={retour}
+      />
+    )
   }
   return (
     <Lien href={ligne.ouverture} className="oto-btn anim-host" data-variant="secondary">

@@ -9,12 +9,13 @@
 // d'écriture. Sans lui, un compte rattaché ne se
 // connecterait pas. Un refus ne dit jamais combien de comptes porte la clé ni à qui est un compte.
 import { hostedLinkReturnSchema, hostedLinkSchema } from "../../schemas/connectors"
-import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
+import { declaredConnector, type DeclaredAccess } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError, type PlatformErrorCode } from "../errors"
 import type { Identity, IdentityOrg } from "../identity"
 import type { Tx } from "../sql"
 import { accountRows, labelTaken, summary, type AccountSummary } from "./accounts"
+import { singleAccess } from "./accesses"
 import { CONSENT_DEFAULT_RETURN, consentLabel } from "./consent"
 import { keepDeclaredConnector } from "./declaration"
 import type { ConnectorAccountIdentity, HostedLinkProvider } from "./definition"
@@ -35,13 +36,17 @@ export function hostedLinkReturnUrl(origin: string, requestId: string): string {
   return `${origin}${HOSTED_LINK_CALLBACK_PATH}?request=${encodeURIComponent(requestId)}`
 }
 
-/** Un connecteur à compte rattaché déclaré, avec son port ; sinon le refus nommé. */
-type HostedConnector = DeclaredConnector & { identityOf: ConnectorAccountIdentity; port: HostedLinkProvider }
+/**
+ * Un connecteur à compte rattaché déclaré (toujours à un seul accès, `accesses.ts`), son accès et son port ; sinon le
+ * refus nommé.
+ */
+type HostedConnector = DeclaredAccess & { identityOf: ConnectorAccountIdentity; port: HostedLinkProvider }
 
 function hostedConnector(name: string, org: IdentityOrg): HostedConnector {
-  const declared = declaredConnector(name)
-  const identityOf = declared?.definition.accountIdentity
-  if (!declared || !identityOf) throw new PlatformError("invalid_arguments", `Connector ${name} does not connect an account hosted by a third party.`)
+  const found = declaredConnector(name)
+  const identityOf = found?.definition.accountIdentity
+  if (!found || !identityOf) throw new PlatformError("invalid_arguments", `Connector ${name} does not connect an account hosted by a third party.`)
+  const declared = singleAccess(found)
   if (!declared.hostedLinks) {
     console.error(`[platform] connector ${name}: no hostedLinks given to registerConnectors`)
     throw new PlatformError(

@@ -11,12 +11,13 @@ import { mergeCredential } from "../../cli/vault.mjs"
 import type { AccountMarkReason, AccountMode, ConnectorAccountForm } from "../../schemas"
 import { accountSecretSchema } from "../../schemas/connectors"
 import { describeOwner } from "../access"
-import { declaredConnector, declaredConnectors, type DeclaredConnector } from "../catalog/connector-source"
+import { declaredConnector, declaredConnectors, type DeclaredAccess, type DeclaredConnector } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
+import { accountAccess } from "./accesses"
 import { formOwnerKinds } from "./account-owners"
 import { managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
 import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
@@ -26,8 +27,8 @@ import { accountFieldNames, hostFieldsOf, readHostFields } from "./host-fields"
 import { accountSettings, settingValueProblem } from "./settings"
 import { decryptCredential, decryptToken, encryptCredential, encryptToken, type OpenedCredential } from "./vault"
 
-/** Ce que l'appel lit d'un compte résolu pour l'ouvrir. */
-type CallAccount = { id: string; label: string; mode: AccountMode; owner: AccountOwner }
+/** Ce que l'appel lit d'un compte résolu pour l'ouvrir ; `access` : celui qu'il retient, pour un connecteur à plusieurs. */
+type CallAccount = { id: string; label: string; access?: string; mode: AccountMode; owner: AccountOwner }
 
 /** Le chiffré du secret, les réglages, les champs posés, la version de la dernière saisie et la marque d'un compte. */
 type SecretRow = { secret: string | null; settings: Record<string, string>; secret_fields: string[]; secret_updated_at: string | null; mark: unknown }
@@ -95,13 +96,13 @@ function declaredOf(connector: string): DeclaredConnector {
 }
 
 /** Les champs d'un secret ouvert ; un secret v1 (un seul champ) se range sous le dernier champ qu'exige l'authentification. */
-function fieldsOf(declared: DeclaredConnector, opened: OpenedCredential): Record<string, string> {
+function fieldsOf(declared: DeclaredAccess, opened: OpenedCredential): Record<string, string> {
   if ("fields" in opened) return opened.fields
   return { [requiredFields(declared.auth).at(-1) ?? declared.definition.credential[0].name]: opened.single }
 }
 
 /** Les réglages saisis, contrôlés contre la déclaration ; une adresse perd son `/` final. */
-export function checkedSettings(declared: DeclaredConnector, given: Record<string, string | null>): Record<string, string | null> {
+export function checkedSettings(declared: DeclaredAccess, given: Record<string, string | null>): Record<string, string | null> {
   const settings = declared.definition.settings ?? []
   const checked: Record<string, string | null> = {}
   for (const [name, raw] of Object.entries(given)) {
@@ -132,7 +133,7 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
   const id = parsed.data.account_id
   const row = await managedAccount(db, identity, id, { service: "setAccountSecret", gesture: "Setting the secret of" })
   if (accountMode(row.mode) === "simule") throw new PlatformError("invalid_arguments", `Account « ${row.label} » is simulated: it has no secret.`)
-  const declared = declaredOf(row.connector)
+  const declared = accountAccess(declaredOf(row.connector), { label: row.label, access: row.access })
   if (declared.auth.kind === "user_consent") {
     throw new PlatformError("invalid_arguments", `Account « ${row.label} » holds the tokens of a person's consent: it has no secret to set. Connect it again instead.`)
   }
@@ -169,31 +170,35 @@ export async function setAccountSecret(db: PlatformDb, identity: Identity, input
 }
 
 /**
- * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration : les propriétaires qu'admettent
- * ses `modes` (`formOwnerKinds`), si sa sonde se joue (`probe`), les champs du secret que garde un compte (jamais ceux
- * de l'hôte), puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret.
- * Un connecteur dont les `modes` n'admettent ni `byo_user` ni `byo_org` (`platform` seul, servi par la clé de l'hôte)
- * n'en a pas. Un connecteur `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par son
- * consentement. Un connecteur à `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le port
- * (`ready`). Sans lecture de base, sans rôle exigé : aucun secret n'y figure.
+ * Le formulaire du compte de chaque connecteur réel déclaré, tiré de sa déclaration, un par accès pour un connecteur à
+ * plusieurs (`access`, son nom et son libellé) : les propriétaires qu'admettent les `modes` de l'accès
+ * (`formOwnerKinds`), si sa sonde se joue (`probe`), les champs du secret que garde un compte (jamais ceux de l'hôte),
+ * puis les réglages ; ce que l'écran Connecteurs montre pour créer un compte réel ou en saisir le secret. Un accès dont
+ * les `modes` n'admettent ni `byo_user` ni `byo_org` (`platform` seul, servi par la clé de l'hôte) n'en a pas. Un accès
+ * `oauth2_user` (`consent`) n'a ni champ ni réglage : chacun y connecte son compte par son consentement. Un connecteur à
+ * `accountIdentity` (`hosted`) se branche par la personne, si l'hôte en a fourni le port (`ready`). Sans lecture de
+ * base, sans rôle exigé : aucun secret n'y figure.
  */
 export function connectorAccountForms(): ConnectorAccountForm[] {
-  return declaredConnectors().flatMap(({ definition, hostedLinks, probe }) => {
-    const ownerKinds = formOwnerKinds(definition)
-    if (ownerKinds.length === 0) return []
-    return [
-      {
-        connector: definition.name,
-        label: definition.label,
-        consent: definition.auth.kind === "oauth2_user",
-        ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
-        ownerKinds,
-        probe: { available: probe !== null, balance: definition.probe?.balance !== undefined },
-        fields: definition.credential.filter((field) => field.holder !== "host").map(({ name, label, secret }) => ({ name, label, secret })),
-        settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
-      },
-    ]
-  })
+  return declaredConnectors().flatMap(({ accesses }) =>
+    accesses.flatMap(({ name, label: accessLabel, definition, hostedLinks, probe }) => {
+      const ownerKinds = formOwnerKinds(definition)
+      if (ownerKinds.length === 0) return []
+      return [
+        {
+          connector: definition.name,
+          label: definition.label,
+          ...(name !== null && accessLabel !== null ? { access: { name, label: accessLabel } } : {}),
+          consent: definition.auth.kind === "oauth2_user",
+          ...(definition.accountIdentity ? { hosted: { ready: hostedLinks !== null } } : {}),
+          ownerKinds,
+          probe: { available: probe !== null, balance: definition.probe?.balance !== undefined },
+          fields: definition.credential.filter((field) => field.holder !== "host").map(({ name: field, label, secret }) => ({ name: field, label, secret })),
+          settings: (definition.settings ?? []).map((setting) => (setting.type === "choice" ? { ...setting, choices: [...setting.choices] } : { ...setting })),
+        },
+      ]
+    }),
+  )
 }
 
 /** Le jeton d'un échange, lu et écrit sur la ligne du compte, chiffré à part du secret saisi. */
@@ -217,7 +222,7 @@ export function tokenStore(db: PlatformDb, accountId: string): TokenStore {
 }
 
 /** Le premier champ du compte exigé par l'authentification qui manque, nommé par son libellé ; `null` : aucun. */
-export function missingField(declared: DeclaredConnector, present: readonly string[]): string | null {
+export function missingField(declared: DeclaredAccess, present: readonly string[]): string | null {
   const own = accountFieldNames(declared.definition)
   const name = requiredFields(declared.auth).find((field) => own.includes(field) && !present.includes(field))
   return name === undefined ? null : (declared.definition.credential.find((field) => field.name === name)?.label ?? name)
@@ -238,7 +243,7 @@ export function applicationMissing(label: string): PlatformError {
  * l'a déjà remplacé ; ses jetons restent, rien ne les purge. Le compte s'ouvre avec sa marque (`remedy` : le compte,
  * s'il est celui de l'appelant, et à qui demander).
  */
-function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredConnector, row: SecretRow | undefined): () => Promise<AccountCredential> {
+function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAccess, row: SecretRow | undefined): () => Promise<AccountCredential> {
   const { definition, application } = declared
   if (!application) throw applicationMissing(definition.label)
   const { account, own } = remedy
@@ -292,8 +297,9 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredCon
 
 /**
  * Le compte d'un appel à un connecteur réel déclaré, lu après sa résolution et avant tout récapitulatif ; rend de quoi
- * l'ouvrir pour `run` seul, au dernier moment. Refus nommés, la fonction non appelée (`not_enabled`, qui dit à qui
- * demander) : un compte simulé ; un compte sans secret, ou sans un champ qu'exige l'authentification ; un réglage
+ * l'ouvrir pour `run` seul, au dernier moment, par l'accès qu'il retient (`accountAccess`). Refus nommés, la fonction
+ * non appelée (`not_enabled`, qui dit à qui demander) : un compte simulé ; un compte d'un connecteur à plusieurs accès
+ * qui n'en retient pas, ou un que la déclaration ne porte plus ; un compte sans secret, ou sans un champ qu'exige l'authentification ; un réglage
  * manquant ou devenu invalide ; un compte `oauth2_user` sans consentement, ou sans l'application OAuth de l'hôte ; un
  * champ de l'hôte qu'il n'a pas fourni ; un compte d'un connecteur à `accountIdentity` sans identifiant chez le tiers
  * (`linked_id`), ou dont l'identifiant ne suit plus le motif. Les champs de l'hôte (`holder: host`) se lisent à
@@ -308,11 +314,13 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
       `Account « ${account.label} » is simulated, but ${connector} is a live connector: it runs on live accounts only. Ask ${await who()} to connect a live account.`,
     )
   }
-  const declared = declaredConnector(connector)
-  if (!declared) {
+  const connectorDeclared = declaredConnector(connector)
+  if (!connectorDeclared) {
     console.error(`[platform] call: live connector ${connector} is not declared`)
     throw new PlatformError("internal", "Internal error.")
   }
+  // Le compte s'ouvre et se signe par l'accès qu'il retient, jamais par un autre.
+  const declared = accountAccess(connectorDeclared, account)
   const row = await secretRow(db, "liveCredential", account.id)
   const own = account.owner.kind === "user" && account.owner.userId === identity.user.id
   const consent = declared.auth.kind === "user_consent"
@@ -357,7 +365,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
  * `platform.account_linked_id` (jamais accordé en lecture à `authenticated`) et recontrôlé contre le motif déclaré.
  * Aucun : le compte n'est pas branché (`not_enabled`, « connect your account ») ; hors motif : à reconnecter.
  */
-async function linkedIdOf(db: PlatformDb, identity: Identity, account: CallAccount, declared: DeclaredConnector): Promise<string> {
+async function linkedIdOf(db: PlatformDb, identity: Identity, account: CallAccount, declared: DeclaredAccess): Promise<string> {
   const accountIdentity = declared.definition.accountIdentity
   if (!accountIdentity) {
     console.error(`[platform] liveCredential: ${declared.definition.name} has no accountIdentity`)
