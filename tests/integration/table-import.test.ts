@@ -221,7 +221,7 @@ describe.skipIf(!sqlConfigured)(portable("table.import and POST tables/import on
     const claire = await session("claire")
     const text = "# Titre\n\n```call\nx {\n```"
     const strict = await claire.call("write", { ctx: ref.id(CTX.claire), path: "ventes/cr_strict", title: "CR", summary: "Un compte rendu.", ops: [{ op: "insert_after", text }], tolerant: true })
-    expect([strict.isError, strict.text]).toEqual([true, "Invalid arguments for acme_write: unknown key « tolerant »; keys: ctx, path, base_revision, title, summary, kind, ops, header, publish"])
+    expect([strict.isError, strict.text]).toEqual([true, "Invalid arguments for acme_write: unknown key « tolerant »; keys: ctx, path, base_revision, title, summary, kind, space, ops, header, publish"])
     const screen = await writeNode(await ref.db("claire"), acmeIdentity(ref, "claire"), { path: "ventes/cr_ecran", title: "CR", summary: "Un compte rendu.", ops: [{ op: "insert_after", text }], tolerant: true }, { kind: "human" })
     expect(screen.data).toMatchObject({ kept_as_text: 1 })
   })

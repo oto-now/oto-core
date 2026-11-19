@@ -62,7 +62,7 @@ describe.skipIf(!sqlConfigured)(portable("tables written through write"), { time
   describe("creating a table (AC1, AC2)", () => {
     it("should create, open the draft, pose the header and publish revision 1 for Claire, and for Léa at the write level (E11-S02, AC-a2)", async () => {
       const claire = await writeAs(ref, "claire", salons("ventes/salons"))
-      expect(claire.result?.text).toBe("Published ventes/salons revision 1: a table with 4 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1.")
+      expect(claire.result?.text).toBe("Published ventes/salons revision 1: a table with 4 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.")
       const node = await nodeAt(seed, ref, "ventes/salons")
       expect(node).toMatchObject({ kind: "table", status: "published", revision: 1 })
       expect(node?.meta).toEqual({ ...SALONS_HEADER, closed: false, proof: false })
@@ -76,7 +76,7 @@ describe.skipIf(!sqlConfigured)(portable("tables written through write"), { time
 
       // Léa rédige dans l'équipe Ventes (niveau 2) : sa création publie aussi l'en-tête (E11-S02, AC-a2, HN-E11S02-17).
       const lea = await writeAs(ref, "lea", salons("ventes/salons_2"))
-      expect(lea.result?.text).toBe("Published ventes/salons_2 revision 1: a table with 4 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1.")
+      expect(lea.result?.text).toBe("Published ventes/salons_2 revision 1: a table with 4 columns, key nom. Write rows with acme_call table.write. Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.")
       const created = await nodeAt(seed, ref, "ventes/salons_2")
       expect(created).toMatchObject({ kind: "table", status: "published", revision: 1 })
       expect(created?.meta).toEqual({ ...SALONS_HEADER, closed: false, proof: false })

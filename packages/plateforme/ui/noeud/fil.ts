@@ -8,7 +8,7 @@
 // Porté d'oto-frontend (`components/noeud/fil-du-noeud.tsx`) : chaque maillon ouvre ses frères, le courant
 // coché ; un frère sans destination reste affiché, inerte. Changé : les frères se lisent dans l'arbre
 // visible (`sectionsDeLArbre`, l'ordre du rail), un espace mène à son Contexte (aucune page de section).
-import type { TreeNode } from "../../schemas"
+import type { NodeView, TreeNode } from "../../schemas"
 import { PERSO, SECTION_PERSO, sectionsDeLArbre, titreDeContexte, titresParChemin, TOUT_LE_MONDE } from "../arbre/depuis-l-arbre"
 import type { NatureDeNoeud, NoeudDArbre, SectionCle } from "../arbre/types"
 import type { PorteeDEspace } from "./glyphes"
@@ -29,6 +29,17 @@ type SectionDuChemin = { cle: string | null; titre: string; debut: number }
 export function porteeDeLaSection(cle: string): PorteeDEspace {
   if (cle === "") return "all"
   return cle === PERSO ? "private" : "equipe"
+}
+
+/**
+ * L'espace d'un nœud tel que « Partager · <espace> » le dit : celui qui est écrit sur le nœud (son propriétaire), pas
+ * la section de son chemin, qui n'est que son adresse (décidé avec JB le 03/11) : une page Privée rangée dans un dossier
+ * de Tout le monde reste « Privé ».
+ */
+export function espaceDuNoeud(owner: NodeView["owner"]): { titre: string; portee: PorteeDEspace } {
+  if (owner.kind === "team") return { titre: owner.teamName ?? "Équipe", portee: "equipe" }
+  if (owner.kind === "user") return { titre: owner.you ? SECTION_PERSO : `${SECTION_PERSO} de ${owner.userName ?? "son auteur"}`, portee: "private" }
+  return { titre: TOUT_LE_MONDE, portee: "all" }
 }
 
 /**

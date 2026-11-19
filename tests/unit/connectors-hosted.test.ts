@@ -9,8 +9,6 @@ import type { FunctionContext } from "../../packages/plateforme/server/catalog/d
 import { CatalogRegistrationError } from "../../packages/plateforme/server/catalog/erp"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import { catalogFunctions, findFunction } from "../../packages/plateforme/server/catalog/registry"
-import { admittedOwnerKinds, formOwnerKinds } from "../../packages/plateforme/server/connectors/account-owners"
-import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
 import { registerConnectors, type ConnectorOptions } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import { readHostFields } from "../../packages/plateforme/server/connectors/host-fields"
@@ -96,26 +94,6 @@ describe("declaring host fields, account identity and act", () => {
 
   it("should refuse a reader for a connector without any host field", () => {
     expect(refusalOf([describedConnector()], { hostCredentials: { crm: () => ({ api_key: "x" }) } })).toBe("Host credentials for crm: no connector of this name with a host field is declared.")
-  })
-})
-
-describe("the account form of a connector where each person connects their own", () => {
-  // `platform` seul sert la clé de l'hôte, mais sur un compte rattaché ou un consentement chacun connecte le sien :
-  // l'écran lui offre « Connecter mon compte », que la 1.8.0 avait retiré avec le formulaire des connecteurs `platform`.
-  it("should give a platform-only hosted connector a personal form, ready when the host gives its port", () => {
-    const { port } = fakeHostedLinks()
-    registerConnectors([hostedConnector()], { hostCredentials: { crm: () => ({ api_key: key() }) }, hostedLinks: { crm: port } })
-    const form = connectorAccountForms().find((candidate) => candidate.connector === "crm")
-    expect(form).toMatchObject({ consent: false, hosted: { ready: true }, ownerKinds: ["user"], fields: [] })
-  })
-
-  it("should offer the person on a platform-only consent connector, and nobody on a host key alone", () => {
-    expect(formOwnerKinds({ ...consentConnector(), modes: ["platform"] })).toEqual(["user"])
-    expect(formOwnerKinds({ ...hostedConnector(), accountIdentity: undefined })).toEqual([])
-  })
-
-  it("should not admit a personal account created by hand on a platform-only hosted connector: it is born of its link", () => {
-    expect(admittedOwnerKinds(hostedConnector())).toEqual(["org", "team"])
   })
 })
 

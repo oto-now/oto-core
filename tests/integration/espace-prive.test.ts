@@ -109,8 +109,8 @@ describe.skipIf(!sqlConfigured || spacesPending)(
         path: `private/${handle}/contexte`,
         title: "Contexte",
         summary: "Ce que votre assistant lit à chaque conversation ; vous seul le recevez.",
-        owner_kind: null,
-        owner_user_id: null,
+        owner_kind: "user",
+        owner_user_id: userId,
       },
     ]
     const withoutVersion = (rows: Awaited<ReturnType<typeof spaces>>) =>

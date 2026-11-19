@@ -499,7 +499,7 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
       const claire = await session("claire")
       const created = await claire.tool("write", { path: "ventes/faq_mcp_s02", title: "FAQ", summary: "Questions fréquentes.", ops: [{ op: "add_section", section: "Livraison", text: "Sous huit jours." }] })
       // E11-S18 (AC-4) : une ligne, la publication et ce que l'écriture a fait.
-      expect(created.text).toBe("Published ventes/faq_mcp_s02 revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.")
+      expect(created.text).toBe("Published ventes/faq_mcp_s02 revision 1 (1 section, 2 blocks): added « Livraison » (30 characters). Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.")
       const drafted = await claire.tool("write", { path: "ventes/faq_mcp_s02", base_revision: 1, ops: [{ op: "append", section: "Livraison", text: "Hors week-end." }], publish: false })
       expect(drafted.text.split("\n")[1]).toBe("publish: false is no longer supported: everything written is published at once. To suggest a change without editing, comment with acme_call comment.add.")
       expect(drafted.result.structuredContent).toMatchObject({ status: "published", revision: 2, has_draft: false })

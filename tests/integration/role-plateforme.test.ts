@@ -157,9 +157,9 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const id = await createOrg(args)
       const nodes = await fx.admin`select path, title, kind, status, owner_kind from platform.nodes where org_id = ${id} order by path`
       expect(nodes).toEqual([
-        { path: "contexte", title: "Contexte", kind: "context", status: "draft", owner_kind: null },
+        { path: "contexte", title: "Contexte", kind: "context", status: "draft", owner_kind: "org" },
         { path: "guide", title: "Guide de Acme Test", kind: "page", status: "draft", owner_kind: "org" },
-        { path: "private", title: "Espaces personnels", kind: "page", status: "draft", owner_kind: null },
+        { path: "private", title: "Espaces personnels", kind: "page", status: "draft", owner_kind: "org" },
       ])
       expect(await fx.admin`select user_id, reason, revoked_at from platform.platform_grants where org_id = ${id}`).toEqual([
         { user_id: staff.s.id, reason: "creation", revoked_at: null },
