@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — Rail : glisser une page sans la vue fractionnée de Chrome, repère au bon niveau
+**Quoi :** au départ du glisser d'une ligne, les données que le navigateur joint au lien (son adresse) sont retirées, seul le type du rail voyage ; le trait d'un dépôt entre deux lignes part du glyphe de la ligne visée (`--rail-glyphe-x`), à son niveau, au lieu du bord du lien.
+**Pourquoi :** retour RET-011 : Chrome proposait sa « vue fractionnée » en glissant une page, et le trait laissait croire que la page irait dessous.
+**Problèmes :** la disparition du panneau de Chrome ne se vérifie qu'à la main dans Chrome ; le test vérifie les données glissées.
+**Fichiers :** `packages/plateforme/ui/coque/arbre-du-rail.tsx`, `packages/plateforme/ui/ds/app/islands.css`, `packages/plateforme/ui/ds/components/css/product.css`, `tests/integration/components/rail-application.test.tsx`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-19] — Rail : la flèche de dépliage visible en permanence
 **Quoi :** dans l'arbre du rail, la bascule d'une page qui a des sous-pages ne porte plus que le chevron, toujours visible, dans une colonne devant le glyphe de type ; le glyphe passe dans le lien, sur toutes les lignes ; une feuille garde la colonne vide (`--rail-chevron-col`), pour l'alignement. Au clavier, le chevron atteint prend l'anneau du rail.
 **Pourquoi :** retour RET-013 : rien ne disait qu'une page avait des sous-pages sans la survoler.

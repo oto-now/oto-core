@@ -96,6 +96,9 @@ function useGlisserDeLaLigne(glisser: GlisserDuRail | null, chemin: string | nul
     draggable: glisser.peutGlisser(chemin) || undefined,
     onDragStart: (evenement: DragEvent<HTMLAnchorElement>) => {
       if (!glisser.peutGlisser(chemin)) return
+      // La ligne est un lien : le navigateur y joint d'office son adresse, et Chrome propose alors sa « vue fractionnée »
+      // près du bord de la fenêtre. Seul le type du rail voyage.
+      evenement.dataTransfer?.clearData()
       evenement.dataTransfer?.setData(TYPE_DU_GLISSER, chemin)
       if (evenement.dataTransfer) evenement.dataTransfer.effectAllowed = "move"
       glisser.commencer(chemin)

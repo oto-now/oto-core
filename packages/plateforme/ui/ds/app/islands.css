@@ -379,7 +379,9 @@
 /* La bascule prend le rembourrage et la colonne du chevron, le lien repart de zéro avec son glyphe ; une feuille de l'arbre décale son lien d'autant, pour qu'une branche et une feuille sœurs restent alignées. */
 .oto-rail-tree { --rail-chevron-col: calc(var(--space-2) + 14px + var(--space-2)); }
 .oto-rail-row[data-branch] { gap: var(--space-2); }
-.oto-rail-tree .oto-rail-row:not([data-branch]) > .oto-rail-item { padding-inline-start: var(--rail-chevron-col); }
+.oto-rail-tree .oto-rail-row:not([data-branch]) > .oto-rail-item { padding-inline-start: var(--rail-chevron-col); --rail-glyphe-x: var(--rail-chevron-col); }
+/* L'abscisse du glyphe dans le lien, d'où part le repère d'un dépôt entre deux lignes (`product.css`) : au début du lien d'une branche, après la colonne vide d'une feuille. */
+.oto-rail-row[data-branch] > .oto-rail-item { --rail-glyphe-x: 0px; }
 
 /* L'aplat passe à la rangée, sinon sur une branche il commencerait après la bascule et laisserait le glyphe sur le rail nu ; `[data-branch] > .oto-rail-item` (0,3,0) bat `[aria-current]` et `:hover` (0,2,0), sans `!important`. */
 .oto-rail-row[data-branch] { border-radius: var(--r-btn); }

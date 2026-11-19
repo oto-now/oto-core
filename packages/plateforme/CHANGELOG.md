@@ -23,6 +23,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Reading a function of a declared connector that describes itself gives that description too (« About the connector … »), and `read functions` its first sentence atop the connector.
 
 ### Hosts
+- UI: dragging a line of the rail carries only the rail's own type: the browser's link address is cleared, so Chrome no longer offers its split view; the line between two rows starts at the target row's glyph, at its level.
 - UI: in the rail tree, a page with sub-pages always shows its unfold chevron, in a column before its type glyph, which every row keeps; a row without sub-pages keeps the column empty. The chevron no longer shows on hover only.
 - Server: `registerConnectors` accepts two optional connector fields, ahead of the `connectors` library: `description` (1 to 2000 characters, for the assistant) and `logoDomain` (the tool's domain, lowercase, without scheme, port or path); anything else is refused by name. `listConnectorsForOrg` returns both on `OrgConnector` (`Schemas:`), absent when not declared; the screen does not show the logo yet.
 - Server: `connectorAccountForms` gives again a form, the person's own (`ownerKinds: ["user"]`), to a `platform`-only connector where each person connects their own account (`oauth2_user` consent, or `accountIdentity` such as a hosted link): 1.8.0 had dropped it, and with it « Connecter mon compte ».
