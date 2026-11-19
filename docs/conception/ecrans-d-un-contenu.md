@@ -1,7 +1,7 @@
 # Écrans d'un contenu
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-11-19
 
 ## Résumé
 
@@ -30,6 +30,11 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - À l'écran, un bloc `reference` résolu se rend en place (vue d'un tableau ou carte d'un nœud, désigné par son `id`) ; sinon, le chemin cité en lien (P18).
 - Rendu des blocs à la lecture : l'en-tête teinté d'un tableau simple vaut à la lecture comme dans l'éditeur, sur le jeton `--oto-bg`, opaque, collé en défilant (HN-E11S15-b2) ; le rendu au repos d'un texte marqué vaut pour tout bloc à texte en ligne (Texte, titre, liste, cases, citation), un code et un appel restant lus tels quels (M59) (HN-E11S15-b5) ; « etc. » d'AC-b2 se lit tableau, fichier, image (HN-E11S15-b4) ; la hauteur libérée du menu de la poignée vaut pour tout bloc, bornée à la fenêtre (HN-E11S15-b3).
 - Liens : un clic sur une page citée navigue par un `<a href>` dans l'onglet (Ctrl, ⌘ ou bouton du milieu : nouvel onglet) ; une adresse web s'ouvre dans un nouvel onglet (`noopener noreferrer nofollow`) (HN-E11S15-b6). Une adresse nue s'affiche entière jusqu'à 40 caractères ; au-delà, schéma, hôte et les 12 derniers caractères du chemin, requête et fragment tombés ; hôte montré, infobulle et nom accessible viennent de `new URL` (punycode d'un domaine international), jamais d'un hôte lu à la main ; jamais l'identifiant ni le mot de passe ; un libellé écrit reste le nom du lien (HN-E11S15-b8). Le correcteur du navigateur est coupé (`spellCheck={false}`) sur le champ d'un bloc qui porte un lien et sur « Libellé » et « Chercher une page » du panneau « Lien » (HN-E11S15-b1). Les contenus récents de « @ » sont ceux du bloc « Recent content » de `context` (`recentDocuments` : pages et tableaux lus, écrits ou publiés par la personne sur 90 jours, 20 au plus, hors de la page éditée, `GET /api/platform/search/recent?exclude=`), affichés tant que rien n'est tapé après « @ » ; le panneau « Lien » reste sans récents ; `search` sans `q` reste une erreur (HN-E11S15-b7).
+
+### Une page modifiée ailleurs
+
+- Une page ouverte se tient à jour sans rechargement : tant que l'onglet est visible, toutes les 30 secondes et au retour sur l'onglet ou dans la fenêtre, l'écran relit sa seule révision publiée (`GET nodes/revision`, `VeilleDeLaPage`) ; changée ailleurs (un assistant, une autre personne), la page se relit (`useRafraichir`). Un onglet caché ne lit rien.
+- Si la personne écrit dans la page à ce moment-là (le focus dans un champ ou une zone modifiable), rien n'est remplacé sous ses doigts : un encart « Cette page a été modifiée ailleurs, par un assistant ou une autre personne. » propose « Recharger la page ».
 
 ### Résumé, page vide, tableau vide
 
@@ -73,6 +78,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - **Une infobulle au survol pour la provenance** : écartée pour un panneau ouvert au clic ou au clavier ; une infobulle ne peut porter de lien cliquable (la preuve) et ne s'ouvre pas au toucher.
 - **Lire les titres des nœuds cités dans les cellules** : écarté pour l'instant, une lecture de plus par page de lignes ; un lien sans libellé se nomme par le dernier segment de son chemin.
 - **« Aucun ⋯ sur un Contexte »** (E05-S10 AC-b8) : remplacé par « Télécharger en .md » (D139, [écrans et coque](ecrans-et-coque.md)).
+- **Une page tenue à jour par un canal poussé (Realtime, flux SSE)** : écarté pour une relecture de la seule révision toutes les 30 secondes, onglet visible ; un canal poussé lierait le paquet à Supabase hors des points admis et tiendrait une connexion par onglet, pour un besoin qu'une demi-minute de délai sert — décidé par JB (retour RET-008).
 - **Un menu déroulant (`DropdownMenu`) pour le niveau d'accès** : écarté, il refermait le panneau « Partager » (HN-E05S10b-4).
 
 ## Sécurité et confidentialité
@@ -88,6 +94,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - M94 : le résumé que la base pose sur un Contexte d'équipe ou de Tout le monde garde l'ancien texte (HN-E11S15-a6) ; le changer demande une migration.
 - M66 : `ContenusLies` (`ui/noeud/sous-pages.tsx`) recopie les sous-pages dans son repli pendant le flux.
 - M101 : `TableCell` force une mise en page par cellule (troncature du texte).
+- Une ligne de tableau écrite ailleurs ne change pas la révision du tableau : la veille ne la voit pas, la grille se relit à sa prochaine lecture.
 - M103 : à 375 px, l'en-tête de la visionneuse d'un fichier fait défiler la zone de contenu en largeur.
 
 ## Questions ouvertes
@@ -101,3 +108,4 @@ Aucune à ce jour.
 - 2026-09-30 : retours sur la 1.1.1, livrés dans la 1.1.2 : encarts de la vue « Contexte », mise en page centrée, panneaux larges, liens au repos, contenus récents de « @ » — décidé par JB (source : story E11-S15).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend P18, les fiches D97, D140 et les choix des stories E05-S10, E11-S05, E11-S15 — décidé par Alexis, accord de JB.
 - 2026-10-20 : provenance par une icône « info » et un panneau, cellules de texte qui vont à la ligne, liens suivis dans les cellules, adresses raccourcies — décidé par JB (source : session du 20/10/2026).
+- 2026-11-19 : une page ouverte relit sa révision toutes les 30 secondes et se met à jour sans rechargement, encart « Recharger la page » si l'on y écrit — décidé par JB (source : retour RET-008).

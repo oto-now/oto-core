@@ -48,6 +48,7 @@ import { titreDuContexte } from "./fil"
 import { ECRAN, genreDuNoeud, INTROUVABLE, PARTAGE, resumeMontre } from "./libelles"
 import { PartageDuNoeud } from "./partage-du-noeud"
 import { ciblesDesLiens, ContenusLies, nomsDesContextes } from "./sous-pages"
+import { VeilleDeLaPage } from "./veille-de-la-page"
 import { VisionneuseDeFichier } from "./visionneuse-de-fichier"
 
 type Equipe = { slug: string; name: string }
@@ -195,6 +196,8 @@ function PageDuNoeud(props: PageDuNoeudProps) {
       avant={<EncartCommentaires />}
     />
   )
+  // La veille de la page ouverte (retour RET-008), dans la colonne du document, juste avant lui.
+  const veille = <VeilleDeLaPage chemin={vue.path} revision={vue.revision} />
   // Une page, une procédure, un Contexte (AC-e1, AC-e2) : l'en-tête et les colonnes sont frères dans le contenu,
   // l'en-tête suit la colonne du document (`islands.css`) ; le chapô est seul dans sa rangée, pour que la colonne
   // de droite commence au haut de la carte (E05-S12, AC-21 ; deux `TwoColumns` aux mêmes pistes, l'écart entre eux
@@ -207,6 +210,7 @@ function PageDuNoeud(props: PageDuNoeudProps) {
         <div className="flex flex-col gap-(--gap)">
           {chapo}
           {encarts("ligne")}
+          {veille}
           <CorpsDuNoeud {...corps} />
         </div>
       </div>
@@ -228,6 +232,7 @@ function PageDuNoeud(props: PageDuNoeudProps) {
             </>
           }
         >
+          {veille}
           <CorpsDuNoeud {...corps} />
         </TwoColumns>
       </>

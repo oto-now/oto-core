@@ -63,7 +63,9 @@ rejoue sur chaque lot, et les règles d'une valeur de tableau (`tables.ts` : `is
   qui n'administre pas. `GET nodes/export` et `GET tables/export`
   rendent `{filename, content}`, des lectures sans ligne de journal (D138) ; `GET nodes/tree` rend l'arbre
   visible de la personne (`visibleTree`, `{tree, truncated}`), celui que le layout de l'hôte passe au rail,
-  lecture sans journal (E11-S20) ; `POST tables/import`
+  lecture sans journal (E11-S20) ; `GET nodes/revision?path=` rend la seule révision publiée d'un nœud
+  (`nodeRevision`, `{path, revision}`, `not_found` pour un nœud que la personne ne lit pas), que l'écran
+  d'une page ouverte relit toutes les 30 secondes, lecture sans journal ; `POST tables/import`
   écrit un lot de 500 lignes d'un CSV. Vérification de la session en deux temps, réponses d'erreur
   JSON et contrôle d'origine d'une mutation dans `api/session.ts`, partagés par la table de dispatch
   et les branches qui passent avant elle. Fichiers : `api/files.ts` (`GET files`, `POST files`,

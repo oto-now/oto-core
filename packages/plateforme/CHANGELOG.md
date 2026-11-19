@@ -31,6 +31,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Schemas: `AccountView.owner` carries `userId` and `userName` for a personal account, as `listOrgAccounts` and `listOwnAccounts` render it (`Server:`).
 - Migrations: apply `20261119083000_platform_supervision.sql` together with the package (development file, merged into the version's single file before the tag): three `security definer` functions for the platform team only (`is_staff()`, else `42501`), `staff_org_overview(since)`, `staff_org_members(org)`, `staff_org_accounts(org)`, list every organisation with its figures, members and accounts, never a key nor any content. The package without it fails on the supervision page and on `admin_org overview` and `members`; nothing else changes.
 - Server: `listPlatformOrgs(db, caller)` and `readPlatformOrg(db, caller, slug)` serve that list to the platform team (`forbidden` otherwise, `not_found` for an unknown slug), calls counted over `SUPERVISION_DAYS` (`Schemas:`, with `SupervisedOrg`, `SupervisedMember`, `SupervisedAccounts`).
+- UI: an open page keeps itself up to date: `EcranDeNoeud` rereads its published revision every 30 seconds while the tab is visible and refreshes through the host's `useRafraichir`, or offers « Recharger la page » while the person is writing.
+- API: `GET /api/platform/nodes/revision?path=` renders a node's published revision alone (`{path, revision}`), a read without a journal line.
 - UI: `EcranSupervision` (and `EcranSupervisionChargement`) shows every space and its figures, a row opening on its members and accounts; mount it for the platform team only, as the reference host does at `/platform/supervision`.
 
 ## 1.8.0 — 2026-11-18
