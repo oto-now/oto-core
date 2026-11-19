@@ -12,7 +12,7 @@
 import { blockRef, orderBlocks, sectionOfBlock, SERVED_RELATED } from "../schemas"
 import { ACCESS_LEVELS, nodeLevels } from "./access"
 import type { CatalogFunction } from "./catalog/define"
-import { findFunction, isActive, looksLikeFunction, searchFunctions } from "./catalog/registry"
+import { connectorDescription, findFunction, isActive, looksLikeFunction, searchFunctions } from "./catalog/registry"
 import type { PlatformDb } from "./db"
 import { inTransaction } from "./errors"
 import type { Identity } from "./identity"
@@ -152,16 +152,22 @@ const FUNCTION_LINE_MAX = 200
 
 /**
  * `read {"path": "functions"}` (E11-S19, AC-e3) : toutes les fonctions actives, groupées par connecteur (ordre
- * alphabétique des connecteurs, puis des noms), chacune avec sa classe et la première phrase de sa description, puis
- * les contrats à lire avant d'écrire. Sans elle, `find` en rend trois au plus : une absence ne s'affirmait pas.
+ * alphabétique des connecteurs, puis des noms ; en tête d'un connecteur décrit, la première phrase de sa description),
+ * chacune avec sa classe et la première phrase de sa description, puis les contrats à lire avant d'écrire. Sans elle,
+ * `find` en rend trois au plus : une absence ne s'affirmait pas.
  */
 export function functionCatalog(active: readonly CatalogFunction[], contracts: readonly string[], prefix: string): ToolOutput {
   const sorted = [...active].sort((a, b) => a.connector.localeCompare(b.connector) || a.name.localeCompare(b.name))
   const connectors = [...new Set(sorted.map((fn) => fn.connector))]
+  const heading = (connector: string): string => {
+    const first = sorted.find((fn) => fn.connector === connector)
+    const description = first ? connectorDescription(first) : null
+    return description === null ? `${connector}:` : `${connector}: ${cut(firstSentence(description), FUNCTION_LINE_MAX)}`
+  }
   const lines = [
     `${sorted.length} functions you can run, by connector:`,
     ...connectors.flatMap((connector) => [
-      `${connector}:`,
+      heading(connector),
       ...sorted.filter((fn) => fn.connector === connector).map((fn) => `- ${fn.name} (${fn.class}): ${cut(firstSentence(fn.description), FUNCTION_LINE_MAX)}`),
     ]),
     ...(contracts.length > 0 ? [`Contracts to read before writing: ${contracts.join(", ")}.`] : []),

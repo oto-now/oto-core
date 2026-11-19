@@ -30,6 +30,7 @@ import { callerTransitFiles, filesProblem } from "./multipart"
 import { declaredLevels, functionScopesProblem, type AccessLevels } from "./levels"
 import type { UserConsentAuth } from "./oauth-user"
 import { stripProblem } from "./output"
+import { presentationProblem } from "./presentation-declaration"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
 import { signalProblem } from "./signal-declaration"
@@ -304,11 +305,9 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
   const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
   const problem =
-    (connectorProblem(definition, reserved, seen) ?? modesProblem(definition)) ??
+    (connectorProblem(definition, reserved, seen) ?? presentationProblem(definition) ?? modesProblem(definition)) ??
     (typeof kindProblem === "string" ? kindProblem : null) ??
-    accountProblem(definition) ??
-    holderProblem(definition) ??
-    accountIdentityProblem(definition)
+    (accountProblem(definition) ?? holderProblem(definition) ?? accountIdentityProblem(definition))
   if (problem) throw new CatalogRegistrationError(problem)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
@@ -360,7 +359,7 @@ export type ConnectorOptions = HostOptions & {
 /**
  * Déclare les connecteurs décrits de l'hôte, partagés ou propres (`ConnectorDefinition`), à appeler au montage de
  * chaque route qui monte une porte du paquet, comme `registerFunctions`. Toute la liste est contrôlée d'abord : nom du
- * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
+ * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, description et domaine (`presentation-declaration.ts`), délai, table d'erreurs (et son
  * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user` et `oauth2_jwt_bearer`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
@@ -374,8 +373,7 @@ export type ConnectorOptions = HostOptions & {
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au
  * serveur de l'hôte (`server-only.ts`) ; `options.backgroundRunner` : le déclencheur des travaux en tâche de fond ; tous
- * fournis par l'hôte. Au premier refus,
- * `CatalogRegistrationError` et rien n'est déclaré ;
+ * fournis par l'hôte. Au premier refus, `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
 export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {

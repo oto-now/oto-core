@@ -8,6 +8,7 @@ import { checkArguments } from "../../packages/plateforme/server/catalog/argumen
 import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "../../packages/plateforme/server/catalog/erp"
 import { catalogFunctions, describeFunction, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
+import { functionCatalog } from "../../packages/plateforme/server/find"
 import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
 import { errorTable } from "../../packages/plateforme/server/connectors/error-table"
 import { describedConnector, markingConnector, timedConnector } from "../factories/described-connector"
@@ -83,6 +84,26 @@ describe("registerConnectors", () => {
     expect(checkArguments(fn.schema, {})).toEqual({ success: false, issues: [{ path: ["contact_id"], message: "Required", code: "required" }] })
   })
 
+  it("should accept a description and a logo domain, and serve the description in the contract and atop the connector in the list", () => {
+    const description = "Crm is the sales CRM of the team. Use it for companies and their contacts, never for invoices."
+    registerConnectors([{ ...describedConnector(), description, logoDomain: "crm.example.co.uk" }])
+    const contact = findFunction(catalogFunctions(), "crm.get_contact")
+    if (!contact) throw new Error("crm.get_contact is not declared")
+    const lines = describeFunction(contact, "acme").text.split("\n")
+    expect(lines.slice(1, 3)).toEqual([contact.description, `About the connector crm: ${description}`])
+    const list = functionCatalog(catalogFunctions().filter((fn) => fn.connector === "crm"), [], "acme").text.split("\n")
+    expect(list[1]).toBe("crm: Crm is the sales CRM of the team.")
+  })
+
+  it("should serve neither line for a connector without a description", () => {
+    registerConnectors([{ ...describedConnector(), description: "A".repeat(2000) }, describedConnector("other")])
+    const contact = findFunction(catalogFunctions(), "other.get_contact")
+    if (!contact) throw new Error("other.get_contact is not declared")
+    expect(describeFunction(contact, "acme").text).not.toContain("About the connector")
+    const list = functionCatalog(catalogFunctions().filter((fn) => fn.connector === "other"), [], "acme").text.split("\n")
+    expect(list[1]).toBe("other:")
+  })
+
   it("should replace the whole declaration at each call, so that a hot reload doubles nothing (AC1)", () => {
     registerConnectors([describedConnector()])
     registerConnectors([describedConnector()])
@@ -95,6 +116,17 @@ describe("registerConnectors", () => {
     ["an invalid name", () => [{ ...describedConnector(), name: "Crm" }], 'Invalid connector name "Crm": lowercase ASCII letters, digits and _, starting with a letter, 40 characters at most.'],
     ["a namespace of the package", () => [describedConnector("mail")], "Connector mail: the namespace is already served by another source."],
     ["a duplicate", () => [describedConnector(), describedConnector()], "Duplicate connector crm in registerConnectors."],
+    // `connector.description` et `connector.logo_domain` du format (oto-now/connectors#244).
+    ["an empty description", () => [{ ...describedConnector(), description: "  " }], "crm: description must be 1 to 2000 characters."],
+    ["a description too long", () => [{ ...describedConnector(), description: "a".repeat(2001) }], "crm: description must be 1 to 2000 characters."],
+    ["a description that is not text", () => [{ ...describedConnector(), description: 42 } as unknown as ConnectorDefinition], "crm: description must be 1 to 2000 characters."],
+    ...(["https://crm.example.test", "crm.example.test/app", "Crm.Example.test", "crm.example.test:443", "crm", "crm.example.test.", "-crm.example.test", ""] as const).map(
+      (logoDomain): [string, () => ConnectorDefinition[], string] => [
+        `a logo domain ${JSON.stringify(logoDomain)}`,
+        () => [{ ...describedConnector(), logoDomain }],
+        "crm: logoDomain must be a lowercase domain name, without scheme, port or path (example.com).",
+      ],
+    ),
     // Les `modes` portés depuis la bibliothèque, sans défaut (écran Connecteurs, oto-core#103).
     [
       "no modes",

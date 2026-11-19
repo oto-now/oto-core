@@ -432,6 +432,17 @@ export type ConnectorDefinition = {
   readonly name: string
   readonly label: string
   /**
+   * Ce qu'est l'outil et quand s'en servir, écrit pour l'assistant (`connector.description` du format) : 1 à 2 000
+   * caractères. Servi en entier avec le contrat de chaque fonction (`read <fonction>`), sa première phrase en tête du
+   * connecteur dans `read functions`, et rendu à l'écran Connecteurs (`OrgConnector.description`).
+   */
+  readonly description?: string
+  /**
+   * Le domaine de l'outil (`connector.logo_domain` du format : `attio.com`), en minuscules, sans schéma, port ni chemin,
+   * d'où l'écran tire son logo ; rendu tel quel à l'écran Connecteurs (`OrgConnector.logoDomain`).
+   */
+  readonly logoDomain?: string
+  /**
    * Racine `https://` des chemins, sans `/` final ; gabarit possible sur les réglages (`https://{domain}.example.net`) et
    * sur l'identité du compte, après l'hôte (`https://api.example.com/v2/{account_id}`).
    */
