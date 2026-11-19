@@ -632,7 +632,7 @@ describe("RailApplication tree (AC-a5, AC-a6)", () => {
 
 /** Glisse une ligne sur une autre, comme la souris : départ, survol, dépôt ; rend `false` si le survol n'est pas accepté. */
 function glisserSur(source: HTMLElement, cible: HTMLElement): boolean {
-  const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" }
+  const dataTransfer = { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" }
   fireEvent.dragStart(source, { dataTransfer })
   // `fireEvent` rend `false` quand le gestionnaire a annulé l'évènement : le survol est accepté.
   const accepte = !fireEvent.dragOver(cible, { dataTransfer })
@@ -760,7 +760,7 @@ const ORDRE: TreeNode[] = [
 /** Un survol à cette hauteur d'une ligne de 20 px (0 en haut) : le quart haut range avant, le quart bas après. */
 function survoler(evenement: "dragOver" | "drop", cible: HTMLElement, hauteur: number): boolean {
   vi.spyOn(cible, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 20, right: 200, width: 200, height: 20, toJSON: () => ({}) })
-  const survol = createEvent[evenement](cible, { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+  const survol = createEvent[evenement](cible, { dataTransfer: { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
   // jsdom n'a pas de `DragEvent` : l'évènement créé n'a pas de `clientY`, posé ici comme le navigateur le pose.
   Object.defineProperty(survol, "clientY", { value: hauteur })
   return fireEvent(cible, survol)
@@ -768,7 +768,7 @@ function survoler(evenement: "dragOver" | "drop", cible: HTMLElement, hauteur: n
 
 /** Glisse une ligne entre deux autres, à cette hauteur de la ligne visée ; rend `false` si le survol n'est pas accepté. */
 function glisserA(source: HTMLElement, cible: HTMLElement, hauteur: number): boolean {
-  fireEvent.dragStart(source, { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+  fireEvent.dragStart(source, { dataTransfer: { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
   const accepte = !survoler("dragOver", cible, hauteur)
   if (accepte) survoler("drop", cible, hauteur)
   fireEvent.dragEnd(source)
@@ -782,7 +782,11 @@ describe("RailApplication, ordering siblings (E05-S10, b2, AC-b9)", () => {
   it("should show where a line would fall between two others, then put it there among its siblings for everyone, without a question", async () => {
     const appels = simulerLAPI({ data: { path: "tarifs", after: null } })
     render(rangees("/"))
-    fireEvent.dragStart(lien("Tarifs"), { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+    const transfert = { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" }
+    fireEvent.dragStart(lien("Tarifs"), { dataTransfer: transfert })
+    // RET-011 : l'adresse que le navigateur joint au lien glissé est retirée, seul le type du rail voyage.
+    expect(transfert.clearData.mock.invocationCallOrder[0]).toBeLessThan(transfert.setData.mock.invocationCallOrder[0])
+    expect(transfert.setData.mock.calls.map(([type]) => type)).toEqual(["application/x-oto-chemin"])
     expect(survoler("dragOver", lien("Offres"), 2)).toBe(false)
     expect(lien("Offres")).toHaveAttribute("data-rang", "avant")
     expect(lien("Offres")).not.toHaveAttribute("data-depot")
@@ -809,7 +813,7 @@ describe("RailApplication, ordering siblings (E05-S10, b2, AC-b9)", () => {
   it("should drop into an unfolded branch from its bottom quarter, its children following it on screen", () => {
     simulerLAPI()
     render(rangees("/n/conseil/devis"))
-    fireEvent.dragStart(lien("Tarifs"), { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+    fireEvent.dragStart(lien("Tarifs"), { dataTransfer: { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
     expect(survoler("dragOver", lien("Conseil"), 18)).toBe(false)
     expect(lien("Conseil")).toHaveAttribute("data-depot")
     expect(lien("Conseil")).not.toHaveAttribute("data-rang")
@@ -1010,7 +1014,7 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
     const appels = simulerLAPI(impact({ gained: [membre("Bob", 0, 1)], totals: { gained: 1, lost: 0, changed: 0 } }), { data: { path: "ventes/contexte/notes", moves: [] } })
     render(railA("/n/conseil/grille"))
     // Le haut de la ligne d'un Contexte reçoit dedans : rien ne se range avant lui, il reste en tête.
-    fireEvent.dragStart(lien("Notes"), { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+    fireEvent.dragStart(lien("Notes"), { dataTransfer: { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
     expect(survoler("dragOver", lien("Contexte · Ventes"), 2)).toBe(false)
     expect(lien("Contexte · Ventes")).toHaveAttribute("data-depot")
     expect(lien("Contexte · Ventes")).not.toHaveAttribute("data-rang")
@@ -1033,7 +1037,7 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
     const appels = simulerLAPI(impact({ changes: false }), { data: { path: "ventes/notes", moves: [] } }, { data: {} })
     render(railA("/n/conseil/grille"))
     expect(glisserA(lien("Qualifier un prospect"), lien("Contexte · Ventes"), 18)).toBe(false)
-    fireEvent.dragStart(lien("Notes"), { dataTransfer: { setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
+    fireEvent.dragStart(lien("Notes"), { dataTransfer: { clearData: vi.fn(), setData: vi.fn(), effectAllowed: "", dropEffect: "" } })
     expect(survoler("dragOver", lien("Contexte · Ventes"), 18)).toBe(false)
     expect(lien("Contexte · Ventes")).toHaveAttribute("data-rang", "apres")
     expect(lien("Contexte · Ventes")).not.toHaveAttribute("data-depot")
