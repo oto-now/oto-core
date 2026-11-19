@@ -71,12 +71,16 @@ jobs:
           node scripts/ci/version-publiable.mjs --ref "$MERGE_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"
       # La dernière revue de chaque approbateur (hors simples commentaires) est une approbation, posée sur le dernier
       # commit de la pull request : une approbation antérieure à un push ne couvre pas ce qui est publié.
-      - name: Approved by an approver
+      # Contournement : un approbateur qui fusionne sans approbation (exception des administrateurs de la règle de
+      # branche, réservée à un blocage) publie quand même ; le job le dit en avertissement et dans son résumé.
+      # Toute autre fusion sans approbation échoue, et rien n'est tagué.
+      - name: Approved by an approver, or merged by one who bypassed the review
         if: steps.version.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
         run: |
           gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" --jq '.[] | [.user.login, .state, .commit_id] | @tsv' > reviews.tsv
           approved=""
@@ -84,8 +88,16 @@ jobs:
             last=$(awk -F'\t' -v who="$login" '$1 == who && $2 != "COMMENTED" { state = $2; commit = $3 } END { print state " " commit }' reviews.tsv)
             if [ "$last" = "APPROVED $HEAD_SHA" ]; then approved="$login"; break; fi
           done
-          test -n "$approved" || { echo "no approval by one of: $APPROVERS, on $HEAD_SHA"; exit 1; }
-          echo "approved by $approved"
+          if [ -n "$approved" ]; then echo "approved by $approved"; exit 0; fi
+          for login in $APPROVERS; do
+            if [ "$MERGED_BY" = "$login" ]; then
+              message="published WITHOUT approval: pull request #$PR merged by $MERGED_BY, who bypassed the review; the reason is due as a comment on the pull request"
+              echo "::warning title=Version without approval::$message"
+              echo "$message" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          echo "no approval by one of: $APPROVERS, on $HEAD_SHA, and merged by $MERGED_BY"; exit 1
       - name: Tag the merge commit
         if: steps.version.outputs.tag != ''
         env:

@@ -150,7 +150,8 @@ describe("publish workflow (AC9)", () => {
     expect(workflow()).toContain('APPROVERS: "jean-baptiste-tiple AlexisLaporte"')
   })
 
-  it("should tag the merge commit of a version pull request only after its content checks and an approver's approval of its last commit", () => {
+  // Un approbateur qui passe outre la règle de branche (exception des administrateurs) publie, en avertissement tracé.
+  it("should tag the merge commit of a version pull request only after its content checks and an approver's approval of its last commit, or an approver's traced bypass", () => {
     const tag = job("tag")
     expect(tag).toContain("if: github.event_name == 'pull_request' && github.event.pull_request.merged == true")
     expect(flat(tag.split("permissions:")[1].split("outputs:")[0])).toBe("contents: write pull-requests: read")
@@ -161,7 +162,11 @@ describe("publish workflow (AC9)", () => {
       '"repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"',
       '$2 != "COMMENTED"',
       'if [ "$last" = "APPROVED $HEAD_SHA" ]',
-      'test -n "$approved" || {',
+      'if [ -n "$approved" ]; then echo "approved by $approved"; exit 0; fi',
+      'if [ "$MERGED_BY" = "$login" ]; then',
+      'echo "::warning title=Version without approval::$message"',
+      'echo "$message" >> "$GITHUB_STEP_SUMMARY"',
+      'and merged by $MERGED_BY"; exit 1',
       'git tag -a "$TAG" -m "@otomata_tech/oto_platform ${TAG#v}" "$MERGE_SHA"',
       'git push origin "refs/tags/$TAG"',
     ]

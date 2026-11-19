@@ -904,7 +904,9 @@ Réservé aux mainteneurs du dépôt.
    identique (fiche D124, `migrations/README.md`).
 3. `pnpm verify`, puis le commit, poussé sur une branche du dépôt, et la pull request de version
    vers `main` (ou vers `release/x.y.z`, créée sur le tag de départ, pour une version corrective).
-4. JB ou Alexis approuve la pull request ; elle fusionne quand la CI est verte.
+4. JB ou Alexis approuve la pull request ; elle fusionne quand la CI est verte. En cas de blocage
+   seulement (relecteur absent, correctif urgent), un administrateur fusionne sans approbation et
+   le dit en commentaire sur la pull request, avec la raison ; le contournement reste tracé.
 5. À la fusion, le workflow `.github/workflows/publish.yml` vérifie cette approbation, pose le tag
    `v<x.y.z>` sur le commit de fusion, contrôle les secrets de l'arbre et de l'historique et les
    migrations, vérifie que le tag, la version et le CHANGELOG concordent, puis publie sur
