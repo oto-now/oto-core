@@ -18,11 +18,45 @@ export const connexionDe = (formulaire: ConnectorAccountForm | undefined): Conne
 export const formulaireDuCompte = (formulaires: readonly ConnectorAccountForm[], compte: Pick<AccountView, "connector" | "access">): ConnectorAccountForm | undefined =>
   formulaires.find((formulaire) => formulaire.connector === compte.connector && formulaire.access?.name === compte.access)
 
+/** Qui lit la façon d'un accès : la personne qui ajoute un outil, pour elle ou son organisation, ou qui lit un compte déjà là, parfois celui d'un autre. */
+type Regard = "ajout" | "compte"
+
+function faconDe(formulaire: ConnectorAccountForm, regard: Regard): string {
+  const chezLeTiers = connexionDe(formulaire) !== "saisie"
+  if (regard === "compte") return chezLeTiers ? "Connexion au service" : "Clé"
+  if (chezLeTiers) return `Avec mon compte ${formulaire.label}`
+  const pourSoi = formulaire.ownerKinds.includes("user")
+  const pourLOrganisation = formulaire.ownerKinds.some((genre) => genre !== "user")
+  if (pourSoi) return pourLOrganisation ? "Avec une clé" : "Avec ma clé"
+  return "Avec une clé, pour l'organisation"
+}
+
+/**
+ * La façon d'ouvrir un compte par l'accès d'un formulaire, pour un connecteur à plusieurs accès : dite par l'écran, d'après
+ * comment on s'y connecte et pour qui, jamais par le libellé de l'accès, écrit pour qui déclare le connecteur
+ * (« Service account of the organization »). Deux accès d'un même outil qui se diraient pareil prennent ce libellé entre
+ * parenthèses. `null` pour un connecteur à un seul accès, ou sans formulaire.
+ */
+export function faconDeLAcces(formulaire: ConnectorAccountForm | undefined, formulaires: readonly ConnectorAccountForm[], regard: Regard): string | null {
+  const acces = formulaire?.access
+  if (!formulaire || !acces) return null
+  const dite = faconDe(formulaire, regard)
+  const jumeau = formulaires.some((autre) => autre.connector === formulaire.connector && autre.access !== undefined && autre.access.name !== acces.name && faconDe(autre, regard) === dite)
+  return jumeau ? `${dite} (${acces.label})` : dite
+}
+
+/**
+ * Un compte qui ne retient aucun accès alors que son outil s'ouvre maintenant par plusieurs : le service le refuse à
+ * chaque appel, et aucun geste ne lui donne un accès.
+ */
+export const sansAcces = (formulaires: readonly ConnectorAccountForm[], compte: Pick<AccountView, "connector" | "access">): boolean =>
+  compte.access === undefined && formulaires.some((formulaire) => formulaire.connector === compte.connector && formulaire.access !== undefined)
+
 /** Le geste qui répare un état : saisir ou remplacer la clé (dans le détail), connecter ou reconnecter chez le tiers. */
 type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
 
 export type EtatDuCompte = {
-  code: "non_teste" | "fonctionne" | "test_en_echec" | "a_terminer" | "a_reconnecter" | "cle_refusee" | "credits_epuises" | "desactive"
+  code: "non_teste" | "fonctionne" | "test_en_echec" | "a_terminer" | "a_reconnecter" | "a_remplacer" | "cle_refusee" | "credits_epuises" | "desactive"
   /** Le mot de l'état, toujours écrit : la couleur du point ne le dit jamais seule. */
   mot: string
   precision: string | null
@@ -46,10 +80,21 @@ const clePosee = (compte: AccountView) => (compte.secret?.fields.length ?? 0) > 
 /** Un compte à consentement dont les jetons ne sont jamais arrivés. */
 const jamaisConnecte = (compte: AccountView) => !compte.secret?.updatedAt
 
+/** À qui demander un geste sur un compte qu'on ne gère pas. */
+const aQuiDemander = (compte: AccountView) => (compte.owner.kind === "user" ? (compte.owner.userName ?? "son propriétaire") : "qui le gère")
+
+/** Un compte sans accès (`sansAcces`) : rien ne le répare, il se remplace par un compte ajouté de nouveau. */
+function aRemplacer(compte: AccountView, gere: boolean): EtatDuCompte {
+  const precision = gere
+    ? "Cet outil se connecte maintenant de plusieurs façons : ajoutez-le de nouveau, puis désactivez celui-ci."
+    : `Cet outil se connecte maintenant de plusieurs façons : demandez à ${aQuiDemander(compte)} de l'ajouter de nouveau.`
+  return { code: "a_remplacer", mot: "À remplacer", precision, point: "failed", demandeUnGeste: true, geste: null }
+}
+
 function aReconnecter(compte: AccountView, formulaire: ConnectorAccountForm | undefined, aMoi: boolean): EtatDuCompte {
   const connexion = connexionDe(formulaire)
   const reconnectable = connexion === "consentement" || (connexion === "branchement" && formulaire?.hosted?.ready === true)
-  const qui = compte.owner.kind === "user" ? (compte.owner.userName ?? "son propriétaire") : "qui le gère"
+  const qui = aQuiDemander(compte)
   return {
     code: "a_reconnecter",
     mot: "À reconnecter",
@@ -135,13 +180,15 @@ function teste(compte: AccountView): EtatDuCompte | null {
 }
 
 /**
- * L'état d'un compte pour la personne `moi` : désactivé, à reconnecter (en erreur, ou refusé par un service où il
- * se connecte chez le tiers), marqué (clé refusée, crédits épuisés), à terminer, sinon ce que dit son dernier test
- * (« Fonctionne », « Test en échec »), et « Non testé » sans test, ou quand la clé a changé depuis.
+ * L'état d'un compte pour la personne `moi` : désactivé, à remplacer (`sansSonAcces`, ce que rend `sansAcces`), à
+ * reconnecter (en erreur, ou refusé par un service où il se connecte chez le tiers), marqué (clé refusée, crédits
+ * épuisés), à terminer, sinon ce que dit son dernier test (« Fonctionne », « Test en échec »), et « Non testé » sans
+ * test, ou quand la clé a changé depuis.
  */
-export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string): EtatDuCompte {
+export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string, sansSonAcces: boolean): EtatDuCompte {
   if (compte.status === "disabled") return { code: "desactive", mot: "Désactivé", precision: null, point: "paused", demandeUnGeste: false, geste: null }
   const gere = compte.viewerLevel === "manage"
+  if (sansSonAcces) return aRemplacer(compte, gere)
   const aMoi = estAMoi(compte, moi)
   if (compte.status === "error") return aReconnecter(compte, formulaire, aMoi)
   return (

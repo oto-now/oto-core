@@ -34,6 +34,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerConnectors` accepts a connector with several accesses (`accesses`, at least two `{ name, label, auth, credential, modes }` in place of `auth`, `credential` and `modes`), each judged like a single-access connector and refused by name (`CatalogRegistrationError`); `accountIdentity` beside `accesses` is refused.
 - Server: an account of such a connector retains its access (`AccountView.access`): `createAccount`, `startConnectorConsent` and `probeConnector` take `access`, required and checked for a connector with several accesses, refused for one with a single access, never a default (`invalid_arguments`, reason `access`); a call signs with the account's access, and an account without a declared access is refused (`not_enabled`). Single-access connectors are unchanged.
 - UI: `connectorAccountForms` gives one form per access (`ConnectorAccountForm.access`); the « Ajouter un connecteur » window shows one tool per access (« Connecter mon compte » for a consent access, the key otherwise), and an account reads the form of its access. Unchanged for single-access connectors.
+- UI: on the Connectors screen, an access is said by how one connects and for whom (« Avec mon compte <outil> », « Avec une clé, pour l'organisation »), never by `access.label`; the list and the detail say how an account opens, and an account without access of a connector that now has several reads « À remplacer ». Nothing to do for a host.
 
 ## 1.8.0 — 2026-11-18
 

@@ -4,7 +4,7 @@
 // Module sans « use client » : l'écran, rendu par le serveur, le calcule et ne passe à la fenêtre que des données. Sans
 // lui, la fenêtre proposerait un ajout que le service refuse (un propriétaire non admis, un outil sans port chez le tiers).
 import { normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, type Connexion } from "./etat-du-compte"
+import { connexionDe, faconDeLAcces, type Connexion } from "./etat-du-compte"
 
 type Proprietaire = ConnectorAccountForm["ownerKinds"][number]
 
@@ -15,7 +15,8 @@ export type OutilAAjouter = {
   libelle: string
   /**
    * L'accès du compte à créer, pour un connecteur à plusieurs accès : son nom (envoyé à la création, au consentement et
-   * à la sonde) et son libellé (montré sous le nom de l'outil) ; absent pour un connecteur à un seul accès.
+   * à la sonde) et la façon de s'y connecter, dite par l'écran sous le nom de l'outil (`faconDeLAcces` : « Avec mon
+   * compte … », « Avec une clé, pour l'organisation ») ; absent pour un connecteur à un seul accès.
    */
   acces?: { nom: string; libelle: string }
   /** Comment on s'y connecte ; `sans_cle` : un connecteur sans formulaire, simulé ou servi par la clé de l'hôte. */
@@ -58,7 +59,8 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
         const proprietaires = ORDRE.filter((genre) => admis.includes(genre) && ouvert(genre) && (genre === "user" || !chezLeTiers))
         if (proprietaires.length === 0) return []
         const mode = connecteur.accountModes[0] ?? "reel"
-        const acces = formulaire?.access ? { acces: { nom: formulaire.access.name, libelle: formulaire.access.label } } : {}
+        const dite = faconDeLAcces(formulaire ?? undefined, siens, "ajout")
+        const acces = formulaire?.access && dite !== null ? { acces: { nom: formulaire.access.name, libelle: dite } } : {}
         return [{ connecteur: connecteur.connector, libelle: connecteur.label, ...acces, facon, proprietaires, mode, ferme: connecteur.closedBy !== null, formulaire }]
       })
     })

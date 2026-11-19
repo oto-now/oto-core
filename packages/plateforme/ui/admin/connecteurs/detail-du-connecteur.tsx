@@ -240,6 +240,10 @@ type DetailDuConnecteurProps = {
   formulaire: ConnectorAccountForm | undefined
   /** Le nom lisible de l'outil. */
   outil: string
+  /** Pour un outil qui s'ouvre de plusieurs façons, celle de ce compte (`faconDeLAcces`) ; `null` sinon. */
+  facon: string | null
+  /** Vrai pour un compte sans accès d'un outil qui s'ouvre maintenant par plusieurs (`sansAcces`) : il est à remplacer. */
+  sansSonAcces: boolean
   fonctions: OrgConnector["functions"]
   /** Ses partages, lus par la page pour qui le gère. */
   partages: PartagesDuCompte | undefined
@@ -251,8 +255,8 @@ type DetailDuConnecteurProps = {
   fermer: string
 }
 
-export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
-  const etat = etatDuCompte(compte, formulaire, moi)
+export function DetailDuConnecteur({ compte, formulaire, outil, facon, sansSonAcces, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
+  const etat = etatDuCompte(compte, formulaire, moi, sansSonAcces)
   const gere = compte.viewerLevel === "manage"
   return (
     <TiroirDeConversation titre={compte.label} fermer={fermer}>
@@ -261,7 +265,7 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
           <div className="flex items-start gap-3">
             <TuileDeLOutil nom={outil} taille="lg" />
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm text-mute">{outil}</span>
+              <span className="text-sm text-mute">{facon ? `${outil} · ${facon}` : outil}</span>
               {compte.description && <p className="text-sm text-ink">{compte.description}</p>}
             </div>
           </div>

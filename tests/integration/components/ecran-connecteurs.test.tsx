@@ -62,6 +62,10 @@ const FORMULAIRE_CRM: ConnectorAccountForm = {
   settings: [{ name: "region", label: "Région", type: "choice", choices: ["us", "eu"], default: "us" }],
 }
 const FORMULAIRE_MS: ConnectorAccountForm = { connector: "microsoft", label: "Microsoft 365", consent: true, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
+// Un outil qui s'ouvre par deux accès, leurs libellés tels que la bibliothèque les écrit : l'écran ne les montre pas.
+const CONSOLE: OrgConnector = { ...CRM, connector: "console", label: "Search Console", functions: [] }
+const CONSOLE_PAR_CLE: ConnectorAccountForm = { ...FORMULAIRE_CRM, connector: "console", label: "Search Console", access: { name: "service_account", label: "Service account of the organization" }, ownerKinds: ["org", "team"], settings: [] }
+const CONSOLE_PAR_CONNEXION: ConnectorAccountForm = { ...FORMULAIRE_MS, connector: "console", label: "Search Console", access: { name: "google_account", label: "Sign-in of a person" } }
 
 const A_LEA: AccountView["owner"] = { kind: "user", userId: LEA, userName: "Léa Bernard" }
 const A_PAUL: AccountView["owner"] = { kind: "user", userId: PAUL, userName: "Paul Durand" }
@@ -277,6 +281,27 @@ describe("EcranConnecteurs, the detail of a connector", () => {
   it("should open nothing for an account the person does not see", () => {
     rendre({}, { vue: { compte: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d99" } })
     expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("should say how an account of a tool with several accesses opens, and that an account without access is to replace, with no test and no gesture but its deactivation", () => {
+    const suivi: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d70", label: "Suivi SEO", connector: "console", access: "google_account", secret: { fields: ["refresh_token"], updatedAt: "2026-11-02T09:00:00.000Z" } }
+    const ancienne: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d71", label: "Ancienne console", connector: "console" }
+    const donnees = { accounts: [suivi, ancienne], connectors: [CONSOLE], formulaires: [CONSOLE_PAR_CLE, CONSOLE_PAR_CONNEXION], partages: {} }
+    rendre(donnees, { vue: { compte: suivi.id } })
+    expect(ligneDe("Suivi SEO").getByText("Search Console · Connexion au service", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(detailDe(suivi).getByText("Search Console · Connexion au service")).toBeInTheDocument()
+    const ligne = ligneDe("Ancienne console")
+    expect(ligne.getByText("Search Console", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(ligne.getByText("À remplacer")).toBeInTheDocument()
+    expect(ligne.queryByRole("button")).toBeNull()
+
+    cleanup()
+    rendre(donnees, { vue: { compte: ancienne.id } })
+    const detail = detailDe(ancienne)
+    expect(detail.getByText("À remplacer")).toBeInTheDocument()
+    expect(detail.getByText("Cet outil se connecte maintenant de plusieurs façons : ajoutez-le de nouveau, puis désactivez celui-ci.")).toBeInTheDocument()
+    expect(detail.queryByRole("button", { name: /^Tester|la clé|^Reconnecter/ })).toBeNull()
+    expect(detail.getByRole("button", { name: "Désactiver Ancienne console" })).toBeInTheDocument()
   })
 
   it("should offer nothing reserved to who manages the account under that level, and say who manages it", () => {
@@ -594,6 +619,21 @@ describe("EcranConnecteurs, adding a connector", () => {
     expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: ICI } }])
     fireEvent.click(fenetre.getByRole("button", { name: "Tous les outils" }))
     expect(fenetre.getByRole("heading", { name: "Choisir un outil" })).toHaveFocus()
+  })
+
+  it("should show a tool that opens by several accesses as one card per access, said by how one connects and for whom, and send the access with the consent", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    fetchMock.mockResolvedValue(reponse(200, { data: { url: "https://login.example.test/authorize?state=s" } }))
+    rendre({ connectors: [CONSOLE], formulaires: [CONSOLE_PAR_CLE, CONSOLE_PAR_CONNEXION], ...ADMINISTRE })
+    const fenetre = ouvrirLaFenetre()
+    expect(cartes(fenetre)).toEqual(["Search ConsoleAvec mon compte Search Console", "Search ConsoleAvec une clé, pour l'organisation"])
+    expect(fenetre.queryByText(/Service account|Sign-in/)).toBeNull()
+    fireEvent.click(fenetre.getByRole("button", { name: /Avec mon compte Search Console$/ }))
+    expect(fenetre.getByText("Avec mon compte Search Console", { selector: ".oto-caption" })).toBeInTheDocument()
+    fireEvent.click(fenetre.getByRole("button", { name: "Connecter mon compte Search Console" }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
+    expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "console", access: "google_account", return_to: ICI } }])
   })
 
   it("should say so to a member who can add nothing, and say a tool closed by an administrator without offering it", () => {

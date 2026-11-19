@@ -4,8 +4,8 @@
 // recherche, puis une carte par outil que la personne peut ajouter (`catalogue-des-connecteurs.ts`), un outil fermé par
 // un administrateur dit sans geste. Puis l'outil choisi : sa clé à saisir (`FormulaireDAjout`), ou sa connexion chez le
 // tiers (`ConnexionParConsentement`). Une carte ne dit jamais comment l'outil se connecte, sauf celle d'un connecteur
-// à plusieurs accès, une par accès, qui porte le libellé de son accès sous le nom de l'outil. L'îlot ne reçoit que des
-// données ; la recherche et l'outil choisi sont un état de la fenêtre, perdu à sa fermeture.
+// à plusieurs accès, une par accès, qui dit sous le nom de l'outil la façon de s'y connecter (`faconDeLAcces`). L'îlot
+// ne reçoit que des données ; la recherche et l'outil choisi sont un état de la fenêtre, perdu à sa fermeture.
 import { useEffect, useRef, useState } from "react"
 import { CaretLeft } from "@phosphor-icons/react/dist/csr/CaretLeft"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
