@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — Profil : une personne garde son nom en arrivant dans un nouvel espace
+**Quoi :** migration `20261119170000_platform_profil_d_arrivee.sql` : à toute arrivée dans `members`, un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la personne dans l'espace qu'elle a rejoint le plus récemment ; un profil nommé n'est pas touché, aucune ligne existante reprise. Sans profil nommé, l'identité (`identityInOrg`) prend le nom du compte avant le début de l'email, comme l'annuaire. Décrit dans `identite-et-connexion.md`.
+**Pourquoi :** retour RET-010 : dans un espace qu'elle venait de créer, une personne apparaissait sous le début de son email au lieu du nom de son profil ailleurs.
+**Fichiers :** `packages/plateforme/migrations/20261119170000_platform_profil_d_arrivee.sql` (et sa copie dans `supabase/migrations/`), `packages/plateforme/migrations/README.md`, `packages/plateforme/server/identity.ts`, `tests/integration/profil-d-arrivee.test.ts`, `docs/conception/identite-et-connexion.md`, `packages/plateforme/CHANGELOG.md`, `.method/conventions/component-registry.md`.
+
 ## [2026-11-19] — Connecteurs : description et domaine de l'outil, acceptés à la déclaration
 **Quoi :** `ConnectorDefinition` gagne `description` (1 à 2 000 caractères) et `logoDomain` (domaine en minuscules, sans schéma, port ni chemin), facultatifs, contrôlés par `registerConnectors` avec des refus nommés (`presentation-declaration.ts`). La description est servie à l'assistant dans le contrat de chaque fonction du connecteur (`read <fonction>`) et, sa première phrase, en tête du connecteur dans `read functions` ; `listConnectorsForOrg` rend les deux (`OrgConnector.description`, `logoDomain`). Doc `connecteurs-et-comptes.md` § Moteur des connecteurs décrits et § Écart avec le code.
 **Pourquoi :** la bibliothèque `connectors` ajoute `connector.description` et `connector.logo_domain` à son format (décision Q5 de `docs/conception/custom-api.md`, oto-now/connectors#244) ; le paquet doit les accepter et les contrôler avant qu'elle ne les publie.

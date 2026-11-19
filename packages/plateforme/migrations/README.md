@@ -478,6 +478,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
   table, colonne, policy ni index ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la
   version avant le tag.
+- `20261119170000_platform_profil_d_arrivee.sql` (le nom d'une personne qui arrive dans un espace, décidé par JB le
+  19/11 ; identité et connexion) : la fonction `members_profile_on_arrival` et son déclencheur `before insert` sur
+  `members` : un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la même personne dans un
+  autre espace. Aucune ligne existante reprise ; aucune table, colonne ni policy. Le paquet
+  ne dépend pas d'elle ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant
+  le tag.
 
 ## Installer sur un hôte neuf
 
