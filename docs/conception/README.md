@@ -105,7 +105,7 @@ chaque document garde ces repères à côté de la décision qu'ils portent.
 | ADR-007 | Connecteurs par un service sans état, dans un autre dépôt (§ 1, § 2, § 4 remplacés) | [Connecteurs et comptes](connecteurs-et-comptes.md) |
 | ADR-008 | Écrans copiés d'`oto-frontend`, sans routeur imposé, sous une seule coque | [Écrans et coque](ecrans-et-coque.md) |
 | ADR-009 | Transport MCP sans état ; texte seul dans la conversation | [Outils MCP](outils-mcp.md) |
-| ADR-010 | Distribution du paquet : npm public, dépôt open source | [Distribution du paquet](distribution-du-paquet.md) |
+| ADR-010 | Distribution du paquet : npm public, dépôt open source (révisée le 2026-11-19 : publication à la fusion d'une pull request de version approuvée par JB ou Alexis) | [Distribution du paquet](distribution-du-paquet.md) |
 | ADR-011 | Le contenu en nœuds typés et en blocs ; une ligne de tableau est un bloc | [Nœuds et arbre](noeuds-et-arbre.md), [Pages et blocs](pages-et-blocs.md), [Lecture et écriture des pages](lecture-et-ecriture-des-pages.md) (§ 1, § 3, § 6 : nœuds ; § 2 : blocs ; § 4, § 5, § 7 : lecture et écriture) |
 | ADR-012 | Ports d'identité et de base ; droits décidés dans le service ; Supabase hôte par défaut | [Base et portabilité](base-et-portabilite.md) |
 | ADR-013 | Partage public d'un contenu par lien | [Partage public](partage-public.md) |

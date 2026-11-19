@@ -26,8 +26,9 @@ d'un agent (échelle d'un changement, conventions routées, revue, gate de commi
 - Message : un préfixe (`feat:`, `fix:`, `perf:`, `docs:`…), la phrase de ce qui change pour le
   lecteur, puis les trailers.
 - La CI (`.github/workflows/ci.yml`) construit, contrôle les migrations, joue la suite portable sur
-  un Postgres nu et construit un hôte depuis le paquet empaqueté ; une version ne se publie que
-  d'un tag posé sur un commit vert (`.github/workflows/publish.yml`, `README.md § Publier une version`).
+  un Postgres nu et construit un hôte depuis le paquet empaqueté ; une version se publie à la
+  fusion de sa pull request de version, approuvée par JB ou Alexis, qui pose son tag
+  (`.github/workflows/publish.yml`, `README.md § Publier une version`).
 - Dépôt public : aucun nom réel de client, de partenaire ni de personne hors du titulaire de la
   licence ; aucun secret (`CLAUDE.md § Modifications documentaires`, règle 5 ; `pnpm check:public`).
 
