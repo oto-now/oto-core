@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import { executeDescribed } from "../../packages/plateforme/server/connectors/engine"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { authorizationAddress } from "../../packages/plateforme/server/connectors/oauth-user"
@@ -33,27 +33,27 @@ function stub(...answers: Response[]) {
 
 /** L'adresse d'autorisation du connecteur déclaré `crm`, et ses paramètres. */
 function authorizationOf(): { address: string; query: Record<string, string> } {
-  const declared = declaredConnector("crm")
+  const declared = declaredConnector("crm")?.accesses[0]
   if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
   const url = new URL(authorizationAddress(declared.auth, { clientId: "client-test", redirectUri: "https://acme.test/api/platform/connector-consent/callback", state: "s", codeChallenge: "c" }))
   return { address: url.origin + url.pathname, query: Object.fromEntries(url.searchParams) }
 }
 
 /** Le connecteur de test à niveaux d'accès sous une autre authentification, ou une fonction changée. */
-function leveledVariant(auth: Record<string, unknown> = {}, change: (fn: ConnectorDefinition["functions"][number]) => ConnectorDefinition["functions"][number] = (fn) => fn): ConnectorDefinition {
+function leveledVariant(auth: Record<string, unknown> = {}, change: (fn: ConnectorView["functions"][number]) => ConnectorView["functions"][number] = (fn) => fn): ConnectorView {
   const base = leveledConsentConnector()
-  return { ...base, auth: { ...base.auth, ...auth } as ConnectorDefinition["auth"], functions: base.functions.map(change) }
+  return { ...base, auth: { ...base.auth, ...auth } as ConnectorView["auth"], functions: base.functions.map(change) }
 }
 
 /** Le connecteur à consentement de test sous une autre authentification ou d'autres champs. */
-function consentVariant(auth: Record<string, unknown> = {}, change: Partial<ConnectorDefinition> = {}): ConnectorDefinition {
+function consentVariant(auth: Record<string, unknown> = {}, change: Partial<ConnectorView> = {}): ConnectorView {
   const base = consentConnector()
-  return { ...base, ...change, auth: { ...base.auth, ...auth } as ConnectorDefinition["auth"] }
+  return { ...base, ...change, auth: { ...base.auth, ...auth } as ConnectorView["auth"] }
 }
 
-const register = (definition: ConnectorDefinition = consentConnector()) => registerConnectors([definition], { oauthApplications: { [definition.name]: TEST_APPLICATION } })
+const register = (definition: ConnectorView = consentConnector()) => registerConnectors([definition], { oauthApplications: { [definition.name]: TEST_APPLICATION } })
 
-function registrationProblem(definition: ConnectorDefinition, applications?: Record<string, { clientId: string; clientSecret: string }>): string {
+function registrationProblem(definition: ConnectorView, applications?: Record<string, { clientId: string; clientSecret: string }>): string {
   try {
     registerConnectors([definition], { oauthApplications: applications })
   } catch (error) {
@@ -87,13 +87,13 @@ afterEach(() => {
 describe("oauth2_user declaration", () => {
   it("should accept the form the factory renders, with the host's OAuth application, and keep the identity function", () => {
     register()
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     expect([declared?.auth.kind, declared?.identity?.fn.name, declared?.application]).toEqual(["user_consent", "crm.get_company", TEST_APPLICATION])
   })
 
   it("should accept the connector without an OAuth application, which the consent and the call then refuse", () => {
     registerConnectors([consentConnector()])
-    expect(declaredConnector("crm")?.application).toBeNull()
+    expect(declaredConnector("crm")?.accesses[0]?.application).toBeNull()
   })
 
   it.each([
@@ -137,20 +137,20 @@ describe("oauth2_user declaration", () => {
 describe("oauth2_user with access levels and an identity address", () => {
   it("should accept the levels the factory renders, keep them unapplied, and ask the scopes of full plus those of the identity address", () => {
     register(leveledConsentConnector())
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
     expect([declared.auth.accessLevels, declared.auth.scopeImplies]).toEqual([
       { read: ["offline_access", "contacts.read"], full: ["offline_access", "contacts.write", "entries.write"] },
       { "contacts.write": ["contacts.read"] },
     ])
     // Aucun filtrage : toutes les fonctions sont servies, comme au niveau `full`.
-    expect(declared.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm_act.post_entry"])
+    expect(declaredConnector("crm")?.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm_act.post_entry"])
     expect(authorizationOf().query.scope).toBe("offline_access contacts.write entries.write openid email")
   })
 
   it("should keep a connector without levels as it was: its scopes, its identity function", () => {
     register()
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
     expect([declared.auth.scopes, declared.auth.accessLevels, declared.auth.scopeImplies, declared.auth.identity, declared.identity?.fn.name]).toEqual([
       ["offline_access", "contacts.read"],
@@ -201,7 +201,7 @@ describe("oauth2_user with access levels and an identity address", () => {
 
   it("should read the identity address with a GET, the access token as a bearer, no redirect followed, outside the catalog", async () => {
     register(leveledConsentConnector())
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (!declared?.identity) throw new Error("no identity")
     const access = token()
     const { sent } = stub(json({ email: "ada@contoso.test", sub: "1" }))
@@ -211,7 +211,7 @@ describe("oauth2_user with access levels and an identity address", () => {
       [{ email: "ada@contoso.test", sub: "1" }],
       [["GET", "https://id.crm.example.test/v1/userinfo", "error", `Bearer ${access}`]],
     ])
-    expect(declared.functions.map((fn) => fn.name)).not.toContain(declared.identity.fn.name)
+    expect(declaredConnector("crm")?.functions.map((fn) => fn.name)).not.toContain(declared.identity.fn.name)
   })
 })
 

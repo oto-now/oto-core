@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AccountOwnerChoices, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
-import { nomLibre, outilsAAjouter, outilsCherches } from "../../packages/plateforme/ui/admin/connecteurs/catalogue-des-connecteurs"
+import { cleDeLOutil, nomLibre, outilsAAjouter, outilsCherches } from "../../packages/plateforme/ui/admin/connecteurs/catalogue-des-connecteurs"
 
 // Le catalogue de la fenêtre « Ajouter un connecteur » : fonctions pures, sur des connecteurs en mémoire.
 
@@ -72,6 +72,31 @@ describe("outilsAAjouter", () => {
     const modes = outilsAAjouter(CONNECTEURS, FORMULAIRES, ADMINISTRATEUR).map((outil) => [outil.connecteur, outil.mode])
     expect(modes).toContainEqual(["mail", "simule"])
     expect(modes).toContainEqual(["crm", "reel"])
+  })
+})
+
+describe("outilsAAjouter, connecteur à plusieurs accès", () => {
+  const console = connecteur("console", "Search Console")
+  const FORMULAIRES_DE_LA_CONSOLE = [
+    formulaire("console", { access: { name: "service_account", label: "Compte de service" }, consent: false, ownerKinds: ["org", "team"], fields: [{ name: "service_account_key", label: "Clé", secret: true }] }),
+    formulaire("console", { access: { name: "google_account", label: "Compte Google" }, consent: true, ownerKinds: ["user"] }),
+  ]
+
+  it("should give one tool per access, by the label of its access: the key of the service account to enter, and Connect my account for the sign-in", () => {
+    const outils = outilsAAjouter([console], FORMULAIRES_DE_LA_CONSOLE, ADMINISTRATEUR)
+    expect(outils.map((outil) => [cleDeLOutil(outil), outil.acces, outil.facon, outil.proprietaires])).toEqual([
+      ["console:service_account", { nom: "service_account", libelle: "Compte de service" }, "saisie", ["org", "team"]],
+      ["console:google_account", { nom: "google_account", libelle: "Compte Google" }, "consentement", ["user"]],
+    ])
+  })
+
+  it("should give a member only the access that admits a personal account", () => {
+    expect(outilsAAjouter([console], FORMULAIRES_DE_LA_CONSOLE, MEMBRE).map(cleDeLOutil)).toEqual(["console:google_account"])
+  })
+
+  it("should keep the tool of a connector with a single access without access, keyed by its connector", () => {
+    const [crm] = outilsAAjouter([connecteur("crm", "Crm Pro")], [formulaire("crm", {})], ADMINISTRATEUR)
+    expect([cleDeLOutil(crm), "acces" in crm]).toEqual(["crm", false])
   })
 })
 

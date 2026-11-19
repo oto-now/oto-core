@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AccountView, ConnectorAccountForm } from "@otomata_tech/oto_platform/schemas"
-import { etatDuCompte } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
+import { etatDuCompte, formulaireDuCompte } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
 import { adresseDeLaVue, comptesAuxPartagesLus, lignesDesConnecteurs, vueDesConnecteurs, type VueDesConnecteurs } from "../../packages/plateforme/ui/admin/connecteurs/lignes-des-connecteurs"
 
 // L'état d'un compte et les lignes de la liste de l'écran Connecteurs : fonctions pures, sur des comptes en mémoire.
@@ -156,5 +156,26 @@ describe("vueDesConnecteurs", () => {
     expect(ids(null)).toEqual([mien.id])
     expect(ids(gere.id)).toEqual([mien.id, gere.id])
     expect(ids(lu.id)).toEqual([mien.id])
+  })
+})
+
+describe("formulaireDuCompte et lignes d'un connecteur à plusieurs accès", () => {
+  const CLE_DE_SERVICE: ConnectorAccountForm = { ...CLE, connector: "console", label: "Search Console", access: { name: "service_account", label: "Compte de service" } }
+  const CONNEXION: ConnectorAccountForm = { ...CONSENTEMENT, connector: "console", label: "Search Console", access: { name: "google_account", label: "Compte Google" } }
+  const formulaires = [CLE, CLE_DE_SERVICE, CONNEXION]
+
+  it("should take the form of the access the account retains, and the single form of a connector with one access", () => {
+    expect([
+      formulaireDuCompte(formulaires, { connector: "console", access: "google_account" }),
+      formulaireDuCompte(formulaires, { connector: "console", access: "service_account" }),
+      formulaireDuCompte(formulaires, { connector: "console" }),
+      formulaireDuCompte(formulaires, { connector: "crm" }),
+    ]).toEqual([CONNEXION, CLE_DE_SERVICE, undefined, CLE])
+  })
+
+  it("should reconnect a person's account by the access it retains", () => {
+    const aReconnecter = compte({ connector: "console", access: "google_account", owner: A_MOI, status: "error" })
+    const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
+    expect(ligne.geste).toEqual({ genre: "connexion", libelle: "Reconnecter", ressource: "connector-consent", connecteur: "console", acces: "google_account" })
   })
 })

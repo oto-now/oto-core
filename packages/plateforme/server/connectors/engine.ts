@@ -18,7 +18,7 @@ import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
 import { bodyArgument, bodyTable } from "./body-argument"
 import { bodyEntries, tableBody } from "./body-table"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
+import type { ConnectorView, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { runFileOutput } from "./file-output"
 import { requestJson, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { declaredLevels, refuseUnserved } from "./levels"
@@ -29,7 +29,7 @@ import { resolveAddress, type AddressSpec } from "./settings"
 
 /** Une fonction décrite prête à courir, préparée une fois à la déclaration (`declaration.ts`). */
 export type PreparedFunction = {
-  connector: ConnectorDefinition
+  connector: ConnectorView
   fn: ConnectorFunctionDefinition
   /** Le tiers, avec la table d'erreurs de la fonction : ses refus à statut HTTP, puis ceux du connecteur ; l'adresse se résout à l'appel. */
   api: Omit<ConnectorApi, "baseUrl">

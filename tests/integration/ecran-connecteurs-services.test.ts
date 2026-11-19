@@ -7,7 +7,7 @@
 // connexion d'administration ne sert qu'à poser et relire.
 import { randomBytes, randomUUID } from "crypto"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import { connectorAccountForms, setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
 import { disableAccount, enableAccount, updateAccount } from "../../packages/plateforme/server/connectors/account-changes"
 import { createAccount, listOwnAccounts } from "../../packages/plateforme/server/connectors/accounts"
@@ -42,7 +42,7 @@ const SPARE = `t${hex(4)}`
 const ORG_ONLY = `t${hex(4)}`
 const CONNECTORS = [LIVE, FRESH, SPARE, ORG_ONLY]
 
-const orgOnly = (): ConnectorDefinition => ({ ...describedConnector(ORG_ONLY), modes: ["byo_org"] })
+const orgOnly = (): ConnectorView => ({ ...describedConnector(ORG_ONLY), modes: ["byo_org"] })
 
 type Session = { db: PlatformDb; identity: Identity }
 

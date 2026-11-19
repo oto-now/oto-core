@@ -7,11 +7,12 @@
 import { randomUUID } from "node:crypto"
 import { disableAccountSchema, type AccountHealth, type AccountMarkReason, type AccountProbe, type ProbedBalance, type ProbeFailureCode } from "../../schemas"
 import { connectorProbeSchema } from "../../schemas/connectors"
-import { declaredConnector, type DeclaredConnector } from "../catalog/connector-source"
+import { declaredConnector, type DeclaredAccess } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
 import { inTransaction, invalidInput, isPlatformError, PlatformError } from "../errors"
 import type { Identity } from "../identity"
+import { accountAccess, requestedAccess } from "./accesses"
 import { checkedSettings, liveCredential, missingField } from "./account-secret"
 import { accountOwner, lastProbeOf, managedAccount } from "./accounts"
 import { closedConnector, isConnectorClosed, requireActivable } from "./activations"
@@ -125,7 +126,7 @@ function outcome(problem: ProbeProblem | null, balance: ProbedBalance | null): A
  * solde la décide. Un refus ou une panne du tiers, un compte mal réglé : non sain, avec la raison ; une panne interne
  * lève.
  */
-async function runProbe(declared: DeclaredConnector, accountId: string, open: () => Promise<AccountCredential>, where: string): Promise<AccountHealth> {
+async function runProbe(declared: DeclaredAccess, accountId: string, open: () => Promise<AccountCredential>, where: string): Promise<AccountHealth> {
   const prepared = declared.probe
   const paths = declared.definition.probe?.nonEmpty
   if (!prepared || !paths) throw noProbe(declared.definition.name)
@@ -164,10 +165,12 @@ export async function probeAccount(db: PlatformDb, identity: Identity, input: un
   if (!parsed.success) throw invalidInput(parsed.error)
   const id = parsed.data.account_id
   const row = await managedAccount(db, identity, id, { service: "probeAccount", gesture: "Probing" })
-  const declared = declaredConnector(row.connector)
+  const connector = declaredConnector(row.connector)
+  // La sonde de l'accès que le compte retient, jouée par lui.
+  const declared = connector ? accountAccess(connector, { label: row.label, access: row.access }) : null
   if (!declared?.probe) throw noProbe(row.connector)
   countProbe(identity)
-  const account = { id, label: row.label, mode: accountMode(row.mode), owner: accountOwner(row) }
+  const account = { id, label: row.label, ...(row.access !== null ? { access: row.access } : {}), mode: accountMode(row.mode), owner: accountOwner(row) }
   const open = async () => (await liveCredential(db, identity, account, row.connector))()
   const health = await runProbe(declared, id, open, `connector ${row.connector}: account ${id}`)
   const [kept] = await inTransaction(
@@ -197,7 +200,7 @@ function passingTokens(): AccountCredential["tokens"] {
 }
 
 /** Les champs saisis, contrôlés contre la déclaration : aucun inconnu, aucun de l'hôte, aucun exigé qui manque. */
-function checkedFields(declared: DeclaredConnector, fields: Record<string, string>): Record<string, string> {
+function checkedFields(declared: DeclaredAccess, fields: Record<string, string>): Record<string, string> {
   const { definition } = declared
   const fromHost = hostFieldsOf(definition).find((field) => Object.hasOwn(fields, field.name))
   if (fromHost) throw new PlatformError("invalid_arguments", `Field ${fromHost.name} of ${definition.name} is provided by this application, never entered.`)
@@ -213,8 +216,9 @@ function checkedFields(declared: DeclaredConnector, fields: Record<string, strin
  * La sonde à blanc, avant l'ajout d'un compte (`POST admin/connectors/<nom>/probe`) : la sonde du connecteur jouée avec
  * les champs et les réglages du formulaire, contrôlés comme `setAccountSecret` les contrôle, sans compte. N'écrit rien :
  * ni compte, ni marque, ni jeton gardé ; la même garde d'adresse qu'un appel (`guardedFetch`). Ouverte à tout membre.
- * Refus : connecteur inconnu (`not_found`) ; fermé par un administrateur (`not_enabled`, `closed`) ; sans sonde, à
- * consentement (`oauth2_user`) ou à compte rattaché (`invalid_arguments`, `no_probe`) ; champ manquant, inconnu ou de
+ * Refus : connecteur inconnu (`not_found`) ; fermé par un administrateur (`not_enabled`, `closed`) ; accès absent,
+ * inconnu ou de trop (`invalid_arguments`, `access` : celui du compte à créer, pour un connecteur à plusieurs) ; sans
+ * sonde, à consentement (`oauth2_user`) ou à compte rattaché (`invalid_arguments`, `no_probe`) ; champ manquant, inconnu ou de
  * l'hôte, réglage inconnu, hors de ses valeurs ou manquant (`invalid_arguments`) ; plus de 10 tests par minute
  * (`rate_limited`). Une clé refusée par le tiers rend une issue non saine, jamais un refus.
  */
@@ -224,8 +228,11 @@ export async function probeConnector(db: PlatformDb, identity: Identity, input: 
   const { connector, input: given } = parsed.data
   requireActivable(connector, catalogFunctions())
   if (await isConnectorClosed(db, identity, connector)) throw await closedConnector(db, identity, connector)
-  const declared = declaredConnector(connector)
-  if (!declared?.probe) throw noProbe(connector)
+  const found = declaredConnector(connector)
+  if (!found) throw noProbe(connector)
+  // L'accès du compte à créer : celui que la saisie nomme pour un connecteur à plusieurs accès.
+  const declared = requestedAccess(found, given.access)
+  if (!declared.probe) throw noProbe(connector)
   if (declared.auth.kind === "user_consent") throw noProbe(connector, "connects by consent")
   if (declared.definition.accountIdentity) throw noProbe(connector, "connects through its own sign-in")
   const fields = checkedFields(declared, given.fields)

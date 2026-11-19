@@ -4,7 +4,7 @@
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
 import { normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, estAMoi, etatDuCompte, type EtatDuCompte } from "./etat-du-compte"
+import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
 /**
@@ -60,7 +60,7 @@ export function libelleDuConnecteur(connecteur: string, formulaires: readonly Co
 /** Le geste d'une ligne : un lien vers le détail, où se saisit la clé, ou la connexion chez le tiers. */
 type GesteDeLigne =
   | { genre: "detail"; libelle: string }
-  | { genre: "connexion"; libelle: string; ressource: "connector-consent" | "hosted-link"; connecteur: string }
+  | { genre: "connexion"; libelle: string; ressource: "connector-consent" | "hosted-link"; connecteur: string; acces?: string }
 
 /** Une ligne de la liste, ses textes et ses adresses calculés par l'écran. */
 export type LigneDeConnecteur = {
@@ -86,7 +86,8 @@ function gesteDe(etat: EtatDuCompte, compte: AccountView, formulaire: ConnectorA
   if (!etat.geste) return null
   const libelle = LIBELLES_DES_GESTES[etat.geste]
   if (etat.geste === "saisir" || etat.geste === "remplacer") return { genre: "detail", libelle }
-  return { genre: "connexion", libelle, ressource: connexionDe(formulaire) === "branchement" ? "hosted-link" : "connector-consent", connecteur: compte.connector }
+  const ressource = connexionDe(formulaire) === "branchement" ? "hosted-link" : "connector-consent"
+  return { genre: "connexion", libelle, ressource, connecteur: compte.connector, ...(compte.access !== undefined ? { acces: compte.access } : {}) }
 }
 
 /** À qui est le compte et, dessous, ce que la personne y peut. */
@@ -122,7 +123,7 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
   const cherche = normalizeTitle(vue.q)
   const lignes = retenus
     .map((compte) => {
-      const formulaire = formulaires.find((candidat) => candidat.connector === compte.connector)
+      const formulaire = formulaireDuCompte(formulaires, compte)
       const etat = etatDuCompte(compte, formulaire, moi)
       const ligne: LigneDeConnecteur = {
         id: compte.id,
