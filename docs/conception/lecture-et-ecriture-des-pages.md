@@ -1,7 +1,7 @@
 # Lecture et écriture des pages
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-11-17
+- **Dernière révision** : 2026-11-19
 
 ## Résumé
 
@@ -22,7 +22,7 @@ Un assistant lit et écrit du texte : les six outils ne transportent que du mark
 ### Lire (ADR-011 § 5)
 
 - `read` sert les blocs rendus en markdown, sections comprises, et la référence courte de chaque bloc sur demande. E03-S03 N43 : rendu, sections et emplacement d'un `call` viennent de `schemas/blocks-render.ts` (`orderBlocks`, `renderBlocks`, `splitSections`, `findSections`, `sectionOfBlock`, `callLocation`…), consommés sans réécriture par `server/` et `ui/`.
-- E03-S03 N1 : `read` sert la page entière jusqu'à 12 000 caractères rendus, au-delà le début de page puis le plan ; une page sans titre est servie entière ; au-delà de 45 000 caractères, elle se sert par parties avec `cursor`.
+- E03-S03 N1 : `read` sert la page entière jusqu'à 12 000 caractères rendus, au-delà le début de page puis le plan ; une page sans titre est servie entière ; au-delà de 45 000 caractères, elle se sert par parties avec `cursor`. Le plan, demandé (`outline`) ou servi d'office, nomme après les titres les fichiers joints de la page (blocs `file`, 20 au plus, `OUTLINE_FILES_MAX`, les suivants dits par leur nombre) : chacun sur la ligne que la page sert, avec la section qui le range et l'appel qui en lit le texte (`read {path, file}`). Sans eux, un assistant qui ne reçoit que les titres ignorerait que la page en porte. Une page sans fichier joint garde son plan à l'identique.
 - E03-S03 N2 : le plafond d'un résultat se mesure sur `structuredContent` sérialisé ; les champs ne répètent jamais un texte de bloc ; le plan en champs est borné à 100 titres. E03-S03 N36 : `MAX_RESULT_CHARS` et `MAX_DATA_CHARS` vivent dans `server/tool-output.ts`, réexportées par `mcp/result.ts`.
 - E03-S03 N3 : un curseur est opaque et lié au nœud, à la requête (mode, section, `draft`, `refs`, `since_revision`), à la partie et à l'empreinte du texte complet ; autre chose → `invalid_arguments`.
 - E03-S03 N5 : enfants d'un nœud : 50 au plus, rangés par `position` puis par chemin (une position nulle se range par chemin), comptés après le filtre de visibilité. E03-S03 N56 : un parent que le lecteur ne voit pas (niveau 0) est servi `parent: none` (`null` en champ) : son titre serait une fuite.
@@ -113,3 +113,4 @@ Aucune à ce jour.
 - 2026-09-30 : une écriture d'assistant est entière ou rien ; `set_markdown`, `replace_text` sur toute la page avec `count`, `node.write_many`, frontmatter YAML, coupe au mot ; l'écran écrit jusqu'à 1 000 opérations — décidé par JB (source : story E11-S18, fiche D153).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-011 § 4, § 5 et § 7, la fiche D153 et les choix H54, H57, E03-S03, E11-S18 — décidé par Alexis, accord de JB.
 - 2026-11-17 : `publish: false` d'un assistant n'a plus d'effet, et le refus d'une procédure ne le conseille plus — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).
+- 2026-11-19 : le plan d'une page nomme ses fichiers joints, avec leur section et l'appel qui en lit le texte — demandé par le responsable du produit (source : retour d'un assistant en usage).

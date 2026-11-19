@@ -7,7 +7,7 @@
 import * as z from "zod/v4"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { formatResult } from "../../packages/plateforme/mcp/result"
-import { renderBlocks, type BlockInput, type ReadNodeInput } from "../../packages/plateforme/schemas"
+import { fileLink, renderBlocks, type BlockInput, type ReadNodeInput } from "../../packages/plateforme/schemas"
 import { defineFunction } from "../../packages/plateforme/server/catalog/define"
 import { catalogFunctions, describeFunction } from "../../packages/plateforme/server/catalog/registry"
 import { diffBlocks, samePublishedContent } from "../../packages/plateforme/server/nodes/diff"
@@ -273,6 +273,38 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       expect(lea.text.endsWith('\n\noutline (2 sections, 73 characters):\n- Objet (18 characters)\n- Corps (53 characters)\nRead one with acme_read {"path": "ventes/modele_relance", "section": "<title>"}.')).toBe(true)
       expect(lea.text).not.toContain("Bonjour")
       expect(lea.data).not.toHaveProperty("outline")
+    })
+
+    it("should name the attached files under an outline, asked for or served for a long page, each with its section and how to read it, 20 at most", async () => {
+      const joint = (rang: number, name: string) => ({ id: blockUuid(0xf000 + rang), name, size: 1200, mime: "application/pdf" })
+      const bloc = (file: ReturnType<typeof joint>): BlockInput => ({ type: "file", data: { file_id: file.id, name: file.name, size: file.size, mime: file.mime } })
+      const brief = joint(1, "Brief.pdf")
+      const budget = joint(2, "Budget mars.pdf")
+      const tables = base([{ path: "conseil/dossier" }, { path: "conseil/dossier_long" }, { path: "conseil/dossier_plein" }])
+      addBlocks(tables, "conseil/dossier", "published", [bloc(brief), heading("Budget"), paragraph("Voir le tableur."), heading("Détail", 2), bloc(budget)])
+      addBlocks(tables, "conseil/dossier_long", "published", [heading("Contexte"), paragraph("a".repeat(7000)), heading("Pièces"), paragraph("b".repeat(7000)), bloc(budget)])
+      addBlocks(tables, "conseil/dossier_plein", "published", [heading("Pièces"), ...Array.from({ length: 21 }, (_, rang) => bloc(joint(10 + rang, `Annexe ${rang + 1}.pdf`)))])
+      await content(tables)
+
+      const asked = await read("marc", { path: "conseil/dossier", outline: true })
+      expect(asked.text.split("\n").slice(-5)).toEqual([
+        'Read one with acme_read {"path": "conseil/dossier", "section": "<title>"}.',
+        "files (2):",
+        `- ${fileLink(brief)} at the start of the page`,
+        `- ${fileLink(budget)} in « Détail »`,
+        'Read the text of a file with acme_read {"path": "conseil/dossier", "file": "<id>"}: its id ends its address.',
+      ])
+
+      const long = await read("marc", { path: "conseil/dossier_long" })
+      expect(long.text.split("\n").slice(-3)).toEqual([
+        "files (1):",
+        `- ${fileLink(budget)} in « Pièces »`,
+        'Read the text of a file with acme_read {"path": "conseil/dossier_long", "file": "<id>"}: its id ends its address.',
+      ])
+
+      const full = (await read("marc", { path: "conseil/dossier_plein", outline: true })).text.split("\n")
+      const from = full.indexOf("files (21):")
+      expect([from > 0, full.slice(from + 1).filter((line) => line.startsWith("- [")).length, full.at(-2)]).toEqual([true, 20, "- … and 1 more"])
     })
   })
 
