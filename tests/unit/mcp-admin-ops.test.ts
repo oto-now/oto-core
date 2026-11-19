@@ -34,7 +34,7 @@ const CREATE_SUMMARY =
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
 /** La migration de la supervision (N9) : ses opérations se sautent tant que le projet ne l'a pas. */
-const SUPERVISION = "20261119083000"
+const SUPERVISION = "20261119210949"
 const supervisionPending = (await pendingMigrations()).includes(SUPERVISION)
 
 /** Une ligne d'ancrage d'`admin_context`, datée de `age` millisecondes. */
