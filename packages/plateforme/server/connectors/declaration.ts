@@ -31,6 +31,7 @@ import { accountIdentityProblem, baseAddressProblem, checkedApplications, checke
 import { filesProblem } from "./multipart"
 import { declaredLevels, functionScopesProblem, type AccessLevels } from "./levels"
 import { stripProblem } from "./output"
+import { presentationProblem } from "./presentation-declaration"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
 import { signalProblem } from "./signal-declaration"
@@ -265,7 +266,7 @@ function firstAccessProblem(accesses: readonly PreparedAccess[], check: (access:
 
 /** Un connecteur contrôlé et préparé, chacun de ses accès compris ; au premier problème, `CatalogRegistrationError`. */
 function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, given: HostGiven): DeclaredConnector {
-  const shape = connectorProblem(definition, reserved, seen) ?? accessesProblem(definition)
+  const shape = connectorProblem(definition, reserved, seen) ?? presentationProblem(definition) ?? accessesProblem(definition)
   if (shape) throw new CatalogRegistrationError(shape)
   const views = accessViews(definition)
   const prepared: PreparedAccess[] = views.map((access) => ({ access, auth: preparedAccess(access), probe: null, identity: null }))
@@ -347,7 +348,7 @@ export type ConnectorOptions = HostOptions & {
 /**
  * Déclare les connecteurs décrits de l'hôte, partagés ou propres (`ConnectorDefinition`), à appeler au montage de
  * chaque route qui monte une porte du paquet, comme `registerFunctions`. Toute la liste est contrôlée d'abord : nom du
- * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, délai, table d'erreurs (et son
+ * connecteur (celui de `platform.connectors`), espace de noms libre, doublon, libellé, description et domaine (`presentation-declaration.ts`), délai, table d'erreurs (et son
  * signal de refus, `body` et `marksAccount`, comme les refus de chaque fonction), champs
  * du secret et réglages, adresse (fixe, gabarit ou par réglage), authentification (`api_key`, `bearer`, `basic`,
  * `oauth2_client_credentials`, `oauth2_user` et `oauth2_jwt_bearer`, avec `scopes` ou des niveaux d'accès) ; puis chaque fonction : nom,
@@ -363,8 +364,7 @@ export type ConnectorOptions = HostOptions & {
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au
  * serveur de l'hôte (`server-only.ts`) ; `options.backgroundRunner` : le déclencheur des travaux en tâche de fond ; tous
- * fournis par l'hôte. Au premier refus,
- * `CatalogRegistrationError` et rien n'est déclaré ;
+ * fournis par l'hôte. Au premier refus, `CatalogRegistrationError` et rien n'est déclaré ;
  * sinon la liste remplace toute la déclaration précédente (un rechargement à chaud ne double rien).
  */
 export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {

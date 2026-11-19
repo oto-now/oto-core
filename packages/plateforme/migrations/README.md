@@ -483,7 +483,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   nul pour un connecteur à un seul accès ; lue et écrite à la création par `authenticated`, jamais modifiée) et la
   colonne `connector_consents.access` (l'accès d'une demande de consentement), chacune avec sa contrainte de forme.
   Additif : aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant.
-  Fichier de développement, à réunir avec les autres de la version avant le tag.
+  Fichier de développement, à réunir avec les autres de la version avant le tag. Un connecteur qui passe d'un accès à
+  plusieurs arrête ses comptes existants (`access` nul) : leur reprise est dans connecteurs et comptes, § Plusieurs
+  accès.
+- **À réunir avant le tag de la prochaine version** : `20261119083000_platform_supervision.sql` et
+  `20261119104631_platform_acces_du_compte.sql`, en un seul fichier de version (`scripts/reunir-migrations.mjs`, comme
+  pour la 1.8.0).
 
 ## Installer sur un hôte neuf
 
