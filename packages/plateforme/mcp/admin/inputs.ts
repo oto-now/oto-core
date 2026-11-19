@@ -27,7 +27,8 @@ function confirm(ops: string) {
 /** Les opérations déclarées de chaque outil, dans l'ordre du contrat ; `help` d'abord. */
 export const ADMIN_OPS = {
   admin_context: ["ctx", "orgs", "help"],
-  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access", "add_admin"],
+  // `overview` et `members` (supervision, N9) : ajoutées en dernier, le contrat n'évoluant que par ajout.
+  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access", "add_admin", "overview", "members"],
   admin_team: ["help", "list", "create", "rename", "set_lead", "add_lead", "remove_lead", "add_member", "remove_member", "delete"],
   admin_node: ["help", "move", "publish", "transfer_owner", "rules", "add_rule", "remove_rule"],
   admin_connector: [

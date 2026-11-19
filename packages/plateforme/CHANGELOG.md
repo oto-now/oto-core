@@ -17,12 +17,19 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- Platform team: `admin_org overview` lists every organisation of the platform, platform access or not: members, teams, calls over 30 days, active connectors, accounts.
+- Platform team: `admin_org members {org}` reads the members, roles and accounts by connector and owner of any organisation, never a key nor a label.
+
 ### Hosts
 - Server: `connectorAccountForms` gives again a form, the person's own (`ownerKinds: ["user"]`), to a `platform`-only connector where each person connects their own account (`oauth2_user` consent, or `accountIdentity` such as a hosted link): 1.8.0 had dropped it, and with it « Connecter mon compte ».
 - UI: the Connectors screen is one list for everyone: every account the person sees (`listOrgAccounts`), called a connector, with its access, its state in one word, filters and a search kept in the address, its detail in a drawer, and the sharing panel of a page for any account the person manages. `EcranConnecteurs` takes `moi` (the viewer's user id) and `vue` (`vueDesConnecteurs(query)`: `?filter=`, `?q=`, `?connector=`), both required: a type error until set; `DonneesDesConnecteurs` replaces `options`, `impacts` and `limites` by `sujets` (teams and members, required) and `administration` (`impacts`, `limites`; administrators only); `DonneesDeMesComptes` and `partageable` are removed, `comptesAuxPartagesLus` selects the accounts whose rules the page reads. Update your page, or copy the reference host's `src/app/(dashboard)/admin/connectors/page.tsx`.
 - Install: a page that reads the declared connectors (`listConnectorsForOrg`, `connectorAccountForms`) must import the host's declarations for their side effect, as the reference `admin/connectors/page.tsx` now does (`import "@/lib/fonctions-metier"`): a serverless bundle that does not import them renders the screen with the package's connectors only.
 - UI: the Connectors screen uses the engine's two lots: an « Ajouter un connecteur » window in two steps (the tools the person may add, then the key, tested before the account is created), « Tester », « Modifier le nom » and « Réactiver » in the detail, the states « Fonctionne » and « Test en échec » (a failure said in French by its code), and tools closed, closed in advance or reopened by an administrator. `DonneesDesConnecteurs` gains `proprietaires` (required: a type error until set), what `accountOwnerChoices(db, identity)` returns: add it to the page's reads, as the reference page does; a team lead is then offered their teams.
 - Schemas: `AccountView.owner` carries `userId` and `userName` for a personal account, as `listOrgAccounts` and `listOwnAccounts` render it (`Server:`).
+- Migrations: apply `20261119083000_platform_supervision.sql` together with the package (development file, merged into the version's single file before the tag): three `security definer` functions for the platform team only (`is_staff()`, else `42501`), `staff_org_overview(since)`, `staff_org_members(org)`, `staff_org_accounts(org)`, list every organisation with its figures, members and accounts, never a key nor any content. The package without it fails on the supervision page and on `admin_org overview` and `members`; nothing else changes.
+- Server: `listPlatformOrgs(db, caller)` and `readPlatformOrg(db, caller, slug)` serve that list to the platform team (`forbidden` otherwise, `not_found` for an unknown slug), calls counted over `SUPERVISION_DAYS` (`Schemas:`, with `SupervisedOrg`, `SupervisedMember`, `SupervisedAccounts`).
+- UI: `EcranSupervision` (and `EcranSupervisionChargement`) shows every space and its figures, a row opening on its members and accounts; mount it for the platform team only, as the reference host does at `/platform/supervision`.
 
 ## 1.8.0 — 2026-11-18
 
