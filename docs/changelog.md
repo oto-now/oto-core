@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — Connecteurs : description et domaine de l'outil, acceptés à la déclaration
+**Quoi :** `ConnectorDefinition` gagne `description` (1 à 2 000 caractères) et `logoDomain` (domaine en minuscules, sans schéma, port ni chemin), facultatifs, contrôlés par `registerConnectors` avec des refus nommés (`presentation-declaration.ts`). La description est servie à l'assistant dans le contrat de chaque fonction du connecteur (`read <fonction>`) et, sa première phrase, en tête du connecteur dans `read functions` ; `listConnectorsForOrg` rend les deux (`OrgConnector.description`, `logoDomain`). Doc `connecteurs-et-comptes.md` § Moteur des connecteurs décrits et § Écart avec le code.
+**Pourquoi :** la bibliothèque `connectors` ajoute `connector.description` et `connector.logo_domain` à son format (décision Q5 de `docs/conception/custom-api.md`, oto-now/connectors#244) ; le paquet doit les accepter et les contrôler avant qu'elle ne les publie.
+**Problèmes :** aucune source de logo par domaine n'existe à l'écran : la tuile garde l'initiale, le logo est une suite à donner.
+**Fichiers :** `packages/plateforme/server/connectors/{definition.ts,declaration.ts,presentation-declaration.ts,activations.ts}`, `packages/plateforme/server/catalog/registry.ts`, `packages/plateforme/server/find.ts`, `packages/plateforme/schemas/connectors.ts`, `packages/plateforme/ui/admin/connecteurs/tuile-de-l-outil.tsx`, `tests/unit/connectors-declaration.test.ts`, `docs/conception/connecteurs-et-comptes.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-19] — Connecteurs : « Connecter mon compte » revient sur un connecteur `platform` où chacun connecte le sien
 **Quoi :** `formOwnerKinds` rend la personne (`user`) pour un connecteur `platform` à consentement (`oauth2_user`) ou à compte rattaché (`accountIdentity`) ; `admittedOwnerKinds` est inchangé (un tel compte ne naît que du consentement ou du branchement, jamais de `createAccount`). Doc `connecteurs-et-comptes.md` § Propriétaires d'un compte et `CHANGELOG.md` du paquet.
 **Pourquoi :** en 1.8.0, `connectorAccountForms` ne rendait plus de formulaire pour un connecteur `platform` seul : un connecteur à compte rattaché servi par la clé de l'hôte perdait « Connecter mon compte » sur l'écran Connecteurs d'un hôte.

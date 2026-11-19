@@ -153,6 +153,13 @@ export type OrgConnector = {
   connector: string
   /** Le nom que la déclaration lui donne (« Pennylane ») ; le nom technique pour un connecteur non déclaré (`mail`). */
   label: string
+  /** Ce qu'est l'outil, tel que sa déclaration le décrit pour l'assistant (`ConnectorDefinition.description`) ; absente sans elle. */
+  description?: string
+  /**
+   * Le domaine de l'outil (`attio.com`), en minuscules, sans schéma ni chemin, tel que sa déclaration le donne
+   * (`ConnectorDefinition.logoDomain`), d'où l'écran tirera son logo ; absent sans lui.
+   */
+  logoDomain?: string
   state: "active" | "inactive"
   /** Actif : depuis quand ; inactif : `null`. */
   activatedAt: string | null
