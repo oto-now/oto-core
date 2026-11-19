@@ -10,6 +10,12 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-19] — Page ouverte : ce qu'un assistant y écrit apparaît sans recharger
+**Quoi :** l'écran d'une page relit toutes les 30 secondes, onglet visible, et au retour sur l'onglet, sa seule révision publiée (`GET nodes/revision`, service `nodeRevision`) ; changée ailleurs, la page se relit ; si la personne écrit, un encart propose « Recharger la page » (`VeilleDeLaPage`).
+**Pourquoi :** retour RET-008 : une écriture d'un assistant n'apparaissait qu'après un rechargement à la main. 30 secondes plutôt qu'un canal poussé : décision de JB, pour un coût d'une lecture d'une ligne par onglet visible.
+**Problèmes :** une ligne de tableau écrite ailleurs ne change pas la révision du tableau ; la veille ne la voit pas.
+**Fichiers :** `packages/plateforme/server/nodes/revision.ts`, `packages/plateforme/schemas/search.ts`, `packages/plateforme/api/nodes.ts`, `packages/plateforme/ui/noeud/{veille-de-la-page.tsx,libelles.ts,ecran-de-noeud.tsx}`, `tests/integration/components/veille-de-la-page.test.tsx`, `tests/unit/nodes-read.test.ts`, `docs/conception/ecrans-d-un-contenu.md`, `docs/reference/services-et-portes.md`, `.method/conventions/component-registry.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-19] — Connecteurs : description et domaine de l'outil, acceptés à la déclaration
 **Quoi :** `ConnectorDefinition` gagne `description` (1 à 2 000 caractères) et `logoDomain` (domaine en minuscules, sans schéma, port ni chemin), facultatifs, contrôlés par `registerConnectors` avec des refus nommés (`presentation-declaration.ts`). La description est servie à l'assistant dans le contrat de chaque fonction du connecteur (`read <fonction>`) et, sa première phrase, en tête du connecteur dans `read functions` ; `listConnectorsForOrg` rend les deux (`OrgConnector.description`, `logoDomain`). Doc `connecteurs-et-comptes.md` § Moteur des connecteurs décrits et § Écart avec le code.
 **Pourquoi :** la bibliothèque `connectors` ajoute `connector.description` et `connector.logo_domain` à son format (décision Q5 de `docs/conception/custom-api.md`, oto-now/connectors#244) ; le paquet doit les accepter et les contrôler avant qu'elle ne les publie.

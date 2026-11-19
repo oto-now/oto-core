@@ -11,7 +11,8 @@
 // AC-b9), `POST nodes/duplicate` (AC-b10), `POST nodes/access` (accès général, AC-b13) ; aucun outil MCP
 // ne les porte (liste figée, ADR-002). `GET nodes/export?path=` (E10-S01, AC-a5) : le `.md` d'un nœud publié.
 // `GET nodes/tree` (E11-S20, AC-1) : l'arbre visible, celui que le layout de l'hôte passe au rail, que le rail relit
-// seul à la navigation client, où Next ne rejoue pas le layout.
+// seul à la navigation client, où Next ne rejoue pas le layout. `GET nodes/revision?path=` (retour RET-008) : la seule
+// révision, que l'écran d'une page ouverte relit toutes les 30 secondes pour voir ce qu'un assistant y a écrit.
 import { generalAccessSchema, moveNodeSchema, nodePathBodySchema, placeNodeSchema, writeNodeBodySchema } from "../schemas"
 import { nodeHeadQuerySchema, type NodeHead } from "../schemas/search"
 import { invalidInput } from "../server/errors"
@@ -22,6 +23,7 @@ import { moveImpact } from "../server/nodes/move-impact"
 import { moveNode } from "../server/nodes/move"
 import { nodeLinks } from "../server/nodes/node-links"
 import { placeNode } from "../server/nodes/order"
+import { nodeRevision } from "../server/nodes/revision"
 import { loadNode } from "../server/nodes/read"
 import { visibleTree } from "../server/nodes/tree"
 import { writeNode } from "../server/nodes/write"
@@ -86,6 +88,14 @@ export const nodesRoutes: ResourceRoutes = {
       fixed: { 0: "tree" },
       async handle({ db, identity }) {
         return { status: 200, data: await visibleTree(db, identity) }
+      },
+    },
+    {
+      // Retour RET-008 : la révision seule, relue toutes les 30 secondes par une page ouverte. Une lecture : aucune ligne de journal.
+      params: 1,
+      fixed: { 0: "revision" },
+      async handle({ db, identity, request }) {
+        return { status: 200, data: await nodeRevision(db, identity, queryOf(request)) }
       },
     },
   ],

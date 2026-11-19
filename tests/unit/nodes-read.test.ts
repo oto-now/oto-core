@@ -16,6 +16,7 @@ import type { NodeRow } from "../../packages/plateforme/server/nodes/lookup"
 import { applyOps } from "../../packages/plateforme/server/nodes/ops"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
 import { staleState } from "../../packages/plateforme/server/nodes/read-format"
+import { nodeRevision } from "../../packages/plateforme/server/nodes/revision"
 import {
   addBlocks,
   addVersion,
@@ -580,6 +581,15 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       vi.mocked(catalogFunctions).mockReturnValue([wordy])
       const line = (await read("lea", { path: "functions" })).text.split("\n")[2]
       expect([line.length, line.endsWith("…")]).toEqual(["- erp.long (read): ".length + 200, true])
+    })
+
+    // Retour RET-008 : la seule révision, que la veille d'une page ouverte relit ; mêmes droits que la page.
+    it("should give the revision of a node alone, and answer an invisible one as unknown", async () => {
+      const tables = base([MODELE, { path: "support/faq" }])
+      await content(tables)
+      const lea = who("lea")
+      expect(await nodeRevision(await ref.db("lea"), lea, { path: MODELE.path })).toEqual({ path: MODELE.path, revision: 2 })
+      await expect(nodeRevision(await ref.db("lea"), lea, { path: "support/faq" })).rejects.toMatchObject({ code: "not_found", message: "Unknown path support/faq." })
     })
 
     it("should answer an unknown, invisible, personal or foreign node as unknown, and refuse a malformed path (AC17)", async () => {
