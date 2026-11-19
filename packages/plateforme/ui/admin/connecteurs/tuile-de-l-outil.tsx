@@ -1,6 +1,7 @@
-// La tuile d'un outil sur l'écran Connecteurs : son initiale dans un carré, à défaut de logo (le moteur ne sert pas
-// encore le domaine de l'éditeur). Décorative : le nom de l'outil est toujours écrit à côté. Module sans « use client » :
-// la liste et la fenêtre d'ajout (îlots clients) comme le détail (rendu par le serveur) la montent.
+// La tuile d'un outil sur l'écran Connecteurs : son initiale dans un carré, à défaut de logo (le domaine de l'outil est
+// servi, `OrgConnector.logoDomain`, mais aucune source de logo par domaine n'est encore retenue). Décorative : le nom
+// de l'outil est toujours écrit à côté. Module sans « use client » : la liste et la fenêtre d'ajout (îlots clients)
+// comme le détail (rendu par le serveur) la montent.
 
 type TuileDeLOutilProps = {
   /** Le nom lisible de l'outil : sa première lettre fait la tuile. */

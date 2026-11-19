@@ -150,15 +150,14 @@ describe("publish workflow (AC9)", () => {
     expect(workflow()).toContain('APPROVERS: "jean-baptiste-tiple AlexisLaporte"')
   })
 
-  it("should tag the merge commit of a version pull request only once an approver approved its last commit", () => {
+  it("should tag the merge commit of a version pull request only after its content checks and an approver's approval of its last commit", () => {
     const tag = job("tag")
     expect(tag).toContain("if: github.event_name == 'pull_request' && github.event.pull_request.merged == true")
     expect(flat(tag.split("permissions:")[1].split("outputs:")[0])).toBe("contents: write pull-requests: read")
 
     const steps = [
       "ref: ${{ github.event.pull_request.merge_commit_sha }}",
-      'if [ "$before" = "$after" ]; then',
-      'echo "tag=v$after" >> "$GITHUB_OUTPUT"',
+      'node scripts/ci/version-publiable.mjs --ref "$MERGE_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"',
       '"repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"',
       '$2 != "COMMENTED"',
       'if [ "$last" = "APPROVED $HEAD_SHA" ]',
@@ -174,7 +173,10 @@ describe("publish workflow (AC9)", () => {
 
   it("should publish from the tag, after every check, with provenance; by hand only for an approver", () => {
     const publish = job("publish")
-    expect(publish).toContain("if: ${{ !cancelled() && (needs.tag.outputs.tag != '' || github.event_name == 'workflow_dispatch') }}")
+    // Le job `tag` peut avoir sorti un tag puis échoué (approbation absente) : son résultat compte, pas sa sortie seule.
+    expect(publish).toContain(
+      "if: ${{ !cancelled() && ((github.event_name == 'pull_request' && needs.tag.result == 'success' && needs.tag.outputs.tag != '') || github.event_name == 'workflow_dispatch') }}",
+    )
     expect(flat(publish.split("permissions:")[1].split("env:")[0])).toBe("contents: read id-token: write")
     expect(publish).toContain("TAG: ${{ needs.tag.outputs.tag || inputs.tag }}")
 
@@ -191,10 +193,7 @@ describe("publish workflow (AC9)", () => {
       "run: pnpm install --frozen-lockfile",
       "run: node scripts/check-public.mjs --secrets-only",
       "run: pnpm check:migrations",
-      'git describe --tags --abbrev=0 --match "v*" "$TAG^"',
-      'test "$added" -le 1',
-      'test "$TAG" = "v$version"',
-      'grep -q "^## $version — " packages/plateforme/CHANGELOG.md',
+      'run: node scripts/ci/version-publiable.mjs --ref "$TAG" --tag "$TAG"',
       "run: npm pack --dry-run",
       "run: npm publish --provenance --access public",
       "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
@@ -208,9 +207,14 @@ describe("publish workflow (AC9)", () => {
     expect(last).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}")
   })
 
-  it("should run CI on pull requests to release/** too, where a corrective version pull request merges", () => {
-    const trigger = read(".github/workflows/ci.yml").split("\njobs:")[0]
+  it("should run CI on pull requests to release/** too, with the version's content checks before the merge", () => {
+    const ci = read(".github/workflows/ci.yml")
+    const trigger = ci.split("\njobs:")[0]
     expect(flat(trigger.split("pull_request:")[1])).toBe('branches: [main, "release/**"]')
+    const version = ci.split("\n  version:")[1].split("\n  packed-host-build:")[0]
+    expect(version).toContain("if: github.event_name == 'pull_request'")
+    expect(version).toContain("fetch-depth: 0")
+    expect(version).toContain('run: node scripts/ci/version-publiable.mjs --ref "$GITHUB_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"')
   })
 })
 

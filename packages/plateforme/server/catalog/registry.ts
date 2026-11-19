@@ -28,7 +28,7 @@ import { teamSharesFunction } from "../team-shares"
 import { nodeExportTree, nodeImportTree } from "../transfer/functions"
 import { nodeCheck, nodeTree } from "../transfer/inspect"
 import { argumentsJsonSchema } from "./arguments"
-import { declaredConnectors } from "./connector-source"
+import { declaredConnector, declaredConnectors } from "./connector-source"
 import type { CatalogFunction } from "./define"
 import { erpFunctions } from "./erp-source"
 import { hostSurface } from "./surface-source"
@@ -172,7 +172,18 @@ export function searchFunctions(
     .slice(0, limit)
 }
 
-/** Contrat servi par `read` (path = nom de la fonction) : ce qu'il faut pour appeler juste. */
+/**
+ * La description d'un connecteur déclaré (`ConnectorDefinition.description`), ce que l'outil est et quand s'en servir ;
+ * `null` pour une fonction d'une autre origine ou d'un connecteur qui n'en déclare pas.
+ */
+export function connectorDescription(fn: CatalogFunction): string | null {
+  return fn.origin === "connecteur" ? (declaredConnector(fn.connector)?.definition.description ?? null) : null
+}
+
+/**
+ * Contrat servi par `read` (path = nom de la fonction) : ce qu'il faut pour appeler juste, et, pour une fonction d'un
+ * connecteur qui la déclare, la description du connecteur, après celle de la fonction.
+ */
 export function describeFunction(fn: CatalogFunction, prefix: string): { text: string; data: Record<string, unknown> } {
   // Rendu des entrées des outils (`mcp/schemas.ts`), sans la clé `$schema`, mais côté entrée : ce que le
   // modèle écrit et que `call` valide, un champ à défaut facultatif (E08-S05, NH8 ; identique pour le paquet) ; le
@@ -181,6 +192,7 @@ export function describeFunction(fn: CatalogFunction, prefix: string): { text: s
   const text = [
     `Function ${fn.name} (connector ${fn.connector}, origin ${fn.origin}, class ${fn.class}${fn.class === "sensitive" ? ": two-step confirmation" : ""})`,
     fn.description,
+    ...about(fn),
     "Arguments (JSON Schema):",
     JSON.stringify(schema),
     "Examples:",
@@ -197,6 +209,12 @@ export function describeFunction(fn: CatalogFunction, prefix: string): { text: s
     examples: fn.examples,
   }
   return { text, data }
+}
+
+/** La ligne de la description du connecteur d'une fonction, dans son contrat ; rien sans elle. */
+function about(fn: CatalogFunction): string[] {
+  const description = connectorDescription(fn)
+  return description === null ? [] : [`About the connector ${fn.connector}: ${description}`]
 }
 
 /** Au plus deux connecteurs cités, puis `table.rows` : trois noms au plus (N15). */

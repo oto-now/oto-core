@@ -2,8 +2,10 @@
 # § Publication, ADR-010 révisée le 2026-11-19). La CI de chaque push et de chaque pull request reste ci.yml.
 #
 # Une pull request de version monte `version` de `packages/plateforme/package.json`, vers main ou vers
-# `release/x.y.z` (correctif parti d'un tag). À sa fusion, le job `tag` vérifie qu'elle porte l'approbation d'un
-# approbateur sur son dernier commit, puis pose le tag annoté `v<version>` sur le commit de fusion ; le job
+# `release/x.y.z` (correctif parti d'un tag). À sa fusion, le job `tag` rejoue les contrôles de contenu de la version
+# (`scripts/ci/version-publiable.mjs`, que `ci.yml` joue déjà sur la pull request), vérifie qu'elle porte
+# l'approbation d'un approbateur sur son dernier commit, puis pose le tag annoté `v<version>` sur le commit de
+# fusion : un tag posé sur un commit qui ne peut pas être publié ne se retirerait qu'à la main. Le job
 # `publish` part de ce tag, dans le même workflow : un tag poussé avec le GITHUB_TOKEN ne déclenche aucun autre
 # workflow, d'où l'enchaînement ici plutôt qu'un `push: tags`.
 #
@@ -51,9 +53,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       # Une pull request de version change `version` entre sa base (le point où elle part) et son dernier commit ;
-      # changer une dépendance du paquet ne publie rien.
-      - name: Version change
+      # changer une dépendance du paquet ne publie rien. Avant le tag : une seule migration depuis le tag précédent,
+      # accord de la version et du CHANGELOG, tag encore libre.
+      - name: Version change and content checks
         id: version
         env:
           PR: ${{ github.event.pull_request.number }}
@@ -62,15 +68,7 @@ jobs:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           git fetch --no-tags origin "refs/pull/$PR/head"
-          version_at() { git show "$1:packages/plateforme/package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version"; }
-          before=$(version_at "$(git merge-base "$BASE_SHA" "$HEAD_SHA")")
-          after=$(version_at "$HEAD_SHA")
-          merged=$(version_at "$MERGE_SHA")
-          if [ "$before" = "$after" ]; then echo "version unchanged ($after): nothing to publish"; exit 0; fi
-          test "$merged" = "$after" || { echo "merge commit carries $merged, pull request $after"; exit 1; }
-          if git rev-parse -q --verify "refs/tags/v$after" >/dev/null; then echo "tag v$after already exists"; exit 1; fi
-          echo "version pull request: $before -> $after"
-          echo "tag=v$after" >> "$GITHUB_OUTPUT"
+          node scripts/ci/version-publiable.mjs --ref "$MERGE_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"
       # La dernière revue de chaque approbateur (hors simples commentaires) est une approbation, posée sur le dernier
       # commit de la pull request : une approbation antérieure à un push ne couvre pas ce qui est publié.
       - name: Approved by an approver
@@ -102,7 +100,7 @@ jobs:
   publish:
     name: Publish from the tag
     needs: tag
-    if: ${{ !cancelled() && (needs.tag.outputs.tag != '' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && ((github.event_name == 'pull_request' && needs.tag.result == 'success' && needs.tag.outputs.tag != '') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -133,18 +131,9 @@ jobs:
       - name: Check migrations
         run: pnpm check:migrations
       # Une seule migration par version publiée (database-patterns.md § Règles) : un hôte en applique une par montée.
-      - name: One migration since the previous tag
-        run: |
-          previous=$(git describe --tags --abbrev=0 --match "v*" "$TAG^" 2>/dev/null || true)
-          if [ -z "$previous" ]; then echo "no previous tag"; exit 0; fi
-          added=$(git diff --name-only --diff-filter=A "$previous" "$TAG" -- packages/plateforme/migrations | grep -c "[.]sql$" || true)
-          echo "$added migration(s) added since $previous"
-          test "$added" -le 1 || { echo "merge them into one <timestamp>_vX_Y_Z.sql in the version pull request"; exit 1; }
-      - name: Tag, version and CHANGELOG agree
-        run: |
-          version=$(node -p "require('./packages/plateforme/package.json').version")
-          test "$TAG" = "v$version" || { echo "tag $TAG, package v$version"; exit 1; }
-          grep -q "^## $version — " packages/plateforme/CHANGELOG.md || { echo "CHANGELOG: no entry for $version"; exit 1; }
+      # Accord du tag, de la version et du CHANGELOG. Déjà joués avant le tag ; rejoués ici pour le passage manuel.
+      - name: One migration since the previous tag; tag, version and CHANGELOG agree
+        run: node scripts/ci/version-publiable.mjs --ref "$TAG" --tag "$TAG"
       - name: Files to publish
         working-directory: packages/plateforme
         run: npm pack --dry-run

@@ -469,6 +469,15 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      `code`), celle à quatre restant, plus appelée par le paquet ; `platform.forget_account_probe`, qui retire le dernier
      test d'un compte quand sa saisie change. Les deux fonctions neuves sont `security definer`, réservées au rôle du
      serveur. Une colonne, trois fonctions ; rien à relancer avant.
+- `20261119083000_platform_supervision.sql` (supervision de la plateforme, décidée par Alexis le 30/10 et JB le 02/11 ;
+  administration et cellule, N9) : trois fonctions `security definer`, réservées à l'équipe plateforme (`is_staff()`,
+  sinon 42501), exécutables par `authenticated` : `staff_org_overview(since)` (identité et chiffres de chaque
+  organisation : membres, équipes, appels `tools/call` depuis `since`, connecteurs actifs, comptes ; `since` nul refusé,
+  22004), `staff_org_members(org)` (membres, email, nom, rôle, date d'entrée) et `staff_org_accounts(org)` (comptes
+  regroupés par connecteur, titulaire, état et mode) ; `org` nul : toutes les organisations. Ni clé, ni colonne
+  `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
+  table, colonne, policy ni index ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la
+  version avant le tag.
 
 ## Installer sur un hôte neuf
 

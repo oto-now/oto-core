@@ -202,6 +202,9 @@ Un changement se fait ici (retours produit compris), se commite sur `main`, puis
    puis contrôle les secrets de l'arbre, les migrations, l'accord du tag, de la version et du
    `CHANGELOG.md`, et publie avec provenance. Aucun tag ne se pousse à la main ; si la publication
    tombe après le tag, JB ou Alexis relance `publish.yml` sur ce tag (`workflow_dispatch`).
+   GitHub interdit d'approuver sa propre pull request : les versions de l'un attendent l'autre.
+   Après une version corrective sur `release/x.y.z`, son auteur ouvre aussitôt une pull request
+   vers `main` qui y reporte la section du `CHANGELOG.md` (sortie de `## Unreleased`).
 5. Vérifier : `npm view @otomata_tech/oto_platform@<version> version`.
 6. Dans chaque application (oto-saas) : la pull request Renovate (§ Mises à jour par Renovate du
    README du paquet), ou à la main `pnpm add @otomata_tech/oto_platform@<version> -E`, puis

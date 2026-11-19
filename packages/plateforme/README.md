@@ -910,6 +910,8 @@ Réservé aux mainteneurs du dépôt.
    migrations, vérifie que le tag, la version et le CHANGELOG concordent, puis publie sur
    npmjs.com avec provenance. Aucun tag ne se pousse à la main. Chaque application hôte reçoit sa
    pull request Renovate.
+6. Pour une version corrective partie de `release/x.y.z`, son auteur reporte aussitôt sa section
+   du `CHANGELOG.md` sur `main` par une pull request, en la sortant de `## Unreleased`.
 
 Une version fautive ne se republie pas : JB la signale par
 `npm deprecate @otomata_tech/oto_platform@<x.y.z> "<raison>"`, et une version corrective la

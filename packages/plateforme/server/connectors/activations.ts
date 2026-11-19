@@ -87,9 +87,12 @@ function connectorView(
     const entry = userId ? directory.find((candidate) => candidate.userId === userId) : undefined
     return entry ? { userId: entry.userId, name: entry.name } : { userId: null, name: null }
   }
+  const definition = declaredConnector(connector)?.definition
   return {
     connector,
-    label: declaredConnector(connector)?.definition.label ?? connector,
+    label: definition?.label ?? connector,
+    ...(definition?.description !== undefined ? { description: definition.description } : {}),
+    ...(definition?.logoDomain !== undefined ? { logoDomain: definition.logoDomain } : {}),
     state: active ? "active" : "inactive",
     activatedAt: active ? row.updated_at : null,
     activatedBy: active ? person(row.activated_by) : null,
