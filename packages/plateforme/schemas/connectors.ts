@@ -18,6 +18,12 @@ const connectorNameSchema = z
   .trim()
   .regex(CONNECTOR_NAME_PATTERN, "Connector: lowercase letters, digits and _, starting with a letter, 40 characters max, e.g. mail")
 
+/**
+ * Le nom d'un accès d'un connecteur qui s'ouvre par plusieurs (`accesses`, contrainte `accounts_access_check`) : exigé
+ * pour un tel connecteur, refusé pour un connecteur à un seul accès, contrôlé par le service contre la déclaration.
+ */
+const accessNameSchema = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, "an access name: lowercase letters, digits and _, starting with a letter")
+
 /** Libellé rogné, 1 à 80 caractères ; unique sans casse pour un même propriétaire (index `uq_accounts_owner_label`). */
 const accountLabelSchema = z.string().trim().min(1).max(80)
 
@@ -47,6 +53,8 @@ export const createAccountSchema = z
     team_id: z.uuid().optional(),
     label: accountLabelSchema,
     mode: accountModeSchema.default("simule"),
+    /** L'accès qui ouvre le compte, pour un connecteur à plusieurs accès ; jamais pour un connecteur à un seul. */
+    access: accessNameSchema.optional(),
   })
   .superRefine((account, context) => {
     if (account.owner_kind === "team" && !account.team_id) {
@@ -81,9 +89,12 @@ const returnPathSchema = z
 
 /**
  * Le consentement d'une personne à un connecteur `oauth2_user` (`startConnectorConsent`, `POST connector-consent`) :
- * le connecteur, et l'écran de l'hôte où revenir ensuite (`return_to`, l'écran Connecteurs par défaut).
+ * le connecteur, son accès à consentement pour un connecteur à plusieurs accès (`access`), et l'écran de l'hôte où
+ * revenir ensuite (`return_to`, l'écran Connecteurs par défaut).
  */
-export const connectorConsentSchema = z.object({ connector: connectorNameSchema, return_to: returnPathSchema.optional() }).strict()
+export const connectorConsentSchema = z
+  .object({ connector: connectorNameSchema, access: accessNameSchema.optional(), return_to: returnPathSchema.optional() })
+  .strict()
 export type ConnectorConsentInput = z.input<typeof connectorConsentSchema>
 
 /** Le retour du tiers sur l'adresse de retour (`GET connector-consent/callback`) : la query qu'il pose. */
@@ -95,9 +106,10 @@ export const connectorConsentReturnSchema = z.object({
 
 /**
  * Le branchement hébergé du compte d'une personne à un connecteur à `accountIdentity` (`startHostedLink`,
- * `POST hosted-link`) : la même saisie que le consentement, le connecteur et l'écran de l'hôte où revenir.
+ * `POST hosted-link`) : le connecteur et l'écran de l'hôte où revenir, sans accès (un compte rattaché ne se sert qu'à
+ * un connecteur à un seul accès).
  */
-export const hostedLinkSchema = connectorConsentSchema
+export const hostedLinkSchema = z.object({ connector: connectorNameSchema, return_to: returnPathSchema.optional() }).strict()
 export type HostedLinkInput = z.input<typeof hostedLinkSchema>
 
 /**
@@ -130,12 +142,14 @@ export const accountSecretSchema = z.object({ account_id: z.uuid(), input: accou
 
 /**
  * Une clé à essayer avant de créer un compte (`probeConnector`, `POST admin/connectors/<nom>/probe`) : les champs du
- * formulaire et ses réglages, comme `accountSecretInputSchema` les pose, sans rien d'effacé. Jamais gardée ni rendue.
+ * formulaire et ses réglages, comme `accountSecretInputSchema` les pose, sans rien d'effacé, et l'accès du compte à
+ * créer pour un connecteur à plusieurs accès (`access`). Jamais gardée ni rendue.
  */
 export const connectorProbeInputSchema = z
   .object({
     fields: z.record(accountKeySchema, z.string().trim().min(1).max(10_000)),
     settings: z.record(accountKeySchema, z.string().trim().max(2_000)).optional(),
+    access: accessNameSchema.optional(),
   })
   .strict()
 
@@ -241,6 +255,8 @@ export type AccountView = {
   id: string
   label: string
   connector: string
+  /** L'accès qui ouvre le compte, pour un connecteur à plusieurs accès ; absent pour un connecteur à un seul. */
+  access?: string
   /**
    * Pour un compte personnel : sa personne (`userId`) et son nom dans l'annuaire (`userName`, `null` quand elle n'est
    * plus membre), que l'écran Connecteurs lit pour dire « Partagé par … » et pour reconnaître les comptes de l'appelant.
@@ -271,10 +287,13 @@ export type AccountView = {
  * Le formulaire d'un compte d'un connecteur réel déclaré, tiré de sa déclaration (`connectorAccountForms`) : les
  * champs du secret (saisie masquée pour un champ `secret`), puis les réglages. L'écran Connecteurs le lit pour créer un
  * compte réel et pour en saisir le secret, ou, pour un connecteur à consentement, pour proposer « Connecter mon compte ».
+ * Un connecteur à plusieurs accès en a un par accès (`access`).
  */
 export type ConnectorAccountForm = {
   connector: string
   label: string
+  /** L'accès du formulaire, pour un connecteur à plusieurs accès : son nom et son libellé ; absent pour un seul accès. */
+  access?: { name: string; label: string }
   /** Vrai pour un connecteur `oauth2_user` : ni champ ni réglage, chacun y connecte son compte par son consentement. */
   consent?: boolean
   /**

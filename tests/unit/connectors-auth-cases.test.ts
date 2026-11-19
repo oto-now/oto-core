@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import { prepareAuth, requiredFields, sign } from "../../packages/plateforme/server/connectors/auth"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { authCases, type AuthCase } from "../factories/auth-cases"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 /** Le connecteur de test sous l'authentification et le credential du cas. */
-const connectorOf = (c: AuthCase): ConnectorDefinition => ({ ...describedConnector(), auth: c.auth, credential: c.credential })
+const connectorOf = (c: AuthCase): ConnectorView => ({ ...describedConnector(), auth: c.auth, credential: c.credential })
 
 const credentialOf = (c: AuthCase) => ({ fields: c.values, settings: {}, tokens: memoryTokens() })
 

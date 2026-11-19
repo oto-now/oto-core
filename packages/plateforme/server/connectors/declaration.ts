@@ -2,33 +2,34 @@
 // l'hôte passe à `registerConnectors` les définitions des connecteurs qu'il utilise, partagés (sortie de la fabrique du
 // dépôt `connectors`) ou propres ; le paquet n'en contient aucun. Chaque définition est contrôlée, son schéma compilé,
 // puis ses fonctions entrent au catalogue de `call` avec l'origine `connecteur`, exécutées par le moteur (`engine.ts`).
+// Un connecteur à plusieurs accès (`accesses`) est jugé accès par accès, sur le connecteur tel que chacun le voit
+// (`accesses.ts`) ; ses fonctions, communes, se préparent pour chaque accès, et l'appel prend celle de l'accès du compte.
 // La liste `platform.connectors` en est tenue : le nom d'un connecteur déclaré s'y ajoute à son premier usage
 // (`keepDeclaredConnector`), jamais retiré. Sans ce module, un connecteur réel ne s'ajouterait qu'en code du paquet.
 import { compileJsonArguments, checkArguments, type JsonSchemaArguments } from "../catalog/arguments"
-import { declaredConnector, declaredConnectors, replaceDeclaredConnectors, type DeclaredConnector } from "../catalog/connector-source"
+import { declaredConnector, declaredConnectors, replaceDeclaredConnectors, type DeclaredAccess, type DeclaredConnector } from "../catalog/connector-source"
 import { contractNames } from "../catalog/contracts"
-import type { CatalogFunction, FunctionContext } from "../catalog/define"
 import { CatalogRegistrationError } from "../catalog/erp"
-import { ACT_SUFFIX, actName, catalogFunctions, looksLikeFunction } from "../catalog/registry"
-import { issuesText, PlatformError } from "../errors"
+import { ACT_SUFFIX, catalogFunctions, looksLikeFunction } from "../catalog/registry"
+import { issuesText } from "../errors"
 import { backgroundRunnerProblem, declareBackgroundRunner, type BackgroundRunner } from "../jobs/trigger"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
+import { accessesProblem, accessProblem, accessViews, type AccessView } from "./accesses"
 import { modesProblem } from "./account-owners"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
 import { bodyArgumentProblem } from "./body-argument"
 import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, OAuthApplication } from "./definition"
-import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
-import { backgroundProblem, backgroundTraits, servedDescription } from "./background-declaration"
+import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, OAuthApplication } from "./definition"
+import { catalogFunction, functionApi, identityAddress, refusalLines } from "./catalog-function"
+import type { PreparedFunction } from "./engine"
+import { backgroundProblem } from "./background-declaration"
 import { asyncProblem, costProblem, functionKeysProblem } from "./cost-declaration"
-import { errorTable } from "./error-table"
 import { fileOutputProblem } from "./file-output"
 import { accountIdentityProblem, baseAddressProblem, checkedApplications, checkedHostGifts, FIELD_NAME, functionHostProblem, holderProblem, type HostGiven, type HostOptions } from "./host-declaration"
-import { callerTransitFiles, filesProblem } from "./multipart"
+import { filesProblem } from "./multipart"
 import { declaredLevels, functionScopesProblem, type AccessLevels } from "./levels"
-import type { UserConsentAuth } from "./oauth-user"
 import { stripProblem } from "./output"
 import { identityProblem, probeProblem } from "./probe-declaration"
 import { withServerOnly, type ServerOnlyOption } from "./server-only"
@@ -80,7 +81,7 @@ function connectorProblem(definition: ConnectorDefinition, reserved: ReadonlySet
  * Le problème de ce qu'est un compte : les champs du secret, puis les réglages ; `null` : aucun. Un compte `oauth2_user`
  * n'a aucun champ : ses jetons viennent du consentement, son application OAuth de l'hôte.
  */
-function accountProblem(definition: ConnectorDefinition): string | null {
+function accountProblem(definition: ConnectorView): string | null {
   const { name, credential } = definition
   if (definition.auth?.kind === "oauth2_user") {
     return Array.isArray(credential) && credential.length === 0 ? null : `${name}: credential must be empty with oauth2_user: the tokens of a consent are not fields, and the OAuth application is the host's.`
@@ -113,7 +114,7 @@ function typesOf(property: unknown): unknown[] {
 }
 
 /** Le problème de la requête d'une fonction, son corps entier (`body-argument.ts`), emboîté (`body-table.ts`) ou en liste (`body-list.ts`) compris ; `null` : aucun. */
-function requestProblem(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
+function requestProblem(definition: ConnectorView, fn: ConnectorFunctionDefinition, auth: PreparedAuth): string | null {
   const spec = fn.request
   if (!isJsonObject(spec) || !METHODS.includes(spec.method) || typeof spec.path !== "string" || !spec.path.startsWith("/")) {
     return `${fn.name}: request needs a method (GET, POST, PUT, PATCH, DELETE) and a path starting with /.`
@@ -226,115 +227,101 @@ function functionTimeoutProblem(definition: ConnectorDefinition, fn: ConnectorFu
   return timeout === definition.timeoutMs ? `${fn.name}: timeoutMs equals the connector's (${timeout}): it says nothing, drop it.` : null
 }
 
-/** Le tiers d'une fonction : le délai de la fonction s'il en déclare un, sinon celui du connecteur ; sa table d'erreurs. */
-function functionApi(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): PreparedFunction["api"] {
-  return { label: definition.label, timeoutMs: fn.timeoutMs ?? definition.timeoutMs, errors: errorTable(definition, fn), rateLimit: definition.rateLimit }
-}
-
-/** Les refus que `read` sert : ceux de la fonction, le compte, puis la table du connecteur. */
-function refusalLines(definition: ConnectorDefinition, fn: ConnectorFunctionDefinition): string[] {
-  const account =
-    definition.auth.kind === "oauth2_user"
-      ? `No ${definition.name} account connected for you, or one to connect again: each person connects their own, the refusal says how.`
-      : `No ${definition.name} account you can use, or one without its secret: the refusal says whom to ask.`
-  return [
-    ...fn.refusals.map((refusal) => `${refusal.code}: ${refusal.message}${typeof refusal.when === "number" ? ` (HTTP ${refusal.when})` : ""}`),
-    account,
-    ...definition.errors.map((error) => `${error.code}: ${error.message}`),
-  ]
-}
-
-/** Le compte de l'appel, résolu par `runCall` pour toute fonction d'origine `connecteur` : sans lui, câblage fautif. */
-function describedCall(prepared: PreparedFunction, context: FunctionContext): DescribedCall {
-  if (!context.account) {
-    console.error(`[platform] call: ${prepared.fn.name} without a resolved account`)
-    throw new PlatformError("internal", "Internal error.")
-  }
-  const files = prepared.fn.request.files !== undefined || prepared.fn.output?.file !== undefined
-  const answered = context.answered ? { answered: context.answered } : {}
-  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}), ...answered }
-}
-
-/** Une fonction décrite au contrat du catalogue : origine `connecteur`, exemples sans titre, exécution par le moteur. */
-function catalogFunction(prepared: PreparedFunction, schema: JsonSchemaArguments): CatalogFunction {
-  const { connector, fn } = prepared
-  const summary = fn.confirm?.summary
-  return {
-    // Une fonction qui engage ou détruit est servie sous `<connecteur>_act.<fonction>` ; `connector` reste le connecteur.
-    name: fn.act ? (actName(fn.name) ?? fn.name) : fn.name,
-    connector: connector.name,
-    class: fn.class,
-    origin: "connecteur",
-    // Une fonction longue : la phrase fixe du moteur, et ce qu'en lit `call` pour la mettre en file.
-    description: servedDescription(fn),
-    ...backgroundTraits(fn),
-    schema,
-    examples: fn.examples.map((example) => ({ ...example.input })),
-    refusals: refusalLines(connector, fn),
-    run: (context, args: Record<string, unknown>) => runDescribed(prepared, describedCall(prepared, context), args),
-    summarize: fn.class === "sensitive" && summary !== undefined ? async (_context, args: Record<string, unknown>) => describedSummary(summary, args) : undefined,
-  }
-}
-
 /** Les niveaux d'accès d'une authentification : ceux d'un consentement ou d'un compte de service ; `null` ailleurs. */
 const levelsOf = (auth: PreparedAuth): AccessLevels | null => (auth.kind === "user_consent" || auth.kind === "service_account" ? declaredLevels(auth) : null)
 
 /**
- * L'identité lue à une adresse complète, préparée comme une lecture sans argument : un `GET` sur l'adresse, avec le
- * jeton d'accès, par le même moteur qu'une fonction (client HTTP, redirection refusée, délai et table
- * d'erreurs du connecteur, renouvellement sur un 401). Elle n'entre pas au catalogue : l'agent ne l'appelle jamais.
+ * Le problème d'un accès, sur le connecteur tel qu'il le voit, dans l'ordre : ses `modes`, une authentification que le
+ * moteur n'exécute pas (refusée par son nom, avant ses champs : `oauth2_user` n'en a pas), les champs de son secret et
+ * les réglages, leurs titulaires, l'identité d'un compte rattaché ; pour un connecteur à plusieurs accès, des niveaux
+ * d'accès, les droits de ses fonctions étant communs. Puis son authentification préparée. Un refus nomme l'accès.
  */
-function identityAddress(definition: ConnectorDefinition, auth: UserConsentAuth, url: string): PreparedFunction {
-  const fn: ConnectorFunctionDefinition = {
-    name: `${definition.name}.identity`,
-    connector: definition.name,
-    class: "read",
-    act: false,
-    description: "Who consented, read at the identity address.",
-    schema: { type: "object", additionalProperties: false, properties: {} },
-    examples: [{ title: "Who consented", input: {} }],
-    refusals: [],
-    request: { method: "GET", path: "", pathParams: [], query: {}, body: {}, headers: {} },
+function preparedAccess(access: AccessView): PreparedAuth {
+  const { view } = access
+  const kindProblem = RUN_AUTH_KINDS.includes(String(view.auth?.kind)) ? null : prepareAuth(view)
+  const problem =
+    modesProblem(view) ?? (typeof kindProblem === "string" ? kindProblem : null) ?? accountProblem(view) ?? holderProblem(view) ?? accountIdentityProblem(view)
+  if (problem) throw new CatalogRegistrationError(accessProblem(access, problem) ?? problem)
+  const auth = prepareAuth(view)
+  if (typeof auth === "string") throw new CatalogRegistrationError(accessProblem(access, auth) ?? auth)
+  if (access.name !== null && levelsOf(auth) === null) {
+    const levels = `${view.name}: auth ${String(view.auth.kind)} needs access levels (accessLevels): the accesses of a connector share the scopes its functions declare.`
+    throw new CatalogRegistrationError(accessProblem(access, levels) ?? levels)
   }
-  return { connector: definition, fn, api: functionApi(definition, fn), address: { template: url }, auth, cursorArgument: null }
+  return auth
 }
 
-/** Un connecteur contrôlé et préparé ; au premier problème, `CatalogRegistrationError`. */
+/** Un accès préparé : sa vue, son authentification, sa sonde et l'identité d'un consentement. */
+type PreparedAccess = { access: AccessView; auth: PreparedAuth; probe: PreparedFunction | null; identity: PreparedFunction | null }
+
+/** Le premier problème d'un des accès, nommé ; `null` : aucun. */
+function firstAccessProblem(accesses: readonly PreparedAccess[], check: (access: PreparedAccess) => string | null): string | null {
+  for (const access of accesses) {
+    const problem = accessProblem(access.access, check(access))
+    if (problem) return problem
+  }
+  return null
+}
+
+/** Un connecteur contrôlé et préparé, chacun de ses accès compris ; au premier problème, `CatalogRegistrationError`. */
 function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, given: HostGiven): DeclaredConnector {
-  // Une authentification que le moteur n'exécute pas se refuse par son nom, avant ses champs (`oauth2_user` n'en a pas).
-  const kindProblem = RUN_AUTH_KINDS.includes(String(definition.auth?.kind)) ? null : prepareAuth(definition)
-  const problem =
-    (connectorProblem(definition, reserved, seen) ?? modesProblem(definition)) ??
-    (typeof kindProblem === "string" ? kindProblem : null) ??
-    accountProblem(definition) ??
-    holderProblem(definition) ??
-    accountIdentityProblem(definition)
-  if (problem) throw new CatalogRegistrationError(problem)
+  const shape = connectorProblem(definition, reserved, seen) ?? accessesProblem(definition)
+  if (shape) throw new CatalogRegistrationError(shape)
+  const views = accessViews(definition)
+  const prepared: PreparedAccess[] = views.map((access) => ({ access, auth: preparedAccess(access), probe: null, identity: null }))
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
   const addressFault = baseAddressProblem(definition, address)
   if (addressFault) throw new CatalogRegistrationError(addressFault)
-  const auth = prepareAuth(definition)
-  if (typeof auth === "string") throw new CatalogRegistrationError(auth)
   seen.add(definition.name)
-  let probe: PreparedFunction | null = null
-  let identity: PreparedFunction | null = null
   const functions = definition.functions.map((fn) => {
     const schema = compiledFunction(definition, fn, seen)
     if (typeof schema === "string") throw new CatalogRegistrationError(schema)
     const cursor = cursorArgument(fn)
-    const later = functionKeysProblem(fn) ?? requestProblem(definition, fn, auth) ?? (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ?? controlsProblem(fn) ?? functionScopesProblem(fn, levelsOf(auth)) ?? functionTimeoutProblem(definition, fn) ?? backgroundProblem(definition, fn) ?? costProblem(fn) ?? asyncProblem(definition, fn) ?? filesProblem(fn) ?? fileOutputProblem(definition, fn) ?? stripProblem(fn)
+    const later =
+      functionKeysProblem(fn) ??
+      firstAccessProblem(prepared, ({ access, auth }) => requestProblem(access.view, fn, auth)) ??
+      (typeof cursor === "object" && cursor !== null ? cursor.problem : null) ??
+      controlsProblem(fn) ??
+      firstAccessProblem(prepared, ({ auth }) => functionScopesProblem(fn, levelsOf(auth))) ??
+      functionTimeoutProblem(definition, fn) ??
+      backgroundProblem(definition, fn) ??
+      costProblem(fn) ??
+      asyncProblem(definition, fn) ??
+      filesProblem(fn) ??
+      fileOutputProblem(definition, fn) ??
+      stripProblem(fn)
     if (later) throw new CatalogRegistrationError(later)
     seen.add(fn.name)
-    const prepared: PreparedFunction = { connector: definition, fn, api: functionApi(definition, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
-    if (fn.name === definition.probe?.function) probe = prepared
-    if (auth.kind === "user_consent" && "function" in auth.identity && fn.name === auth.identity.function) identity = prepared
-    return catalogFunction(prepared, schema)
+    const byAccess = new Map<string | null, PreparedFunction>()
+    for (const access of prepared) {
+      const { view } = access.access
+      const { auth } = access
+      const one: PreparedFunction = { connector: view, fn, api: functionApi(view, fn), address, auth, cursorArgument: typeof cursor === "string" ? cursor : null }
+      byAccess.set(access.access.name, one)
+      if (fn.name === definition.probe?.function) access.probe = one
+      if (auth.kind === "user_consent" && "function" in auth.identity && fn.name === auth.identity.function) access.identity = one
+    }
+    return catalogFunction({ connector: definition, fn, byAccess, schema, refusals: refusalLines(definition, views, fn) })
   })
-  const problemOfProbe = probeProblem(definition) ?? identityProblem(definition, auth)
+  const problemOfProbe = probeProblem(definition) ?? firstAccessProblem(prepared, ({ access, auth }) => identityProblem(access.view, auth))
   if (problemOfProbe) throw new CatalogRegistrationError(problemOfProbe)
-  if (auth.kind === "user_consent" && "url" in auth.identity) identity = identityAddress(definition, auth, auth.identity.url)
-  return { definition, auth, functions, probe, identity, ...given, application: auth.kind === "user_consent" ? given.application : null }
+  const accesses = prepared.map(({ access, auth, probe, identity }): DeclaredAccess => {
+    const consent = auth.kind === "user_consent"
+    const read = consent && "url" in auth.identity ? identityAddress(access.view, auth, auth.identity.url) : identity
+    return {
+      name: access.name,
+      label: access.label,
+      definition: access.view,
+      auth,
+      probe,
+      identity: read,
+      application: consent ? given.application : null,
+      hostCredentials: given.hostCredentials,
+      hostedLinks: given.hostedLinks,
+    }
+  })
+  return { definition, accesses, functions }
 }
 
 /** Ce que l'hôte passe à `registerConnectors` en plus de ses définitions. */
@@ -370,7 +357,9 @@ export type ConnectorOptions = HostOptions & {
  * asynchrone (`async`, sa relève une lecture du connecteur ; `cost-declaration.ts`), fichiers envoyés (`request.files`)
  * et sortie (`output`, toute clé inconnue refusée ; son fichier, `output.file`, `file-output.ts` ; ses chemins `strip`,
  * comme la règle 18 de la fabrique) ; enfin la sonde et
- * l'identité d'un consentement (une fonction, ou une adresse complète). `options.oauthApplications` : l'application OAuth de chaque
+ * l'identité d'un consentement (une fonction, ou une adresse complète). Un connecteur à plusieurs accès (`accesses`,
+ * `accesses.ts`) : chaque accès contrôlé comme un connecteur à un seul, son refus nommé, ses fonctions préparées pour
+ * chacun et servies une fois. `options.oauthApplications` : l'application OAuth de chaque
  * connecteur `oauth2_user` ; `options.hostCredentials` : le lecteur des champs `holder: host` ; `options.hostedLinks` :
  * le port du branchement hébergé d'un connecteur à `accountIdentity` ; `options.serverOnly` : les fonctions réservées au
  * serveur de l'hôte (`server-only.ts`) ; `options.backgroundRunner` : le déclencheur des travaux en tâche de fond ; tous

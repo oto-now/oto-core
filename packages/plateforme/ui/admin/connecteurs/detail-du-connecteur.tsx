@@ -69,6 +69,7 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
           <ConnexionParConsentement
             ressource={connexionDe(formulaire) === "branchement" ? "hosted-link" : "connector-consent"}
             connecteur={compte.connector}
+            acces={compte.access}
             libelle={etat.geste === "connecter" ? "Connecter" : "Reconnecter"}
             retour={ici}
           />

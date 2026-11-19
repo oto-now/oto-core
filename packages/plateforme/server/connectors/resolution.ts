@@ -34,6 +34,8 @@ export type ResolvedAccount = {
   id: string
   label: string
   connector: string
+  /** L'accès qui ouvre le compte, pour un connecteur à plusieurs accès : l'appel se signe par lui. */
+  access?: string
   mode: AccountMode
   owner: AccountOwner
   level: LevelName
@@ -178,8 +180,8 @@ export function teamRefusal(choice: Exclude<TeamChoice, { kind: "team" }>, fnNam
 }
 
 function resolved(account: ConnectorAccount, source: ResolvedAccount["source"]): AccountChoice {
-  const { id, label, connector, mode, owner, level } = account
-  return { kind: "account", account: { id, label, connector, mode, owner, level: levelName(level), source } }
+  const { id, label, connector, access, mode, owner, level } = account
+  return { kind: "account", account: { id, label, connector, ...(access !== undefined ? { access } : {}), mode, owner, level: levelName(level), source } }
 }
 
 /** Le compte personnel d'une autre personne que l'appelant. */

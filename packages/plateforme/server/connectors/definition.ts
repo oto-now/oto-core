@@ -3,9 +3,10 @@
 // exécute. Le paquet ne dépend d'aucun dépôt de connecteurs : ce type est le sien, de même forme que la sortie de la
 // fabrique du dépôt `connectors` (`ts/src/types.ts`), qu'un hôte lui passe telle quelle ; un connecteur propre à
 // l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, quota, exposition) est ignoré ;
-// `modes` y figure : il dit qui peut posséder un compte du connecteur. Aucun secret ici : `auth` nomme des champs de
-// `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement (`oauth2_user`) viennent de la
-// personne qui a consenti et de l'application OAuth de l'hôte.
+// `modes` y figure : il dit qui peut posséder un compte du connecteur. Un connecteur s'ouvre par un seul accès (`auth`,
+// `credential`, `modes`) ou par plusieurs (`accesses`, à leur place) : chaque compte retient le sien. Aucun secret ici :
+// `auth` nomme des champs de `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement
+// (`oauth2_user`) viennent de la personne qui a consenti et de l'application OAuth de l'hôte.
 
 /**
  * Qui sert un compte du connecteur, comme la fabrique l'écrit : `byo_user`, la clé d'une personne (un compte personnel) ;
@@ -428,7 +429,24 @@ export type ConnectorFunctionDefinition = {
  */
 export type ConnectorProbeBalance = { readonly path: string; readonly min: number; readonly unit: string }
 
-export type ConnectorDefinition = {
+/** Comment un compte s'ouvre : son authentification, les champs de son credential, qui peut le posséder. */
+export type ConnectorAccessFields = {
+  readonly auth: ConnectorAuth
+  /** Vide pour `oauth2_user` : les jetons d'un consentement ne sont pas des champs. */
+  readonly credential: readonly ConnectorCredentialField[]
+  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
+  readonly modes: readonly ConnectorMode[]
+}
+
+/**
+ * Un accès d'un connecteur qui s'ouvre par plusieurs (le compte de service d'une organisation, le consentement d'une
+ * personne) : `name`, que le compte ouvert par lui retient (`accounts.access`), `label`, montré à qui connecte, et ses
+ * `auth` (à niveaux d'accès), `credential` et `modes`. Les fonctions, l'adresse et la table d'erreurs sont communes.
+ */
+export type ConnectorAccess = { readonly name: string; readonly label: string } & ConnectorAccessFields
+
+/** Ce qu'un connecteur déclare hors de ses accès. */
+type ConnectorShared = {
   readonly name: string
   readonly label: string
   /**
@@ -438,14 +456,9 @@ export type ConnectorDefinition = {
   readonly baseUrl?: string
   /** Racine des chemins par valeur d'un réglage `choice` (une région), à la place de `baseUrl`. */
   readonly baseUrls?: ConnectorUrlsBySetting
-  readonly auth: ConnectorAuth
-  /** Vide pour `oauth2_user` : les jetons d'un consentement ne sont pas des champs. */
-  readonly credential: readonly ConnectorCredentialField[]
   /** Présente pour un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs. */
   readonly accountIdentity?: ConnectorAccountIdentity
   readonly settings?: readonly ConnectorSetting[]
-  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
-  readonly modes: readonly ConnectorMode[]
   readonly timeoutMs: number
   readonly queryArrays?: "repeat" | "brackets" | "comma"
   /** En-têtes constants de toute requête ; jamais l'en-tête d'authentification. */
@@ -460,3 +473,23 @@ export type ConnectorDefinition = {
   readonly probe?: { readonly function: string; readonly nonEmpty: readonly string[]; readonly balance?: ConnectorProbeBalance }
   readonly functions: readonly ConnectorFunctionDefinition[]
 }
+
+/**
+ * Le connecteur tel qu'un seul accès l'ouvre : un connecteur à un seul accès, ou un connecteur à plusieurs vu par l'un
+ * d'eux (`auth`, `credential` et `modes` de l'accès à la place de `accesses`, comme la fabrique le juge). Ce que lisent
+ * l'authentification, les propriétaires, le formulaire et le moteur.
+ */
+export type ConnectorView = ConnectorShared & ConnectorAccessFields & { readonly accesses?: undefined }
+
+/**
+ * Un connecteur décrit : un seul accès (`auth`, `credential`, `modes`), ou plusieurs (`accesses`, au moins deux, à
+ * leur place, jamais à côté).
+ */
+export type ConnectorDefinition =
+  | ConnectorView
+  | (ConnectorShared & {
+      readonly accesses: readonly ConnectorAccess[]
+      readonly auth?: undefined
+      readonly credential?: undefined
+      readonly modes?: undefined
+    })

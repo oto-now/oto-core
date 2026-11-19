@@ -9,7 +9,7 @@
 import type { AccountMark, AccountMarkReason } from "../../schemas"
 import { PlatformError } from "../errors"
 import { isJsonObject } from "../json"
-import type { ConnectorDefinition, ConnectorSetting, OAuthApplication } from "./definition"
+import type { ConnectorView, ConnectorSetting, OAuthApplication } from "./definition"
 import { requestJson, type ApiRequest, type Fetch } from "./http"
 import { consentAccessToken, EXPIRY_MARGIN_MS, prepareUserConsent, type UserConsentAuth } from "./oauth-user"
 import { prepareServiceAccount, serviceAccountToken, type ServiceAccountAuth } from "./service-account"
@@ -98,11 +98,11 @@ export type AccountCredential = {
 /** Ce que l'authentification pose sur une requête. */
 export type Signature = { headers: Record<string, string>; query: [string, string][] }
 
-const isField = (definition: ConnectorDefinition, name: unknown): name is string =>
+const isField = (definition: ConnectorView, name: unknown): name is string =>
   typeof name === "string" && definition.credential.some((field) => field.name === name)
 
 /** Le problème d'un échange `oauth2_client_credentials` déclaré, ou ce qu'il prépare. */
-function clientCredentials(definition: ConnectorDefinition, auth: Record<string, unknown>): PreparedAuth | string {
+function clientCredentials(definition: ConnectorView, auth: Record<string, unknown>): PreparedAuth | string {
   const head = `${definition.name}: auth oauth2_client_credentials`
   const { clientId, clientSecret, tokenRequest, clientAuth, scope } = auth
   if (!isField(definition, clientId) || !isField(definition, clientSecret)) return `${head} must name two credential fields (clientId, clientSecret).`
@@ -128,7 +128,7 @@ function clientCredentials(definition: ConnectorDefinition, auth: Record<string,
  * nomme un champ de `credential` ; `basic` sans `username` signe d'un identifiant vide ; `oauth2_user` (consentement
  * d'une personne) n'en nomme aucun ; `oauth2_jwt_bearer` nomme le seul, secret. Toute autre sorte (`none`) est refusée.
  */
-export function prepareAuth(definition: ConnectorDefinition): PreparedAuth | string {
+export function prepareAuth(definition: ConnectorView): PreparedAuth | string {
   const auth: Record<string, unknown> = { ...definition.auth }
   const head = `${definition.name}: auth ${String(auth.kind)}`
   if (auth.kind === "bearer") return isField(definition, auth.token) ? { kind: "header", header: "authorization", prefix: "Bearer ", field: auth.token } : `${head} must name a credential field (token).`
@@ -199,7 +199,7 @@ async function exchangeToken(exchange: Exchange, credential: AccountCredential, 
 }
 
 /** Ce qu'il faut pour signer une requête : l'authentification, le compte, de quoi joindre le point de jeton. */
-export type Signer = { auth: PreparedAuth; definition: ConnectorDefinition; credential: AccountCredential; accountId: string; fetcherFor: (guarded: boolean) => Fetch }
+export type Signer = { auth: PreparedAuth; definition: ConnectorView; credential: AccountCredential; accountId: string; fetcherFor: (guarded: boolean) => Fetch }
 
 /**
  * La signature d'une requête. `fresh` : un jeton d'échange neuf, même si celui du compte n'est pas échu (après un 401).

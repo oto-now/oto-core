@@ -17,7 +17,7 @@ import {
   type JwtBearerRefusedKey,
 } from "@otomata_tech/connectors/jwt-bearer-cases"
 import { prepareAuth, sign, type Signer } from "../../packages/plateforme/server/connectors/auth"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
@@ -38,7 +38,7 @@ const assertionOf = (c: JwtBearerCase) => `${segment(c.assertion.header)}.${segm
  * d'accès du compte s'il en dit un.
  */
 function signerOf(c: JwtBearerCase | JwtBearerRefusedKey, fetcher: Fetch) {
-  const definition: ConnectorDefinition = { ...describedConnector(), auth: c.auth, credential: c.credential }
+  const definition: ConnectorView = { ...describedConnector(), auth: c.auth, credential: c.credential }
   const auth = prepareAuth(definition)
   if (typeof auth === "string") throw new Error(auth)
   const tokens = memoryTokens()

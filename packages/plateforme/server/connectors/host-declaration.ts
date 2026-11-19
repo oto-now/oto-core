@@ -5,7 +5,7 @@
 // module à part pour garder la déclaration à sa taille ; il n'en importe rien.
 import { CatalogRegistrationError } from "../catalog/erp"
 import { isJsonObject } from "../json"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, HostCredentialReader, HostedLinkProvider, OAuthApplication } from "./definition"
+import type { ConnectorAccessFields, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, HostCredentialReader, HostedLinkProvider, OAuthApplication } from "./definition"
 import { addressProblem, citesIdentity, type AddressSpec } from "./settings"
 
 const HOLDERS = ["account", "host"]
@@ -15,7 +15,7 @@ export const FIELD_NAME = /^[a-z][a-z0-9_]{0,39}$/
 const IDENTITY_LABEL_MAX = 80
 
 /** Le premier champ du credential (déjà contrôlé) dont le titulaire n'est ni `account` ni `host` ; `null` : aucun. */
-export function holderProblem(definition: ConnectorDefinition): string | null {
+export function holderProblem(definition: ConnectorView): string | null {
   const bad = definition.credential.find((field) => field.holder !== undefined && !HOLDERS.includes(field.holder))
   return bad ? `${definition.name}: credential field ${bad.name} has holder ${JSON.stringify(String(bad.holder))}: account or host.` : null
 }
@@ -81,6 +81,13 @@ export type HostOptions = {
 export type HostGiven = { application: OAuthApplication | null; hostCredentials: HostCredentialReader | null; hostedLinks: HostedLinkProvider | null }
 
 /**
+ * Les accès d'une définition que `registerConnectors` n'a pas encore contrôlée : ceux de `accesses`, ou le connecteur
+ * lui-même ; un dû de l'hôte vaut pour le connecteur, quel que soit l'accès qui le lit.
+ */
+const accessesOf = (definition: ConnectorDefinition | undefined): readonly Partial<ConnectorAccessFields>[] =>
+  definition === undefined ? [] : Array.isArray(definition.accesses) ? definition.accesses : [definition]
+
+/**
  * Les lecteurs des champs de l'hôte et les ports du branchement hébergé, contrôlés : chacun d'un connecteur déclaré qui
  * déclare un champ `holder: host` (un lecteur, une fonction) ou une `accountIdentity` (un port, ses trois méthodes).
  */
@@ -88,7 +95,7 @@ export function checkedHostGifts(definitions: readonly ConnectorDefinition[], op
   const readers = new Map<string, HostCredentialReader>()
   for (const [name, reader] of Object.entries(options.hostCredentials ?? {})) {
     const definition = definitions.find((candidate) => candidate.name === name)
-    if (!definition?.credential?.some((field) => field.holder === "host")) throw new CatalogRegistrationError(`Host credentials for ${name}: no connector of this name with a host field is declared.`)
+    if (!accessesOf(definition).some((access) => access.credential?.some((field) => field.holder === "host"))) throw new CatalogRegistrationError(`Host credentials for ${name}: no connector of this name with a host field is declared.`)
     if (typeof reader !== "function") throw new CatalogRegistrationError(`Host credentials for ${name} must be a function that returns the host fields.`)
     readers.set(name, reader)
   }
@@ -105,12 +112,17 @@ export function checkedHostGifts(definitions: readonly ConnectorDefinition[], op
   return { readers, ports }
 }
 
-/** Les applications OAuth contrôlées : chacune d'un connecteur `oauth2_user` déclaré, identifiant et secret non vides. */
+/**
+ * Les applications OAuth contrôlées : chacune d'un connecteur déclaré dont un accès est `oauth2_user`, identifiant et
+ * secret non vides.
+ */
 export function checkedApplications(definitions: readonly ConnectorDefinition[], given: Readonly<Record<string, OAuthApplication>> | undefined): Map<string, OAuthApplication> {
   const applications = new Map<string, OAuthApplication>()
   for (const [name, application] of Object.entries(given ?? {})) {
     const definition = definitions.find((candidate) => candidate.name === name)
-    if (definition?.auth.kind !== "oauth2_user") throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
+    if (!accessesOf(definition).some((access) => access.auth?.kind === "oauth2_user")) {
+      throw new CatalogRegistrationError(`OAuth application for ${name}: no oauth2_user connector of this name is declared.`)
+    }
     const filled = (value: unknown): value is string => typeof value === "string" && value.trim() !== ""
     const complete = isJsonObject(application) && filled(application.clientId) && filled(application.clientSecret)
     if (!complete) throw new CatalogRegistrationError(`OAuth application for ${name} needs a non-empty clientId and clientSecret.`)

@@ -9,7 +9,7 @@ import { createPrivateKey, createSign, type KeyObject } from "node:crypto"
 import { PlatformError } from "../errors"
 import { isJsonObject } from "../json"
 import type { Signer } from "./auth"
-import type { ConnectorDefinition } from "./definition"
+import type { ConnectorView } from "./definition"
 import { requestToken, type ApiRequest } from "./http"
 import { declaredLevels, FULL_LEVEL, readAccessLevels, resolveLevel } from "./levels"
 import { EXPIRY_MARGIN_MS } from "./oauth-user"
@@ -68,7 +68,7 @@ function scopesOf(head: string, auth: Record<string, unknown>): Pick<ServiceAcco
  * `scopes` non vide ou des niveaux d'accès (`scopesOf`), `key` qui nomme le seul champ du credential, secret (règle 2 de
  * la fabrique).
  */
-export function prepareServiceAccount(definition: ConnectorDefinition, auth: Record<string, unknown>): ServiceAccountAuth | string {
+export function prepareServiceAccount(definition: ConnectorView, auth: Record<string, unknown>): ServiceAccountAuth | string {
   const head = `${definition.name}: auth oauth2_jwt_bearer`
   const { tokenUrl, key } = auth
   if (typeof tokenUrl !== "string" || !FIXED_HTTPS.test(tokenUrl) || auth.tokenUrls !== undefined) return `${head} needs a fixed https tokenUrl (no template, query nor tokenUrls).`
@@ -83,7 +83,7 @@ export function prepareServiceAccount(definition: ConnectorDefinition, auth: Rec
  * Le niveau d'un compte de service pour un appel : celui du compte (`accessLevel`), sinon `defaultLevel` ; `null` sans
  * niveaux. Un niveau non déclaré lève (`resolveLevel`).
  */
-export function serviceAccountLevel(definition: ConnectorDefinition, auth: ServiceAccountAuth, accessLevel: string | undefined): string | null {
+export function serviceAccountLevel(definition: ConnectorView, auth: ServiceAccountAuth, accessLevel: string | undefined): string | null {
   return resolveLevel(definition.name, declaredLevels(auth), accessLevel, auth.defaultLevel)
 }
 

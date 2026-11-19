@@ -478,6 +478,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
   table, colonne, policy ni index ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la
   version avant le tag.
+- `20261119104631_platform_acces_du_compte.sql` (connecteur à plusieurs accès, décidé par Alexis le 19/11 ;
+  connecteurs et comptes, § Plusieurs accès) : la colonne `accounts.access` (le nom de l'accès qui a ouvert le compte,
+  nul pour un connecteur à un seul accès ; lue et écrite à la création par `authenticated`, jamais modifiée) et la
+  colonne `connector_consents.access` (l'accès d'une demande de consentement), chacune avec sa contrainte de forme.
+  Additif : aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant.
+  Fichier de développement, à réunir avec les autres de la version avant le tag.
 
 ## Installer sur un hôte neuf
 

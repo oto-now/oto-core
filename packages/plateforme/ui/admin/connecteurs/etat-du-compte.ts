@@ -11,6 +11,13 @@ export type Connexion = "saisie" | "consentement" | "branchement"
 export const connexionDe = (formulaire: ConnectorAccountForm | undefined): Connexion =>
   formulaire?.consent === true ? "consentement" : formulaire?.hosted ? "branchement" : "saisie"
 
+/**
+ * Le formulaire d'un compte : celui de son connecteur et, pour un connecteur à plusieurs accès, de l'accès que le compte
+ * retient (un formulaire par accès) ; aucun si l'accès n'a pas de formulaire.
+ */
+export const formulaireDuCompte = (formulaires: readonly ConnectorAccountForm[], compte: Pick<AccountView, "connector" | "access">): ConnectorAccountForm | undefined =>
+  formulaires.find((formulaire) => formulaire.connector === compte.connector && formulaire.access?.name === compte.access)
+
 /** Le geste qui répare un état : saisir ou remplacer la clé (dans le détail), connecter ou reconnecter chez le tiers. */
 type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
 

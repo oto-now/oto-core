@@ -34,7 +34,6 @@ import {
   type AccountLevel,
   type Owner,
 } from "../access"
-import { declaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
 import { leadNames, leadWord, memberDirectory, ownerNames, ownerView, teamsWithLeads } from "../directory"
@@ -43,6 +42,7 @@ import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
+import { creationAccess } from "./accesses"
 import { requireAdmittedOwner } from "./account-owners"
 import { closedConnector, openConnectorForAccount, requireActivable } from "./activations"
 import { mayCreateAccountFor } from "./creation-right"
@@ -58,8 +58,11 @@ export type LevelName = Exclude<AccountLevelName, "none">
 /** Propriétaire d'un compte, décrit comme le lit le modèle : « team Ventes », « organisation », « personal ». */
 export type AccountOwner = Owner & { description: string }
 
-/** Un compte tel que les services le rendent : jamais de secret. */
-export type AccountSummary = { id: string; label: string; connector: string; mode: AccountMode; owner: AccountOwner }
+/**
+ * Un compte tel que les services le rendent : jamais de secret. `access` : l'accès qui l'ouvre, pour un connecteur à
+ * plusieurs accès (`accesses.ts`) ; absent pour un connecteur à un seul.
+ */
+export type AccountSummary = { id: string; label: string; connector: string; access?: string; mode: AccountMode; owner: AccountOwner }
 
 /**
  * Un compte visible de la personne, avec son état, la raison d'un état `error` (un consentement à reconnecter), sa
@@ -165,6 +168,8 @@ export type AccountRow = {
    * plus là : une pause, quand elle existera, s'y ajoutera.
    */
   owner_left: boolean
+  /** L'accès qui ouvre le compte, pour un connecteur à plusieurs accès ; `null` pour un connecteur à un seul. */
+  access: string | null
 }
 
 /**
@@ -177,7 +182,8 @@ export function accountRows(sql: Tx, orgId: string, only: { connector?: string; 
     select a.id, a.label, a.connector, a.mode, a.status, a.owner_kind, a.owner_team_id, a.owner_user_id, t.name as team_name,
            a.settings, a.secret_fields, to_json(a.secret_updated_at) #>> '{}' as secret_updated_at, a.status_reason, a.description,
            a.health -> 'mark' as mark, a.health -> 'last_probe' as last_probe,
-           a.owner_kind = 'user' and not exists (select 1 from platform.members m where m.org_id = a.org_id and m.user_id = a.owner_user_id) as owner_left
+           a.owner_kind = 'user' and not exists (select 1 from platform.members m where m.org_id = a.org_id and m.user_id = a.owner_user_id) as owner_left,
+           a.access
       from platform.accounts a left join platform.teams t on t.id = a.owner_team_id
      where a.org_id = ${orgId}
        and a.connector = coalesce(${only.connector ?? null}, a.connector)
@@ -200,8 +206,11 @@ export function accountOwner(row: AccountRow): AccountOwner {
 }
 
 export function summary(row: AccountRow): AccountSummary {
-  return { id: row.id, label: row.label, connector: row.connector, mode: accountMode(row.mode), owner: accountOwner(row) }
+  return { id: row.id, label: row.label, connector: row.connector, ...accessOf(row), mode: accountMode(row.mode), owner: accountOwner(row) }
 }
+
+/** L'accès d'un compte tel que le rendent les services : présent pour un connecteur à plusieurs accès seulement. */
+const accessOf = (row: AccountRow): { access?: string } => (row.access === null ? {} : { access: row.access })
 
 /**
  * Les comptes du connecteur que la personne voit (niveau 1 au moins), tous états, avec son niveau
@@ -271,16 +280,6 @@ function requireCreatableMode(connector: string, mode: AccountMode): void {
 }
 
 /**
- * Un connecteur à consentement (`oauth2_user`) n'a pas de compte créé à la main, quel qu'en soit le titulaire : ses
- * jetons ne naissent que du consentement d'une personne, qui en fait un compte personnel. Ce compte se partage ensuite
- * comme tout compte personnel (règles d'accès, sans règle propre).
- */
-export function requireNotConsent(connector: string): void {
-  if (declaredConnector(connector)?.auth.kind !== "user_consent") return
-  throw new PlatformError("invalid_arguments", `Accounts of ${connector} are not created by hand: each person connects their own by consenting (Connect my account), then may share it like any personal account.`)
-}
-
-/**
  * L'identifiant d'un compte chez un tiers (`linked_id`) ne s'écrit que par le branchement hébergé, qui le vérifie
  * auprès du tiers (`link_hosted_account`) : une saisie qui le porte est refusée, jamais ignorée en silence.
  */
@@ -303,7 +302,9 @@ export function labelTaken(label: string, orgName: string): PlatformError {
  * `connectors_max` ; fermé par un administrateur, le compte est refusé (`not_enabled`, `closed`). Le mode est posé
  * explicitement : le défaut de la colonne est `reel`. Un libellé déjà pris par le même propriétaire, sans casse, tous
  * connecteurs compris, est refusé par l'index unique (`23505` → `conflict`, `label_taken`). L'identifiant chez un tiers
- * (`linked_id`) n'est jamais une saisie. Écrit sous le rôle du serveur, qui tient la liste des connecteurs
+ * (`linked_id`) n'est jamais une saisie. Pour un connecteur à plusieurs accès, `access` nomme celui du compte, exigé,
+ * jamais un accès à consentement, et le compte le retient (`accounts.access`) ; refusé pour un connecteur à un seul
+ * (`creationAccess`). Écrit sous le rôle du serveur, qui tient la liste des connecteurs
  * (`keepDeclaredConnector`) ; l'état prend sa valeur par défaut, actif : `authenticated` n'insère que ce que la
  * personne fournit.
  */
@@ -313,11 +314,10 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   if (!parsed.success) throw invalidInput(parsed.error)
   const account = parsed.data
   requireActivable(account.connector, catalogFunctions())
-  requireNotConsent(account.connector)
+  const access = creationAccess(account.connector, account.access)
   requireCreatableMode(account.connector, account.mode)
   await requireCreationRight(db, identity, account)
-  const declared = declaredConnector(account.connector)
-  if (declared) requireAdmittedOwner(declared.definition, account.owner_kind)
+  if (access) requireAdmittedOwner(access.definition, account.owner_kind)
   const scope: LimitScope = { db, identity, limits: await orgLimits(identity.org) }
   requireAdmittedAccountOwner(scope, account.owner_kind)
   const teamId = account.owner_kind === "team" ? (account.team_id ?? null) : null
@@ -331,8 +331,8 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
       await requireUnderAccountsPerOwner(sql, scope, { connector: account.connector, owner: { kind: account.owner_kind, teamId, userId } })
       await keepDeclaredConnector(sql, account.connector)
       const [created] = await sql<{ id: string }[]>`
-        insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode)
-        values (${orgId}, ${account.connector}, ${account.owner_kind}, ${teamId}, ${userId}, ${label}, ${account.mode})
+        insert into platform.accounts (org_id, connector, owner_kind, owner_team_id, owner_user_id, label, mode, access)
+        values (${orgId}, ${account.connector}, ${account.owner_kind}, ${teamId}, ${userId}, ${label}, ${account.mode}, ${access?.name ?? null})
         returning id`
       const [written] = await accountRows(sql, orgId, { id: created.id })
       // Relue dans la transaction qui l'écrit, la ligne ne manque que si sa lecture la refuse : une panne,
@@ -362,6 +362,7 @@ export function accountView(row: AccountRow, level: AccountLevel, names: Readonl
     id: row.id,
     label: row.label,
     connector: row.connector,
+    ...accessOf(row),
     owner: ownerView(accountOwner(row).kind, row, names),
     mode: accountMode(row.mode),
     status: accountStatus(row.status),
