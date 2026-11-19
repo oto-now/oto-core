@@ -203,9 +203,9 @@ Un changement se fait ici (retours produit compris), se commite sur `main`, puis
    `CHANGELOG.md`, et publie avec provenance. Aucun tag ne se pousse à la main ; si la publication
    tombe après le tag, JB ou Alexis relance `publish.yml` sur ce tag (`workflow_dispatch`).
    GitHub interdit d'approuver sa propre pull request : les versions de l'un attendent l'autre.
-   En cas de blocage seulement (relecteur absent, correctif urgent), un administrateur fusionne sans
+   En cas de blocage seulement (relecteur absent, correctif urgent), Alexis fusionne sans
    approbation et le dit en commentaire sur la pull request, avec la raison ; `publish.yml` publie
-   et l'inscrit en avertissement.
+   et l'inscrit en avertissement. Toute autre fusion sans approbation ne publie rien.
    Après une version corrective sur `release/x.y.z`, son auteur ouvre aussitôt une pull request
    vers `main` qui y reporte la section du `CHANGELOG.md` (sortie de `## Unreleased`).
 5. Vérifier : `npm view @otomata_tech/oto_platform@<version> version`.

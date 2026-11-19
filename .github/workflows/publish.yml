@@ -37,6 +37,8 @@ concurrency:
 env:
   # Les comptes GitHub dont l'approbation publie une version : JB, Alexis.
   APPROVERS: "jean-baptiste-tiple AlexisLaporte"
+  # Le seul compte dont une fusion sans approbation publie quand même (contournement réservé à un blocage) : Alexis.
+  BYPASSERS: "AlexisLaporte"
 
 jobs:
   tag:
@@ -71,10 +73,10 @@ jobs:
           node scripts/ci/version-publiable.mjs --ref "$MERGE_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"
       # La dernière revue de chaque approbateur (hors simples commentaires) est une approbation, posée sur le dernier
       # commit de la pull request : une approbation antérieure à un push ne couvre pas ce qui est publié.
-      # Contournement : un approbateur qui fusionne sans approbation (exception des administrateurs de la règle de
-      # branche, réservée à un blocage) publie quand même ; le job le dit en avertissement et dans son résumé.
-      # Toute autre fusion sans approbation échoue, et rien n'est tagué.
-      - name: Approved by an approver, or merged by one who bypassed the review
+      # Contournement : Alexis (`BYPASSERS`) qui fusionne sans approbation (exception des administrateurs de la règle
+      # de branche, réservée à un blocage) publie quand même ; le job le dit en avertissement et dans son résumé.
+      # Toute autre fusion sans approbation échoue, et rien n'est tagué : JB, même administrateur, attend Alexis.
+      - name: Approved by an approver, or merged by a bypasser
         if: steps.version.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,7 +91,7 @@ jobs:
             if [ "$last" = "APPROVED $HEAD_SHA" ]; then approved="$login"; break; fi
           done
           if [ -n "$approved" ]; then echo "approved by $approved"; exit 0; fi
-          for login in $APPROVERS; do
+          for login in $BYPASSERS; do
             if [ "$MERGED_BY" = "$login" ]; then
               message="published WITHOUT approval: pull request #$PR merged by $MERGED_BY, who bypassed the review; the reason is due as a comment on the pull request"
               echo "::warning title=Version without approval::$message"
@@ -97,7 +99,7 @@ jobs:
               exit 0
             fi
           done
-          echo "no approval by one of: $APPROVERS, on $HEAD_SHA, and merged by $MERGED_BY"; exit 1
+          echo "no approval by one of: $APPROVERS, on $HEAD_SHA, and merged by $MERGED_BY, not one of: $BYPASSERS"; exit 1
       - name: Tag the merge commit
         if: steps.version.outputs.tag != ''
         env:
