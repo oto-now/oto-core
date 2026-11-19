@@ -412,8 +412,12 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
       const session = await connectDeps(mcpDeps(db, "paul"))
       const context = await session.call("context", { phrase: "relance les devis en attente" })
       // E03-S08 : le Contexte de Tout le monde, que Paul lit, cite `ventes/suivi_prospects` dans son Lexique ;
-      // du contenu écrit, pas un chemin servi par le service : aucune autre ligne ne nomme Ventes.
-      expect(context.text.split("\n").filter((line) => line.includes("ventes/"))).toEqual([acmeNode("contexte").blocks[3].text])
+      // du contenu écrit, pas un chemin servi par le service. La vue invité nomme le seul contenu de Ventes que Paul
+      // lit, le dossier que possède Support : aucune autre ligne ne nomme Ventes.
+      expect(context.text.split("\n").filter((line) => line.includes("ventes/"))).toEqual([
+        acmeNode("contexte").blocks[3].text,
+        "- ventes/zone (+1 under it) — ventes/zone — Summary of ventes/zone.",
+      ])
       expect(context.result.structuredContent).toMatchObject({ served: null, candidates: [{ path: "support/reponse_ticket", score: 0.53 }] })
 
       const byWords = await find(db, paul, { query: "relance devis" }, NO_CATALOG)

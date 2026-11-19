@@ -128,6 +128,8 @@ describe("catalog (AC23)", () => {
       "comment.edit",
       "comment.delete",
       "comment.resolve",
+      // Les partages d'une équipe, calculés des droits.
+      "team.shares",
     ])
     expect(callExamples(catalogFunctions(), NONE)).toEqual(["table.rows"])
   })

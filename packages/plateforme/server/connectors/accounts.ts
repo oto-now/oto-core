@@ -37,7 +37,7 @@ import {
 import { declaredConnector } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
-import { leadNames, leadWord, memberDirectory, teamsWithLeads } from "../directory"
+import { leadNames, leadWord, memberDirectory, ownerNames, ownerView, teamsWithLeads } from "../directory"
 import { fromDatabaseError, inTransaction, invalidInput, isUniqueViolation, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
@@ -356,13 +356,13 @@ function accountStatus(value: string): AccountView["status"] {
   return value === "active" || value === "disabled" ? value : "error"
 }
 
-export function accountView(row: AccountRow, level: AccountLevel): AccountView {
-  const { kind } = accountOwner(row)
+/** La vue d'un compte au niveau `level` ; `names` nomme la personne d'un compte personnel (`ownerNames`). */
+export function accountView(row: AccountRow, level: AccountLevel, names: ReadonlyMap<string, string>): AccountView {
   return {
     id: row.id,
     label: row.label,
     connector: row.connector,
-    owner: kind === "team" && row.team_name !== null ? { kind, teamName: row.team_name } : { kind },
+    owner: ownerView(accountOwner(row).kind, row, names),
     mode: accountMode(row.mode),
     status: accountStatus(row.status),
     secret: { fields: row.secret_fields, updatedAt: row.secret_updated_at },
@@ -396,15 +396,18 @@ export async function listOwnAccounts(db: PlatformDb, identity: Identity): Promi
   return visibleViews(db, identity, rows)
 }
 
-/** La vue des comptes lus que l'appelant voit (niveau 1 au moins, `accountLevels` en un lot), triée par libellé. */
+/**
+ * La vue des comptes lus que l'appelant voit (niveau 1 au moins, `accountLevels` en un lot), triée par libellé. L'annuaire
+ * ne se lit que si un compte personnel est visible : il nomme sa personne.
+ */
 async function visibleViews(db: PlatformDb, identity: Identity, rows: AccountRow[]): Promise<AccountView[]> {
   const levels = await accountLevels(db, identity, rows.map((row) => row.id))
-  return rows
-    .flatMap((row) => {
-      const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
-      return level >= ACCOUNT_LEVELS.read ? [accountView(row, level)] : []
-    })
-    .sort((a, b) => a.label.localeCompare(b.label, "fr"))
+  const visible = rows.flatMap((row) => {
+    const level = levels.get(row.id) ?? ACCOUNT_LEVELS.none
+    return level >= ACCOUNT_LEVELS.read ? [{ row, level }] : []
+  })
+  const names = await ownerNames(db, identity.org.id, visible.map(({ row }) => row))
+  return visible.map(({ row, level }) => accountView(row, level, names)).sort((a, b) => a.label.localeCompare(b.label, "fr"))
 }
 
 /**

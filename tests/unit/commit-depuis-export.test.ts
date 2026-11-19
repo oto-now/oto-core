@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "child_process"
 import fs from "fs"
 import os from "os"
 import path from "path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { lireLaListe, lireLeRecu, ligneVerified } from "../../scripts/commit-depuis-export.mjs"
 import { arbreDeCodeDuCommit, arbreDeCodeDuDossier } from "../../scripts/lib/arbre-de-code.mjs"
 import { empreinteDesMigrations } from "../../scripts/lib/empreinte-des-migrations.mjs"
@@ -93,9 +93,14 @@ function lancer(cas: ReturnType<typeof monter>, args = ["--depot", cas.depot, "-
   return { status: result.status, output: result.stdout + result.stderr, sha: /^Commit ([0-9a-f]{40})/m.exec(result.stdout)?.[1] }
 }
 
-// Une dizaine de lancements de git par cas, plus node : environ 1 s au calme ; 30 s, comme les autres tests
-// sur dépôt jetable (`check-framework.test.ts`), sur la machine partagée.
-describe("commit-depuis-export on a throwaway repository", { timeout: 30_000 }, () => {
+// Chaque test lance git et node sans rendre la main : un tour de boucle d'événements entre deux tests laisse Vitest
+// traiter ses appels internes (`onTaskUpdate`, expirés passé 60 s cumulées). Le fichier a duré 131 s dans un
+// `pnpm verify` complet sur la machine chargée.
+afterEach(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
+// Des dizaines de lancements de git par cas, plus node : d'une à dix secondes au calme, plus de trente pour les cas
+// d'une branche de travail sur la machine partagée quand elle est chargée ; 60 s.
+describe("commit-depuis-export on a throwaway repository", { timeout: 60_000 }, () => {
   it("should build the commit of the export on its base, with the receipt in trailers, without pushing nor touching the checkout", () => {
     const cas = monter()
     fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 2\n")
@@ -179,6 +184,73 @@ describe("commit-depuis-export on a throwaway repository", { timeout: 30_000 }, 
     expect(result.output).toContain("refaire l'export sur la tête")
   })
 
+  /** Le premier commit d'une branche de travail : construit sur `origin/main`, sans `--branche`, puis poussé sur elle. */
+  function ouvrirUneBranche(cas: ReturnType<typeof monter>) {
+    fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 2\n")
+    recuVert(cas.exporte)
+    const premier = lancer(cas).sha!
+    git(cas.depot, "push", "--quiet", "origin", `${premier}:refs/heads/travail`)
+    return premier
+  }
+  const surLaBranche = (cas: ReturnType<typeof monter>, base: string) => lancer(cas, ["--depot", cas.depot, "--base", base, "--message", cas.message, "--branche", "travail"])
+
+  it("should stack the commit of the export on the head of a work branch with --branche, and refuse a base that is not that head, a branch that does not exist, and main", () => {
+    const cas = monter()
+    const premier = ouvrirUneBranche(cas)
+    fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 3\n")
+    const recu = recuVert(cas.exporte)
+
+    // `--base` nomme encore `origin/main` : la branche a déjà un commit, l'export doit partir de sa tête.
+    const perime = surLaBranche(cas, cas.base)
+    expect(perime.status, perime.output).toBe(1)
+    expect(perime.output).toContain("refaire l'export sur sa tête")
+
+    const empile = surLaBranche(cas, premier)
+    expect(empile.status, empile.output).toBe(0)
+    // `main` n'a pas avancé : un seul parent, la tête de la branche.
+    expect(git(cas.depot, "log", "-1", "--format=%P", empile.sha!)).toBe(premier)
+    expect(git(cas.depot, "show", `${empile.sha!}:a.ts`)).toBe("export const a = 3")
+    expect(git(cas.depot, "log", "-1", "--format=%(trailers:key=Verified-tree,valueonly)", empile.sha!)).toBe(recu.tree)
+    expect(empile.output).toContain(`${empile.sha!}:refs/heads/travail`)
+    // Rien n'est poussé : la branche et `main` gardent leur tête.
+    expect([git(cas.origin, "rev-parse", "travail"), git(cas.origin, "rev-parse", "main")]).toEqual([premier, cas.base])
+
+    const inconnue = lancer(cas, ["--depot", cas.depot, "--base", premier, "--message", cas.message, "--branche", "autre"])
+    expect(inconnue.output).toContain("origin/autre n'existe pas")
+    const surMain = lancer(cas, ["--depot", cas.depot, "--base", cas.base, "--message", cas.message, "--branche", "main"])
+    expect([inconnue.status, surMain.status]).toEqual([1, 1])
+    expect(surMain.output).toContain("--branche nomme une branche de travail")
+  })
+
+  it("should take the head of main as a second parent once main moved, only when the export carries what main changed", () => {
+    const cas = monter()
+    const premier = ouvrirUneBranche(cas)
+    // Une autre session pousse sur `main` un fichier que la branche ne touche pas.
+    const autre = path.join(cas.racine, "autre")
+    git(cas.racine, "clone", "--quiet", cas.origin, autre)
+    fs.writeFileSync(path.join(autre, "c.ts"), "export const c = 1\n")
+    git(autre, "add", "c.ts")
+    git(autre, "commit", "--quiet", "--no-verify", "-m", "c")
+    git(autre, "push", "--quiet", "origin", "HEAD:refs/heads/main")
+    const main = git(autre, "rev-parse", "HEAD")
+
+    // L'export est resté sur l'ancienne tête de `main` : le commit effacerait `c.ts` à la fusion de la branche.
+    fs.writeFileSync(path.join(cas.exporte, "a.ts"), "export const a = 3\n")
+    recuVert(cas.exporte)
+    const sansMain = surLaBranche(cas, premier)
+    expect(sansMain.status, sansMain.output).toBe(1)
+    expect(sansMain.output).toContain("ne porte pas ce qu'origin/main")
+    expect(sansMain.output).toContain("c.ts")
+
+    // Recalé : le fichier de `main` est repris tel quel dans l'export, puis vérifié.
+    fs.writeFileSync(path.join(cas.exporte, "c.ts"), "export const c = 1\n")
+    recuVert(cas.exporte)
+    const recale = surLaBranche(cas, premier)
+    expect(recale.status, recale.output).toBe(0)
+    expect(git(cas.depot, "log", "-1", "--format=%P", recale.sha!)).toBe(`${premier} ${main}`)
+    expect([git(cas.depot, "show", `${recale.sha!}:a.ts`), git(cas.depot, "show", `${recale.sha!}:c.ts`)]).toEqual(["export const a = 3", "export const c = 1"])
+  })
+
   it("should refuse a commit that changes nothing, and say its usage without its three options", () => {
     const cas = monter()
     recuVert(cas.exporte)
@@ -214,7 +286,8 @@ describe("lireLeRecu", () => {
 
   it.each<[string, Record<string, unknown>, string]>([
     ["older than an hour", { at: new Date(Date.now() - 61 * 60 * 1000).toISOString() }, "périmé"],
-    ["dated in the future", { at: new Date(Date.now() + 60 * 1000).toISOString() }, "périmé"],
+    // Une heure d'avance : la table se date à la lecture du fichier, et les tests d'avant durent plus d'une minute sur un poste chargé.
+    ["dated in the future", { at: new Date(Date.now() + 60 * 60 * 1000).toISOString() }, "périmé"],
     ["without a check", { checks: ["type-check", "lint", "test"] }, "check:framework"],
     ["without the code tree", { tree: undefined }, "arbre de code"],
     ["without the test summary", { tests: undefined }, "résume pas les tests"],

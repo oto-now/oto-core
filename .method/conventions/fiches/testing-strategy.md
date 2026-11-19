@@ -16,6 +16,7 @@ Texte complet : `.method/conventions/testing-strategy.md`. La fiche suffit pour 
 - Un test de recherche sème un mot propre à lui, absent des autres contenus semés du fichier. § Anti-patterns
 - Mocker les seules frontières (base, API) ; chaque `it` passe lancé seul, pose sa précondition et consomme un état sur une ressource à lui. § Anti-patterns
 - Un ordre de chargement de module se teste dans un Node natif (`tests/helpers/native-load-first.mjs`), jamais par `import()` sous Vitest, qui rend `undefined` au lieu de lever à travers un cycle. § Anti-patterns
+- Une date relative au présent dans une table `it.each` se date à la lecture du fichier : sa marge dépasse ce qu'un fichier peut durer (une heure), ou elle se calcule dans le test. § Anti-patterns
 - Jamais de `sleep` : `waitFor` ou `findBy` ; un focus après une action asynchrone se lit par `await waitFor(() => expect(document.activeElement)…)`. § Anti-patterns
 - Aucun test sous jsdom ni spec Playwright ne charge `cli/db-prepare.mjs` ni `scripts/lib/env.mjs` : la règle TLS vient de `cli/ssl-option.mjs` ; un fichier jsdom qui importe une aide SQL porte `// @vitest-environment node`. § Anti-patterns
 - « Objet vide » s'affirme par `toEqual({})`, jamais par `{}` dans `toMatchObject` ou `objectContaining`. § Anti-patterns

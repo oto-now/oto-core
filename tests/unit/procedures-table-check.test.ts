@@ -85,7 +85,7 @@ describe.skipIf(!sqlConfigured)(portable("publishing a procedure that releases r
         `Publication of ${PATH} refused: 1 problem(s). Nothing was written; the draft saved before this call stays.`,
         `- ${problem}`,
         'Fix them with acme_write (ops on the sections), then publish again. Format and rules: acme_read {"path": "write.procedure"}.',
-        "Writing it in several calls? Pass publish: false until the last one.",
+        "Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls.",
       ].join("\n"),
       details: { refusals: [{ kind: "check_failed", section: "Étapes", block: 1, step: 5, block_id: callId, function: "table.release", message: problem }] },
     })

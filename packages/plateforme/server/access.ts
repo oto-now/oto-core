@@ -355,6 +355,24 @@ export async function teamMemberLevels(db: PlatformDb, identity: Identity, nodeI
 }
 
 /**
+ * Le niveau d'un simple membre d'une équipe sur chacun des nœuds, en un lot (les partages d'une équipe) : un membre
+ * que rien ne nomme, comme `plain` de `teamMemberLevels` ; ce que l'équipe lit, sans personne en particulier. Exact au
+ * seuil de la lecture, comme `nodeLevels` : une chaîne incomplète est ramenée à la lecture. 0 pour un nœud inconnu.
+ */
+export async function teamReadLevels(db: PlatformDb, identity: Identity, teamId: string, nodeIds: readonly string[]): Promise<Map<string, AccessLevel>> {
+  const plain: Caller = { userId: "", orgId: identity.org.id, isOrgAdmin: false, teamIds: new Set([teamId]), ledTeamIds: new Set() }
+  const chains = await readNodeChains(db, identity.org.id, nodeIds)
+  return new Map(
+    nodeIds.map((id) => {
+      const chain = chains.get(id)
+      if (!chain) return [id, ACCESS_LEVELS.none]
+      const level = nodeLevelOf(plain, chain)
+      return [id, chain.complete || level <= ACCESS_LEVELS.read ? level : ACCESS_LEVELS.read]
+    }),
+  )
+}
+
+/**
  * Les membres de l'organisation qui lisent un nœud (niveau 1 au moins), par identifiant : ceux qu'un commentaire de la
  * page peut mentionner. Chacun tel que le calcul le décide (`nodeLevelOf`, sur les faits de chaque membre, comme
  * `teamMemberLevels`) ; vide quand le nœud manque. Calcul pur sur les faits lus, sans rien écrire.

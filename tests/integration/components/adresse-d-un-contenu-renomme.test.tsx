@@ -148,7 +148,7 @@ describe("SectionsDuRail, the open content under its old address (AC-b12)", () =
     await waitFor(() => expect(lien("Tarifs 2026")).toHaveAttribute("aria-current", "page"))
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Tarifs 2026" }))
     fireEvent.click(screen.getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Tarifs 2026 » ?" })).getByRole("button", { name: "Supprimer" }))
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Supprimer « Tarifs 2026 » ?" })).getByRole("button", { name: "Supprimer" }))
 
     await waitFor(() => expect(naviguer).toHaveBeenCalledWith("/n/ventes"))
   })

@@ -219,7 +219,7 @@ Phrases de test par outil : `docs/reference/mcp-golden-queries.md`.
 | `find` | Chercher dans les titres, les résumés et le contenu (blocs, lignes de tableau), et dans les fonctions | `query`, `type` facultatif | `ctx` | trois nœuds et trois fonctions avec score, chacun avec le bloc trouvé et un extrait, ou une question |
 | `read` | Lire une procédure, une page, un tableau, le journal ou le contrat d'une fonction ; en plan, par section, depuis une révision, en brouillon | `path`, `section`, `outline`, `since_revision`, `draft`, `refs`, `cursor` | `ctx` | contenu en texte et en structuré |
 | `call` | Exécuter une fonction du catalogue après validation, droits et résolution du compte | `function`, `arguments`, `confirm`, `team`, `account` | `ctx` | résultat et suites possibles |
-| `write` | Créer ou modifier une page, une procédure, un tableau, par opérations ; publié à chaque écriture, brouillon sur demande (`publish: false`) | `path`, `base_revision`, `title`, `summary`, `kind`, `ops`, `header`, `publish` | `ctx` | révision et différences |
+| `write` | Créer ou modifier une page, une procédure, un tableau, par opérations ; publié à chaque écriture (`publish` n'a plus d'effet) | `path`, `base_revision`, `title`, `summary`, `kind`, `ops`, `header`, `publish` | `ctx` | révision et différences |
 | `feedback` | Signaler une friction, un manque, une erreur d'outil | `type`, `text`, `target` | `ctx` | numéro de ticket |
 
 **Ce que renvoie `context`.** 35 000 caractères au plus, environ 10 000 tokens, qui repartent au
@@ -338,8 +338,8 @@ personnes qui modifient deux blocs d'une page ne se gênent pas.
 **Brouillon et publication.** Écrire publie (fiche D135) : un contenu est publié dès sa création et
 à chaque modification, par qui peut l'écrire ; publier fait avancer la révision et garde un
 instantané. À l'écran, la publication est seule, 3 s après la dernière frappe et en quittant la
-page. Un brouillon partagé ne reste que si un assistant le demande (`publish: false`) ou si la
-publication est refusée ; l'assistant peut l'abandonner (`node.discard_draft`). La gestion garde le
+page. Un assistant ne laisse pas de brouillon ; un brouillon partagé ne reste que si la publication
+est refusée à l'écran ; l'assistant peut l'abandonner (`node.discard_draft`). La gestion garde le
 partage, les règles, le déplacement et la corbeille.
 
 **Procédure.** Un titre, un résumé qui dit comment on la demande, puis des sections faites de blocs ;
@@ -406,7 +406,7 @@ un relais d'envoi.
 
 | ID | Exigence | Priorité | État |
 |---|---|---|---|
-| FR-CONC-01 | `write` opère sur une section adressée par son titre (remplacer, insérer, supprimer, ajouter, remplacer un passage) ou sur un bloc adressé par sa référence courte (remplacer, insérer après, supprimer, déplacer) ; publiée à chaque écriture, brouillon sur demande (`publish: false`) ; une écriture sur une révision périmée est refusée avec l'état actuel, bloc par bloc ; la réponse donne la révision, les différences et le nouveau chemin si le titre a changé | Must | Livrée |
+| FR-CONC-01 | `write` opère sur une section adressée par son titre (remplacer, insérer, supprimer, ajouter, remplacer un passage) ou sur un bloc adressé par sa référence courte (remplacer, insérer après, supprimer, déplacer) ; publiée à chaque écriture, sans brouillon d'assistant ; une écriture sur une révision périmée est refusée avec l'état actuel, bloc par bloc ; la réponse donne la révision, les différences et le nouveau chemin si le titre a changé | Must | Livrée |
 | FR-CONC-02 | Procédure (ci-dessus) : à la publication, le serveur vérifie que chaque fonction, argument et état cité par un bloc `call` existe et est accepté ; le refus nomme la section, le rang du bloc, l'étape qui le précède, la fonction et l'élément fautif | Must | Livrée |
 | FR-CONC-03 | Éditeurs web de page, de procédure et de Contexte, repris d'oto-frontend : titre en place (et résumé, pour une procédure seule), poignée de bloc, publication seule dès le niveau écriture, « @ », aperçu de ce que le modèle recevra d'un Contexte ; une procédure s'y édite comme une page | Should | Livrée ; à l'écran, le bloc d'appel, le contrôle du brouillon et le score d'une phrase (« Tester une phrase ») d'une procédure : V2, avec les connecteurs |
 | FR-CONC-04 | Les nouveautés de l'organisation (pages et procédures publiées, connecteurs activés) apparaissent dans `context` à la conversation suivante ; le bloc est omis quand rien n'a changé depuis une conversation du jour même ; la publication d'un contenu changé d'un Contexte invalide les seuls codes `ctx` auxquels il était servi. Aucune note de version de la plateforme n'y figure | Should | Livrée ; les notes de version de la plateforme : Retirées (elles n'aidaient pas la demande de l'utilisateur) |

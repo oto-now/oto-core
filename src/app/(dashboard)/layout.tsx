@@ -93,6 +93,8 @@ export default async function DashboardLayout({
             administre={identity ? isOrgAdmin(identity) : false}
             adresses={adressesDe(identity ? isOrgAdmin(identity) : false)}
             organisations={organisations}
+            // Les équipes de la personne : le rail range à part celles où elle ne voit que ce qu'on partage avec elle.
+            equipesDeLaPersonne={identity?.teams.map((team) => team.slug)}
           />
           <Content>{children}</Content>
         </Desk>

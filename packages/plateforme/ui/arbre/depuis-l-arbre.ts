@@ -69,8 +69,15 @@ function contexteDAbord(noeuds: readonly NoeudDArbre[]): NoeudDArbre[] {
  * Contexte ouvre sa section ; une section vide n'est pas rendue. Chaque section porte sa clé (`""`, le
  * slug de l'équipe, `private`), que lit le rail (E05-S09). La clé `""` de « Tout le monde » est aussi le parent
  * de ce qu'on y crée (le haut de l'arbre) ; `all` y ferait une clé qu'une équipe au slug `all` pourrait prendre.
+ * `equipesDeLaPersonne` (les slugs de ses équipes) : les équipes dont elle n'est pas membre viennent après « Privé »,
+ * par nom, marquées `invite` ; sans lui, toutes les équipes se suivent comme avant.
  */
-export function sectionsDeLArbre(arbre: readonly TreeNode[], equipes: readonly { slug: string; name: string }[], handle: string | null): SectionCle[] {
+export function sectionsDeLArbre(
+  arbre: readonly TreeNode[],
+  equipes: readonly { slug: string; name: string }[],
+  handle: string | null,
+  equipesDeLaPersonne?: readonly string[],
+): SectionCle[] {
   const premiers = arbre.flatMap((noeud) => (noeud.path === RACINE ? noeud.children : [noeud]))
   const slugs = new Set(equipes.map((equipe) => equipe.slug))
   const lignes = new Map<string, TreeNode[]>()
@@ -82,14 +89,16 @@ export function sectionsDeLArbre(arbre: readonly TreeNode[], equipes: readonly {
     else ajouter("", [noeud])
   }
   const parNom = [...equipes].sort((a, b) => a.name.localeCompare(b.name, "fr"))
-  const ordre: { cle: string; titre: string }[] = [
+  const membre = (equipe: { slug: string }) => equipesDeLaPersonne === undefined || equipesDeLaPersonne.includes(equipe.slug)
+  const ordre: { cle: string; titre: string; invite?: boolean }[] = [
     { cle: "", titre: TOUT_LE_MONDE },
-    ...parNom.map((equipe) => ({ cle: equipe.slug, titre: equipe.name })),
+    ...parNom.filter(membre).map((equipe) => ({ cle: equipe.slug, titre: equipe.name, ...(equipesDeLaPersonne === undefined ? {} : { invite: false }) })),
     { cle: PERSO, titre: SECTION_PERSO },
+    ...parNom.filter((equipe) => !membre(equipe)).map((equipe) => ({ cle: equipe.slug, titre: equipe.name, invite: true })),
   ]
-  return ordre.flatMap(({ cle, titre }) => {
+  return ordre.flatMap(({ cle, titre, invite }) => {
     const noeuds = contexteDAbord(noeudsDArbreDepuis(lignes.get(cle) ?? []))
-    return noeuds.length > 0 ? [{ cle, titre, noeuds }] : []
+    return noeuds.length > 0 ? [{ cle, titre, noeuds, ...(invite === undefined ? {} : { invite }) }] : []
   })
 }
 

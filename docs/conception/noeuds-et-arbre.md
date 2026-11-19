@@ -1,7 +1,7 @@
 # Nœuds et arbre
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-11-17
 
 ## Résumé
 
@@ -70,9 +70,9 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 
 ### Écrire publie (ADR-011 § 3, D135)
 
-- D135 : publication directe : à l'écran comme par l'assistant, un contenu est publié dès sa création et à chaque modification ; `write` publie par défaut, un brouillon ne reste que sur `publish: false` ou sur une publication refusée ; qui peut écrire publie (la gestion garde partage, droits, déplacement, suppression).
+- D135 : publication directe : à l'écran comme par l'assistant, un contenu est publié dès sa création et à chaque modification ; `write` publie toujours : un assistant ne laisse pas de brouillon (`publish: false`, reçu à sa porte, est retiré, et la réponse le dit, `server/nodes/publish-always.ts`) ; un brouillon ne reste que sur une publication refusée à l'écran, ou pour une procédure qu'un import d'arborescence n'a pas pu publier ; qui peut écrire publie (la gestion garde partage, droits, déplacement, suppression).
 - L'écran regroupe les frappes et publie 3 s après la dernière et en quittant la page ; HN-E11S02-20 : cadence de 3 s gardée, aucune fusion de révisions. Le brouillon est partagé, et la publication suivante le publie entier ; HN-E11S02-19 : aucun avis à l'ouverture d'un nœud qui a un brouillon : la frappe suivante le publie entier.
-- HN-E11S02-21 : le défaut de `publish` se lit dans le service (`publish !== false`) ; l'écran passe `publish: false` par la file d'opérations. HN-E11S02-22 : refus de publication : brouillon gardé, `isError` avec son code (E03-S03 N28) ; une écriture d'assistant, elle, est entière ou rien (HN-E11S18-1).
+- HN-E11S02-21 : le défaut de `publish` se lit dans le service (`publish !== false`) ; l'écran passe `publish: false` par la file d'opérations, comme l'import d'une arborescence et le dépôt par lien, qui écrivent en deux temps : l'option reste dans le service, retirée aux seules portes d'un assistant (`write` du MCP, `node.write_many`, `upload.link`). HN-E11S02-22 : refus de publication : brouillon gardé, `isError` avec son code (E03-S03 N28) ; une écriture d'assistant, elle, est entière ou rien (HN-E11S18-1).
 - Modifier écrit l'état `draft` : la première modification ouvre le brouillon et copie les blocs publiés, avec les mêmes `id`. Publier remplace l'état `published` par le brouillon, incrémente `nodes.revision`, prend un instantané dans `node_versions`, réécrit les liens, puis efface le brouillon. L'en-tête en attente (titre, résumé, type, schéma) vit dans `node_drafts` ; brouillon, publication et abandon passent par `open_draft`, `publish_node` et `discard_draft`.
 - HN-E11S02-17 : qui peut écrire publie aussi l'en-tête changé d'un tableau publié (colonnes, clé, `proof`, `agents_may_decide`, `closed`) ; canal ouvert voulu, tracé. Un tableau n'a pas de brouillon de lignes : ses blocs `row` s'écrivent à l'état `published` ([tableaux](tableaux.md)).
 - HN-E11S02-23 : Contextes et espaces créés par la base restent à la révision 0 jusqu'à leur première écriture. HN-E11S02-28 : le Contexte suit la règle : écrire le publie.
@@ -92,6 +92,7 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 
 - **Brouillon par défaut, publication à la gestion** (ADR-011 § 3 d'origine, défaut `publish` de l'ADR-002, H63) : remplacés par la publication directe au niveau écriture (D135, 2026-09-29) : un brouillon laissé ouvert bloquait l'assistant, et la gestion ne doit garder que partage, droits, déplacement et suppression.
 - **Pas d'abandon de brouillon** (E01-S06 N5, [pages et blocs](pages-et-blocs.md)) : remplacé par `node.discard_draft` (E11-S02) : un assistant doit pouvoir sortir d'un brouillon qu'il a laissé.
+- **Un brouillon gardé à la demande d'un assistant** (`publish: false`, D135 d'origine) : retiré le 17/11/2026 : ce brouillon n'était trouvé par aucune recherche, ne se commentait pas, et la frappe suivante de n'importe qui le publiait entier ; pour proposer sans modifier, un assistant commente ([commentaires](commentaires.md)). Refuser l'appel a été écarté : un assistant qui suit une ancienne consigne ferait un appel de plus, et une procédure qui le demande échouerait ; l'ignorer en silence aussi : l'assistant croirait avoir laissé un brouillon.
 - **Refuser un chemin pris** : écarté par D125 : un chemin n'est pas une information que la personne doit gérer ; on prend le premier libre.
 - **Espace personnel sous `perso/<handle>`** : renommé `private/<handle>` (D89, D107) ; les anciens chemins restent des alias, le journal n'est pas réécrit.
 - **Un bouton d'abandon de brouillon à l'écran** (HN-E11S02-12) : écarté, l'écran publiant toujours ; **une corbeille de lignes** (HN-E11S02-10) : écartée, une ligne supprimée l'est pour de bon.
@@ -130,3 +131,4 @@ Aucune à ce jour.
 - 2026-10-20 : la base exige l'écriture du parent pour créer un nœud (déclencheur `nodes_guard_creation`) et n'accorde à une session que les colonnes de `nodes` que les services écrivent : à la création, celles d'`insertNode`, propriétaire hérité ; ensuite, parent, chemin, propriétaire, dernier auteur, position et corbeille (`20261021110000`) — décidé par Alexis (source : revue des droits de colonne de `nodes`).
 - 2026-10-20 : `open_draft`, `publish_node`, `discard_draft` et `duplicate_subtree` exigent en base le niveau de leur service (`20261021100000`) ; la duplication ne copie plus une page ni des descendants cachés — décidé par Alexis (source : revue des fonctions `security definer`).
 - 2026-10-20 : la base juge les gestes d'une mise à jour d'un nœud et sa suppression au niveau du service (déclencheur `nodes_gesture_guard`, `nodes_delete_manager`, `20261021090000`) — décidé par Alexis (source : revue des policies d'écriture).
+- 2026-11-17 : un assistant ne laisse plus de brouillon : `publish: false` est retiré à sa porte (`write`, `node.write_many`, `upload.link`), l'écriture est publiée et la réponse le dit ; l'écran garde son brouillon d'une publication refusée — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).

@@ -6,6 +6,11 @@
 export const MENU_DE_L_EQUIPE = {
   actions: (nom: string) => `Actions sur l'équipe ${nom}`,
   personnes: (nom: string) => `Les personnes de ${nom}`,
+  partages: "Partages de l'équipe…",
+  titreDesPartages: (nom: string) => `Les partages de ${nom}`,
+  chargementDesPartages: "Lecture des partages…",
+  echecDesPartages: "Les partages n'ont pas pu être lus",
+  partagesReserves: "Les partages d'une équipe sont réservés à ses membres et aux administrateurs.",
   renommer: "Renommer l'équipe…",
   renommee: (nom: string) => `L'équipe s'appelle maintenant ${nom}.`,
   supprimer: "Supprimer l'équipe…",
@@ -131,6 +136,15 @@ export const DEPLACEMENT_RAIL = {
   },
 } as const
 
+/**
+ * Les sections des équipes dont la personne n'est pas membre : l'intertitre qui les coiffe, et ce que dit le titre de
+ * chacune, au survol et aux lecteurs d'écran.
+ */
+export const SECTIONS_INVITEES = {
+  titre: "Partagé avec vous",
+  invite: (equipe: string) => `Vous n'êtes pas membre de ${equipe} : vous y voyez ce qu'elle partage avec vous.`,
+} as const
+
 /** Les gestes du « ⋯ » d'une ligne (E05-S10, partie b2) : « Dupliquer » (AC-b10), « Supprimer » (AC-b11). */
 export const GESTES_DU_RAIL = {
   dupliquer: "Dupliquer",
@@ -139,6 +153,13 @@ export const GESTES_DU_RAIL = {
   confirmerLaSuppression: (nom: string) => `Supprimer « ${nom} » ?`,
   corbeille: "Il va à la corbeille : il disparaît du rail, des recherches et des assistants. La Corbeille le restaure à sa place jusqu'à sa purge.",
   partentAvec: (nombre: number) => (nombre > 1 ? `Ses ${nombre} sous-contenus partent avec lui.` : "Son sous-contenu part avec lui."),
+  /** Qui perd l'accès, sujet d'abord (`phraseDuPartage`) : un sujet seul, ou plusieurs. */
+  touteLOrganisation: "toute l'organisation",
+  personnes: (nombre: number) => `${nombre} ${nombre > 1 ? "personnes" : "personne"}`,
+  perdLAcces: (sujet: string) => `${sujet} n'y aura plus accès.`,
+  perdentLAcces: (sujets: string) => `${sujets} n'y auront plus accès.`,
+  /** Annoncé pendant la lecture de qui perd l'accès, avant la question. */
+  lectureDuPartage: "Vérification du partage…",
   suppressionEnCours: "Suppression…",
   supprime: (nom: string) => `« ${nom} » est à la corbeille.`,
 } as const

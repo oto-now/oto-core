@@ -157,13 +157,15 @@ describe("retrait déclaré", () => {
     const first = fixture("-- retrait: platform.orgs.name ; plus lu depuis v1.7.0\nalter table platform.orgs drop column name;\n")
     const second = fixture("-- retrait: platform.orgs.slug ; plus lu depuis v1.10.0\nalter table platform.orgs drop column slug;\n", "20261121090000_platform_retrait.sql")
     const ok = check([first, second], ["--json", "--tags", "v1.7.0,v1.10.0"], dir)
+    // La commande écrit ses chemins avec « / » sur tout système ; sous Windows, `path.relative` rend une barre oblique inverse.
+    const shown = (file: string) => path.relative(dir, file).split(path.sep).join("/")
     expect(ok.status).toBe(0)
     expect(ok.stderr).toBe("")
     expect(JSON.parse(ok.stdout)).toEqual({
       ok: true,
       files: [
-        { file: path.relative(dir, first), retraits: [{ line: 1, objects: ["platform.orgs.name"], since: "v1.7.0" }], errors: [] },
-        { file: path.relative(dir, second), retraits: [{ line: 1, objects: ["platform.orgs.slug"], since: "v1.10.0" }], errors: [] },
+        { file: shown(first), retraits: [{ line: 1, objects: ["platform.orgs.name"], since: "v1.7.0" }], errors: [] },
+        { file: shown(second), retraits: [{ line: 1, objects: ["platform.orgs.slug"], since: "v1.10.0" }], errors: [] },
       ],
       requires: "v1.10.0",
     })

@@ -145,6 +145,10 @@ function simulerLAPI(...reponses: Reponse[]) {
   return appels
 }
 
+/** `GET trash/impact` : personne d'autre ne lit le contenu ; puis un contenu partagé hors de son équipe. */
+const SANS_PARTAGE: Reponse = { data: { path: "conseil", shared: { teams: [], people: 0, org: false } } }
+const partage = (shared: { teams: { name: string; level: string }[]; people: number; org: boolean }): Reponse => ({ data: { path: "conseil", shared } })
+
 const REFUS: Reponse = { error: { code: "forbidden", message: "Only a writer of ventes can write here: ask Ada." } }
 
 type Changement = MoveImpact["gained"][number]
@@ -356,7 +360,7 @@ describe("RailApplication menus (AC-a4)", () => {
     const rail = monter()
     expect(within(rail).queryByRole("button", { name: "Actions sur l'équipe Tout le monde" })).toBeNull()
     fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
-    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Renommer l'équipe…", "Supprimer l'équipe…"])
+    expect(itemsDuMenu()).toEqual(["Les personnes de Ventes", "Partages de l'équipe…", "Renommer l'équipe…", "Supprimer l'équipe…"])
     fireEvent.click(menu().getByRole("menuitem", { name: "Les personnes de Ventes" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Les personnes de Ventes" })).toHaveTextContent("Claire Morel"))
     // Le dialogue lit ensuite le niveau de chaque membre sur les pages de l'équipe (1.4.12).
@@ -367,6 +371,7 @@ describe("RailApplication menus (AC-a4)", () => {
     cleanup()
     const autre = monter({ administre: false })
     fireEvent.click(within(autre).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    // Sans les équipes de la personne, l'hôte ne dit pas qui est membre : les partages restent à qui administre.
     expect(itemsDuMenu()).toEqual(["Les personnes de Ventes"])
   })
 
@@ -896,23 +901,28 @@ describe("RailApplication, duplicating and deleting (E05-S10, b2, AC-b10, AC-b11
     expect(hote.naviguer).not.toHaveBeenCalled()
   })
 
-  it("should ask before deleting, saying how many sub-contents go with it, send nothing on « Annuler », then put it in the bin, open its parent and focus the line before it", async () => {
-    const appels = simulerLAPI({ data: { path: "conseil", count: 2 } })
+  it("should ask before deleting, saying how many sub-contents go with it and who loses access, send nothing on « Annuler », then put it in the bin, open its parent and focus the line before it", async () => {
+    const appels = simulerLAPI(SANS_PARTAGE, partage({ teams: [{ name: "Support", level: "read" }, { name: "Ventes", level: "write" }], people: 2, org: false }), { data: { path: "conseil", count: 2 } })
+    const envois = () => appels.filter((appel) => appel.methode === "POST")
     render(railA("/n/conseil/grille"))
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    const question = within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    const question = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
     expect(question.getByText("Son sous-contenu part avec lui.")).toBeInTheDocument()
+    // Personne d'autre ne le lit : la question d'avant, sans phrase de plus.
+    expect(question.queryByText(/plus accès/)).toBeNull()
     fireEvent.click(question.getByRole("button", { name: "Annuler" }))
-    expect(appels).toEqual([])
+    expect(appels).toEqual([{ url: "/api/platform/trash/impact?path=conseil", methode: "GET", corps: undefined }])
 
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" })).getByRole("button", { name: "Supprimer" }))
+    const partagee = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    expect(partagee.getByText("Support, Ventes et 2 personnes n'y auront plus accès.")).toBeInTheDocument()
+    fireEvent.click(partagee.getByRole("button", { name: "Supprimer" }))
 
     // La page ouverte (sa grille) partie avec lui : le parent s'ouvre, la racine menant au Contexte.
     await waitFor(() => expect(hote.naviguer).toHaveBeenCalledWith("/n/guide"))
-    expect(appels).toEqual([{ url: "/api/platform/trash", methode: "POST", corps: { path: "conseil" } }])
+    expect(envois()).toEqual([{ url: "/api/platform/trash", methode: "POST", corps: { path: "conseil" } }])
     expect(hote.rafraichir).toHaveBeenCalledTimes(1)
     expect(screen.getByText("« Conseil » est à la corbeille.")).toHaveAttribute("role", "status")
     await waitFor(() => expect(lien("Contexte · Tout le monde")).toHaveFocus())
@@ -920,11 +930,14 @@ describe("RailApplication, duplicating and deleting (E05-S10, b2, AC-b10, AC-b11
 
   // Le chemin vers la corbeille, depuis le menu du compte (E05-S11, AC-e22) : `RailApplication menus`.
   it("should say a refused deletion in the rail and open nothing", async () => {
-    simulerLAPI({ error: { code: "conflict", message: "A content was put under conseil meanwhile." } })
+    // La lecture du partage refusée : la question d'avant, la suppression reste décidée par le service.
+    simulerLAPI(REFUS, { error: { code: "conflict", message: "A content was put under conseil meanwhile." } })
     render(railA("/trash"))
     fireEvent.click(screen.getByRole("button", { name: "Autres actions sur Conseil" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Conseil » ?" })).getByRole("button", { name: "Supprimer" }))
+    const question = within(await screen.findByRole("dialog", { name: "Supprimer « Conseil » ?" }))
+    expect(question.queryByText(/plus accès/)).toBeNull()
+    fireEvent.click(question.getByRole("button", { name: "Supprimer" }))
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Un contenu vient d'être rangé dessous : rien n'est parti. Réessayez.")
     expect(hote.naviguer).not.toHaveBeenCalled()
@@ -1069,11 +1082,11 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
   })
 
   it("should give the focus back to the Contexte line once its first child is in the bin (AC-27)", async () => {
-    simulerLAPI({ data: { path: "contexte/tarifs", count: 0 } })
+    simulerLAPI(SANS_PARTAGE, { data: { path: "contexte/tarifs", count: 0 } })
     render(sousContexte("/n/contexte/relance"))
     fireEvent.click(within(rail()).getByRole("button", { name: "Autres actions sur Tarifs" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Supprimer" }))
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Supprimer « Tarifs » ?" })).getByRole("button", { name: "Supprimer" }))
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Supprimer « Tarifs » ?" })).getByRole("button", { name: "Supprimer" }))
 
     await waitFor(() => expect(lien("Contexte · Tout le monde")).toHaveFocus())
     expect(hote.naviguer).not.toHaveBeenCalled()
@@ -1471,5 +1484,126 @@ describe("the coque (E05-S11, lot e ; E11-S05)", () => {
       fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
       expect(within(screen.getByRole("menu")).queryAllByRole("menuitemradio")).toEqual([])
     })
+  })
+})
+
+describe("the teams where the person is a guest", () => {
+  const INVITEE = [
+    noeud("guide", "page", "Guide de Démo", [
+      ...ARBRE[0].children,
+      noeud("support/faq", "page", "FAQ"),
+      noeud("finance/mandat", "page", "Mandat SEPA"),
+    ]),
+  ]
+  const TOUTES = [...EQUIPES, { slug: "support", name: "Support" }, { slug: "finance", name: "Finance" }]
+  const donnees = { arbre: { data: { tree: INVITEE, truncated: false } }, equipes: { data: TOUTES } }
+
+  it("should group them after Privé under one heading that names their group, each saying the person is not a member, without a « + » of section", () => {
+    const rail = monter({ ...donnees, equipesDeLaPersonne: ["ventes"] })
+
+    const groupe = within(rail).getByRole("group", { name: LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre })
+    expect(within(groupe).getAllByRole("button", { name: /^Replier / }).map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Replier Finance", "Replier Support"])
+    // Après « Privé », la dernière section de la personne.
+    expect(within(rail).getByRole("button", { name: "Replier Privé" }).compareDocumentPosition(groupe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // L'intertitre coiffe les sections : ni pli ni bouton.
+    const intertitre = within(groupe).getByText(LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre)
+    expect([intertitre.tagName, intertitre.querySelector("button")]).toEqual(["P", null])
+    expect(within(groupe).getByText("Vous n'êtes pas membre de Finance : vous y voyez ce qu'elle partage avec vous.")).toBeInTheDocument()
+    expect(within(groupe).getByRole("button", { name: "Replier Finance" }).closest("[title]")).toHaveAttribute("title", "Vous n'êtes pas membre de Finance : vous y voyez ce qu'elle partage avec vous.")
+    // Rien ne se crée à la racine d'une équipe dont on n'est pas membre ; les « + » de ses lignes restent.
+    expect(within(rail).getAllByRole("button", { name: /^Créer dans / }).map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Créer dans Tout le monde", "Créer dans Ventes", "Créer dans Privé"])
+    expect(within(groupe).getByRole("button", { name: "Ajouter dans FAQ" })).toBeInTheDocument()
+  })
+
+  it("should keep the rail as before for a host that does not name the person's teams", () => {
+    const rail = monter(donnees)
+
+    expect(within(rail).queryByRole("group", { name: LIBELLES_DE_LA_COQUE.SECTIONS_INVITEES.titre })).toBeNull()
+    // Les sections seules : une ligne dépliée de l'arbre porte aussi un bouton « Replier ».
+    const sections = within(rail).getAllByRole("button", { name: /^Replier (Tout le monde|Finance|Support|Ventes|Privé)$/ })
+    expect(sections.map((bouton) => bouton.getAttribute("aria-label"))).toEqual(["Replier Tout le monde", "Replier Finance", "Replier Support", "Replier Ventes", "Replier Privé"])
+    expect(within(rail).getByRole("button", { name: "Créer dans Support" })).toBeInTheDocument()
+  })
+})
+
+describe("« Les partages de … » a team, from the « ⋯ » of its section", () => {
+  const INVITEE = [noeud("guide", "page", "Guide de Démo", [...ARBRE[0].children, noeud("support/faq", "page", "FAQ")])]
+  const donnees = { arbre: { data: { tree: INVITEE, truncated: false } }, equipes: { data: [...EQUIPES, { slug: "support", name: "Support" }] }, equipesDeLaPersonne: ["ventes"] }
+  const PARTAGES = {
+    team: { slug: "ventes", name: "Ventes" },
+    opened: [
+      {
+        path: "ventes/devis",
+        title: "Devis",
+        kind: "page",
+        subjects: [
+          { kind: "team", name: "Support", level: "read" },
+          { kind: "org", name: "", level: "read" },
+          { kind: "user", name: "Paul Girard", level: "write" },
+        ],
+      },
+    ],
+    received: [{ team: { slug: "support", name: "Support" }, entries: [{ path: "support/dossier", title: "Dossier", kind: "page", under: 4 }, { path: "support/faq", title: "FAQ", kind: "page", under: 0 }] }],
+    brokenLinks: [{ from: { path: "ventes/devis", title: "Devis" }, to: { path: "private/claire/notes", title: null } }],
+    brokenTotal: 1,
+  }
+  const ouvrir = async (rail: HTMLElement) => {
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Partages de l'équipe…" }))
+    // Le dialogue d'attente, puis celui des partages : un autre élément, relu une fois ses sections rendues.
+    await screen.findAllByRole("heading", { level: 3 })
+    return within(screen.getByRole("dialog", { name: "Les partages de Ventes" }))
+  }
+  const lignes = (liste: HTMLElement) => within(liste).getAllByRole("listitem").map((ligne) => ligne.textContent)
+
+  it("should offer it to the members of the team and to an administrator, never on a team the person is only a guest of", () => {
+    const rail = monter({ ...donnees, administre: false })
+    fireEvent.click(within(rail).getByRole("button", { name: "Actions sur l'équipe Support" }))
+    expect(itemsDuMenu()).toEqual(["Les personnes de Support"])
+    cleanup()
+
+    const admin = monter({ ...donnees, administre: true })
+    fireEvent.click(within(admin).getByRole("button", { name: "Actions sur l'équipe Support" }))
+    expect(itemsDuMenu()).toContain("Partages de l'équipe…")
+  })
+
+  it("should read the shares by GET teams/<slug>/shares and say what the team shares outside, with whom and at which level, what others share with it, and the links its members cannot open", async () => {
+    const appels = simulerLAPI({ data: PARTAGES })
+    const dialogue = await ouvrir(monter(donnees))
+
+    await waitFor(() => expect(dialogue.getByRole("list", { name: "Les contenus de Ventes partagés hors de l'équipe" })).toBeInTheDocument())
+    expect(appels).toEqual([{ url: "/api/platform/teams/ventes/shares", methode: "GET", corps: undefined }])
+    expect(dialogue.getByRole("heading", { level: 3, name: "1 contenu partagé hors de l'équipe" })).toBeInTheDocument()
+    expect(lignes(dialogue.getByRole("list", { name: "Les contenus de Ventes partagés hors de l'équipe" }))).toEqual(["Devisavec Support, toute l'organisationPeut lireavec Paul GirardPeut modifier"])
+    expect(dialogue.getAllByRole("link", { name: "Devis" }).map((lien) => lien.getAttribute("href"))).toEqual(["/n/ventes/devis", "/n/ventes/devis"])
+    expect(dialogue.getByRole("heading", { level: 3, name: "2 contenus partagés par d'autres équipes" })).toBeInTheDocument()
+    // Le compte d'un dossier suit son titre ; « · » ne les sépare que sur un écran étroit.
+    expect(lignes(dialogue.getByRole("list", { name: "Les contenus que d'autres équipes partagent avec Ventes" }))).toEqual(["Dossieret 4 contenus dessous·par Support", "FAQpar Support"])
+    // Le titre d'une cible que la personne ne lit pas n'est pas servi : son chemin, sans lien.
+    const note = within(dialogue.getByRole("note", { name: "1 lien à vérifier" }))
+    expect(note.getByText("Ce lien mène à un contenu que les membres de Ventes ne peuvent pas ouvrir.")).toBeInTheDocument()
+    expect(note.getByRole("listitem").textContent).toBe("Devis mène à private/claire/notes")
+    expect(note.getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(["/n/ventes/devis"])
+  })
+
+  it("should say under each count, in one line, how to share when nothing is shared outside, and nothing more when no team shares with it, without a note", async () => {
+    simulerLAPI({ data: { ...PARTAGES, opened: [], received: [], brokenLinks: [], brokenTotal: 0 } })
+    const dialogue = await ouvrir(monter(donnees))
+
+    expect(dialogue.getAllByRole("heading", { level: 3 }).map((titre) => titre.textContent)).toEqual(["0 contenu partagé hors de l'équipe", "0 contenu partagé par d'autres équipes"])
+    expect(dialogue.getByText("Pour partager un contenu : son menu « Partager ».")).toBeInTheDocument()
+    expect(dialogue.queryByRole("note")).toBeNull()
+    expect(dialogue.queryByRole("list")).toBeNull()
+  })
+
+  it("should say a refused read in the dialog, with « Réessayer »", async () => {
+    simulerLAPI(REFUS)
+    fireEvent.click(within(monter(donnees)).getByRole("button", { name: "Actions sur l'équipe Ventes" }))
+    fireEvent.click(menu().getByRole("menuitem", { name: "Partages de l'équipe…" }))
+
+    const alerte = await screen.findByRole("alert")
+    expect(alerte).toHaveTextContent("Les partages n'ont pas pu être lus")
+    expect(alerte).toHaveTextContent("Les partages d'une équipe sont réservés à ses membres et aux administrateurs.")
+    expect(within(alerte).getByRole("button", { name: "Réessayer" })).toBeInTheDocument()
   })
 })

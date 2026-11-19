@@ -1,7 +1,7 @@
 # Commentaires
 
 - **Statut** : validé avec le responsable du produit le 12/11/2026
-- **Dernière révision** : 2026-11-12
+- **Dernière révision** : 2026-11-17
 
 ## Résumé
 
@@ -92,7 +92,7 @@ Jamais son auteur ; un commentaire écrit par un assistant prévient comme un au
 
 - **L'hôte lance chaque heure** `oto-platform comments notify`, sur la connexion d'administration, avec `PLATFORM_SMTP_URL` et `PLATFORM_MAIL_FROM` ([installer un hôte](../exploitation/installer-un-hote.md)). La logique vit en `.mjs` sous `cli/` (`comments-mail.mjs`, fonctions pures ; `comments-notify.mjs`, base et envoi ; `mail.mjs`, le relais, partagé avec l'invitation du mode OIDC) : la commande tourne en Node natif et ne charge aucun module de `server/`.
 - **Un email par personne et par organisation, un par heure au plus**, qui réunit ce qui est arrivé depuis le précédent. `comment_mails` garde l'heure du dernier envoi, prise en une instruction avant l'envoi : deux commandes lancées ensemble n'envoient qu'une fois. La fenêtre tolère cinq minutes, pour qu'une tâche horaire partie une seconde plus tôt que la précédente ne repousse pas l'email d'une heure. `comment_mail_items` garde ce qui a été envoyé à qui : relancée, la commande n'envoie rien en double.
-- **Ce qui part** : objet « n nouveaux commentaires sur vos pages » ; par commentaire, le titre de la page, l'auteur, un extrait de 200 caractères et un lien vers la page, sans ancre de fil ; au nom et au logo de l'organisation. L'origine des liens est une adresse de l'organisation (`org_domains`), jamais un en-tête de requête.
+- **Ce qui part** : objet « n nouveaux commentaires sur vos pages » ; un bloc par page commentée (`byPage`), dans l'ordre où chaque page paraît d'abord : son titre, chaque commentaire avec son auteur et un extrait de 200 caractères, puis un bouton qui dit ce qu'il ouvre, « Voir le commentaire et répondre » (« les commentaires » au-delà d'un), vers la page, sans ancre de fil ; au nom et au logo de l'organisation. L'origine des liens est une adresse de l'organisation (`org_domains`), jamais un en-tête de requête.
 - **Ce qui ne part pas** : un commentaire supprimé, un fil résolu, une page à la corbeille ou que la personne ne lit plus. Sans relais, la commande le dit, n'envoie rien, ne marque rien et sort à 0, et le champ n'annonce aucun email ; une organisation sans adresse garde ses commentaires en attente. Un envoi en échec rend son heure à la personne, laisse ses commentaires au passage suivant et s'écrit au journal de l'équipe plateforme.
 
 ### L'accueil
@@ -153,5 +153,6 @@ Canaux qui restent ouverts, voulus ou acceptés :
 
 ## Historique
 
+- 2026-11-17 : l'email groupé réunit les commentaires par page, et son lien dit ce qu'il ouvre (« Voir le commentaire et répondre ») — décidé par le responsable du produit (source : relecture de l'aperçu de l'email du 17/11/2026).
 - 2026-11-12 : création. Fils ancrés sur un bloc et un passage cité, lire suffit pour commenter, les fils suivent la page ; `@assistant` et cinq fonctions de `call` ; email groupé lancé chaque heure par l'hôte ; suivi sur l'accueil et dans `context` par une seule règle des destinataires ; un fil résolu est figé — décidé par le responsable du produit (source : décisions du 12/11/2026 et maquette validée le même jour).
 - 2026-11-12 : devant un fil en attente, l'assistant dit d'abord à sa personne ce qui est demandé et par qui, et n'agit qu'avec son accord — décidé par le responsable du produit (source : décision du 12/11/2026 sur la consigne servie par `read`).

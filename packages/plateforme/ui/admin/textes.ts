@@ -24,26 +24,31 @@ function procedures(chemins: readonly string[]): string {
 }
 
 function comptes(nombre: number): string {
-  if (nombre === 0) return "Il n'a aucun compte."
-  return nombre === 1 ? "Son compte est conservé." : `Ses ${nombre} comptes sont conservés.`
+  if (nombre === 0) return "Il n'a aucun connecteur."
+  return nombre === 1 ? "Son connecteur est conservé." : `Ses ${nombre} connecteurs sont conservés.`
 }
 
 /**
- * « Désactiver « mail » ? … » : ce que la désactivation arrête, composé depuis son impact (AC5) ; sans
+ * « Fermer « Mail » ? … » : ce que la fermeture d'un outil arrête, composé depuis son impact (AC5) ; sans
  * impact lu, la question ne dit que l'arrêt des fonctions, jamais « aucune procédure ».
  */
 export function questionDeDesactivation(connecteur: string, impact: DeactivationImpact | undefined): string {
-  const question = `Désactiver « ${connecteur} » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde.`
+  const question = `Fermer « ${connecteur} » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde, et plus personne ne pourra l'ajouter.`
   return impact ? `${question} ${procedures(impact.procedures)} ${comptes(impact.accounts)}` : question
 }
 
-/** La question de la désactivation d'un compte (AC7). */
-export function questionDeDesactivationDuCompte(libelle: string): string {
-  return `Désactiver le compte « ${libelle} » ? Les appels qui le résolvent échoueront dès maintenant. Un compte désactivé ne se réactive pas : il faudra en créer un autre.`
+/**
+ * La question de la fermeture d'avance d'un outil que personne n'a encore ajouté : rien ne s'arrête, et le rouvrir ne
+ * le ramène pas à cet état, il l'ouvre pour toute l'organisation.
+ */
+export function questionDeFermetureDAvance(connecteur: string): string {
+  return `Fermer « ${connecteur} » d'avance ? Plus personne ne pourra l'ajouter. Le rouvrir l'ouvrira pour toute l'organisation.`
 }
 
-/** Un libellé de compte déjà pris dans l'organisation, sans casse (AC6) : sous le champ Libellé. */
-export const LIBELLE_PRIS = "Un compte porte déjà ce libellé dans l'organisation."
+/** La question de la désactivation d'un compte de connecteur, dans les mots de l'écran : « connecteur », jamais « compte ». */
+export function questionDeDesactivationDuCompte(libelle: string): string {
+  return `Désactiver « ${libelle} » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Vous pourrez le réactiver.`
+}
 
 /** Les drapeaux écrits entre la lecture de la page et le geste (AC8). */
 export const MESSAGES_DES_DRAPEAUX: MessagesDuGeste = {

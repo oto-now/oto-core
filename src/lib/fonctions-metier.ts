@@ -5,8 +5,9 @@
 //
 // Ce fichier est importé, pour son effet, en tête de chaque route qui monte une porte du paquet
 // (`src/app/api/mcp/route.ts`, `src/app/api/platform/[...route]/route.ts`,
-// `src/app/api/mcp-admin/route.ts`) : l'état d'un module vit dans chaque bundle serverless, et une route
-// qui ne l'importe pas sert un catalogue sans ces fonctions (garde :
+// `src/app/api/mcp-admin/route.ts`) et par chaque page qui lit les connecteurs déclarés
+// (`src/app/(dashboard)/admin/connectors/page.tsx`) : l'état d'un module vit dans chaque bundle serverless, et une
+// route ou une page qui ne l'importe pas sert un catalogue sans ces fonctions ni ces connecteurs (garde :
 // `tests/unit/fonctions-metier-imports.test.ts`). `registerFunctions` remplace toute la liste à chaque
 // appel ; une fonction mal déclarée lève au chargement de la route, avant de servir un contrat faux.
 //

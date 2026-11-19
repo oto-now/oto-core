@@ -34,6 +34,16 @@ export type PlaceNodeInput = z.infer<typeof placeNodeSchema>
 /** `GET nodes/impact?path=&new_path=` (AC-b7) : le déplacement dont on veut l'effet, comme `nodes/move`. */
 export const moveImpactQuerySchema = z.strictObject({ path: nodePathSchema, new_path: nodePathSchema })
 
+/**
+ * `GET trash/impact?path=` : qui perd l'accès si ce contenu part à la corbeille. `shared` : les sujets des règles de
+ * lecture ou plus posées sur lui ou sur un contenu dessous, hors de son équipe propriétaire et de l'appelant ; les
+ * équipes par leur nom, à leur plus haut niveau, les personnes comptées, jamais nommées.
+ */
+export type TrashImpact = {
+  path: string
+  shared: { teams: { name: string; level: "read" | "write" | "manage" }[]; people: number; org: boolean }
+}
+
 /** L'accès général d'un nœud (AC-b13, ADR-014) : toute l'organisation, à un niveau, ou les personnes ajoutées seulement. */
 export const GENERAL_ACCESS = ["organisation", "restricted"] as const
 

@@ -13,6 +13,7 @@ import {
 import { FILTERED_ROWS_MAX } from "../../schemas/tables"
 import { formatCount } from "../nodes/document"
 import { BLOCKS_MAX, PAGE_MAX } from "../nodes/limits"
+import { sayingPublished, withoutDraftRequest } from "../nodes/publish-always"
 import { createUploadTicket, receiveUpload, uploadTokenHash, type IssuedTicket } from "../uploads"
 import { fetchSource, textSourceFailure } from "../uploads-fetch"
 import { defineFunction, type FunctionContext, type FunctionOutput } from "./define"
@@ -88,7 +89,7 @@ function failedDownload(issued: IssuedTicket, args: UploadLinkArgs, reason: stri
  * ou un CSV servi sous un type qui n'est pas du texte (HN-E10S02-118), rend sa cause et le repli (AC-f14), sans l'adresse
  * ni le contenu, le ticket libre pour le formulaire.
  */
-async function runUploadLink(context: FunctionContext, args: UploadLinkArgs): Promise<FunctionOutput> {
+async function linkOrSend(context: FunctionContext, args: UploadLinkArgs): Promise<FunctionOutput> {
   const issued = await createUploadTicket(context, args)
   if (args.source_url === undefined) return linkOutput(issued, args)
   const fetched = await fetchSource(args.source_url)
@@ -98,6 +99,13 @@ async function runUploadLink(context: FunctionContext, args: UploadLinkArgs): Pr
   const origin = new URL(issued.url).origin
   const result = await receiveUpload(context.identity.org, { hash: uploadTokenHash(issued.token), via: "link", bytes: fetched.bytes, origin, userAgent: "upload.link source_url" })
   return { text: result.text, data: result.data }
+}
+
+/** Comme `write` : `publish: false` est retiré avant le ticket, et la réponse le dit (`publish-always.ts`). */
+async function runUploadLink(context: FunctionContext, args: UploadLinkArgs): Promise<FunctionOutput> {
+  const { input, asked } = withoutDraftRequest(args)
+  const output = await linkOrSend(context, input)
+  return asked ? sayingPublished(output, context.identity.org.prefix) : output
 }
 
 export const uploadLink = defineFunction({

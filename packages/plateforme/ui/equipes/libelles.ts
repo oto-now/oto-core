@@ -155,3 +155,28 @@ export const COLONNES_DES_PERSONNES = {
 export const NIVEAUX_DU_DOSSIER = {
   explication: "Le niveau d'un membre vaut pour toutes les pages de l'équipe ; « Partager » le change sur une page.",
 } as const
+
+/**
+ * « Les partages de … » (`partages-de-l-equipe.tsx`) : ce que l'équipe partage hors d'elle, ce que d'autres équipes
+ * partagent avec elle, et les liens de ses contenus que ses membres ne peuvent pas ouvrir.
+ */
+export const PARTAGES_D_EQUIPE = {
+  titre: (equipe: string) => `Les partages de ${equipe}`,
+  explication: "Calculés d'après les partages de chaque contenu. Pour en changer un : ouvrez le contenu, puis son menu « Partager ».",
+  fermer: "Fermer",
+  partages: (nombre: number) => `${pluriel(nombre, "contenu partagé", "contenus partagés")} hors de l'équipe`,
+  listeDesPartages: (equipe: string) => `Les contenus de ${equipe} partagés hors de l'équipe`,
+  commentPartager: "Pour partager un contenu : son menu « Partager ».",
+  organisation: "toute l'organisation",
+  /** « avec Support, Ventes », ou le compte au-delà de trois (la liste entière au survol). */
+  avec: (noms: readonly string[]) => (noms.length > 3 ? `avec ${noms.length} équipes ou personnes` : `avec ${noms.join(", ")}`),
+  recus: (nombre: number) => `${pluriel(nombre, "contenu partagé", "contenus partagés")} par d'autres équipes`,
+  listeDesRecus: (equipe: string) => `Les contenus que d'autres équipes partagent avec ${equipe}`,
+  de: (equipe: string) => `par ${equipe}`,
+  dessous: (nombre: number) => `et ${pluriel(nombre, "contenu", "contenus")} dessous`,
+  liensAVerifier: (nombre: number) => `${pluriel(nombre, "lien", "liens")} à vérifier`,
+  liensCasses: (nombre: number, equipe: string) =>
+    nombre > 1 ? `Ces liens mènent à des contenus que les membres de ${equipe} ne peuvent pas ouvrir.` : `Ce lien mène à un contenu que les membres de ${equipe} ne peuvent pas ouvrir.`,
+  meneA: " mène à ",
+  etAutresLiens: (nombre: number) => `et ${pluriel(nombre, "autre lien", "autres liens")}`,
+} as const

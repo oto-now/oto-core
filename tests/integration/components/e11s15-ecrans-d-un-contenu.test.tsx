@@ -232,6 +232,9 @@ describe("the « Contexte » view explained (E11-S15, AC-a8)", () => {
     expect(within(aide).getByText(EXPLICATION_DU_CONTEXTE.ceQuEst)).toBeInTheDocument()
     expect(within(aide).getByText(EXPLICATION_DU_CONTEXTE.fonctionnement)).toBeInTheDocument()
     expect(within(aide).getAllByRole("listitem").map((etape) => etape.textContent)).toEqual([...EXPLICATION_DU_CONTEXTE.etapes])
+    // Un hôte qui ne demande pas « Tester une demande » garde l'écran d'avant : ni champ, ni texte exact.
+    expect(screen.queryByRole("textbox", { name: "Tester une demande" })).toBeNull()
+    expect(screen.queryByRole("group", { name: "Texte exact envoyé à l'assistant" })).toBeNull()
   })
 
   // Le conteneur de `render` tient lieu de `.oto-content` : un de ses enfants directs est cadré par `.oto-content > *`,

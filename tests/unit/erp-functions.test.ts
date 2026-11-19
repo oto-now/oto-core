@@ -296,7 +296,7 @@ describe.skipIf(!sqlConfigured)(portable("ERP functions on a real database (E08-
           `- ${at}: erp.create_invoice has no argument « client »; its arguments: customer, amount`,
           `- ${at}: erp.create_invoice needs argument « customer »; write "<…>" for a value known only when the procedure runs`,
           `Fix them with ${ref.org.prefix}_write (ops on the sections), then publish again. Format and rules: ${ref.org.prefix}_read {"path": "write.procedure"}.`,
-          "Writing it in several calls? Pass publish: false until the last one.",
+          "Writing it in several calls? Each call is published: write complete call blocks only, and add the other steps in later calls.",
         ].join("\n"),
       ])
       expect(publishCalls(refused.requests)).toEqual([])

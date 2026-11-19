@@ -501,6 +501,19 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
     const PARTIES = [
       { name: "code", texte: ["ctx: XXXX-XXXX", "Pass this ctx to every demo_ tool.", ...REGLES, "## This request", "No request given."].join("\n") },
       {
+        name: "guests",
+        texte: [
+          "## Shared with you by other teams (generated from access rights)",
+          "You are not a member of these teams: you read only what is listed here and what sits under a listed folder. Read one with demo_read; search them with demo_find.",
+          "### Team Finance. Lead: Paul Girard, Marc Petit.",
+          "- finance/mandat — Mandat SEPA — Quand un client paie par prélèvement.",
+          "- finance/esg (+4 under it) — Politique ESG — Ce que nous publions chaque année.",
+          "### Team Support. Lead: Paul Girard.",
+          "- support/contexte — Contexte — Les règles du Support.",
+          "- support/faq — FAQ",
+        ].join("\n"),
+      },
+      {
         name: "recent content",
         texte: [
           "## Recent content (new: published since 2026-09-20)",
@@ -546,9 +559,23 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
       ])
     })
 
+    it("should read « Partagé avec vous » team by team with its leads, each entry a link with its summary under it and the count of a folder", () => {
+      monter()
+      const invites = carte("Partagé avec vous")
+      expect(lignes(invites.getByRole("list", { name: "Équipe Finance · Responsables : Paul Girard, Marc Petit" }))).toEqual([
+        ["Mandat SEPAQuand un client paie par prélèvement.", "/n/finance/mandat"],
+        ["Politique ESG — et 4 contenus dessousCe que nous publions chaque année.", "/n/finance/esg"],
+      ])
+      // Un seul responsable s'accorde ; le Contexte de l'équipe se nomme comme dans le rail ; sans résumé quand la taille l'a retiré.
+      expect(lignes(invites.getByRole("list", { name: "Équipe Support · Responsable : Paul Girard" }))).toEqual([
+        ["Contexte · SupportLes règles du Support.", "/n/support/contexte"],
+        ["FAQ", "/n/support/faq"],
+      ])
+    })
+
     it("should leave none of the served English headers in the page", () => {
       monter()
-      for (const anglais of ["Recent content", "new: published since", "new v3", "How this workspace works", "Rule 1."]) {
+      for (const anglais of ["Recent content", "new: published since", "new v3", "How this workspace works", "Rule 1.", "Shared with you", "You are not a member", "under it", "Team Finance"]) {
         expect(document.body.textContent).not.toContain(anglais)
       }
     })

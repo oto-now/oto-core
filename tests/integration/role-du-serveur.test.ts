@@ -15,9 +15,9 @@ import { withServerSession } from "../../packages/plateforme/server/sql"
 const VERSION = "20261019130000"
 const DELETES = "20261019140000"
 /** L'écran Connecteurs (`record_account_probe`, libellé et description écrits par le serveur). */
-const SCREEN = "20261114120000"
+const SCREEN = "20261117220000"
 /** L'écran Connecteurs, lot 2 (le code d'un test, son effacement, qui a fermé un connecteur). */
-const SCREEN_LOT2 = "20261116161500"
+const SCREEN_LOT2 = "20261117220000"
 const missing = (await pendingMigrations()).filter((version) => [VERSION, DELETES, SCREEN, SCREEN_LOT2].includes(version))
 const pending = missing.length > 0
 

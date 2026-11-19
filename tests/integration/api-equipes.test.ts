@@ -79,6 +79,16 @@ describe.skipIf(!sqlConfigured || privatePending)(
     }, SETUP_TIMEOUT)
 
     describe("teams", () => {
+      it("should serve the shares of a team by teams/<slug>/shares to its members, 403 on a team the person is not in, and what a deletion takes away by trash/impact", async () => {
+        const shares = await call("lea", "GET", "teams/ventes/shares")
+        const refused = await call("lea", "GET", "teams/support/shares")
+        const impact = await call("claire", "GET", "trash/impact?path=ventes/devis")
+
+        expect([shares.status, shares.body.data.team]).toEqual([200, { slug: "ventes", name: "Ventes" }])
+        expect([refused.status, refused.body.error.code]).toEqual([403, "forbidden"])
+        expect([impact.status, impact.body.data.path, Object.keys(impact.body.data.shared).sort()]).toEqual([200, "ventes/devis", ["org", "people", "teams"]])
+      })
+
       it("should answer 400 for an empty name and 409 for a taken name, the refusal journaled", async () => {
         expect((await call("ada", "POST", "teams", { name: " " })).status).toBe(400)
         const name = `Juridique ${hex(3)}`
