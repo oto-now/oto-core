@@ -194,12 +194,14 @@ Un changement se fait ici (retours produit compris), se commite sur `main`, puis
    `supabase/migrations/` (fiche D124 ; historique du projet de test réparé si l'une y était
    appliquée : `packages/plateforme/migrations/README.md`) ; `"version"` de
    `packages/plateforme/package.json`, `## Unreleased` renommé en
-   `## <version> — <AAAA-MM-JJ>` sous un `## Unreleased` vide ; `pnpm verify`, commit, push sur
-   `main`, CI verte.
-4. `git tag -a v<version> -m "@otomata_tech/oto_platform <version>"` puis
-   `git push origin v<version>` : `publish.yml` contrôle les secrets de l'arbre, les migrations,
-   l'accord du tag, de la version et du `CHANGELOG.md`, puis publie avec provenance. Seul JB pousse
-   un tag, ou l'agent avec son accord.
+   `## <version> — <AAAA-MM-JJ>` sous un `## Unreleased` vide ; `pnpm verify`, commit, poussé sur
+   une branche du dépôt, puis la pull request de version vers `main` (ou vers `release/x.y.z`, créée
+   sur le tag de départ, pour un correctif quand `main` porte un lot pas encore publiable).
+4. JB ou Alexis approuve la pull request de version ; elle fusionne à CI verte. À la fusion,
+   `publish.yml` vérifie l'approbation, pose le tag annoté `v<version>` sur le commit de fusion,
+   puis contrôle les secrets de l'arbre, les migrations, l'accord du tag, de la version et du
+   `CHANGELOG.md`, et publie avec provenance. Aucun tag ne se pousse à la main ; si la publication
+   tombe après le tag, JB ou Alexis relance `publish.yml` sur ce tag (`workflow_dispatch`).
 5. Vérifier : `npm view @otomata_tech/oto_platform@<version> version`.
 6. Dans chaque application (oto-saas) : la pull request Renovate (§ Mises à jour par Renovate du
    README du paquet), ou à la main `pnpm add @otomata_tech/oto_platform@<version> -E`, puis

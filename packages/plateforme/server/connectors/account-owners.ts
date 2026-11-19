@@ -27,35 +27,24 @@ export function modesProblem(definition: ConnectorDefinition): string | null {
 
 const ordered = (kinds: ReadonlySet<OwnerKind>): OwnerKind[] => OWNER_ORDER.filter((kind) => kinds.has(kind))
 
-/** Les propriétaires des modes où le compte apporte sa clé : `byo_user` → `user`, `byo_org` → `org` et `team`. */
-function ownKeyOwnerKinds(definition: ConnectorDefinition): Set<OwnerKind> {
+/**
+ * Les propriétaires qu'un compte saisi sur l'écran admet : `byo_user` → `user`, `byo_org` → `org` et `team`. Vide : le
+ * connecteur n'a pas de formulaire (`platform` seul, servi par la clé de l'hôte).
+ */
+export function formOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
   const kinds = new Set<OwnerKind>()
   if (definition.modes.includes("byo_user")) kinds.add("user")
   if (definition.modes.includes("byo_org")) ["org", "team"].forEach((kind) => kinds.add(kind as OwnerKind))
-  return kinds
-}
-
-/**
- * Les propriétaires qu'un compte ouvert depuis l'écran admet : ceux des modes où le compte apporte sa clé, plus, pour
- * `platform` sur un connecteur dont chaque personne connecte le sien (consentement `oauth2_user`, compte rattaché
- * `accountIdentity`), la personne : elle y connecte son compte (« Connecter mon compte ») avec l'application ou le port
- * de l'hôte. Vide : le connecteur n'a pas de formulaire (`platform` seul, servi par la clé de l'hôte).
- */
-export function formOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
-  const kinds = ownKeyOwnerKinds(definition)
-  const personal = definition.auth.kind === "oauth2_user" || definition.accountIdentity !== undefined
-  if (definition.modes.includes("platform") && personal) kinds.add("user")
   return ordered(kinds)
 }
 
 /**
- * Les propriétaires qu'un compte admet à sa création (`createAccount`) : ceux des modes où le compte apporte sa clé,
- * plus, pour `platform` sur un connecteur dont l'hôte fournit tous les champs (aucun à saisir, aucun consentement), un
- * compte d'organisation ou d'équipe, qui ouvre la clé de l'hôte sans rien saisir. Le compte d'une personne sur un
- * connecteur `platform` où chacun connecte le sien ne naît que de son consentement ou de son branchement, jamais ici.
+ * Les propriétaires qu'un compte admet à sa création : ceux du formulaire, plus, pour `platform` sur un connecteur dont
+ * l'hôte fournit tous les champs (aucun à saisir, aucun consentement), un compte d'organisation ou d'équipe, qui ouvre la
+ * clé de l'hôte sans rien saisir.
  */
 export function admittedOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
-  const kinds = ownKeyOwnerKinds(definition)
+  const kinds = new Set(formOwnerKinds(definition))
   const hostKeyOnly = definition.auth.kind !== "oauth2_user" && accountFieldNames(definition).length === 0
   if (definition.modes.includes("platform") && hostKeyOnly) ["org", "team"].forEach((kind) => kinds.add(kind as OwnerKind))
   return ordered(kinds)

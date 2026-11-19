@@ -1,21 +1,124 @@
-# Publication du paquet sur npmjs.com, déclenchée par un tag v<version> que seul JB pousse
-# (ADR-010). La CI de chaque push reste ci.yml.
+# Publication du paquet sur npmjs.com, à la fusion d'une pull request de version (distribution-du-paquet.md
+# § Publication, ADR-010 révisée le 2026-11-19). La CI de chaque push et de chaque pull request reste ci.yml.
+#
+# Une pull request de version monte `version` de `packages/plateforme/package.json`, vers main ou vers
+# `release/x.y.z` (correctif parti d'un tag). À sa fusion, le job `tag` vérifie qu'elle porte l'approbation d'un
+# approbateur sur son dernier commit, puis pose le tag annoté `v<version>` sur le commit de fusion ; le job
+# `publish` part de ce tag, dans le même workflow : un tag poussé avec le GITHUB_TOKEN ne déclenche aucun autre
+# workflow, d'où l'enchaînement ici plutôt qu'un `push: tags`.
+#
+# `workflow_dispatch` : passage manuel exceptionnel, sur un tag `v*` déjà posé (publication tombée après le tag,
+# par exemple une panne de npm), lancé par un approbateur seulement. Pas de `push: tags` : quiconque peut pousser
+# un tag publierait sans l'approbation exigée.
 name: Publish package
 
 on:
-  push:
-    tags: ["v*"]
+  pull_request:
+    types: [closed]
+    branches: [main, "release/**"]
+    paths: ["packages/plateforme/package.json"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag v<version> déjà posé, à publier"
+        required: true
+        type: string
 
 permissions:
   contents: read
-  id-token: write # provenance npm
+
+# Une publication à la fois ; aucune n'en annule une autre.
+concurrency:
+  group: publish-package
+  cancel-in-progress: false
+
+env:
+  # Les comptes GitHub dont l'approbation publie une version : JB, Alexis.
+  APPROVERS: "jean-baptiste-tiple AlexisLaporte"
 
 jobs:
-  publish:
+  tag:
+    name: Approval and tag of a version pull request
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # pousser le tag
+      pull-requests: read # lire les approbations
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+      # Une pull request de version change `version` entre sa base (le point où elle part) et son dernier commit ;
+      # changer une dépendance du paquet ne publie rien.
+      - name: Version change
+        id: version
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          git fetch --no-tags origin "refs/pull/$PR/head"
+          version_at() { git show "$1:packages/plateforme/package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version"; }
+          before=$(version_at "$(git merge-base "$BASE_SHA" "$HEAD_SHA")")
+          after=$(version_at "$HEAD_SHA")
+          merged=$(version_at "$MERGE_SHA")
+          if [ "$before" = "$after" ]; then echo "version unchanged ($after): nothing to publish"; exit 0; fi
+          test "$merged" = "$after" || { echo "merge commit carries $merged, pull request $after"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v$after" >/dev/null; then echo "tag v$after already exists"; exit 1; fi
+          echo "version pull request: $before -> $after"
+          echo "tag=v$after" >> "$GITHUB_OUTPUT"
+      # La dernière revue de chaque approbateur (hors simples commentaires) est une approbation, posée sur le dernier
+      # commit de la pull request : une approbation antérieure à un push ne couvre pas ce qui est publié.
+      - name: Approved by an approver
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" --jq '.[] | [.user.login, .state, .commit_id] | @tsv' > reviews.tsv
+          approved=""
+          for login in $APPROVERS; do
+            last=$(awk -F'\t' -v who="$login" '$1 == who && $2 != "COMMENTED" { state = $2; commit = $3 } END { print state " " commit }' reviews.tsv)
+            if [ "$last" = "APPROVED $HEAD_SHA" ]; then approved="$login"; break; fi
+          done
+          test -n "$approved" || { echo "no approval by one of: $APPROVERS, on $HEAD_SHA"; exit 1; }
+          echo "approved by $approved"
+      - name: Tag the merge commit
+        if: steps.version.outputs.tag != ''
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "@otomata_tech/oto_platform ${TAG#v}" "$MERGE_SHA"
+          git push origin "refs/tags/$TAG"
+
+  publish:
+    name: Publish from the tag
+    needs: tag
+    if: ${{ !cancelled() && (needs.tag.outputs.tag != '' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance npm
+    env:
+      TAG: ${{ needs.tag.outputs.tag || inputs.tag }}
+    steps:
+      - name: Manual pass by an approver only
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$TAG" in v[0-9]*) ;; *) echo "not a v<version> tag: $TAG"; exit 1 ;; esac
+          for login in $APPROVERS; do test "$GITHUB_ACTOR" = "$login" && exit 0; done
+          echo "$GITHUB_ACTOR is not one of: $APPROVERS"; exit 1
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
           fetch-depth: 0 # check-public lit tout l'historique
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -32,15 +135,15 @@ jobs:
       # Une seule migration par version publiée (database-patterns.md § Règles) : un hôte en applique une par montée.
       - name: One migration since the previous tag
         run: |
-          previous=$(git describe --tags --abbrev=0 --match "v*" "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          previous=$(git describe --tags --abbrev=0 --match "v*" "$TAG^" 2>/dev/null || true)
           if [ -z "$previous" ]; then echo "no previous tag"; exit 0; fi
-          added=$(git diff --name-only --diff-filter=A "$previous" "$GITHUB_REF_NAME" -- packages/plateforme/migrations | grep -c "[.]sql$" || true)
+          added=$(git diff --name-only --diff-filter=A "$previous" "$TAG" -- packages/plateforme/migrations | grep -c "[.]sql$" || true)
           echo "$added migration(s) added since $previous"
-          test "$added" -le 1 || { echo "merge them into one <timestamp>_vX_Y_Z.sql before tagging"; exit 1; }
+          test "$added" -le 1 || { echo "merge them into one <timestamp>_vX_Y_Z.sql in the version pull request"; exit 1; }
       - name: Tag, version and CHANGELOG agree
         run: |
           version=$(node -p "require('./packages/plateforme/package.json').version")
-          test "$GITHUB_REF_NAME" = "v$version" || { echo "tag $GITHUB_REF_NAME, package v$version"; exit 1; }
+          test "$TAG" = "v$version" || { echo "tag $TAG, package v$version"; exit 1; }
           grep -q "^## $version — " packages/plateforme/CHANGELOG.md || { echo "CHANGELOG: no entry for $version"; exit 1; }
       - name: Files to publish
         working-directory: packages/plateforme

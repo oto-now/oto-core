@@ -1,11 +1,11 @@
 # Distribution du paquet
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-10-01
+- **Dernière révision** : 2026-11-19 (publication à la fusion d'une pull request de version)
 
 ## Résumé
 
-Le paquet `@otomata_tech/oto_platform` est consommé en source dans son workspace et publié en public sur npmjs.com, en version sémantique, par un tag `v<version>` ; le dépôt `oto-pkg` est open source (MIT) et ne contient rien de privé (ADR-010). Son SQL ne touche que le schéma `platform` et ne fait qu'ajouter ; personne n'écrit dans `platform` hors des services ; un hôte monte de version par une pull request Renovate (ADR-006).
+Le paquet `@otomata_tech/oto_platform` est consommé en source dans son workspace et publié en public sur npmjs.com, en version sémantique, à la fusion d'une pull request de version approuvée par JB ou par Alexis, qui pose le tag `v<version>` ; le dépôt `oto-pkg` est open source (MIT) et ne contient rien de privé (ADR-010). Son SQL ne touche que le schéma `platform` et ne fait qu'ajouter ; personne n'écrit dans `platform` hors des services ; un hôte monte de version par une pull request Renovate (ADR-006).
 
 ## Contexte
 
@@ -23,7 +23,13 @@ Le paquet s'installe dans la base de l'application hôte, à côté du schéma `
 ### Publication (ADR-010)
 
 - **Dans le workspace, le paquet est consommé en source** (ADR-010 § 1) : `"@otomata_tech/oto_platform": "workspace:*"` dans le `package.json` de l'application de base, `exports` du paquet vers ses fichiers TypeScript, `transpilePackages` dans `next.config.ts`. Aucune étape de build ; le paquet est aussi publié en sources TypeScript.
-- **Pour tout autre hôte, publication publique sur npmjs.com** (ADR-010 § 2), en version sémantique, sous le scope de l'organisation npm `otomata_tech`. Aucun registre privé, aucun jeton d'installation. Un tag `v<version>` poussé sur le dépôt déclenche `.github/workflows/publish.yml` : contrôle des secrets de l'arbre (`check-public --secrets-only`), des migrations, de l'accord du tag, de la version et du `CHANGELOG.md` du paquet, puis `npm publish --provenance` (secret `NPM_TOKEN` du dépôt). La provenance exige que `repository.url` du paquet nomme le dépôt qui publie. Un tag ne part que d'un commit où les jobs de CI sont verts.
+- **Pour tout autre hôte, publication publique sur npmjs.com** (ADR-010 § 2), en version sémantique, sous le scope de l'organisation npm `otomata_tech`. Aucun registre privé, aucun jeton d'installation. La provenance exige que `repository.url` du paquet nomme le dépôt qui publie.
+- **Une version se publie à la fusion de sa pull request de version** (ADR-010, révisée le 2026-11-19), par `.github/workflows/publish.yml` :
+  1. La pull request de version monte `version` de `packages/plateforme/package.json`, nomme la section `## <version> — <date>` du `CHANGELOG.md` du paquet et réunit les migrations de la version en un seul fichier (D124). Elle vise `main`, ou `release/x.y.z` pour un correctif parti d'un tag quand `main` porte un lot pas encore publiable (branche créée sur le tag de départ, `release/1.4.1` depuis `v1.4.0`). Elle part d'une branche du dépôt, jamais d'une fourche : le jeton d'une fourche ne pousse pas de tag.
+  2. Elle est approuvée par JB (`jean-baptiste-tiple`) ou par Alexis (`AlexisLaporte`), sur son dernier commit, et fusionne quand la CI (`ci.yml`, qui tourne aussi sur les pull requests vers `release/**`) est verte.
+  3. À la fusion, le job `tag` vérifie que la version change entre la base de la pull request et son dernier commit (sinon rien ne se publie), que la dernière revue d'un des deux approbateurs est une approbation de ce commit (sinon il échoue, et rien n'est tagué), puis pose le tag annoté `v<version>` (message `@otomata_tech/oto_platform <version>`) sur le commit de fusion.
+  4. Le job `publish`, dans le même workflow, part de ce tag : contrôle des secrets de l'arbre et de l'historique (`check-public --secrets-only`), des migrations (`check:migrations`, une seule ajoutée depuis le tag précédent), de l'accord du tag, de la version et du `CHANGELOG.md`, puis `npm publish --provenance` (secret `NPM_TOKEN` du dépôt). Un tag poussé avec le jeton du workflow ne déclenche aucun autre workflow : la publication s'enchaîne donc dans le même, plutôt que sur un `push: tags`.
+- **Passage manuel exceptionnel** : `workflow_dispatch` de `publish.yml` sur un tag `v<version>` déjà posé, lancé par JB ou Alexis seulement (le job le refuse à tout autre compte), quand la publication est tombée après le tag (panne de npm). Il n'existe plus de tag poussé à la main qui publie : un `push: tags` publierait sans l'approbation exigée. La 1.8.1, publiée le 2026-11-19 par un tag poussé à la main depuis `release/1.8.1`, sur accord direct d'Alexis, est la dernière exception à cette règle.
 - **Deux dépôts dans l'organisation GitHub `otomata-tech`** (ADR-010 § 3) : `oto-pkg`, public, sous licence MIT, porte le paquet et l'application de base minimale qui le teste ; `oto-saas`, privé, porte notre SaaS, application hôte qui dépend du paquet publié. Le titulaire de la licence est celui d'`oto-backend`.
 - À la fin de la V1, le code s'est séparé en ces deux dépôts neufs : le paquet, public, publié sur npm au tag `v1.0.0` avec une application de base minimale, et le SaaS, privé ; jusque-là, `src/` était l'hôte de référence (H124). Pas de purge d'historique : paquet et SaaS sont partis chacun d'un dépôt neuf, en un commit initial de l'arbre nettoyé ; l'ancien dépôt reste privé ; le pilote a exécuté ces gestes de fin de V1 avec l'accord de JB (D96).
 
@@ -63,6 +69,8 @@ Le paquet s'installe dans la base de l'application hôte, à côté du schéma `
 ## Décisions et alternatives écartées
 
 - **Registre privé** (GitHub Packages ou npmjs.com privé) : scope lié au propriétaire du registre, jeton dans chaque ERP et dans Renovate. Écarté : le dépôt est public (ADR-010).
+- **Un tag `v<version>` poussé à la main par JB seul** (ADR-010 jusqu'au 2026-11-19) : la publication attendait une seule personne, et le contrôle de la version passait hors de toute revue. Remplacé par la pull request de version approuvée par JB ou par Alexis, et le tag posé par la CI.
+- **Un second workflow déclenché par le tag posé par la CI** : un tag poussé avec le jeton du workflow ne déclenche aucun workflow ; il faudrait un jeton personnel ou d'application dans les secrets. Écarté au profit de deux jobs enchaînés dans `publish.yml`.
 - **Paquet non publié, copié dans chaque ERP** : copie qui diverge, plus de pull request Renovate. Écarté (ADR-010).
 - **Un seul dépôt pour le paquet et le SaaS** : le SaaS porte des réglages et un outillage propres à son hébergement, et sa CI des secrets de déploiement. Écarté (ADR-010).
 - **Purge de l'historique de l'ancien dépôt** : écartée au profit de dépôts neufs partant d'un arbre nettoyé (D96).
@@ -78,10 +86,12 @@ Le paquet s'installe dans la base de l'application hôte, à côté du schéma `
 
 - Tout ce qui entre dans `oto-pkg` est public, fixtures et commits compris : `check:public` à chaque vérification et à la publication ; la liste de refus n'est jamais commitée.
 - La publication vérifie les secrets de l'arbre avant `npm publish` et porte la provenance npm.
+- Seule l'approbation de JB ou d'Alexis, lue par l'API des revues de la pull request, fait poser un tag de version ; le passage manuel est réservé aux mêmes comptes.
 - La connexion d'administration de l'outillage n'entre jamais dans l'application déployée ni dans le paquet.
 
 ## Écart avec le code
 
+- Les règles de branche ne se posent pas par le dépôt : sur `main` et `release/**`, une pull request obligatoire, une approbation, l'invalidation des approbations à chaque nouveau commit et les jobs de `ci.yml` exigés sont à régler dans GitHub. Sans elles, `publish.yml` refuse toujours de taguer une version non approuvée ; il ne protège pas le reste de `main`.
 - Le registre central des versions de plusieurs cellules n'existe pas ; `admin_cell` ne décrit que la cellule courante.
 - `oto-platform migrations sync` compare les copies de l'hôte octet pour octet, ce qui échoue sur un checkout Windows en CRLF (M74).
 - L'installation complète par `supabase db push` sous un rôle non superutilisateur n'est prouvée que sur un Postgres 16 du poste (M93) ; elle reste à jouer sur un projet Supabase neuf, et aucun job de CI ne pousse sous un tel rôle.
@@ -98,3 +108,4 @@ Aucune à ce jour.
 - 2026-09-29 : schéma propre en 1.0.0, une ligne de base (D102) ; 1.0.0 publiée avec provenance ; E10 et E11 en une seule version, la 1.1.0 (D131, D145) — décidé par JB (source : fiches D102, D131, D145, story E01-S12).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend ADR-006, ADR-010, H01, H124, D67, D69, D96, D102, D121, D124, D131, D145 et les choix d'E01-S12 — décidé par Alexis, accord de JB.
 - 2026-10-01 : une migration préalable à la ligne de base charge `pg_trgm` pour `supabase db push` (M93), poussée une fois avec `--include-all` par un hôte installé ; garde `pg-trgm-parameter-before-load` de `check:migrations` — décidé par JB (source : session de travail du 2026-10-01).
+- 2026-11-19 : une version se publie à la fusion de sa pull request de version (vers `main` ou `release/x.y.z`), approuvée par JB ou par Alexis ; la CI pose le tag `v<version>` sur le commit de fusion puis publie dans le même workflow ; plus de tag manuel réservé à une seule personne, la 1.8.1 en est la dernière exception — décidé par Alexis (révise ADR-010).

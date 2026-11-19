@@ -129,17 +129,60 @@ describe.skipIf(!changelogWritten)("package CHANGELOG (AC7), written by the pilo
 
 describe("publish workflow (AC9)", () => {
   const workflow = () => read(".github/workflows/publish.yml")
+  const flat = (text: string) => text.replace(/#.*$/gm, "").replace(/\s+/g, " ").trim()
+  const job = (name: "tag" | "publish") => {
+    const jobs = workflow().split("\njobs:")[1]
+    return name === "tag" ? jobs.split("\n  publish:")[0] : jobs.split("\n  publish:")[1]
+  }
 
-  it("should run on pushed v* tags only, read the contents, write the provenance token, and check everything before publishing from the package", () => {
+  // ADR-010 révisée le 2026-11-19 : une version se publie à la fusion de sa pull request de version, approuvée par
+  // JB ou Alexis ; aucun `push: tags`, sans quoi un tag poussé à la main publierait sans approbation.
+  it("should run on merged pull requests to main or release/** that touch the package manifest, or by hand on an existing tag, never on a pushed tag", () => {
     const trigger = workflow().split("\npermissions:")[0].split("\non:")[1]
-    expect(trigger.replace(/\s+/g, " ").trim()).toBe('push: tags: ["v*"]')
+    expect(flat(trigger)).toBe(
+      'pull_request: types: [closed] branches: [main, "release/**"] paths: ["packages/plateforme/package.json"] ' +
+        'workflow_dispatch: inputs: tag: description: "Tag v<version> déjà posé, à publier" required: true type: string',
+    )
+    expect(trigger).not.toMatch(/push:/)
 
-    const permissions = workflow().split("\npermissions:")[1].split("\njobs:")[0]
-    expect(permissions.replace(/#.*$/gm, "").replace(/\s+/g, " ").trim()).toBe("contents: read id-token: write")
+    const permissions = workflow().split("\npermissions:")[1].split(/\n[a-z]/)[0]
+    expect(flat(permissions)).toBe("contents: read")
+    expect(workflow()).toContain('APPROVERS: "jean-baptiste-tiple AlexisLaporte"')
+  })
 
-    const text = workflow()
+  it("should tag the merge commit of a version pull request only once an approver approved its last commit", () => {
+    const tag = job("tag")
+    expect(tag).toContain("if: github.event_name == 'pull_request' && github.event.pull_request.merged == true")
+    expect(flat(tag.split("permissions:")[1].split("outputs:")[0])).toBe("contents: write pull-requests: read")
+
     const steps = [
+      "ref: ${{ github.event.pull_request.merge_commit_sha }}",
+      'if [ "$before" = "$after" ]; then',
+      'echo "tag=v$after" >> "$GITHUB_OUTPUT"',
+      '"repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"',
+      '$2 != "COMMENTED"',
+      'if [ "$last" = "APPROVED $HEAD_SHA" ]',
+      'test -n "$approved" || {',
+      'git tag -a "$TAG" -m "@otomata_tech/oto_platform ${TAG#v}" "$MERGE_SHA"',
+      'git push origin "refs/tags/$TAG"',
+    ]
+    const positions = steps.map((step) => tag.indexOf(step))
+    steps.forEach((step, k) => expect(positions[k], step).toBeGreaterThan(k === 0 ? -1 : positions[k - 1]))
+    // Un tag poussé avec le GITHUB_TOKEN ne déclenche aucun workflow : la publication suit dans le même workflow.
+    expect(job("publish")).toContain("needs: tag")
+  })
+
+  it("should publish from the tag, after every check, with provenance; by hand only for an approver", () => {
+    const publish = job("publish")
+    expect(publish).toContain("if: ${{ !cancelled() && (needs.tag.outputs.tag != '' || github.event_name == 'workflow_dispatch') }}")
+    expect(flat(publish.split("permissions:")[1].split("env:")[0])).toBe("contents: read id-token: write")
+    expect(publish).toContain("TAG: ${{ needs.tag.outputs.tag || inputs.tag }}")
+
+    const steps = [
+      "- name: Manual pass by an approver only",
+      'for login in $APPROVERS; do test "$GITHUB_ACTOR" = "$login" && exit 0; done',
       "uses: actions/checkout@v4",
+      "ref: refs/tags/${{ env.TAG }}",
       "fetch-depth: 0",
       "uses: pnpm/action-setup@v4",
       "uses: actions/setup-node@v4",
@@ -148,19 +191,26 @@ describe("publish workflow (AC9)", () => {
       "run: pnpm install --frozen-lockfile",
       "run: node scripts/check-public.mjs --secrets-only",
       "run: pnpm check:migrations",
-      'test "$GITHUB_REF_NAME" = "v$version"',
+      'git describe --tags --abbrev=0 --match "v*" "$TAG^"',
+      'test "$added" -le 1',
+      'test "$TAG" = "v$version"',
       'grep -q "^## $version — " packages/plateforme/CHANGELOG.md',
       "run: npm pack --dry-run",
       "run: npm publish --provenance --access public",
       "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
     ]
-    const positions = steps.map((step) => text.indexOf(step))
+    const positions = steps.map((step) => publish.indexOf(step))
     steps.forEach((step, k) => expect(positions[k], step).toBeGreaterThan(k === 0 ? -1 : positions[k - 1]))
 
-    const publish = text.split("- name: Publish")[1]
-    expect(publish).toContain("working-directory: packages/plateforme")
-    expect(publish).toContain("run: npm publish --provenance --access public")
-    expect(publish).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}")
+    const last = publish.split("- name: Publish\n")[1]
+    expect(last).toContain("working-directory: packages/plateforme")
+    expect(last).toContain("run: npm publish --provenance --access public")
+    expect(last).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}")
+  })
+
+  it("should run CI on pull requests to release/** too, where a corrective version pull request merges", () => {
+    const trigger = read(".github/workflows/ci.yml").split("\njobs:")[0]
+    expect(flat(trigger.split("pull_request:")[1])).toBe('branches: [main, "release/**"]')
   })
 })
 

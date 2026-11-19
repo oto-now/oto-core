@@ -9,10 +9,10 @@ name: CI — Build
 on:
   push:
     # `release/**` : une version corrective partie d'un tag (`release/1.4.1` depuis `v1.4.0`), quand main porte un lot pas encore
-    # publiable ; son tag ne part que d'un commit où ces jobs sont verts, comme sur main.
+    # publiable ; sa pull request de version y fusionne quand ces jobs sont verts, comme vers main (publish.yml).
     branches: [main, "release/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
 
 jobs:
   build:
