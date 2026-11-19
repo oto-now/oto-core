@@ -93,7 +93,6 @@ function RailTreeNodeRow({ node, addItems, moreItems, as }: Gestes & { node: Rai
     <>
       {branche && (
         <button type="button" className="oto-rail-branch" aria-expanded={ouvert} aria-controls={idEnfants} aria-label={`${ouvert ? "Replier" : "Déplier"} ${node.label}`} onClick={() => setOuvert(!ouvert)}>
-          {node.icon}
           <Icon as={CaretRight} size="xs" className="oto-rail-chevron" />
         </button>
       )}
@@ -103,7 +102,7 @@ function RailTreeNodeRow({ node, addItems, moreItems, as }: Gestes & { node: Rai
         label={node.label}
         active={node.active}
         variant={node.variant}
-        icon={branche ? undefined : node.icon}
+        icon={node.icon}
         end={
           node.badge != null && (
             <Badge tone="review" count>
