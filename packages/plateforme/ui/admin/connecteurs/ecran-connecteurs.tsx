@@ -30,7 +30,7 @@ import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
-import { estAMoi, formulaireDuCompte } from "./etat-du-compte"
+import { estAMoi, faconDeLAcces, formulaireDuCompte, sansAcces } from "./etat-du-compte"
 import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 
@@ -228,13 +228,16 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
   const compte = donnees.accounts.find((candidat) => candidat.id === vue.compte)
   if (!compte) return null
   const formulaires = donnees.formulaires ?? []
+  const formulaire = formulaireDuCompte(formulaires, compte)
   return (
     <DetailDuConnecteur
       // Une instance par compte : le tiroir refermé d'un compte ne sert jamais, encore fermé, à un autre.
       key={compte.id}
       compte={compte}
-      formulaire={formulaireDuCompte(formulaires, compte)}
+      formulaire={formulaire}
       outil={libelleDuConnecteur(compte.connector, formulaires)}
+      facon={faconDeLAcces(formulaire, formulaires, "compte")}
+      sansSonAcces={sansAcces(formulaires, compte)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}

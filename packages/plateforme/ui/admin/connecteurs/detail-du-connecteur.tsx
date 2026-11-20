@@ -209,6 +209,8 @@ function Actions({ fonctions }: { fonctions: OrgConnector["functions"] }) {
   )
 }
 
+const SANS_ACCES = "Ce compte ne retient aucune façon de se connecter : le service le refuse à chaque appel."
+
 /** Ce que le détail dit de la connexion, jamais la clé : sa date, ou son absence. */
 function phraseDeConnexion(compte: AccountView, formulaire: ConnectorAccountForm | undefined): string {
   if (compte.mode !== "reel") return "Connecteur simulé : rien ne sort du serveur."
@@ -228,7 +230,8 @@ function Connexion({ compte, formulaire, etat }: Omit<Detail, "ici">) {
   const saisissable = compte.viewerLevel === "manage" && compte.mode === "reel" && aCle
   return (
     <Section titre="Connexion">
-      <p className="text-sm text-ink">{phraseDeConnexion(compte, formulaire)}</p>
+      {/* Un compte à remplacer ne retient aucun accès : ni clé ni connexion ne se disent de lui. */}
+      <p className="text-sm text-ink">{etat.code === "a_remplacer" ? SANS_ACCES : phraseDeConnexion(compte, formulaire)}</p>
       {saisissable && <SaisieDuCompte compte={compte} formulaire={formulaire} libelle={etat.geste === "saisir" ? "Saisir la clé" : "Remplacer la clé"} ouverte={etat.geste === "saisir" || etat.geste === "remplacer"} />}
     </Section>
   )
@@ -240,6 +243,10 @@ type DetailDuConnecteurProps = {
   formulaire: ConnectorAccountForm | undefined
   /** Le nom lisible de l'outil. */
   outil: string
+  /** Pour un outil qui s'ouvre de plusieurs façons, celle de ce compte (`faconDeLAcces`) ; `null` sinon. */
+  facon: string | null
+  /** Vrai pour un compte sans accès d'un outil qui s'ouvre maintenant par plusieurs (`sansAcces`) : il est à remplacer. */
+  sansSonAcces: boolean
   fonctions: OrgConnector["functions"]
   /** Ses partages, lus par la page pour qui le gère. */
   partages: PartagesDuCompte | undefined
@@ -251,8 +258,8 @@ type DetailDuConnecteurProps = {
   fermer: string
 }
 
-export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
-  const etat = etatDuCompte(compte, formulaire, moi)
+export function DetailDuConnecteur({ compte, formulaire, outil, facon, sansSonAcces, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
+  const etat = etatDuCompte(compte, formulaire, moi, sansSonAcces)
   const gere = compte.viewerLevel === "manage"
   return (
     <TiroirDeConversation titre={compte.label} fermer={fermer}>
@@ -261,7 +268,7 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
           <div className="flex items-start gap-3">
             <TuileDeLOutil nom={outil} taille="lg" />
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm text-mute">{outil}</span>
+              <span className="text-sm text-mute">{facon ? `${outil} · ${facon}` : outil}</span>
               {compte.description && <p className="text-sm text-ink">{compte.description}</p>}
             </div>
           </div>
