@@ -17,6 +17,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Migrations: apply `20261120120000_platform_profil_d_arrivee.sql` (development file, merged into the version's single file before the tag): a person arriving in an organisation without a profile name takes the names of their profile in another organisation. No existing row is rewritten; the package does not depend on it.
+- Server: the identity names a person without a profile name by their account name (`members.name`) before the start of their email, as the directory does.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants
