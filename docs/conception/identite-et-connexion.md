@@ -1,7 +1,7 @@
 # Identité et connexion
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-13
+- **Dernière révision** : 2026-11-20
 
 ## Résumé
 
@@ -30,6 +30,7 @@ Une personne a un compte dans l'annuaire de l'application hôte : il sert aux é
 - E02-S01 N9 : sans session, l'API répond 401 avec le code `forbidden` ; le statut porte la différence.
 - H18 : `members.role` n'admet que `admin` et `member`. E02-S01 N8 : `teams.lead_user_id` est la seule source du responsable d'une équipe ; le rôle d'équipe de l'identité (`lead` ou `member`) en est dérivé (amendé depuis par D128, [droits d'accès](droits-d-acces.md)).
 - D27 : `members.email` et `members.name` sont des copies tenues par l'outillage et par la session ; l'annuaire (`member_directory`) les lit là, jamais dans `auth.users`. HN-M08-5 : sous une session, une ligne `members` qui change de `user_id` perd l'email, le nom et la dernière connexion de la précédente ; si la personne nouvelle est l'appelante, elle reçoit les copies de ses claims.
+- **Le nom d'une personne qui arrive dans un espace** : un profil (`members.profile`) est propre à chaque espace. À son arrivée (toute insertion dans `members`, déclencheur `members_profile_on_arrival`), un profil sans nom reprend le nom, le prénom et le nom de famille de son profil dans l'espace qu'elle a rejoint le plus récemment ; sans profil nommé ailleurs, rien n'est copié. L'identité (`identityInOrg`) nomme une personne par le nom de son profil, sinon par celui de son compte (`members.name`, copie des claims tenue à chaque connexion), sinon par le début de son email, comme l'annuaire (`member_directory`) : copié dans le profil, le nom du compte s'y figerait. Un profil qui porte déjà un nom n'est pas touché ; un nom changé ensuite dans un espace ne change pas les autres ; les lignes existantes ne sont pas reprises. Sans lui, une personne qui créait ou rejoignait un espace y apparaissait sous le début de son email.
 - E02-S01 N17 : `unique_handle` translittère aussi les majuscules accentuées avant `lower()` : sous une ctype `C`, `lower()` ne touche que l'ASCII.
 
 ### Émetteur : un hôte, un émetteur
@@ -123,4 +124,5 @@ Aucune à ce jour.
 - 2026-10-19 : le lien de l'invitation d'un administrateur nommé par l'équipe plateforme suit la même règle (`linkOrigin`), `x-forwarded-proto` n'étant plus lu — décidé par Alexis (source : écart relevé avec le correctif de l'origine des liens sortants).
 
 - 2026-10-20 : connexion par l'adresse d'abord, accueil d'une invitation (mot de passe, fournisseur ou plus tard), organisations de la personne à l'adresse commune — demandé par JB (source : session du 20/10/2026).
+- 2026-11-19 : le profil d'une personne qui arrive dans un espace reprend son nom d'un autre espace, et l'identité prend le nom du compte en secours — décidé par JB (source : retour d'usage RET-010).
 - 2026-11-13 : le contact d'une organisation (`org_contact`) n'est plus rendu à un non-membre ; l'écran « aucune organisation » ne le nomme plus — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).

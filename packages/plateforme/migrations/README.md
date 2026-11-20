@@ -490,6 +490,12 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant. Un connecteur
      qui passe d'un accès à plusieurs arrête ses comptes existants (`access` nul) : leur reprise est dans connecteurs et
      comptes, § Plusieurs accès.
+- `20261120120000_platform_profil_d_arrivee.sql` (le nom d'une personne qui arrive dans un espace, décidé par JB le
+  19/11 ; identité et connexion) : la fonction `members_profile_on_arrival` et son déclencheur `before insert` sur
+  `members` : un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la même personne dans un
+  autre espace. Aucune ligne existante reprise ; aucune table, colonne ni policy. Le paquet
+  ne dépend pas d'elle ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant
+  le tag.
 
 ## Installer sur un hôte neuf
 
