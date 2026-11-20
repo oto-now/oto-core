@@ -22,7 +22,7 @@ import { hex } from "../helpers/plateforme"
 import { createLocalFixtures, type LocalFixtures } from "../helpers/session-locale"
 import { SQL_SKIP_REASON, sqlConfigured, testAdminSql, type SqlReferenceOrg, type TestSql } from "../helpers/sql"
 
-const VERSION = "20261119104631"
+const VERSION = "20261119210949"
 const pending = (await pendingMigrations()).includes(VERSION)
 
 const CONNECTOR = `t${hex(4)}`
