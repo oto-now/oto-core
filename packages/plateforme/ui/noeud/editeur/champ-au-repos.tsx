@@ -3,9 +3,11 @@
 // Le champ d'un bloc qu'on ne touche pas (1.1.3, qui remplace le champ toujours monté de la fiche D21 B) : son texte
 // brut dans un `span` aux classes du champ (`oto-block-field`, `data-kind`), à la même géométrie, sous le rendu au
 // repos quand le texte en a un (`data-rendu`, `editeur.css`) ; le dessin reste celui d'un champ hors du focus. Il est
-// atteint au clavier et se dit modifiable (`role="textbox"`, nom du champ) ; son focus (tabulation, toucher, geste de
-// l'éditeur) monte le `<textarea>` à sa place, curseur au caractère touché, sinon à la fin. Sans lui, chaque bloc
-// d'une page montait son `<textarea>`, et une page de trois cents blocs se figeait plusieurs secondes à l'ouverture.
+// atteint au clavier et se dit modifiable (`role="textbox"`, nom du champ) ; son focus au clavier (tabulation, geste de
+// l'éditeur) monte le `<textarea>` à sa place, curseur à la fin. Au pointeur, c'est le clic qui le monte, curseur au
+// caractère cliqué (`rangAuClic`, appelé par la pile du bloc), et seulement s'il ne laisse aucune sélection de texte :
+// un glissé ou un appui long se lit et se copie sans ouvrir l'édition. Sans lui, chaque bloc d'une page montait son
+// `<textarea>`, et une page de trois cents blocs se figeait plusieurs secondes à l'ouverture.
 //
 // 1.1.4 : un diagramme non vide se lit au repos comme à l'écran de lecture (`DiagrammeAuRepos`).
 import { useRef, type ReactNode } from "react"
@@ -26,8 +28,22 @@ function rangSousLePointeur(element: HTMLElement, x: number, y: number): number 
   return noeud !== undefined && noeud === element.firstChild && noeud.nodeType === Node.TEXT_NODE && rang !== undefined ? rang : null
 }
 
-/** Le temps d'un toucher, de l'appui au focus qu'il donne après le lâcher. */
-const DUREE_D_UN_TOUCHER_MS = 1_000
+/**
+ * Le rang, dans le texte brut du bloc lu `champ`, du caractère cliqué en (`x`, `y`) dans sa pile : le rendu ou la copie
+ * d'une liste, posés dessus, prennent le pointeur pour que le texte lu se sélectionne ; le temps de la mesure, la pile
+ * les rend transparents au pointeur (`data-sonde`, `editeur.css`). `null` hors du texte brut, ou sans l'API (jsdom).
+ */
+export function rangAuClic(pile: HTMLElement, champ: HTMLElement, x: number, y: number): number | null {
+  pile.dataset.sonde = ""
+  try {
+    return rangSousLePointeur(champ, x, y)
+  } finally {
+    delete pile.dataset.sonde
+  }
+}
+
+/** Le temps d'un appui, du pointeur posé au focus qu'il donne (au doigt, après le lâcher). */
+const DUREE_D_UN_APPUI_MS = 1_000
 
 type ChampAuReposProps = {
   texte: string
@@ -38,14 +54,14 @@ type ChampAuReposProps = {
   /** Le rendu du texte est posé dessus : le texte brut se tait (`editeur.css`). */
   rendu: boolean
   invite?: string
-  /** Le focus arrive : le champ se monte, curseur à `curseur`. */
+  /** Le focus arrive au clavier : le champ se monte, curseur à `curseur`. */
   ouvrir: (curseur: number) => void
 }
 
 export function ChampAuRepos({ texte, nom, genre, decritPar, lectureSeule, rendu, invite, ouvrir }: ChampAuReposProps) {
-  // Le caractère touché par l'appui qui précède le focus (au doigt ; à la souris, le champ est déjà monté au survol). Au
-  // doigt, le focus suit le lâcher : l'appui vaut jusqu'au focus, une seconde au plus, et un appui annulé ne vaut rien.
-  const touche = useRef<{ rang: number | null; instant: number } | null>(null)
+  // L'instant du dernier appui du pointeur : le focus qui le suit (à l'appui à la souris, au lâcher au doigt) n'ouvre
+  // rien, le clic décide. Une seconde au plus ; un appui annulé (un défilement, un appui long) ne vaut rien.
+  const appui = useRef<number | null>(null)
   return (
     <span
       role="textbox"
@@ -60,16 +76,16 @@ export function ChampAuRepos({ texte, nom, genre, decritPar, lectureSeule, rendu
       data-kind={genre}
       data-rendu={rendu ? "" : undefined}
       className="oto-block-field focus-visible:outline-hidden!"
-      onPointerDown={(evenement) => {
-        touche.current = { rang: rangSousLePointeur(evenement.currentTarget, evenement.clientX, evenement.clientY), instant: Date.now() }
+      onPointerDown={() => {
+        appui.current = Date.now()
       }}
       onPointerCancel={() => {
-        touche.current = null
+        appui.current = null
       }}
       onFocus={() => {
-        const appui = touche.current
-        touche.current = null
-        ouvrir(appui !== null && Date.now() - appui.instant < DUREE_D_UN_TOUCHER_MS ? (appui.rang ?? texte.length) : texte.length)
+        const instant = appui.current
+        appui.current = null
+        if (instant === null || Date.now() - instant >= DUREE_D_UN_APPUI_MS) ouvrir(texte.length)
       }}
     >
       {texte}

@@ -4,7 +4,7 @@ import { CHEMINS, EQUIPE, ESPACE, PROCEDURE as TITRE_DE_LA_PROCEDURE, SANS_ESPAC
 import { attendreLEnregistrement, lireLeHtml, ouvrirAQuoiSert, seConnecterSurLEspace } from "./fixtures/noeud"
 
 // Contrôle visuel connecté des écrans d'une procédure et d'un Contexte (E05-S04, AC16 ; E05-S08, AC10 :
-// chaque bloc se lit, son champ monté au survol ou au focus depuis la 1.1.3 ; M59, fiche D104 : l'écran d'une
+// chaque bloc se lit, son champ monté au clic ou au focus ; M59, fiche D104 : l'écran d'une
 // procédure est celui d'une page) : le compte E2E,
 // administrateur de l'organisation de la campagne et responsable de son équipe (`espace.ts`), en clair puis en sombre. Le rail
 // mène à la procédure semée (une procédure est une page de l'arbre, E05-S09 AC-a5), dont
