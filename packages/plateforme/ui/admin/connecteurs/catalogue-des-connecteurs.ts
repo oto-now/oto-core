@@ -3,7 +3,7 @@
 // s'y connecter et les propriétaires qu'elle peut choisir.
 // Module sans « use client » : l'écran, rendu par le serveur, le calcule et ne passe à la fenêtre que des données. Sans
 // lui, la fenêtre proposerait un ajout que le service refuse (un propriétaire non admis, un outil sans port chez le tiers).
-import { normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
+import { connectorLogoAddress, normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
 import { connexionDe, type Connexion } from "./etat-du-compte"
 
 type Proprietaire = ConnectorAccountForm["ownerKinds"][number]
@@ -13,6 +13,8 @@ export type OutilAAjouter = {
   connecteur: string
   /** Le nom lisible de l'outil. */
   libelle: string
+  /** L'adresse du logo de l'outil, `null` sans domaine déclaré (`OrgConnector.logoDomain`). */
+  logo: string | null
   /**
    * L'accès du compte à créer, pour un connecteur à plusieurs accès : son nom (envoyé à la création, au consentement et
    * à la sonde) et son libellé (montré sous le nom de l'outil) ; absent pour un connecteur à un seul accès.
@@ -59,7 +61,8 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
         if (proprietaires.length === 0) return []
         const mode = connecteur.accountModes[0] ?? "reel"
         const acces = formulaire?.access ? { acces: { nom: formulaire.access.name, libelle: formulaire.access.label } } : {}
-        return [{ connecteur: connecteur.connector, libelle: connecteur.label, ...acces, facon, proprietaires, mode, ferme: connecteur.closedBy !== null, formulaire }]
+        const logo = connecteur.logoDomain !== undefined ? connectorLogoAddress(connecteur.connector) : null
+        return [{ connecteur: connecteur.connector, libelle: connecteur.label, logo, ...acces, facon, proprietaires, mode, ferme: connecteur.closedBy !== null, formulaire }]
       })
     })
     .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr") || (a.acces?.libelle ?? "").localeCompare(b.acces?.libelle ?? "", "fr"))

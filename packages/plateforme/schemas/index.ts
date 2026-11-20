@@ -165,7 +165,7 @@ export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.
 export { orgSettingsFormSchema } from "./admin"
 export type { OrgSettingsForm, OrgView } from "./admin"
-export { PROBE_FAILURE_CODES } from "./connectors"
+export { connectorLogoAddress, PROBE_FAILURE_CODES } from "./connectors"
 export type {
   AccountHealth,
   AccountMark,

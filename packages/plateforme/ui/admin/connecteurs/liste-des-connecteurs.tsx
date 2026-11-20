@@ -22,7 +22,7 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
   const { Lien } = useHote()
   return (
     <span className="flex min-w-0 items-center gap-3 py-1">
-      <TuileDeLOutil nom={ligne.outil} />
+      <TuileDeLOutil nom={ligne.outil} logo={ligne.logo} />
       <span className="flex min-w-0 flex-col">
         <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}

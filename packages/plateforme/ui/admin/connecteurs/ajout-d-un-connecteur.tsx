@@ -28,7 +28,7 @@ function Carte({ outil, choisir }: { outil: OutilAAjouter; choisir: (cle: string
   if (outil.ferme) {
     return (
       <li className={`${CARTE} text-mute`}>
-        <TuileDeLOutil nom={outil.libelle} />
+        <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
         <span className="flex min-w-0 flex-col">
           <span className="font-semibold">{outil.acces ? `${outil.libelle} — ${outil.acces.libelle}` : outil.libelle}</span>
           <span className="oto-caption">Fermé par un administrateur</span>
@@ -39,7 +39,7 @@ function Carte({ outil, choisir }: { outil: OutilAAjouter; choisir: (cle: string
   return (
     <li>
       <button type="button" className={`${CARTE} cursor-pointer font-semibold text-ink hover:bg-desk focus-visible:ring-2 focus-visible:ring-ink`} onClick={() => choisir(cleDeLOutil(outil))}>
-        <TuileDeLOutil nom={outil.libelle} />
+        <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
         {outil.acces ? (
           <span className="flex min-w-0 flex-col">
             <span>{outil.libelle}</span>
@@ -116,7 +116,7 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, retour, apresAjout }: Outil
         </Button>
       </div>
       <div className="flex items-center gap-3">
-        <TuileDeLOutil nom={outil.libelle} taille="lg" />
+        <TuileDeLOutil nom={outil.libelle} logo={outil.logo} taille="lg" />
         <h3 ref={titre} tabIndex={-1} className="text-lg font-semibold text-ink">
           {outil.libelle}
         </h3>

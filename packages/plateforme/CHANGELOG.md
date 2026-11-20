@@ -17,6 +17,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- UI: on the Connectors screen, the tile of a tool that declares its domain (`logoDomain`) shows the tool's favicon, its initial otherwise and when the favicon fails. Nothing to do for a host.
+- API: `GET /api/platform/connectors/<name>/logo` (session required) serves that favicon from the application: the server reads `https://<domain>/favicon.ico` (raster image, 64 KB, 3 s) and keeps it a day in memory. A host whose server cannot reach the internet, or that closed address downloads (`registerHostSurface`), keeps the initials.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants
