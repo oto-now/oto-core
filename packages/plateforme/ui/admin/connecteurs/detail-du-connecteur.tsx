@@ -240,6 +240,8 @@ type DetailDuConnecteurProps = {
   formulaire: ConnectorAccountForm | undefined
   /** Le nom lisible de l'outil. */
   outil: string
+  /** L'adresse du logo de l'outil (`logoDe`), `null` sans domaine déclaré. */
+  logo: string | null
   fonctions: OrgConnector["functions"]
   /** Ses partages, lus par la page pour qui le gère. */
   partages: PartagesDuCompte | undefined
@@ -251,7 +253,7 @@ type DetailDuConnecteurProps = {
   fermer: string
 }
 
-export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
+export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions, partages, sujets, moi, ici, fermer }: DetailDuConnecteurProps) {
   const etat = etatDuCompte(compte, formulaire, moi)
   const gere = compte.viewerLevel === "manage"
   return (
@@ -259,7 +261,7 @@ export function DetailDuConnecteur({ compte, formulaire, outil, fonctions, parta
       <PorteeDuPartage>
         <div className="flex flex-col gap-3">
           <div className="flex items-start gap-3">
-            <TuileDeLOutil nom={outil} taille="lg" />
+            <TuileDeLOutil nom={outil} logo={logo} taille="lg" />
             <div className="flex min-w-0 flex-col gap-1">
               <span className="text-sm text-mute">{outil}</span>
               {compte.description && <p className="text-sm text-ink">{compte.description}</p>}

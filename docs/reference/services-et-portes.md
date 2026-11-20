@@ -73,7 +73,9 @@ rejoue sur chaque lot, et les règles d'une valeur de tableau (`tables.ts` : `is
   `api/transit-files.ts` (`POST transit-files`, `POST transit-files/<id>/complete`, `POST transit-files/<id>/keep`,
   la garde sur une page, servie aussi par `file.keep` : `server/files/keep.ts`) et
   `api/files-html.ts` (route isolée `files/<id>/html` et son pendant public, branche avant le
-  dispatch, texte brut, ADR-017) ; `public/<jeton>/files/…` passe par la porte publique.
+  dispatch, texte brut, ADR-017) ; `public/<jeton>/files/…` passe par la porte publique. Le logo d'un outil :
+  `api/connector-logo.ts`, `GET connectors/<nom>/logo`, branche avant le dispatch, à session, l'image ou un 404 sans
+  corps, lecture sans journal (service : `server/connectors/logo.ts`).
   Commentaires : `api/comments.ts` (`GET comments?path=`, lecture sans ligne de journal, D138 ; `POST comments`,
   201, un fil ou une réponse ; `PATCH comments/<id>` et `DELETE comments/<id>` ; `PATCH comment-threads/<id>`,
   l'état d'un fil), chaque mutation journalisée sous le chemin du nœud.

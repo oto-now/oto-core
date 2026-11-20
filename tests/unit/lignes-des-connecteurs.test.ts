@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { AccountView, ConnectorAccountForm } from "@otomata_tech/oto_platform/schemas"
+import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
 import { etatDuCompte, formulaireDuCompte } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
 import { adresseDeLaVue, comptesAuxPartagesLus, lignesDesConnecteurs, vueDesConnecteurs, type VueDesConnecteurs } from "../../packages/plateforme/ui/admin/connecteurs/lignes-des-connecteurs"
 
@@ -100,9 +100,21 @@ describe("lignesDesConnecteurs", () => {
     },
     [prive.id]: { general: null, rules: [] },
   }
-  const sources = { comptes, formulaires: [CLE], partages, moi: MOI, ici: ICI }
+  // Seul « crm » déclare le domaine de son outil : ses lignes portent l'adresse de son logo.
+  const CRM: OrgConnector = { connector: "crm", label: "Crm Pro", logoDomain: "crm.example", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
+  const MICROSOFT: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
+  const sources = { comptes, connecteurs: [CRM, MICROSOFT], formulaires: [CLE], partages, moi: MOI, ici: ICI }
   const vue = (champs: Partial<VueDesConnecteurs> = {}): VueDesConnecteurs => ({ filtre: "all", q: "", compte: null, ...champs })
   const libelles = (une: VueDesConnecteurs) => lignesDesConnecteurs(sources, une).lignes.map((ligne) => ligne.libelle)
+
+  it("should give the lines of a connector that declares its domain the address of its logo, and none to the others", () => {
+    const comptesDeDeuxOutils = [compte({ label: "Banque" }), compte({ label: "Agenda", connector: "microsoft" })]
+    const lignes = lignesDesConnecteurs({ ...sources, comptes: comptesDeDeuxOutils }, vue()).lignes
+    expect(lignes.map((ligne) => [ligne.libelle, ligne.logo])).toEqual([
+      ["Agenda", null],
+      ["Banque", "/api/platform/connectors/crm/logo"],
+    ])
+  })
 
   it("should put first the accounts waiting for a gesture, then the others by label, the disabled ones last", () => {
     expect(libelles(vue())).toEqual(["Zèbre", "Agenda de Paul", "Annuaire", "Banque", "Écritures", "Zoho Ventes", "Ancien"])
@@ -175,7 +187,7 @@ describe("formulaireDuCompte et lignes d'un connecteur à plusieurs accès", () 
 
   it("should reconnect a person's account by the access it retains", () => {
     const aReconnecter = compte({ connector: "console", access: "google_account", owner: A_MOI, status: "error" })
-    const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
+    const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], connecteurs: [], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
     expect(ligne.geste).toEqual({ genre: "connexion", libelle: "Reconnecter", ressource: "connector-consent", connecteur: "console", acces: "google_account" })
   })
 })

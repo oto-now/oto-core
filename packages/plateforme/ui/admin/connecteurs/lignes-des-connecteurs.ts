@@ -3,7 +3,7 @@
 // « use client » : l'écran, rendu par le serveur, le calcule et ne passe à ses îlots que des données (comme
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
-import { normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
+import { connectorLogoAddress, normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
 import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
@@ -68,6 +68,8 @@ export type LigneDeConnecteur = {
   libelle: string
   /** Le nom lisible de l'outil. */
   outil: string
+  /** L'adresse du logo de l'outil (`logoDe`), `null` sans domaine déclaré. */
+  logo: string | null
   /** La description écrite par qui le gère : elle remplace le nom de l'outil sous le libellé. */
   description: string | null
   acces: string
@@ -106,6 +108,7 @@ const rang = (etat: EtatDuCompte) => (etat.code === "desactive" ? 2 : etat.deman
 
 type Sources = {
   comptes: readonly AccountView[]
+  connecteurs: readonly OrgConnector[]
   formulaires: readonly ConnectorAccountForm[]
   partages: Partial<Record<string, PartagesDuCompte>>
   moi: string
@@ -116,7 +119,7 @@ type Sources = {
  * Les lignes de la vue, et le compte de chaque filtre (compté avant la recherche, qui ne change pas ses pastilles) :
  * « À moi », les comptes personnels de la personne ; « Partagés avec moi », tous les autres.
  */
-export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici }: Sources, vue: VueDesConnecteurs) {
+export function lignesDesConnecteurs({ comptes, connecteurs, formulaires, partages, moi, ici }: Sources, vue: VueDesConnecteurs) {
   const miens = comptes.filter((compte) => estAMoi(compte, moi))
   const retenus = vue.filtre === "mine" ? miens : vue.filtre === "shared" ? comptes.filter((compte) => !estAMoi(compte, moi)) : comptes
   // Sans casse ni accent : « Écritures » se trouve en tapant « ecritures ».
@@ -129,6 +132,7 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
         id: compte.id,
         libelle: compte.label,
         outil: libelleDuConnecteur(compte.connector, formulaires),
+        logo: logoDe(compte.connector, connecteurs),
         description: compte.description,
         ...accesDe(compte, moi, partages[compte.id]),
         etat: { mot: etat.mot, precision: etat.precision, point: etat.point },
@@ -145,6 +149,11 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
 }
 
 /** Les fonctions d'un connecteur, telles que le catalogue les décrit ; aucune pour un connecteur qu'il ne décrit plus. */
+/** L'adresse du logo d'un connecteur qui déclare le domaine de son outil ; `null` sinon, et la tuile garde l'initiale. */
+export function logoDe(connecteur: string, catalogue: readonly OrgConnector[]): string | null {
+  return catalogue.some((candidat) => candidat.connector === connecteur && candidat.logoDomain !== undefined) ? connectorLogoAddress(connecteur) : null
+}
+
 export function fonctionsDe(connecteur: string, catalogue: readonly OrgConnector[]): OrgConnector["functions"] {
   return catalogue.find((candidat) => candidat.connector === connecteur)?.functions ?? []
 }

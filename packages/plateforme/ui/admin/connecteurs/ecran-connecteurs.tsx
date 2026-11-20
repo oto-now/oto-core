@@ -31,7 +31,7 @@ import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
 import { estAMoi, formulaireDuCompte } from "./etat-du-compte"
-import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
+import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, logoDe, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 
 /** Ce que la page lit pour l'écran : les comptes que la personne voit, le catalogue, leurs partages, et à qui partager. */
@@ -208,7 +208,7 @@ function Liste({ donnees, moi, vue, ici }: VueProps) {
       </EmptyState>
     )
   }
-  const sources = { comptes: donnees.accounts, formulaires: donnees.formulaires ?? [], partages: donnees.partages, moi, ici }
+  const sources = { comptes: donnees.accounts, connecteurs: donnees.connectors, formulaires: donnees.formulaires ?? [], partages: donnees.partages, moi, ici }
   const { lignes, comptes } = lignesDesConnecteurs(sources, vue)
   const filtres = [
     { valeur: "all", libelle: `Tous · ${comptes.tous}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "all", compte: null }) },
@@ -235,6 +235,7 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
       compte={compte}
       formulaire={formulaireDuCompte(formulaires, compte)}
       outil={libelleDuConnecteur(compte.connector, formulaires)}
+      logo={logoDe(compte.connector, donnees.connectors)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}
