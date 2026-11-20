@@ -4,7 +4,7 @@
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
 import { normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type EtatDuCompte } from "./etat-du-compte"
+import { connexionDe, estAMoi, etatDuCompte, faconDeLAcces, formulaireDuCompte, sansAcces, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
 /**
@@ -68,6 +68,8 @@ export type LigneDeConnecteur = {
   libelle: string
   /** Le nom lisible de l'outil. */
   outil: string
+  /** Pour un outil qui s'ouvre de plusieurs façons, celle de ce compte (`faconDeLAcces`), dite après le nom de l'outil ; `null` sinon. */
+  facon: string | null
   /** La description écrite par qui le gère : elle remplace le nom de l'outil sous le libellé. */
   description: string | null
   acces: string
@@ -124,11 +126,12 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
   const lignes = retenus
     .map((compte) => {
       const formulaire = formulaireDuCompte(formulaires, compte)
-      const etat = etatDuCompte(compte, formulaire, moi)
+      const etat = etatDuCompte(compte, formulaire, moi, sansAcces(formulaires, compte))
       const ligne: LigneDeConnecteur = {
         id: compte.id,
         libelle: compte.label,
         outil: libelleDuConnecteur(compte.connector, formulaires),
+        facon: faconDeLAcces(formulaire, formulaires, "compte"),
         description: compte.description,
         ...accesDe(compte, moi, partages[compte.id]),
         etat: { mot: etat.mot, precision: etat.precision, point: etat.point },

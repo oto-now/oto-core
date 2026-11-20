@@ -78,15 +78,36 @@ describe("outilsAAjouter", () => {
 describe("outilsAAjouter, connecteur à plusieurs accès", () => {
   const console = connecteur("console", "Search Console")
   const FORMULAIRES_DE_LA_CONSOLE = [
-    formulaire("console", { access: { name: "service_account", label: "Compte de service" }, consent: false, ownerKinds: ["org", "team"], fields: [{ name: "service_account_key", label: "Clé", secret: true }] }),
-    formulaire("console", { access: { name: "google_account", label: "Compte Google" }, consent: true, ownerKinds: ["user"] }),
+    formulaire("console", { label: "Search Console", access: { name: "service_account", label: "Service account of the organization" }, consent: false, ownerKinds: ["org", "team"], fields: [{ name: "service_account_key", label: "Clé", secret: true }] }),
+    formulaire("console", { label: "Search Console", access: { name: "google_account", label: "Sign-in of a person" }, consent: true, ownerKinds: ["user"] }),
   ]
 
-  it("should give one tool per access, by the label of its access: the key of the service account to enter, and Connect my account for the sign-in", () => {
+  it("should give one tool per access, said by how one connects and for whom, never by the label of the access: a key to enter for the organisation, and Connect my account", () => {
     const outils = outilsAAjouter([console], FORMULAIRES_DE_LA_CONSOLE, ADMINISTRATEUR)
     expect(outils.map((outil) => [cleDeLOutil(outil), outil.acces, outil.facon, outil.proprietaires])).toEqual([
-      ["console:service_account", { nom: "service_account", libelle: "Compte de service" }, "saisie", ["org", "team"]],
-      ["console:google_account", { nom: "google_account", libelle: "Compte Google" }, "consentement", ["user"]],
+      ["console:google_account", { nom: "google_account", libelle: "Avec mon compte Search Console" }, "consentement", ["user"]],
+      ["console:service_account", { nom: "service_account", libelle: "Avec une clé, pour l'organisation" }, "saisie", ["org", "team"]],
+    ])
+  })
+
+  it("should say a key for oneself, a key for anyone, and tell apart by their label two accesses that would read the same", () => {
+    const cle = (name: string, label: string, ownerKinds: ConnectorAccountForm["ownerKinds"]) => formulaire("console", { label: "Search Console", access: { name, label }, ownerKinds, fields: [{ name: "key", label: "Clé", secret: true }] })
+    const dites = (formulaires: ConnectorAccountForm[]) => outilsAAjouter([console], formulaires, ADMINISTRATEUR).map((outil) => outil.acces?.libelle)
+    expect([
+      dites([cle("personal", "Personal key", ["user"]), cle("shared", "Any key", ["org", "team", "user"])]),
+      dites([cle("api_key", "API key", ["org", "team"]), cle("service_account", "Service account", ["org", "team"])]),
+    ]).toEqual([
+      ["Avec ma clé", "Avec une clé"],
+      ["Avec une clé, pour l'organisation (API key)", "Avec une clé, pour l'organisation (Service account)"],
+    ])
+  })
+
+  it("should say to a member « Avec ma clé » for a key access open to anyone, since only their own account is offered", () => {
+    const partagee = formulaire("console", { label: "Search Console", access: { name: "shared", label: "Any key" }, ownerKinds: ["org", "team", "user"], fields: [{ name: "key", label: "Clé", secret: true }] })
+    const outils = outilsAAjouter([console], [partagee, FORMULAIRES_DE_LA_CONSOLE[1]], MEMBRE)
+    expect(outils.map((outil) => [outil.acces?.libelle, outil.proprietaires])).toEqual([
+      ["Avec ma clé", ["user"]],
+      ["Avec mon compte Search Console", ["user"]],
     ])
   })
 

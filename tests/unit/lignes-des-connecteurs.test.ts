@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AccountView, ConnectorAccountForm } from "@otomata_tech/oto_platform/schemas"
-import { etatDuCompte, formulaireDuCompte } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
+import { etatDuCompte, formulaireDuCompte, sansAcces } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
 import { adresseDeLaVue, comptesAuxPartagesLus, lignesDesConnecteurs, vueDesConnecteurs, type VueDesConnecteurs } from "../../packages/plateforme/ui/admin/connecteurs/lignes-des-connecteurs"
 
 // L'état d'un compte et les lignes de la liste de l'écran Connecteurs : fonctions pures, sur des comptes en mémoire.
@@ -50,7 +50,7 @@ describe("etatDuCompte", () => {
       ["désactivé", compte({ status: "disabled", mark: marque }), CLE],
     ]
     const lus = cas.map(([nom, un, formulaire]) => {
-      const { mot, precision, geste, demandeUnGeste } = etatDuCompte(un, formulaire, MOI)
+      const { mot, precision, geste, demandeUnGeste } = etatDuCompte(un, formulaire, MOI, false)
       return [nom, mot, precision, geste, demandeUnGeste]
     })
     expect(lus).toEqual([
@@ -177,5 +177,28 @@ describe("formulaireDuCompte et lignes d'un connecteur à plusieurs accès", () 
     const aReconnecter = compte({ connector: "console", access: "google_account", owner: A_MOI, status: "error" })
     const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
     expect(ligne.geste).toEqual({ genre: "connexion", libelle: "Reconnecter", ressource: "connector-consent", connecteur: "console", acces: "google_account" })
+  })
+
+  it("should say how an account of a tool with several accesses opens, whoever owns it, and nothing for a tool with a single access", () => {
+    const parCle = compte({ connector: "console", access: "service_account" })
+    const parConnexion = compte({ connector: "console", access: "google_account", owner: A_PAUL, viewerLevel: "read" })
+    const simple = compte({})
+    const { lignes } = lignesDesConnecteurs({ comptes: [parCle, parConnexion, simple], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null })
+    const facons = new Map(lignes.map((ligne) => [ligne.id, ligne.facon]))
+    expect([facons.get(parCle.id), facons.get(parConnexion.id), facons.get(simple.id)]).toEqual(["Clé", "Connexion au service", null])
+  })
+
+  it("should say « À remplacer », with no gesture, for an account without access of a tool that now opens by several, and tell who does not manage it whom to ask", () => {
+    const gere = compte({ connector: "console" })
+    const lu = compte({ connector: "console", owner: A_PAUL, viewerLevel: "read" })
+    expect([sansAcces(formulaires, gere), sansAcces(formulaires, { connector: "console", access: "service_account" }), sansAcces(formulaires, { connector: "crm" })]).toEqual([true, false, false])
+    const { lignes } = lignesDesConnecteurs({ comptes: [gere, lu], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null })
+    const lues = new Map(lignes.map((ligne) => [ligne.id, [ligne.etat.mot, ligne.etat.precision, ligne.geste, ligne.facon]]))
+    expect([lues.get(gere.id), lues.get(lu.id)]).toEqual([
+      ["À remplacer", "Cet outil se connecte maintenant de plusieurs façons : ajoutez-le de nouveau, puis désactivez celui-ci.", null, null],
+      ["À remplacer", "Cet outil se connecte maintenant de plusieurs façons : demandez à Paul Durand de l'ajouter de nouveau.", null, null],
+    ])
+    // Désactivé, il se dit désactivé : c'est le geste demandé.
+    expect(etatDuCompte({ ...gere, status: "disabled" }, undefined, MOI, true).mot).toBe("Désactivé")
   })
 })

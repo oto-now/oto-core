@@ -27,7 +27,8 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
         <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
-        <span className="oto-caption">{ligne.description ?? ligne.outil}</span>
+        {/* La façon d'un compte reste dite après sa description : deux comptes décrits d'un même outil se distinguent par elle. */}
+        <span className="oto-caption">{[ligne.description ?? ligne.outil, ligne.facon].filter(Boolean).join(" · ")}</span>
       </span>
     </span>
   )

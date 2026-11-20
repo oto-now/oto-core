@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- UI: on the Connectors screen, an access is said by how one connects and for whom (« Avec mon compte <outil> », « Avec une clé, pour l'organisation »), never by `access.label`; the list and the detail say how an account opens, and an account without access of a connector that now has several reads « À remplacer ». Nothing to do for a host.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants
