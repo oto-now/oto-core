@@ -57,12 +57,17 @@ maison divergera de celui des 34 composants existants.
 - aucun `outline-none` / `focus:outline-none` sans `focus-visible:ring-*` sur le même élément
 - aucune règle globale `*:focus { outline: none }` dans `globals.css`
 - tout élément rendu interactif par un `onClick` sur un `div`/`span` est un défaut : utiliser `<button>`.
+  **Exception bornée, pile d'un bloc de l'éditeur** : le `span` `oto-block-pile` de `champ-de-bloc.tsx`
+  porte un `onClick` qui ouvre le champ au caractère cliqué ; il n'ajoute aucun contrôle, son équivalent au
+  clavier est le bloc lu qu'il contient (`role="textbox"`, focalisable, dont le focus au clavier monte le champ).
+  Contrôle : `rg -n "onClick=" packages/plateforme/ui/noeud/editeur/champ-de-bloc.tsx` ne trouve que la pile.
   **Exception bornée, champ d'un bloc de l'éditeur** : le `textarea` d'un
   bloc (`ui/noeud/editeur/champ-de-bloc.tsx`) n'a ni fond, ni bordure, ni anneau au focus ; il porte
   `focus-visible:outline-hidden`, qui garde un contour en contrastes forcés ; le curseur reste visible, et
   la rangée (`group`) révèle au focus sa gouttière (« + » et poignée, `group-focus-within:opacity-100`,
   anneau du design system). Le bloc lu qui le précède (`ui/noeud/editeur/champ-au-repos.tsx`) porte la même
-  classe : il n'a le focus que le temps de monter le champ qui le prend, et sans elle le `outline: none` du
+  classe : au clavier, il n'a le focus que le temps de monter le champ qui le prend ; au pointeur, il le garde
+  pendant qu'on sélectionne son texte, sans contour, comme un texte lu ; et sans elle le `outline: none` du
   design system lui retirerait aussi le contour en contrastes forcés. Contrôle : `rg -n "outline-hidden" packages/plateforme/ui` ne trouve que
   `champ-de-bloc.tsx` et `champ-au-repos.tsx`, dont la rangée est un `BlockRow` dont la gouttière est révélée par `:focus-within`
   (`blocks.css`, `.oto-block-row:focus-within > .oto-block-gutter`)

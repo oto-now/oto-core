@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- UI: in the page editor, a block no longer turns into its field under the mouse; a click that leaves no text selection opens it at the clicked character, a drag selects text across blocks to copy, and blocks are selected from the margin only. On touch, a tap edits and a long press selects. Nothing to do for a host.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants

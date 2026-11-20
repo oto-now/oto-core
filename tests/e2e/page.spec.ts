@@ -4,7 +4,7 @@ import { assurerLeNoeud, attendre, attendreLEnregistrement, capturer, ouvrirAQuo
 import { CHEMINS, EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
 // Contrôle visuel connecté de la page d'un nœud (E05-S02, AC24 ; E05-S08, AC10 : chaque bloc se lit, nommé comme son
-// champ, qui se monte au survol ou au focus depuis la 1.1.3 ;
+// champ, qui se monte au clic ou au focus ;
 // E05-S09, partie c1 : porté d'oto-frontend) : le compte E2E, administrateur de l'organisation de la campagne et
 // responsable de son équipe (`espace.ts`), en clair puis en sombre. Le Contexte de l'équipe, ouvert par le rail,
 // montre son document et ses notes en deux colonnes, l'encart « À quoi sert cette page » en une phrase (E05-S13,

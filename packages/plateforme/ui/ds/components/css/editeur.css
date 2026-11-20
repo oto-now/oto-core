@@ -143,6 +143,26 @@
   pointer-events: auto;
 }
 
+/* Sur un bloc lu, le rendu (ou la copie d'une liste qui porte des liens) prend le pointeur : son texte, celui qu'on voit, se sélectionne à travers les blocs et se copie ; un clic qui ne laisse aucune sélection ouvre le champ (`champ-de-bloc.tsx`). Le texte brut, transparent dessous, ne se sélectionne pas : copié avec le rendu, il doublerait le texte. */
+.oto-block-pile > [data-au-repos] ~ .oto-block-rendu,
+.oto-block-pile:has(> [data-au-repos][data-rendu]) > .oto-block-copie {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.oto-block-pile > .oto-block-field[data-au-repos][data-rendu] {
+  user-select: none;
+}
+
+/* Le temps de mesurer le caractère cliqué (`rangAuClic`), le rendu et la copie laissent le pointeur au texte brut dessous. */
+.oto-block-pile[data-sonde] > :is(.oto-block-rendu, .oto-block-copie) {
+  pointer-events: none;
+}
+
+.oto-block-pile[data-sonde] > .oto-block-field[data-au-repos] {
+  user-select: text;
+}
+
 /* Hors du focus, le texte brut se tait sous son rendu ; au focus, le rendu s'efface et le texte brut paraît (le curseur y est). Le champ d'un bloc, ou un champ en place (le repli). */
 .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-rendu]:not(:focus) {
   color: transparent;
@@ -219,9 +239,10 @@
   min-block-size: 1lh;
 }
 
-/* Au focus, ou sans lien, la copie est le texte brut, qu'on ne voit pas : le champ se lit au travers ; seuls ses repères paraissent. */
+/* Au focus, ou sans lien, la copie est le texte brut, qu'on ne voit pas : le champ se lit au travers ; seuls ses repères paraissent. Elle ne se sélectionne pas : le texte du champ, dessous, est celui qu'on copie. */
 .oto-block-element-texte[data-brut] {
   visibility: hidden;
+  user-select: none;
 }
 
 /* Le repère d'un élément, dans le retrait réservé par le champ, à la hauteur de sa première ligne ; il rythme, il ne parle pas, comme le `::marker` de la lecture. */
@@ -288,6 +309,11 @@
 
   .oto-block-pile > :is(.oto-block-field, .oto-inline-field)[data-rendu]:not(:focus) {
     color: CanvasText;
+  }
+
+  /* Le rendu retiré, le texte brut d'un bloc lu est celui qu'on voit : il se sélectionne. */
+  .oto-block-pile > .oto-block-field[data-au-repos][data-rendu]:not([data-kind="list"], [data-kind="checklist"]) {
+    user-select: text;
   }
 
   .oto-block-pile > .oto-block-field[data-rendu][data-kind="list"]:not(:focus),
@@ -368,7 +394,7 @@
   pointer-events: auto;
 }
 
-/* Le texte d'un bloc sélectionné ne montre pas sa sélection de texte : un glissé sorti de son bloc prend des blocs entiers, le navigateur garde celle du champ jusqu'au lâcher (AC-a1). */
+/* Le texte d'un bloc sélectionné ne montre pas sa sélection de texte : le surlignage du bloc dit seul ce qui est pris. */
 .oto-block-row[data-selectionnee] .oto-block-field::selection {
   background-color: transparent;
 }
