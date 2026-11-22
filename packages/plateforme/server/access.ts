@@ -87,15 +87,17 @@ const INVISIBLE: Decision = { level: ACCESS_LEVELS.none, owner: null }
  * jamais au-dessus du niveau de la base, exact au seuil de la lecture (niveau ≥ 1). Un nœud dont un
  * ancêtre manque à la lecture (un chemin sans nœud ; la RLS n'en cache plus depuis E01-S08) est ramené à
  * la lecture : sans `node_owner`, son propriétaire effectif peut être faux (HN-E01S07-4, HN-E01S07-19). Une décision à
- * l'écriture ou à la gestion passe par `nodeLevel` ou `requireNodeLevel`.
+ * l'écriture ou à la gestion passe par `nodeLevel` ou `requireNodeLevel`. `trashed` : les nœuds à la corbeille se
+ * décident aussi, au niveau qu'ils auraient vivants (`node.describe` : dire « à la corbeille » à qui le lisait).
  */
 export async function nodeLevels(
   db: PlatformDb,
   identity: Identity,
   nodeIds: readonly string[],
+  options: { trashed?: boolean } = {},
 ): Promise<Map<string, AccessLevel>> {
   const caller = callerOf(identity)
-  const chains = await readNodeChains(db, identity.org.id, nodeIds)
+  const chains = await readNodeChains(db, identity.org.id, nodeIds, options)
   return new Map(
     nodeIds.map((id) => {
       const chain = chains.get(id)

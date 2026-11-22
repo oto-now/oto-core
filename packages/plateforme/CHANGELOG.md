@@ -17,6 +17,18 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- `read`, `write` and `node.move` take `id`, a node's stable id, instead of `path`; `read`, `find`, `write` and `node.tree` serve it.
+- `node.describe {ids}` gives up to 200 ids at once: present (path, title), trashed or missing; one you cannot read answers missing.
+- A page in the trash read, written or moved by its id is refused as such (`conflict`), never served nor called unknown.
+
+### Hosts
+- MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
+- MCP: the descriptions of `read` and `write` grow by one sentence each on `id` (`read` cites `node.describe` only when it is served).
+- MCP: `node.describe` (read), a new function of the built-in `node` connector, after `node.move`; a host that declares its surface (`registerHostSurface`) names it to serve it. `node.move` takes `id` instead of `path`.
+- Schemas: `writeNodeBodySchema` (`POST /api/platform/nodes`) takes `id`, and `WriteNodeBody.path` becomes optional; `moveNodeArgsSchema`, `nodeIdSchema`, `refinePathOrId`, `refineReadTarget`, `pathOrIdIssue`, `READ_TARGET_MISSING`, `NODE_ID_EXAMPLE` are exported. `moveNodeSchema` and `node.write_many` keep `path`.
+- Server: `findNodeById(db, identity, id)` beside `findNode`: the node and the caller's level; `not_found` as for an unknown path, `conflict` for a node in the trash. No migration.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants

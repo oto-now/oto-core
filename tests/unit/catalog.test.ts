@@ -105,6 +105,8 @@ describe("catalog (AC23)", () => {
       "node.trash",
       // E11-S18 (AC-5, AC-12) : déplacer, écrire par lot.
       "node.move",
+      // L'état d'un lot de nœuds par leur identifiant stable.
+      "node.describe",
       "node.write_many",
       // Transfert d'une arborescence d'un MCP Oto à un autre.
       "node.export_tree",

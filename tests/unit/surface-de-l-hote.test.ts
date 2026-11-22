@@ -93,7 +93,7 @@ describe("registerHostSurface", () => {
     const { tools } = await (await connectDeps(deps())).client.listTools()
     const text = tools.map((tool) => tool.description).join("\n")
     expect(tools.map((tool) => tool.name)).toEqual(open.map((tool) => tool.name))
-    expect(["upload.link", "node.move", "node.write_many"].filter((name) => text.includes(name))).toEqual([])
+    expect(["upload.link", "node.move", "node.write_many", "node.describe"].filter((name) => text.includes(name))).toEqual([])
     expect(text).toContain("table.rows")
   })
 

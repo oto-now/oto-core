@@ -111,6 +111,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
         [
           "# Modèle d'email de relance",
           `path: ventes/modele_relance · page · published · revision 2 · updated ${DAY}`,
+          `id: ${ref.nodeId(MODELE.path)}`,
           "summary: Le modèle d'email de relance d'un devis, à personnaliser.",
           "owner: team Ventes (lead: Claire Morel)",
           "access: write (write and publish; sharing, moving and deleting are reserved to team Ventes (lead: Claire Morel))",
@@ -125,6 +126,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
         ].join("\n"),
       )
       expect(lea.data).toMatchObject({
+        id: ref.nodeId(MODELE.path),
         path: MODELE.path,
         title: MODELE.title,
         kind: "page",

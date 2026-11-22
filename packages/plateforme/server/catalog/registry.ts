@@ -10,6 +10,7 @@ import { commentAdd, commentDelete, commentEdit, commentList, commentResolve } f
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
 import { fileKeep } from "../files/keep-function"
 import { jobRead } from "../jobs/read-function"
+import { nodeDescribe } from "../nodes/describe"
 import { nodeDiscardDraft } from "../nodes/discard"
 import { nodeMove } from "../nodes/move-function"
 import { nodePublicLink } from "../nodes/public-link-function"
@@ -41,7 +42,7 @@ export const NATIVE_CONNECTOR = "table"
  * Catalogue de la V1 (H80) : `mail` simulé (E04-S01), lecture des tableaux (E07-S01), écriture et file
  * de travail (E07-S02), import d'un CSV (E10-S01), suppression de lignes, abandon d'un brouillon et
  * corbeille (E11-S02, connecteur natif `node`) ; ERP (E08-S05) s'y ajoute ; le dépôt par lien (E10-S02 lot f, connecteur
- * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les commentaires d'une page (connecteur `comment`) ; les fonctions des connecteurs
+ * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; l'état d'un lot de nœuds par identifiant (`node.describe`, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les commentaires d'une page (connecteur `comment`) ; les fonctions des connecteurs
  * décrits que l'hôte déclare (`registerConnectors`).
  */
 export function catalogFunctions(): CatalogFunction[] {
@@ -69,6 +70,7 @@ export function packageFunctions(): CatalogFunction[] {
     nodeDiscardDraft,
     nodeTrash,
     nodeMove,
+    nodeDescribe,
     nodeWriteMany,
     nodeExportTree,
     nodeImportTree,

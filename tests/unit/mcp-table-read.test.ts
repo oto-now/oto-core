@@ -53,6 +53,7 @@ describe.skipIf(!sqlConfigured)(portable("acme_read of a table (AC18)"), { timeo
       [
         "# Suivi des prospects",
         `path: ventes/suivi_prospects · table · published · revision 3 · updated ${CONTENT_AT.slice(0, 10)}`,
+        `id: ${ref.nodeId(PROSPECTS.path)}`,
         "summary: Les prospects de l'équipe Ventes et la file des fiches à qualifier.",
         "owner: team Ventes (lead: Claire Morel)",
         "access: write (write and publish; sharing, moving and deleting are reserved to team Ventes (lead: Claire Morel))",

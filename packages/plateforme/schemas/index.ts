@@ -75,6 +75,7 @@ export type {
 export { ACCESS_LEVEL_NAMES, setNodeRuleSchema } from "./rules"
 export type { AccessLevelName, NodeRulesView, RuledNodeView, RuleSubject } from "./rules"
 export { BLOCK_OPS, NODE_KINDS, nodeKindSchema, readNodeSchema, SECTION_OPS, strictWriteOpsSchema, writeNodeSchema, writeOpSchema } from "./nodes"
+export { NODE_ID_EXAMPLE, nodeIdSchema, pathOrIdIssue, READ_TARGET_MISSING, refinePathOrId, refineReadTarget } from "./nodes"
 export type { BlockView, NodeKind, NodeView, ReadNodeInput, TreeNode, WriteNodeInput, WriteOp } from "./nodes"
 export { writeNodeBodySchema } from "./node-body"
 export type { WriteNodeBody, WriteOpBody } from "./node-body"
@@ -125,7 +126,7 @@ export {
   OPEN_ENTRY_DOMAINS_MAX,
 } from "./admin"
 export type { OpenEntry, OrgSettings, PersonOrganisation, SignupInput } from "./admin"
-export { moveNodeSchema } from "./nodes"
+export { moveNodeArgsSchema, moveNodeSchema } from "./nodes"
 export type { MoveNodeInput } from "./nodes"
 // Tableaux (E07-S01) : en-tête, grammaire de filtre et arguments des trois fonctions de lecture, que
 // lisent `server/tables/` (forms-patterns.md § Principe). `tableFilterSchema` et `tableRowReadSchema`

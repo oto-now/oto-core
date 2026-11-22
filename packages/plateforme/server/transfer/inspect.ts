@@ -56,7 +56,8 @@ async function runTree(context: FunctionContext, args: z.infer<typeof treeArgsSc
   const tail = next === null ? [] : [`Call node.tree again with continue_from ${next} for the next ones.`]
   const data = {
     total: nodes.length,
-    nodes: page.map((node) => ({ path: node.path, kind: node.kind, title: node.title, revision: node.revision })),
+    // L'identifiant stable de chaque nœud, en données seulement : un hôte qui garde ses pages par `id` le relève ici.
+    nodes: page.map((node) => ({ id: node.id, path: node.path, kind: node.kind, title: node.title, revision: node.revision })),
     ...(next === null ? {} : { continue_from: next }),
   }
   return { text: [head, ...lines, ...tail].join("\n"), data }
@@ -170,7 +171,7 @@ export const nodeTree = defineFunction({
   class: "read",
   origin: "paquet",
   description:
-    "Lists a root and everything under it that you can read: path, kind, title, whether it was ever published, revision; 200 nodes per answer, continue_from for the next ones. Use it to take stock of a folder before reorganising, copying or checking it; find returns a few results only. In French: lister, inventorier, arborescence d'un dossier.",
+    "Lists a root and everything under it that you can read: path, kind, title, whether it was ever published, revision, and each stable id in the data; 200 nodes per answer, continue_from for the next ones. Use it to take stock of a folder before reorganising, copying or checking it; find returns a few results only. In French: lister, inventorier, arborescence d'un dossier.",
   schema: treeArgsSchema,
   examples: [{ path: "sav" }, { path: "sav", continue_from: 200 }],
   refusals: ["An unknown root, or one you cannot read; more than 2,000 nodes (list the folders one by one)."],
