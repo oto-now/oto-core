@@ -17,6 +17,14 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- `member.list`, `member.add`, `member.set_teams`, `member.remove`: the members and the people pending their first sign-in, named by email. `member.add` sends no email.
+- `team.create` creates a team with its folder. Administrators do everything; a team lead adds or removes members of the teams they lead only; a plain member is refused.
+
+### Hosts
+- MCP: a built-in connector `member`, always active, with `member.list` (read), `member.add` (write), `member.set_teams` (write) and `member.remove` (sensitive); the built-in connector `team` gains `team.create` (write). A host that declares its surface (`registerHostSurface`) names them to serve them.
+- Server: `registerInvitation(db, identity, input, replacing?)` registers a pending person without sending any email, with the rights, limit and refusals of `inviteMember`; the person joins at their first sign-in. A pending person joins one team at most, and their invitation lives 7 days like any other.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants

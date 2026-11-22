@@ -18,6 +18,7 @@ import {
   invitationIdSchema,
   inviteSchema,
   listInvitationsQuerySchema,
+  type Invite,
   type InvitationRole,
   type InvitationState,
 } from "../schemas"
@@ -70,7 +71,7 @@ function invalidArguments(error: z.ZodError): PlatformError {
   return new PlatformError("invalid_arguments", `Invalid ${field}: ${issue?.message ?? "invalid value"}.`)
 }
 
-function invitationRole(value: string): InvitationRole {
+export function invitationRole(value: string): InvitationRole {
   return value === "admin" ? "admin" : "member"
 }
 
@@ -217,20 +218,10 @@ function platformEmail(identity: Identity, to: string, redirectTo: string): Invi
 }
 
 /**
- * Invite une personne dans l'organisation de l'identité, puis envoie l'email : le lien magique de
- * Supabase, ou, en mode OIDC, l'email de la plateforme (E01-S11 a2). Un email qui ne part pas retire
- * l'invitation : aucune ligne en attente ne reste sans email parti (AC17, AC-a8b).
+ * Le droit d'inviter `invite` (rôle et équipe), décidé avant toute écriture par `invitationOptions` : seul un
+ * administrateur invite un administrateur ; un responsable d'équipe invite dans une équipe qu'il mène.
  */
-export async function inviteMember(
-  db: PlatformDb,
-  identity: Identity,
-  input: unknown,
-  options: { redirectTo: string },
-): Promise<{ invitation: CreatedInvitation; emailed: true }> {
-  const parsed = inviteSchema.safeParse(input)
-  if (!parsed.success) throw invalidArguments(parsed.error)
-  const invite = parsed.data
-
+async function authorizeInvitation(db: PlatformDb, identity: Identity, invite: Invite): Promise<void> {
   const allowed = await invitationOptions(db, identity)
   if (!allowed.roles.includes(invite.role)) {
     throw new PlatformError("forbidden", "Only an administrator can invite an administrator.", {
@@ -244,11 +235,11 @@ export async function inviteMember(
   if (invite.teamId !== undefined && !inAllowedTeam) {
     throw new PlatformError("invalid_arguments", `Unknown team ${invite.teamId} in ${identity.org.name}.`)
   }
+}
 
-  // L'envoi avant l'insertion : une variable manquante ne laisse aucune invitation sans email.
-  const email = oidcMode() ? platformEmail(identity, invite.email, options.redirectTo) : magicLinkEmail(options.redirectTo)
-  // Au plafond de `members_max` (invitations en attente comprises), refus avant l'insertion, donc avant l'email (E12-S02).
-  const data = await limitedTx(db, identity, "members_max", (sql) =>
+/** L'invitation écrite, au plafond de `members_max` (invitations en attente comprises) refusée avant l'insertion (E12-S02). */
+async function insertInvitation(db: PlatformDb, identity: Identity, invite: Invite): Promise<CreatedRow> {
+  return limitedTx(db, identity, "members_max", (sql) =>
       sql<CreatedRow[]>`
         insert into platform.invitations (org_id, email, role, team_id, invited_by)
         values (${identity.org.id}, ${invite.email}, ${invite.role}, ${invite.teamId ?? null}, ${identity.user.id})
@@ -258,6 +249,35 @@ export async function inviteMember(
     .catch((error) => {
       throw insertError(error, invite.email, identity.org.name)
     })
+}
+
+function createdInvitation(data: CreatedRow): CreatedInvitation {
+  return { id: data.id, email: data.email, role: invitationRole(data.role), teamId: data.team_id, expiresAt: data.expires_at }
+}
+
+function parsedInvite(input: unknown): Invite {
+  const parsed = inviteSchema.safeParse(input)
+  if (!parsed.success) throw invalidArguments(parsed.error)
+  return parsed.data
+}
+
+/**
+ * Invite une personne dans l'organisation de l'identité, puis envoie l'email : le lien magique de
+ * Supabase, ou, en mode OIDC, l'email de la plateforme (E01-S11 a2). Un email qui ne part pas retire
+ * l'invitation : aucune ligne en attente ne reste sans email parti (AC17, AC-a8b).
+ */
+export async function inviteMember(
+  db: PlatformDb,
+  identity: Identity,
+  input: unknown,
+  options: { redirectTo: string },
+): Promise<{ invitation: CreatedInvitation; emailed: true }> {
+  const invite = parsedInvite(input)
+  await authorizeInvitation(db, identity, invite)
+
+  // L'envoi avant l'insertion : une variable manquante ne laisse aucune invitation sans email.
+  const email = oidcMode() ? platformEmail(identity, invite.email, options.redirectTo) : magicLinkEmail(options.redirectTo)
+  const data = await insertInvitation(db, identity, invite)
 
   // L'invitation écrite, sa transaction close : l'email part hors de toute transaction.
   const refused = await email(data.email)
@@ -266,16 +286,23 @@ export async function inviteMember(
     throw refused
   }
 
-  return {
-    invitation: {
-      id: data.id,
-      email: data.email,
-      role: invitationRole(data.role),
-      teamId: data.team_id,
-      expiresAt: data.expires_at,
-    },
-    emailed: true,
-  }
+  return { invitation: createdInvitation(data), emailed: true }
+}
+
+/**
+ * Inscrit une personne en attente, sans email : l'hôte qui gère lui-même son annuaire la prévient, et la personne entre
+ * à sa première connexion, ses invitations en attente acceptées (`accept_invitations` ; en mode OIDC, dès sa première
+ * requête, `resolveIdentity`). Mêmes droits, même plafond et mêmes refus qu'`inviteMember` (`already_member`,
+ * `already_invited`) ; seul l'email ne part pas. `replacing` : l'invitation en attente de la même adresse qu'elle
+ * remplace (autre rôle, autre équipe), révoquée après la décision du droit (`revokeInvitation` : son émetteur ou un
+ * administrateur) et avant l'insertion. Deux transactions : l'insertion lit les limites de l'hôte hors de toute
+ * transaction (`limitedTx`) ; si elle échoue, son refus remonte et la personne n'est plus en attente.
+ */
+export async function registerInvitation(db: PlatformDb, identity: Identity, input: unknown, replacing?: string): Promise<CreatedInvitation> {
+  const invite = parsedInvite(input)
+  await authorizeInvitation(db, identity, invite)
+  if (replacing) await revokeInvitation(db, identity, replacing)
+  return createdInvitation(await insertInvitation(db, identity, invite))
 }
 
 type InvitationRow = {
