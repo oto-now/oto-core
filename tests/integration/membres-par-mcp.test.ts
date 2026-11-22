@@ -4,10 +4,11 @@
 // la personne qui agit. Les droits sont ceux de l'écran Équipes, décidés par ses services. O de référence : Ada
 // administre, Claire mène Ventes (Léa en est), Paul mène Support, Marc est membre sans équipe, Sam (équipe plateforme)
 // entre par un accès en cours.
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { runCall } from "../../packages/plateforme/server/calls"
 import type { FunctionContext, FunctionOutput } from "../../packages/plateforme/server/catalog/define"
-import { acceptInvitations } from "../../packages/plateforme/server/invitations"
+import { acceptInvitations, listInvitations } from "../../packages/plateforme/server/invitations"
+import { registerOrgLimits } from "../../packages/plateforme/server/limits"
 import { memberAdd, memberList, memberRemove, memberSetTeams, teamCreate } from "../../packages/plateforme/server/member-functions"
 import { nodeAccess, nodeShareFunction } from "../../packages/plateforme/server/nodes/share-functions"
 import type { Person } from "../helpers/reference-org"
@@ -36,6 +37,8 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "members and teams through call 
   afterAll(async () => {
     await seed?.cleanup()
   }, SETUP_TIMEOUT)
+
+  afterEach(() => registerOrgLimits(null))
 
   const context = async (person: Person): Promise<FunctionContext> => ({ db: await ref.db(person), identity: ref.identityOf(person), ctx: null })
   // `run` reçoit des arguments déjà validés par le schéma de la fonction : le test passe leur forme validée.
@@ -89,6 +92,38 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "members and teams through call 
     await acceptInvitations(asCaller(person.id, person.email))
 
     expect(await listed(person.email)).toMatchObject({ member_id: person.id, status: "active", teams: ["ventes"] })
+  })
+
+  it("should keep a pending person open with no expiry, listed and counted, and let her in weeks later", async () => {
+    const person = seed.person()
+    await as("ada").add({ email: person.email, teams: ["support"] })
+    // Deux mois plus tard : l'hôte l'a prévenue quand il a voulu, elle se connecte enfin.
+    await seed.admin`update platform.invitations set created_at = now() - interval '60 days' where org_id = ${ref.org.id} and email = ${person.email}`
+    const [stored] = await seed.admin<{ expires_at: Date | null }[]>`select expires_at from platform.invitations where org_id = ${ref.org.id} and email = ${person.email}`
+    const pending = await listInvitations(await ref.db("ada"), ref.identityOf("ada"))
+    const [usage] = await seed.admin<{ pending_invitations: number; open: number }[]>`
+      select u.pending_invitations, (select count(*)::int from platform.invitations i where i.org_id = ${ref.org.id}
+                                       and i.accepted_at is null and i.declined_at is null and i.revoked_at is null) as open
+        from platform.org_usage(${ref.org.id}) u`
+
+    expect(stored?.expires_at).toBeNull()
+    expect(pending.find((invitation) => invitation.email === person.email)).toMatchObject({ expiresAt: null, state: "pending" })
+    expect(usage?.pending_invitations).toBe(usage?.open)
+    await acceptInvitations(asCaller(person.id, person.email))
+    expect(await listed(person.email)).toMatchObject({ member_id: person.id, status: "active", teams: ["support"] })
+  })
+
+  it("should leave a pending person as she was when the replacement of her invitation is refused", async () => {
+    const person = seed.person()
+    await as("ada").add({ email: person.email, teams: ["ventes"] })
+    // L'organisation passe sous son plafond de membres : la révocation et l'inscription, dans une transaction, s'annulent.
+    registerOrgLimits({ read: ({ id }) => (id === ref.org.id ? { members_max: 1 } : null) })
+    const refused = await settle(as("ada").setTeams(person.email, ["support"]))
+    registerOrgLimits(null)
+
+    expect(refused.error).toMatchObject({ code: "forbidden", details: { reason: "limit", limit: "members_max" } })
+    expect(await listed(person.email)).toMatchObject({ status: "pending", teams: ["ventes"] })
+    expect((await as("ada").setTeams(person.email, ["support"])).data).toMatchObject({ status: "pending", teams: ["support"], changed: true })
   })
 
   it("should let a lead add a member to the team she leads only, as a member, and refuse a plain member", async () => {

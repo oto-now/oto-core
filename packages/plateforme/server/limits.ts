@@ -85,7 +85,7 @@ async function limitCounts(sql: Tx, orgId: string): Promise<Counts> {
     select (select count(*)::int from platform.members m where m.org_id = ${orgId})
          + (select count(*)::int from platform.invitations i
              where i.org_id = ${orgId} and i.accepted_at is null and i.declined_at is null
-               and i.revoked_at is null and i.expires_at > now()) as members,
+               and i.revoked_at is null and (i.expires_at is null or i.expires_at > now())) as members,
            (select count(*)::int from platform.teams t where t.org_id = ${orgId}) as teams,
            (select count(*)::int from platform.connector_activations a where a.org_id = ${orgId} and a.state = 'active') as connectors`
   return { members_max: row.members, teams_max: row.teams, connectors_max: row.connectors }

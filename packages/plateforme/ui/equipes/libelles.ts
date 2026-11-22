@@ -138,6 +138,7 @@ export const PERSONNES = {
   aucune: "Aucune",
   jamais: "Jamais",
   expire: (date: string) => `expire le ${date}`,
+  sansEcheance: "sans échéance",
   invitePar: (nom: string | null) => (nom ? `invitée par ${nom}` : "invitée hors de l'organisation"),
 } as const
 

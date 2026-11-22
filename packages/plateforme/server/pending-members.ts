@@ -24,7 +24,7 @@ export async function openInvitation(db: PlatformDb, identity: Identity, email: 
     (sql) => sql<OpenRow[]>`
       select id, email, role, team_id from platform.invitations
        where org_id = ${identity.org.id} and email = ${email.toLowerCase()}
-         and accepted_at is null and declined_at is null and revoked_at is null and expires_at > ${new Date()}`,
+         and accepted_at is null and declined_at is null and revoked_at is null and (expires_at is null or expires_at > ${new Date()})`,
   )
   return row ? { id: row.id, email: row.email, role: invitationRole(row.role), teamId: row.team_id } : null
 }
