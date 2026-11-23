@@ -93,7 +93,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
-    "@otomata_tech/connectors": "github:oto-now/connectors#47c4bdcb0273f8fc7fbb2433adb5ad2167548784&path:/ts",
+    "@otomata_tech/connectors": "github:oto-now/connectors#7e3bc776ad17cff88538ca1a1ee91119af38de7f&path:/ts",
     "@tailwindcss/postcss": "4.2.1",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.2.1",

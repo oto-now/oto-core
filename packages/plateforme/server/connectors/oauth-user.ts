@@ -26,8 +26,11 @@ const GRANT_TYPE = /^[A-Za-z0-9_.:-]+$/
 /** Qui a consenti : une fonction du connecteur, ou une adresse complète lue avec le jeton, et ses droits. */
 export type ConsentIdentity = { function: string; path: string } | { url: string; path: string; scopes: string[] }
 
-/** Le consentement déclaré, prêt pour l'appel : ses adresses, ses scopes, son renouvellement, l'identité à lire. */
-export type UserConsentAuth = {
+/**
+ * Le parcours d'un consentement, prêt pour l'appel : ses adresses, ses scopes, ses paramètres, son renouvellement. Celui
+ * d'un connecteur déclaré (`UserConsentAuth`), ou celui que construit l'API d'un hôte (`host-api/consent-access.ts`).
+ */
+export type ConsentFlow = {
   kind: "user_consent"
   authorize: AddressSpec
   token: AddressSpec
@@ -45,11 +48,18 @@ export type UserConsentAuth = {
   /** Un droit et ceux qu'il couvre, tels que le fournisseur le définit ; vide sans niveaux. */
   scopeImplies: Record<string, string[]>
   authorizeParams: Record<string, string>
+  /**
+   * Les paires ajoutées à chaque demande au point de jeton (code, renouvellement) : vide pour un connecteur déclaré ;
+   * `resource` pour l'API d'un hôte (RFC 8707), sans laquelle l'émetteur ne rend pas un jeton de son audience.
+   */
+  tokenParams: Record<string, string>
   refresh: "refresh_token" | "exchange" | "none"
   exchange: { grantType: string; tokenParam: string } | null
   expiresInDefault: number | null
-  identity: ConsentIdentity
 }
+
+/** Le consentement déclaré, prêt pour l'appel : son parcours, et l'identité à lire. */
+export type UserConsentAuth = ConsentFlow & { identity: ConsentIdentity }
 
 /** Les jetons qu'un point de jeton rend : le jeton d'accès, celui de rafraîchissement, l'échéance, les droits accordés. */
 export type ConsentTokens = { accessToken: string; refreshToken: string | null; expiresAt: Date | null; scopes: string[] | null }
@@ -134,6 +144,7 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
     accessLevels: declared.accessLevels,
     scopeImplies: declared.scopeImplies,
     authorizeParams: { ...(params as Record<string, string>) },
+    tokenParams: {},
     ...refresh,
     expiresInDefault: expires ?? null,
     identity,
@@ -145,7 +156,7 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
  * de retour, les scopes joints par des espaces, le `state`, la preuve PKCE (S256, toujours : un serveur ignore un
  * paramètre qu'il ne connaît pas, RFC 6749 § 3.1), puis les constantes de la description.
  */
-export function authorizationAddress(auth: UserConsentAuth, request: { clientId: string; redirectUri: string; state: string; codeChallenge: string }): string {
+export function authorizationAddress(auth: ConsentFlow, request: { clientId: string; redirectUri: string; state: string; codeChallenge: string }): string {
   const { url } = resolveAddress(auth.authorize, {}, [])
   const query = new URLSearchParams([
     ["response_type", "code"],
@@ -161,7 +172,7 @@ export function authorizationAddress(auth: UserConsentAuth, request: { clientId:
 }
 
 /** Ce qu'il faut pour joindre le point de jeton d'un connecteur. */
-export type TokenEndpointCall = { definition: ConnectorView; auth: UserConsentAuth; application: OAuthApplication; pacingKey: string; fetcher: Fetch }
+export type TokenEndpointCall = { definition: ConnectorView; auth: ConsentFlow; application: OAuthApplication; pacingKey: string; fetcher: Fetch }
 
 /** Les droits accordés d'une réponse de jeton (`scope`, joints par des espaces) ; absents : `null`. */
 function grantedScopes(answer: Record<string, unknown>): string[] | null {
@@ -180,7 +191,8 @@ async function tokenRequest(call: TokenEndpointCall, pairs: [string, string][]):
   const { definition, auth, application } = call
   const client = clientPlacement(auth.clientAuth, application.clientId, application.clientSecret)
   const { url } = resolveAddress(auth.token, {}, [])
-  const request: ApiRequest = { method: "POST", path: "", headers: client.headers, form: [...pairs, ...client.pairs], pacingKey: call.pacingKey }
+  const form: [string, string][] = [...pairs, ...Object.entries(auth.tokenParams), ...client.pairs]
+  const request: ApiRequest = { method: "POST", path: "", headers: client.headers, form, pacingKey: call.pacingKey }
   const api = { label: definition.label, baseUrl: url, timeoutMs: definition.timeoutMs, errors: [] }
   const answer = await requestToken(api, request, call.fetcher)
   if (!answer.ok) {
@@ -221,7 +233,7 @@ export async function exchangeCode(call: TokenEndpointCall, request: { code: str
  * ou refusé (`invalid_grant`, `refresh: none` échu, aucun jeton de rafraîchissement) passe le compte à reconnecter et
  * lève son refus nommé (`revoked`).
  */
-export async function consentAccessToken(signer: Signer & { auth: UserConsentAuth }, fresh: boolean): Promise<string> {
+export async function consentAccessToken(signer: Omit<Signer, "auth"> & { auth: ConsentFlow }, fresh: boolean): Promise<string> {
   const { auth, credential, definition } = signer
   const consent = consentOf(credential, definition)
   const kept = await credential.tokens.read()

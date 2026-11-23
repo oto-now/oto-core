@@ -243,7 +243,12 @@ export function applicationMissing(label: string): PlatformError {
  * l'a déjà remplacé ; ses jetons restent, rien ne les purge. Le compte s'ouvre avec sa marque (`remedy` : le compte,
  * s'il est celui de l'appelant, et à qui demander).
  */
-function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAccess, row: SecretRow | undefined): () => Promise<AccountCredential> {
+function consentOpener(
+  db: PlatformDb,
+  remedy: MarkRemedy,
+  declared: Pick<DeclaredAccess, "definition" | "application">,
+  row: SecretRow | undefined,
+): () => Promise<AccountCredential> {
   const { definition, application } = declared
   if (!application) throw applicationMissing(definition.label)
   const { account, own } = remedy
@@ -293,6 +298,22 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAcc
     }
     return { fields: {}, settings: {}, tokens: tokenStore(db, id), consent, mark }
   }
+}
+
+/**
+ * Le consentement ouvert du compte personnel `account` de l'appelant, hors de tout connecteur déclaré : celui de l'API de
+ * l'hôte de son organisation (`host-api/consent.ts`), avec le connecteur vu par le moteur et le client de consentement
+ * de l'instance. Mêmes renouvellement, rotation et passage à reconnecter qu'un compte `oauth2_user` (`consentOpener`).
+ */
+export async function ownConsentCredential(
+  db: PlatformDb,
+  identity: Identity,
+  account: CallAccount,
+  access: Pick<DeclaredAccess, "definition" | "application">,
+): Promise<AccountCredential> {
+  const row = await secretRow(db, "ownConsentCredential", account.id)
+  const remedy: MarkRemedy = { account, own: true, reconnect: true, hostKey: false, who: () => describeOwner(db, identity, account.owner) }
+  return consentOpener(db, remedy, access, row)()
 }
 
 /**

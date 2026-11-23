@@ -1,6 +1,8 @@
 // Un faux émetteur et un faux hôte en local, pour les fonctions d'un hôte (`docs/conception/fonctions-d-un-hote.md`) :
 // un serveur HTTP sur 127.0.0.1 sert la découverte et le point de jeton de l'émetteur (`https://auth.example.test/oidc`),
-// le document OpenAPI et l'API de l'hôte (`https://hote.example.test`). Le poste n'ayant pas d'hôte public, le transport
+// le document OpenAPI et l'API de l'hôte (`https://hote.example.test`). Le point de jeton tient l'échange RFC 8693 (son
+// refus réglable), le code d'un consentement et son renouvellement ; ses jetons sont des JWT non signés qui disent leur
+// `sub`, comme ceux qu'un émetteur rend en TLS. Le poste n'ayant pas d'hôte public, le transport
 // gardé et `fetch` sont réécrits vers lui par la suite qui l'emploie (`vi.mock` d'`address-guard`, `routeFetch`) ; une
 // autre adresse passe par le vrai transport gardé, qui la refuse. Ce que le serveur a reçu se relit dans `seen`.
 import { createServer, type IncomingMessage, type Server } from "node:http"
@@ -10,6 +12,15 @@ export const ISSUER = "https://auth.example.test/oidc"
 export const HOST = "https://hote.example.test"
 export const RESOURCE = "https://hote.example.test/api"
 export const EXCHANGE_ENV = { PLATFORM_OIDC_EXCHANGE_CLIENT_ID: "oto-m2m", PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET: "m2m-secret-not-in-logs" }
+export const CONSENT_ENV = { PLATFORM_OIDC_CONSENT_CLIENT_ID: "oto-web", PLATFORM_OIDC_CONSENT_CLIENT_SECRET: "web-secret-not-in-logs" }
+/** Le refus de Logto pour le jeton d'un client tiers (`THIRD_PARTY_REFUSAL`). */
+export const THIRD_PARTY = { error: "invalid_grant", description: "grant request is invalid" }
+
+/** Un JWT non signé portant `claims` : la forme d'un jeton d'accès, que le code ne lit que pour ses claims. */
+export function unsignedJwt(claims: Record<string, unknown>): string {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url")
+  return `${part({ alg: "none", typ: "at+jwt" })}.${part(claims)}.signature`
+}
 
 /** Le document d'un hôte accepté par le profil : une lecture et une écriture sensible confirmée par l'hôte. */
 export function hostDocument(version = "1.0.0", extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -22,7 +33,7 @@ export function hostDocument(version = "1.0.0", extra: Record<string, unknown> =
       issuer: ISSUER,
       resource: RESOURCE,
       roles: { member: "Member" },
-      families: { projet: "Projects", etape: "Steps" },
+      families: { projet: { label: "Projects", scope: "projets" }, etape: { label: "Steps", scope: "etapes read:steps" } },
     },
     paths: {
       "/projets": {
@@ -73,8 +84,13 @@ export type FakeState = {
   etag: string | null
   documentStatus: number | null
   documentRaw: string | null
-  exchangeError: string | null
+  exchangeRefusal: { error: string; description: string } | null
   exchanged: number
+  /** Le `sub` des jetons d'un consentement ; `refreshRefused` : le renouvellement rend `invalid_grant`. */
+  consentSubject: string
+  consentExpiresIn: number
+  refreshRefused: boolean
+  consented: number
   problem: { status: number; body: Record<string, unknown> } | null
   firstStep: "202" | "200"
 }
@@ -86,8 +102,12 @@ const freshState = (): FakeState => ({
   etag: '"v1"',
   documentStatus: null,
   documentRaw: null,
-  exchangeError: null,
+  exchangeRefusal: null,
   exchanged: 0,
+  consentSubject: "sub-lea",
+  consentExpiresIn: 3600,
+  refreshRefused: false,
+  consented: 0,
   problem: null,
   firstStep: "202",
 })
@@ -113,12 +133,24 @@ export async function startFakeHost(): Promise<FakeHost> {
       response.end(JSON.stringify(value))
     }
     if (url.pathname === "/oidc/.well-known/openid-configuration") {
-      return json(200, { issuer: ISSUER, jwks_uri: `${ISSUER}/jwks`, token_endpoint: `${ISSUER}/token` })
+      return json(200, { issuer: ISSUER, jwks_uri: `${ISSUER}/jwks`, token_endpoint: `${ISSUER}/token`, authorization_endpoint: `${ISSUER}/auth` })
     }
     if (url.pathname === "/oidc/token" && request.method === "POST") {
-      if (state.exchangeError) return json(400, { error: state.exchangeError, error_description: "subject token not delegable" })
-      state.exchanged += 1
-      return json(200, { access_token: `exchanged-token-${state.exchanged}`, token_type: "Bearer", expires_in: 3600 })
+      const form = new URLSearchParams(body)
+      const grant = form.get("grant_type")
+      if (grant === "urn:ietf:params:oauth:grant-type:token-exchange") {
+        if (state.exchangeRefusal) return json(400, { error: state.exchangeRefusal.error, error_description: state.exchangeRefusal.description })
+        state.exchanged += 1
+        return json(200, { access_token: `exchanged-token-${state.exchanged}`, token_type: "Bearer", expires_in: 3600 })
+      }
+      if (grant === "authorization_code" || grant === "refresh_token") {
+        if (grant === "refresh_token" && state.refreshRefused) return json(400, { error: "invalid_grant", error_description: "grant request is invalid" })
+        if (grant === "authorization_code" && !form.get("code_verifier")) return json(400, { error: "invalid_grant", error_description: "grant request is invalid" })
+        state.consented += 1
+        const access = unsignedJwt({ sub: state.consentSubject, aud: form.get("resource"), client_id: "oto-web", n: state.consented })
+        return json(200, { access_token: access, refresh_token: `refresh-${state.consented}`, token_type: "Bearer", expires_in: state.consentExpiresIn, scope: "openid offline_access projets etapes read:steps" })
+      }
+      return json(400, { error: "unsupported_grant_type" })
     }
     if (url.pathname === "/openapi.json") {
       if (state.documentStatus) {

@@ -21,7 +21,7 @@ import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./au
 import { bodyArgumentProblem } from "./body-argument"
 import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, OAuthApplication } from "./definition"
+import { HOST_CONSENT_CONNECTOR, type ConnectorDefinition, type ConnectorFunctionDefinition, type ConnectorView, type OAuthApplication } from "./definition"
 import { catalogFunction, functionApi, identityAddress, refusalLines } from "./catalog-function"
 import type { PreparedFunction } from "./engine"
 import { backgroundProblem } from "./background-declaration"
@@ -372,7 +372,8 @@ export type ConnectorOptions = HostOptions & {
 export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {
   const current = new Set(declaredConnectors().flatMap((connector) => connector.functions))
   const others = catalogFunctions().filter((fn) => !current.has(fn))
-  const reserved = new Set([...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf))
+  // Le connecteur des consentements à l'API d'un hôte n'est jamais déclaré : son nom est pris.
+  const reserved = new Set([...[...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf), HOST_CONSENT_CONNECTOR])
   const seen = new Set<string>()
   const applications = checkedApplications(definitions, options.oauthApplications)
   const runnerProblem = backgroundRunnerProblem(options.backgroundRunner)
