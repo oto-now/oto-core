@@ -21,6 +21,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - `read`, `write` and `node.move` take `id`, a node's stable id, instead of `path`; `read`, `find`, `write` and `node.tree` serve it.
 - `node.describe {ids}` gives up to 200 ids at once: present (path, title), trashed or missing; one you cannot read answers missing.
 - A page in the trash read, written or moved by its id is refused as such (`conflict`), never served nor called unknown.
+- `member.list`, `member.add`, `member.set_teams`, `member.remove`: the members and the people pending their first sign-in, named by email. `member.add` sends no email.
+- `team.create` creates a team with its folder. Administrators do everything; a team lead adds or removes members of the teams they lead only; a plain member is refused.
 
 ### Hosts
 - MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
@@ -28,6 +30,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - MCP: `node.describe` (read), a new function of the built-in `node` connector, after `node.move`; a host that declares its surface (`registerHostSurface`) names it to serve it. `node.move` takes `id` instead of `path`.
 - Schemas: `writeNodeBodySchema` (`POST /api/platform/nodes`) takes `id`, and `WriteNodeBody.path` becomes optional; `moveNodeArgsSchema`, `nodeIdSchema`, `refinePathOrId`, `refineReadTarget`, `pathOrIdIssue`, `READ_TARGET_MISSING`, `NODE_ID_EXAMPLE` are exported. `moveNodeSchema` and `node.write_many` keep `path`.
 - Server: `findNodeById(db, identity, id)` beside `findNode`: the node and the caller's level; `not_found` as for an unknown path, `conflict` for a node in the trash. No migration.
+- MCP: a built-in connector `member`, always active, with `member.list` (read), `member.add` (write), `member.set_teams` (write) and `member.remove` (sensitive); the built-in connector `team` gains `team.create` (write). A host that declares its surface (`registerHostSurface`) names them to serve them.
+- Server: `registerInvitation(db, identity, input, replacing?)` registers a pending person without sending any email, with the rights, limit and refusals of `inviteMember`; the person joins at their first sign-in, however late: the registration never expires (`expiresAt` null) until `member.remove` withdraws it. A pending person joins one team at most.
+- Server: `listInvitations` and `inviteMember`'s `CreatedInvitation` type `expiresAt` as `string | null`: null for a registration without email; an emailed invitation still lives 7 days (`Schemas:`). The Équipes screen shows « sans échéance » for it.
+- Migrations: apply `20261122184838_platform_attente_sans_echeance.sql` with the package: `invitations.expires_at` becomes nullable (default kept), `authenticated` may insert it, and the functions that read an open invitation (`accept_invitations`, `invitations_guard`, `identity_for_caller`, the sign-up hook, `org_usage`, `join_org`) treat a null expiry as open. No row rewritten; the package without it fails on `member.add`.
 
 ## 1.9.0 — 2026-11-19
 

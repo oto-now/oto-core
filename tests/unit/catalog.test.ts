@@ -132,6 +132,12 @@ describe("catalog (AC23)", () => {
       "comment.resolve",
       // Les partages d'une équipe, calculés des droits.
       "team.shares",
+      // Les membres et les équipes d'une organisation, sous le jeton de la personne qui agit.
+      "member.list",
+      "member.add",
+      "member.set_teams",
+      "member.remove",
+      "team.create",
     ])
     expect(callExamples(catalogFunctions(), NONE)).toEqual(["table.rows"])
   })

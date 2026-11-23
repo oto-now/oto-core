@@ -490,6 +490,14 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant. Un connecteur
      qui passe d'un accès à plusieurs arrête ses comptes existants (`access` nul) : leur reprise est dans connecteurs et
      comptes, § Plusieurs accès.
+- `20261122184838_platform_attente_sans_echeance.sql` (non publiée ; réunie au fichier de la prochaine version avant
+  son tag ; identité et connexion, § Personne en attente, sans email) : `invitations.expires_at` facultatif, sa valeur
+  par défaut (sept jours) gardée pour l'invitation envoyée par email ; nul, l'inscription sans email de `member.add`
+  (`registerInvitation`), qui n'expire pas. `authenticated` reçoit `insert(expires_at)`. Six fonctions recréées,
+  privilèges redits à l'identique, où une échéance nulle compte comme ouverte : `invitations_guard`
+  (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
+  `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
+  relancer avant. Rollback dans le fichier.
 
 ## Installer sur un hôte neuf
 
