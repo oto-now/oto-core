@@ -47,6 +47,9 @@ export function hostHeaders(context: FunctionContext): Record<string, string> {
 }
 
 /** Le scope demandé à l'émetteur : les familles du document, jointes par une espace (provisoire, voir la conception). */
+// TODO(2026-12-04) : provisoire, le profil hôte de la lib refuse `x-oto-scope`. À remplacer par le scope que chaque fonction
+// porte dans `definition.functions[name].scope` dès la montée de la lib qui contient « Profil hôte : scope OAuth par
+// famille » (oto-now/connectors#281), dans la PR 2/3.
 export function hostScope(imported: ImportedHost): string {
   return imported.families.join(" ")
 }
