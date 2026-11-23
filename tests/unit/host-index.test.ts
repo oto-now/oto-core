@@ -1,5 +1,5 @@
 // @vitest-environment node
-// L'index des fonctions d'un hôte sans base (`docs/conception/fonctions-d-un-hote.md` § Index) : les fonctions
+// L'index des fonctions d'un hôte sans base (`docs/conception/fonctions-d-un-hote-index.md` § Index) : les fonctions
 // filtrées par la liste de la personne, le bloc de `context` borné à 3 000 caractères et sa règle de troncature
 // (les fonctions proches d'abord, puis les familles par la fin, une ligne qui le dit et renvoie à `read functions`),
 // déterministe ; pas de bloc sans API servie ni pour une personne sans fonction ; la raison d'une liste indisponible ;

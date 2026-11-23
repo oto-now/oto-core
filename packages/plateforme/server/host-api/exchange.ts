@@ -1,4 +1,4 @@
-// Le jeton de la personne pour l'API d'un hôte (`fonctions-d-un-hote.md` § Jeton) : l'échange RFC 8693 auprès de
+// Le jeton de la personne pour l'API d'un hôte (`fonctions-d-un-hote-jeton.md` § Ordre) : l'échange RFC 8693 auprès de
 // l'émetteur de l'instance, voie first-party. Le jeton vérifié de l'appelant (`subject_token`) s'échange au point de
 // jeton de la découverte OIDC contre un jeton de l'audience de l'API (`resource`), au scope de la fonction appelée ; oto
 // s'y authentifie en client M2M (`PLATFORM_OIDC_EXCHANGE_CLIENT_ID` et `_SECRET`, `cell.ts`). Le jeton de la personne ne

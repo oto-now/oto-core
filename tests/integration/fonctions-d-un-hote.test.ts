@@ -19,6 +19,7 @@ import { completeConnectorConsent, startConnectorConsent } from "../../packages/
 import { orgAssistantFunctions, visibleOrgFunctions } from "../../packages/plateforme/server/catalog/org-catalog"
 import { buildContext } from "../../packages/plateforme/server/context"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
+import { forgetConsentLinks } from "../../packages/plateforme/server/host-api/consent"
 import { forgetExchangedTokens } from "../../packages/plateforme/server/host-api/exchange"
 import { forgetHostFunctions, hostApi, hostApiFunctions, refreshHostApi } from "../../packages/plateforme/server/host-api/service"
 import { forgetHostVisibility } from "../../packages/plateforme/server/host-api/visibility"
@@ -79,6 +80,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     fake.reset()
     forgetExchangedTokens()
     forgetHostVisibility()
+    forgetConsentLinks()
     vi.stubEnv("PLATFORM_OIDC_ISSUER", ISSUER)
     vi.stubEnv("PLATFORM_OIDC_AUDIENCE", "https://oto.example.test/api/mcp")
     for (const [name, value] of Object.entries({ ...EXCHANGE_ENV, ...CONSENT_ENV })) vi.stubEnv(name, value)
@@ -240,6 +242,38 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       // Ni jeton ni secret au log.
       const logged = vi.mocked(console.error).mock.calls.flat().map(String).join(" ")
       for (const secret of [bearer, "refresh-1", THIRD_PARTY_SUBJECT, "web-secret-not-in-logs", "m2m-secret-not-in-logs"]) expect(logged).not.toContain(secret)
+    })
+
+    it("should give the same link while its request stays open, from a call as from the list of functions, and a new one near its expiry", async () => {
+      const requests = async () => {
+        const admin = testAdminSql()
+        try {
+          return await admin<{ expires_at: Date }[]>`select expires_at from platform.connector_consents where org_id = ${o.org.id} and user_id = ${o.people.lea.id} and connector = 'host_api'`
+        } finally {
+          await admin.end({ timeout: 5 })
+        }
+      }
+      const before = (await requests()).length
+      const first = await refusal(callThirdParty({ function: "projet.lister" }))
+      const url = String(first?.details?.url)
+      expect(first?.message).toContain("within 5 minutes")
+      expect(String((await refusal(callThirdParty({ function: "projet.lister" })))?.details?.url)).toBe(url)
+      // La liste des fonctions de la personne dit le même lien, entier, dans sa raison.
+      const { visibility } = await visibleOrgFunctions(lea.db, lea.identity, { accessToken: THIRD_PARTY_SUBJECT, origin: ORIGIN })
+      expect(visibility).toMatchObject({ kind: "unavailable" })
+      expect(visibility.kind === "unavailable" ? visibility.reason : "").toContain(url)
+      expect((await requests()).length).toBe(before + 1)
+
+      // À moins de cinq minutes de son échéance, la demande est remplacée par une neuve.
+      const admin = testAdminSql()
+      try {
+        await admin`update platform.connector_consents set expires_at = now() + interval '2 minutes' where org_id = ${o.org.id} and user_id = ${o.people.lea.id} and connector = 'host_api'`
+      } finally {
+        await admin.end({ timeout: 5 })
+      }
+      const renewed = String((await refusal(callThirdParty({ function: "projet.lister" })))?.details?.url)
+      expect(renewed).not.toBe(url)
+      expect((await requests()).length).toBe(before + 2)
     })
 
     it("should start the same consent from the Connectors screen (Reconnect), and refuse it in an organisation without a host's API", async () => {

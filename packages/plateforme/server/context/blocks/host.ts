@@ -1,4 +1,4 @@
-// Bloc « fonctions de l'hôte » de `context` (`fonctions-d-un-hote.md` § Index) : ce que la personne voit de l'API de
+// Bloc « fonctions de l'hôte » de `context` (`fonctions-d-un-hote-index.md` § Index) : ce que la personne voit de l'API de
 // l'hôte de son organisation, borné à 3 000 caractères (`host-api/index-view.ts`), servi juste après les règles. Aucun
 // bloc sans API servie ni fonction visible ; une liste indisponible en dit la raison. Sans lui, l'assistant ignorerait
 // les fonctions de l'hôte tant qu'il ne lit pas le catalogue.

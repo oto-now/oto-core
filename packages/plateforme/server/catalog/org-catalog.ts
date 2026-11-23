@@ -44,7 +44,7 @@ export async function visibleOrgFunctions(db: PlatformDb, identity: Identity, vi
 
 /**
  * `read functions` : les fonctions actives de l'instance, puis celles de l'hôte que la liste de la personne nomme, par
- * famille (`fonctions-d-un-hote.md` § Visibilité par personne) ; une liste indisponible dit sa raison.
+ * famille (`fonctions-d-un-hote-index.md` § Visibilité par personne) ; une liste indisponible dit sa raison.
  */
 export async function readFunctionCatalog(db: PlatformDb, identity: Identity, viewer: HostViewer): Promise<ToolOutput> {
   const [{ instance, host, visibility }, active] = await Promise.all([visibleOrgFunctions(db, identity, viewer), loadActiveConnectors(db, identity.org.id)])

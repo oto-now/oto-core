@@ -48,6 +48,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
 - Server: the host serves `GET <address><x-oto.functions>` (`/me/functions`) → `200 {"functions": ["<operationId>", …]}`, the functions the person may call, under a token for its API without scope; oto keeps it 5 minutes per person and filters `context`, `find` and `read functions` with it, never `call`. A refusal or another answer: the index says the list is unavailable, with its reason.
 - Server: `readNode` options gain `viewer` (`accessToken`, `ctx`, `host`) and `ContextRequest` gains `accessToken`: without them, `read functions` says the host's list is unavailable and `context` serves no host block (the Context preview). `activeOrgFunctions` is replaced by `visibleOrgFunctions` and `readFunctionCatalog`.
+- Server: the authorization link of a host's API reuses the person's open consent request (5 minutes left at least, `consentStillOpen`) instead of opening one per reading; it now says « within 5 minutes ».
 
 ## 1.9.0 — 2026-11-19
 

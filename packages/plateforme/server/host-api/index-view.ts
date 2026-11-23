@@ -1,4 +1,4 @@
-// L'index des fonctions de l'hôte (`fonctions-d-un-hote.md` § Index) : ce que la personne voit de l'API de l'hôte de son
+// L'index des fonctions de l'hôte (`fonctions-d-un-hote-index.md` § Index) : ce que la personne voit de l'API de l'hôte de son
 // organisation, filtré par sa liste (`visibility.ts`). Deux vues, un seul calcul : le bloc de `context`, borné à 3 000
 // caractères (une ligne par famille, puis les fonctions proches de la demande), et la partie de `read functions`, entière,
 // groupée par famille, `summary` compris. Aucun outil MCP de plus (ADR-002) : le bloc est un contenu de `context`. Sans ce
@@ -59,7 +59,7 @@ function familyLine(label: string, entries: readonly HostIndexEntry[]): { text: 
 }
 
 /**
- * Le bloc « fonctions de l'hôte » de `context` (règle de troncature de `fonctions-d-un-hote.md` § Index), `null` sans API
+ * Le bloc « fonctions de l'hôte » de `context` (règle de troncature de `fonctions-d-un-hote-index.md` § Index), `null` sans API
  * servie ou sans fonction visible. Il porte une tête (comment appeler, où lire l'index entier), une ligne par famille, puis
  * les fonctions les plus proches de `phrase` (`searchFunctions` : score, puis nom ; 8 au plus) avec leur `summary`.
  * `cut` : un nom de famille compté ou une ligne retirée. S'il dépasse 3 000 caractères : les fonctions proches partent d'abord, la moins proche en premier, puis les familles,

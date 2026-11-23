@@ -1,4 +1,4 @@
-// Les fonctions de l'API d'un hôte que la personne peut appeler (`fonctions-d-un-hote.md` § Visibilité par personne) :
+// Les fonctions de l'API d'un hôte que la personne peut appeler (`fonctions-d-un-hote-index.md` § Visibilité par personne) :
 // oto les demande à l'hôte, `GET <adresse><x-oto.functions>` (`/me/functions`) sous le jeton de la personne pour l'API,
 // et ne se fie pas aux rôles déclarés (`x-oto-roles`), qui servent l'affichage : la visibilité réelle dépend de droits
 // plus fins que l'hôte seul connaît. La liste est gardée en mémoire cinq minutes par organisation, personne, adresse et
@@ -23,8 +23,11 @@ import { servedHost, type ServedHost } from "./served"
 export const VISIBILITY_KEPT_MS = 5 * 60_000
 /** Délai de la lecture de la liste, corps compris. */
 const VISIBILITY_TIMEOUT_MS = 10_000
-/** Au plus, en caractères, la raison d'une liste indisponible, dite dans l'index. */
-export const UNAVAILABLE_REASON_MAX = 300
+/**
+ * Au plus, en caractères, la raison d'une liste indisponible, dite dans l'index : assez pour le lien d'autorisation
+ * entier d'un consentement à donner (plus de 400 caractères), qu'une coupe rendrait inutilisable.
+ */
+export const UNAVAILABLE_REASON_MAX = 1_000
 /**
  * Le scope du jeton de la liste : aucun. La liste ne lit que l'identité de la personne ; le jeton porte l'audience de
  * l'API (`resource`), jamais le droit d'appeler une fonction.
