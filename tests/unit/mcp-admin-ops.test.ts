@@ -278,7 +278,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
         "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin, overview, members",
         "- admin_team: list, create, rename, set_lead, add_lead, remove_lead, add_member, remove_member, delete",
         "- admin_node: move, publish, transfer_owner, rules, add_rule, remove_rule",
-        "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule",
+        "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule, host_api, refresh_host_api",
         "- admin_journal: conversations, conversation, admin_log",
         "- admin_feedback: list, set_state",
         "- admin_cell: version, migrations, health",

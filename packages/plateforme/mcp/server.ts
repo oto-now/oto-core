@@ -21,6 +21,7 @@ import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
+import { orgAssistantFunctions } from "../server/catalog/org-catalog"
 import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
 import { servesCapability } from "../server/catalog/surface-source"
 import { readBrand } from "../server/brand"
@@ -119,7 +120,7 @@ class JsonRpcError extends Error {
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
   context: ({ db, identity, userAgent, gate, origin }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin }),
-  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: assistantFunctions(), activeConnectors: await activeConnectors() }),
+  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: await orgAssistantFunctions(db, identity), activeConnectors: await activeConnectors() }),
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
   read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
   call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }, input, ctx) =>

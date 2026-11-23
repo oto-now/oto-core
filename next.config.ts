@@ -3,7 +3,7 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   // Configuration minimale — personnaliser par projet
   // Le paquet est consommé en source TypeScript depuis le workspace : Next doit le transpiler.
-  transpilePackages: ["@otomata_tech/oto_platform"],
+  transpilePackages: ["@otomata_tech/oto_platform", "@otomata_tech/connectors"],
   // Le « Segment Explorer » des outils de développement (Next 15.5, actif par défaut) : quand une
   // compilation croise un chargement, le client hydrate ses enveloppes avec une branche de moins que le
   // serveur, et tout `useId` de la page change (« attributes didn't match » : contrôle visuel d'E05-S02,

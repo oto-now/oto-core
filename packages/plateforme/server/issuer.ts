@@ -15,8 +15,11 @@ import { PlatformConfigError } from "./sql"
 /** L'émetteur des jetons : Supabase Auth du projet (`aud` non vérifiée), ou un émetteur OIDC et son audience. */
 type IssuerConfig = { kind: "supabase"; issuer: string } | { kind: "oidc"; issuer: string; audience: string }
 
-/** Ce que le paquet lit de la découverte d'un émetteur OIDC. */
-type Discovery = { jwksUri: string; userinfoEndpoint: string | null }
+/**
+ * Ce que le paquet lit de la découverte d'un émetteur OIDC ; `tokenEndpoint` : son point de jeton, où s'échange le jeton
+ * d'une personne contre celui de l'API d'un hôte (`host-api/exchange.ts`), `null` s'il n'en publie pas.
+ */
+type Discovery = { jwksUri: string; userinfoEndpoint: string | null; tokenEndpoint: string | null }
 
 /** La machine locale, seule à se joindre en `http` (un émetteur de développement). `URL` rend une adresse IPv6 entre crochets. */
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
@@ -95,7 +98,11 @@ function discoveryOf(issuer: string, document: unknown): Discovery {
   if (document.issuer !== issuer) throw new PlatformConfigError("PLATFORM_OIDC_ISSUER: discovery names another issuer (compare the trailing slash)")
   const jwksUri = optionalEndpoint(document.jwks_uri, "jwks_uri")
   if (!jwksUri) throw new PlatformConfigError("PLATFORM_OIDC_ISSUER: discovery has no jwks_uri")
-  return { jwksUri, userinfoEndpoint: optionalEndpoint(document.userinfo_endpoint, "userinfo_endpoint") }
+  return {
+    jwksUri,
+    userinfoEndpoint: optionalEndpoint(document.userinfo_endpoint, "userinfo_endpoint"),
+    tokenEndpoint: optionalEndpoint(document.token_endpoint, "token_endpoint"),
+  }
 }
 
 async function readDiscovery(issuer: string): Promise<Discovery> {

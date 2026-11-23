@@ -38,6 +38,12 @@ export type ConnectorApi = {
   errors: readonly ApiError[]
   /** Débit maximal du tiers, par compte : `requests` requêtes par fenêtre de `intervalMs`. */
   rateLimit?: { requests: number; intervalMs: number }
+  /**
+   * Un tiers qui écrit ses refus pour l'assistant en `application/problem+json` (RFC 9457), l'API d'un hôte
+   * (`host-api/problem-json.ts`) : une réponse hors 2xx de ce type devient le refus que rend cette traduction, son corps
+   * lu (borné) et jamais journalisé ; les autres réponses suivent la table d'erreurs.
+   */
+  problems?: (status: number, problem: unknown) => PlatformError
 }
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
@@ -207,11 +213,30 @@ async function answered(api: ConnectorApi, request: ApiRequest, fetcher: Fetch, 
     answer = await send(api, request, fetcher)
   }
   if (!answer.ok) {
+    if (api.problems && isProblem(answer)) throw await problemOf(api, answer, api.problems)
     const body = await errorBody(api, answer)
     console.error(`[platform] connector ${api.label}: status ${answer.status}`)
     throw errorOf(api, answer.status, body)
   }
   return answer
+}
+
+/** Une réponse `application/problem+json` (RFC 9457), paramètres du type ignorés. */
+const isProblem = (answer: Response) => (answer.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase() === "application/problem+json"
+
+/**
+ * Le refus d'un `problem+json` : son corps lu sous la borne d'une réponse (illisible : `null`), traduit par le tiers qui
+ * les écrit ; au log, le statut seul, jamais le corps.
+ */
+async function problemOf(api: ConnectorApi, answer: Response, translate: (status: number, problem: unknown) => PlatformError): Promise<PlatformError> {
+  let problem: unknown = null
+  try {
+    problem = await readAnswer(api, answer)
+  } catch {
+    // Un corps illisible ne dit rien de plus que son statut.
+  }
+  console.error(`[platform] connector ${api.label}: status ${answer.status} (problem)`)
+  return translate(answer.status, problem)
 }
 
 /** La borne d'une réponse JSON, et le refus au-delà ; les 4 Mo d'une réponse ordinaire à défaut. */
@@ -233,6 +258,14 @@ export type RequestOptions = { resign?: () => Promise<ApiRequest>; bound?: Answe
  * `unreadable` : le refus d'une réponse illisible (un fichier JSON, `file_unreadable`).
  */
 export async function requestJson(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, options: RequestOptions = {}): Promise<unknown> {
+  return (await requestAnswer(api, request, fetcher, options)).value
+}
+
+/**
+ * `requestJson`, et le statut 2xx de la réponse : le premier temps d'une fonction sensible de l'API d'un hôte se lit à son
+ * `202` (`host-api/functions.ts`).
+ */
+export async function requestAnswer(api: ConnectorApi, request: ApiRequest, fetcher: Fetch = fetch, options: RequestOptions = {}): Promise<{ status: number; value: unknown }> {
   const answer = await answered(api, request, fetcher, options.resign)
   const value = await readAnswer(api, answer, options)
   const refused = rowOf(api, answer.status, value)
@@ -240,7 +273,7 @@ export async function requestJson(api: ConnectorApi, request: ApiRequest, fetche
     console.error(`[platform] connector ${api.label}: status ${answer.status} refused by its body`)
     throw refusalOf(refused)
   }
-  return value
+  return { status: answer.status, value }
 }
 
 /**

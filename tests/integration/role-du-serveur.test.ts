@@ -103,6 +103,8 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   comments: ["text", "mentions", "edited_at", "to_assistant"],
   connector_activations: ["org_id", "connector", "state", "activated_by", "closed_by", "created_at", "updated_at"],
   ctx: ["contexts"],
+  // L'API de l'hôte (`20261123150000`) : réglée et rafraîchie par l'équipe plateforme (`refreshHostApi`), sa ligne entière.
+  host_apis: ["org_id", "address", "document", "version", "etag", "served_at", "refreshed_at", "refused_address", "refused_at", "problems", "created_at", "updated_at"],
   feedback: ["state", "resolution", "handled_by", "handled_at"],
   invitations: ["revoked_at"],
   members: ["org_id", "user_id", "role", "profile", "created_at"],

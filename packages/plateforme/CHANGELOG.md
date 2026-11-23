@@ -23,6 +23,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A page in the trash read, written or moved by its id is refused as such (`conflict`), never served nor called unknown.
 - `member.list`, `member.add`, `member.set_teams`, `member.remove`: the members and the people pending their first sign-in, named by email. `member.add` sends no email.
 - `team.create` creates a team with its folder. Administrators do everything; a team lead adds or removes members of the teams they lead only; a plain member is refused.
+- An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 
 ### Hosts
 - MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
@@ -34,6 +35,11 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerInvitation(db, identity, input, replacing?)` registers a pending person without sending any email, with the rights, limit and refusals of `inviteMember`; the person joins at their first sign-in, however late: the registration never expires (`expiresAt` null) until `member.remove` withdraws it. A pending person joins one team at most.
 - Server: `listInvitations` and `inviteMember`'s `CreatedInvitation` type `expiresAt` as `string | null`: null for a registration without email; an emailed invitation still lives 7 days (`Schemas:`). The Équipes screen shows « sans échéance » for it.
 - Migrations: apply `20261122184838_platform_attente_sans_echeance.sql` with the package: `invitations.expires_at` becomes nullable (default kept), `authenticated` may insert it, and the functions that read an open invitation (`accept_invitations`, `invitations_guard`, `identity_for_caller`, the sign-up hook, `org_usage`, `join_org`) treat a null expiry as open. No row rewritten; the package without it fails on `member.add`.
+- Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
+- Install: `@otomata_tech/connectors` becomes a dependency of the package (`github:oto-now/connectors#47c4bdcb…&path:/ts`, v1.246.0, TypeScript sources): transpile it with the package (`transpilePackages`).
+- Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.
+- MCP: `admin_connector host_api` and `refresh_host_api` (two steps) show, set and refresh the host API of an organisation; a refused document keeps the previous version served.
+- Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
 
 ## 1.9.0 — 2026-11-19
 

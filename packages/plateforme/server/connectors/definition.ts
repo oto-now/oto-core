@@ -171,7 +171,9 @@ export type ConnectorOAuthUser = {
  * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
  * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
  * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`),
- * contre les droits de `scopes` ou du niveau du compte.
+ * contre les droits de `scopes` ou du niveau du compte. `host_delegated` (profil hôte de la lib) : le jeton de la personne
+ * obtenu de `issuer` pour l'audience `resource`, réservé aux fonctions de l'API d'un hôte (`host-api/`), refusé par
+ * `registerConnectors`.
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -189,6 +191,7 @@ export type ConnectorAuth =
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
   | ({ readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly key: string } & ConnectorServiceAccountScopes)
+  | { readonly kind: "host_delegated"; readonly issuer: string; readonly resource: string }
   | { readonly kind: string }
 
 /**
@@ -417,8 +420,12 @@ export type ConnectorFunctionDefinition = {
   readonly background?: true
   /** Ce que coûte un appel ; contrôlé à la déclaration, lu par `costOf` et `settledQuantity`, ni réservé ni réglé par le moteur. */
   readonly cost?: ConnectorFunctionCost
-  /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */
-  readonly confirm?: { readonly summary: string }
+  /**
+   * La confirmation d'une fonction sensible : le gabarit du récapitulatif, avec des `{argument}` ; ou `by: "host"`, les
+   * deux temps de l'API elle-même (profil hôte de la lib, règle 26 de la fabrique), réservés aux fonctions de l'API d'un
+   * hôte (`host-api/`) et refusés par `registerConnectors`.
+   */
+  readonly confirm?: { readonly summary: string; readonly by?: never } | { readonly by: "host"; readonly summary?: never }
 }
 
 /**

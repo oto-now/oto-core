@@ -179,6 +179,8 @@ function controlsProblem(fn: ConnectorFunctionDefinition): string | null {
       return `${fn.name}: expect ${String(expectation.kind)} is not supported, or names no refusal of the function (non_empty with a path).`
     }
   }
+  // Les deux temps tenus par l'API elle-même (`by: host`) n'appartiennent qu'aux fonctions de l'API d'un hôte (`host-api/`).
+  if (fn.confirm?.by !== undefined) return `${fn.name}: confirm by host is reserved to the functions of a host's API, not to a declared connector.`
   if (fn.class === "sensitive" && (typeof fn.confirm?.summary !== "string" || !fn.confirm.summary.trim())) {
     return `${fn.name}: a sensitive function needs confirm.summary (two-step confirmation).`
   }
