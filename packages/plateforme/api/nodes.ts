@@ -94,7 +94,8 @@ export const nodesRoutes: ResourceRoutes = {
       params: 0,
       target: ({ body }) => {
         const parsed = writeNodeBodySchema.safeParse(body)
-        return parsed.success ? parsed.data.path : null
+        // Une écriture par `id` n'a pas de chemin avant le service : sa cible au journal est celle du résultat.
+        return parsed.success ? (parsed.data.path ?? null) : null
       },
       async handle({ db, identity, body }) {
         const output = await writeNode(db, identity, body, { kind: "human" })

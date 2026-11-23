@@ -2,6 +2,7 @@
 // création d'un nœud, la provenance d'un bloc écrit selon la porte, le texte et les données de la
 // réponse (références des blocs neufs connues après leur écriture). Fichier à part de `write.ts` pour la
 // borne de 300 lignes (`coding-standards.md § Complexité`).
+import type { WriteNodeBody } from "../../schemas"
 import type { AccessLevel } from "../access"
 import type { PlatformDb } from "../db"
 import { boundedList, fromDatabaseError, isUniqueViolation, PlatformError } from "../errors"
@@ -18,6 +19,12 @@ import type { PublishResult } from "./publish"
  * déposé par lien (E10-S02 lot f, AC-f7, AC-f8), écrit sous la provenance de l'assistant et le `ctx` de son ticket ; posé
  * par le seul service du dépôt (`server/uploads-write.ts`), jamais par une porte.
  */
+/**
+ * Le corps d'une écriture une fois sa cible résolue en chemin : un nœud désigné par son identifiant (`id`) s'écrit à son
+ * chemin courant (`writeNode`) ; la suite de l'écriture ne connaît que le chemin.
+ */
+export type WriteAtPath = Omit<WriteNodeBody, "id" | "path"> & { path: string }
+
 /** `places` : la porte d'un assistant quand l'hôte déclare des personnes, pour `find` de `replace_text` (`OpState`). */
 export type WriteOrigin = { kind: "agent"; ctx: string | null; file?: { replace: boolean }; places?: OpState["places"] } | { kind: "human" }
 
@@ -175,8 +182,10 @@ export function savedResult(input: ResultInput): ToolOutput {
       })
       .slice(0, TOUCHED_BLOCKS_MAX),
   }))
+  // L'identifiant stable du nœud écrit (`id`), créé ou modifié : `read`, `write` et `node.move` le prennent à la place du chemin.
   const data = published
     ? {
+        id: node.id,
         path: node.path,
         revision: published.revision,
         status: "published",
@@ -188,7 +197,7 @@ export function savedResult(input: ResultInput): ToolOutput {
         // Les avertissements d'un en-tête de tableau publié, en champs (E07-S04, AC6).
         ...(published.table ? { warnings: published.table.warnings } : {}),
       }
-    : { path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
+    : { id: node.id, path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
   // Le compte du mode tolérant (E10-S01, AC-a2), pour l'écran seul : en mode strict, les champs de `write` ne changent pas.
   const kept = saved?.keptAsText ? { kept_as_text: saved.keptAsText } : {}
   return { text: lines.join("\n"), data: { ...data, ...kept }, nextActions: [`${prefix}_read`], target: node.path, teamId: input.teamId }

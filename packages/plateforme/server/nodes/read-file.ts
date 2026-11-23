@@ -12,7 +12,7 @@
 // Fichier à part de `read.ts` (borne de 300 lignes).
 import type { FileOriginView } from "../../schemas"
 import { fileOrigin } from "../files/origin"
-import { normalizeTitle, type ReadNodeInput } from "../../schemas"
+import { normalizeTitle, READ_TARGET_MISSING, type ReadNodeInput } from "../../schemas"
 import { fenceFor } from "../../schemas/blocks-render"
 import { fileExtension } from "../../schemas/csv"
 import { fileSizeText, fileTypeOf } from "../../schemas/files"
@@ -197,7 +197,7 @@ async function readTransitFile(db: PlatformDb, identity: Identity, request: Omit
  * sur son nœud (`readAt`), comme avec son chemin ; sinon en transit, à son seul auteur.
  */
 export async function readFileAlone(db: PlatformDb, identity: Identity, input: ReadNodeInput, readAt: (path: string) => Promise<ToolOutput>): Promise<ToolOutput> {
-  if (input.file === undefined) throw new PlatformError("invalid_arguments", "Give path, or file alone to read a file by its id.")
+  if (input.file === undefined) throw new PlatformError("invalid_arguments", READ_TARGET_MISSING)
   checkFileModes(input)
   const attached = await readableFile(db, identity, input.file).catch((error: unknown) => {
     if (error instanceof PlatformError && error.code === "not_found") return null

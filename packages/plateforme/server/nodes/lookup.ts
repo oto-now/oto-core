@@ -10,8 +10,8 @@
 // sous l'appelant de la requête ; la décision reste celle d'`access.ts`. E05-S10 (partie c) : le nœud et son
 // niveau se lisent dans une seule transaction (chacune coûte quatre allers-retours de plus que ses requêtes) ;
 // elle ne tient que ses requêtes et le calcul du niveau (`supabase-patterns.md § Couplage à Supabase (ADR-012)`).
-import { NODE_PATH_PATTERN } from "../../schemas"
-import { ACCESS_LEVELS, ancestorPaths, nodeDepth, nodeLevel, nodeLevels, ROOT_PATH, type AccessLevel } from "../access"
+import { NODE_PATH_PATTERN, nodeIdSchema, pathOrIdIssue } from "../../schemas"
+import { ACCESS_LEVELS, ancestorPaths, nodeDecisions, nodeDepth, nodeLevel, nodeLevels, ROOT_PATH, type AccessLevel } from "../access"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
@@ -143,6 +143,63 @@ export async function findNode(
     if (!found || found.level === ACCESS_LEVELS.none) return null
     return found
   })
+}
+
+/** Un identifiant inconnu, d'une autre organisation ou invisible (H68) : le même refus, sans dire lequel. */
+function unknownId(id: string, prefix: string): PlatformError {
+  return new PlatformError("not_found", `Unknown id ${cut(id, 60)}: no content you can read has it. Use ${prefix}_find to locate it by its words.`)
+}
+
+/**
+ * Le nœud désigné par son identifiant stable (`nodes.id`) dans l'organisation de l'identité, et le niveau de l'appelant,
+ * décidé comme pour `findNode` (`nodeDecisions`, H123) : un identifiant mal formé est refusé avant la requête ; inconnu,
+ * d'une autre organisation ou de niveau 0, il répond comme un chemin inconnu (H68). Un nœud à la corbeille que
+ * l'appelant lisait (niveau décidé sur le nœud à la corbeille) est refusé par un `conflict` qui le dit, avec son chemin :
+ * ni contenu, ni faux « introuvable ». Une ligne lue, une décision : `read`, `write` et `node.move` par `id`.
+ */
+export async function findNodeById(db: PlatformDb, identity: Identity, id: string): Promise<{ node: NodeRow; level: AccessLevel }> {
+  const prefix = identity.org.prefix
+  if (!nodeIdSchema.safeParse(id).success) throw new PlatformError("invalid_arguments", `Invalid id « ${cut(id, 60)} »: the uuid of a node, as read, find and write return it.`)
+  return inTransaction(db, "nodes: find by id", async (sql) => {
+    // `deleted_at` lu à côté de la ligne, hors de `NodeRow` : la forme de PostgREST reste celle des autres lectures.
+    const [row] = await sql<(NodeJson & { trashed: boolean })[]>`
+      select to_json(n)::jsonb - 'deleted_at' as node, n.deleted_at is not null as trashed
+        from (select ${sql([...NODE_SQL_COLUMNS, "deleted_at"])} from platform.nodes where org_id = ${identity.org.id} and id = ${id}) n`
+    if (!row) throw unknownId(id, prefix)
+    const level = (await nodeDecisions(db, identity, [row.node.id], { trashed: row.trashed })).get(row.node.id)?.level ?? ACCESS_LEVELS.none
+    if (level === ACCESS_LEVELS.none) throw unknownId(id, prefix)
+    if (row.trashed) {
+      throw new PlatformError(
+        "conflict",
+        `${row.node.path} (id ${row.node.id}) is in the trash: it cannot be read nor written until a manager restores it from the Trash screen.`,
+      )
+    }
+    return { node: row.node, level }
+  })
+}
+
+/** Un nœud trouvé par son chemin, un ancien chemin ou son identifiant, et le niveau de l'appelant (1 à 3). */
+export type FoundNode = NonNullable<Awaited<ReturnType<typeof findNode>>>
+
+/**
+ * La cible d'une demande qui désigne un nœud par son chemin ou par son identifiant (`read`) : `null` sans l'un ni l'autre ;
+ * les deux ensemble, refusés par le service aussi, quelle que soit la porte.
+ */
+export function nodeTarget(input: { path?: string; id?: string }): { path: string } | { id: string } | null {
+  const both = pathOrIdIssue(input, true)
+  if (both !== null) throw new PlatformError("invalid_arguments", both)
+  return input.id !== undefined ? { id: input.id } : input.path !== undefined ? { path: input.path.trim() } : null
+}
+
+/**
+ * Le nœud lu par son chemin, ancien chemin compris (`findNode`), ou par son identifiant stable (`findNodeById`) : même
+ * niveau, mêmes refus ; un nœud invisible répond comme inconnu (H68), un nœud à la corbeille lu par son identifiant le dit.
+ */
+export async function findTarget(db: PlatformDb, identity: Identity, target: { path: string } | { id: string }): Promise<FoundNode> {
+  if ("id" in target) return { ...(await findNodeById(db, identity, target.id)), movedFrom: null, movedAt: null }
+  const found = await findNode(db, identity, target.path)
+  if (!found) throw unknownNode(target.path, identity.org.prefix)
+  return found
 }
 
 /** La ligne servie en tête de ce qu'on sert par un ancien chemin (AC7) : « ventes/a/x moved to ventes/b/x on 2026-09-24: use the new path. » */
