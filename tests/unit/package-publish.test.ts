@@ -75,10 +75,12 @@ describe("package manifest (AC1)", () => {
     // E10-S02 lot a : aws4fetch, la signature SigV4 du port de stockage S3 (`server/files/s3.ts`, ADR-016).
     // Moteur des connecteurs décrits : ajv, la validation du JSON Schema 2020-12 d'un connecteur décrit (`server/catalog/arguments.ts`).
     // fflate : les ZIP du transfert d'une arborescence (`server/transfer/formats.ts`).
-    // Fonctions d'un hôte : la lib de connecteurs, son profil hôte (`server/host-api/document.ts`), épinglée par SHA complet,
-    // faute d'être publiée sur npm.
-    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.32.1", "@otomata_tech/connectors": "github:oto-now/connectors#47c4bdcb0273f8fc7fbb2433adb5ad2167548784&path:/ts", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
+    expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.32.1", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
     expect(pkg.peerDependencies.zod).toBe("^3.25")
+    // Fonctions d'un hôte : la lib de connecteurs (profil hôte, `server/host-api/document.ts`), installée par l'hôte depuis
+    // git, faute d'être publiée sur npm : pnpm refuse une dépendance git dans les sous-dépendances, et une version venue de
+    // git ne satisfait aucun intervalle semver.
+    expect(pkg.peerDependencies["@otomata_tech/connectors"]).toBe("*")
   })
 })
 

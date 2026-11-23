@@ -344,9 +344,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.1
         version: 1.32.1(supports-color@7.2.0)(zod@3.25.76)
-      '@otomata_tech/connectors':
-        specifier: github:oto-now/connectors#47c4bdcb0273f8fc7fbb2433adb5ad2167548784&path:/ts
-        version: https://codeload.github.com/oto-now/connectors/tar.gz/47c4bdcb0273f8fc7fbb2433adb5ad2167548784#path:/ts
       '@phosphor-icons/react':
         specifier: ^2
         version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -396,6 +393,9 @@ importers:
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
+      '@otomata_tech/connectors':
+        specifier: github:oto-now/connectors#47c4bdcb0273f8fc7fbb2433adb5ad2167548784&path:/ts
+        version: https://codeload.github.com/oto-now/connectors/tar.gz/47c4bdcb0273f8fc7fbb2433adb5ad2167548784#path:/ts
       '@tailwindcss/postcss':
         specifier: 4.2.1
         version: 4.2.1
