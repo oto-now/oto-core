@@ -490,14 +490,17 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant. Un connecteur
      qui passe d'un accès à plusieurs arrête ses comptes existants (`access` nul) : leur reprise est dans connecteurs et
      comptes, § Plusieurs accès.
-- `20261122184838_platform_attente_sans_echeance.sql` (non publiée ; réunie au fichier de la prochaine version avant
-  son tag ; identité et connexion, § Personne en attente, sans email) : `invitations.expires_at` facultatif, sa valeur
-  par défaut (sept jours) gardée pour l'invitation envoyée par email ; nul, l'inscription sans email de `member.add`
-  (`registerInvitation`), qui n'expire pas. `authenticated` reçoit `insert(expires_at)`. Six fonctions recréées,
-  privilèges redits à l'identique, où une échéance nulle compte comme ouverte : `invitations_guard`
-  (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
-  `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
-  relancer avant. Rollback dans le fichier.
+- `20261123153610_v1_10_0.sql` (version 1.10.0 ; un seul fichier de migration par version publiée, fiche D124) : la
+  seule migration ajoutée depuis 1.9.0, écrite pendant le développement puis réunie avant le tag, au contenu identique ;
+  une bannière nomme son fichier d'origine, et son bloc `-- ROLLBACK:` reste à sa fin (aucune ligne changée). Aucune
+  version publiée ne portait le fichier d'origine (§ « Hôtes qui avaient appliqué la migration de la 1.10.0 »).
+  1. `20261122184838_platform_attente_sans_echeance.sql` (identité et connexion, § Personne en attente, sans email) :
+     `invitations.expires_at` facultatif, sa valeur par défaut (sept jours) gardée pour l'invitation envoyée par
+     email ; nul, l'inscription sans email de `member.add` (`registerInvitation`), qui n'expire pas. `authenticated` reçoit `insert(expires_at)`. Six fonctions recréées,
+     privilèges redits à l'identique, où une échéance nulle compte comme ouverte : `invitations_guard`
+     (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
+     `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
+     relancer avant. Rollback dans le fichier.
 
 ## Installer sur un hôte neuf
 
@@ -764,6 +767,27 @@ appliquer. Comme pour la 1.8.0 (§ précédent), par qui exploite la base, jamai
   fichier d'origine), puis le cas précédent.
 
 Les copies des deux dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
+
+## Hôtes qui avaient appliqué la migration de la 1.10.0
+
+Le fichier d'origine de `20261123153610_v1_10_0.sql` (`20261122184838`) n'a été publié par aucune version : seule une
+base de développement, une base d'essai d'un hôte, ou le projet de test de ce dépôt, a pu l'appliquer. Comme pour la
+1.9.0 (§ précédent), par qui exploite la base, jamais par la CI, à la racine d'un dépôt dont `supabase/migrations/`
+porte `20261123153610_v1_10_0.sql` et plus le fichier d'origine, `DB_URL` posée comme au § « marquer la ligne de base
+V1 appliquée » :
+
+- **Base locale de test** : `pnpm db:local --reset` la recrée, rien d'autre.
+- **Appliquée** (`supabase migration list` la montre côté base) : seul l'historique change.
+
+  ```bash
+  npx supabase migration repair --db-url "$DB_URL" --status reverted 20261122184838
+  npx supabase migration repair --db-url "$DB_URL" --status applied 20261123153610
+  npx supabase migration list --db-url "$DB_URL"
+  npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
+  ```
+
+La copie du fichier d'origine dans `supabase/migrations/` de l'hôte se supprime : `migrations sync` ajoute, il ne
+retire rien.
 
 ## Supprimer une personne
 

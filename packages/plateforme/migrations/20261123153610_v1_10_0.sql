@@ -1,3 +1,11 @@
+-- Version 1.10.0 du paquet (un seul fichier de migration par version publiée, database-patterns.md § Règles) :
+-- la migration ajoutée depuis la version précédente, réunies au contenu identique, dans l'ordre
+-- de leurs horodatages, chacune précédée d'une bannière qui nomme son fichier d'origine. Aucune ligne n'est changée.
+
+-- ====================================================================================================
+-- Partie 1 sur 1 : écrite en 20261122184838_platform_attente_sans_echeance.sql.
+-- ====================================================================================================
+
 -- La personne en attente sans échéance (conception, identité et connexion § Personne en attente, sans email ; décision
 -- du 22/11) : l'inscription que fait `member.add` (`registerInvitation`) part sans email d'oto ; l'hôte prévient la
 -- personne lui-même, qui peut se connecter des semaines plus tard. Elle n'expire donc pas : `expires_at` nul. Une
