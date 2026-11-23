@@ -25,6 +25,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - `team.create` creates a team with its folder. Administrators do everything; a team lead adds or removes members of the teams they lead only; a plain member is refused.
 - An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 - From a third-party client, a host's function first asks the person to authorize oto once: the refusal carries the link to open.
+- `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 
 ### Hosts
 - MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
@@ -45,6 +46,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: the consent is kept, encrypted, on the person's account of the connector `host_api` (never declared: `registerConnectors` refuses the name); disabling the account revokes it. `PLATFORM_VAULT_KEY` is then required.
 - Server: `TokenAnswer` gains `description` (the `error_description` of a refused token request); `UserConsentAuth` gains `tokenParams`.
 - Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
+- Server: the host serves `GET <address><x-oto.functions>` (`/me/functions`) → `200 {"functions": ["<operationId>", …]}`, the functions the person may call, under a token for its API without scope; oto keeps it 5 minutes per person and filters `context`, `find` and `read functions` with it, never `call`. A refusal or another answer: the index says the list is unavailable, with its reason.
+- Server: `readNode` options gain `viewer` (`accessToken`, `ctx`, `host`) and `ContextRequest` gains `accessToken`: without them, `read functions` says the host's list is unavailable and `context` serves no host block (the Context preview). `activeOrgFunctions` is replaced by `visibleOrgFunctions` and `readFunctionCatalog`.
 
 ## 1.9.0 — 2026-11-19
 

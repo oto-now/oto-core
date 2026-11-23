@@ -6,7 +6,9 @@
 // client tiers, dont l'émetteur n'échange pas le jeton : sans consentement, le refus et son lien d'autorisation ; le
 // consentement rangé par le retour du parcours `oauth2_user`, chiffré sur le compte `host_api` de la personne ; l'appel
 // sous le jeton consenti, son renouvellement, la révocation par la désactivation du compte, un renouvellement refusé, un
-// consentement donné sous un autre compte de l'émetteur. Un faux émetteur et un faux hôte en local
+// consentement donné sous un autre compte de l'émetteur. Enfin ce que la personne voit : sa liste (`/me/functions`) filtre
+// `read functions`, `find` et le bloc de `context`, jamais `call` ; une personne sans rôle n'a pas de bloc, une liste
+// indisponible le dit, une organisation sans API d'hôte n'a pas de bloc. Un faux émetteur et un faux hôte en local
 // (`tests/helpers/host-api.ts`). Organisation de référence jetable. Suite portable.
 import { randomBytes } from "node:crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -14,10 +16,12 @@ import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/o
 import { runCall } from "../../packages/plateforme/server/calls"
 import { disableAccount } from "../../packages/plateforme/server/connectors/account-changes"
 import { completeConnectorConsent, startConnectorConsent } from "../../packages/plateforme/server/connectors/consent"
-import { orgAssistantFunctions } from "../../packages/plateforme/server/catalog/org-catalog"
+import { orgAssistantFunctions, visibleOrgFunctions } from "../../packages/plateforme/server/catalog/org-catalog"
+import { buildContext } from "../../packages/plateforme/server/context"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { forgetExchangedTokens } from "../../packages/plateforme/server/host-api/exchange"
 import { forgetHostFunctions, hostApi, hostApiFunctions, refreshHostApi } from "../../packages/plateforme/server/host-api/service"
+import { forgetHostVisibility } from "../../packages/plateforme/server/host-api/visibility"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
 import { CONSENT_ENV, EXCHANGE_ENV, HOST, hostDocument, ISSUER, RESOURCE, routeFetch, startFakeHost, THIRD_PARTY, unsignedJwt, type FakeHost } from "../helpers/host-api"
 import { pendingMigrations } from "../helpers/pending-migrations"
@@ -74,6 +78,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
   beforeEach(() => {
     fake.reset()
     forgetExchangedTokens()
+    forgetHostVisibility()
     vi.stubEnv("PLATFORM_OIDC_ISSUER", ISSUER)
     vi.stubEnv("PLATFORM_OIDC_AUDIENCE", "https://oto.example.test/api/mcp")
     for (const [name, value] of Object.entries({ ...EXCHANGE_ENV, ...CONSENT_ENV })) vi.stubEnv(name, value)
@@ -108,8 +113,8 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     const names = (await hostApiFunctions(lea.db, lea.identity)).map((fn) => fn.name)
     expect(names).toEqual(["projet.lister", "projet_act.archiver"])
     expect((await orgAssistantFunctions(lea.db, lea.identity)).filter((fn) => fn.connector === "projet").map((fn) => fn.name)).toEqual(names)
-    const catalogue = await readNode(lea.db, lea.identity, { path: "functions" })
-    expect(catalogue.text).toContain("projet.lister")
+    const catalogue = await readNode(lea.db, lea.identity, { path: "functions" }, { origin: ORIGIN, viewer: { accessToken: SUBJECT } })
+    expect(catalogue.text).toContain("- projet.lister (read): List the projects")
 
     // Le même document, relu avec son ETag : rien ne change que la date du rafraîchissement.
     expect(await refreshHostApi(staff.db, staff.identity, {})).toMatchObject({ kind: "unchanged", view: { version: "1.0.0" } })
@@ -293,6 +298,89 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       expect(await refusal(callThirdParty({ function: "projet.lister" }))).toMatchObject({ code: "upstream_error" })
       expect(fake.seen.filter((request) => request.path.startsWith("/oidc/auth"))).toEqual([])
       expect(toHost()).toEqual([])
+    })
+  })
+
+  describe("what the person sees: her list of the host's functions", () => {
+    const viewer = { accessToken: SUBJECT, ctx: "7K3Q-M2XA", host: "claude-ai@0.1.0" }
+    const catalogue = () => readNode(lea.db, lea.identity, { path: "functions" }, { origin: ORIGIN, viewer })
+    const contextText = async (phrase?: string) => (await buildContext(lea.db, lea.identity, { phrase }, { userAgent: null, origin: ORIGIN, accessToken: SUBJECT })).text
+    const lists = () => fake.seen.filter((request) => request.path === "/me/functions")
+    const grants = () => fake.seen.filter((request) => request.path === "/oidc/token").map((request) => Object.fromEntries(new URLSearchParams(request.body)))
+
+    beforeEach(async () => {
+      fake.state.document = hostDocument("5.0.0")
+      fake.state.etag = '"v5"'
+      await refreshHostApi(staff.db, staff.identity, { address: HOST })
+    })
+
+    it("should show in the index only what the host lists for the person, asked once under an exchanged token without scope", async () => {
+      fake.state.functions = ["projet.lister"]
+      const read = await catalogue()
+      expect(read.text).toContain("Functions of Hote Test open to you, by family:\nProjects:\n- projet.lister (read): List the projects")
+      expect(read.text).not.toContain("archiver")
+      expect((read.data as { functions: { name: string }[] }).functions.map((fn) => fn.name)).toContain("projet.lister")
+
+      const { host } = await visibleOrgFunctions(lea.db, lea.identity, viewer)
+      expect(host.map((fn) => fn.name)).toEqual(["projet.lister"])
+
+      const text = await contextText("archive a project")
+      expect(text).toContain("Functions of Hote Test open to you, by family")
+      expect(text).toContain("- Projects: projet.lister\nClosest to the request:\n- projet.lister: List the projects")
+      expect(text).not.toContain("projet_act.archiver")
+
+      // Une seule lecture de la liste pour les trois portes : elle est gardée cinq minutes.
+      expect(lists()).toHaveLength(1)
+      const [list] = lists()
+      expect(list.headers.authorization).toBe("Bearer exchanged-token-1")
+      expect(list.headers["oto-org"]).toBe(o.org.id)
+      expect(JSON.stringify(lists())).not.toContain(SUBJECT)
+      expect(grants()).toEqual([expect.not.objectContaining({ scope: expect.anything() })])
+      expect(grants()[0]).toMatchObject({ resource: RESOURCE, grant_type: "urn:ietf:params:oauth:grant-type:token-exchange" })
+    })
+
+    it("should still send a call of a function outside the list to the host, which decides, and relay its refusal", async () => {
+      fake.state.functions = ["projet.lister"]
+      await catalogue()
+      fake.state.problem = { status: 403, body: { title: "Forbidden", detail: "Only a coach can archive a project.", code: "role_required" } }
+      const refused = await callAs(lea, { function: "projet_act.archiver", arguments: { id: 7 } }).then(
+        () => null,
+        (error: { code: string; message: string; details?: Record<string, unknown> }) => ({ code: error.code, message: error.message, details: error.details }),
+      )
+      expect(refused).toEqual({ code: "forbidden", message: "Only a coach can archive a project.", details: { refusal: "role_required" } })
+      expect(fake.seen.filter((request) => request.path.startsWith("/api/v2/")).map((request) => request.path)).toEqual(["/api/v2/projets/7/archive"])
+    })
+
+    it("should serve no block and no host function to a person without a role", async () => {
+      fake.state.functions = []
+      expect(await contextText("archive a project")).not.toContain("Hote Test")
+      expect((await catalogue()).text).toContain("No function of Hote Test is open to you.")
+      expect((await visibleOrgFunctions(lea.db, lea.identity, viewer)).host).toEqual([])
+    })
+
+    it("should say the list is unavailable, with its reason, rather than show every function, and not keep the failure", async () => {
+      fake.state.functionsStatus = 500
+      const unavailable = "Functions of Hote Test unavailable: Hote Test answered with an unexpected status (500). Retry later. acme_call still reaches Hote Test, which decides."
+      expect(await contextText()).toContain(unavailable.replaceAll("acme", lea.identity.org.prefix))
+      const read = await catalogue()
+      expect(read.text).toContain(unavailable.replaceAll("acme", lea.identity.org.prefix))
+      expect(read.text).not.toContain("projet.lister")
+
+      fake.state.functionsStatus = null
+      expect((await catalogue()).text).toContain("- projet.lister (read)")
+    })
+
+    it("should serve no block in an organisation without a host's API", async () => {
+      const admin = testAdminSql()
+      try {
+        await admin`delete from platform.host_apis where org_id = ${o.org.id}`
+      } finally {
+        await admin.end({ timeout: 5 })
+      }
+      forgetHostFunctions()
+      expect(await contextText("archive a project")).not.toContain("Hote Test")
+      expect((await catalogue()).text).not.toContain("Hote Test")
+      expect(lists()).toEqual([])
     })
   })
 })

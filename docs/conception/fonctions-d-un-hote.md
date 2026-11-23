@@ -9,7 +9,8 @@ Un hôte qui a sa propre API REST la décrit en OpenAPI ; oto lit ce document, e
 catalogue de l'organisation derrière `call`, comme des fonctions de l'ERP, et les exécute par le moteur des connecteurs
 décrits, sous un jeton de la personne dont l'audience est l'API de l'hôte, au scope de la fonction appelée : obtenu par
 échange (RFC 8693) pour un client first-party, par le consentement de la personne pour un client tiers. L'hôte reste seul
-juge des droits, du récapitulatif d'une écriture sensible et du texte d'un refus.
+juge des droits, du récapitulatif d'une écriture sensible et du texte d'un refus. L'index montre à chacun les seules
+fonctions que l'hôte lui ouvre (`/me/functions`) : le catalogue et un bloc de 3 000 caractères au plus dans `context`.
 
 ## Contexte
 
@@ -26,9 +27,11 @@ juge des droits, du récapitulatif d'une écriture sensible et du texte d'un ref
 
 Objectifs : une source par organisation, refusée avec ses problèmes nommés sans jamais remplacer la version servie ; des
 fonctions trouvées par `find`, lues par `read`, appelées par `call` ; le jeton de la personne jamais transmis à l'hôte ;
-les deux temps d'une écriture sensible tenus par l'hôte ; ses refus `problem+json` relayés.
+les deux temps d'une écriture sensible tenus par l'hôte ; ses refus `problem+json` relayés ; un index filtré par personne,
+dans `context` sans en manger le budget.
 
-Non-objectifs : aucun outil MCP de plus (ADR-002) ; la visibilité par personne (`/me/functions`), le filtrage de l'index et le bloc de `context` (PR 3) ; un écran.
+Non-objectifs : aucun outil MCP de plus (ADR-002) ; le filtrage comme garantie de sécurité (l'hôte décide à l'appel) ;
+un écran.
 
 ## Conception
 
@@ -130,12 +133,58 @@ avec les rôles de la personne.
 rompt le contrat : refus `upstream_error` (`details.reason = host_confirmation_broken`), journalisé, qui dit que l'hôte a
 pu agir, jamais que rien n'a été fait.
 
+**Visibilité par personne** (`server/host-api/visibility.ts`). oto demande à l'hôte les fonctions que la personne peut
+appeler : `GET <adresse><x-oto.functions>` (`/me/functions`), par le transport gardé, 10 s, avec les en-têtes `Oto-*`,
+sous un jeton de la personne pour l'API obtenu comme celui d'un appel (§ Jeton : échange, sinon consentement, sinon le
+refus et son lien), mais **sans scope** : la liste ne lit que l'identité, le jeton porte l'audience seule. Réponse
+attendue : `200 {"functions": ["<operationId>", …]}`, les noms du document. Un nom que le document servi ne porte pas (un
+document plus récent chez l'hôte) est ignoré et compté au log. Les rôles déclarés (`x-oto-roles`) ne filtrent rien : ils
+servent l'affichage et la lecture du contrat ; la visibilité réelle dépend de droits plus fins que l'hôte seul connaît.
+La liste est gardée en mémoire du processus cinq minutes par (organisation, personne, adresse, version du document) ;
+seule une liste lue est gardée. Elle est lue par `context`, `find` et `read functions` (`visibleOrgFunctions`,
+`server/catalog/org-catalog.ts`), **jamais par `call`** : une fonction absente de la liste part quand même vers l'hôte, qui
+décide, et son refus `problem+json` est relayé (§ Erreurs). Indisponible (refus de l'hôte, réponse illisible, panne,
+consentement à donner, appel sans jeton vérifié), la liste ne montre aucune fonction de l'hôte et l'index le dit :
+« Functions of <titre> unavailable: <raison> <p>_call still reaches <titre>, which decides. », raison bornée à
+300 caractères ; jamais toutes les fonctions.
+
+**Index** (`server/host-api/index-view.ts`). Deux vues des mêmes fonctions visibles :
+
+- **Bloc de `context`** (`server/context/blocks/host.ts`), « host functions », servi juste après les règles, en
+  affichage comme au budget (`PRIORITY.host = 1`, [contexte servi](contexte-servi.md)). Une tête (lire un contrat par
+  `read`, l'appeler par `call`, l'index entier par `read {"path": "functions"}`), une ligne par famille dans l'ordre de
+  `x-oto.families` (« - <libellé> : <noms servis> », une famille sans fonction visible omise), puis « Closest to the
+  request: » et les fonctions les plus proches de la demande, 8 au plus (`searchFunctions` : score, puis nom), avec leur
+  `summary`. Aucun bloc sans API servie, ni pour une personne sans fonction visible ; une liste indisponible : sa ligne.
+  Le `context` léger (`since_ctx`) ne le sert pas, ni l'aperçu de l'écran « Contexte », qui n'a pas de jeton de la
+  personne.
+- **Règle de troncature**, déterministe (même document, même liste, même demande, même texte), à 3 000 caractères :
+  1. une ligne de famille de plus de 600 caractères garde ses premiers noms entiers et compte les autres (« … and 12
+     more ») ;
+  2. si le bloc dépasse 3 000 caractères, les fonctions proches partent une à une, la moins proche d'abord ;
+  3. puis les familles, la dernière d'abord ;
+  4. le bloc coupé finit par « [Index cut to 3,000 characters: N families and M close functions not listed. Read them
+     with <p>_read {"path": "functions"}.] » : jamais une coupure muette. Le bloc coupé est rapporté `cut` à l'aperçu.
+- **`read functions`** : les fonctions actives de l'instance par connecteur, puis « Functions of <titre> open to you, by
+  family: », chaque famille et ses fonctions avec leur classe et leur `summary`, entière ; « No function of <titre> is
+  open to you. » pour une liste vide ; la ligne d'indisponibilité sinon. `find` cherche parmi les seules fonctions
+  visibles, et ajoute la ligne d'indisponibilité quand la liste manque.
+
 **Erreurs** (`server/host-api/problem-json.ts`). Un `application/problem+json` devient une `PlatformError` : 400 et 422
 → `invalid_arguments`, 401 → `unauthorized` (« reconnectez-vous »), 403 → `forbidden`, 404 → `not_found`, 409 →
 `conflict`, 413 → `too_large`, 429 → `rate_limited`, le reste → `upstream_error`. Message : `detail`, sinon `title`, borné
 à 500 caractères ; le `code` de l'hôte en `details.refusal`. Une autre réponse hors 2xx suit la table standard du profil.
 
 ## Décisions et alternatives écartées
+
+- **Filtrer par les rôles déclarés (`x-oto-roles`)** : écarté (réponse 6 de la conception), la visibilité réelle dépend de
+  droits plus fins que le rôle, que seul l'hôte connaît ; oto lit `/me/functions`.
+- **Filtrer `call` par la liste** : écarté, la liste sert le routage ; le refus de l'hôte à l'exécution reste la seule
+  garantie, et il est relayé.
+- **Tout montrer quand la liste échoue** : écarté, l'index dit la raison au lieu de tout montrer.
+- **Le jeton de la liste au scope de toutes les fonctions** : écarté, la liste ne lit que l'identité ; aucun scope.
+- **L'index entier dans `context`** (8 à 9 000 caractères pour 78 fonctions) : écarté (décision du 22/11/2026), le quart
+  du plafond à chaque conversation ; un bloc de 3 000 caractères et `read functions`.
 
 - **Transmettre le jeton de la personne tel quel** : écarté (décision du 22/11/2026), contraire à la spécification MCP.
 - **Impersonation par la Management API de l'émetteur** : écartée, pouvoir total sur les personnes du tenant.
@@ -168,12 +217,21 @@ pu agir, jamais que rien n'a été fait.
   par son statut, son code et son message borné, jamais son corps.
 - Le document de l'hôte n'a rien de secret (servi sans authentification) : il est lisible par les membres de
   l'organisation.
+- La liste d'une personne sert le routage, jamais la sécurité : `call` ne la lit pas, l'hôte juge chaque appel. Elle est
+  gardée par personne (son identifiant dans la clé), jamais partagée entre deux personnes ; le jeton de la liste n'a aucun
+  scope.
 
 ## Écart avec le code
 
 - Le rafraîchissement n'est que manuel (`admin_connector refresh_host_api`) : aucune tâche ne relit le document toutes les
   10 minutes, faute d'une écriture hors session de l'équipe plateforme.
-- Visibilité par personne, filtrage et bloc de `context` : PR 3.
+- `read {"path": "functions/<famille>"}` (l'index d'une seule famille, réponse 7 de la conception) n'est pas servi :
+  `read functions` sert l'index entier, et le bloc de `context` y renvoie. Le chemin `functions/…` n'est pas réservé à
+  l'écriture.
+- Une personne dont le client tiers n'a pas encore de consentement : chaque lecture de sa liste (`context`, `find`,
+  `read functions`) pose une demande de consentement, à usage unique et de dix minutes, pour porter le lien dans la ligne
+  d'indisponibilité.
+- Un échec de la liste n'est pas gardé : chaque lecture la redemande à l'hôte.
 - Le retour du consentement exige la session web de la personne à l'adresse de l'organisation, comme tout consentement
   `oauth2_user` : ouvert sans elle, le lien mène à la connexion, puis il faut le rouvrir.
 - Le jeton consenti porte les scopes de toutes les fonctions, pas celui de la fonction appelée (un seul jeton par
@@ -183,6 +241,9 @@ pu agir, jamais que rien n'a été fait.
 - La lib est épinglée par une URL GitHub (`github:oto-now/connectors#<sha>&path:/ts`) : elle n'est pas publiée sur npm.
 
 ## Questions ouvertes
+
+- La forme de la réponse de `/me/functions` (`{"functions": [operationId…]}`) est fixée par oto ; le premier hôte doit
+  la servir telle quelle (le profil de la lib n'en dit rien).
 
 - Discrimination du client tiers : le couple `invalid_grant` + « grant request is invalid » couvre aussi un client
   supprimé et une personne suspendue (le lien n'aboutit pas pour eux). Obtenir de Logto qu'il rende le détail, ou
@@ -196,3 +257,6 @@ pu agir, jamais que rien n'a été fait.
 - 2026-11-23 : PR 2 du chantier : scope par fonction (lib v1.248.0, famille sans scope refusée à l'import), consentement
   OAuth d'un client tiers (compte `host_api`, lien d'autorisation dans le refus), discrimination du client tiers —
   décidé par Alexis (issue #153, commentaire du 22/11/2026).
+- 2026-11-23 : PR 3 du chantier : visibilité par personne (`/me/functions`, sans scope, gardée cinq minutes), filtrage de
+  `find`, de `read functions` et de `context`, jamais de `call` ; bloc « host functions » de `context`, 3 000 caractères
+  au plus, et sa règle de troncature — décidé par Alexis (source : réponses 6 et 7 de la conception, décisions du 22/11/2026).

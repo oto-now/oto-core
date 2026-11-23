@@ -1,6 +1,6 @@
 // Un faux émetteur et un faux hôte en local, pour les fonctions d'un hôte (`docs/conception/fonctions-d-un-hote.md`) :
 // un serveur HTTP sur 127.0.0.1 sert la découverte et le point de jeton de l'émetteur (`https://auth.example.test/oidc`),
-// le document OpenAPI et l'API de l'hôte (`https://hote.example.test`). Le point de jeton tient l'échange RFC 8693 (son
+// le document OpenAPI, la liste des fonctions de la personne (`/me/functions`) et l'API de l'hôte (`https://hote.example.test`). Le point de jeton tient l'échange RFC 8693 (son
 // refus réglable), le code d'un consentement et son renouvellement ; ses jetons sont des JWT non signés qui disent leur
 // `sub`, comme ceux qu'un émetteur rend en TLS. Le poste n'ayant pas d'hôte public, le transport
 // gardé et `fetch` sont réécrits vers lui par la suite qui l'emploie (`vi.mock` d'`address-guard`, `routeFetch`) ; une
@@ -93,6 +93,9 @@ export type FakeState = {
   consented: number
   problem: { status: number; body: Record<string, unknown> } | null
   firstStep: "202" | "200"
+  /** Ce que rend `/me/functions` : les noms du document que la personne peut appeler ; `functionsStatus` : un refus. */
+  functions: string[]
+  functionsStatus: number | null
 }
 
 export type FakeHost = { local: string; state: FakeState; seen: Seen[]; reset(): void; close(): Promise<void> }
@@ -110,6 +113,8 @@ const freshState = (): FakeState => ({
   consented: 0,
   problem: null,
   firstStep: "202",
+  functions: ["projet.lister", "projet.archiver"],
+  functionsStatus: null,
 })
 
 function bodyOf(request: IncomingMessage): Promise<string> {
@@ -163,6 +168,10 @@ export async function startFakeHost(): Promise<FakeHost> {
       }
       response.writeHead(200, { "content-type": "application/json", ...(state.etag ? { etag: state.etag } : {}) })
       return response.end(state.documentRaw ?? JSON.stringify(state.document))
+    }
+    if (url.pathname === "/me/functions" && request.method === "GET") {
+      if (state.functionsStatus) return json(state.functionsStatus, { error: "unavailable" })
+      return json(200, { functions: state.functions })
     }
     if (state.problem && url.pathname.startsWith("/api/v2/")) {
       response.writeHead(state.problem.status, { "content-type": "application/problem+json" })

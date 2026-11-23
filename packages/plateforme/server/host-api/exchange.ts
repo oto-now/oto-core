@@ -147,7 +147,8 @@ export async function exchangedToken(label: string, request: ExchangeRequest): P
     ["subject_token", request.subjectToken],
     ["subject_token_type", ACCESS_TOKEN_TYPE],
     ["resource", request.resource],
-    ["scope", request.scope],
+    // Un scope vide (la liste des fonctions de la personne, `visibility.ts`) : l'audience seule, aucun scope demandé.
+    ...(request.scope === "" ? [] : [["scope", request.scope] as [string, string]]),
   ]
   // `fetch` lu à l'appel : l'émetteur de l'instance est une adresse de sa configuration, jamais une saisie.
   const answer = await requestToken(api, { method: "POST", path: "", headers: { authorization: basicOf(client.id, client.secret) }, form, pacingKey: `exchange:${request.orgId}` }, (input, init) =>

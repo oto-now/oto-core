@@ -7,7 +7,6 @@
 // `202 { status: "needs_confirmation", summary }` ; avec, la requête porte `?confirm=true`.
 import type { JsonSchemaArguments } from "../catalog/arguments"
 import type { CatalogFunction, FunctionContext, FunctionSummary } from "../catalog/define"
-import { actName } from "../catalog/registry"
 import type { AccountCredential } from "../connectors/auth"
 import { functionApi } from "../connectors/catalog-function"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView } from "../connectors/definition"
@@ -17,7 +16,7 @@ import { PlatformError } from "../errors"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { assistantName } from "../usage-statistics"
-import type { ImportedHost } from "./document"
+import { servedName, type ImportedHost } from "./document"
 import { HOST_CONSENT_REQUIRED, hostBearer } from "./consent"
 import { hostProblems } from "./problem-json"
 
@@ -115,7 +114,7 @@ function refusalLines(definition: ConnectorDefinition): string[] {
 function catalogFunction(host: HostFunction): CatalogFunction {
   const { definition, fn, schema } = host
   return {
-    name: fn.act ? (actName(fn.name) ?? fn.name) : fn.name,
+    name: servedName(fn),
     connector: definition.name,
     class: fn.class,
     origin: "erp",
