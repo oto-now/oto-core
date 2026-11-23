@@ -288,11 +288,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(await tryWith(near(request, -4))).toEqual(["/admin/connectors", "connected", label("lea")])
   })
 
-  it("should reconnect a dead session of the person's own id, then link it back whatever its date", async () => {
+  it("should reconnect a dead session of the person's own id, then link it back whatever its date, forgetting its last test", async () => {
     const id = accountId("lea")
     await connect("lea", id)
     fake.state.accounts = [{ id, createdAt: "2020-01-01T00:00:00Z", probe: "dead" }]
-    await admin`update platform.accounts set status = 'error', status_reason = 'session lost' where linked_id = ${id}`
+    await admin`update platform.accounts set status = 'error', status_reason = 'session lost', health = jsonb_build_object('last_probe', jsonb_build_object('at', now(), 'healthy', false, 'code', 'account_not_ready', 'reason', 'dead', 'balance', null)) where linked_id = ${id}`
     fake.calls.length = 0
     const { url } = await start("lea")
     const request = await lastRequest("lea")
@@ -301,6 +301,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     fake.state.accounts = [{ id, createdAt: "2020-01-01T00:00:00Z", probe: "alive", who: who("lea") }]
     expect(outcome(await back("lea", { request: request.id }))).toEqual(["/admin/connectors", "connected", label("lea")])
     expect(await accountsOf("lea")).toMatchObject([{ status: "active", linked_id: id }])
+    expect((await admin<{ kept: boolean }[]>`select health ? 'last_probe' as kept from platform.accounts where linked_id = ${id}`)[0].kept).toBe(false)
   })
 
   it("should link an id already the person's in a second organisation in one gesture, without the third party's link", async () => {

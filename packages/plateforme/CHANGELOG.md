@@ -17,6 +17,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Hosts
+- Server: reconnecting an account at its third party (the return of a consent, the link of a hosted account) forgets its last test, as a new key does: the Connectors screen says « Non testé » instead of a test made on the old connection. Nothing to do for a host.
+
 ## 1.9.0 — 2026-11-19
 
 ### Assistants

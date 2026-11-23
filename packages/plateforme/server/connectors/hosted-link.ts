@@ -198,7 +198,8 @@ type PostedRequest = { id: string; created_at: Date; expires_at: Date }
 
 /**
  * Lie l'identifiant sur le compte personnel de la personne, par `platform.link_hosted_account`, qui refait les gardes
- * sous verrou et consomme les demandes ouvertes. Rend le compte lié ; un refus de la base, nommé.
+ * sous verrou et consomme les demandes ouvertes ; le dernier test du compte, qui portait sur l'ancienne session, s'efface
+ * dans la même transaction. Rend le compte lié ; un refus de la base, nommé.
  */
 async function link(db: PlatformDb, identity: Identity, connector: HostedConnector, linking: { requestId: string; id: string; createdAt: Date | null; who: string }): Promise<AccountSummary> {
   const name = connector.definition.name
@@ -214,6 +215,7 @@ async function link(db: PlatformDb, identity: Identity, connector: HostedConnect
         }
         throw hostedRefusal(outcome.refusal as HostedRefusal, connector.definition.label)
       }
+      if (outcome?.account_id) await sql`select platform.forget_account_probe(${outcome.account_id}::uuid)`
       const [written] = outcome?.account_id ? await accountRows(sql, identity.org.id, { id: outcome.account_id }) : []
       if (!written) {
         console.error(`[platform] link_hosted_account: account ${outcome?.account_id ?? "?"} linked but not read back`)

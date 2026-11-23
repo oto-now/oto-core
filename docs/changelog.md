@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-23] — Connecteurs : une reconnexion efface le dernier test du compte
+**Quoi :** le retour d'un consentement (`keepConsent`, `server/connectors/consent.ts`) et le rattachement d'un compte hébergé (`link`, `server/connectors/hosted-link.ts`) appellent `platform.forget_account_probe` dans la transaction qui range la connexion, comme `setAccountSecret` à une nouvelle clé ; un jeton renouvelé garde le test.
+**Pourquoi :** un compte reconnecté avec succès restait « Test en échec » à l'écran jusqu'au test suivant, le test portant sur l'ancienne connexion (demande de l'écran sur oto-core#103 du 16/11).
+**Fichiers :** `packages/plateforme/server/connectors/{consent,hosted-link}.ts`, `tests/integration/{consentement-oauth,comptes-rattaches}.test.ts`, `docs/conception/connecteurs-et-comptes.md`, `docs/reference/schema-platform.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-22] — Job `recu` : une fusion de branche couverte n'est plus signalée
 **Quoi :** `scripts/ci/recu.mjs` donne deux verdicts de plus aux commits de fusion sans reçu propre. `fusion` : le second parent (la branche fusionnée) porte un `Verified-tree:` valide pour son arbre, ou laisse inchangé celui de son premier parent, et la fusion garde l'arbre de code de ce second parent ; accepté. `ecart` : même second parent couvert, mais l'arbre de la fusion diffère du sien (`main` a bougé entre-temps, le mélange n'a été vérifié par personne) ; signalé comme un commit sans reçu. Le job reste en `--avertir`.
 **Pourquoi :** sur `main` du 25/10 au 22/11, 17 des 38 avertissements « Reçu du commit » étaient des fusions de pull request, que le script comparait à leur premier parent ; 10 d'entre elles fusionnent une branche attestée au même arbre, et ne sont plus signalées. Les 7 autres fusionnent une branche sans reçu et le restent. Étape préalable avant de rendre le job bloquant (#84, #85).
