@@ -128,23 +128,6 @@ export async function beginConsent(db: PlatformDb, identity: Identity, connector
 }
 
 /**
- * La demande de consentement à ce `state` est encore ouverte pour au moins `minutes` : à la personne et à l'organisation
- * de l'appel, ni servie ni échue. Lu par le lien d'un refus de l'API d'un hôte (`host-api/consent.ts`), qui reprend une
- * demande ouverte au lieu d'en poser une à chaque lecture.
- */
-export async function consentStillOpen(db: PlatformDb, identity: Identity, state: string, minutes: number): Promise<boolean> {
-  const rows = await db
-    .tx((sql) => sql`
-      select 1 from platform.connector_consents
-       where state_hash = ${stateHash(state)} and org_id = ${identity.org.id} and user_id = ${identity.user.id}
-         and expires_at > now() + make_interval(mins => ${minutes})`)
-    .catch((error) => {
-      throw fromDatabaseError(error, "consentStillOpen: connector_consents")
-    })
-  return rows.length > 0
-}
-
-/**
  * Démarre le consentement de la personne connectée à un connecteur `oauth2_user`, ou à l'accès `oauth2_user` que la
  * saisie nomme d'un connecteur à plusieurs accès (`access`, gardé avec la demande), et rend l'adresse d'autorisation du
  * tiers, où l'envoyer : scopes de la description (ceux du niveau `full` pour un connecteur à niveaux d'accès, que le

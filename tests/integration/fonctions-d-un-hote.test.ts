@@ -15,11 +15,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
 import { runCall } from "../../packages/plateforme/server/calls"
 import { disableAccount } from "../../packages/plateforme/server/connectors/account-changes"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { completeConnectorConsent, startConnectorConsent } from "../../packages/plateforme/server/connectors/consent"
 import { orgAssistantFunctions, visibleOrgFunctions } from "../../packages/plateforme/server/catalog/org-catalog"
 import { buildContext } from "../../packages/plateforme/server/context"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
-import { forgetConsentLinks } from "../../packages/plateforme/server/host-api/consent"
 import { forgetExchangedTokens } from "../../packages/plateforme/server/host-api/exchange"
 import { forgetHostFunctions, hostApi, hostApiFunctions, refreshHostApi } from "../../packages/plateforme/server/host-api/service"
 import { forgetHostVisibility } from "../../packages/plateforme/server/host-api/visibility"
@@ -80,7 +80,6 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
     fake.reset()
     forgetExchangedTokens()
     forgetHostVisibility()
-    forgetConsentLinks()
     vi.stubEnv("PLATFORM_OIDC_ISSUER", ISSUER)
     vi.stubEnv("PLATFORM_OIDC_AUDIENCE", "https://oto.example.test/api/mcp")
     for (const [name, value] of Object.entries({ ...EXCHANGE_ENV, ...CONSENT_ENV })) vi.stubEnv(name, value)
@@ -183,9 +182,16 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
         await admin.end({ timeout: 5 })
       }
     }
-    /** Le lien d'un refus suivi comme le ferait l'émetteur : le retour sur l'adresse du paquet, avec un code et le `state`. */
-    const consentThrough = async (url: string) => {
-      const state = new URL(url).searchParams.get("state") ?? ""
+    /** L'adresse stable d'un refus (`/connect/host_api?space=me`), ouverte par la page : l'adresse d'autorisation où elle envoie. */
+    const opened = async (link: string) => {
+      const url = new URL(link)
+      const step = await connectionStep(lea.db, lea.identity, { connector: decodeURIComponent(url.pathname.split("/").pop() ?? ""), ...Object.fromEntries(url.searchParams) }, { origin: ORIGIN })
+      if (step.kind !== "redirect") throw new Error(`expected a redirect, got ${step.kind}`)
+      return step.url
+    }
+    /** Le lien d'un refus suivi comme le feraient la page puis l'émetteur : le retour sur l'adresse du paquet, avec un code et le `state`. */
+    const consentThrough = async (link: string) => {
+      const state = new URL(await opened(link)).searchParams.get("state") ?? ""
       return completeConnectorConsent(lea.db, lea.identity, { code: `code-${randomBytes(6).toString("hex")}`, state }, { origin: ORIGIN })
     }
 
@@ -202,11 +208,12 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       await refreshHostApi(staff.db, staff.identity, { address: HOST })
     })
 
-    it("should refuse without a consent with the authorization link, then call the host under the consented token, never the person's", async () => {
+    it("should refuse without a consent with the connection link, then call the host under the consented token, never the person's", async () => {
       const refused = await refusal(callThirdParty({ function: "projet.lister" }))
-      expect(refused).toMatchObject({ code: "not_enabled", details: { reason: "host_consent_required" } })
-      const url = new URL(String(refused?.details?.url))
-      expect(refused?.message).toContain(`Authorize oto to act on Hote Test for you: ${url.toString()}`)
+      const link = `${ORIGIN}/connect/host_api?space=me`
+      expect(refused).toMatchObject({ code: "not_enabled", details: { reason: "no_account", gesture: "oauth", connector: "host_api", space: "me", url: link } })
+      expect(refused?.message).toContain(`Ask the user to authorize Hote Test, then call again: open ${link}`)
+      const url = new URL(await opened(link))
       expect(`${url.origin}${url.pathname}`).toBe(`${ISSUER}/auth`)
       expect(Object.fromEntries(url.searchParams)).toMatchObject({
         response_type: "code",
@@ -219,8 +226,11 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       })
       expect(toHost()).toEqual([])
 
-      const { account: kept } = await consentThrough(url.toString())
+      const state = url.searchParams.get("state") ?? ""
+      const { account: kept, returnTo } = await completeConnectorConsent(lea.db, lea.identity, { code: `code-${randomBytes(6).toString("hex")}`, state }, { origin: ORIGIN })
       expect(kept).toMatchObject({ connector: "host_api", label: "Hote Test", owner: { kind: "user", userId: o.people.lea.id } })
+      // Le retour ramène sur la page de connexion, qui dira de revenir à l'assistant.
+      expect(returnTo).toBe("/connect/host_api?space=me")
       const [code] = tokenGrants().filter((grant) => grant.grant_type === "authorization_code")
       expect(code).toMatchObject({ resource: RESOURCE, redirect_uri: `${ORIGIN}/api/platform/connector-consent/callback` })
       expect(fake.seen.find((request) => new URLSearchParams(request.body).get("grant_type") === "authorization_code")?.headers.authorization).toBe(
@@ -244,7 +254,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       for (const secret of [bearer, "refresh-1", THIRD_PARTY_SUBJECT, "web-secret-not-in-logs", "m2m-secret-not-in-logs"]) expect(logged).not.toContain(secret)
     })
 
-    it("should give the same link while its request stays open, from a call as from the list of functions, and a new one near its expiry", async () => {
+    it("should give the same stable link from a call as from the list of functions, and pose a consent request only when the page opens", async () => {
       const requests = async () => {
         const admin = testAdminSql()
         try {
@@ -256,24 +266,20 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       const before = (await requests()).length
       const first = await refusal(callThirdParty({ function: "projet.lister" }))
       const url = String(first?.details?.url)
-      expect(first?.message).toContain("within 5 minutes")
       expect(String((await refusal(callThirdParty({ function: "projet.lister" })))?.details?.url)).toBe(url)
       // La liste des fonctions de la personne dit le même lien, entier, dans sa raison.
       const { visibility } = await visibleOrgFunctions(lea.db, lea.identity, { accessToken: THIRD_PARTY_SUBJECT, origin: ORIGIN })
       expect(visibility).toMatchObject({ kind: "unavailable" })
       expect(visibility.kind === "unavailable" ? visibility.reason : "").toContain(url)
+      // Ni secret ni jeton dans le lien : ni `state`, ni code, ni client.
+      expect([...new URL(url).searchParams.keys()]).toEqual(["space"])
+      expect((await requests()).length).toBe(before)
+      // L'ouverture pose une demande, de dix minutes, à usage unique : servie une fois, elle ne ressert pas.
+      const authorization = new URL(await opened(url))
       expect((await requests()).length).toBe(before + 1)
-
-      // À moins de cinq minutes de son échéance, la demande est remplacée par une neuve.
-      const admin = testAdminSql()
-      try {
-        await admin`update platform.connector_consents set expires_at = now() + interval '2 minutes' where org_id = ${o.org.id} and user_id = ${o.people.lea.id} and connector = 'host_api'`
-      } finally {
-        await admin.end({ timeout: 5 })
-      }
-      const renewed = String((await refusal(callThirdParty({ function: "projet.lister" })))?.details?.url)
-      expect(renewed).not.toBe(url)
-      expect((await requests()).length).toBe(before + 2)
+      const state = authorization.searchParams.get("state") ?? ""
+      await completeConnectorConsent(lea.db, lea.identity, { code: "code-1", state }, { origin: ORIGIN })
+      expect(await codeOf(completeConnectorConsent(lea.db, lea.identity, { code: "code-2", state }, { origin: ORIGIN }))).toBe("invalid_arguments")
     })
 
     it("should start the same consent from the Connectors screen (Reconnect), and refuse it in an organisation without a host's API", async () => {
@@ -298,7 +304,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       const first = await refusal(callThirdParty({ function: "projet.lister" }))
       const { account: kept } = await consentThrough(String(first?.details?.url))
       await disableAccount(lea.db, lea.identity, { account_id: kept.id })
-      expect(await refusal(callThirdParty({ function: "projet.lister" }))).toMatchObject({ code: "not_enabled", details: { reason: "host_consent_required" } })
+      expect(await refusal(callThirdParty({ function: "projet.lister" }))).toMatchObject({ code: "not_enabled", details: { reason: "no_account", gesture: "oauth" } })
 
       // Consentir de nouveau reprend le même compte, actif ; son jeton échoit vite, pour que le suivant se renouvelle.
       fake.state.consentExpiresIn = 30
@@ -310,7 +316,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       expect(third).toBeNull()
       fake.state.refreshRefused = true
       const lapsed = await refusal(callThirdParty({ function: "projet.lister" }))
-      expect(lapsed).toMatchObject({ code: "not_enabled", details: { reason: "host_consent_required" } })
+      expect(lapsed).toMatchObject({ code: "not_enabled", details: { reason: "reconnect", gesture: "oauth" } })
       expect(lapsed?.message).toContain("no longer holds")
       expect((await account()).map((row) => row.status)).toEqual(["error"])
       expect(toHost()).toHaveLength(1)
@@ -321,7 +327,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       const refused = await refusal(callThirdParty({ function: "projet.lister" }))
       await consentThrough(String(refused?.details?.url))
       const mismatch = await refusal(callThirdParty({ function: "projet.lister" }))
-      expect(mismatch).toMatchObject({ code: "not_enabled", details: { reason: "host_consent_required" } })
+      expect(mismatch).toMatchObject({ code: "not_enabled", details: { reason: "reconnect", gesture: "oauth" } })
       expect(mismatch?.message).toContain("under another account")
       expect((await account()).map((row) => row.status)).toEqual(["error"])
       expect(toHost()).toEqual([])

@@ -1,13 +1,13 @@
 // Le jeton qu'une fonction de l'API d'un hôte envoie (`fonctions-d-un-hote-jeton.md` § Ordre), dans un ordre fixe : l'échange
 // RFC 8693 d'abord (`exchange.ts`) ; s'il désigne un client tiers, le consentement de la personne s'il est rangé (son
-// compte `host_api`, renouvelé comme tout compte `oauth2_user`) ; sinon le refus qui porte le lien d'autorisation à
-// ouvrir. Aucun repli silencieux : un autre refus de l'échange est une erreur, jamais un consentement. Le jeton de la
+// compte `host_api`, renouvelé comme tout compte `oauth2_user`) ; sinon le refus qui porte l'adresse de la
+// connexion (`connect-link.ts`). Aucun repli silencieux : un autre refus de l'échange est une erreur, jamais un consentement. Le jeton de la
 // personne ne part jamais vers l'hôte, ni un jeton consenti par une autre personne. Sans ce module, un client MCP tiers
 // n'atteindrait pas l'API de l'hôte.
 import type { FunctionContext } from "../catalog/define"
 import { ownConsentCredential } from "../connectors/account-secret"
 import { accountRows, summary } from "../connectors/accounts"
-import { beginConsent, consentStillOpen } from "../connectors/consent"
+import { connectRefusal } from "../connectors/connect-link"
 import { HOST_CONSENT_CONNECTOR } from "../connectors/definition"
 import { consentAccessToken } from "../connectors/oauth-user"
 import { inTransaction, PlatformError } from "../errors"
@@ -15,57 +15,15 @@ import { consentAccessFor } from "./consent-access"
 import type { ImportedHost } from "./document"
 import { claimsOf, exchangedToken } from "./exchange"
 
-/** Le refus d'un appel sans consentement rangé : `details.reason`, que `read` sert parmi les refus d'une fonction. */
-export const HOST_CONSENT_REQUIRED = "host_consent_required"
-
-/** Ce qu'il reste au moins, en minutes, à la demande d'un lien servi ; plus près de son échéance, une demande neuve. */
-export const LINK_LEFT_MINUTES = 5
-
-/** Le dernier lien servi, par organisation, personne, ressource, version du document et adresse de retour. */
-const links = new Map<string, string>()
-
-/** Oublie les liens servis ; les tests seuls. */
-export function forgetConsentLinks(): void {
-  links.clear()
-}
-
 /**
- * Le lien d'autorisation de la personne pour l'API : celui de sa demande encore ouverte (au moins `LINK_LEFT_MINUTES`),
- * relue en base par son `state`, sinon une demande neuve (dix minutes, à usage unique, à la personne). Sans lui, chaque
- * lecture de la liste de ses fonctions (`context`, `find`, `read functions`) posait une demande de plus.
+ * Le refus d'un appel qu'aucune voie ne porte : l'adresse stable de la connexion (`connectRefusal`, geste `oauth`), qui
+ * pose la demande de consentement quand la personne l'ouvre et l'envoie chez l'émetteur. `why` : ce qui précède, quand
+ * un consentement rangé ne vaut plus (`reconnect`) ; sans lui, aucun n'est rangé (`no_account`). L'adresse est celle de
+ * l'organisation appelée (`origin`).
  */
-async function authorizationLink(context: FunctionContext & { origin: string }, imported: ImportedHost): Promise<string> {
-  const { db, identity, origin } = context
-  const key = JSON.stringify([identity.org.id, identity.user.id, imported.resource, imported.version, origin])
-  const kept = links.get(key)
-  if (kept) {
-    const state = new URL(kept).searchParams.get("state")
-    if (!state) throw new Error("[platform] host api: an authorization link without its state")
-    if (await consentStillOpen(db, identity, state, LINK_LEFT_MINUTES)) return kept
-    links.delete(key)
-  }
-  const url = await beginConsent(db, identity, await consentAccessFor(imported), { returnTo: null, origin })
-  links.set(key, url)
-  return url
-}
-
-/**
- * Le refus d'un appel qu'aucune voie ne porte : le lien d'autorisation chez l'émetteur (`authorizationLink`) dans le
- * message et en `details.url`. `why` : ce qui précède, quand un consentement rangé ne vaut plus. L'adresse de retour est
- * celle de l'organisation appelée (`origin`).
- */
-async function consentLink(context: FunctionContext, imported: ImportedHost, why = ""): Promise<PlatformError> {
-  const { origin } = context
-  if (!origin) {
-    console.error(`[platform] host api ${imported.title}: no origin to build the consent link`)
-    return new PlatformError("internal", "Internal error.")
-  }
-  const url = await authorizationLink({ ...context, origin }, imported)
-  return new PlatformError(
-    "not_enabled",
-    `${why}Authorize oto to act on ${imported.title} for you: ${url} (ask the user to open this link within ${LINK_LEFT_MINUTES} minutes and sign in, then call again).`,
-    { reason: HOST_CONSENT_REQUIRED, url },
-  )
+async function consentLink(context: FunctionContext, imported: ImportedHost, why?: string): Promise<PlatformError> {
+  const said = why ?? `oto is not authorized to act on ${imported.title} for you from this client.`
+  return connectRefusal(context, { reason: why ? "reconnect" : "no_account", connector: HOST_CONSENT_CONNECTOR, label: imported.title, said })
 }
 
 /** Le compte `host_api` actif de l'appelant, consenti pour cette ressource ; `null` sans lui (désactivé, à reconnecter, autre ressource). */
@@ -88,13 +46,13 @@ async function consentedToken(context: FunctionContext, imported: ImportedHost, 
   let token: string
   let credential: Awaited<ReturnType<typeof ownConsentCredential>>
   try {
-    credential = await ownConsentCredential(context.db, context.identity, account, access)
+    credential = await ownConsentCredential(context, account, access)
     // `fetch` lu à l'appel : l'émetteur de l'instance est une adresse de sa configuration, jamais une saisie.
     const fetcherFor = () => (input: string, init: RequestInit) => fetch(input, { ...init, redirect: "error" })
     token = await consentAccessToken({ auth: access.auth, definition: access.definition, credential, accountId: account.id, fetcherFor }, false)
   } catch (error) {
     // Un consentement sans jeton, ou que l'émetteur ne renouvelle plus (passé à reconnecter) : le lien, pour consentir à nouveau.
-    if (error instanceof PlatformError && error.code === "not_enabled") throw await consentLink(context, imported, `The authorization given to oto for ${imported.title} no longer holds. `)
+    if (error instanceof PlatformError && error.code === "not_enabled") throw await consentLink(context, imported, `The authorization given to oto for ${imported.title} no longer holds.`)
     throw error
   }
   const given = claimsOf(token)?.sub
@@ -104,7 +62,7 @@ async function consentedToken(context: FunctionContext, imported: ImportedHost, 
   }
   if (given !== claimsOf(subjectToken)?.sub) {
     await credential.consent?.revoked("the authorization was given under another account of the issuer")
-    throw await consentLink(context, imported, `The authorization given to oto for ${imported.title} was given under another account. `)
+    throw await consentLink(context, imported, `The authorization given to oto for ${imported.title} was given under another account.`)
   }
   return token
 }

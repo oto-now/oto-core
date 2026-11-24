@@ -289,7 +289,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, code: probe.code, reason: probe.reason, balance: probe.balance })
     const probe = async (id: string, answer: Response) => {
       vi.stubGlobal("fetch", vi.fn(async () => answer))
-      return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }))
+      return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }, { origin: "https://acme.example.test" }))
     }
     /** Ce que `health` porte hors du dernier test, gardé sous `last_probe` (écran Connecteurs, lot 1). */
     const healthOf = async (id: string) => Object.fromEntries(Object.entries((await row(id)).health as Record<string, unknown>).filter(([key]) => key !== "last_probe"))
@@ -342,7 +342,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const spent = await markOf(paid.id)
       expect(spent?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => (remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining))))
-      expect((await probeAccount(ada.db, ada.identity, { account_id: paid.id })).healthy).toBe(false)
+      expect((await probeAccount(ada.db, ada.identity, { account_id: paid.id }, { origin: "https://acme.example.test" })).healthy).toBe(false)
       expect(await markOf(paid.id)).toEqual(spent)
     })
 
@@ -370,7 +370,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))
       expect((await markOf(crm.id))?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => json({ name: "Contoso", scopes: ["read"] })))
-      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(await healthOf(crm.id)).toEqual({})
     })
   })

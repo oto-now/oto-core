@@ -219,8 +219,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const lea = person("lea", o)
     const claire = person("claire", o)
     const none = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
-    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}. Ask the user to connect theirs in the application (Connect my account).`
-    expect([none.code, none.message]).toEqual(["not_enabled", yours])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}.`
+    const action = ` Ask the user to link their ${LABEL} account, then call again: open ${link}`
+    expect([none.code, none.message]).toEqual(["not_enabled", yours + action])
+    expect(none.details).toEqual({ reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link })
     const id = accountId("lea")
     await connect("lea", id)
     const own = await callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) })
@@ -234,8 +237,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const shared = ` Personal accounts shared with you, used only when named: « ${label("lea")} » (owner Léa Roux, live). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".`
     expect([unnamed.code, unnamed.message, unnamed.details]).toEqual([
       "not_enabled",
-      yours + shared,
-      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
+      yours + shared + action,
+      { reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link, shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
     ])
     const named = await callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts`, account: label("lea") }, { origin: origin(o) })
     expect([named.status, named.account?.label, sent.at(-1)?.url]).toEqual(["done", label("lea"), `${API}/${id}/contacts?view=full`])
@@ -465,7 +468,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const hostField = await refusal(setAccountSecret(ada.db, ada.identity, { account_id: manual.id, input: { secret: { api_key: "mine" } } }))
     expect([idInput.code, hostField.code, hostField.message]).toEqual(["invalid_arguments", "invalid_arguments", `Field api_key of ${CONNECTOR} is provided by this application, never set on an account.`])
     const notLinked = await refusal(callFunction(ada.db, ada.identity, { function: `${CONNECTOR}.list_contacts`, account: manual.label }, { origin: origin(o) }))
-    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", expect.stringMatching(new RegExp(`^Account « ${manual.label} » is not connected to ${LABEL} yet\\. Ask .+ to connect it \\(Connect my account\\)\\.$`))])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", `Account « ${manual.label} » is not connected to ${LABEL} yet. Ask the user to link their ${LABEL} account, then call again: open ${link}`])
+    expect(notLinked.details).toMatchObject({ reason: "reconnect", gesture: "hosted_link", url: link })
     expect(sent).toEqual([])
   })
 

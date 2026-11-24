@@ -17,7 +17,7 @@ import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { assistantName } from "../usage-statistics"
 import { servedName, type ImportedHost } from "./document"
-import { HOST_CONSENT_REQUIRED, hostBearer } from "./consent"
+import { hostBearer } from "./consent"
 import { hostProblems } from "./problem-json"
 
 /** Au plus, en caractères, la valeur d'un en-tête `Oto-*`. */
@@ -104,7 +104,7 @@ function firstStep(label: string, name: string): AnswerReader {
 /** Les refus que `read` sert d'une fonction de l'hôte : le consentement, la table standard, puis ceux que l'hôte écrit. */
 function refusalLines(definition: ConnectorDefinition): string[] {
   return [
-    `not_enabled: The person has not authorized oto to act on ${definition.label} from this client: the message carries the link to open (details.reason ${HOST_CONSENT_REQUIRED}, details.url).`,
+    `not_enabled: The person has not authorized oto to act on ${definition.label} from this client: the message carries the link to open (details.reason no_account or reconnect, details.gesture oauth, details.url).`,
     ...definition.errors.map((error) => `${error.code}: ${error.message}`),
     `Any refusal ${definition.label} writes (problem+json) comes with its own message, and its code in details.refusal.`,
   ]

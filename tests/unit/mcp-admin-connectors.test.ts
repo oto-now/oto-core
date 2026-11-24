@@ -200,6 +200,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
           `- table (built in): always active — ${native.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           `- node (built in): always active — ${nodes.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           "- upload (built in): always active — upload.link (write)",
+          "- connector (built in): always active — connector.connect (read)",
           "- file (built in): always active — file.keep (write)",
           "- job (built in): always active — job.read (read)",
           "- comment (built in): always active — comment.list (read), comment.add (write), comment.edit (write), comment.delete (sensitive), comment.resolve (write)",
@@ -224,6 +225,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         { name: "table", kind: "built_in", activable: false, state: "always_active", since: null, functions: native.map((fn) => ({ name: fn.name, class: fn.class })) },
         { name: "node", kind: "built_in", activable: false, state: "always_active", since: null, functions: nodes.map((fn) => ({ name: fn.name, class: fn.class })) },
         { name: "upload", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "upload.link", class: "write" }] },
+        { name: "connector", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "connector.connect", class: "read" }] },
         { name: "file", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "file.keep", class: "write" }] },
         { name: "job", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "job.read", class: "read" }] },
         {

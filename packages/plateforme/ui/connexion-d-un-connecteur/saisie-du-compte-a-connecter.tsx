@@ -1,0 +1,49 @@
+"use client"
+
+// La saisie du compte sur la page de connexion d'un connecteur : le formulaire de l'écran Connecteurs
+// (`FormulaireDAjout`, sa sonde et ses refus), l'espace posé par l'adresse et revérifié par le service à l'envoi ; une
+// fois le compte créé, la page dit qu'on peut revenir à l'assistant. Sans lui, la page ne ferait que renvoyer à
+// l'écran Connecteurs.
+import { useState } from "react"
+import type { ConnectionStepView } from "../../schemas"
+import { FormulaireDAjout } from "../admin/connecteurs/formulaire-d-ajout"
+import { connexionDe } from "../admin/connecteurs/etat-du-compte"
+import { Alert } from "../ds/react/primitives"
+import { CONNEXION_D_UN_CONNECTEUR as MOTS } from "./libelles"
+
+type Saisie = Extract<ConnectionStepView, { kind: "key" }>
+
+export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
+  const [connecte, setConnecte] = useState<string | null>(null)
+  if (connecte !== null) {
+    return (
+      <Alert tone="ok" title={MOTS.reussi(connecte)}>
+        {MOTS.revenir}
+      </Alert>
+    )
+  }
+  const outil = {
+    connecteur: etape.connector,
+    libelle: etape.label,
+    ...(etape.access ? { acces: { nom: etape.access.name, libelle: etape.access.label } } : {}),
+    facon: etape.form ? connexionDe(etape.form) : ("sans_cle" as const),
+    proprietaires: [etape.owner],
+    mode: etape.mode,
+    ferme: false,
+    formulaire: etape.form,
+  }
+  const equipes = etape.team ? [{ id: etape.team.id, name: etape.team.name }] : []
+  return (
+    <>
+      {etape.form && etape.form.fields.length > 0 && <p className="text-sm text-ink">{MOTS.cle(etape.label)}</p>}
+      <FormulaireDAjout
+        outil={outil}
+        equipes={equipes}
+        equipe={etape.team?.id}
+        nomPropose={etape.label}
+        annuler={() => window.history.back()}
+        apresAjout={() => setConnecte(etape.label)}
+      />
+    </>
+  )
+}

@@ -135,4 +135,6 @@ export { cheminDuContexte } from "./contexte/parties-du-contexte"
 export { MESSAGES_DE_LA_VISIONNEUSE } from "./noeud/libelles-des-fichiers"
 // E10-S02 (lot f, AC-f15) : le formulaire de dépôt d'un lien à usage unique, et ses phrases pour `resultatDe` de la page de l'hôte.
 export { EcranDeDepot } from "./depot/ecran-de-depot"
+export { EcranConnexionDUnConnecteur } from "./connexion-d-un-connecteur/ecran-connexion-d-un-connecteur"
+export type { EcranConnexionDUnConnecteurProps, EtapeAffichee } from "./connexion-d-un-connecteur/ecran-connexion-d-un-connecteur"
 export { REFUS_DU_DEPOT } from "./depot/libelles"

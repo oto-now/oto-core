@@ -160,6 +160,7 @@ export type {
 // Le consentement d'une personne à un connecteur `oauth2_user` : son départ pour la personne connectée (l'adresse
 // d'autorisation où l'envoyer), et l'adresse de retour à déclarer chez le tiers, servie par la porte du paquet.
 export { CONNECTOR_CONSENT_CALLBACK_PATH, connectorConsentRedirectUri, startConnectorConsent } from "./connectors/consent"
+export { connectionStep } from "./connectors/connect-page"
 // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ pour la personne connectée
 // (l'adresse où l'envoyer), et l'adresse de retour que le paquet donne au tiers par le port `hostedLinks`.
 export { HOSTED_LINK_CALLBACK_PATH, hostedLinkReturnUrl, startHostedLink } from "./connectors/hosted-link"

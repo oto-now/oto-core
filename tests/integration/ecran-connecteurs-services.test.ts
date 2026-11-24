@@ -242,12 +242,12 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
       await disableAccount(lea.db, lea.identity, { account_id: account.id })
       stubTiers(["contacts:read"])
-      const probe = await probeAccount(lea.db, lea.identity, { account_id: account.id })
+      const probe = await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })
       expect(probe).toEqual({ at: expect.any(String), healthy: true, code: null, reason: null, balance: null })
       const view = (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
       expect(view).toMatchObject({ status: "disabled", lastProbe: probe })
       stubTiers([])
-      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id })).toMatchObject({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes." })
+      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })).toMatchObject({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes." })
     })
 
     it("should probe a key before the account exists, for any member, writing nothing, and refuse what cannot be probed", async () => {
@@ -293,7 +293,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       const account = await personal("lea")
       await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
       stubTiers([])
-      const failed = await probeAccount(lea.db, lea.identity, { account_id: account.id })
+      const failed = await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })
       expect(failed).toMatchObject({ healthy: false, code: "unexpected_answer" })
       const seen = async () => (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
       expect((await seen())?.lastProbe).toEqual(failed)
