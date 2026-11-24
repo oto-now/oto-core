@@ -5,8 +5,8 @@
 
 ## Résumé
 
-Chaque refus de connecteur (connecteur éteint, aucun compte, compte à reconnecter) porte une adresse finale,
-`<origine>/connect/<connecteur>?space=…`, et une phrase d'action ; `connector.connect` donne la même adresse sans
+Chaque refus de connecteur (connecteur éteint, aucun compte, compte à reconnecter, clé refusée par le tiers, compte
+sans secret) porte une adresse finale, `<origine>/connect/<connecteur>?space=…[&account_id=<id>]`, et une phrase d'action ; `connector.connect` donne la même adresse sans
 attendre un refus. La personne ouvre l'adresse et fait le seul geste humain : consentir chez le tiers, coller une clé,
 brancher son compte, ou, administrateur, confirmer l'activation. Puis elle revient à son assistant. Le contrat suit
 celui que la lib de connecteurs fixe pour oto.now et oto.cx (`docs/conception/refus-de-connexion.md` de
@@ -32,8 +32,9 @@ Objectifs :
 Non-objectifs :
 - notifier les administrateurs : l'assistant leur transmet l'adresse ;
 - toucher l'écran Connecteurs ou ajouter une migration ;
-- les refus de marque (clé refusée, crédits épuisés) et ceux d'un champ manquant, qui ne sont pas un geste de
-  connexion.
+- les crédits épuisés, qui se rachètent chez le tiers, hors de l'application ;
+- un champ ou un réglage manquant d'un compte qui a déjà son secret (« has no <champ> yet », « setting … ») : ils
+  gardent leur phrase.
 
 ## Conception
 
@@ -49,6 +50,33 @@ Il fait le plan (`planConnection`), puis bâtit le refus (`refusalFromPlan`) :
   plusieurs), `space` (`me`, `org` ou `team:<slug>`), `url`, `administrators` (quand seul un administrateur peut
   agir, `[{name}]` : leurs noms seuls, jamais leur identifiant) et `shared_accounts`.
 
+**La clé d'un compte existant.** Une clé refusée par le tiers et un compte créé sans secret visent un compte précis :
+l'adresse le nomme, et la page y ouvre la saisie de sa clé, pas la création d'un autre compte. `planAccountKey` en fait
+le plan, `accountKeyRefusal` le refus (`connect-link.ts`) :
+- geste `key` ; espace : celui du compte (`me` pour un compte personnel, vu par sa personne, `org`, `team:<slug>`) ;
+  adresse `…?space=…[&access=…]&account_id=<id>` ;
+- qui agit : la personne si elle gère le compte (`ACCOUNT_LEVELS.manage`) ; sinon qui le gère, nommé dans la phrase
+  (« Only Léa Petit | the administrators of Acme (Ada Martin) | team Ventes (lead: Claire Morel) can set the key of
+  account « … »; … open URL »), et `administrators` pour un compte de l'organisation ;
+- `reason` : `reconnect` pour une clé refusée, `no_account` pour un compte sans secret (aucun compte utilisable).
+
+**Les refus de marque** (`account-marker.ts`, `markRefusal`). Le refus du tiers qui marque le compte pose la marque,
+puis devient, à l'appel :
+- clé refusée (`credential_rejected`) d'un compte à clé : `not_enabled`, `reason: reconnect`, geste `key`, l'adresse de
+  la clé du compte ; le message garde le refus du tiers et la marque (« Crm refused the key. (key_rejected) Account « … »
+  is marked: key refused since … UTC. Ask the user to paste … open URL ») ;
+- clé refusée d'un consentement ou d'un compte rattaché : `not_enabled`, `reason: reconnect`, geste `oauth` ou
+  `hosted_link` (`connectRefusal`) ;
+- clé refusée de l'hôte (un compte sans champ à lui) : le refus du tiers (`credential_rejected`), « ask whoever runs
+  this application to check it » ; personne dans l'organisation n'a de geste ;
+- crédits épuisés (`quota_exhausted`) : le refus du tiers, sans adresse, « Ask <qui gère le compte> to add credits. ».
+  Ce n'est pas un refus de connexion : aucun geste dans l'application ne le lève, et la lib ne déclare aucune page du
+  fournisseur (ni facturation, ni console) vers laquelle mener la personne.
+
+La sonde de l'écran Connecteurs (`liveCredential(…, "probe")`) garde le refus du tiers, qu'elle classe par son code
+(`credential_rejected`) devant qui gère déjà le compte. Un compte sans secret y rend le refus de connexion
+(`account_not_ready`).
+
 **Le plan.** `planConnection` décide trois choses, sous l'identité de l'appelant.
 - Le geste. `oauth` pour un accès `user_consent` ou l'API d'un hôte, `hosted_link` pour un accès à identité rattachée,
   `key` sinon. Un connecteur fermé par un administrateur, ou jamais ouvert (pour un geste autre que la clé), devient
@@ -60,8 +88,8 @@ Il fait le plan (`planConnection`), puis bâtit le refus (`refusalFromPlan`) :
 - Qui agit. La personne, si elle peut faire le geste. Sinon, les administrateurs, nommés, à qui elle transmet
   l'adresse.
 
-**L'adresse.** `<origine>/connect/<connecteur>?space=…[&access=…][&activate=1]`. Elle est stable et n'expire pas.
-Elle ne porte aucun secret : ni `state`, ni code, ni client. L'origine est celle de la requête, reconnue pour
+**L'adresse.** `<origine>/connect/<connecteur>?space=…[&access=…][&activate=1 | &account_id=<id>]`. Elle est stable et
+n'expire pas. Elle ne porte aucun secret : ni `state`, ni code, ni client ; l'identifiant d'un compte n'en est pas un. L'origine est celle de la requête, reconnue pour
 l'organisation. Sans origine utilisable (absente, avec un chemin, autre que http(s)), le refus est une erreur de
 configuration (`internal`) : « The public address of this organisation is not known… ». Il n'y a jamais de repli sur
 une adresse relative.
@@ -83,8 +111,14 @@ une adresse relative.
   geste chez le tiers. Le retour revient sur la page, avec son issue.
 - Compte hébergé déjà relié dans une autre organisation de la personne : la page le dit avant le clic (« Votre compte X
   est déjà utilisé dans ORG. Le bouton le relie aussi à cette organisation. », « Relier mon compte X ») ; seul ce `POST`
-  le relie.
+  le relie. Toute organisation hors de la courante où le compte est relié compte (`hostedLinkedElsewhere`, sur
+  `my_hosted_accounts`), celle que la personne a quittée comprise : elle n'en lit plus le nom (RLS de `orgs`), la page
+  dit « une autre organisation ».
 - Clé : le formulaire du compte, l'espace et l'équipe posés.
+- Clé d'un compte existant (`account_id`) : le formulaire de la clé et des réglages du détail du compte
+  (`FormulaireDeLaCle`), réservé à qui gère le compte (`forbidden` sinon, qui dit qui le gère). L'adresse est revérifiée
+  contre le compte : son connecteur, son accès, son espace ; un compte qui ne prend pas de clé, ou `activate` avec
+  `account_id`, sont refusés nommément (`invalid_arguments`). L'envoi passe par `setAccountSecret`, qui revérifie.
 - Activation : un bouton qui confirme. Rien ne s'active à l'ouverture.
 - Une autre personne doit agir : l'adresse à copier et les administrateurs.
 - L'issue d'un retour s'affiche sans rien relancer et sans croire l'adresse. Réussi : « Le compte est connecté. Vous
@@ -98,8 +132,10 @@ connecteur natif `connector`, classe `read`,
 toujours active. Elle suit le même plan et dit la même phrase. Elle rend `{url, gesture, connector, access?, space, by,
 administrators?}`. Quand un compte marche déjà dans l'espace (actif, sans marque, pour l'accès du plan, sa personne
 présente), elle rend `{gesture: "none", connector, access?, space, account}` sans adresse ; `account` a la forme du compte
-des données d'un appel : `{id, label, mode, owner}`, `owner` valant `{kind: "org" | "team", description}` ou `{kind:
-"user", userId, name, yours}`. `access` est exigé pour un connecteur à plusieurs accès, refusé sinon. `find` la trouve par « connecter fod » ou « activer un connecteur ». Une procédure ne l'appelle
+des données d'un appel, `{id, label, mode, owner}`, `owner` valant `{kind: "org" | "team", description}` ou `{kind:
+"user", name, yours}` : sans l'identifiant de la personne, qu'aucune sortie servie à un client MCP ne porte (contrat de
+la lib, oto-now/connectors#288). Les données d'un appel le gardent (`CallAccountOwner`) : le journal en lit qui a prêté
+le compte. `access` est exigé pour un connecteur à plusieurs accès, refusé sinon. `find` la trouve par « connecter fod » ou « activer un connecteur ». Une procédure ne l'appelle
 pas : l'adresse va à une personne.
 
 ## Décisions et alternatives écartées
@@ -122,6 +158,8 @@ pas : l'adresse va à une personne.
 - L'adresse ne porte aucun secret : connecteur, espace, accès, `activate`. Le `state` du consentement (256 bits, haché
   en base, dix minutes, usage unique, lié à la personne, l'organisation et le connecteur, avec PKCE) n'est créé qu'au
   clic du bouton, par un `POST` de même origine d'une session connectée, jamais à l'ouverture ni dans un refus.
+- Le compte de l'adresse n'est jamais cru : la page le relit sous la session, réservé à qui le gère ; un compte
+  invisible est introuvable (`not_found`).
 - L'espace de l'adresse n'est jamais cru.
   - Il est revérifié à l'affichage (`planConnection`), puis à l'envoi par le service de création de compte.
   - Un espace non permis est un refus nommé.
@@ -135,19 +173,27 @@ pas : l'adresse va à une personne.
 
 ## Écart avec le code
 
-- Les refus de marque (`credential_rejected`, crédits) et ceux d'un champ manquant (« has no secret yet ») gardent
-  leur phrase : ils ne portent pas encore d'adresse.
+- Gardent leur phrase, sans adresse : les crédits épuisés, la clé de l'hôte refusée, et un champ ou un réglage manquant
+  d'un compte qui a déjà son secret.
+- Une clé refusée, à l'appel, ne rend plus le code `credential_rejected` mais `not_enabled` : le contrat met le compte
+  marqué sous `reconnect`. La sonde le garde.
 - Écarts au contrat commun de la lib : l'espace d'équipe s'écrit `team:<slug>` (le contrat dit `team:<id>` ; son motif
   admet les deux) ; une origine `http` est admise (poste local), le contrat demande `https` ; `connector.connect` rend
   en plus `connector`, `access` et `by` ; l'API d'un hôte (`host_api`), qui demande un consentement pour un client
   tiers, sert `gesture: oauth`, là où le contrat ne prévoit aucun geste pour `host_delegated` ; un refus de connecteur
-  sans compte, à plusieurs accès, prend l'accès à consentement par défaut.
+  sans compte, à plusieurs accès, prend l'accès à consentement par défaut ; l'adresse de la clé d'un compte existant
+  porte `account_id=<id>`, que le contrat ne prévoit pas ; un compte sans secret est `no_account` (le contrat ne dit pas
+  ce cas) ; pour un compte d'équipe que la personne ne gère pas, les responsables de l'équipe peuvent agir, mais
+  `details` n'a que `administrators` : ils ne sont nommés que dans la phrase, et `administrators` est absent ; pour un
+  compte personnel d'une autre personne, sa personne n'est nommée que dans la phrase.
 - `shared_accounts` : éléments `{id, label, owner, description}`, `owner` étant le nom de la personne qui partage.
 - Un hôte qui déclare sa surface (`registerHostSurface`) doit y nommer `connector.connect` pour la servir.
 
 ## Questions ouvertes
 
-- Les refus de marque doivent-ils porter l'adresse de la saisie d'une nouvelle clé ?
+- Les crédits épuisés : la lib pourrait déclarer la page du fournisseur où les racheter ; le refus la porterait alors,
+  hors du contrat `not_enabled`.
+- Un champ ou un réglage manquant d'un compte qui a déjà son secret : mener à la même saisie (`account_id=<id>`) ?
 
 ## Historique
 

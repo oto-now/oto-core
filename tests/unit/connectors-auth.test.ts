@@ -205,7 +205,7 @@ describe("oauth2_jwt_bearer", () => {
     registerConnectors([serviceAccount()])
     vi.spyOn(console, "error").mockImplementation(() => {})
     const set = vi.fn<AccountMarker["set"]>(async () => {})
-    const mark: AccountMarker = { current: null, effect: null, set, remedy: async () => "Ask the manager." }
+    const mark: AccountMarker = { current: null, effect: null, set, refusal: async (error) => error }
     stub(json({ error: "invalid_grant", error_description: "Invalid JWT Signature." }, 400))
     const error = await refusal(getCompany({ fields: keyOf(), settings: {}, tokens: memoryTokens(), mark }))
     expect([error.code, set.mock.calls]).toEqual(["credential_rejected", [["credential_rejected"]]])

@@ -2,11 +2,13 @@
 
 // La saisie du compte sur la page de connexion d'un connecteur : le formulaire de l'écran Connecteurs
 // (`FormulaireDAjout`, sa sonde et ses refus), l'espace posé par l'adresse et revérifié par le service à l'envoi ; une
-// fois le compte créé, la page dit qu'on peut revenir à l'assistant. Sans lui, la page ne ferait que renvoyer à
-// l'écran Connecteurs.
+// fois le compte créé, la page dit qu'on peut revenir à l'assistant. La clé d'un compte existant (refusée par le tiers,
+// ou jamais posée) s'y saisit par le formulaire du détail du compte (`FormulaireDeLaCle`). Sans lui, la page ne ferait
+// que renvoyer à l'écran Connecteurs.
 import { useState } from "react"
 import type { ConnectionStepView } from "../../schemas"
 import { FormulaireDAjout } from "../admin/connecteurs/formulaire-d-ajout"
+import { FormulaireDeLaCle } from "../admin/connecteurs/saisie-du-compte"
 import { connexionDe } from "../admin/connecteurs/etat-du-compte"
 import { Alert } from "../ds/react/primitives"
 import { CONNEXION_D_UN_CONNECTEUR as MOTS } from "./libelles"
@@ -44,6 +46,26 @@ export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
         annuler={() => window.history.back()}
         apresAjout={() => setConnecte(etape.label)}
       />
+    </>
+  )
+}
+
+type CleDuCompte = Extract<ConnectionStepView, { kind: "account_key" }>
+
+/** La clé d'un compte existant : le formulaire du détail du compte ; enregistrée, la personne revient à son assistant. */
+export function SaisieDeLaCleDuCompte({ etape }: { etape: CleDuCompte }) {
+  const [enregistre, setEnregistre] = useState(false)
+  if (enregistre) {
+    return (
+      <Alert tone="ok" title={MOTS.cleEnregistree(etape.account.label)}>
+        {MOTS.revenir}
+      </Alert>
+    )
+  }
+  return (
+    <>
+      <p className="text-sm text-ink">{MOTS.cleDuCompte(etape.label, etape.account.label)}</p>
+      <FormulaireDeLaCle compte={etape.account} formulaire={etape.form} enregistre={() => setEnregistre(true)} annule={() => window.history.back()} />
     </>
   )
 }

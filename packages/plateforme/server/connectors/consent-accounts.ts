@@ -7,10 +7,9 @@
 // compte (`resolution.ts`), les lignes de `context` (`lines.ts`) et le renouvellement d'un consentement
 // (`account-secret.ts`) : sans ce module, chacun redirait ses refus.
 import { declaredConnector } from "../catalog/connector-source"
-import { memberDirectory } from "../directory"
-import { PlatformError } from "../errors"
+import type { PlatformError } from "../errors"
 import type { AccountOwner, ConnectorAccount } from "./accounts"
-import { connectRefusal, refusalFromPlan, type ConnectionPlan, type ConnectWhere } from "./connect-link"
+import { connectRefusal, ownerNameOf, refusalFromPlan, type ConnectionPlan, type ConnectWhere } from "./connect-link"
 
 /**
  * Un connecteur dont chaque personne peut connecter le sien (consentement `oauth2_user`, par son seul accès ou par l'un
@@ -52,12 +51,6 @@ export function reconnectRefuser(where: ConnectWhere, connector: string, account
   return async (said: string) => {
     const base = { reason: "reconnect" as const, connector, access: account.access ?? null, said }
     if (own || account.owner.kind !== "user") return connectRefusal(where, base)
-    const ownerId = account.owner.userId
-    const name = (await memberDirectory(where.db, where.identity.org.id)).find((person) => person.userId === ownerId)?.name
-    if (name === undefined) {
-      console.error(`[platform] reconnect refusal: no directory name for the owner of account ${account.id}`)
-      throw new PlatformError("internal", "Internal error.")
-    }
-    return connectRefusal(where, { ...base, owner: name })
+    return connectRefusal(where, { ...base, owner: await ownerNameOf(where, account) })
   }
 }

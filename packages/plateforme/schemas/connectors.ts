@@ -334,11 +334,19 @@ const connectSpaceSchema = z.string().regex(/^(me|org|team:[a-z0-9][a-z0-9-]{0,6
 /**
  * La page de connexion d'un connecteur (`/connect/<connecteur>?space=…`, `connectionStep`) : le connecteur, l'espace,
  * l'accès pour un connecteur à plusieurs, et `activate=1` pour l'adresse d'un administrateur, qui n'active rien à
- * l'ouverture (la page demande sa confirmation).
+ * l'ouverture (la page demande sa confirmation) ; ou `account_id`, le compte existant dont poser la clé, sans `activate` (`account` est le libellé que rend le retour
+ * d'un consentement).
  */
 export const connectionPageSchema = z
-  .object({ connector: connectorNameSchema, space: connectSpaceSchema.optional(), access: accessNameSchema.optional(), activate: z.literal("1").optional() })
+  .object({
+    connector: connectorNameSchema,
+    space: connectSpaceSchema.optional(),
+    access: accessNameSchema.optional(),
+    activate: z.literal("1").optional(),
+    account_id: z.uuid().optional(),
+  })
   .strict()
+  .refine((input) => !(input.account_id && input.activate), { message: "an account link activates nothing", path: ["activate"] })
 export type ConnectionPageInput = z.input<typeof connectionPageSchema>
 
 /** `connector.connect` : le connecteur, et l'espace et l'accès s'il faut les nommer. */
@@ -351,7 +359,8 @@ export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
  * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,
  * par la porte du consentement ou du branchement, en `POST` de même origine ; `elsewhere` : les autres organisations de
  * la personne où son compte hébergé est déjà relié, qu'un clic relie ici), saisir le compte (`key`, l'espace posé),
- * confirmer l'activation (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
+ * poser la clé d'un compte existant (`account_key`, refusée par le tiers ou jamais posée), confirmer l'activation
+ * (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
  */
 export type ConnectionStepView =
   | {
@@ -361,7 +370,8 @@ export type ConnectionStepView =
       label: string
       space: string
       access?: string
-      elsewhere?: string[]
+      /** Les autres organisations où le compte hébergé est déjà relié : leur nom, `null` quand la personne ne le lit plus. */
+      elsewhere?: (string | null)[]
     }
   | {
       kind: "key"
@@ -374,5 +384,6 @@ export type ConnectionStepView =
       mode: AccountMode
       form: ConnectorAccountForm | null
     }
+  | { kind: "account_key"; connector: string; label: string; space: string; account: AccountView; form: ConnectorAccountForm }
   | { kind: "activate"; connector: string; label: string; space: string }
   | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[] }

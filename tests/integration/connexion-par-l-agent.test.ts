@@ -3,8 +3,10 @@
 // pour qui l'administre, l'équipe qu'on dirige, sinon soi) et refuse nommément un espace qu'elle ne peut pas ; la page
 // (`connectionStep`) ouvre la saisie du compte, l'espace posé ; un connecteur fermé par un administrateur donne à
 // l'administrateur l'adresse qui active (la page demande sa confirmation, jamais à l'ouverture) et à un membre celle à
-// transmettre, les administrateurs nommés. Aucune adresse ne porte de secret. Le consentement OAuth et le branchement
-// hébergé se testent avec leurs parcours (`consentement-oauth.test.ts`, `comptes-rattaches.test.ts`).
+// transmettre, les administrateurs nommés. Un compte existant sans clé mène à la saisie de la sienne (`account_id=<id>`),
+// pour qui le gère seul, l'adresse revérifiée contre le compte. Aucune adresse ne porte de secret. Le consentement OAuth
+// et le branchement hébergé se testent avec leurs parcours (`consentement-oauth.test.ts`, `comptes-rattaches.test.ts`) ;
+// la clé refusée par le tiers, avec la marque (`etat-des-comptes.test.ts`).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
 import { activateConnector, deactivateConnector, loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
@@ -118,6 +120,63 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
       expect(result.text).toBe(`Crm is already connected (org): account « ${label} ». Call its functions; name the account if several serve.`)
       // Ailleurs, l'espace n'en a pas : l'adresse.
       expect((await connect("lea", {})).data.result).toMatchObject({ gesture: "key", space: "me" })
+    } finally {
+      await fx.admin`delete from platform.accounts where id = ${id}`
+    }
+  })
+
+  it("should name the person of a personal account that already works, never their identifier", async () => {
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(o.org.id, { connector: LIVE, ownerKind: "user", ownerUserId: o.people.lea.id, label, mode: "simule" })
+    try {
+      const result = await connect("lea", {})
+      expect(result.data.result).toEqual({ gesture: "none", connector: LIVE, space: "me", account: { id, label, mode: "simule", owner: { kind: "user", name: "Léa Roux", yours: true } } })
+      expect(JSON.stringify(result.data.result)).not.toContain(o.people.lea.id)
+    } finally {
+      await fx.admin`delete from platform.accounts where id = ${id}`
+    }
+  })
+
+  it("should lead a team account without key to the entry of its own key, for its lead, the page checking the link against the account", async () => {
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(o.org.id, { connector: LIVE, ownerKind: "team", ownerTeamId: o.teams.ventes, label, mode: "reel" })
+    try {
+      const url = `${ORIGIN}/connect/${LIVE}?space=team%3Aventes&account_id=${id}`
+      const byClaire = await refusal(call("claire", { function: `${LIVE}.list_contacts`, team: "ventes", account: label }))
+      expect({ code: byClaire.code, message: byClaire.message, details: byClaire.details }).toEqual({
+        code: "not_enabled",
+        message: `Account « ${label} » has no secret yet. Ask the user to paste the Crm key of account « ${label} », then call again: open ${url}`,
+        details: { reason: "no_account", gesture: "key", connector: LIVE, space: "team:ventes", url },
+      })
+      expect(url).not.toMatch(/key=|secret|state=|code=/)
+
+      const shown = await step("claire", { space: "team:ventes", account_id: id })
+      expect(shown).toMatchObject({ kind: "account_key", connector: LIVE, label: "Crm", space: "team:ventes", account: { id, label, owner: { kind: "team" } } })
+      expect(shown.kind === "account_key" ? shown.form.fields : null).toEqual([{ name: "api_key", label: "API key", secret: true }])
+      // Sans espace, celui du compte ; un autre espace, un autre connecteur, `activate` : refusés nommément.
+      expect(await step("claire", { account_id: id })).toMatchObject({ kind: "account_key", space: "team:ventes" })
+      const elsewhere = await refusal(step("claire", { space: "me", account_id: id }))
+      expect([elsewhere.code, elsewhere.message]).toEqual(["invalid_arguments", `Account « ${label} » is in team:ventes, not in me.`])
+      expect((await refusal(step("claire", { space: "team:ventes", account_id: id, activate: "1" }))).code).toBe("invalid_arguments")
+      const other = await refusal(connectionStep(as("claire").db, as("claire").identity, { connector: "autre", account_id: id }, { origin: ORIGIN }))
+      expect(other.code).toBe("invalid_arguments")
+      // Léa ne gère pas le compte : la page le lui refuse, en disant qui le gère.
+      const byLea = await refusal(step("lea", { account_id: id }))
+      expect([byLea.code, byLea.message]).toEqual(["forbidden", `Setting the key of « ${label} » is reserved to those who manage it: team Ventes (lead: Claire Morel).`])
+    } finally {
+      await fx.admin`delete from platform.accounts where id = ${id}`
+    }
+  })
+
+  it("should give the link of a team account without key to its lead when a member, Léa, calls with it", async () => {
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(o.org.id, { connector: LIVE, ownerKind: "team", ownerTeamId: o.teams.ventes, label, mode: "reel" })
+    try {
+      const error = await refusal(call("lea", { function: `${LIVE}.list_contacts`, team: "ventes", account: label }))
+      const url = `${ORIGIN}/connect/${LIVE}?space=team%3Aventes&account_id=${id}`
+      expect(error.code).toBe("not_enabled")
+      expect(error.message).toBe(`Account « ${label} » has no secret yet. Only team Ventes (lead: Claire Morel) can set the key of account « ${label} »; ask the user to pass them the link and call again once it is done: open ${url}`)
+      expect(error.details).toEqual({ reason: "no_account", gesture: "key", connector: LIVE, space: "team:ventes", url })
     } finally {
       await fx.admin`delete from platform.accounts where id = ${id}`
     }

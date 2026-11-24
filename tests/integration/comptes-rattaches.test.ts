@@ -341,6 +341,23 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect((await lastRequest("lea", o2)).consumed_at).not.toBeNull()
   })
 
+  it("should say an account still linked in an organisation the person left, unnamed, before the click that links it here", async () => {
+    // Léa relie son compte dans une troisième organisation, puis la quitte : le compte y reste relié, mais elle n'en lit
+    // plus le nom (RLS de `orgs`). La page de la seconde le dit quand même, sans le nom.
+    const left = await fx.buildReferenceOrg(o.people)
+    await fx.addActivation(left.org.id, CONNECTOR)
+    const id = accountId("lea")
+    await connect("lea", id, left)
+    expect((await linkedRows(id)).map((row) => row.org_id)).toEqual([left.org.id])
+    await admin`delete from platform.team_members where user_id = ${o.people.lea.id} and team_id in (select id from platform.teams where org_id = ${left.org.id})`
+    await admin`delete from platform.members where org_id = ${left.org.id} and user_id = ${o.people.lea.id}`
+    const lea2 = person("lea", o2)
+    const step = await connectionStep(lea2.db, lea2.identity, { connector: CONNECTOR, space: "me" }, { origin: origin(o2) })
+    expect(step).toMatchObject({ kind: "authorize", gesture: "hosted_link" })
+    expect(step.kind === "authorize" ? step.elsewhere?.filter((name) => name === null) : null).toEqual([null])
+    expect(step.kind === "authorize" ? step.elsewhere?.filter((name) => name !== null) : null).not.toContain(left.org.name)
+  })
+
   it("should refuse a dead session, and say unavailable for a session it cannot read, a port that throws, or an invalid link", async () => {
     await start("lea")
     const request = await lastRequest("lea")

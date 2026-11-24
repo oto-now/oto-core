@@ -171,7 +171,7 @@ export async function probeAccount(db: PlatformDb, identity: Identity, input: un
   if (!declared?.probe) throw noProbe(row.connector)
   countProbe(identity)
   const account = { id, label: row.label, ...(row.access !== null ? { access: row.access } : {}), mode: accountMode(row.mode), owner: accountOwner(row) }
-  const open = async () => (await liveCredential({ db, identity, origin: options.origin }, account, row.connector))()
+  const open = async () => (await liveCredential({ db, identity, origin: options.origin }, account, row.connector, "probe"))()
   const health = await runProbe(declared, id, open, `connector ${row.connector}: account ${id}`)
   const [kept] = await inTransaction(
     db,

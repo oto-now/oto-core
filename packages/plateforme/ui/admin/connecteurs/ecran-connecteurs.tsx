@@ -55,8 +55,11 @@ export type DonneesDesConnecteurs = {
   administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
 }
 
-/** L'issue d'un consentement, lue dans l'adresse où le tiers ramène la personne (`issueDuConsentement`). */
-export type IssueDuConsentement = { issue: "connected"; compte: string } | { issue: "failed"; raison: string }
+/**
+ * L'issue d'un consentement, lue dans l'adresse où le tiers ramène la personne (`issueDuConsentement`). Réussie, sans le
+ * nom du compte : l'adresse le porte, mais un lien forgé y écrirait n'importe quel texte.
+ */
+export type IssueDuConsentement = { issue: "connected" } | { issue: "failed"; raison: string }
 
 export type EcranConnecteursProps = {
   resultat: Resultat<DonneesDesConnecteurs>
@@ -76,7 +79,7 @@ export type EcranConnecteursProps = {
 /**
  * L'issue d'un consentement ou d'un branchement hébergé lue dans la query de l'écran (`?consent=connected&account=…`
  * ou `?consent=failed&reason=<code>` ; `hosted=` de même, posée par l'adresse de retour du paquet) ; `undefined` hors
- * d'un retour.
+ * d'un retour. `account` n'est pas lu : son texte vient de l'adresse.
  */
 export function issueDuConsentement(query: Readonly<Record<string, string | string[] | undefined>>): IssueDuConsentement | undefined {
   const lu = (nom: string) => {
@@ -84,7 +87,7 @@ export function issueDuConsentement(query: Readonly<Record<string, string | stri
     return typeof valeur === "string" ? valeur : undefined
   }
   const issue = lu("consent") ?? lu("hosted")
-  if (issue === "connected") return { issue: "connected", compte: lu("account") ?? "" }
+  if (issue === "connected") return { issue: "connected" }
   if (issue === "failed") return { issue: "failed", raison: lu("reason") ?? "" }
   return undefined
 }
@@ -112,7 +115,7 @@ export function echecDuConsentement(raison: string): string {
 }
 
 function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsentement }) {
-  if (consentement.issue === "connected") return <Alert tone="ok" title={`« ${consentement.compte} » est connecté.`} />
+  if (consentement.issue === "connected") return <Alert tone="ok" title="Le compte est connecté." />
   return <Alert tone="fail" title={echecDuConsentement(consentement.raison)} />
 }
 

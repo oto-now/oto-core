@@ -252,16 +252,19 @@ async function ownedPlan(identity: Identity, connector: HostedConnector, owned: 
 }
 
 /**
- * Les autres organisations de la personne où son compte hébergé de ce connecteur est déjà relié, par leur nom : la page
- * de connexion le dit avant le clic qui le relierait ici (`startHostedLink`). Lecture seule, sans appel au tiers ni
- * demande posée ; une organisation que la personne ne lit plus n'est pas nommée.
+ * Les autres organisations où le compte hébergé de ce connecteur de la personne est déjà relié : la page de connexion le
+ * dit avant le clic qui le relierait ici (`startHostedLink`). Chaque ligne de `my_hosted_accounts` hors de
+ * l'organisation courante compte, celle d'une organisation que la personne a quittée comprise : son nom, si la personne
+ * le lit encore (RLS de `orgs`), sinon `null`, que l'écran dit « une autre organisation ». Les noms d'abord, triés, puis
+ * les organisations sans nom lisible. Lecture seule, sans appel au tiers ni demande posée.
  */
-export async function hostedLinkedElsewhere(db: PlatformDb, identity: Identity, connectorName: string): Promise<string[]> {
+export async function hostedLinkedElsewhere(db: PlatformDb, identity: Identity, connectorName: string): Promise<(string | null)[]> {
   return inTransaction(db, "hostedLinkedElsewhere: my_hosted_accounts", async (sql) => {
     const others = [...new Set((await myHostedAccounts(sql, connectorName)).filter((row) => row.org_id !== identity.org.id).map((row) => row.org_id))]
     if (others.length === 0) return []
-    const orgs = await sql<{ name: string }[]>`select name from platform.orgs where id = any(${others}::uuid[]) order by name`
-    return orgs.map((org) => org.name)
+    const readable = await sql<{ id: string; name: string }[]>`select id, name from platform.orgs where id = any(${others}::uuid[])`
+    const named = readable.map((org) => org.name).sort((a, b) => a.localeCompare(b, "fr"))
+    return [...named, ...others.filter((id) => !readable.some((org) => org.id === id)).map(() => null)]
   })
 }
 

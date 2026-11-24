@@ -2,8 +2,8 @@
 // qu'un refus ou `connector.connect` donne à l'assistant. La page de l'hôte lit l'étape (`connectionStep`), sans rien
 // écrire. L'écran montre : l'issue du retour du tiers (réussi, avec l'invitation à revenir à l'assistant, ou échoué, sa
 // raison connue seule, avec « Réessayer »), le bouton qui part chez le tiers (`POST` de même origine, jamais à
-// l'ouverture), la saisie du compte, la confirmation de l'activation par un administrateur (un bouton), ou l'adresse à
-// transmettre aux administrateurs. Server Component ; données, erreur (`role="alert"`). Sans lui, l'adresse d'un refus
+// l'ouverture), la saisie du compte, celle de la clé d'un compte existant, la confirmation de l'activation par un
+// administrateur (un bouton), ou l'adresse à transmettre aux administrateurs. Server Component ; données, erreur (`role="alert"`). Sans lui, l'adresse d'un refus
 // ne mènerait à aucun geste.
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
 import type { ConnectionStepView } from "../../schemas"
@@ -18,7 +18,7 @@ import { Island, IslandBody } from "../ds/react/island"
 import { Alert } from "../ds/react/primitives"
 import { ScreenHeader } from "../ds/react/screen-header"
 import { CONNEXION_D_UN_CONNECTEUR as MOTS } from "./libelles"
-import { SaisieDuCompteAConnecter } from "./saisie-du-compte-a-connecter"
+import { SaisieDeLaCleDuCompte, SaisieDuCompteAConnecter } from "./saisie-du-compte-a-connecter"
 
 /** Une étape que l'écran rend. */
 export type EtapeAffichee = ConnectionStepView
@@ -26,7 +26,8 @@ export type EtapeAffichee = ConnectionStepView
 /** Le bouton qui démarre le consentement ou le branchement, et le compte hébergé déjà relié ailleurs. */
 function Autorisation({ etape, retour }: { etape: Extract<EtapeAffichee, { kind: "authorize" }>; retour: string }) {
   const consentement = etape.gesture === "oauth"
-  const ailleurs = etape.elsewhere?.join(", ")
+  // Une organisation sans nom lisible se dit une fois, quel que soit leur nombre.
+  const ailleurs = etape.elsewhere && [...new Set(etape.elsewhere.map((nom) => nom ?? MOTS.autreOrganisation))].join(", ")
   const libelle = consentement ? MOTS.autoriser(etape.label) : ailleurs ? MOTS.relier(etape.label) : MOTS.brancher(etape.label)
   return (
     <div className="flex flex-col gap-3">
@@ -51,6 +52,8 @@ function Etape({ etape, retour }: { etape: EtapeAffichee; retour: string }) {
       return <Autorisation etape={etape} retour={retour} />
     case "key":
       return <SaisieDuCompteAConnecter etape={etape} />
+    case "account_key":
+      return <SaisieDeLaCleDuCompte etape={etape} />
     case "activate":
       return (
         <div className="flex flex-col gap-3">

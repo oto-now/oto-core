@@ -204,8 +204,8 @@ export function memoryMark(initial: AccountMark | null = null, who = "team Vente
       marker.current = reason === null ? null : { reason, at: new Date().toISOString() }
       marker.effect = reason === null ? "lifted" : "marked"
     },
-    async remedy() {
-      return `Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`
+    async refusal(error: PlatformError) {
+      return new PlatformError(error.code, `${error.message} Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`, error.details)
     },
   }
   return marker

@@ -344,7 +344,7 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     expect(envois()).toEqual([{ url: `/api/platform/admin/accounts/${BANQUE.id}/enable`, methode: "POST", corps: {} }])
     expect(detail.getByRole("heading", { name: "État" })).toHaveFocus()
 
-    fetchMock.mockImplementation(async () => reponse(403, { error: { code: "not_enabled", details: { reason: "closed", administrators: [{ userId: "u", name: "Claire Morel" }] } } }))
+    fetchMock.mockImplementation(async () => reponse(403, { error: { code: "not_enabled", details: { reason: "closed", administrators: [{ name: "Claire Morel" }] } } }))
     fireEvent.click(detail.getByRole("button", { name: "Réactiver Banque" }))
     expect(await detail.findByText("Cet outil a été fermé par un administrateur. Un administrateur peut le rouvrir.")).toBeInTheDocument()
   })
@@ -759,9 +759,10 @@ describe("EcranConnecteurs, adding a connector", () => {
     expect(envois().map((envoi) => envoi.corps)).toEqual([{ connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" }])
   })
 
-  it("should say the outcome of a return from the third party", () => {
-    const { unmount } = rendre({}, { consentement: issueDuConsentement({ consent: "connected", account: "lea@contoso.test (microsoft)" }) })
-    expect(screen.getByRole("status")).toHaveTextContent("« lea@contoso.test (microsoft) » est connecté.")
+  it("should say the outcome of a return from the third party, never the text of the address", () => {
+    const { unmount } = rendre({}, { consentement: issueDuConsentement({ consent: "connected", account: "Votre compte est suspendu, appelez le 01 23 45 67 89" }) })
+    expect(screen.getByRole("status")).toHaveTextContent("Le compte est connecté.")
+    expect(document.body.textContent).not.toContain("appelez")
     unmount()
     rendre({}, { consentement: issueDuConsentement({ hosted: "failed", reason: "expired" }) })
     expect(screen.getByRole("alert")).toHaveTextContent("Cette demande de connexion a expiré. Recommencez.")
