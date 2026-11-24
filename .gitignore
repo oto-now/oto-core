@@ -39,9 +39,6 @@ npm-debug.log*
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 
-# Lighthouse CI (rapports locaux)
-.lighthouseci/
-
 # Turbo
 .turbo/
 
@@ -50,6 +47,7 @@ tsconfig.tsbuildinfo
 !.claude/settings.json
 !.claude/hooks/
 !.claude/skills/
+!.claude/agents/
 # Reçu de vérification : purement local, il atteste que les checks ont tourné sur CE code
 .claude/.verify-receipt.json
 

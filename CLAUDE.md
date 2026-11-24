@@ -202,14 +202,30 @@ Tout vit dans `.claude/skills/`. Un skill se déclenche **sur l'intention** et r
 gravité. `plan` ne s'auto-déclenche jamais (`disable-model-invocation`) : un cadrage réécrit PRD,
 conception et stories. Face à un besoin produit large, le **proposer** et attendre l'accord.
 
-## Déléguer à un sous-agent
+## Les sous-agents de la méthode
 
-Un sous-agent reçoit la méthode, pas seulement la tâche : échelle annoncée, conventions routées à
-charger, critères de succès, liste explicite des fichiers qu'il écrit (jamais un motif ni « ceux
-des autres, à ne pas toucher » : deux agents réécriraient les mêmes), interdiction de commiter,
-interdiction de trancher un arbitrage (§ Avant de coder). Dès l'échelle Standard, son rapport porte
-son **rayon d'impact**. Le commit reste à qui l'a lancé. En vague de stories menée sans JB, les
-règles du pilote et des agents sont dans `.method/sprint/vagues.md`.
+Tout sous-agent est un **agent nommé de `.claude/agents/`** : son fichier fixe le modèle, ses
+outils et la méthode qu'il applique. Le pilote ne lance jamais un agent générique pour un rôle de
+cette liste. `check:framework` vérifie que chaque agent cité par un skill existe, et qu'aucun
+agent n'est orphelin.
+
+| Agent | Lancé par | Outils | Rôle |
+|-------|-----------|--------|------|
+| `implementer` | le pilote, pour tout lot délégué | tous | Écrit un lot selon la méthode : conventions, rayon d'impact, tests, type-check |
+| `reviewer` | skill `revue`, dès l'échelle Module | lecture + commandes | Relecture de code à contexte neuf, protocole de `revue` |
+| `auditor` | skill `audit`, un lot par agent | lecture + rapport | Audit d'un lot de l'existant |
+
+- **Le pilote transmet la tâche, pas la méthode** : échelle, critères de succès vérifiables, issue
+  et story s'il y en a, et la **liste explicite des fichiers que l'agent écrit** (jamais un motif
+  ni « ceux des autres, à ne pas toucher » : deux agents réécriraient les mêmes). La méthode
+  (conventions routées, rayon d'impact dès Standard, tests, interdiction de commiter,
+  **interdiction de trancher un arbitrage**) est dans le fichier de l'agent : il s'arrête et
+  remonte, le pilote pose la question (§ Avant de coder). Le commit reste au pilote.
+- **Coder et juger restent des agents distincts.** Seul l'`implementer` écrit du code ; les deux
+  autres n'en ont pas les outils. Un agent qui juge ne reçoit jamais le raisonnement de celui qui
+  a produit : le `reviewer` reçoit la demande, le périmètre et le récap des surfaces nouvelles.
+- En vague de stories menée sans JB, les règles du pilote et des agents sont dans
+  `.method/sprint/vagues.md`.
 
 ## Modifications documentaires
 
@@ -253,9 +269,40 @@ exclus du reçu de vérification : les éditer n'invalide pas des checks déjà 
 - **Le projet Supabase de test est partagé avec le dépôt de banc MCP (`mcp-test`)** : ses objets (`public.bench_*`, schémas `proto` et `oauth_test`) et ses versions de `supabase_migrations` ne sont ni supprimés, ni modifiés, ni « nettoyés », par SQL, tableau de bord ou connecteur ; ce dépôt ne touche que `platform` et ses propres versions (`database-patterns.md § Règles` pour `migration repair`). Vérifiable : une instruction `drop`, `truncate` ou `delete` lancée sur le projet nomme un objet de `platform`.
 - **Un commit n'indexe que ses propres fichiers** : d'autres sessions écrivent dans le même checkout ; avant `git add`, chaque chemin de `git status --porcelain` se rattache au travail commité, un chemin inconnu reste hors du commit et se signale à JB.
 - **C'est un gate appliqué, pas une convention.** `.claude/hooks/enforce-git-gate.mjs` bloque tout `git commit`, `merge`, `rebase`, `revert`, `cherry-pick` et `push` direct, lancé par l'outil Bash comme par l'outil PowerShell (matcher `Bash|PowerShell` de `.claude/settings.json` ; les deux hooks lisent la commande par `scripts/hook-command.mjs`, dans la grammaire du shell de l'outil), et refuse un commit dont le reçu ne couvre pas l'état exact du code. `--no-verify` et `--force` sont bloqués sans échappement possible. Si `scripts/hook-command.mjs` ne se charge pas, les hooks refusent ce qu'ils gardent et disent quoi faire : réparer le module par l'outil Edit ou Write, que les hooks ne voient pas (vérifiable : `tests/unit/hooks.test.ts`, « hooks whose reading module does not load »). `.githooks/pre-commit` couvre les commits que le hook ne voit pas (script, Makefile).
+- **Autre dépôt.** Le gate juge le dépôt que la commande vise (`cd <dir> &&` en tête, ou `git -C <dir>`) : un dépôt hors méthode (ni `scripts/verify-receipt.mjs` ni reçu) suit son propre gate, un autre dépôt de la méthode est jugé par son propre `scripts/verify-receipt.mjs check` ; seuls `--no-verify` et `--force` restent interdits partout, et ce checkout reste gardé. `git merge-file` et `git merge-base` ne créent aucun commit et passent ; `git commit-tree` lancé directement est bloqué comme un commit (celui de `pnpm commit:export`, lancé par le script, ne passe pas par le hook). Vérifiable : `tests/unit/hooks.test.ts`, « dépôt visé ».
 - **Pas de worktree** (règle commune du 20/10/2026). Des stories menées en parallèle (`.method/sprint/vagues.md`) se mènent chacune dans un **export** de `main` : `git archive origin/main` dans un dossier `mktemp -d`, avec sa propre installation (`pnpm install --frozen-lockfile`, jamais un lien vers le `node_modules` d'un autre dossier : le paquet s'y résout lui-même et le code testé serait celui de l'autre) et sa propre base locale (`test_<dossier>`). Un check destiné à un export porte son dossier (`pnpm --dir <export> verify`) ou suit un `cd <export> &&` : derrière un `;`, l'échec d'une commande précédente le laisse tourner dans le checkout principal, dont il réécrit le reçu (vérifiable : la ligne `RUN` de Vitest nomme l'export). Un correctif, une story seule ou une préparation de version se font dans le checkout principal. Le travail d'un export revient sur `main` par `pnpm commit:export --depot <checkout> --base <sha> --message <fichier>`, lancé dans l'export après son `pnpm verify` : il construit le commit sur un index temporaire du checkout (tout l'export, les modes de la base gardés), vérifie que son arbre de code est celui du reçu, et l'écrit avec deux trailers, `Verified-tree:` (l'arbre de code) et `Verified:` (checks, tests, sautés, plafond, empreinte des migrations de la base de test, durée, date) ; il refuse un reçu périmé, partiel, avec un test en échec ou un fichier sauté en entier hors de `scripts/sauts-toleres.txt` (la liste de la base ; l'étendre passe par une PR), un reçu sans base de test construite par `pnpm verify` ou dont l'empreinte des migrations n'est pas celle de l'arbre commité, et une base qui n'est plus `origin/main`. Le SHA se pousse ensuite en avance rapide (`git push origin <sha>:refs/heads/main`) ; si `main` a bougé, l'export se refait sur sa nouvelle tête et `pnpm verify` se relance, jamais `rebase` ni `merge`. Un chantier livré en plusieurs commits avant d'entrer sur `main` vit sur une branche de travail : son premier commit se construit comme les autres, sur `origin/main`, et se pousse sur `refs/heads/<branche>` ; les suivants s'empilent par `--branche <branche>`, `--base` nommant alors la tête d'`origin/<branche>`, dont l'export part. Quand `main` a avancé, l'export reprend ses fichiers, le commit prend la tête de `main` pour second parent, et l'outil refuse un export qui ne porte pas ce que `main` a changé hors des fichiers de la branche : resté sur l'ancienne tête, il effacerait à la fusion ce que `main` a reçu entre-temps (vérifiable : `tests/unit/commit-depuis-export.test.ts`, « work branch »). `git commit-tree` échappe au gate, qui ne juge que le reçu du checkout principal : le trailer est la preuve. La CI la relit (job `recu`, `scripts/ci/recu.mjs`, #84) : chaque commit poussé porte le `Verified-tree:` de son arbre de code, ou laisse inchangé celui de son parent (documents de méthode seuls), ou, commit de fusion, garde l'arbre de code de son second parent couvert par l'une de ces règles (une fusion dont l'arbre diffère de la branche, `main` ayant bougé, reste signalée) ; en avertissement jusqu'au 29/10/2026 (#85), bloquant ensuite.
 - **CI** : `pnpm check:migrations` (le SQL du paquet reste dans `platform` et additif, FR-INST-04), `pnpm build` (erreurs propres à Linux), et la suite portable sur un Postgres nu (job `bare-postgres` : `db prepare`, la ligne de base, la fumée, puis `vitest run tests/integration`, les suites propres à Supabase se sautant), et le build comme un hôte (job `packed-host-build` : le paquet empaqueté, installé depuis son `.tgz` dans une copie de l'application de référence, puis `next build` ; le build du workspace ne voit pas l'ordre de chargement d'un hôte). Une pull request de version ne fusionne que quand ces jobs sont verts. Pas de duplication avec le local.
 - **Publication** : une version se publie à la fusion de sa pull request de version (vers `main` ou `release/x.y.z`), approuvée par JB ou Alexis (`docs/conception/distribution-du-paquet.md § Publication`) ; le job `version` de `ci.yml` puis `publish.yml` jouent `scripts/ci/version-publiable.mjs` avant le tag ; `publish.yml` vérifie l'approbation, pose le tag `v<version>` sur le commit de fusion, puis, dans le même workflow, partant du tag : secrets de l'arbre (`check-public --secrets-only`), migrations (un seul fichier ajouté depuis le tag précédent : les migrations d'une version se fusionnent avant son tag, `database-patterns.md § Règles`), accord du tag, de la version et du `CHANGELOG.md` du paquet, puis `npm publish --provenance`.
+
+### Plusieurs sessions sur le même checkout
+
+Plusieurs conversations travaillent souvent en même temps dans ce dossier. Les commandes longues
+se **mutualisent** : un seul run, au bon moment, pour tout le monde.
+
+**Ce que l'outillage garantit** (`scripts/long-run.mjs`, hook `.claude/hooks/coordinate-sessions.mjs`, branché comme le gate sur les outils Bash et PowerShell, ce que `check:framework` vérifie) :
+- `verify` et `build` tournent **un à la fois** : lancé pendant l'autre, l'un attend la fin du
+  premier au lieu de tourner en parallèle. Un export de vague a sa propre file (son
+  `scripts/long-run.mjs`).
+- `verify` et `build` **gèlent** le checkout : avant de partir, ils attendent que les autres
+  sessions aient cessé d'écrire depuis 30 s (5 min au plus) ; pendant le run, le hook refuse les
+  `Edit`/`Write` des autres sessions. Une session bloquée attend avec `node scripts/long-run.mjs
+  wait`, puis réessaie ; elle ne contourne pas par Bash.
+- Un `verify` qui a attendu celui d'une autre session **ne rejoue rien** si le reçu couvre déjà
+  l'arbre. `node scripts/long-run.mjs status` montre le run en cours et les sessions actives.
+
+**Ce que chaque session fait** (convention, par messages entre sessions) :
+1. **Avant un run long** : `ListAgents`, puis `SendMessage` aux sessions qui travaillent dans ce
+   dossier : « je gèle pour `verify` (+ `build`…) dans ~1 min : finissez l'écriture en cours,
+   répondez si vous devez attendre, ou si vous voulez que j'inclue votre travail ». Attendre les
+   réponses ou ~1 min.
+2. **Une session qui a besoin du même run ne relance pas** : elle répond « inclus-moi » et attend
+   le résultat.
+3. **Après le run** : envoyer le résultat aux sessions prévenues : OK avec le reçu écrit (elles
+   passent par `commit-push`, dont `verify:cached` réutilise le reçu), ou KO avec les erreurs
+   attribuées aux fichiers de chacune. Chaque session corrige les siennes ; un seul nouveau run
+   ensuite.
+4. **Commiter** : chacune ses fichiers (`git add` explicite), seulement s'ils ne dépendent pas du
+   travail non fini d'une autre session.
 
 ## Invariants techniques
 
