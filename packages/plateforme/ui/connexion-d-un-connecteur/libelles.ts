@@ -8,9 +8,19 @@ export const CONNEXION_D_UN_CONNECTEUR = {
   impossible: "Connexion impossible",
   /** Le titre qu'on annonce : l'ancre du focus après l'activation. */
   ancre: "connexion-d-un-connecteur-titre",
-  reussi: (compte: string) => `« ${compte} » est connecté.`,
+  /** Le succès, sans le nom que porte l'adresse : un lien forgé l'écrirait. */
+  reussi: "Le compte est connecté.",
+  /** Le compte que le service vient de créer, nommé par sa réponse (jamais par l'adresse). */
+  compteConnecte: (compte: string) => `« ${compte} » est connecté.`,
   revenir: "Vous pouvez revenir à votre assistant et lui demander de reprendre.",
-  echec: (raison: string) => `La connexion n'a pas abouti${raison ? ` (${raison})` : ""}.`,
+  consentement: (outil: string) => `Autorisez l'accès à ${outil} chez son éditeur : vous y partez, puis vous revenez ici.`,
+  autoriser: (outil: string) => `Autoriser ${outil}`,
+  branchement: (outil: string) => `Connectez votre compte ${outil} chez son éditeur : vous y partez, puis vous revenez ici.`,
+  brancher: (outil: string) => `Connecter mon compte ${outil}`,
+  /** Le compte hébergé déjà relié ailleurs : le clic le relie ici, sans repasser chez le tiers. */
+  ailleurs: (outil: string, organisations: string) =>
+    `Votre compte ${outil} est déjà utilisé dans ${organisations}. Le bouton le relie aussi à cette organisation.`,
+  relier: (outil: string) => `Relier mon compte ${outil}`,
   reessayer: "Réessayer",
   cle: (outil: string) => `Collez la clé de ${outil} ; elle part chiffrée, et ne se réaffiche jamais.`,
   activation: (outil: string) => `${outil} n'est pas activé dans l'organisation. En tant qu'administrateur, confirmez son activation : ses fonctions deviendront disponibles, puis vous connecterez un compte.`,

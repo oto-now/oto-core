@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { connectionStep } from "@otomata_tech/oto_platform/server"
-import { EcranConnexionDUnConnecteur, issueDuConsentement, resultatDe, type EtapeAffichee } from "@otomata_tech/oto_platform/ui"
+import { EcranConnexionDUnConnecteur, issueDuConsentement, resultatDe } from "@otomata_tech/oto_platform/ui"
 // Pour son effet : la page lit les connecteurs que l'hôte déclare, et son bundle n'a pas ceux des routes.
 import "@/lib/fonctions-metier"
 import { getPlatformIdentity, getRequestOrigin } from "@/lib/plateforme/session"
@@ -9,9 +9,9 @@ import { loginPath } from "@/lib/schemas/auth"
 
 // « Connecter un outil » (`connexion-par-l-agent.md` § Page) : l'adresse finale qu'un refus de connecteur ou
 // `connector.connect` donne à l'assistant. La session et l'appartenance se revérifient ici ; sans session, la connexion
-// ramène sur cette même adresse. Le service décide l'étape sous le jeton de la session, l'espace de l'adresse revérifié :
-// un consentement ou un branchement part aussitôt chez le tiers (la demande posée, cette page pour retour), le reste se
-// montre. Le retour du tiers revient ici avec son issue en query, qui ne relance rien.
+// ramène sur cette même adresse. Le service décide l'étape sous le jeton de la session, l'espace de l'adresse revérifié,
+// sans rien écrire : un consentement ou un branchement part par le bouton de l'écran (`POST` de même origine), jamais à
+// l'ouverture, qu'un lien forgé déclencherait. Le retour du tiers revient ici avec son issue en query, qui ne relance rien.
 export const metadata: Metadata = {
   title: "Connecter un outil",
   robots: { index: false },
@@ -45,6 +45,5 @@ export default async function ConnexionDUnConnecteurPage({ params, searchParams 
   }
   const { identity, session } = identite.data
   const etape = await resultatDe(connectionStep(session.db, identity, { connector, ...entree }, { origin: origine }))
-  if (etape.data?.kind === "redirect") redirect(etape.data.url)
-  return <EcranConnexionDUnConnecteur outil={connector} resultat={etape as { data: EtapeAffichee } | { error: string }} reessayer={ici} />
+  return <EcranConnexionDUnConnecteur outil={connector} resultat={etape} reessayer={ici} />
 }

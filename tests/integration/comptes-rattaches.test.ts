@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -75,12 +76,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     })
 
   async function gate(caller: Caller, org: SqlReferenceOrg, path: string, body?: unknown): Promise<Response> {
+    return gateFrom(origin(org), caller, org, { path, body })
+  }
+
+  /** La porte appelée depuis `from` : l'origine de l'écran, ou celle d'un autre site pour un envoi forgé. */
+  async function gateFrom(from: string, caller: Caller, org: SqlReferenceOrg, { path, body }: { path: string; body?: unknown }): Promise<Response> {
     const method = body === undefined ? "GET" : "POST"
     const tasks: Task[] = []
     const request = new Request(`${origin(org)}/api/platform/${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { origin: origin(org), "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
+      headers: { origin: from, "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
     })
     const response = await handlePlateforme(request, { accessToken: tokens.get(caller) ?? null, host: org.host, verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
     for (const task of tasks) await task()
@@ -310,6 +316,23 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const id = accountId("lea")
     await connect("lea", id)
     fake.calls.length = 0
+    // La page de connexion ouverte dans la seconde organisation (un GET) dit le compte déjà relié ailleurs, sans rien
+    // relier, poser ni demander au tiers : un lien forgé n'y relie rien.
+    const lea2 = person("lea", o2)
+    const requestsIn = async (org: SqlReferenceOrg) => (await admin`select 1 from platform.hosted_link_requests where org_id = ${org.org.id} and user_id = ${o.people.lea.id}`).length
+    const before = await requestsIn(o2)
+    expect(await connectionStep(lea2.db, lea2.identity, { connector: CONNECTOR, space: "me" }, { origin: origin(o2) })).toEqual({
+      kind: "authorize",
+      gesture: "hosted_link",
+      connector: CONNECTOR,
+      label: LABEL,
+      space: "me",
+      elsewhere: [o.org.name],
+    })
+    expect([await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([before, 0, 1])
+    // Le relier ne se fait que par le POST du bouton, de la même origine : d'une autre, refusé sans rien relier.
+    const forged = await gateFrom("https://evil.example.test", "lea", o2, { path: "hosted-link", body: { connector: CONNECTOR, return_to: "/mes-comptes" } })
+    expect([forged.status, await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([403, before, 0, 1])
     const { url } = await start("lea", o2, { connector: CONNECTOR, return_to: "/mes-comptes" })
     const location = new URL(url)
     expect([location.origin, location.pathname, Object.fromEntries(location.searchParams)]).toEqual([origin(o2), "/mes-comptes", { hosted: "connected", account: label("lea") }])

@@ -252,6 +252,20 @@ async function ownedPlan(identity: Identity, connector: HostedConnector, owned: 
 }
 
 /**
+ * Les autres organisations de la personne où son compte hébergé de ce connecteur est déjà relié, par leur nom : la page
+ * de connexion le dit avant le clic qui le relierait ici (`startHostedLink`). Lecture seule, sans appel au tiers ni
+ * demande posée ; une organisation que la personne ne lit plus n'est pas nommée.
+ */
+export async function hostedLinkedElsewhere(db: PlatformDb, identity: Identity, connectorName: string): Promise<string[]> {
+  return inTransaction(db, "hostedLinkedElsewhere: my_hosted_accounts", async (sql) => {
+    const others = [...new Set((await myHostedAccounts(sql, connectorName)).filter((row) => row.org_id !== identity.org.id).map((row) => row.org_id))]
+    if (others.length === 0) return []
+    const orgs = await sql<{ name: string }[]>`select name from platform.orgs where id = any(${others}::uuid[]) order by name`
+    return orgs.map((org) => org.name)
+  })
+}
+
+/**
  * Démarre le branchement hébergé de la personne connectée à un connecteur à `accountIdentity` (`POST hosted-link`) et
  * rend l'adresse où l'envoyer. Une demande datée d'une heure est posée (les demandes échues de l'organisation purgées
  * au passage) ; un identifiant déjà à la personne et vivant se relie sans repasser par le tiers, et l'adresse rendue

@@ -182,12 +182,16 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
         await admin.end({ timeout: 5 })
       }
     }
-    /** L'adresse stable d'un refus (`/connect/host_api?space=me`), ouverte par la page : l'adresse d'autorisation où elle envoie. */
+    /**
+     * L'adresse stable d'un refus (`/connect/host_api?space=me`) ouverte par la page, qui montre le bouton sans rien
+     * poser, puis son clic (`POST connector-consent`, `startConnectorConsent`, cette page pour retour) : l'adresse
+     * d'autorisation où il envoie.
+     */
     const opened = async (link: string) => {
       const url = new URL(link)
       const step = await connectionStep(lea.db, lea.identity, { connector: decodeURIComponent(url.pathname.split("/").pop() ?? ""), ...Object.fromEntries(url.searchParams) }, { origin: ORIGIN })
-      if (step.kind !== "redirect") throw new Error(`expected a redirect, got ${step.kind}`)
-      return step.url
+      if (step.kind !== "authorize" || step.gesture !== "oauth") throw new Error(`expected the authorize button, got ${step.kind}`)
+      return (await startConnectorConsent(lea.db, lea.identity, { connector: step.connector, return_to: `${url.pathname}${url.search}` }, { origin: ORIGIN })).url
     }
     /** Le lien d'un refus suivi comme le feraient la page puis l'émetteur : le retour sur l'adresse du paquet, avec un code et le `state`. */
     const consentThrough = async (link: string) => {
@@ -254,7 +258,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       for (const secret of [bearer, "refresh-1", THIRD_PARTY_SUBJECT, "web-secret-not-in-logs", "m2m-secret-not-in-logs"]) expect(logged).not.toContain(secret)
     })
 
-    it("should give the same stable link from a call as from the list of functions, and pose a consent request only when the page opens", async () => {
+    it("should give the same stable link from a call as from the list of functions, and pose a consent request only on the page's button, never when it opens", async () => {
       const requests = async () => {
         const admin = testAdminSql()
         try {
@@ -274,7 +278,11 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
       // Ni secret ni jeton dans le lien : ni `state`, ni code, ni client.
       expect([...new URL(url).searchParams.keys()]).toEqual(["space"])
       expect((await requests()).length).toBe(before)
-      // L'ouverture pose une demande, de dix minutes, à usage unique : servie une fois, elle ne ressert pas.
+      // L'ouverture de la page ne pose rien (un GET) ; son bouton pose une demande, de dix minutes, à usage unique :
+      // servie une fois, elle ne ressert pas.
+      const page = new URL(url)
+      expect(await connectionStep(lea.db, lea.identity, { connector: "host_api", space: "me" }, { origin: ORIGIN })).toMatchObject({ kind: "authorize", gesture: "oauth", connector: "host_api", space: page.searchParams.get("space") })
+      expect((await requests()).length).toBe(before)
       const authorization = new URL(await opened(url))
       expect((await requests()).length).toBe(before + 1)
       const state = authorization.searchParams.get("state") ?? ""

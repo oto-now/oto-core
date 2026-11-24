@@ -48,7 +48,7 @@ const PLAN: ConnectionPlan = {
   space: { kind: "org" },
   gesture: "key",
   byCaller: false,
-  administrators: [{ userId: "u-ada", name: "Ada Martin" }],
+  administrators: [{ name: "Ada Martin" }],
   administratorNames: "Ada Martin",
   entersKey: false,
   url: CONNECT_URL,
@@ -332,7 +332,7 @@ describe("chooseAccount: nothing usable (AC16, N5, N6)", () => {
       connector: "mail",
       space: "org",
       url: CONNECT_URL,
-      administrators: [{ userId: "u-ada", name: "Ada Martin" }],
+      administrators: [{ name: "Ada Martin" }],
     })
     const alone = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: null }))
     expect(alone.message).toContain("(your own, then the organisation). Only an administrator of Acme Test (Ada Martin)")

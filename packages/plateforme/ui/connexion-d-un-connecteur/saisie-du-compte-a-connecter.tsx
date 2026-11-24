@@ -17,7 +17,7 @@ export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
   const [connecte, setConnecte] = useState<string | null>(null)
   if (connecte !== null) {
     return (
-      <Alert tone="ok" title={MOTS.reussi(connecte)}>
+      <Alert tone="ok" title={MOTS.compteConnecte(connecte)}>
         {MOTS.revenir}
       </Alert>
     )

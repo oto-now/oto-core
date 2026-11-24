@@ -183,7 +183,7 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       await expect(refused).rejects.toMatchObject({
         code: "not_enabled",
         message: `${said} Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open ${forAdmins}`,
-        details: { reason: "connector_off", gesture: "admin_activation", url: forAdmins, administrators: [{ userId: ref.people.ada.id, name: "Ada Martin" }] },
+        details: { reason: "connector_off", gesture: "admin_activation", url: forAdmins, administrators: [{ name: "Ada Martin" }] },
       })
       expect(writes()).toEqual([])
       await seed.admin`update platform.connector_activations set state = 'active', closed_by = null where org_id = ${ref.org.id} and connector = 'mail'`

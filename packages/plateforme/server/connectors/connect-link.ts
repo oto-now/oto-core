@@ -34,7 +34,7 @@ export type ConnectReason = "connector_off" | "no_account" | "reconnect"
 export type ConnectSpace = { kind: "user" } | { kind: "org" } | { kind: "team"; slug: string }
 
 /** Un administrateur nommé dans un refus ou sur la page : à qui transmettre l'adresse. */
-export type NamedAdministrator = { userId: string; name: string }
+export type NamedAdministrator = { name: string }
 
 /** Ce qu'il faut pour bâtir une adresse : la base, l'appelant, l'origine de l'adresse de l'organisation appelée. */
 export type ConnectWhere = { db: PlatformDb; identity: Identity; origin?: string | null }
@@ -243,7 +243,8 @@ async function administratorsOf(db: PlatformDb, identity: Identity): Promise<{ a
   const directory = await memberDirectory(db, identity.org.id)
   const administrators = directory
     .filter((person) => person.role === "admin")
-    .map((person) => ({ userId: person.userId, name: person.name }))
+    // Leurs noms seuls : l'adresse et le refus passent par l'assistant, jamais un identifiant de personne.
+    .map((person) => ({ name: person.name }))
     .sort((a, b) => a.name.localeCompare(b.name, "fr"))
   return { administrators, names: administratorNames(directory) }
 }

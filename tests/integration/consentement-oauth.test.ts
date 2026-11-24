@@ -145,11 +145,16 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     registerConnectors([consentConnector(CONNECTOR), leveledConsentConnector(LEVELED)], withApplication ? { oauthApplications: { [CONNECTOR]: TEST_APPLICATION, [LEVELED]: TEST_APPLICATION } } : {})
 
   async function gate(caller: Caller, method: string, path: string, body?: unknown): Promise<Response> {
+    return gateFrom(origin(), caller, { method, path, body })
+  }
+
+  /** La porte appelée depuis `from` : l'origine de l'écran, ou celle d'un autre site pour un envoi forgé. */
+  async function gateFrom(from: string, caller: Caller, { method, path, body }: { method: string; path: string; body?: unknown }): Promise<Response> {
     const tasks: Task[] = []
     const request = new Request(`${origin()}/api/platform/${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { origin: origin(), "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "consentement-test" },
+      headers: { origin: from, "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "consentement-test" },
     })
     const response = await handlePlateforme(request, { accessToken: tokens.get(caller) ?? null, host: o.host, verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
     for (const task of tasks) await task()
@@ -312,21 +317,31 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect(none.details).toEqual({ reason: "no_account", gesture: "oauth", connector: CONNECTOR, space: "me", url: link })
   })
 
-  it("should lead from the stable link straight to the third party, then back to the page with its outcome; the link holds no secret and its space is checked again", async () => {
+  it("should show the stable link's button without writing anything, start the consent only on a same-origin POST, and come back to the page with its outcome; the link holds no secret and its space is checked again", async () => {
     const claire = people.get("claire")
     if (!claire) throw new Error("no claire")
     const none = await refusal(call("claire"))
     const link = new URL(String(none.details?.url))
     // Rien de secret dans le lien : son connecteur et son espace, ni `state`, ni code, ni client.
     expect([link.pathname, [...link.searchParams.entries()]]).toEqual([`/connect/${CONNECTOR}`, [["space", "me"]]])
-    // La page ouvre le lien : la demande est posée à son ouverture, la personne part aussitôt chez le tiers.
+    const requests = async () => (await admin`select 1 from platform.connector_consents where org_id = ${o.org.id} and user_id = ${o.people.claire.id}`).length
+    const before = await requests()
+    // La page ouverte (un GET) montre le bouton, sans poser de demande ni appeler le tiers.
+    const sent = provider.sent.length
     const step = await connectionStep(claire.db, claire.identity, { connector: CONNECTOR, space: "me" }, { origin: origin() })
-    if (step.kind !== "redirect") throw new Error(`expected a redirect, got ${step.kind}`)
-    const address = new URL(step.url)
+    expect(step).toEqual({ kind: "authorize", gesture: "oauth", connector: CONNECTOR, label: "Crm", space: "me" })
+    expect([await requests(), provider.sent.length]).toEqual([before, sent])
+    // Le bouton : un POST d'une autre origine est refusé, sans demande posée.
+    const forged = await gateFrom("https://evil.example.test", "claire", { method: "POST", path: "connector-consent", body: { connector: CONNECTOR, return_to: `${link.pathname}${link.search}` } })
+    expect([forged.status, await requests()]).toEqual([403, before])
+    // De la même origine : la demande posée, le navigateur part chez le tiers, cette page pour retour.
+    const { status, url } = await start("claire", { connector: CONNECTOR, return_to: `${link.pathname}${link.search}` })
+    expect([status, await requests()]).toEqual([200, before + 1])
+    const address = new URL(url)
     expect(address.origin + address.pathname).toBe("https://login.crm.example.test/authorize")
     expect(address.searchParams.get("redirect_uri")).toBe(`${origin()}/api/platform/connector-consent/callback`)
     // Le retour ramène sur la page, qui dit l'issue ; la demande servie ne ressert pas.
-    const granted = provider.authorize(step.url, who("claire"))
+    const granted = provider.authorize(url, who("claire"))
     const returned = await back("claire", granted)
     expect([returned.origin, returned.pathname, Object.fromEntries(returned.searchParams)]).toEqual([
       origin(),

@@ -140,7 +140,7 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
         connector: LIVE,
         space: "me",
         url: forAdmins,
-        administrators: [{ userId: o.people.ada.id, name: "Ada Martin" }],
+        administrators: [{ name: "Ada Martin" }],
       })
       expect(byLea.message).toContain(`Only an administrator of ${o.org.name} (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open ${forAdmins}`)
       expect((await connect("lea", {})).data.result).toMatchObject({ gesture: "admin_activation", by: "administrator", url: forAdmins })
@@ -154,7 +154,7 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
         label: "Crm",
         space: "me",
         url: forAdmins,
-        administrators: [{ userId: o.people.ada.id, name: "Ada Martin" }],
+        administrators: [{ name: "Ada Martin" }],
       })
       // Ada confirme (le bouton de la page, `POST admin/connectors/<nom>/activation`) : la page enchaîne sur la saisie.
       await activateConnector(ada.db, ada.identity, { connector: LIVE })

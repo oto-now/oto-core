@@ -47,7 +47,7 @@ Il fait le plan (`planConnection`), puis bâtit le refus (`refusalFromPlan`) :
   `open <url>` : un assistant qui ne lit pas `details` relaie quand même le geste ;
 - `details` : `reason` (`connector_off`, `no_account` ou `reconnect`), `gesture`, `connector`, `access` (s'il en a
   plusieurs), `space` (`me`, `org` ou `team:<slug>`), `url`, `administrators` (quand seul un administrateur peut
-  agir) et `shared_accounts`.
+  agir, `[{name}]` : leurs noms seuls, jamais leur identifiant) et `shared_accounts`.
 
 **Le plan.** `planConnection` décide trois choses, sous l'identité de l'appelant.
 - Le geste. `oauth` pour un accès `user_consent` ou l'API d'un hôte, `hosted_link` pour un accès à identité rattachée,
@@ -76,14 +76,21 @@ une adresse relative.
 `connectionStep` dans `server/connectors/connect-page.ts`).
 - Sans session, la page renvoie à la connexion, avec retour sur la même adresse. Hors de l'organisation de
   l'adresse, elle renvoie à `/no-organization`.
-- Le plan est refait sous la session.
-- Consentement ou branchement sur un espace permis : la demande est posée à l'ouverture, et la personne part aussitôt
-  chez le tiers. Le retour revient sur la page, avec son issue.
+- Le plan est refait sous la session. L'ouverture (un GET) ne pose rien, n'appelle pas le tiers et n'écrit rien.
+- Consentement ou branchement sur un espace permis : un seul bouton (« Autoriser X », « Connecter mon compte X »). Son
+  clic envoie un `POST` de même origine (`connector-consent` ou `hosted-link`, origine contrôlée par
+  `requireSameOrigin`), qui pose la demande, puis le navigateur part chez le tiers. Le parcours reste un clic, puis le
+  geste chez le tiers. Le retour revient sur la page, avec son issue.
+- Compte hébergé déjà relié dans une autre organisation de la personne : la page le dit avant le clic (« Votre compte X
+  est déjà utilisé dans ORG. Le bouton le relie aussi à cette organisation. », « Relier mon compte X ») ; seul ce `POST`
+  le relie.
 - Clé : le formulaire du compte, l'espace et l'équipe posés.
 - Activation : un bouton qui confirme. Rien ne s'active à l'ouverture.
 - Une autre personne doit agir : l'adresse à copier et les administrateurs.
-- L'issue d'un retour s'affiche sans rien relancer. Réussi : « Vous pouvez revenir à votre assistant et lui demander de
-  reprendre. » Échoué : « Réessayer ».
+- L'issue d'un retour s'affiche sans rien relancer et sans croire l'adresse. Réussi : « Le compte est connecté. Vous
+  pouvez revenir à votre assistant et lui demander de reprendre. », sans le nom que porte l'adresse. Échoué : la phrase
+  de la raison si elle est connue (`echecDuConsentement`, la liste de l'écran Connecteurs), sinon une phrase générique,
+  et « Réessayer ».
 
 **La fonction** `connector.connect {connector, space?, access?}` (contrat `server/catalog/connector-connect.ts`, logique
 `server/connectors/connect-function.ts`, chargée à l'appel pour ne pas créer de cycle d'imports avec le registre) :
@@ -100,8 +107,11 @@ pas : l'adresse va à une personne.
 - **Adresse stable plutôt que lien du tiers à usage unique.** Mettre le lien d'autorisation dans le refus posait une
   demande à chaque refus, exposait le `state` dans la conversation et expirait avant que la personne ne lise.
   Le cache des liens et `consentStillOpen` sont retirés.
-- **Redirection immédiate pour l'OAuth.** Un clic de plus sur la page n'ajoute aucune garantie : la page est sous
-  session, et le tiers demande lui-même le consentement.
+- **Redirection immédiate au GET, abandonnée pour raison de CSRF.** La page partait chez le tiers dès l'ouverture, la
+  demande posée. Un lien forgé, ou une navigation de premier niveau depuis un autre site (cookie `lax`), forçait alors
+  un consentement chez un fournisseur qui approuve sans écran, ou reliait sans geste un compte hébergé déjà utilisé dans
+  une autre organisation ; chaque GET écrivait une demande. Le départ passe par un bouton et un `POST` de même origine.
+  `Sec-Fetch-Site` ne suffit pas comme garde : le lien arrive souvent d'une autre application, donc d'un autre site.
 - **Activation par bouton, jamais à l'ouverture.** Un lien transmis ou prérendu ne doit rien changer.
 - **Un seul code, `not_enabled`.** Un nouveau code aurait cassé les clients qui le lisent ; la raison va dans
   `details.reason`. `host_consent_required` devient `no_account` ou `reconnect`, avec `gesture: oauth`.
@@ -110,14 +120,17 @@ pas : l'adresse va à une personne.
 ## Sécurité et confidentialité
 
 - L'adresse ne porte aucun secret : connecteur, espace, accès, `activate`. Le `state` du consentement (256 bits, haché
-  en base, dix minutes, usage unique, lié à la personne, l'organisation et le connecteur, avec PKCE) n'est créé qu'à
-  l'ouverture par une session connectée, jamais dans un refus.
+  en base, dix minutes, usage unique, lié à la personne, l'organisation et le connecteur, avec PKCE) n'est créé qu'au
+  clic du bouton, par un `POST` de même origine d'une session connectée, jamais à l'ouverture ni dans un refus.
 - L'espace de l'adresse n'est jamais cru.
   - Il est revérifié à l'affichage (`planConnection`), puis à l'envoi par le service de création de compte.
   - Un espace non permis est un refus nommé.
   - Une équipe d'une autre organisation est introuvable, car l'identité est celle de l'organisation de l'adresse.
-- La redirection immédiate est réservée au consentement et au branchement sur un espace permis. L'activation passe par
-  un `POST` sous session, réservé aux administrateurs par sa route.
+- Rien ne part ni ne s'écrit au GET : consentement, branchement, relier un compte hébergé d'une autre organisation et
+  activation passent chacun par un `POST` de même origine sous session (l'activation, réservée aux administrateurs par
+  sa route).
+- L'issue du retour ne reprend aucun texte de l'adresse : raison par liste blanche, succès sans nom de compte.
+- `administrators` ne porte que des noms.
 - Le retour du tiers ne peut ramener que sur un chemin local (`return_to` validé par le parcours de consentement).
 
 ## Écart avec le code

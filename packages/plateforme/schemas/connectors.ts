@@ -348,12 +348,21 @@ export const connectorConnectSchema = z
 export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
 
 /**
- * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : partir chez le tiers (`redirect`, consentement
- * ou branchement déjà demandés), saisir le compte (`key`, l'espace posé), confirmer l'activation (`activate`, un
- * administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
+ * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,
+ * par la porte du consentement ou du branchement, en `POST` de même origine ; `elsewhere` : les autres organisations de
+ * la personne où son compte hébergé est déjà relié, qu'un clic relie ici), saisir le compte (`key`, l'espace posé),
+ * confirmer l'activation (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
  */
 export type ConnectionStepView =
-  | { kind: "redirect"; url: string }
+  | {
+      kind: "authorize"
+      gesture: "oauth" | "hosted_link"
+      connector: string
+      label: string
+      space: string
+      access?: string
+      elsewhere?: string[]
+    }
   | {
       kind: "key"
       connector: string
@@ -366,4 +375,4 @@ export type ConnectionStepView =
       form: ConnectorAccountForm | null
     }
   | { kind: "activate"; connector: string; label: string; space: string }
-  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { userId: string; name: string }[] }
+  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[] }
