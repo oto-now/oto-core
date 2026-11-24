@@ -54,7 +54,7 @@ export {
   createAccountSchema,
   disableAccountSchema,
 } from "./connectors"
-export type { AccountChange, AccountMode, AccountSecretInput, ConnectionStepView, ConnectorConnectArgs, ConnectorProbeInput } from "./connectors"
+export type { AccountChange, AccountMode, AccountSecretInput, ConnectAccessChoice, ConnectionStepView, ConnectorConnectArgs, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
 export { BROKEN_LINKS_MAX, teamSharesArgsSchema } from "./team-shares"

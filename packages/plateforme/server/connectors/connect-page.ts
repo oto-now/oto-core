@@ -17,7 +17,7 @@ import type { Identity } from "../identity"
 import { accountAccess } from "./accesses"
 import { connectorAccountForms } from "./account-secret"
 import { accountOwner, accountView, managedAccount } from "./accounts"
-import { accountSpace, connectorLabel, parseSpace, planConnection, spaceParam } from "./connect-link"
+import { accessChoices, accountSpace, connectorLabel, parseSpace, planConnection, spaceParam } from "./connect-link"
 import { accountFieldNames } from "./host-fields"
 import { hostedLinkedElsewhere } from "./hosted-link"
 import { creatableModes } from "./modes"
@@ -28,25 +28,33 @@ import { creatableModes } from "./modes"
  * `activate` (un administrateur confirme l'activation), `ask_admin` (l'adresse à transmettre, les administrateurs
  * nommés). Lecture seule. Refus : saisie invalide (`invalid_arguments`), connecteur inconnu ou natif, espace non permis
  * (`forbidden`, nommé), équipe inconnue (`not_found`). Avec `account_id` : l'étape `account_key` (`accountKeyStep`).
+ * Un connecteur à plusieurs accès sans accès nommé : `choose_access`, chaque accès et son geste, avant tout plan ; un
+ * accès nommé : son étape, et les autres accès offerts (`others`), sauf à l'activation, commune à tous.
  */
 export async function connectionStep(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<ConnectionStepView> {
   const parsed = connectionPageSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   if (parsed.data.account_id) return accountKeyStep(db, identity, { ...parsed.data, account_id: parsed.data.account_id })
-  const { connector, access, space } = parsed.data
+  const { connector, access, space, activate } = parsed.data
+  // Un connecteur à plusieurs accès, sans accès nommé : la personne choisit, jamais un accès pris à sa place.
+  const choices = access || activate ? [] : accessChoices(connector)
+  if (choices.length > 0) return { kind: "choose_access", connector, label: connectorLabel(connector), accesses: choices }
   const plan = await planConnection({ db, identity, origin: options.origin }, { connector, access, ...(space ? { space: parseSpace(space) } : {}) })
   const base = { connector: plan.connector, label: plan.label, space: spaceParam(plan.space) }
-  if (!plan.byCaller) return { kind: "ask_admin", ...base, url: plan.url, administrators: plan.administrators }
-  if (plan.gesture === "admin_activation") return { kind: "activate", ...base }
   const accessName = plan.access?.name ?? null
+  const others = plan.gesture === "admin_activation" ? [] : accessChoices(plan.connector, accessName)
+  const offered = others.length > 0 ? { others } : {}
+  if (!plan.byCaller) return { kind: "ask_admin", ...base, url: plan.url, administrators: plan.administrators, ...offered }
+  if (plan.gesture === "admin_activation") return { kind: "activate", ...base }
   if (plan.gesture === "oauth" || plan.gesture === "hosted_link") {
     const elsewhere = plan.gesture === "hosted_link" ? await hostedLinkedElsewhere(db, identity, plan.connector) : []
-    return { kind: "authorize", gesture: plan.gesture, ...base, ...(accessName ? { access: accessName } : {}), ...(elsewhere.length > 0 ? { elsewhere } : {}) }
+    return { kind: "authorize", gesture: plan.gesture, ...base, ...(accessName ? { access: accessName } : {}), ...(elsewhere.length > 0 ? { elsewhere } : {}), ...offered }
   }
   const form = connectorAccountForms().find((candidate) => candidate.connector === plan.connector && (candidate.access?.name ?? null) === accessName) ?? null
   return {
     kind: "key",
     ...base,
+    ...offered,
     ...(form?.access ? { access: form.access } : {}),
     owner: plan.space.kind,
     ...(plan.team ? { team: plan.team } : {}),

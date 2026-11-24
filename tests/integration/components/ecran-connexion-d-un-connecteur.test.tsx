@@ -71,3 +71,34 @@ describe("EcranConnexionDUnConnecteur, the key of an existing account", () => {
     await waitFor(() => expect(rafraichir).not.toHaveBeenCalled())
   })
 })
+
+describe("EcranConnexionDUnConnecteur, a connector with several accesses", () => {
+  const ACCES = [
+    { name: "oauth", label: "Sign-in of a person", gesture: "oauth" as const },
+    { name: "key", label: "Key of the organization", gesture: "key" as const },
+  ]
+
+  it("should make the person choose the access when the link names none, each a link to the same page with its gesture", () => {
+    render(<EcranConnexionDUnConnecteur outil="fod" resultat={{ data: { kind: "choose_access", connector: "fod", label: "Fod", accesses: ACCES } }} reessayer="/connect/fod" />)
+    expect(screen.getByText("Fod se connecte de plusieurs façons. Choisissez la vôtre :")).toBeInTheDocument()
+    const liste = within(screen.getByRole("list", { name: "Les façons de se connecter" }))
+    expect(liste.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Sign-in of a person : autoriser l'accès chez l'éditeur",
+      "Key of the organization : coller une clé",
+    ])
+    expect(liste.getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(["/connect/fod?access=oauth", "/connect/fod?access=key"])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("should offer the other accesses beside the gesture of the access the link names", () => {
+    render(
+      <EcranConnexionDUnConnecteur
+        outil="fod"
+        resultat={{ data: { kind: "ask_admin", connector: "fod", label: "Fod", space: "org", url: "https://acme.example.test/connect/fod?space=org&access=key", administrators: [{ name: "Ada Martin" }], others: [ACCES[0]] } }}
+        reessayer="/connect/fod?access=key"
+      />,
+    )
+    expect(screen.getByText("Ou connectez-vous autrement :")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Sign-in of a person" })).toHaveAttribute("href", "/connect/fod?access=oauth")
+  })
+})

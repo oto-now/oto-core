@@ -33,4 +33,9 @@ export const CONNEXION_D_UN_CONNECTEUR = {
   administrateurs: (outil: string, noms: string) =>
     `Seul un administrateur de l'organisation peut activer ${outil} ou y connecter ce compte${noms ? ` : ${noms}` : ""}. Transmettez-lui ce lien :`,
   lien: "le lien de connexion",
+  /** Un connecteur à plusieurs accès : la personne choisit le sien, jamais pris à sa place. */
+  choisir: (outil: string) => `${outil} se connecte de plusieurs façons. Choisissez la vôtre :`,
+  autres: "Ou connectez-vous autrement :",
+  listeDesAcces: "Les façons de se connecter",
+  geste: { oauth: "autoriser l'accès chez l'éditeur", key: "coller une clé", hosted_link: "connecter votre compte chez l'éditeur" },
 } as const

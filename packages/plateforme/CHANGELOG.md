@@ -30,6 +30,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A refused key, or an account without one, links to the entry of that account's key, for whoever manages it.
 - Spent credits keep their refusal (`quota_exhausted`), without a link: they are bought at the third party.
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
+- A connector that opens by several accesses names the others in a refusal without account; its link lets the user choose, each access with its own gesture.
 
 ### Hosts
 - MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
@@ -65,6 +66,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - MCP: in `connector.connect`'s `{gesture: "none", account}`, a personal account's `owner` is `{kind: "user", name, yours}`, without `userId`.
 - UI: `IssueDuConsentement` loses `compte`: the Connectors screen says « Le compte est connecté. », never the label read in the address.
 - Schemas: `connectionPageSchema` gains `account_id`; `ConnectionStepView` gains `account_key`.
+- Server: `registerConnectors` takes the access levels of a connector with several accesses in every access or in none (an access by key, `bearer`, has none): without them, each access opens the whole connector; a mix is refused by name.
+- Server: `connectionStep` without `access` for a connector with several accesses returns `choose_access` (each access, its label and gesture), before any plan; with one, `authorize`, `key` and `ask_admin` gain `others`, the other accesses. `accessChoices(connector, except?)` gives them.
+- Schemas: `ConnectionStepView` gains `choose_access` and `others`; `ConnectAccessChoice` is exported. UI: `EcranConnexionDUnConnecteur` shows them as links to the same page, `?access=<name>`.
 
 ## 1.9.0 — 2026-11-19
 
