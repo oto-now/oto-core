@@ -19,6 +19,7 @@ import { isPersonalConnector } from "../../packages/plateforme/server/connectors
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorAccess, ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
+import { authorizationAddress } from "../../packages/plateforme/server/connectors/oauth-user"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import {
   describedConnector,
@@ -251,6 +252,20 @@ describe("a connector with several accesses: the engine", () => {
     const credential = { fields: {}, settings: {}, tokens: memoryTokens({ token: access, expiresAt: new Date(Date.now() + 600_000) }), consent: memoryConsent(token()) }
     await getCompany(credential, SIGN_IN)
     expect(sent().map((request) => [request.url, request.authorization])).toEqual([["https://crm.example.test/v2/me", `Bearer ${access}`]])
+  })
+
+  it("should set the resource of the sign-in access, declared in its auth, at its authorization and its renewal", async () => {
+    const resource = "https://api.crm.example.test"
+    verdict(withAccess(SIGN_IN, (access) => ({ ...access, auth: { ...access.auth, resource } })))
+    const signIn = declaredConnector("crm")?.accesses.find((access) => access.name === SIGN_IN)
+    if (signIn?.auth.kind !== "user_consent") throw new Error("not a consent")
+    const address = new URL(authorizationAddress(signIn.auth, { clientId: "client-test", redirectUri: "https://acme.test/cb", state: "s", codeChallenge: "c" }))
+    expect(address.searchParams.get("resource")).toBe(resource)
+    const refresh = token()
+    const sent = stub(json({ access_token: "a1", refresh_token: refresh, expires_in: 3600 }), json({ scopes: ["contacts.read"] }))
+    const credential = { fields: {}, settings: {}, tokens: memoryTokens({ token: "expiring", expiresAt: new Date(Date.now() + 30_000) }), consent: memoryConsent(refresh) }
+    await getCompany(credential, SIGN_IN)
+    expect(new URLSearchParams(String(sent()[0].body)).get("resource")).toBe(resource)
   })
 
   it("should refuse before anything is sent a call on an account without access, or with an undeclared one", async () => {
