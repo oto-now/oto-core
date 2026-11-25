@@ -18,12 +18,23 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Assistants
+- An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
+
+### Hosts
+- Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
+- Install: `@otomata_tech/connectors` becomes a peer dependency of the package (`*`): the host installs it itself, pinned at v1.246.0 at least (`github:oto-now/connectors#47c4bdcb…&path:/ts`, TypeScript sources; pnpm refuses a git dependency below a dependency), and transpiles it with the package (`transpilePackages`).
+- Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.
+- MCP: `admin_connector host_api` and `refresh_host_api` (two steps) show, set and refresh the host API of an organisation; a refused document keeps the previous version served.
+- Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
+
+## 1.10.0 — 2026-11-25
+
+### Assistants
 - `read`, `write` and `node.move` take `id`, a node's stable id, instead of `path`; `read`, `find`, `write` and `node.tree` serve it.
 - `node.describe {ids}` gives up to 200 ids at once: present (path, title), trashed or missing; one you cannot read answers missing.
 - A page in the trash read, written or moved by its id is refused as such (`conflict`), never served nor called unknown.
 - `member.list`, `member.add`, `member.set_teams`, `member.remove`: the members and the people pending their first sign-in, named by email. `member.add` sends no email.
 - `team.create` creates a team with its folder. Administrators do everything; a team lead adds or removes members of the teams they lead only; a plain member is refused.
-- An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 
 ### Hosts
 - MCP: `read` and `write` gain an optional `id` (uuid), last in their input schemas; with it, `path` is left out. `path` is no longer required by `write`'s JSON Schema: path or id, never both, refused by name otherwise (`read` also takes `file` alone, as before).
@@ -35,11 +46,9 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `registerInvitation(db, identity, input, replacing?)` registers a pending person without sending any email, with the rights, limit and refusals of `inviteMember`; the person joins at their first sign-in, however late: the registration never expires (`expiresAt` null) until `member.remove` withdraws it. A pending person joins one team at most.
 - Server: `listInvitations` and `inviteMember`'s `CreatedInvitation` type `expiresAt` as `string | null`: null for a registration without email; an emailed invitation still lives 7 days (`Schemas:`). The Équipes screen shows « sans échéance » for it.
 - Migrations: apply `20261122184838_platform_attente_sans_echeance.sql` with the package: `invitations.expires_at` becomes nullable (default kept), `authenticated` may insert it, and the functions that read an open invitation (`accept_invitations`, `invitations_guard`, `identity_for_caller`, the sign-up hook, `org_usage`, `join_org`) treat a null expiry as open. No row rewritten; the package without it fails on `member.add`.
-- Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
-- Install: `@otomata_tech/connectors` becomes a peer dependency of the package (`*`): the host installs it itself, pinned at v1.246.0 at least (`github:oto-now/connectors#47c4bdcb…&path:/ts`, TypeScript sources; pnpm refuses a git dependency below a dependency), and transpiles it with the package (`transpilePackages`).
-- Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.
-- MCP: `admin_connector host_api` and `refresh_host_api` (two steps) show, set and refresh the host API of an organisation; a refused document keeps the previous version served.
-- Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
+- Install: the `next` peer widens from `^15` to `^15 || ^16`: the package imports nothing from Next but the `Metadata` type, and the reference host builds on Next 16.4 (workspace build and packed-host build). Next 15 hosts change nothing.
+- Install: on Next 16, `eslint-config-next` 16 pulls `eslint-plugin-react-hooks` 7, whose preset adds the React Compiler rules; the package's `ui/` does not pass them yet. A host that lints the package sources (workspace, `transpilePackages`) pins `eslint-config-next>eslint-plugin-react-hooks: ^5.2.0` in `overrides`, as the reference host does, until a version says these rules pass.
+- Install: on Next 16, `experimental.devtoolSegmentExplorer` no longer exists: remove it from `next.config.ts`. `src/middleware.ts` still works (deprecated in favour of `proxy.ts`); the reference host keeps it for now.
 
 ## 1.9.0 — 2026-11-19
 

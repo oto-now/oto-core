@@ -5,7 +5,7 @@
 
 ## Principes
 
-1. **Mesurer avant d'optimiser.** Ne pas deviner — utiliser Lighthouse et les Web Vitals.
+1. **Mesurer avant d'optimiser.** Ne pas deviner : sortie de build et Web Vitals (§ Mesurer).
 2. **Server Components par défaut.** Zéro JS côté client = meilleure performance.
 3. **Charger uniquement ce qui est visible.** Lazy load, code splitting, images optimisées.
 
@@ -100,35 +100,21 @@ const inter = Inter({
   ~1 Mo de JS tiers avant la moindre interaction, et ce JS n'est pas dans le bundle — il
   n'apparaît donc dans aucune analyse de bundle.
 
-## Audit Lighthouse
+## Mesurer
 
-```bash
-pnpm build && pnpm audit:lh
-```
+Pas de Lighthouse dans ce dépôt : ses pages sont derrière une authentification, et un score de
+page publique ne décrit pas l'usage réel.
 
-oto-saas : `lighthouserc.json` lance Lighthouse CI sur l'app buildée (`pnpm start`) et **échoue** sous les
-seuils : performance, accessibility, best-practices, seo ≥ 0.95. C'est ce qui rend les cibles
-ci-dessus opposables — sans mesure, « bundle trop gros » ou « contraste insuffisant » restent des
-opinions, et une review ne peut pas les bloquer.
-
-**Quand le lancer :** avant une mise en production, et après tout changement de layout, de hero,
-de police ou de token de couleur. **Pas** dans `pnpm verify` ni dans le gate de commit : un build
-complet suivi de l'audit se compte en minutes, le payer à chaque push pour un diff qui ne touche
-ni rendu ni asset est du gaspillage (arbitrage assumé, pas un oubli).
-
-**Une page ajoutée au site ne s'audite pas toute seule** : la liste des URLs auditées est dans
-oto-saas : `lighthouserc.json`. Y ajouter tout nouvel archétype de page (une page de contenu, pas la
-dix-septième page produit).
-
-**Exemption :** `/design-system` rend l'intégralité du catalogue de composants — sa note de
-performance ne décrit aucune page réelle et bloquerait sur un artefact. Elle est auditée sur
-accessibility, best-practices et SEO seulement (même exemption qu'en
-`coding-standards.md § Complexité`). L'accessibilité, elle, n'est **jamais** exemptée : un
-composant du catalogue sans nom accessible l'est aussi dans les pages qui l'utilisent.
-
-**Ce que l'audit local ne couvre pas** — tout ce qui dépend de l'hébergeur : compression, cache
-`immutable`, HTTP/2+, chaînes de redirection. Ça se vérifie sur l'URL déployée
-(`deployment-patterns.md § Contrôles post-déploiement`).
+- **Poids JS par route** : `node scripts/ci/shared-first-load-js.mjs` après `pnpm build` (Next 16 n'affiche
+  plus la colonne First Load JS), et les budgets du job CI `packed-host-build` (`scripts/ci/shared-first-load-js.mjs`,
+  § Bonnes pratiques). C'est le chiffre qu'un finding « bundle trop gros » doit citer.
+- **Web Vitals (LCP, INP, CLS)** : panneau Performance de Chrome DevTools sur `next start`, sur
+  la page en cause, avec son chiffre. Un ressenti « la page est lente » sans mesure reste BASSE.
+- **Accessibilité, contraste compris** : l'extension axe DevTools à la main, en clair et en
+  sombre, sur les pages touchées (`accessibility-patterns.md § Couleurs & Contraste`).
+- **Ce que la mesure locale ne couvre pas** — tout ce qui dépend de l'hébergeur : compression,
+  cache `immutable`, HTTP/2+, chaînes de redirection. Ça se vérifie sur l'URL déployée
+  (`deployment-patterns.md § Contrôles post-déploiement`).
 
 ## Bundle Size
 
@@ -148,7 +134,7 @@ composant du catalogue sans nom accessible l'est aussi dans les pages qui l'util
   les modules `"use client"` du graphe entier du barrel `ui/index.ts`, pas les seuls noms importés : un import du
   barrel par un fichier chargé à la racine met le code client de toute la face (éditeur, zod) dans le JavaScript de
   chaque page. **Vérifiable :** le job CI `packed-host-build` échoue si le JS partagé par toutes les pages dépasse
-  `SHARED_JS_BUDGET_KB` (`scripts/ci/shared-first-load-js.mjs`, 120 kB) ; en local, `node
+  `SHARED_JS_BUDGET_KB` (`scripts/ci/shared-first-load-js.mjs`, 160 kB) ; en local, `node
   scripts/ci/shared-first-load-js.mjs` après `pnpm build`.
 - **Un écran s'importe de `@otomata_tech/oto_platform/ui` par son nom, et l'hôte déclare
   `optimizePackageImports: ["@otomata_tech/oto_platform/ui"]`** (sous-chemin exact, dans `experimental` de
@@ -156,15 +142,15 @@ composant du catalogue sans nom accessible l'est aussi dans les pages qui l'util
   client des écrans qu'elle monte (`/login` sans l'éditeur, `/n/<chemin>` avec). Sans cette ligne, ou avec le nom du
   paquet seul, qui ne couvre pas `/ui`, toute page ou tout layout qui importe du barrel charge le code client de toute
   la face. La réécriture exige un barrel de réexports seuls : `ui/index.ts` ne déclare rien lui-même (test « pure
-  re-export file » de `tests/unit/package-faces.test.ts`). Le JS d'une route se mesure page et layouts ensemble : la
-  colonne « First Load JS » de `next build` ignore les layouts. **Vérifiable :** `packed-host-build` échoue si `/login`
+  re-export file » de `tests/unit/package-faces.test.ts`). Le JS d'une route se mesure page et layouts ensemble, comme le fait ce script.
+  **Vérifiable :** `packed-host-build` échoue si `/login`
   ou la coque (`/admin`) dépasse son budget (`ROUTE_BUDGETS_KB`, même script).
 
-### Tailles cibles — objectifs mesurés en CI / Lighthouse
+### Tailles cibles — objectifs mesurés
 
 > Ces seuils exigent une mesure : ils sont **hors périmètre d'une review de diff**. Ne pas
-> produire de finding « bundle trop gros » sans chiffre à l'appui. Le chiffre s'obtient avec
-> `pnpm audit:lh` (§ Audit Lighthouse).
+> produire de finding « bundle trop gros » sans chiffre à l'appui. Le chiffre s'obtient comme
+> dit en § Mesurer.
 
 | Métrique | Cible | Comment |
 |----------|-------|---------|

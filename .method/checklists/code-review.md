@@ -35,6 +35,16 @@ Point de contrôle de `CLAUDE.md § Justifier une surface nouvelle` — ne pas y
 - [ ] (paquet) Chaque nom ajouté à l'`index.ts` d'une face (`ui`, `schemas`, `server`, `api`, `mcp`) a un consommateur hors de son module, test mis à part (`rg -w <nom> packages src scripts`), ou figure dans les exports que la story exige ; sinon il reste interne
 - [ ] (dès Standard) Chaque module partagé que le diff crée (classes, type, adaptateur, util, lecture de service) a sa ligne dans « Doublons » du rayon d'impact, trouvée en cherchant son **contenu** (chaîne de classes, forme du type ; côté `server/`, les colonnes du `select` et la table lue) dans chaque face touchée et dans l'hôte, pas son nom ; une copie dans le fichier d'une autre story y porte son verdict, et son refacto est posé en question
 
+## Preuve visuelle
+
+Due dès qu'un fichier du périmètre active le tag `ui` (`.method/conventions/_index.md`). Les
+règles de composition sont dans `ui-patterns.md` ; cette rubrique ne vérifie que la preuve.
+
+- [ ] `pnpm ui:shots <routes touchées>` a tourné et le rapport cite les chemins des captures lues (375, 768, 1280 ; clair et sombre). Diff UI sans capture citée = review incomplète, verdict ❌
+- [ ] Ce que les captures montrent est écrit en une phrase par largeur : débordement, lisibilité en sombre, bouton principal visible, titres sur deux lignes maximum
+- [ ] La lecture de design (plan ou story) correspond à ce que les captures montrent ; un écart est un finding sourcé `ui-patterns.md § Lecture de design`
+- [ ] (Standard+ avec changement visible) Un brief de design existe (story § Design ou plan) et le sous-agent `design-critic` a rendu `APPROVED` sur les captures après, en deux cycles au plus, ou les findings restants ont été posés à l'utilisateur ; le rapport porte la ligne `Design :` (skill `design`). Sans brief ni critique : verdict ❌
+
 ## Conformité à la demande
 
 - [ ] (mode story) Tous les AC de la story sont couverts par le code livré
@@ -44,6 +54,7 @@ Point de contrôle de `CLAUDE.md § Justifier une surface nouvelle` — ne pas y
 - [ ] Les hypothèses prises face à une ambiguïté sont explicitées à l'utilisateur, ou, en travail autonome, écrites avec leur source dans la story ou le récap (`CLAUDE.md § Avant de coder`)
 - [ ] Chaque chiffre de mesure que le diff écrit (commentaire, story, ADR, changelog) nomme la sortie d'où il vient (test, rapport, fichier de résultats) et s'y relit à l'identique ; un chiffre qu'aucune sortie ne porte est retiré ou marqué hypothèse : un décompte fait de mémoire arrondit dans le sens de la décision qu'il justifie
 - [ ] Aucune régression que le diff introduit n'est laissée en « dette » dans le rapport ou la post-implémentation : elle est corrigée, ou écrite en hypothèse sourcée avec sa mesure, et posée en question à l'utilisateur si l'expérience d'un client change
+- [ ] Un défaut de sécurité que la revue affirme nomme le chemin de la valeur jusqu'à sa source : où elle entre, et les gardes qu'elle traverse en amont (vérification du jeton, filtrage des claims, service appelant), relues dans le code ; sans ce chemin relu, c'est une question posée à l'auteur, pas un défaut, car une garde en amont rend souvent le point sans objet
 - [ ] Chaque service du diff décide ses droits et pose ses filtres avant la requête, par `server/access.ts`, et un test où la base rend des lignes interdites le prouve ; aucun refus ni aucun filtre ne repose sur la seule RLS, et « aucune ligne rendue » n'est pas lu comme un refus (`conventions/security-patterns.md § Droits dans le service`)
 - [ ] (si référence UI fournie) L'écart avec la référence est documenté — **si `N/A`, ne pas pénaliser l'absence de maquette**
 
