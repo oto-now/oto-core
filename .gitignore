@@ -54,6 +54,9 @@ tsconfig.tsbuildinfo
 # Playwright MCP (captures et journaux de session)
 .playwright-mcp/
 
+# Captures de `pnpm ui:shots` (preuve visuelle lue en review, jamais versionnée)
+.ui-shots/
+
 # Contrôle pré-public (ADR-010 § 4) : noms de clients réels lus par `pnpm check:public`, jamais commités
 .public-denylist
 

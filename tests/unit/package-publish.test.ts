@@ -62,7 +62,8 @@ describe("package manifest (AC1)", () => {
 
     expect(pkg.peerDependencies).toMatchObject({
       "@supabase/supabase-js": "^2",
-      next: "^15",
+      // Next 16 accepté : le paquet n'importe de Next que le type `Metadata`.
+      next: "^15 || ^16",
       react: "^19",
       "react-dom": "^19",
       "@phosphor-icons/react": "^2",

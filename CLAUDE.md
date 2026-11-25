@@ -190,6 +190,7 @@ Tout vit dans `.claude/skills/`. Un skill se déclenche **sur l'intention** et r
 | Skill | Déclenchement | Rôle |
 |-------|---------------|------|
 | `dev` | auto — modification de `src/`, `tests/`, `supabase/`, config | 2 modes (lecture / écriture) × 3 échelles |
+| `design` | auto — changement visible dès l'échelle Standard | Brief avant code (sous-agent `designer`), critique sur captures après (sous-agent `design-critic`) |
 | `revue` | auto — fin d'implémentation dès l'échelle Standard | Conventions routées, confrontées au diff |
 | `verify` | auto — « vérifie », « ça compile ? », après un fix | `pnpm verify` : 4 checks + reçu |
 | `commit-push` | auto — « commit », « push », « envoie » | Checks (sans les rejouer) + changelog + commit + push |
@@ -212,6 +213,8 @@ agent n'est orphelin.
 | Agent | Lancé par | Outils | Rôle |
 |-------|-----------|--------|------|
 | `implementer` | le pilote, pour tout lot délégué | tous | Écrit un lot selon la méthode : conventions, rayon d'impact, tests, type-check |
+| `designer` | skill `design`, avant le code | lecture + captures | Brief de design : existant, zoom arrière, options, spécification |
+| `design-critic` | skill `design`, après le rendu | lecture + captures | Critique à contexte neuf sur captures, `checklists/design-review.md` |
 | `reviewer` | skill `revue`, dès l'échelle Module | lecture + commandes | Relecture de code à contexte neuf, protocole de `revue` |
 | `auditor` | skill `audit`, un lot par agent | lecture + rapport | Audit d'un lot de l'existant |
 
@@ -221,9 +224,11 @@ agent n'est orphelin.
   (conventions routées, rayon d'impact dès Standard, tests, interdiction de commiter,
   **interdiction de trancher un arbitrage**) est dans le fichier de l'agent : il s'arrête et
   remonte, le pilote pose la question (§ Avant de coder). Le commit reste au pilote.
-- **Coder et juger restent des agents distincts.** Seul l'`implementer` écrit du code ; les deux
+- **Penser, coder et juger restent des agents distincts.** Seul l'`implementer` écrit du code ; les
   autres n'en ont pas les outils. Un agent qui juge ne reçoit jamais le raisonnement de celui qui
-  a produit : le `reviewer` reçoit la demande, le périmètre et le récap des surfaces nouvelles.
+  a produit : le `design-critic` reçoit le brief, les routes et les captures avant ; le `reviewer`
+  la demande, le périmètre et le récap des surfaces nouvelles. L'agent qui implémente un écran
+  produit ses captures après (`pnpm ui:shots`).
 - En vague de stories menée sans JB, les règles du pilote et des agents sont dans
   `.method/sprint/vagues.md`.
 
@@ -317,7 +322,9 @@ déduisent d'aucun chemin de fichier.
 ## Design system
 
 Hôte de référence : violet corporate, dark mode class-based (next-themes), Inter. Tokens dans
-`src/app/globals.css`, documentation dans docs/design/system.md d'oto-saas, preview sur `/design-system`.
+`src/app/globals.css`. Où vit chaque partie du système (jeu Oto du paquet, hôte) : `docs/design/system.md`.
+
+- **Penser le produit avant de coder l'écran.** Dès l'échelle Standard, tout changement visible passe par le skill `design` (brief du `designer`, critique du `design-critic` sur captures, `checklists/design-review.md`). Règles : `ui-patterns.md`, tag `ui` ; sur les écrans du paquet et du groupe `(dashboard)`, ses moyens cèdent à `portage-ecrans.md`.
 
 - **Réutiliser avant de créer** : `.method/conventions/component-registry.md` puis `src/components/ui/`.
 - **Classes sémantiques uniquement** (`bg-primary`, `text-muted-foreground`, `border-border`). Aucune couleur Tailwind numérotée (`bg-emerald-500`) dans `src/` ni `packages/plateforme/ui/`.
