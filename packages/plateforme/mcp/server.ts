@@ -20,7 +20,7 @@ import {
 import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
-import { runCall, type CallTrace } from "../server/calls"
+import { asksToRun, runCall, runRead, type CallDeps, type CallTrace } from "../server/calls"
 import { visibleOrgFunctions } from "../server/catalog/org-catalog"
 import { hostUnavailableNotice } from "../server/host-api/index-view"
 import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
@@ -118,6 +118,11 @@ class JsonRpcError extends Error {
   }
 }
 
+/** Ce que la porte passe à une exécution, par `call` ou par `read` : le même chemin (`runCall`). */
+function callDeps({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }: MemberDeps, ctx: ValidCtx | null): CallDeps {
+  return { db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }
+}
+
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
   // `accessToken` : la liste des fonctions de l'hôte que la personne voit se demande sous son jeton (`host-api/visibility.ts`).
@@ -127,9 +132,12 @@ const SERVICES: { [K in ToolKey]: Service<K> } = {
     return find(db, identity, input, { functions: [...instance, ...host], activeConnectors: await activeConnectors(), notice: hostUnavailableNotice(visibility, identity.org.prefix) })
   },
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
-  read: ({ db, identity, origin, widgets, accessToken }, input, ctx) => readNode(db, identity, input, { origin, views: widgets, viewer: { accessToken, ctx: ctx?.code ?? null, host: ctx?.host ?? null } }),
-  call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }, input, ctx) =>
-    runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }, input),
+  // Avec `arguments` (ou `team`, `account`), une fonction de pure lecture court par le chemin de `call` (`runRead`).
+  read: (deps, input, ctx) =>
+    asksToRun(input)
+      ? runRead(callDeps(deps, ctx), input)
+      : readNode(deps.db, deps.identity, input, { origin: deps.origin, views: deps.widgets, viewer: { accessToken: deps.accessToken, ctx: ctx?.code ?? null, host: ctx?.host ?? null } }),
+  call: (deps, input, ctx) => runCall(callDeps(deps, ctx), input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
   // `places` : `find` de `replace_text` qui porte un jeton se cherche dans le texte pseudonymisé (pseudonymisation).
   // Un assistant ne laisse plus de brouillon : `publish: false` est retiré, et la réponse le dit (`publish-always.ts`).
@@ -170,9 +178,13 @@ function ctxOfArgs(args: Record<string, unknown>): string | null {
   return CTX_PATTERN.test(code) ? code : null
 }
 
-/** Fonction demandée par un `call`, telle qu'envoyée, sans espace de bord et bornée (N22) ; sinon `null`. */
-function functionOfArgs(args: Record<string, unknown>): string | null {
-  return typeof args.function === "string" ? clip(args.function.trim(), MAX_NAME_CHARS) : null
+/**
+ * Fonction demandée par un `call`, ou par un `read` qui l'exécute (`asksToRun`), telle qu'envoyée, sans espace de bord
+ * et bornée (N22) ; sinon `null`.
+ */
+function functionOfArgs(key: ToolKey | null, args: Record<string, unknown>): string | null {
+  const name = key === "call" ? args.function : key === "read" && asksToRun(args) ? args.path : undefined
+  return typeof name === "string" ? clip(name.trim(), MAX_NAME_CHARS) : null
 }
 
 /** Refus nommé tel quel ; toute panne, `internal` compris, devient la consigne de H04. */
@@ -216,8 +228,9 @@ async function runTool(
   const started = Date.now()
   const opened = openEntry(member, "tools/call", args)
   const entry: JournalEntry = { ...opened, tool: clip(name, MAX_NAME_CHARS), ctx: ctxOfArgs(args) }
-  // La fonction demandée, posée avant les gardes : un `call` refusé la garde (E03-S04, N7).
-  if (toolKey(deps.org.prefix, name) === "call") entry.target = functionOfArgs(args)
+  // La fonction demandée, posée avant les gardes : un `call` refusé la garde (E03-S04, N7), un `read` qui l'exécute aussi.
+  const key = toolKey(deps.org.prefix, name)
+  if (key === "call" || (key === "read" && asksToRun(args))) entry.target = functionOfArgs(key, args)
   const validated: { ctx: ValidCtx | null } = { ctx: null }
   // La porte (pseudonymisation) : lue avant le service, fermée en cas de panne ; rien ne part en clair.
   let gate: Pseudonymizer | null = null

@@ -13,12 +13,13 @@
 // H84) et `teams.connectors`. Repris d'Oto (`oto_mcp\middleware\error_envelope.py` l. 24-66) : un code
 // stable, le même sur toutes les faces (H04) ; retiré : `retryable`, `hint` et l'enveloppe `data.oto`,
 // comme le `confirm=<N>` et l'envoi d'essai d'`oto_mcp\capabilities\outreach.py` (H86).
+import type { ReadNodeInput } from "../schemas"
 import { ERP_VIEW_PREFIX } from "../schemas/views"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
 import { personalValues } from "./catalog/personal"
 import { orgAssistantFunctions } from "./catalog/org-catalog"
-import { actName, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
+import { actName, findFunction, isActive, looksLikeFunction, NATIVE_CONNECTOR, runsByRead } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
 import { connectRefusal } from "./connectors/connect-link"
 import type { AccountCredential } from "./connectors/auth"
@@ -340,4 +341,65 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
     // qu'elle déclare (story widgets-dans-la-conversation).
     ...(output.view ? { view: output.view } : fn.view ? { view: `${ERP_VIEW_PREFIX}${fn.view}` as const } : {}),
   }
+}
+
+/** Ce que `read` ajoute à sa lecture pour exécuter une fonction de pure lecture (`outils-mcp.md` § Lire et engager). */
+export type ReadRunFields = Pick<CallInput, "arguments" | "team" | "account">
+
+/** Vrai quand une entrée de `read` demande d'exécuter sa fonction : `arguments`, `team` ou `account` donné. */
+export function asksToRun(input: ReadRunFields): boolean {
+  return input.arguments !== undefined || input.team !== undefined || input.account !== undefined
+}
+
+/** Les champs de lecture d'un nœud qu'une exécution par `read` n'admet pas. */
+const NODE_READ_FIELDS = ["id", "file", "section", "outline", "since_revision", "draft", "cursor", "refs"] as const
+
+/** L'entrée de `call` d'une exécution par `read` : un nom de fonction en `path`, `arguments` donné, aucun champ de lecture d'un nœud. */
+function readCallInput(input: ReadNodeInput & ReadRunFields, prefix: string): CallInput {
+  const path = input.path
+  if (path === undefined || !looksLikeFunction(path)) {
+    throw new PlatformError("invalid_arguments", `arguments, team and account run a function: give its name as path, e.g. table.rows. To read a page, leave them out.`)
+  }
+  const extra = NODE_READ_FIELDS.filter((field) => input[field] !== undefined)
+  if (extra.length > 0) throw new PlatformError("invalid_arguments", `To run ${path}, give only path, arguments, team and account, not ${extra.join(", ")}.`)
+  if (input.arguments === undefined) {
+    throw new PlatformError("invalid_arguments", `team and account go with arguments: ${prefix}_read {"path": "${path}", "arguments": {}} runs ${path} without any.`)
+  }
+  return { function: path, arguments: input.arguments, ...(input.team !== undefined ? { team: input.team } : {}), ...(input.account !== undefined ? { account: input.account } : {}) }
+}
+
+/** Ce qui retient une fonction hors de `read`, dit au refus. */
+function engages(fn: CatalogFunction): string {
+  if (fn.class === "sensitive") return "it sends, deletes or pays"
+  if (fn.class === "write") return "it writes"
+  if (fn.class === "read" && fn.costs === true) return "it costs credits"
+  return "it engages or destroys"
+}
+
+/**
+ * Le refus d'une fonction hors de `read` : rien n'a couru, et la commande `call` à lancer, mêmes arguments, équipe et
+ * compte. Les valeurs des arguments n'y sont pas redites : le refus va au journal, qui retire les données personnelles.
+ */
+function notPureRead(fn: CatalogFunction, input: CallInput, prefix: string): PlatformError {
+  const fields = [`"function": "${fn.name}"`, `"arguments": <the same arguments>`]
+  if (input.team !== undefined) fields.push(`"team": ${JSON.stringify(input.team)}`)
+  if (input.account !== undefined) fields.push(`"account": ${JSON.stringify(input.account)}`)
+  return new PlatformError(
+    "invalid_arguments",
+    `${prefix}_read runs only functions that read and cost nothing; ${fn.name} is not one (${engages(fn)}). Nothing was run. Run it with ${prefix}_call {${fields.join(", ")}}.`,
+  )
+}
+
+/**
+ * `read` avec `arguments` (`outils-mcp.md` § Lire et engager) : une fonction de pure lecture (`runsByRead`) court par
+ * `runCall`, avec tous ses contrôles ; toute autre est refusée avant tout contrôle, sans rien lancer, avec la commande
+ * `call` à lancer. Un nom inconnu reçoit le refus de `call`.
+ */
+export async function runRead(deps: CallDeps, input: ReadNodeInput & ReadRunFields): Promise<CallOutput> {
+  const prefix = deps.identity.org.prefix
+  const call = readCallInput(input, prefix)
+  const functions = deps.functions ?? (await orgAssistantFunctions(deps.db, deps.identity))
+  const fn = findFunction(functions, call.function.trim().toLowerCase())
+  if (fn && !runsByRead(fn)) throw notPureRead(fn, call, prefix)
+  return runCall({ ...deps, functions }, call)
 }

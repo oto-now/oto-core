@@ -18,6 +18,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## Unreleased
 
 ### Assistants
+- `read {path: "<function>", arguments: {...}}` runs a function that only reads and costs nothing; any other is refused with the `call` to make instead, and nothing runs.
+- Without `arguments`, `read` still returns the contract; `team` and `account` choose the account of a read, as on `call`.
 - An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 - From a third-party client, a host's function first asks the person to authorize oto once: the refusal carries the link to open.
 - Every refusal of a connector (off, no account, to reconnect) carries `details.url`, a stable link where the user makes the one gesture, and says who must open it.
@@ -28,6 +30,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - A connector that opens by several accesses names the others in a refusal without account; its link lets the user choose, each access with its own gesture.
 
 ### Hosts
+- MCP: `read` gains three optional fields, `arguments`, `team` and `account`, and its description grows: with `arguments`, a function of class `read`, outside `<connector>_act`, without a declared `cost`, runs through `runCall` (same checks, journal with the function as target); any other is refused (`invalid_arguments`). A client may allow `read` for good and keep asking for `call`.
 - Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
 - Install: `@otomata_tech/connectors` becomes a peer dependency of the package (`*`): the host installs it itself, pinned at v1.249.0 at least (`github:oto-now/connectors#92aa6bb3…&path:/ts`, TypeScript sources; pnpm refuses a git dependency below a dependency), and transpiles it with the package (`transpilePackages`).
 - Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.

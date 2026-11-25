@@ -135,6 +135,14 @@ export function actName(name: string): string | null {
   return space && fn && rest.length === 0 ? `${space}${ACT_SUFFIX}.${fn}` : null
 }
 
+/**
+ * Une fonction que `read` exécute (`outils-mcp.md` § Lire et engager) : de classe `read`, servie hors de l'espace
+ * `<connecteur>_act`, sans coût déclaré. Toute autre ne court que par `call`.
+ */
+export function runsByRead(fn: CatalogFunction): boolean {
+  return fn.class === "read" && !(fn.name.split(".")[0] ?? "").endsWith(ACT_SUFFIX) && fn.costs !== true
+}
+
 /** Nom de fonction (`table.rows`) plutôt que chemin de nœud (`ventes/relance_devis`). */
 export function looksLikeFunction(path: string): boolean {
   return /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(path.trim())

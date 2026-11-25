@@ -3,7 +3,7 @@
 // JSON Schema écrits à la main seraient une seconde source qui diverge (H21).
 //
 // Schémas PLATS (ADR-002 § 5) : ChatGPT ne montre pas au modèle les descriptions imbriquées. Seuls
-// `write.ops`, `write.header` et `call.arguments` sont des objets ; leur forme est répétée dans la
+// `write.ops`, `write.header`, `read.arguments` et `call.arguments` sont des objets ; leur forme est répétée dans la
 // description de l'outil. Surface figée dès qu'un host a lu la liste : on ajoute un champ
 // facultatif, on ne modifie rien (ADR-002 § 1).
 //
@@ -27,6 +27,21 @@ function ctxField(prefix: string) {
 
 export function inputSchemas(prefix: string) {
   const ctx = ctxField(prefix)
+  // L'équipe et le compte d'une exécution, les mêmes pour `call` et pour `read` qui exécute une fonction de pure lecture.
+  const team = z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Slug of the team the call runs for, e.g. ventes; only when a result says the team is ambiguous (default: chosen by the server).")
+  const account = z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe(`Label of the connector account to use, e.g. "Mail Ventes"; only when the user names one (default: resolved by the server).`)
   return {
     context: z.object({
       phrase: z
@@ -54,7 +69,21 @@ export function inputSchemas(prefix: string) {
         .describe("Restrict to one kind of result: procedure, page, table or function (default: all kinds, functions included)."),
     }),
     // `path` ou `id`, jamais les deux (`refineReadTarget`) : un JSON Schema plat ne le dit pas (ADR-002 § 5), la description le dit.
-    read: z.object({ ctx, ...readNodeSchema.shape }).superRefine(refineReadTarget),
+    // `arguments`, `team` et `account` : `read` exécute une fonction de pure lecture (`runRead`), ajouts facultatifs (ADR-002).
+    read: z
+      .object({
+        ctx,
+        ...readNodeSchema.shape,
+        arguments: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            `With path = a function name: runs it with these arguments, as its contract says, if it only reads and costs nothing; any other function runs with ${prefix}_call (default: none, the contract is returned).`,
+          ),
+        team,
+        account,
+      })
+      .superRefine(refineReadTarget),
     call: z.object({
       ctx,
       function: z.string().trim().min(1).max(100).describe("Function name, e.g. table.rows or mail.create_draft."),
@@ -66,20 +95,8 @@ export function inputSchemas(prefix: string) {
         .boolean()
         .optional()
         .describe("true only after the user explicitly approved the summary of a sensitive function, or the content it sends (default false)."),
-      team: z
-        .string()
-        .trim()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("Slug of the team the call runs for, e.g. ventes; only when a result says the team is ambiguous (default: chosen by the server)."),
-      account: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe(`Label of the connector account to use, e.g. "Mail Ventes"; only when the user names one (default: resolved by the server).`),
+      team,
+      account,
     }),
     // `header` garde sa place dans l'objet (la clé existe déjà dans la forme étalée) ; seule sa
     // description, qui cite le préfixe, est posée ici.

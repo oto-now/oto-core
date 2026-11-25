@@ -2,7 +2,7 @@
 
 - **Statut** : validé avec Alexis le 23/10/2026 (principe et modes) ; la forme reste à revoir avec JB ; le regroupement
   par famille est validé par Alexis le 11/11/2026, sa forme reste à revoir avec JB
-- **Dernière révision** : 2026-11-11
+- **Dernière révision** : 2026-11-25
 
 ## Résumé
 
@@ -16,7 +16,8 @@ dit ce qui marche tout de suite et ce qui reste à faire.
 
 - Deux hôtes ERP sortent sous une semaine. Leurs fonctions métier (`registerFunctions`, `defineErpFunction`) sont
   servies, comme celles des connecteurs (`registerConnectors`), par les six outils figés : l'assistant les trouve par
-  `find`, `read` ou `context`, puis les appelle par `call`. Aucune n'est un outil MCP à elle seule.
+  `find`, `read` ou `context`, puis les appelle par `read` si elle est de pure lecture, sinon par `call`. Aucune n'est
+  un outil MCP à elle seule.
 - Demande d'Alexis (point du 23/10/2026 avec JB) : un seul moule pour les deux voies, avec les mêmes services ; une
   exposition choisie à la déclaration ; un message à l'activation, parce qu'aujourd'hui on « active et il ne se passe
   rien, puis il faut configurer à côté ».
@@ -74,7 +75,7 @@ métier (`<espace>.<fonction>`) tient lieu de connecteur.
 
 | Mode | Ce que voit l'assistant | Outil |
 |---|---|---|
-| `call` (défaut) | les six outils, rien de plus | aucun : `find`, `read`, puis `call` |
+| `call` (défaut) | les six outils, rien de plus | aucun : `find`, `read`, puis `read` (pure lecture) ou `call` |
 | `connector` | un outil par connecteur | `<préfixe>_<connecteur>`, la fonction en paramètre |
 | `function` | un outil par fonction | `<préfixe>_<connecteur>_<fonction>` |
 
@@ -90,8 +91,9 @@ métier (`<espace>.<fonction>`) tient lieu de connecteur.
     est celui de la fonction, plus `ctx` obligatoire (le levier mesuré) et `confirm` pour une fonction sensible ;
   - en `connector`, la description liste les fonctions du connecteur, une ligne chacune. Le schéma d'entrée est
     `{ ctx, function, arguments, confirm? }`, et les arguments se lisent par `read` comme pour `call` ;
-  - dans les deux cas, l'appel passe par `runCall`, comme `call` : même journal, même ligne, même refus. La fonction
-    reste appelable par `call`.
+  - dans les deux cas, l'appel passe par `runCall`, comme `call` et comme `read` qui exécute une fonction de pure
+    lecture : même journal, même ligne, même refus. La fonction reste appelable par `call`, et par `read` si elle est
+    de pure lecture.
 - **La liste** : `tools/list` rend les six outils, puis les outils exposés des connecteurs actifs dans l'organisation,
   et ceux des espaces métier, toujours actifs. Elle suit donc l'activation, sans que le client le voie tout de suite :
   c'est ce que dit le message d'activation.
@@ -136,12 +138,15 @@ L'activation (écran et MCP admin) rend un message calculé sur l'état réel :
 
 ### Ce qui change pour le gel des six outils, et ce qui se perd
 
-- **Ne change pas, en mode `call`** : c'est le défaut, et un hôte qui ne dit rien garde exactement les six outils.
+- **Ne change pas, en mode `call`** : c'est le défaut, et un hôte qui ne dit rien garde exactement les six outils. Une
+  fonction de pure lecture (classe `read`, hors `<connecteur>_act`, sans coût déclaré) s'y exécute par `read`, toute
+  autre par `call` (`outils-mcp.md` § Lire et engager).
 - **Change, dès qu'un hôte expose** :
   - la liste d'outils n'est plus la même pour tous les hôtes, ni pour toutes les organisations d'un hôte ;
   - le test qui fige le contrat (D8) fige les six outils, et laisse passer les outils exposés ;
   - « pas d'outil par famille d'objets » devient « pas d'outil que l'hôte n'a pas choisi ».
-- **Reste** : les six outils, leurs champs et leur gel ; `ctx` obligatoire partout ; un seul chemin d'exécution.
+- **Reste** : les six outils, leurs champs et leur gel ; `ctx` obligatoire partout ; un seul chemin d'exécution
+  (`runCall`), que `read` emprunte aussi pour la pure lecture.
 - **Se perd, pour un hôte qui expose** :
   - la stabilité de la liste : un outil ajouté à l'activation ne se voit qu'après un geste, sauf sur Claude Code ;
   - une part du routage : plus d'outils, c'est un choix plus difficile pour l'assistant, et sans mesure chiffrée ;
@@ -196,3 +201,5 @@ Rien n'est réalisé. Les points d'accroche :
   lien avec le bloc `exposure` des descriptions de connecteurs — proposé (source : demande d'Alexis).
 - 2026-11-11 : regroupement par famille, la famille déclarée sur la fonction — validé par Alexis (source : réponse
   à la PR de la note) ; la forme reste à revoir avec JB.
+- 2026-11-25 : `read` exécute les fonctions de pure lecture, `call` garde le reste ; le mode `call` et les outils
+  exposés gardent le seul chemin `runCall` — décidé par Alexis et JB (source : réunion du 25/11/2026).
