@@ -2,36 +2,40 @@
 
 // « Partager » un connecteur (écran Connecteurs) : le panneau du partage d'une page, sur les règles d'un compte. Un champ
 // pour ajouter une personne ou une équipe, l'accès par défaut de toute l'organisation, puis les sujets ajoutés, chacun
-// avec son niveau en pastille (« Lecture seule », « Lecture et écriture », « Toutes les actions ») et « Retirer
-// l'accès ». Ajouter ou changer part à `POST /api/platform/admin/account-rules` (`setAccountRuleSchema`), retirer à
+// avec son niveau en pastille, dans la langue des connecteurs (« Lire », « Lire et modifier », « Tout, avec accord »,
+// et « Gestion » pour un administrateur, qui seul l'accorde), et « Retirer l'accès ». Le premier partage d'un connecteur
+// personnel connecté chez le tiers (par autorisation) passe par une confirmation : l'autre agira par ce compte, au nom
+// de son propriétaire. Ajouter ou changer part à `POST /api/platform/admin/account-rules` (`setAccountRuleSchema`), retirer à
 // `DELETE admin/account-rules/<id>` ; `setAccountRule` décide le droit, la gestion du compte. Le panneau s'ouvre dans un
 // dialogue, depuis « Partager » ou « Gérer les accès » du détail : les deux boutons et le dialogue partagent leur
 // ouverture par `PorteeDuPartage`, posée autour du détail.
 //
 // Repris de `noeud/partage-du-noeud.tsx` : les sections en étiquettes (`SectionDuPartage`), les lignes, la pastille du
-// niveau, les annonces dans une région montée vide, les mots (`PARTAGE`). Changé : l'échelle est celle des comptes, sans
-// la gestion, que seul un administrateur accorde ; un compte n'hérite de rien, donc ni équipe propriétaire réglée à part
+// niveau et son glyphe, les annonces dans une région montée vide, les mots (`PARTAGE`). Changé : l'échelle est celle des
+// comptes, la gestion offerte au seul administrateur ; un compte n'hérite de rien, donc ni équipe propriétaire réglée à part
 // ni niveau « hérité » ; pas de partage sur le web.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { ShareNetwork } from "@phosphor-icons/react/dist/csr/ShareNetwork"
 import { ShieldCheck } from "@phosphor-icons/react/dist/csr/ShieldCheck"
 import { UserPlus } from "@phosphor-icons/react/dist/csr/UserPlus"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
-import { ACCOUNT_LEVEL_NAMES, setAccountRuleSchema, type AccountLevelName, type AccountView } from "../../../schemas"
+import { setAccountRuleSchema, type AccountLevelName, type AccountView } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../../api/messages"
 import { replierLeFocusSur } from "../../components/focus"
 import { Dialog } from "../../ds/react/dialog"
-import { AnimatedIcon } from "../../ds/react/icon"
+import { AnimatedIcon, Icon } from "../../ds/react/icon"
 import { Avatar, Button } from "../../ds/react/primitives"
-import { Select, type SelectOption } from "../../ds/react/select"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { useRafraichir } from "../../hote/rafraichir"
 import { ChampDAjoutDAcces, nomDuCandidat, type Candidat } from "../../noeud/champ-d-ajout-d-acces"
 import { PARTAGE } from "../../noeud/libelles"
 import { EtiquetteDeLigne, SectionDuPartage } from "../../noeud/partage-visuel"
 import { ANCRE_DE_L_ETAT } from "./etat-du-compte"
-import { detailDuNiveau, NIVEAUX_DU_COMPTE, NIVEAUX_PARTAGES, TON_DU_NIVEAU, type ActionsParClasse } from "./libelles-des-partages"
+import { NIVEAUX_DU_COMPTE, type ActionsParClasse } from "./libelles-des-partages"
 import type { PartagesDuCompte } from "./lignes-des-connecteurs"
+import { candidatsDe, GLYPHES_DES_NIVEAUX as GLYPHES, LigneDeToutLOrganisation, LigneDuProprietaire, niveauLu, optionsDeNiveau, PastilleDeNiveau } from "./niveaux-du-partage"
+import { PremierPartage, type Accord } from "./premier-partage"
 
 /** L'intitulé de la liste des ajoutés : il reçoit le focus quand un accès retiré emporte sa ligne. */
 const ANCRE = "partage-du-connecteur"
@@ -48,8 +52,8 @@ const REFUS: MessagesDuGeste = {
 const ContexteDuPartage = createContext<{ ouvert: boolean; poser: (ouvert: boolean) => void } | null>(null)
 
 /** L'ouverture du panneau, partagée par les boutons qui l'ouvrent et le dialogue : posée autour du détail d'un compte. */
-export function PorteeDuPartage({ children }: { children: ReactNode }) {
-  const [ouvert, poser] = useState(false)
+export function PorteeDuPartage({ ouvert: ouvertDAbord = false, children }: { ouvert?: boolean; children: ReactNode }) {
+  const [ouvert, poser] = useState(ouvertDAbord)
   return <ContexteDuPartage.Provider value={{ ouvert, poser }}>{children}</ContexteDuPartage.Provider>
 }
 
@@ -57,7 +61,7 @@ export function PorteeDuPartage({ children }: { children: ReactNode }) {
 export function OuvrirLePartage({ libelle, nomAccessible, variante = "secondary" }: { libelle: string; nomAccessible: string; variante?: "primary" | "secondary" }) {
   const partage = useContext(ContexteDuPartage)
   return (
-    <Button type="button" variant={variante} size="sm" aria-label={nomAccessible} onClick={() => partage?.poser(true)}>
+    <Button type="button" variant={variante} size="sm" iconStart={<Icon as={ShareNetwork} size="xs" />} aria-label={nomAccessible} onClick={() => partage?.poser(true)}>
       {libelle}
     </Button>
   )
@@ -78,28 +82,8 @@ function regleAPoser(compte: string, sujet: { kind: "team" | "user"; id: string 
 
 const regleARetirer = (id: string): Envoi => ({ methode: "DELETE", ressource: `admin/account-rules/${encodeURIComponent(id)}` })
 
-const niveauLu = (valeur: string) => ACCOUNT_LEVEL_NAMES.find((candidat) => candidat === valeur)
-
-/** L'annonce d'un niveau posé : « Équipe Ventes : lecture seule. » */
+/** L'annonce d'un niveau posé : « Équipe Ventes : lire. » */
 const annonceDuNiveau = (nom: string, niveau: AccountLevelName) => `${nom} : ${NIVEAUX_DU_COMPTE[niveau].toLowerCase()}.`
-
-/** Les niveaux qu'une ligne propose : ceux qu'on partage, et toujours celui de la ligne (la gestion, posée par un administrateur). */
-function optionsDeNiveau(courant: AccountLevelName, actions: ActionsParClasse | null): SelectOption[] {
-  const partages: SelectOption[] = NIVEAUX_PARTAGES.map((niveau) => ({ value: niveau, label: NIVEAUX_DU_COMPTE[niveau], description: detailDuNiveau(niveau, actions) }))
-  const horsEchelle = partages.some((option) => option.value === courant) || courant === "none" ? [] : [{ value: courant, label: NIVEAUX_DU_COMPTE[courant] }]
-  return [...horsEchelle, ...partages]
-}
-
-type PastilleProps = { valeur: string; servi: AccountLevelName; options: SelectOption[]; nom: string; disabled: boolean; onChange: (valeur: string) => void }
-
-/** Le niveau d'une ligne, en pastille de sa couleur, qui ouvre la liste des niveaux. */
-function PastilleDeNiveau({ valeur, servi, options, nom, disabled, onChange }: PastilleProps) {
-  return (
-    <span className="oto-share-level" data-niveau={TON_DU_NIVEAU[niveauLu(valeur) ?? servi]}>
-      <Select size="sm" value={valeur} options={options} aria-label={nom} disabled={disabled} onChange={(evenement) => onChange(evenement.target.value)} />
-    </span>
-  )
-}
 
 /** Le choix montré tout de suite ; la relecture ou un refus le ramènent au niveau servi. */
 function useChoixServi(servi: AccountLevelName) {
@@ -112,9 +96,9 @@ function useChoixServi(servi: AccountLevelName) {
   return [choisi, setChoisi] as const
 }
 
-type LigneProps = { compte: string; regle: Regle; actions: ActionsParClasse | null; moi: string; envoyer: Envoyer; enCours: boolean }
+type LigneProps = { compte: string; regle: Regle; actions: ActionsParClasse | null; administre: boolean; moi: string; envoyer: Envoyer; enCours: boolean }
 
-function LigneDAcces({ compte, regle, actions, moi, envoyer, enCours }: LigneProps) {
+function LigneDAcces({ compte, regle, actions, administre, moi, envoyer, enCours }: LigneProps) {
   const [choisi, setChoisi] = useChoixServi(regle.level)
   const ligne = useRef<HTMLLIElement>(null)
   const nom = nomDuCandidat({ kind: regle.subject.kind, nom: regle.subject.name })
@@ -147,7 +131,7 @@ function LigneDAcces({ compte, regle, actions, moi, envoyer, enCours }: LignePro
         valeur={choisi}
         servi={regle.level}
         nom={PARTAGE.accesDe(nom)}
-        options={[...optionsDeNiveau(regle.level, actions), { value: RETIRER, label: "Retirer l'accès" }]}
+        options={[...optionsDeNiveau(regle.level, actions, administre), { value: RETIRER, label: "Retirer l'accès", icon: GLYPHES.none }]}
         disabled={enCours}
         onChange={(valeur) => void changer(valeur)}
       />
@@ -166,10 +150,19 @@ function ListeDesAcces({ regles, ...ligne }: Omit<LigneProps, "regle"> & { regle
   )
 }
 
-type OrganisationProps = { compte: string; general: PartagesDuCompte["general"]; actions: ActionsParClasse | null; envoyer: Envoyer; enCours: boolean }
+type OrganisationProps = {
+  compte: string
+  general: PartagesDuCompte["general"]
+  actions: ActionsParClasse | null
+  administre: boolean
+  envoyer: Envoyer
+  enCours: boolean
+  /** Le premier partage d'un connecteur par autorisation : l'accord de son propriétaire d'abord. */
+  accord: (nom: string, niveau: AccountLevelName) => Promise<boolean>
+}
 
 /** « Toute l'organisation » : son niveau sur ce compte ; « Aucun accès » retire sa règle. */
-function LigneDeLOrganisation({ compte, general, actions, envoyer, enCours }: OrganisationProps) {
+function LigneDeLOrganisation({ compte, general, actions, administre, envoyer, enCours, accord }: OrganisationProps) {
   const servi = general?.level ?? "none"
   const [choisi, setChoisi] = useChoixServi(servi)
 
@@ -179,37 +172,33 @@ function LigneDeLOrganisation({ compte, general, actions, envoyer, enCours }: Or
     const envoi = niveau === "none" ? (general ? regleARetirer(general.id) : null) : regleAPoser(compte, { kind: "org" }, niveau)
     if (!envoi) return
     setChoisi(valeur)
+    if (niveau !== "none" && !(await accord("toute l'organisation", niveau))) return setChoisi(servi)
     const annonce = niveau === "none" ? "Toute l'organisation n'a plus accès à ce connecteur." : annonceDuNiveau("Toute l'organisation", niveau)
     if (!(await envoyer(envoi, annonce))) setChoisi(servi)
   }
 
-  return (
-    <div className="oto-pop-row">
-      <span className="oto-avatar" data-size="sm" aria-hidden="true">
-        <AnimatedIcon as={UsersThree} size="xs" />
-      </span>
-      <span className="oto-share-name">Toute l&apos;organisation</span>
-      <PastilleDeNiveau
-        valeur={choisi}
-        servi={servi}
-        nom="Accès de toute l'organisation"
-        options={[...optionsDeNiveau(servi, actions), { value: "none", label: NIVEAUX_DU_COMPTE.none }]}
-        disabled={enCours}
-        onChange={(valeur) => void changer(valeur)}
-      />
-    </div>
-  )
+  return <LigneDeToutLOrganisation valeur={choisi} servi={servi} actions={actions} administre={administre} disabled={enCours} onChange={(valeur) => void changer(valeur)} />
 }
 
-/** Les équipes puis les personnes qui n'ont pas de règle sur le compte ; jamais la personne d'un compte personnel, qui le gère avant toute règle. */
-function candidatsDe(sujets: SujetsDeRegle, regles: readonly Regle[], proprietaire: string | undefined): Candidat[] {
-  const deja = new Set(regles.map((regle) => `${regle.subject.kind}:${regle.subject.id}`))
-  const tous: Candidat[] = [...sujets.equipes.map((equipe) => ({ kind: "team" as const, ...equipe })), ...sujets.personnes.map((personne) => ({ kind: "user" as const, ...personne }))]
-  return tous.filter((candidat) => !deja.has(`${candidat.kind}:${candidat.id}`) && !(candidat.kind === "user" && candidat.id === proprietaire))
+/** Le nom du propriétaire d'un compte, en tête du panneau. */
+function proprietaireDe(owner: AccountView["owner"]): string {
+  if (owner.kind === "team") return PARTAGE.equipe(owner.teamName ?? "inconnue")
+  if (owner.kind === "org") return "Toute l'organisation"
+  return owner.userName ?? "Une personne qui n'est plus membre"
 }
 
-/** Ce que le moteur fait d'un partage : un compte personnel sert à l'autre quand il le nomme, un compte d'équipe ou d'organisation sans le nommer. */
-function Pied({ personnel }: { personnel: boolean }) {
+/**
+ * Ce que le moteur fait d'un partage : un compte personnel sert à l'autre quand il le nomme, un compte d'équipe ou
+ * d'organisation sans le nommer ; un compte connecté par autorisation agit au nom de son propriétaire.
+ */
+function Pied({ personnel, parAutorisation, proprietaire }: { personnel: boolean; parAutorisation: boolean; proprietaire: string | null }) {
+  // Le connecteur d'un autre, connecté par son autorisation : son assistant y agit au nom de ce propriétaire.
+  if (parAutorisation && proprietaire) {
+    return <p className="oto-caption">{`Chacun s'en sert en le nommant ; son assistant y agit par le compte de ${proprietaire}, en son nom. Son autorisation reste cachée.`}</p>
+  }
+  if (parAutorisation) {
+    return <p className="oto-caption">Chacun s&apos;en sert en le nommant ; son assistant y agit par votre compte, en votre nom. Votre autorisation reste cachée.</p>
+  }
   return (
     <p className="oto-caption">
       {personnel ? "L'assistant de la personne s'en servira quand elle le lui demandera en le nommant." : "L'assistant des membres s'en sert sans avoir à le nommer."} La clé reste cachée : personne ne peut la lire ni la copier.
@@ -225,14 +214,37 @@ type PartageDuConnecteurProps = {
   actions: ActionsParClasse | null
   /** L'identifiant de qui regarde : sa ligne dit « vous ». */
   moi: string
+  /** Qui regarde administre l'organisation : la gestion se propose. */
+  administre: boolean
+  /** Un connecteur personnel connecté chez le tiers : son premier partage demande l'accord de son propriétaire. */
+  parAutorisation: boolean
 }
 
 /** Le dialogue et son panneau, montés à l'ouverture : fermé, rien n'en reste dans le document. */
-function Panneau({ compte, partages, sujets, actions, moi, fermer }: PartageDuConnecteurProps & { fermer: () => void }) {
+function Panneau({ compte, partages, sujets, actions, moi, administre, parAutorisation, fermer }: PartageDuConnecteurProps & { fermer: () => void }) {
   const rafraichir = useRafraichir()
   const [annonce, setAnnonce] = useState("")
   const [erreur, setErreur] = useState("")
   const [enCours, setEnCours] = useState(false)
+  const [question, setQuestion] = useState<Accord | null>(null)
+  // La confirmation du premier partage engage l'autorisation de qui regarde : seulement sur son propre connecteur.
+  const aMoi = compte.owner.kind === "user" && compte.owner.userId === moi
+  const premier = parAutorisation && aMoi && partages.general === null && partages.rules.length === 0
+
+  /** L'accord du propriétaire avant le premier partage d'un connecteur par autorisation ; ensuite, sans question. */
+  const accord = (nom: string, niveau: AccountLevelName) =>
+    premier
+      ? new Promise<boolean>((resoudre) =>
+          setQuestion({
+            nom,
+            niveau,
+            repondre: (oui) => {
+              setQuestion(null)
+              resoudre(oui)
+            },
+          }),
+        )
+      : Promise.resolve(true)
 
   // Qui baisse ou retire sa propre règle de gestion perd le panneau et ses boutons à la relecture : le focus, s'il est
   // perdu une fois le panneau parti, va au titre de l'état du détail, qui reste.
@@ -253,21 +265,27 @@ function Panneau({ compte, partages, sujets, actions, moi, fermer }: PartageDuCo
     return true
   }
 
-  /** Un sujet ajouté l'est en « Lecture seule » : le niveau se monte ensuite sur sa ligne. */
+  /** Un sujet ajouté l'est en « Lire » : le niveau se monte ensuite sur sa ligne. */
   const ajouter = async (candidat: Candidat) => {
     const envoi = regleAPoser(compte.id, { kind: candidat.kind, id: candidat.id }, "read")
-    return envoi !== null && (await envoyer(envoi, annonceDuNiveau(nomDuCandidat(candidat), "read")))
+    if (envoi === null || !(await accord(nomDuCandidat(candidat), "read"))) return false
+    return envoyer(envoi, annonceDuNiveau(nomDuCandidat(candidat), "read"))
   }
 
   return (
     <Dialog open onClose={fermer} title={`Partager « ${compte.label} »`} size="md">
       <div className="oto-share-panel">
-        <ChampDAjoutDAcces candidats={candidatsDe(sujets, partages.rules, compte.owner.userId)} ajouter={ajouter} enCours={enCours} />
+        <ChampDAjoutDAcces candidats={candidatsDe(
+            sujets,
+            partages.rules.map(({ subject }) => subject),
+            compte.owner.userId ? [`user:${compte.owner.userId}`] : [],
+          )} ajouter={ajouter} enCours={enCours} />
         <SectionDuPartage id={`${ANCRE}-defaut`} icone={<ShieldCheck />} titre={PARTAGE.parDefaut}>
-          <LigneDeLOrganisation compte={compte.id} general={partages.general} actions={actions} envoyer={envoyer} enCours={enCours} />
+          <LigneDuProprietaire nom={proprietaireDe(compte.owner)} vous={compte.owner.kind === "user" && compte.owner.userId === moi} />
+          <LigneDeLOrganisation compte={compte.id} general={partages.general} actions={actions} administre={administre} envoyer={envoyer} enCours={enCours} accord={accord} />
         </SectionDuPartage>
         <SectionDuPartage id={ANCRE} icone={<UserPlus />} titre={PARTAGE.ajoutes} compte={partages.rules.length}>
-          <ListeDesAcces regles={partages.rules} compte={compte.id} actions={actions} moi={moi} envoyer={envoyer} enCours={enCours} />
+          <ListeDesAcces regles={partages.rules} compte={compte.id} actions={actions} administre={administre} moi={moi} envoyer={envoyer} enCours={enCours} />
         </SectionDuPartage>
         <div role="status" className="oto-caption">
           {annonce}
@@ -277,8 +295,9 @@ function Panneau({ compte, partages, sujets, actions, moi, fermer }: PartageDuCo
             {erreur}
           </p>
         )}
-        <Pied personnel={compte.owner.kind === "user"} />
+        <Pied personnel={compte.owner.kind === "user"} parAutorisation={parAutorisation} proprietaire={aMoi ? null : (compte.owner.userName ?? "son propriétaire")} />
       </div>
+      {question && <PremierPartage libelle={compte.label} accord={question} />}
     </Dialog>
   )
 }

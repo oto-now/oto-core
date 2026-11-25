@@ -1,28 +1,31 @@
 "use client"
 
 // Le formulaire d'un outil à clé, ou sans clé à saisir, dans la fenêtre « Ajouter un connecteur » : les champs de sa
-// déclaration, la clé essayée dès qu'elle est complète (`useEssaiDeLaCle`, sans rien écrire), le nom, la description et,
-// pour qui administre, le propriétaire. « Ajouter » crée le compte (`POST admin/accounts`), pose sa clé (`…/secret`), sa
-// description (`PATCH`), puis le teste pour que le résultat soit gardé (`…/probe`). Après un test raté, seul le bouton
+// déclaration, la clé essayée dès qu'elle est complète (`useEssaiDeLaCle`, sans rien écrire), le nom quand la personne a
+// déjà un connecteur de cet outil (facultatif, prérempli « Outil 3 » ; le premier prend le nom de l'outil), avec alors
+// une description facultative qui les distingue, pour qui administre le propriétaire, puis ce que l'assistant pourra
+// faire. « Ajouter le connecteur » crée le compte (`POST admin/accounts`), pose sa clé (`…/secret`), sa description
+// (`PATCH`), puis le teste pour que le résultat soit gardé (`…/probe`). Après un test raté, seul le bouton
 // « Ajouter quand même », distinct, crée le compte, et seulement pour la clé qui a échoué. Une suite qui échoue après la
 // création se dit dans la fenêtre, avec sa raison, avant d'ouvrir le détail. La clé ne part qu'à la sonde et à la route
 // du secret, et ne se réaffiche jamais : la fenêtre se ferme avec le formulaire.
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Lock } from "@phosphor-icons/react/dist/csr/Lock"
-import { FormProvider, useForm, useFormContext, useWatch } from "react-hook-form"
+import { FormProvider, useForm } from "react-hook-form"
 import type * as z from "zod/v4"
 import { ACCOUNT_DESCRIPTION_MAX, createAccountSchema, type ConnectorAccountForm, type ConnectorProbeInput } from "../../../schemas"
 import { appelerPlateforme, type ErreurPlateforme } from "../../api/client"
 import { Field, Input } from "../../ds/react/forms"
-import { Icon } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
-import { Radio } from "../../ds/react/radio"
-import { Select } from "../../ds/react/select"
 import { Textarea } from "../../ds/react/textarea"
 import { useRafraichir } from "../../hote/rafraichir"
+import type { SujetsDeRegle } from "../../equipes/types"
 import type { OutilAAjouter } from "./catalogue-des-connecteurs"
 import { chargeDeLaSaisie, ChampsDuCompte, saisieDeDepart, type SaisieDesChamps } from "./champs-du-compte"
+import { FonctionsDuConnecteur } from "./fonctions-du-connecteur"
+import { PiedDeLaFiche } from "./pied-de-la-fiche"
+import { actionsParClasse, nomDe } from "./libelles-des-partages"
+import { PartageALAjout, poserLePartage, proprietaireCree, proprietairesDe, SANS_PARTAGE, type PartageDeLAjout } from "./partage-a-l-ajout"
 import { estNomPris, NOM_PRIS, refusDuConnecteur } from "./refus-des-connecteurs"
 import { AnnonceDeLEssai, essaiRate, useEssaiDeLaCle } from "./test-de-connexion"
 
@@ -31,9 +34,7 @@ type Saisie = z.input<typeof createAccountSchema> & Partial<SaisieDesChamps> & {
 type Equipe = { id: string; name: string }
 
 const NOM_INVALIDE = "Le nom est vide ou trop long."
-const EQUIPE_MANQUANTE = "Choisissez une équipe."
 const SANS_CHAMPS: SaisieDesChamps = { secret: {}, effacer: {}, settings: {} }
-const PROPRIETAIRES = { user: "Moi", org: "L'organisation", team: "Une équipe" } as const
 
 const champsDe = ({ secret = {}, effacer = {}, settings = {} }: Partial<SaisieDesChamps>): SaisieDesChamps => ({ secret, effacer, settings })
 
@@ -48,57 +49,6 @@ function cleAEssayer(saisie: SaisieDesChamps, formulaire: ConnectorAccountForm):
   if (Object.keys(fields).length === 0) return null
   const settings = Object.fromEntries(formulaire.settings.flatMap(({ name }) => (saisie.settings[name]?.trim() ? [[name, saisie.settings[name].trim()]] : [])))
   return { fields, ...(Object.keys(settings).length > 0 ? { settings } : {}), ...(formulaire.access ? { access: formulaire.access.name } : {}) }
-}
-
-function ChoixDeLEquipe({ equipes, erreur }: { equipes: readonly Equipe[]; erreur?: string }) {
-  const { register } = useFormContext<Saisie>()
-  return (
-    <Field label="Équipe" error={erreur}>
-      <Select {...register("team_id", { shouldUnregister: true, setValueAs: (valeur: string) => valeur || undefined })}>
-        <option value="">Choisir une équipe</option>
-        {equipes.map((equipe) => (
-          <option key={equipe.id} value={equipe.id}>
-            {equipe.name}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  )
-}
-
-/**
- * Pour qui est le connecteur : le choix quand la personne en a un, et l'équipe dès que le connecteur est pour une équipe,
- * même sans autre choix (un outil que seule une équipe ou l'organisation porte, ajouté par qui dirige une équipe).
- */
-function ChoixDuProprietaire({ proprietaires, equipes, erreur }: { proprietaires: OutilAAjouter["proprietaires"]; equipes: readonly Equipe[]; erreur?: string }) {
-  const { register } = useFormContext<Saisie>()
-  const genre = useWatch<Saisie, "owner_kind">({ name: "owner_kind" })
-  return (
-    <>
-      {proprietaires.length > 1 && (
-        <fieldset className="oto-radio-group" data-orientation="horizontal">
-          <legend>Pour qui</legend>
-          {proprietaires
-            .filter((un) => un !== "team" || equipes.length > 0)
-            .map((un) => (
-              <Radio key={un} value={un} label={PROPRIETAIRES[un]} {...register("owner_kind")} />
-            ))}
-        </fieldset>
-      )}
-      {genre === "team" && <ChoixDeLEquipe equipes={equipes} erreur={erreur} />}
-    </>
-  )
-}
-
-/** Ce que le pied dit du connecteur à naître, selon son propriétaire. */
-function Pied() {
-  const genre = useWatch<Saisie, "owner_kind">({ name: "owner_kind" })
-  return (
-    <p className="oto-caption flex min-w-0 items-center gap-2">
-      {genre === "user" && <Icon as={Lock} size="xs" />}
-      {genre === "user" ? "Privé : vous seul pourrez l'utiliser. Vous le partagerez ensuite si vous voulez." : "Il servira l'organisation ou l'équipe choisie, selon ses partages."}
-    </p>
-  )
 }
 
 /** Le compte est créé, mais une suite a échoué : ce qui reste à terminer, avec sa raison, puis le détail. */
@@ -124,19 +74,31 @@ function SuitesDeLAjout({ nom, suites, ouvrir }: { nom: string; suites: string[]
   )
 }
 
+/** Les connecteurs que la personne a déjà de cet outil, nommés pour ne pas les confondre. */
+const dejaAMoi = (miens: readonly string[]) =>
+  `Vous en avez déjà ${miens.length} : ${miens.map((nom) => `« ${nom} »`).join(", ")}. C'est ce nom que vous direz à votre assistant.`
+
 type FormulaireDAjoutProps = {
   outil: OutilAAjouter
   equipes: Equipe[]
-  /** Un nom que la personne ne porte pas encore. */
+  /** Un nom que la personne ne porte pas encore : celui de l'outil, ou « Outil 3 » quand elle en a déjà deux. */
   nomPropose: string
+  /** Le plafond d'outils de l'offre est atteint pour cet outil : la fiche le dit, l'ajout ne part pas. */
+  bloque: boolean
+  /** À qui partager dès l'ajout, et qui regarde : « Qui pourra s'en servir ». */
+  sujets: SujetsDeRegle
+  moi: string
+  administre: boolean
   annuler: () => void
   /** Le compte est créé : la fenêtre se ferme et son détail s'ouvre. */
   apresAjout: (compte: { id: string }) => void
   /** L'équipe déjà choisie, pour un compte d'équipe : la page de connexion d'un connecteur la pose depuis son adresse. */
   equipe?: string
+  /** Sans « Qui pourra s'en servir » : la page de connexion d'un connecteur n'a ni annuaire ni partage à poser. */
+  sansPartage?: boolean
 }
 
-export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjout, equipe }: FormulaireDAjoutProps) {
+export function FormulaireDAjout({ outil, equipes, nomPropose, bloque, sujets, moi, administre, annuler, apresAjout, equipe, sansPartage = false }: FormulaireDAjoutProps) {
   const rafraichir = useRafraichir()
   const { formulaire } = outil
   const sonde = formulaire?.probe.available === true
@@ -144,20 +106,26 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
   /** Le test raté, sur « Ajouter », demande confirmation : seul « Ajouter quand même » crée alors le compte. */
   const [question, setQuestion] = useState(false)
   const [reste, setReste] = useState<{ id: string; nom: string; suites: string[] } | null>(null)
+  // Le premier connecteur d'un outil prend son nom sans le demander ; un nom refusé (déjà porté) fait paraître le champ.
+  const [nomDemande, setNomDemande] = useState(outil.miens.length > 0)
+  const nomAFocaliser = useRef(false)
+  const proprietaires = proprietairesDe(outil.proprietaires, equipes, nomDe(sujets, moi))
+  // L'équipe que l'adresse a choisie (page de connexion d'un connecteur) est le propriétaire de départ.
+  const [proprietaire, setProprietaire] = useState(proprietaires.find(({ valeur }) => equipe !== undefined && valeur === `team:${equipe}`)?.valeur ?? proprietaires[0]?.valeur ?? "user")
+  const [partage, setPartage] = useState<PartageDeLAjout>(SANS_PARTAGE)
   const form = useForm<Saisie>({
-    // `raw` : la clé, les réglages et la description, hors du schéma de création, restent dans la saisie rendue.
+    // `raw` : la clé et les réglages, hors du schéma de création, restent dans la saisie rendue.
     resolver: zodResolver(createAccountSchema, undefined, { raw: true }),
     mode: "onBlur",
-    defaultValues: {
-      connector: outil.connecteur,
-      owner_kind: outil.proprietaires[0],
-      ...(equipe ? { team_id: equipe } : {}),
-      label: nomPropose,
-      description: "",
-      ...(formulaire ? saisieDeDepart(formulaire) : SANS_CHAMPS),
-    },
+    defaultValues: { connector: outil.connecteur, ...proprietaireCree(proprietaire), label: nomPropose, ...(formulaire ? saisieDeDepart(formulaire) : SANS_CHAMPS) },
   })
   const { errors, isSubmitting } = form.formState
+  // Après chaque rendu : le champ du nom, paru sur un nom déjà porté, prend le focus une fois monté.
+  useEffect(() => {
+    if (!nomAFocaliser.current || !nomDemande) return
+    nomAFocaliser.current = false
+    form.setFocus("label")
+  })
   const erreurDuNom = errors.label ? (errors.label.type === "server" ? errors.label.message : NOM_INVALIDE) : undefined
   const cleDe = (saisie: Partial<SaisieDesChamps>) => (sonde && formulaire ? cleAEssayer(champsDe(saisie), formulaire) : null)
 
@@ -172,8 +140,12 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
   async function creer({ secret, effacer, settings, description = "", ...compte }: Saisie) {
     const cree = await appelerPlateforme<{ account: { id: string; label: string } }>({ methode: "POST", ressource: "admin/accounts", corps: { ...compte, mode: outil.mode, ...(outil.acces ? { access: outil.acces.nom } : {}) } })
     if (cree.erreur) {
-      if (estNomPris(cree.erreur)) form.setError("label", { type: "server", message: NOM_PRIS }, { shouldFocus: true })
-      else form.setError("root", { type: "server", message: refusDuConnecteur(cree.erreur) })
+      if (estNomPris(cree.erreur)) {
+        // Le champ caché paraît au rendu suivant : le focus l'y attend (effet ci-dessus).
+        nomAFocaliser.current = true
+        setNomDemande(true)
+        form.setError("label", { type: "server", message: NOM_PRIS }, { shouldFocus: true })
+      } else form.setError("root", { type: "server", message: refusDuConnecteur(cree.erreur, { outil: outil.libelle, pourMoi: compte.owner_kind === "user" }) })
       return
     }
     const { id, label } = cree.data.account
@@ -183,6 +155,7 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
     const dire = (quoi: string, erreur: ErreurPlateforme | undefined) => erreur && suites.push(`${quoi} : ${refusDuConnecteur(erreur)}`)
     const pose = charge ? await appelerPlateforme({ methode: "POST", ressource: `${adresse}/secret`, corps: charge }) : null
     dire("Sa clé n'est pas posée", pose?.erreur)
+    suites.push(...(await poserLePartage(id, partage)))
     if (description.trim()) dire("Sa description n'est pas enregistrée", (await appelerPlateforme({ methode: "PATCH", ressource: adresse, corps: { description: description.trim() } })).erreur)
     if (sonde && pose && !pose.erreur) dire("Il n'a pas été testé", (await appelerPlateforme({ methode: "POST", ressource: `${adresse}/probe`, corps: {} })).erreur)
     rafraichir()
@@ -205,10 +178,24 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
     await creer(saisie)
   }
 
+  const idDuFormulaire = `ajout-${useId()}`
   if (reste) return <SuitesDeLAjout nom={reste.nom} suites={reste.suites} ouvrir={() => apresAjout({ id: reste.id })} />
+  // Au plafond d'outils : rien à saisir ; ce que l'outil ferait, et la sortie.
+  if (bloque) {
+    return (
+      <>
+        {outil.fonctions.length > 0 && <FonctionsDuConnecteur titre="Ce que votre assistant pourra faire" fonctions={outil.fonctions} />}
+        <PiedDeLaFiche>
+          <Button type="button" variant="ghost" onClick={annuler}>
+            Annuler
+          </Button>
+        </PiedDeLaFiche>
+      </>
+    )
+  }
   return (
     <FormProvider {...form}>
-      <form noValidate aria-label={`Ajouter ${outil.libelle}`} onSubmit={(evenement) => void form.handleSubmit(ajouter)(evenement)} className="flex flex-col gap-3">
+      <form id={idDuFormulaire} noValidate aria-label={`Ajouter ${outil.libelle}`} onSubmit={(evenement) => void form.handleSubmit(ajouter)(evenement)} className="flex flex-col gap-3">
         {formulaire && (
           <div className="flex flex-col gap-3" onBlur={essayerSiPrete}>
             <ChampsDuCompte formulaire={formulaire} />
@@ -217,14 +204,34 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
         {sonde && <AnnonceDeLEssai essai={essai} />}
         {formulaire && !sonde && <p className="oto-caption">Pas de test automatique pour cet outil : essayez-le dans votre assistant.</p>}
         {!formulaire && <p className="oto-caption">Aucune clé à saisir pour cet outil.</p>}
-        <Field label="Nom" error={erreurDuNom} hint="C'est par ce nom que vous et votre assistant le désignerez.">
-          <Input type="text" {...form.register("label")} />
-        </Field>
-        <Field label="Description (facultatif)" hint="Dites quand l'utiliser : l'assistant la lit pour choisir entre deux connecteurs.">
-          <Textarea maxLength={ACCOUNT_DESCRIPTION_MAX} {...form.register("description")} />
-        </Field>
-        {(outil.proprietaires.length > 1 || outil.proprietaires[0] === "team") && (
-          <ChoixDuProprietaire proprietaires={outil.proprietaires} equipes={equipes} erreur={errors.team_id ? EQUIPE_MANQUANTE : undefined} />
+        {nomDemande && (
+          <Field label="Nom (facultatif)" error={erreurDuNom} hint={outil.miens.length > 0 ? dejaAMoi(outil.miens) : "C'est ce nom que vous direz à votre assistant."}>
+            {/* Vidé, le nom proposé : le champ est facultatif. */}
+            <Input type="text" {...form.register("label", { setValueAs: (valeur: string) => valeur.trim() || nomPropose })} />
+          </Field>
+        )}
+        {outil.miens.length > 0 && (
+          <Field label="Description (facultatif)" hint="Dites quand l'utiliser : l'assistant la lit pour choisir entre vos connecteurs.">
+            <Textarea maxLength={ACCOUNT_DESCRIPTION_MAX} {...form.register("description")} />
+          </Field>
+        )}
+        {!sansPartage && (
+          <PartageALAjout
+            partage={partage}
+            changer={setPartage}
+            proprietaires={proprietaires}
+            proprietaire={proprietaire}
+            choisirProprietaire={(valeur) => {
+              setProprietaire(valeur)
+              const { owner_kind, team_id } = proprietaireCree(valeur)
+              form.setValue("owner_kind", owner_kind)
+              form.setValue("team_id", team_id)
+            }}
+            sujets={sujets}
+            actions={outil.fonctions.length > 0 ? actionsParClasse(outil.fonctions) : null}
+            administre={administre}
+            moi={moi}
+          />
         )}
         {errors.root?.message && <Alert tone="fail" title={errors.root.message} />}
         {question && (
@@ -235,18 +242,16 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
             </Button>
           </div>
         )}
-        <hr className="oto-separator" data-orientation="horizontal" />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Pied />
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" onClick={annuler}>
-              Annuler
-            </Button>
-            <Button type="submit" variant="primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-              {isSubmitting ? "Ajout…" : "Ajouter"}
-            </Button>
-          </div>
-        </div>
+        {outil.fonctions.length > 0 && <FonctionsDuConnecteur titre="Ce que votre assistant pourra faire" fonctions={outil.fonctions} />}
+        {/* Dans le pied fixe de la fenêtre, hors du formulaire : le bouton principal le désigne (`form`). */}
+        <PiedDeLaFiche>
+          <Button type="button" variant="ghost" onClick={annuler}>
+            Annuler
+          </Button>
+          <Button type="submit" form={idDuFormulaire} variant="primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? "Ajout…" : "Ajouter le connecteur"}
+          </Button>
+        </PiedDeLaFiche>
       </form>
     </FormProvider>
   )
