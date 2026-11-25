@@ -58,7 +58,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2",
     "lucide-react": "^1.7.0",
-    "next": "^15",
+    "next": "^16.4.6",
     "next-themes": "^0.4.6",
     "oauth4webapi": "3.8.8",
     "react": "^19",
@@ -69,7 +69,6 @@
     "zod": "^3"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@modelcontextprotocol/sdk": "1.32.1",
     "@otomata_tech/connectors": "github:otomata-tech/connectors#991c8d3daa95a62a19b899e64ebf3dc7b8cf2a07&path:/ts",
     "@playwright/test": "^1",
@@ -82,7 +81,7 @@
     "@vitejs/plugin-react": "^4",
     "aws4fetch": "1.0.20",
     "eslint": "^9",
-    "eslint-config-next": "^15",
+    "eslint-config-next": "^16.4.6",
     "eslint-plugin-import": "^2.32.0",
     "fflate": "0.8.3",
     "jose": "6.2.12",
