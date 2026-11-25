@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "ui:shots": "node scripts/long-run.mjs ui:shots -- \"node scripts/ui-shots.mjs\"",
     "test:cleanup": "node scripts/test-cleanup.mjs",
     "db:local": "node scripts/test-db-local.mjs",
     "demo:seed": "node scripts/demo-seed.mjs",
