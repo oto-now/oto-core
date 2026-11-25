@@ -121,6 +121,34 @@ describe.skipIf(!sqlConfigured || privatePending)(
       expect(of("lea")).toEqual(expected(["write", "read", "write", "read"]))
     })
 
+    // `read` exécute une fonction de pure lecture par le chemin de `call` ; une écriture lui est refusée, sans rien lancer.
+    it("should run node.describe by read as call runs it, refuse node.move without moving anything, and journal the function", async () => {
+      const agent = `rx-${hex(4)}`
+      const lea = await session("lea", agent)
+      const path = `ventes/lu_${hex(3)}`
+      await lea.call("write", { path, title: "Lue par read", summary: "Page de test.", ops: [{ op: "add_section", section: "Note", text: "Rien." }] })
+      const id = await fx.nodeId(ref.org.id, path)
+      const described = await lea.call("read", { path: "node.describe", arguments: { ids: [id] } })
+      expect(described.result.structuredContent).toMatchObject({ function: "node.describe", result: { nodes: [{ id, state: "present", can_read: true, path }] } })
+      expect(described.text).toBe((await lea.call("call", { function: "node.describe", arguments: { ids: [id] } })).text)
+
+      const moved = await lea.answer("read", { path: "node.move", arguments: { from: path, to: `${path}_bis` } })
+      expect(moved.isError).toBe(true)
+      expect(moved.text).toContain(`Nothing was run. Run it with ${ref.org.prefix}_call {"function": "node.move", "arguments": <the same arguments>}.`)
+      expect(await fx.nodeId(ref.org.id, path)).toBe(id)
+
+      await lea.flush()
+      const lines = await admin<{ tool: string | null; target: string | null; is_error: boolean }[]>`
+        select tool, target, is_error from platform.journal
+        where org_id = ${ref.org.id} and user_agent = ${agent} and method = 'tools/call' and tool <> ${`${ref.org.prefix}_context`} order by id`
+      expect(lines.map((line) => [line.tool, line.target, line.is_error])).toEqual([
+        [`${ref.org.prefix}_write`, path, false],
+        [`${ref.org.prefix}_read`, "node.describe", false],
+        [`${ref.org.prefix}_call`, "node.describe", false],
+        [`${ref.org.prefix}_read`, "node.move", true],
+      ])
+    })
+
     // E11-S02 (AC-b1, AC-a2) : écrire publie, au niveau écriture ; un assistant ne laisse plus de brouillon : `publish: false`
     // est retiré à sa porte, et la réponse le dit.
     it("should publish a write without publish, publish one that asks publish: false and say so, and publish a table header at the write level", async () => {

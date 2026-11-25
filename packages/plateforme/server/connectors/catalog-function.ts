@@ -109,6 +109,8 @@ export function catalogFunction({ connector, fn, byAccess, schema, refusals }: S
     // Une fonction longue : la phrase fixe du moteur, et ce qu'en lit `call` pour la mettre en file.
     description: servedDescription(fn),
     ...backgroundTraits(fn),
+    // Une fonction qui coûte ne court que par `call` (`runsByRead`).
+    ...(fn.cost !== undefined ? { costs: true as const } : {}),
     schema,
     examples: fn.examples.map((example) => ({ ...example.input })),
     refusals,

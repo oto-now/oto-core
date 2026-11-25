@@ -136,6 +136,11 @@ export type CatalogFunction = {
   output?: { entityFields?: readonly EntityFields[] }
   /** Une fonction longue d'un connecteur décrit (`background: true`) : mise en file par `call`, jamais courue pendant l'appel. */
   background?: CatalogBackground
+  /**
+   * Une fonction d'un connecteur décrit qui déclare un coût (`cost`, lu par `costOf`) : `call` seul l'exécute, jamais
+   * `read` (`runsByRead`). Une fonction native ou de l'hôte n'en porte pas : seule sa classe décide.
+   */
+  costs?: true
   run: (context: FunctionContext, args: never) => Promise<FunctionOutput>
   /** Fonctions sensibles : récapitulatif nominatif montré avant l'accord, sans rien exécuter. */
   summarize?: (context: FunctionContext, args: never) => Promise<FunctionSummary>

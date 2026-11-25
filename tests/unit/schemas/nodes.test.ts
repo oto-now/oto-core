@@ -90,11 +90,12 @@ function strip(field: Json, added: string): void {
 describe("read and write input schemas, extended by additions only (AC1)", () => {
   const served = inputSchemas("acme")
 
-  it("should serve the E03-S01 JSON Schema of read plus the optional refs, then the optional file, then the optional id, last", () => {
+  it("should serve the E03-S01 JSON Schema of read plus the optional refs, file and id, then arguments, team and account, last", () => {
     const read = structuredClone(toInputSchema(served.read))
     const properties = at(read, "properties")
-    // Les ajouts, dans leur ordre : `refs` (E03-S03), puis `file` (E10-S02 AC-d2, fiche D119), puis `id` (l'identifiant stable).
-    expect(Object.keys(properties).slice(-3)).toEqual(["refs", "file", "id"])
+    // Les ajouts, dans leur ordre : `refs` (E03-S03), puis `file` (E10-S02 AC-d2, fiche D119), puis `id` (l'identifiant stable),
+    // puis `arguments`, `team` et `account` (`read` exécute une fonction de pure lecture), figés par `mcp-tools.test.ts`.
+    expect(Object.keys(properties).slice(-6)).toEqual(["refs", "file", "id", "arguments", "team", "account"])
     expect(properties.id).toEqual({
       description:
         "Stable id of a page, procedure or table, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90, instead of path: it does not change when the node moves (default: none, read by path).",
@@ -124,6 +125,7 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     delete properties.refs
     delete properties.file
     delete properties.id
+    for (const added of ["arguments", "team", "account"]) delete properties[added]
     expect(read).toEqual(E03_S01.read)
   })
 

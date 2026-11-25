@@ -58,6 +58,20 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "account": {
+          "description": "Label of the connector account to use, e.g. "Mail Ventes"; only when the user names one (default: resolved by the server).",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string",
+        },
+        "arguments": {
+          "additionalProperties": {},
+          "description": "With path = a function name: runs it with these arguments, as its contract says, if it only reads and costs nothing; any other function runs with acme_call (default: none, the contract is returned).",
+          "propertyNames": {
+            "type": "string",
+          },
+          "type": "object",
+        },
         "ctx": {
           "description": "ctx code returned by acme_context, e.g. 7K3Q-M2XA. Required: call acme_context first.",
           "type": "string",
@@ -109,6 +123,12 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "maximum": 9007199254740991,
           "minimum": 0,
           "type": "integer",
+        },
+        "team": {
+          "description": "Slug of the team the call runs for, e.g. ventes; only when a result says the team is ambiguous (default: chosen by the server).",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string",
         },
       },
       "required": [

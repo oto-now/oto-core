@@ -147,18 +147,63 @@ export const testInvoice = defineFunction({
 
 export const TEST_FUNCTIONS: CatalogFunction[] = [testRead, testWrite, testSend, testOff, tableTestRead, testBig, testFail, testRelease, testInvoice]
 
+/** `test_act.peek` : de classe `read`, mais servie dans l'espace `_act` : `read` ne l'exécute pas (`runsByRead`). */
+export const testActPeek = defineFunction({
+  name: "test_act.peek",
+  connector: "test",
+  class: "read",
+  origin: "erp",
+  description: "Reads test data, served as engaging.",
+  schema: z.strictObject({}),
+  examples: [{}],
+  refusals: [],
+  run: async (context) => ({ text: "Test act peeked.", data: received(context) }),
+})
+
+/** `test.paid_read` : une lecture qui déclare un coût, comme une fonction décrite à `cost` : `read` ne l'exécute pas. */
+export const testPaidRead: CatalogFunction = {
+  ...defineFunction({
+    name: "test.paid_read",
+    connector: "test",
+    class: "read",
+    origin: "erp",
+    description: "Reads paid test data.",
+    schema: z.strictObject({}),
+    examples: [{}],
+    refusals: [],
+    run: async (context) => ({ text: "Paid test data read.", data: received(context) }),
+  }),
+  costs: true,
+}
+
+/** `mail.test_peek` : une lecture du connecteur `mail`, sur un compte résolu comme pour `call`. */
+export const mailTestPeek = defineFunction({
+  name: "mail.test_peek",
+  connector: "mail",
+  class: "read",
+  origin: "connecteur",
+  description: "Peeks at the test mailbox.",
+  schema: z.strictObject({}),
+  examples: [{}],
+  refusals: [],
+  run: async (context) => ({ text: "Test mailbox peeked.", data: received(context) }),
+})
+
+/** Les fonctions de la garde de `read` qui exécute (`runRead`) : hors `TEST_FUNCTIONS`, que d'autres suites comptent. */
+export const READ_GATE_FUNCTIONS: CatalogFunction[] = [testActPeek, testPaidRead, mailTestPeek]
+
 type Registry = typeof import("../../packages/plateforme/server/catalog/registry")
 
 /**
- * La fabrique de `vi.mock` du registre : le catalogue réel complété de `TEST_FUNCTIONS`, celui de l'assistant aussi
+ * La fabrique de `vi.mock` du registre : le catalogue réel complété de `TEST_FUNCTIONS` (et d'`extra`), celui de l'assistant aussi
  * (les portes qui servent un assistant lisent `assistantFunctions`). Appelée par un import dynamique dans la
  * fabrique, que `vi.mock` hisse au-dessus des imports du fichier.
  */
-export async function withTestFunctions(importOriginal: <T = unknown>() => Promise<T>): Promise<Registry> {
+export async function withTestFunctions(importOriginal: <T = unknown>() => Promise<T>, extra: readonly CatalogFunction[] = []): Promise<Registry> {
   const original = await importOriginal<Registry>()
   return {
     ...original,
-    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS],
-    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS],
+    catalogFunctions: () => [...original.catalogFunctions(), ...TEST_FUNCTIONS, ...extra],
+    assistantFunctions: () => [...original.assistantFunctions(), ...TEST_FUNCTIONS, ...extra],
   }
 }

@@ -7,16 +7,21 @@
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest"
 import { MAX_RESULT_CHARS } from "../../packages/plateforme/mcp/result"
 import type { ToolInput } from "../../packages/plateforme/mcp/schemas"
-import type { CallInput } from "../../packages/plateforme/server/calls"
+import type { CallInput, ReadRunFields } from "../../packages/plateforme/server/calls"
+import { runsByRead } from "../../packages/plateforme/server/catalog/registry"
 import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
 import type { Identity } from "../../packages/plateforme/server/identity"
+import { mailTestPeek, testActPeek, testPaidRead, testRead, testSend, testWrite } from "../factories/test-functions"
 import { connectDeps } from "../helpers/mcp"
 import { ACCOUNTS, ORG, PEOPLE, referenceTables, teamOf, TEAMS } from "../helpers/reference-org"
 import { seedReferenceTables, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import type { Row, Tables } from "../helpers/simulated-db"
 import { sqlConfigured, seedWithAdmin, type SeededData, portable } from "../helpers/sql"
 
-vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => (await import("../factories/test-functions")).withTestFunctions(importOriginal))
+vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
+  const factory = await import("../factories/test-functions")
+  return factory.withTestFunctions(importOriginal, factory.READ_GATE_FUNCTIONS)
+})
 
 const CTX = "7K3Q-M2XA"
 const DRAFT_ID = "sim_1a2b3c4d"
@@ -31,6 +36,24 @@ afterEach(() => {
 describe("acme_call input", () => {
   it("should give the service every field of the call schema but ctx (N10)", () => {
     expectTypeOf<Omit<ToolInput<"call">, "ctx">>().toEqualTypeOf<CallInput>()
+  })
+})
+
+// `read` exécute une fonction de pure lecture (`outils-mcp.md` § Lire et engager) : ses champs d'exécution sont ceux de `call`.
+describe("acme_read that runs a function", () => {
+  it("should give runRead the arguments, team and account of the read schema", () => {
+    expectTypeOf<Pick<ToolInput<"read">, "arguments" | "team" | "account">>().toEqualTypeOf<ReadRunFields>()
+  })
+
+  it("should run by read only a function of class read, outside the _act namespace, that declares no cost", () => {
+    expect([testRead, mailTestPeek, testWrite, testSend, testActPeek, testPaidRead].map((fn) => [fn.name, runsByRead(fn)])).toEqual([
+      ["test.read", true],
+      ["mail.test_peek", true],
+      ["test.write", false],
+      ["test.send", false],
+      ["test_act.peek", false],
+      ["test.paid_read", false],
+    ])
   })
 })
 
@@ -142,5 +165,79 @@ describe.skipIf(!sqlConfigured)(portable("acme_call through the MCP gate"), { ti
     expect([failed.isError, failed.text, failed.result.structuredContent]).toEqual([true, internal(), undefined])
     expect(log).toHaveBeenCalledWith("[platform] mcp: tools/call failed", expect.objectContaining({ message: "socket hang up at 10.0.0.12:5432" }))
     expect(journal[0]).toMatchObject({ target: "test.fail", is_error: true, error: `internal: ${internal()}` })
+  })
+
+  /** Session MCP de Claire, et `read` sous son `ctx`. */
+  async function readSession() {
+    const connected = await session()
+    const read = (fields: Record<string, unknown>) => connected.call("read", { ctx: ref.id(CTX), ...fields })
+    return { ...connected, read }
+  }
+
+  it("should run with read a function that only reads, through the path of call: same result, account resolved", async () => {
+    const { read, run } = await readSession()
+    const ran = await read({ path: "test.read", arguments: {} })
+    expect(ran.isError).toBe(false)
+    expect(ran.text).toBe("Test data read.")
+    expect(ref.readable(ran.result.structuredContent)).toMatchObject({ function: "test.read", result: { account: null, ctx: CTX } })
+    expect(ran.result.structuredContent).toEqual((await run({ function: "test.read", arguments: {} })).result.structuredContent)
+    // Une fonction de connecteur court sur le compte résolu, nommé comme par `call`.
+    const peeked = await read({ path: "mail.test_peek", arguments: {}, account: ACCOUNTS.ventes.label })
+    expect(peeked.isError).toBe(false)
+    expect(ref.readable(peeked.result.structuredContent)).toMatchObject({ function: "mail.test_peek", result: { account: ACCOUNTS.ventes.label } })
+  })
+
+  it("should refuse with read a write, a sensitive, an _act and a costly function, run none, and give the call to make", async () => {
+    const { read, journal } = await readSession()
+    const prefix = ref.org.prefix
+    const refusals = [
+      ["test.write", { team_id: "x" }, "it writes"],
+      ["test.send", { to: "sophie@valbrune.test" }, "it sends, deletes or pays"],
+      ["test_act.peek", {}, "it engages or destroys"],
+      ["test.paid_read", {}, "it costs credits"],
+    ] as const
+    for (const [name, args, why] of refusals) {
+      const refused = await read({ path: name, arguments: args, team: "ventes" })
+      expect(refused.isError, name).toBe(true)
+      expect(refused.text).toBe(
+        `${prefix}_read runs only functions that read and cost nothing; ${name} is not one (${why}). Nothing was run. Run it with ${prefix}_call {"function": "${name}", "arguments": <the same arguments>, "team": "ventes"}.`,
+      )
+    }
+    // Rien n'a couru : aucune ligne ne porte de compte ni d'équipe, chaque refus garde sa fonction en cible.
+    expect(journal.map((line) => [line.tool, line.target, line.is_error, line.team_id ?? null])).toEqual(refusals.map(([name]) => [`${prefix}_read`, name, true, null]))
+  })
+
+  it("should still return the contract without arguments, and refuse team or account without them", async () => {
+    const { read } = await readSession()
+    const contract = await read({ path: "test.read" })
+    expect(contract.isError).toBe(false)
+    expect(contract.text).not.toContain("Test data read.")
+    expect(contract.text).toContain("test.read")
+    const alone = await read({ path: "test.read", team: "ventes" })
+    expect([alone.isError, alone.text]).toEqual([true, `team and account go with arguments: ${ref.org.prefix}_read {"path": "test.read", "arguments": {}} runs test.read without any.`])
+    const page = await read({ path: "ventes/relance_devis", arguments: {} })
+    expect(page.isError).toBe(true)
+    expect(page.text).toContain("give its name as path")
+  })
+
+  it("should journal a read that runs with its function as target, its team and its account, like call", async () => {
+    const { read, run, journal } = await readSession()
+    await read({ path: "mail.test_peek", arguments: {}, account: ACCOUNTS.ventes.label })
+    await run({ function: "mail.test_peek", arguments: {}, account: ACCOUNTS.ventes.label })
+    const lines = ref.readable(journal)
+    expect(lines.map((line) => [line.tool, line.target, line.team_id, line.account_id, line.is_error ?? false])).toEqual([
+      [`${ref.org.prefix}_read`, "mail.test_peek", TEAMS.ventes.id, ACCOUNTS.ventes.id, false],
+      [`${ref.org.prefix}_call`, "mail.test_peek", TEAMS.ventes.id, ACCOUNTS.ventes.id, false],
+    ])
+  })
+
+  it("should give by read the refusal of call for an inactive connector or an unknown account", async () => {
+    const { read, run } = await readSession()
+    const off = await read({ path: "test.off", arguments: {} })
+    expect(off.isError).toBe(true)
+    expect(off.text).toBe((await run({ function: "test.off", arguments: {} })).text)
+    const unknown = await read({ path: "mail.test_peek", arguments: {}, account: "Mail Inconnu" })
+    expect(unknown.isError).toBe(true)
+    expect(unknown.text).toBe((await run({ function: "mail.test_peek", arguments: {}, account: "Mail Inconnu" })).text)
   })
 })
