@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-25] — Conception : « Ce que reçoit l'assistant », vue d'ensemble des couches de confidentialité
+**Quoi :** nouveau document de conception, proposé : les cinq couches qui limitent ce qu'un assistant reçoit des données d'une organisation (ne pas servir, transformer un champ connu, jeton d'identité stable, dictionnaire des personnes déclarées, modèle de reconnaissance), ce sur quoi chacune tient, le livré et le proposé, et l'ordre de mise en place pour un hôte. Renvoie à `pseudonymisation.md` pour le détail.
+**Pourquoi :** donner une vue d'ensemble qu'aucun document ne portait.
+**Fichiers :** `docs/conception/ce-que-recoit-l-assistant.md`, `docs/conception/README.md`, `docs/changelog.md`.
+
 ## [2026-11-23] — Fonctions d'un hôte (1/3) : source par organisation, échange de jeton, confirmation par l'hôte
 **Quoi :** une organisation a une « API de l'hôte » (`platform.host_apis`, migration `20261123150000`) : son document OpenAPI, lu à `<adresse>/openapi.json` par le transport gardé et jugé par le profil hôte de la lib (épinglée sur v1.246.0), donne des fonctions qui entrent au catalogue de l'organisation (`orgAssistantFunctions`) comme des fonctions de l'ERP. Elles courent par le moteur des connecteurs décrits sous un jeton échangé (RFC 8693) auprès de l'émetteur de l'instance, avec les en-têtes `Oto-Ctx`, `Oto-Client` et `Oto-Org` ; une fonction sensible se confirme par les deux temps de l'hôte (`202 needs_confirmation`, puis `?confirm=true`) ; un `problem+json` devient une `PlatformError`. Administration : `admin_connector host_api` et `refresh_host_api`. Test qui refuse deux têtes de migration.
 **Pourquoi :** issue #153 et ses décisions (jeton jamais transmis tel quel, un enregistrement par organisation, `call` seul).
