@@ -35,6 +35,7 @@ export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
     logo: null,
     bloquePar: null,
     actif: true,
+    aAdopter: false,
     fonctions: [],
     miens: [],
     mesComptes: [],

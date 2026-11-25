@@ -12,7 +12,7 @@ import { Info } from "@phosphor-icons/react/dist/csr/Info"
 import { Lock } from "@phosphor-icons/react/dist/csr/Lock"
 import { Prohibit } from "@phosphor-icons/react/dist/csr/Prohibit"
 import { TreeStructure } from "@phosphor-icons/react/dist/csr/TreeStructure"
-import { limitReached, type DeactivationImpact, type OrgLimitsView } from "../../../schemas"
+import type { DeactivationImpact } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
 import { ActionPlateforme } from "../../components/action-plateforme"
@@ -22,7 +22,6 @@ import { Icon, type Glyphe } from "../../ds/react/icon"
 import { Alert, Button, IconButton } from "../../ds/react/primitives"
 import { Tooltip } from "../../ds/react/tooltip"
 import { useRafraichir } from "../../hote/rafraichir"
-import { LimiteAtteinte } from "../../limites/limite-atteinte"
 
 /** Un effet d'un geste confirmé : son glyphe (rouge, sauf `calme`) et sa phrase. */
 export type Effet = { glyphe: Glyphe; texte: ReactNode; calme?: boolean }
@@ -39,8 +38,8 @@ function procedures(outil: string, chemins: readonly string[]): Effet[] {
 
 /**
  * Ce que le blocage arrête, effet par effet. Un outil ouvert : tous ses connecteurs de l'organisation se taisent, sans
- * compte (`DeactivationImpact` ne compte que ceux que l'administrateur voit, pas ceux privés des membres) ; un outil
- * jamais ouvert : personne n'en a ajouté, rien ne s'arrête.
+ * compte (`DeactivationImpact` ne compte que ceux que l'administrateur voit, pas ceux privés des membres), ouvert par
+ * défaut compris ; un outil payé par la clé de l'application et pas encore adopté : personne n'en a ajouté, rien ne s'arrête.
  */
 function effets(outil: string, impact: DeactivationImpact | undefined, actif: boolean): Effet[] {
   const arret: Effet[] = actif
@@ -163,20 +162,21 @@ export function BlocageDeLOutil({ connecteur, outil, impact, actif, presentation
 type DeblocageProps = {
   connecteur: string
   outil: string
-  /** Les capacités de l'organisation, lues par l'administrateur : au plafond d'outils, « Débloquer » se grise. */
-  limites: OrgLimitsView | undefined
+  /** Un outil payé par la clé de l'application, jamais adopté : « Adopter » au lieu de « Débloquer », le même geste. */
+  adopter?: boolean
   ancre: string
 }
 
-/** « Débloquer » : l'outil rouvert pour l'organisation, sans question (réversible), au plafond de `connectors_max` près. */
-export function DeblocageDeLOutil({ connecteur, outil, limites, ancre }: DeblocageProps) {
-  if (limites?.connectors && limitReached(limites.connectors)) {
-    return <LimiteAtteinte libelle="Débloquer" nom="connectors_max" etat={limites.connectors} lien={limites.raiseUrl} />
-  }
+/**
+ * « Débloquer » : l'outil rouvert pour l'organisation, sans question (réversible), sans plafond : le nombre d'outils
+ * n'est plus limité. « Adopter » pour un outil payé par la clé de l'application, qu'aucun administrateur n'a adopté.
+ */
+export function DeblocageDeLOutil({ connecteur, outil, adopter = false, ancre }: DeblocageProps) {
+  const libelle = adopter ? "Adopter" : "Débloquer"
   return (
     <ActionPlateforme
-      libelle="Débloquer"
-      nomAccessible={`Débloquer ${outil}`}
+      libelle={libelle}
+      nomAccessible={`${libelle} ${outil}`}
       requete={{ methode: "POST", ressource: `admin/connectors/${encodeURIComponent(connecteur)}/activation`, corps: {} }}
       ancre={ancre}
     />

@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react"
 import { Check } from "@phosphor-icons/react/dist/csr/Check"
 import { Lock } from "@phosphor-icons/react/dist/csr/Lock"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
-import type { DeactivationImpact, OrgLimitsView } from "../../../schemas"
+import type { DeactivationImpact } from "../../../schemas"
 import { Icon } from "../../ds/react/icon"
 import { InputAffix } from "../../ds/react/input-affix"
 import { Tooltip } from "../../ds/react/tooltip"
@@ -26,7 +26,7 @@ const RECHERCHER = "Rechercher un outil"
 export const ANCRE_DU_CATALOGUE = "catalogue-des-connecteurs"
 
 /** Ce qu'un administrateur lit pour bloquer ou débloquer un outil ; absent pour un membre. */
-export type GouvernanceDesOutils = { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
+export type GouvernanceDesOutils = { impacts: Partial<Record<string, DeactivationImpact>> }
 
 /** « Connecté », ou « Connecté : 2 connecteurs à vous » : seuls ceux de la personne qui servent comptent. */
 export const motDuConnecte = (nombre: number) => (nombre > 1 ? `Connecté : ${nombre} connecteurs à vous` : "Connecté")
@@ -49,6 +49,8 @@ function Connecte({ nombre }: { nombre: number }) {
 
 /** Ce qu'une carte dit sous le nom : l'accès d'un outil à plusieurs, sinon le nombre de ses fonctions. */
 function Precision({ outil }: { outil: OutilAAjouter }) {
+  // Payé par la clé de l'application, pas encore adopté : la fiche dit pourquoi rien ne s'ajoute, et qui l'adopte.
+  if (outil.aAdopter) return <span className="oto-caption">À adopter par un administrateur</span>
   if (outil.acces) return <span className="oto-caption">{outil.acces.libelle}</span>
   if (outil.fonctions.length === 0) return null
   return <span className="oto-caption">{fonctions(outil.fonctions.length)}</span>
@@ -99,7 +101,7 @@ function Bloque({ outil, moi, gouvernance }: BloqueProps) {
           <span className="oto-caption">{`Bloqué par ${qui}.${gouvernance ? "" : " Demandez à un administrateur si vous en avez besoin."}`}</span>
         </span>
       </span>
-      {gouvernance && <DeblocageDeLOutil connecteur={outil.connecteur} outil={outil.libelle} limites={gouvernance.limites} ancre={ANCRE_DU_CATALOGUE} />}
+      {gouvernance && <DeblocageDeLOutil connecteur={outil.connecteur} outil={outil.libelle} ancre={ANCRE_DU_CATALOGUE} />}
     </li>
   )
 }

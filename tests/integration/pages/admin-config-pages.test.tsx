@@ -12,7 +12,7 @@ import type { NodeView } from "@otomata_tech/oto_platform/schemas"
 import type { AccountView } from "@otomata_tech/oto_platform/schemas"
 import {
   accountOwnerChoices,
-  deactivationImpact,
+  deactivationImpacts,
   listAccountRules,
   listConnectorsForOrg,
   listMembers,
@@ -53,7 +53,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   listAccountRules: vi.fn(),
   listTeams: vi.fn(),
   accountOwnerChoices: vi.fn(async () => ({ user: true, org: false, teams: [] })),
-  deactivationImpact: vi.fn(),
+  deactivationImpacts: vi.fn(),
   listShares: vi.fn(),
   loadNode: vi.fn(),
   // L'aperçu du Contexte servi de la même page (E05-S13, lot A), vide ici.
@@ -96,7 +96,7 @@ const CONTEXTE = {
   blocks: [{ id: "bloc-1", ref: "b1", type: "paragraph", text: "Nous vendons des pompes.", data: {}, key: null, position: 1, revision: 1, provenance: {} }],
 } as unknown as NodeView
 
-const SERVICES = [readOrgView, listConnectorsForOrg, listOrgAccounts, listTeams, deactivationImpact, listShares, loadNode, previewContext]
+const SERVICES = [readOrgView, listConnectorsForOrg, listOrgAccounts, listTeams, deactivationImpacts, listShares, loadNode, previewContext]
 
 // `fil` : Connecteurs n'est plus rangé dans le menu de l'entreprise mais au pied du rail (E05-S11, AC-32) : sans groupe, sans fil.
 const PAGES = [
@@ -130,7 +130,7 @@ beforeEach(() => {
   vi.mocked(listOrgAccounts).mockResolvedValue([])
   vi.mocked(listMembers).mockResolvedValue([])
   vi.mocked(listTeams).mockResolvedValue([])
-  vi.mocked(deactivationImpact).mockResolvedValue({ functions: [], procedures: [], accounts: 0 })
+  vi.mocked(deactivationImpacts).mockResolvedValue({ mail: { functions: [], procedures: [], accounts: 0 } })
   vi.mocked(listShares).mockResolvedValue([])
   vi.mocked(loadNode).mockResolvedValue(CONTEXTE)
 })
@@ -179,7 +179,7 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     for (const service of [listOrgAccounts, listConnectorsForOrg, listTeams, listMembers]) expect(service).toHaveBeenCalledWith(SESSION.db, identite("member"))
     // Les partages de son seul compte personnel : ni ceux d'un compte commun fermé, ni ceux du compte d'un autre.
     expect(vi.mocked(listAccountRules).mock.calls).toEqual([[SESSION.db, identite("member"), MON_COMPTE.id]])
-    expect(deactivationImpact).not.toHaveBeenCalled()
+    expect(deactivationImpacts).not.toHaveBeenCalled()
     expect(screen.queryByRole("alert")).toBeNull()
     expect(screen.queryByRole("region", { name: "Outils de l'organisation" })).toBeNull()
     const ligne = (libelle: string) => within(screen.getByRole("link", { name: libelle }).closest("tr") ?? document.body)
@@ -238,12 +238,12 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
 
   it("should read the impact of blocking each open tool for the connectors page, and put it in the confirmation", async () => {
     simulerLesDialogues()
-    vi.mocked(deactivationImpact).mockResolvedValue({ functions: [], procedures: ["ventes/qualifier_prospects"], accounts: 0 })
+    vi.mocked(deactivationImpacts).mockResolvedValue({ mail: { functions: [], procedures: ["ventes/qualifier_prospects"], accounts: 0 } })
     // « mail », sans formulaire, ne s'ajoute que pour l'organisation : sa carte paraît à qui peut la doter.
     vi.mocked(accountOwnerChoices).mockResolvedValueOnce({ user: true, org: true, teams: [] })
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte("admin"))
     render(await ConnecteursPage({}))
-    expect(deactivationImpact).toHaveBeenCalledWith(SESSION.db, identite("admin"), "mail")
+    expect(deactivationImpacts).toHaveBeenCalledWith(SESSION.db, identite("admin"), ["mail"])
     expect(listOrgAccounts).toHaveBeenCalledWith(SESSION.db, identite("admin"))
 
     // L'impact simulé, indexé par le nom du connecteur, arrive dans la confirmation du blocage (AC5).

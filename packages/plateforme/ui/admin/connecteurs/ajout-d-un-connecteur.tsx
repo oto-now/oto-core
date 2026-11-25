@@ -11,20 +11,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { CaretLeft } from "@phosphor-icons/react/dist/csr/CaretLeft"
 import { Key } from "@phosphor-icons/react/dist/csr/Key"
 import { User } from "@phosphor-icons/react/dist/csr/User"
-import { limitReached } from "../../../schemas"
 import { Dialog } from "../../ds/react/dialog"
 import { Icon, type Glyphe } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { useHote } from "../../hote/navigation"
-import { lienDeLimite } from "../../limites/limite-atteinte"
-import { CatalogueDeLAjout, type GouvernanceDesOutils } from "./catalogue-de-l-ajout"
+import { DeblocageDeLOutil } from "./blocage-de-l-outil"
+import { ANCRE_DU_CATALOGUE, CatalogueDeLAjout, type GouvernanceDesOutils } from "./catalogue-de-l-ajout"
 import { cleDeLOutil, nomLibre, type OutilAAjouter } from "./catalogue-des-connecteurs"
 import { ConnexionChezLeTiers } from "./connexion-chez-le-tiers"
 import { FormulaireDAjout } from "./formulaire-d-ajout"
 import { PlaceDuPied } from "./pied-de-la-fiche"
 import { adresseDeLaVue } from "./lignes-des-connecteurs"
-import { plafondDesOutils } from "./refus-des-connecteurs"
 import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const TITRE = "Ajouter un connecteur"
@@ -40,23 +38,20 @@ function facon(outil: OutilAAjouter): { glyphe: Glyphe; texte: string } {
   return { glyphe: Key, texte: outil.acces?.libelle ?? `Avec une clé d'API ${outil.libelle}` }
 }
 
-/** Le plafond d'outils de l'offre, lu par un administrateur, pour un outil que l'organisation n'utilise pas encore. */
-function PlafondDesOutils({ outil, gouvernance }: { outil: OutilAAjouter; gouvernance: GouvernanceDesOutils | undefined }) {
-  const outils = gouvernance?.limites?.connectors
-  if (outil.actif || !outils || !limitReached(outils)) return null
-  const lien = gouvernance?.limites?.raiseUrl
+/**
+ * Un outil payé par la clé de l'application, qu'aucun administrateur n'a encore adopté : rien ne s'ajoute avant. Un
+ * administrateur l'adopte ici ; un membre lit à qui demander. Aucun plafond d'outils : leur nombre n'est plus limité.
+ */
+function AAdopter({ outil, gouvernance }: { outil: OutilAAjouter; gouvernance: GouvernanceDesOutils | undefined }) {
+  if (!outil.aAdopter) return null
   return (
     <Alert
       tone="review"
-      title={plafondDesOutils(outils.max, outil.libelle, true)}
-      actions={
-        lien ? (
-          <a href={lienDeLimite(lien, "connectors_max")} className="oto-btn anim-host" data-variant="secondary" data-size="sm">
-            <span>Relever la limite</span>
-          </a>
-        ) : undefined
-      }
-    />
+      title={`${outil.libelle} est payé par la clé de l'application : un administrateur l'adopte avant tout ajout.`}
+      actions={gouvernance ? <DeblocageDeLOutil connecteur={outil.connecteur} outil={outil.libelle} adopter ancre={ANCRE_DU_CATALOGUE} /> : undefined}
+    >
+      {gouvernance ? undefined : "Demandez à un administrateur de l'adopter."}
+    </Alert>
   )
 }
 
@@ -79,7 +74,7 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, gouvernance, sujets, moi, r
     titre.current?.focus()
   }, [])
   const { glyphe, texte } = facon(outil)
-  const bloque = !outil.actif && limitReached(gouvernance?.limites?.connectors)
+  const bloque = outil.aAdopter
   const chezLeTiers = outil.facon === "consentement" || outil.facon === "branchement"
   return (
     <div className="flex flex-col gap-4">
@@ -100,7 +95,7 @@ function OutilChoisi({ outil, equipes, mesNoms, ici, gouvernance, sujets, moi, r
           </span>
         </div>
       </div>
-      <PlafondDesOutils outil={outil} gouvernance={gouvernance} />
+      <AAdopter outil={outil} gouvernance={gouvernance} />
       {chezLeTiers ? (
         !bloque && <ConnexionChezLeTiers outil={outil} ici={ici} sujets={sujets} moi={moi} administre={gouvernance !== undefined} />
       ) : (

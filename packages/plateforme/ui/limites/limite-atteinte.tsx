@@ -6,12 +6,11 @@ import type { LimitState } from "../../schemas"
 import { Button } from "../ds/react/primitives"
 
 /** Les limites comptées que disent les écrans (`orgLimitsSchema`). */
-export type NomDeLimite = "members_max" | "teams_max" | "connectors_max"
+export type NomDeLimite = "members_max" | "teams_max"
 
 const MOTS: Record<NomDeLimite, [string, string]> = {
   members_max: ["membre", "membres"],
   teams_max: ["équipe", "équipes"],
-  connectors_max: ["connecteur actif", "connecteurs actifs"],
 }
 
 const mot = (nom: NomDeLimite, nombre: number) => MOTS[nom][nombre > 1 ? 1 : 0]
