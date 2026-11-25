@@ -116,7 +116,7 @@ export async function enableAccount(db: PlatformDb, identity: Identity, input: u
     db,
     "enableAccount: accounts update",
     async (sql) => {
-      if ((await openConnectorForAccount(sql, scope, row.connector)) === "closed") return null
+      if ((await openConnectorForAccount(sql, identity, row.connector)) === "closed") return null
       await requireUnderAccountsPerOwner(sql, scope, { connector: row.connector, owner })
       return sql`update platform.accounts set status = 'active' where id = ${id} and status = 'disabled' returning id`
     },

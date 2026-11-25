@@ -10,7 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { runCall } from "../../packages/plateforme/server/calls"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
 import { listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
-import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
@@ -85,7 +85,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
   }
   const set = (id: string, input: unknown) => setAccountSecret(ada.db, ada.identity, { account_id: id, input })
   const call = (fn: string, accountLabel: string) =>
-    runCall({ db: ada.db, identity: ada.identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(ada.db, o.org.id) }, { function: fn, arguments: {}, account: accountLabel })
+    runCall({ db: ada.db, identity: ada.identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(ada.db, o.org.id) }, { function: fn, arguments: {}, account: accountLabel })
   const columns = async (id: string) =>
     (await fx.admin<{ secret_ciphertext: string | null; token_ciphertext: string | null }[]>`select secret_ciphertext, token_ciphertext from platform.accounts where id = ${id}`)[0]
 

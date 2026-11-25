@@ -772,11 +772,12 @@ describe("EcranConnecteurs, adding a connector", () => {
 
 describe("EcranConnecteurs, the tools of the organisation (administrator)", () => {
   const FERME: OrgConnector = { ...MAIL, state: "inactive", activatedAt: null, activatedBy: null, closedBy: { userId: "user-claire", name: "Claire Morel" } }
-  const JAMAIS: OrgConnector = { ...MAIL, connector: "agenda", label: "Agenda", state: "inactive", activatedAt: null, activatedBy: null, functions: [] }
+  // Jamais touché : ouvert par défaut, adopté par personne.
+  const JAMAIS: OrgConnector = { ...MAIL, connector: "agenda", label: "Agenda", state: "active", activatedAt: null, activatedBy: null, functions: [] }
   // Fermé par une personne partie, ou avant que la fermeture garde son auteur : fermé quand même.
   const SANS_AUTEUR: OrgConnector = { ...FERME, connector: "paie", label: "Paie", functions: [], closedBy: { userId: null, name: null } }
 
-  it("should say each tool open, closed and by whom, or never used, close any tool not closed and open a closed one again without a question", async () => {
+  it("should say each tool open, by default or since its adoption, or closed and by whom, close any open tool and open a closed one again without a question", async () => {
     // Deux gestes dans ce test : une réponse neuve à chaque appel, son corps ne se lit qu'une fois.
     fetchMock.mockImplementation(async () => reponse(200, { data: { connector: MAIL } }))
     rendre({ connectors: [FERME, CRM, JAMAIS, SANS_AUTEUR], administration: { impacts: {} } })
@@ -786,13 +787,13 @@ describe("EcranConnecteurs, the tools of the organisation (administrator)", () =
     expect(ilot.getByText("Ouvert depuis le 24 septembre 2026")).toBeInTheDocument()
     expect(ilot.getByText("Fermé par Claire Morel")).toBeInTheDocument()
     expect(ilot.getByText("Fermé par un administrateur")).toBeInTheDocument()
-    // Un outil jamais utilisé s'ouvre au premier ajout : il se ferme d'avance.
-    expect(ilot.getByText("S'ouvre au premier ajout")).toBeInTheDocument()
+    // Un outil jamais utilisé est ouvert par défaut : il se ferme comme un autre.
+    expect(ilot.getByText("Ouvert")).toBeInTheDocument()
     expect(ilot.getAllByRole("button").map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)).toEqual(["Rouvrir mail", "Fermer Crm Pro", "Fermer Agenda", "Rouvrir Paie"])
-    // Rien ne s'arrête à fermer un outil jamais utilisé : sa question le dit, et ce que rouvrir fera.
+    // Ouvert par défaut, ses fonctions répondent : sa fermeture pose la question de toute fermeture.
     fireEvent.click(ilot.getByRole("button", { name: "Fermer Agenda" }))
-    const davance = "Fermer « Agenda » d'avance ? Plus personne ne pourra l'ajouter. Le rouvrir l'ouvrira pour toute l'organisation."
-    fireEvent.click(within(screen.getByRole("group", { name: davance })).getByRole("button", { name: "Fermer" }))
+    const question = "Fermer « Agenda » ? Ses fonctions cesseront aussitôt de répondre, pour tout le monde, et plus personne ne pourra l'ajouter."
+    fireEvent.click(within(screen.getByRole("group", { name: question })).getByRole("button", { name: "Fermer" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/agenda/activation", methode: "DELETE" }])
     fetchMock.mockClear()
@@ -814,10 +815,10 @@ describe("EcranConnecteurs, the tools of the organisation (administrator)", () =
     expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/mail/activation", methode: "DELETE", corps: undefined }])
   })
 
-  it("should grey the reopening of a closed tool at connectors_max, with the raise link", () => {
+  it("should never grey the reopening of a closed tool: the number of tools is not limited, whatever limits a host still passes", () => {
     rendre({ connectors: [FERME], administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 0, used: 0 }, raiseUrl: "https://acme.test/billing?from=pkg" } } })
-    expect(screen.getByRole("button", { name: "Rouvrir" })).toBeDisabled()
-    expect(screen.getByText(/Limite atteinte : 0 connecteur actif sur 0\./)).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?from=pkg&capacity=connectors_max")
+    expect(screen.getByRole("button", { name: "Rouvrir mail" })).toBeEnabled()
+    expect(screen.queryByText(/Limite atteinte/)).toBeNull()
+    expect(screen.queryByRole("link", { name: "Relever la limite" })).toBeNull()
   })
 })

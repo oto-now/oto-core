@@ -7,7 +7,7 @@
 // propre : sa session (`withRunnerSession`) ne fait que réclamer et ranger par les fonctions de la file.
 import { runCall, type CallTrace } from "../calls"
 import { catalogFunctions, findFunction } from "../catalog/registry"
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import { createPlatformDb, type PlatformDb } from "../db"
 import { inTransaction, isPlatformError } from "../errors"
 import { identityInOrg, type Identity, type IdentityOrg } from "../identity"
@@ -115,7 +115,7 @@ async function runClaimed(claim: Claimed): Promise<void> {
         call.answers = answers
       },
     }
-    const deps = { db, identity, ctxCode: stored.ctx, origin: stored.origin, activeConnectors: () => loadActiveConnectors(db, identity.org.id), functions, trace, job }
+    const deps = { db, identity, ctxCode: stored.ctx, origin: stored.origin, activeConnectors: () => loadOpenConnectors(db, identity.org.id), functions, trace, job }
     const input = { function: stored.function, arguments: args, confirm: true, ...(stored.team_slug ? { team: stored.team_slug } : {}), ...(stored.account_id ? { account: stored.account_id } : {}) }
     const output = await runCall(deps, input)
     outcome = { done: { text: output.text, data: output.data, nextActions: output.nextActions } }

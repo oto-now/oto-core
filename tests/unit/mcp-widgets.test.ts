@@ -55,7 +55,7 @@ const untouchable = new Proxy(
 
 function deps(options: { widgets?: boolean; identity?: Identity } = {}): McpDeps {
   const caller = { kind: "member" as const, identity: options.identity ?? IDENTITY }
-  return { db: untouchable, org: ORG, caller, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test", widgets: options.widgets }
+  return { db: untouchable, org: ORG, caller, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test", widgets: options.widgets }
 }
 
 /** `call table.rows` sous un `ctx` accepté, `runCall` rendant une ligne et la vue `record`. */

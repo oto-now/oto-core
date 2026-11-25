@@ -28,6 +28,7 @@ import { executeDescribed, valueAt, type PreparedFunction } from "./engine"
 import type { Fetch } from "./http"
 import { authorizationAddress, exchangeCode, type ConsentFlow, type ConsentTokens, type UserConsentAuth } from "./oauth-user"
 import { consentVerifier, encryptCredential, encryptToken } from "./vault"
+import { closedConnector, isConnectorClosed } from "./activations"
 
 /** Le chemin de l'adresse de retour, sous la porte du paquet, à déclarer chez le tiers avec l'origine de chaque adresse. */
 export const CONNECTOR_CONSENT_CALLBACK_PATH = "/api/platform/connector-consent/callback"
@@ -136,12 +137,14 @@ export async function beginConsent(db: PlatformDb, identity: Identity, connector
  * (l'écran Connecteurs par défaut). Les demandes échues de l'organisation sont purgées au passage. Le connecteur
  * `host_api` consent à l'API de l'hôte de l'organisation (`host-api/consent-access.ts`). Refus : saisie invalide,
  * connecteur ou accès sans consentement, accès absent, inconnu ou de trop, organisation sans API d'hôte
- * (`invalid_arguments`), application OAuth absente (`not_enabled`).
+ * (`invalid_arguments`), application OAuth absente (`not_enabled`), connecteur bloqué par un administrateur
+ * (`not_enabled`, `closed`) : ouvert par défaut, il ne se connecte plus une fois bloqué.
  */
 export async function startConnectorConsent(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = connectorConsentSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const connector = await consentAccessOf(db, identity, parsed.data.connector, parsed.data.access)
+  if (await isConnectorClosed(db, identity, parsed.data.connector)) throw await closedConnector(db, identity, parsed.data.connector)
   return { url: await beginConsent(db, identity, connector, { returnTo: parsed.data.return_to ?? null, origin: options.origin }) }
 }
 

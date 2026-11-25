@@ -12,7 +12,7 @@ import { catalogNames, describeFunction, findFunction, isActive, looksLikeFuncti
 import type { HostViewer } from "../host-api/visibility"
 import { blockRefs, bodyWithComments, commentsLine, waitingCount } from "../comments/served"
 import { openThreads } from "../comments/threads"
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
@@ -48,7 +48,7 @@ async function readFunction(db: PlatformDb, identity: Identity, name: string): P
   const fn = findFunction(await orgAssistantFunctions(db, identity), name)
   const contract = fn ? null : getContract(name)
   if (contract) return { ...renderContract(contract, prefix), nextActions: [`${prefix}_write`], target: contract.name }
-  if (!fn || !isActive(fn, await loadActiveConnectors(db, identity.org.id))) {
+  if (!fn || !isActive(fn, await loadOpenConnectors(db, identity.org.id))) {
     throw new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
   }
   const { text, data } = describeFunction(fn, prefix)

@@ -4,15 +4,15 @@
 // qui le répare ; des filtres et une recherche tenus par l'adresse ; le détail d'un connecteur dans un tiroir, ouvert par
 // l'adresse (`detail-du-connecteur.tsx`), où qui le gère le partage comme une page, remplace sa clé, lit le journal de
 // ses partages et le désactive ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ; l'issue du retour d'un
-// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les outils ouverts, ceux qu'il a
-// fermés, qu'il ferme ou rouvre ; un outil jamais utilisé s'ouvre au premier ajout, ou se ferme d'avance. Server Component : il calcule les
+// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les outils ouverts (tout outil déclaré
+// l'est par défaut), ceux qu'il a fermés, qu'il ferme ou rouvre. Server Component : il calcule les
 // lignes (`lignes-des-connecteurs.ts`) et le catalogue de l'ajout (`catalogue-des-connecteurs.ts`), et ne passe à ses
 // îlots clients que des données.
 //
 // Les mots « activation », « compte » et « secret » ne s'écrivent plus pour un membre (`connecteurs-et-comptes.md`
 // § Écran Connecteurs). L'écran masque un geste, le service le décide.
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
-import { limitReached, type AccountOwnerChoices, type AccountView, type ConnectorAccountForm, type DeactivationImpact, type OrgConnector, type OrgLimitsView } from "../../../schemas"
+import type { AccountOwnerChoices, AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector, OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Alert } from "../../ds/react/primitives"
@@ -21,11 +21,10 @@ import { Icon } from "../../ds/react/icon"
 import { Row, RowList } from "../../ds/react/row-list"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { dateLisible } from "../../format/dates"
-import { LimiteAtteinte } from "../../limites/limite-atteinte"
 import { EnTeteDAdministration } from "../en-tete"
 import { ErreurDeLecture } from "../../components/erreur-de-lecture"
 import { Chargement, Ilot } from "../ilot"
-import { questionDeDesactivation, questionDeFermetureDAvance } from "../textes"
+import { questionDeDesactivation } from "../textes"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter } from "./catalogue-des-connecteurs"
@@ -49,8 +48,8 @@ export type DonneesDesConnecteurs = {
   /** Pour qui la personne peut ajouter un connecteur (`accountOwnerChoices`) : elle-même, l'organisation, ses équipes. */
   proprietaires: AccountOwnerChoices
   /**
-   * Pour qui administre l'organisation : ce que la désactivation de chaque connecteur actif arrête (AC5), et ses
-   * capacités (`orgLimitsView`, E12-S02 ; absentes : aucune activation grisée). Absent pour un membre.
+   * Pour qui administre l'organisation : ce que la fermeture de chaque connecteur ouvert arrête (AC5). Absent pour un
+   * membre. `limites` n'est plus lu : le nombre de connecteurs n'est plus limité, rien n'est grisé ; gardé pour les hôtes.
    */
   administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
 }
@@ -126,31 +125,27 @@ function pluriel(nombre: number, singulier: string, pluriel: string): string {
   return `${nombre} ${nombre > 1 ? pluriel : singulier}`
 }
 
-/** Ouvert, fermé par un administrateur, ou jamais utilisé : le premier ajout l'ouvre alors. */
+/** Ouvert depuis son adoption, ouvert par défaut (personne ne l'a encore ajouté), ou fermé par un administrateur. */
 function etat(connecteur: OrgConnector): string {
-  if (connecteur.state === "active") {
-    const qui = connecteur.activatedBy?.name
-    return `Ouvert depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
-  }
-  return connecteur.closedBy ? `Fermé par ${connecteur.closedBy.name ?? "un administrateur"}` : "S'ouvre au premier ajout"
+  if (connecteur.state !== "active") return `Fermé par ${connecteur.closedBy?.name ?? "un administrateur"}`
+  if (connecteur.activatedAt === null) return "Ouvert"
+  const qui = connecteur.activatedBy?.name
+  return `Ouvert depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
 }
 
-/** La réouverture d'un outil fermé : grisée au plafond de `connectors_max` (E12-S02), avec le lien de l'hôte (îlot réservé aux administrateurs). */
-function Activation({ nom, ressource, limites }: { nom: string; ressource: string; limites: OrgLimitsView | undefined }) {
-  if (limites?.connectors && limitReached(limites.connectors)) {
-    return <LimiteAtteinte libelle="Rouvrir" nom="connectors_max" etat={limites.connectors} lien={limites.raiseUrl} />
-  }
+/** La réouverture d'un outil fermé (îlot réservé aux administrateurs) : aucun plafond, le nombre d'outils n'est pas limité. */
+function Activation({ nom, ressource }: { nom: string; ressource: string }) {
   // Réversible : sans question (N5).
   return <ActionPlateforme libelle="Rouvrir" nomAccessible={`Rouvrir ${nom}`} requete={{ methode: "POST", ressource, corps: {} }} ancre={ANCRE_DES_CONNECTEURS} />
 }
 
-type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationImpact | undefined; limites: OrgLimitsView | undefined }
+type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationImpact | undefined }
 
-function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurProps) {
+function LigneDeConnecteur({ connecteur, impact }: LigneDeConnecteurProps) {
   const nom = connecteur.label
   const ressource = `admin/connectors/${encodeURIComponent(connecteur.connector)}/activation`
-  // Fermé : la ligne garde qui l'a fermé, même inconnu. Jamais fermé, un outil se ferme, ouvert ou pas encore utilisé.
-  const ferme = connecteur.state !== "active" && connecteur.closedBy !== null
+  // Fermé : la ligne garde qui l'a fermé, même inconnu. Ouvert, adopté ou par défaut, un outil se ferme.
+  const ferme = connecteur.state !== "active"
   // `flex-wrap` : la question d'une désactivation, ou un refus, passe sous la ligne au lieu de l'écraser.
   return (
     <Row className="flex-wrap gap-3" lead={<Icon as={Plug} size="sm" />}>
@@ -164,26 +159,26 @@ function LigneDeConnecteur({ connecteur, impact, limites }: LigneDeConnecteurPro
           libelle="Fermer"
           nomAccessible={`Fermer ${nom}`}
           requete={{ methode: "DELETE", ressource }}
-          confirmation={{ question: connecteur.state === "active" ? questionDeDesactivation(nom, impact) : questionDeFermetureDAvance(nom), libelleConfirmer: "Fermer" }}
+          confirmation={{ question: questionDeDesactivation(nom, impact), libelleConfirmer: "Fermer" }}
           ancre={ANCRE_DES_CONNECTEURS}
         />
       )}
-      {ferme && <Activation nom={nom} ressource={ressource} limites={limites} />}
+      {ferme && <Activation nom={nom} ressource={ressource} />}
     </Row>
   )
 }
 
-type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: Partial<Record<string, DeactivationImpact>>; limites: OrgLimitsView | undefined }
+type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: Partial<Record<string, DeactivationImpact>> }
 
 /** « Outils de l'organisation », pour un administrateur : les outils du catalogue, qu'il ferme ou rouvre pour toute l'organisation. */
-function Connecteurs({ connecteurs, impacts, limites }: ConnecteursProps) {
+function Connecteurs({ connecteurs, impacts }: ConnecteursProps) {
   return (
     <Ilot id={ANCRE_DES_CONNECTEURS} titre="Outils de l'organisation" compte={pluriel(connecteurs.length, "outil", "outils")}>
       <div className="flex flex-col gap-3">
-        <p className="oto-caption">Un outil s&apos;ouvre au premier connecteur qu&apos;un membre ajoute. Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours ouvertes.</p>
+        <p className="oto-caption">Chaque outil est ouvert par défaut : l&apos;assistant le trouve et propose à chacun de connecter son compte. Fermer un outil le retire aussitôt pour toute l&apos;organisation. Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours ouvertes.</p>
         <RowList rules empty={<EmptyState compact title="Aucun outil dans cette version de la plateforme." />}>
           {connecteurs.map((connecteur) => (
-            <LigneDeConnecteur key={connecteur.connector} connecteur={connecteur} impact={impacts[connecteur.connector]} limites={limites} />
+            <LigneDeConnecteur key={connecteur.connector} connecteur={connecteur} impact={impacts[connecteur.connector]} />
           ))}
         </RowList>
       </div>
@@ -261,7 +256,7 @@ function Donnees(props: VueProps) {
   return (
     <div className="flex flex-col gap-6">
       <Liste {...props} />
-      {administration && <Connecteurs connecteurs={connectors} impacts={administration.impacts} limites={administration.limites} />}
+      {administration && <Connecteurs connecteurs={connectors} impacts={administration.impacts} />}
       <Detail {...props} />
     </div>
   )

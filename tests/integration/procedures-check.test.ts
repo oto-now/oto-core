@@ -339,7 +339,7 @@ describe.skipIf(!sqlConfigured)(
           expect(refusals.map((refusal) => [refusal.kind, refusal.message])).toEqual([
             [
               "function_not_active",
-              "section « Étapes », call block 1: mail.create_draft belongs to connector mail, which is not enabled for Acme Test; an administrator enables it on the dashboard",
+              "section « Étapes », call block 1: mail.create_draft belongs to connector mail, which an administrator blocked for Acme Test; an administrator reopens it on the dashboard",
             ],
           ])
         } finally {

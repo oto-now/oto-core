@@ -71,7 +71,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   /** Une session MCP de `person`, l'origine de la requête sur l'adresse de l'organisation, et son `ctx`. */
   async function session(person: Person) {
     const { db, identity } = as(person)
-    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `files-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `files-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const { code } = await mcp.openContext("Range le rapport")
     return { call: (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args }), prefix: mcp.prefix }
   }

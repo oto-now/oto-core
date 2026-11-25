@@ -42,6 +42,8 @@ function ownKeyOwnerKinds(definition: ConnectorView): Set<OwnerKind> {
  * de l'hôte. Vide : le connecteur n'a pas de formulaire (`platform` seul, servi par la clé de l'hôte).
  */
 export function formOwnerKinds(definition: ConnectorView): OwnerKind[] {
+  // Sans clé (`auth: none`) : aucun compte, le connecteur s'appelle sans.
+  if (definition.auth.kind === "none") return []
   const kinds = ownKeyOwnerKinds(definition)
   const personal = definition.auth.kind === "oauth2_user" || definition.accountIdentity !== undefined
   if (definition.modes.includes("platform") && personal) kinds.add("user")
@@ -55,6 +57,7 @@ export function formOwnerKinds(definition: ConnectorView): OwnerKind[] {
  * connecteur `platform` où chacun connecte le sien ne naît que de son consentement ou de son branchement, jamais ici.
  */
 export function admittedOwnerKinds(definition: ConnectorView): OwnerKind[] {
+  if (definition.auth.kind === "none") return []
   const kinds = ownKeyOwnerKinds(definition)
   const hostKeyOnly = definition.auth.kind !== "oauth2_user" && accountFieldNames(definition).length === 0
   if (definition.modes.includes("platform") && hostKeyOnly) ["org", "team"].forEach((kind) => kinds.add(kind as OwnerKind))

@@ -21,6 +21,7 @@ import { keepDeclaredConnector } from "./declaration"
 import type { ConnectorAccountIdentity, HostedLinkProvider } from "./definition"
 import { readHostFields } from "./host-fields"
 import { returnAddress } from "./return-address"
+import { closedConnector, isConnectorClosed } from "./activations"
 
 /** Le chemin de l'adresse de retour du branchement, sous la porte du paquet. */
 export const HOSTED_LINK_CALLBACK_PATH = "/api/platform/hosted-link/callback"
@@ -275,13 +276,14 @@ export async function hostedLinkedElsewhere(db: PlatformDb, identity: Identity, 
  * est alors l'écran de retour, `?hosted=connected&account=<libellé>` ; un identifiant à elle dont la session est morte
  * se reconnecte (`reconnect`), sinon le lien crée un compte (`create`). `return_to` : l'écran de l'hôte où revenir
  * (l'écran Connecteurs par défaut). Refus : saisie invalide, connecteur sans compte rattaché (`invalid_arguments`),
- * port ou champ de l'hôte absent (`not_enabled`), panne du tiers ou adresse qui n'est pas `https` (`upstream_error`).
+ * port ou champ de l'hôte absent, connecteur bloqué par un administrateur (`not_enabled`, `closed`), panne du tiers ou adresse qui n'est pas `https` (`upstream_error`).
  */
 export async function startHostedLink(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = hostedLinkSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const connector = hostedConnector(parsed.data.connector, identity.org)
   const name = connector.definition.name
+  if (await isConnectorClosed(db, identity, name)) throw await closedConnector(db, identity, name)
   const returnTo = parsed.data.return_to ?? CONSENT_DEFAULT_RETURN
   const owned = await inTransaction(db, "startHostedLink: my_hosted_accounts", async (sql) => {
     await sql`delete from platform.hosted_link_requests where org_id = ${identity.org.id} and expires_at < now()`

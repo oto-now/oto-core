@@ -155,15 +155,18 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       await forgetActivation(FRESH)
     })
 
-    it("should refuse the implicit activation beyond connectors_max, writing nothing", async () => {
+    it("should count no connector against a limit any more: connectors_max, still accepted from a host, is ignored (decision of 2026-11-25)", async () => {
       const [{ active }] = await fx.admin<{ active: number }[]>`
         select count(*)::int as active from platform.connector_activations where org_id = ${o.org.id} and state = 'active'`
       registerOrgLimits({ read: ({ id }) => (id === o.org.id ? { connectors_max: active } : null) })
-      const before = await accountCount()
-      const refused = await refusal(personal("lea", `Perso ${hex(3)}`, SPARE))
-      expect(said(refused)).toEqual({ code: "forbidden", details: { reason: "limit", limit: "connectors_max", max: active } })
-      expect(refused.message).toBe(`Acme Test is limited to ${active} active ${active > 1 ? "connectors" : "connector"}. Ask the administrators of Acme Test (Ada Martin) about it.`)
-      expect([await activationOf(SPARE), await accountCount()]).toEqual([null, before])
+      const created = await personal("lea", `Perso ${hex(3)}`, SPARE)
+      try {
+        // Le premier compte adopte le connecteur, au-delà de l'ancien plafond, sans refus.
+        expect(await activationOf(SPARE)).toEqual({ state: "active", activated_by: o.people.lea.id })
+      } finally {
+        await fx.admin`delete from platform.accounts where id = ${created.id}`
+        await forgetActivation(SPARE)
+      }
     })
 
     it("should admit only the owners the modes of the declaration name, and say them to the form", async () => {

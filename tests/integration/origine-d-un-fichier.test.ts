@@ -75,7 +75,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
 
   /** Une conversation MCP de `who` : son code, et `read`. */
   async function conversation(who: Session) {
-    const mcp = await connectDeps({ db: who.db, org: who.identity.org, caller: { kind: "member", identity: who.identity }, userAgent: `origine-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db: who.db, org: who.identity.org, caller: { kind: "member", identity: who.identity }, userAgent: `origine-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const { code } = await mcp.openContext("Range l'enregistrement")
     return {
       code,
@@ -94,7 +94,7 @@ describe.skipIf(!sqlConfigured || pending)(sqlConfigured && !pending ? SUITE : `
   /** Une page de `who`, publiée, et son chemin. */
   async function page(who: Session, ctx: string): Promise<string> {
     const path = `ventes/t_origine_${hex(3)}`
-    const mcp = await connectDeps({ db: who.db, org: who.identity.org, caller: { kind: "member", identity: who.identity }, userAgent: `page-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db: who.db, org: who.identity.org, caller: { kind: "member", identity: who.identity }, userAgent: `page-${hex(4)}`, journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const created = await mcp.call("write", { ctx, path, title: "Durand", summary: "Client.", ops: [{ op: "add_section", section: "Appels", text: "Intro." }] })
     expect(created.isError, created.text).toBe(false)
     return path

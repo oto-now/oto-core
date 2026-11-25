@@ -134,6 +134,7 @@ describe("a connector with several accesses: declaration", () => {
       withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "oauth2_jwt_bearer", tokenUrl: SERVICE_ACCOUNT_TOKEN_URL, key: "service_account_key", scopes: ["contacts.read"] } })),
       withAccess(SERVICE, (access) => ({ ...access, auth: { ...access.auth, accessLevels: { read: { scopes: ["contacts.read"] } } } })),
       withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "none" } })),
+      withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "none" }, credential: [] })),
     ].map((definition) => verdict(definition))
     expect(verdicts).toEqual([
       'Access service_account of crm: crm: mode "byo_team" is unknown: platform, byo_user, byo_org.',
@@ -141,7 +142,9 @@ describe("a connector with several accesses: declaration", () => {
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: key must name the one credential field, secret (the JSON key file).",
       "Access service_account of crm: crm: access levels (accessLevels) go in every access or in none: sign_in declares them, auth oauth2_jwt_bearer declares none.",
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: accessLevels needs the level full.",
-      "Access service_account of crm: crm: auth none is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user and oauth2_jwt_bearer.",
+      // Sans clé, un accès s'appelle sans compte : ni champ du secret, ni place parmi plusieurs accès.
+      "Access service_account of crm: crm: auth none takes no credential: it is called without an account.",
+      "crm: auth none is called without an account: it cannot be one of several accesses.",
     ])
   })
 

@@ -12,7 +12,6 @@ import {
   listMembers,
   listOrgAccounts,
   listTeams,
-  orgLimitsView,
   type Identity,
   type PlatformDb,
 } from "@otomata_tech/oto_platform/server"
@@ -52,14 +51,11 @@ async function partagesDe(db: PlatformDb, identity: Identity, accounts: AccountV
   return Object.fromEntries(lus)
 }
 
-/** Ce que seul un administrateur lit : l'impact de chaque désactivation possible, et les capacités (E12-S02), dont la panne ne grise rien. */
+/** Ce que seul un administrateur lit : l'impact de la fermeture de chaque connecteur ouvert (ouvert par défaut compris). */
 async function administration(db: PlatformDb, identity: Identity, connectors: DonneesDesConnecteurs["connectors"]): Promise<DonneesDesConnecteurs["administration"]> {
-  const actifs = connectors.filter((connecteur) => connecteur.state === "active")
-  const [impacts, limites] = await Promise.all([
-    Promise.all(actifs.map(async ({ connector }) => [connector, await deactivationImpact(db, identity, connector)] as const)),
-    orgLimitsView(db, identity).catch(() => undefined),
-  ])
-  return { impacts: Object.fromEntries(impacts), limites }
+  const ouverts = connectors.filter((connecteur) => connecteur.state === "active")
+  const impacts = await Promise.all(ouverts.map(async ({ connector }) => [connector, await deactivationImpact(db, identity, connector)] as const))
+  return { impacts: Object.fromEntries(impacts) }
 }
 
 async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {

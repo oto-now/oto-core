@@ -27,7 +27,17 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 - A connector that opens by several accesses names the others in a refusal without account; its link lets the user choose, each access with its own gesture.
 
+- Every connector the host declares is open by default: `find` finds it, `read` serves it, and a call without an account returns `no_account` with the link to connect one.
+- An administrator still blocks a connector: it then leaves `find`, `read` and `call` (`connector_off`) at once; an open-data connector (no key) runs without any account.
+
 ### Hosts
+- Server: every declared connector is open by default; a `platform.connector_activations` row `inactive` blocks it, and only an administrator sets or lifts it (`deactivateConnector`, `activateConnector`). Existing rows keep their meaning; no data migration.
+- Server: `OrgConnector.state` is `active` for an open connector (adopted, or by default with `activatedAt` and `activatedBy` null) and `inactive` for a blocked one only.
+- Server: `connectors_max` is no longer read nor checked: no connector is refused for a limit. The key stays in `orgLimitsSchema`, accepted and ignored, and `OrgLimitsView.connectors` stays, always `null`: both unused, kept for hosts that still pass or read them.
+- Server: an `auth: none` connector (open data, as the `connectors` library describes it) is declared and runs without account nor secret: no credential field, setting or account identity, never one of several accesses; no account is created for it.
+- UI: `DonneesDesConnecteurs.administration.limites` is no longer read (unused, kept); the « Outils de l'organisation » island says « Ouvert » for a connector never touched and asks the usual closing question; the host reads `deactivationImpact` for each open connector.
+- MCP: `admin_connector catalogue` says `open by default` for a connector never touched; `activate` adopts it.
+- MCP: `tools/list` examples and the connector lines of `context` cite only adopted connectors (an `active` row, or an account), never the whole open catalogue; `context` proposes at most three of its functions, chosen by the request.
 - Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
 - Install: `@otomata_tech/connectors` becomes a peer dependency of the package (`*`): the host installs it itself, pinned at v1.249.0 at least (`github:oto-now/connectors#92aa6bb3…&path:/ts`, TypeScript sources; pnpm refuses a git dependency below a dependency), and transpiles it with the package (`transpilePackages`).
 - Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.

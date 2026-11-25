@@ -1,10 +1,13 @@
-// Activation des connecteurs par organisation (H81, FR-ADMIN-02) : lister, activer, désactiver, et
-// l'ensemble des connecteurs actifs, lu à chaque appel, sans cache (effet immédiat, N9). Sans ce
-// module, rien n'ouvre un connecteur chez un client : ses fonctions n'existeraient pour personne.
+// Ouverture des connecteurs par organisation (H81, FR-ADMIN-02) : lister, bloquer, débloquer, et l'ensemble des
+// connecteurs ouverts, lu à chaque appel, sans cache (effet immédiat, N9). Tout connecteur déclaré est ouvert par défaut :
+// sans ligne, il se trouve et s'appelle ; une ligne `inactive`, posée et levée par un administrateur seul, le bloque ;
+// une ligne `active` dit qu'il a été adopté (débloqué par un administrateur, ou ouvert par un premier compte), ce que
+// lisent les exemples de `tools/list` et les lignes connecteurs de `context`.
 // Face SQL (E01-S10, lot d1) : chaque opération dans une transaction `db.tx`, sous l'appelant ; les
 // lectures d'`access.ts` et de l'annuaire se font hors d'elle.
 //
-// Repris d'Oto : rien. Retiré : l'activation « prochaine session » et les kits (architecture § 10).
+// Repris d'Oto : rien. Retiré : l'activation « prochaine session », les kits (architecture § 10) et le plafond
+// `connectors_max` (connecteurs ouverts par défaut).
 import { connectorRefSchema, type DeactivationImpact, type OrgConnector } from "../../schemas"
 import { ACCESS_LEVELS, accountLevels, administratorNames, administrators, isOrgAdmin, nodeLevels, type AccessLevel, type AccountLevel } from "../access"
 import type { CatalogFunction } from "../catalog/define"
@@ -15,7 +18,6 @@ import { memberDirectory, type DirectoryEntry } from "../directory"
 import { boundedList, inTransaction, invalidInput, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
-import { orgLimits, requireUnderLimit, type LimitScope } from "../limits"
 import type { Tx } from "../sql"
 import { keepDeclaredConnector } from "./declaration"
 import { creatableModes } from "./modes"
@@ -51,12 +53,42 @@ export function requireActivable(connector: string, functions: readonly CatalogF
   throw new PlatformError("not_found", `Unknown connector ${connector}. Connectors you can activate: ${names}.`)
 }
 
-/** Connecteurs actifs de l'organisation, relus à chaque appel : l'activation vaut tout de suite (N9). */
+/** Les connecteurs qu'un administrateur a bloqués dans l'organisation (une ligne `inactive`), relus à chaque appel (N9). */
+export async function loadClosedConnectors(db: PlatformDb, orgId: string): Promise<Set<string>> {
+  const rows = await inTransaction(
+    db,
+    "loadClosedConnectors: connector_activations",
+    (sql) => sql<{ connector: string }[]>`select connector from platform.connector_activations where org_id = ${orgId} and state = 'inactive'`,
+  )
+  return new Set(rows.map((row) => row.connector))
+}
+
+/**
+ * Les connecteurs ouverts de l'organisation, relus à chaque appel (N9) : chaque connecteur activable déclaré, sauf ceux
+ * qu'un administrateur a bloqués. Ce que voient `find`, `read`, `call`, les pistes de `context` et le contrôle des
+ * procédures (`isActive`).
+ */
+export async function loadOpenConnectors(db: PlatformDb, orgId: string): Promise<Set<string>> {
+  const closed = await loadClosedConnectors(db, orgId)
+  return new Set([...activableConnectors(catalogFunctions()).keys()].filter((connector) => !closed.has(connector)))
+}
+
+/**
+ * Les connecteurs adoptés de l'organisation, relus à chaque appel (N9) : débloqués par un administrateur ou ouverts par
+ * un premier compte (une ligne `active`), ou qui ont un compte que l'appelant voit (un consentement, un branchement),
+ * jamais un connecteur bloqué. Seuls eux sont cités par les exemples de `tools/list` et ont leur ligne dans `context` :
+ * tout le catalogue ouvert n'y entre jamais.
+ */
 export async function loadActiveConnectors(db: PlatformDb, orgId: string): Promise<Set<string>> {
   const rows = await inTransaction(
     db,
-    "loadActiveConnectors: connector_activations",
-    (sql) => sql<{ connector: string }[]>`select connector from platform.connector_activations where org_id = ${orgId} and state = 'active'`,
+    "loadActiveConnectors: connector_activations, accounts",
+    (sql) => sql<{ connector: string }[]>`
+      select connector from platform.connector_activations where org_id = ${orgId} and state = 'active'
+      union
+      select a.connector from platform.accounts a
+       where a.org_id = ${orgId}
+         and not exists (select 1 from platform.connector_activations c where c.org_id = a.org_id and c.connector = a.connector and c.state = 'inactive')`,
   )
   return new Set(rows.map((row) => row.connector))
 }
@@ -82,6 +114,7 @@ function connectorView(
   directory: DirectoryEntry[],
 ): OrgConnector {
   const active = row?.state === "active"
+  const closed = row !== null && !active
   const person = (userId: string | null) => (userId ? { userId, name: directory.find((entry) => entry.userId === userId)?.name ?? null } : null)
   const closer = (userId: string | null): NonNullable<OrgConnector["closedBy"]> => {
     const entry = userId ? directory.find((candidate) => candidate.userId === userId) : undefined
@@ -93,17 +126,18 @@ function connectorView(
     label: definition?.label ?? connector,
     ...(definition?.description !== undefined ? { description: definition.description } : {}),
     ...(definition?.logoDomain !== undefined ? { logoDomain: definition.logoDomain } : {}),
-    state: active ? "active" : "inactive",
+    // Ouvert par défaut : `inactive` ne dit qu'un connecteur bloqué ; `activatedAt` et `activatedBy`, une adoption.
+    state: closed ? "inactive" : "active",
     activatedAt: active ? row.updated_at : null,
     activatedBy: active ? person(row.activated_by) : null,
     functions: functions.map((fn) => ({ name: fn.name, class: fn.class })).sort((a, b) => a.name.localeCompare(b.name)),
-    closedBy: row !== null && !active ? closer(row.closed_by) : null,
+    closedBy: closed ? closer(row.closed_by) : null,
     accountModes: creatableModes(connector),
   }
 }
 
 /**
- * Chaque connecteur activable du catalogue avec son état (`inactive` sans ligne), qui l'a activé et
+ * Chaque connecteur activable du catalogue avec son état (ouvert sans ligne, `inactive` bloqué), qui l'a adopté et
  * quand, et ses fonctions (AC3). Catalogue sans connecteur activable : liste vide, sans lecture.
  */
 export async function listConnectorsForOrg(db: PlatformDb, identity: Identity): Promise<OrgConnector[]> {
@@ -142,19 +176,17 @@ async function checkedConnector(db: PlatformDb, identity: Identity, input: unkno
 }
 
 /**
- * Active un connecteur (administrateur). Déjà actif : rien n'est écrit, la date d'activation reste ;
- * sinon la ligne est créée ou repassée à `active`, au nom de l'appelant (AC1).
+ * Débloque ou adopte un connecteur (administrateur). Déjà actif : rien n'est écrit, la date d'activation reste ;
+ * sinon la ligne est créée ou repassée à `active`, au nom de l'appelant (AC1). Aucun plafond : le nombre de connecteurs
+ * d'une organisation n'est plus limité.
  */
 export async function activateConnector(db: PlatformDb, identity: Identity, input: unknown): Promise<OrgConnector> {
   const { connector, functions } = await checkedConnector(db, identity, input)
   const orgId = identity.org.id
-  const limits = await orgLimits(identity.org)
-  // La ligne lue, puis écrite si elle n'est pas active, dans la même transaction ; un connecteur déjà actif ne compte
-  // pas contre `connectors_max` (E12-S02, AC-5).
+  // La ligne lue, puis écrite si elle n'est pas active, dans la même transaction.
   const row = await inTransaction(db, "activateConnector: connector_activations", async (sql) => {
     const current = await activationRow(sql, orgId, connector)
     if (current?.state === "active") return current
-    await requireUnderLimit(sql, { db, identity, limits }, "connectors_max")
     await keepDeclaredConnector(sql, connector)
     const [written] = await sql<ActivationRow[]>`
       insert into platform.connector_activations (org_id, connector, state, activated_by)
@@ -167,9 +199,9 @@ export async function activateConnector(db: PlatformDb, identity: Identity, inpu
 }
 
 /**
- * Ferme un connecteur (administrateur) : ses fonctions cessent aussitôt de répondre ; ses comptes restent, ils
- * reviennent à la réactivation (N13). Jamais activé, il est fermé d'avance : une ligne inactive, que l'ajout d'un compte
- * ne rouvre pas (le premier compte n'active plus le connecteur). Déjà fermé : rien à écrire. La ligne fermée nomme qui
+ * Bloque un connecteur (administrateur) : ses fonctions cessent aussitôt d'être trouvées, lues et appelées ; ses comptes
+ * restent, ils reviennent au déblocage (N13). Jamais touché (ouvert par défaut), il se bloque de même : une ligne
+ * inactive, que l'ajout d'un compte ne rouvre pas. Déjà fermé : rien à écrire. La ligne fermée nomme qui
  * l'a fermée (`closed_by`, lu en `closedBy`) ; `activated_by` reste qui l'avait activé, ou, fermé d'avance, l'appelant
  * (la policy d'insertion l'exige). Sous le rôle du serveur, qui tient la liste des connecteurs
  * (`keepDeclaredConnector`), comme `activateConnector`.
@@ -208,17 +240,15 @@ export async function deactivateConnector(db: PlatformDb, identity: Identity, in
 }
 
 /**
- * Ouvre le connecteur d'un compte qui s'ajoute ou se réactive, dans la transaction qui l'écrit (activation implicite,
- * `connecteurs-et-comptes.md` § Écran Connecteurs) : actif, rien ; jamais activé, activé au nom de l'appelant, compté
- * contre `connectors_max` comme `activateConnector` ; fermé par un administrateur (une ligne `inactive`), `closed` :
- * rien n'est écrit, et l'appelant refuse par `closedConnector`, hors de la transaction.
+ * Adopte le connecteur d'un compte qui s'ajoute ou se réactive, dans la transaction qui l'écrit
+ * (`connecteurs-et-comptes.md` § Écran Connecteurs) : actif, rien ; jamais touché, une ligne `active` au nom de
+ * l'appelant, sans plafond ; bloqué par un administrateur (une ligne `inactive`), `closed` : rien n'est écrit, et
+ * l'appelant refuse par `closedConnector`, hors de la transaction.
  */
-export async function openConnectorForAccount(sql: Tx, scope: LimitScope, connector: string): Promise<"open" | "closed"> {
-  const { identity } = scope
+export async function openConnectorForAccount(sql: Tx, identity: Identity, connector: string): Promise<"open" | "closed"> {
   const current = await activationRow(sql, identity.org.id, connector)
   if (current?.state === "active") return "open"
   if (current) return "closed"
-  await requireUnderLimit(sql, scope, "connectors_max")
   await keepDeclaredConnector(sql, connector)
   await sql`
     insert into platform.connector_activations (org_id, connector, state, activated_by)

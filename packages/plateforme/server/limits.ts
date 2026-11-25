@@ -75,20 +75,19 @@ export async function orgLimits(org: { id: string; slug: string }): Promise<OrgL
 }
 
 /** Les limites comptées par un service. */
-export type CountedLimit = "members_max" | "teams_max" | "connectors_max"
+export type CountedLimit = "members_max" | "teams_max"
 
 type Counts = Record<CountedLimit, number>
 
-/** Ce qui est pris : membres et invitations en attente, équipes, connecteurs actifs ; lu sous la session. */
+/** Ce qui est pris : membres et invitations en attente, équipes ; lu sous la session. */
 async function limitCounts(sql: Tx, orgId: string): Promise<Counts> {
-  const [row] = await sql<{ members: number; teams: number; connectors: number }[]>`
+  const [row] = await sql<{ members: number; teams: number }[]>`
     select (select count(*)::int from platform.members m where m.org_id = ${orgId})
          + (select count(*)::int from platform.invitations i
              where i.org_id = ${orgId} and i.accepted_at is null and i.declined_at is null
                and i.revoked_at is null and (i.expires_at is null or i.expires_at > now())) as members,
-           (select count(*)::int from platform.teams t where t.org_id = ${orgId}) as teams,
-           (select count(*)::int from platform.connector_activations a where a.org_id = ${orgId} and a.state = 'active') as connectors`
-  return { members_max: row.members, teams_max: row.teams, connectors_max: row.connectors }
+           (select count(*)::int from platform.teams t where t.org_id = ${orgId}) as teams`
+  return { members_max: row.members, teams_max: row.teams }
 }
 
 /** Ce que le service a lu avant sa transaction : son client, l'identité et les capacités de l'hôte. */
@@ -99,8 +98,7 @@ function limitText(orgName: string, name: CountedLimit, max: number): string {
   if (name === "teams_max" && max === 0) return `Creating teams is not open for ${orgName}.`
   const plural = max > 1
   if (name === "members_max") return `${orgName} is limited to ${max} ${plural ? "members" : "member"}, pending invitations included.`
-  if (name === "teams_max") return `${orgName} is limited to ${max} ${plural ? "teams" : "team"}.`
-  return `${orgName} is limited to ${max} active ${plural ? "connectors" : "connector"}.`
+  return `${orgName} is limited to ${max} ${plural ? "teams" : "team"}.`
 }
 
 /**
@@ -216,14 +214,15 @@ export async function orgLimitsView(db: PlatformDb, identity: Identity): Promise
   const raiseUrl = source?.raiseUrl ?? null
   if (passesLimits(identity)) return { members: null, teams: null, connectors: null, raiseUrl }
   const limits = await orgLimits(identity.org)
-  const posed = (["members_max", "teams_max", "connectors_max"] as const).some((name) => limits[name] !== undefined)
+  const posed = (["members_max", "teams_max"] as const).some((name) => limits[name] !== undefined)
   if (!posed) return { members: null, teams: null, connectors: null, raiseUrl }
   const counts = await inTransaction(db, "orgLimitsView: counts", (sql) => limitCounts(sql, identity.org.id))
   const state = (name: CountedLimit): LimitState | null => {
     const max = limits[name]
     return max === undefined ? null : { max, used: counts[name] }
   }
-  return { members: state("members_max"), teams: state("teams_max"), connectors: state("connectors_max"), raiseUrl }
+  // `connectors` reste dans la vue pour les hôtes, toujours `null` : le nombre de connecteurs n'est plus limité.
+  return { members: state("members_max"), teams: state("teams_max"), connectors: null, raiseUrl }
 }
 
 /** Ce qu'une organisation compte, lu sans session : ses membres et ses invitations en attente. */

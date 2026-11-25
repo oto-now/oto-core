@@ -9,7 +9,7 @@
 // la clé refusée par le tiers, avec la marque (`etat-des-comptes.test.ts`).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
-import { activateConnector, deactivateConnector, loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { activateConnector, deactivateConnector, loadActiveConnectors, loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -49,7 +49,7 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
 
   const call = (who: ReferencePerson, input: CallInput) => {
     const { db, identity } = as(who)
-    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(db, o.org.id) }, input)
+    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(db, o.org.id) }, input)
   }
   const connect = (who: ReferencePerson, args: Record<string, unknown>) => call(who, { function: "connector.connect", arguments: { connector: LIVE, ...args } })
   const step = (who: ReferencePerson, query: Record<string, string>) => connectionStep(as(who).db, as(who).identity, { connector: LIVE, ...query }, { origin: ORIGIN })

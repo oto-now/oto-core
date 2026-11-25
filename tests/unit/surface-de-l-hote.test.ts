@@ -35,7 +35,7 @@ const untouchable = new Proxy(
   },
 ) as unknown as PlatformDb
 
-const deps = (): McpDeps => ({ db: untouchable, org: ORG, caller: { kind: "member", identity: IDENTITY }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
+const deps = (): McpDeps => ({ db: untouchable, org: ORG, caller: { kind: "member", identity: IDENTITY }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
 
 // Dans l'ordre du catalogue, que la déclaration ne change pas.
 const KEPT = ["table.schema", "table.rows", "node.access"]
