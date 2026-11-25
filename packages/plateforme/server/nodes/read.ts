@@ -7,7 +7,8 @@
 import { FILE_ADDRESS, type BlockView, type CommentThreadView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
 import { contractNames, getContract, renderContract } from "../catalog/contracts"
-import { assistantFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
+import { activeOrgFunctions, orgAssistantFunctions } from "../catalog/org-catalog"
+import { catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
 import { blockRefs, bodyWithComments, commentsLine, waitingCount } from "../comments/served"
 import { openThreads } from "../comments/threads"
 import { loadActiveConnectors } from "../connectors/activations"
@@ -43,7 +44,7 @@ import { familyOf, kindOf, memberNames, ownerOf, ownerTexts, ownerView, statusOf
  */
 async function readFunction(db: PlatformDb, identity: Identity, name: string): Promise<ToolOutput> {
   const prefix = identity.org.prefix
-  const fn = findFunction(assistantFunctions(), name)
+  const fn = findFunction(await orgAssistantFunctions(db, identity), name)
   const contract = fn ? null : getContract(name)
   if (contract) return { ...renderContract(contract, prefix), nextActions: [`${prefix}_write`], target: contract.name }
   if (!fn || !isActive(fn, await loadActiveConnectors(db, identity.org.id))) {
@@ -162,10 +163,7 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
     const { path } = target
     if (looksLikeFunction(path)) return readFunction(db, identity, path)
     if (path === JOURNAL_PATH) return readJournal(db, identity, input)
-    if (path === FUNCTIONS_PATH) {
-      const active = await loadActiveConnectors(db, identity.org.id)
-      return functionCatalog(assistantFunctions().filter((fn) => isActive(fn, active)), contractNames(), prefix)
-    }
+    if (path === FUNCTIONS_PATH) return functionCatalog(await activeOrgFunctions(db, identity), contractNames(), prefix)
     // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
     if (path === HELP_PATH) return helpGuide(input.section, prefix)
     checkNodePath(path)

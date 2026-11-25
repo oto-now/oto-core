@@ -57,6 +57,7 @@
   "peerDependencies": {
     "@hookform/resolvers": "^5",
     "@modelcontextprotocol/ext-apps": "^1.7",
+    "@otomata_tech/connectors": "*",
     "@phosphor-icons/react": "^2",
     "@supabase/supabase-js": "^2",
     "@tailwindcss/postcss": "^4",
@@ -92,6 +93,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@otomata_tech/connectors": "github:oto-now/connectors#47c4bdcb0273f8fc7fbb2433adb5ad2167548784&path:/ts",
     "@tailwindcss/postcss": "4.2.1",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.2.1",

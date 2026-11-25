@@ -259,7 +259,8 @@ NEVER_EXPORTED.push('hosted_link_requests')
 // personnes par leurs anciens identifiants. Les traces des fichiers en transit effacés (`20261021190000`) : 30 jours, lues
 // par leur auteur ; un fichier en transit reste hors de l'export, sa trace aussi.
 // Les travaux en tâche de fond (`20261022230000`), chiffrés sous la clé de la source : un travail se relance. L'état de l'email groupé des commentaires (`20261112090000`) : l'hôte cible a son relais et sa tâche horaire, l'organisation importée y repart sans envoi passé.
-NEVER_EXPORTED.push('account_share_events', 'erased_files', 'jobs', 'comment_mails', 'comment_mail_items')
+// L'API de l'hôte (`host_apis`, fonctions d'un hôte) : un réglage de l'équipe plateforme, refait sur l'hôte cible par l'administration.
+NEVER_EXPORTED.push('account_share_events', 'erased_files', 'jobs', 'comment_mails', 'comment_mail_items', 'host_apis')
 
 /** @param {string} name */
 function tableSpec(name) {

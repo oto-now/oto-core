@@ -17,6 +17,16 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+### Assistants
+- An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
+
+### Hosts
+- Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.
+- Install: `@otomata_tech/connectors` becomes a peer dependency of the package (`*`): the host installs it itself, pinned at v1.246.0 at least (`github:oto-now/connectors#47c4bdcb…&path:/ts`, TypeScript sources; pnpm refuses a git dependency below a dependency), and transpiles it with the package (`transpilePackages`).
+- Server: `PLATFORM_OIDC_EXCHANGE_CLIENT_ID` and `PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET` (optional, OIDC mode): the M2M client of oto at the issuer for the token exchange (RFC 8693, Logto 1.43+, « Allow token exchange »); `admin_cell health` lists them as optional.
+- MCP: `admin_connector host_api` and `refresh_host_api` (two steps) show, set and refresh the host API of an organisation; a refused document keeps the previous version served.
+- Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
+
 ## 1.10.0 — 2026-11-25
 
 ### Assistants

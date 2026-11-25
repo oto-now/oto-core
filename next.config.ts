@@ -3,7 +3,7 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   // Configuration minimale — personnaliser par projet
   // Le paquet est consommé en source TypeScript depuis le workspace : Next doit le transpiler.
-  transpilePackages: ["@otomata_tech/oto_platform"],
+  transpilePackages: ["@otomata_tech/oto_platform", "@otomata_tech/connectors"],
   // `optimizePackageImports` : Next réécrit chaque import du barrel `@otomata_tech/oto_platform/ui` vers le
   // module de l'export nommé. Sans lui, un import du barrel par un fichier serveur (layout, page) met le code
   // client de toute la face (éditeur, zod) dans la route. Le sous-chemin exact : le nom du paquet seul ne

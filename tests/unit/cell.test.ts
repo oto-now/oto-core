@@ -61,7 +61,7 @@ describe("envReport (AC10)", () => {
     expect(envReport({ ...WITNESSES, NEXT_PUBLIC_SITE_URL: "   " }).map((entry) => entry.present)).toEqual([true, true, false])
   })
 
-  it("should check the issuer, the audience, the SMTP relay and the sender on an OIDC host, never the Supabase variables (M50)", () => {
+  it("should check the issuer, the audience, the SMTP relay and the sender on an OIDC host, never the Supabase variables (M50), and report the exchange client without requiring it", () => {
     const env = { PLATFORM_OIDC_ISSUER: "https://issuer.example.test/oidc", PLATFORM_OIDC_AUDIENCE: "valeur-temoin-4", PLATFORM_SMTP_URL: " ", NEXT_PUBLIC_SITE_URL: "valeur-temoin-3" }
     expect(envReport(env)).toEqual([
       { name: "PLATFORM_OIDC_ISSUER", present: true },
@@ -69,6 +69,8 @@ describe("envReport (AC10)", () => {
       { name: "PLATFORM_SMTP_URL", present: false },
       { name: "PLATFORM_MAIL_FROM", present: false },
       { name: "NEXT_PUBLIC_SITE_URL", present: true },
+      { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_ID", present: false, optional: true },
+      { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET", present: false, optional: true },
     ])
   })
 })
