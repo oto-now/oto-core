@@ -63,7 +63,7 @@ function sourceFailure(slug: string, what: string): PlatformError {
 /** L'avertissement d'une clé dépréciée, nommée : sans effet aujourd'hui, refusée demain, jamais ignorée en silence. */
 export const CONNECTORS_MAX_DEPRECATED = "connectors_max has no effect any more; the key will be refused at the next major version"
 
-/** Les organisations dont les capacités chargées posent `connectors_max`, depuis le démarrage (`admin_cell health`). */
+/** Les organisations déjà averties dans ce processus : le journal ne répète pas l'avertissement à chaque chargement. */
 const connectorsMaxSetFor = new Set<string>()
 
 /** Avertit au chargement des capacités qui posent `connectors_max`, une fois par organisation et par processus. */
@@ -73,10 +73,32 @@ function warnDeprecated(slug: string, limits: OrgLimits): void {
   console.warn(`[platform] limits: ${CONNECTORS_MAX_DEPRECATED} (set for ${slug}).`)
 }
 
-/** Les avertissements des capacités chargées depuis le démarrage : une ligne par clé dépréciée posée, avec ses organisations. */
-export function deprecatedLimitWarnings(): string[] {
-  if (connectorsMaxSetFor.size === 0) return []
-  return [`${CONNECTORS_MAX_DEPRECATED} (set for ${[...connectorsMaxSetFor].sort().join(", ")}).`]
+/**
+ * Les avertissements des capacités de l'hôte, relus à la source pour chaque organisation nommée, jamais pris d'un état
+ * du processus : un redémarrage ne les efface pas. Une ligne par clé dépréciée posée, avec ses organisations ; une
+ * source qui lève ou rend des capacités invalides est dite, jamais tue. Sans source : aucun.
+ */
+export async function deprecatedLimitWarnings(orgs: readonly { id: string; slug: string }[]): Promise<string[]> {
+  const read = source?.read
+  if (!read) return []
+  const outcomes = await Promise.all(
+    orgs.map(async (org) => {
+      try {
+        const parsed = orgLimitsSchema.safeParse((await read({ id: org.id, slug: org.slug })) ?? {})
+        if (!parsed.success) return { slug: org.slug, outcome: "unreadable" as const }
+        return { slug: org.slug, outcome: parsed.data.connectors_max === undefined ? ("clear" as const) : ("set" as const) }
+      } catch {
+        return { slug: org.slug, outcome: "unreadable" as const }
+      }
+    }),
+  )
+  const of = (outcome: string) => outcomes.filter((entry) => entry.outcome === outcome).map((entry) => entry.slug).sort().join(", ")
+  const set = of("set")
+  const unreadable = of("unreadable")
+  return [
+    ...(set ? [`${CONNECTORS_MAX_DEPRECATED} (set for ${set}).`] : []),
+    ...(unreadable ? [`the host's limits could not be read for ${unreadable}: connectors_max not checked there.`] : []),
+  ]
 }
 
 /** Les capacités de l'organisation, lues chez l'hôte et validées ; `{}` sans source. */

@@ -68,17 +68,24 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "cellStatus on a real database" 
     expect(Object.values(WITNESSES).filter((witness) => text.includes(witness))).toEqual([])
   })
 
-  it("should name connectors_max, deprecated, once the host's limits set it, without touching the health (decision of 2026-11-25)", async () => {
+  it("should name connectors_max, deprecated, from the host's limits read again at each health, without touching the health (decision of 2026-11-25)", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      registerOrgLimits({ read: ({ slug }) => (slug === ref.org.slug ? { connectors_max: 3 } : {}) })
-      // Chargées deux fois : un seul avertissement, qui nomme la clé et l'organisation.
-      await orgLimits(ref.org)
-      await orgLimits(ref.org)
       const said = `connectors_max has no effect any more; the key will be refused at the next major version (set for ${ref.org.slug}).`
-      expect(warn.mock.calls).toEqual([[`[platform] limits: ${said}`]])
+      registerOrgLimits({ read: ({ slug }) => (slug === ref.org.slug ? { connectors_max: 3 } : {}) })
+      // Aucune capacité chargée dans ce processus (un redémarrage) : la santé relit la source et nomme la clé quand même.
       const status = await cellStatus(clientOf("t"), WITNESSES)
       expect([status.health.warnings, status.health.ok]).toEqual([[said], true])
+      // Au chargement des capacités : un seul avertissement au journal, quel que soit le nombre de chargements.
+      await orgLimits(ref.org)
+      await orgLimits(ref.org)
+      expect(warn.mock.calls).toEqual([[`[platform] limits: ${said}`]])
+      // Retirée de la source : la santé ne la dit plus, même dans le processus qui l'a vue.
+      registerOrgLimits({ read: () => ({}) })
+      expect((await cellStatus(clientOf("t"), WITNESSES)).health.warnings).toEqual([])
+      // Une source qui lève est dite, jamais tue.
+      registerOrgLimits({ read: ({ slug }) => { if (slug === ref.org.slug) throw new Error("down"); return {} } })
+      expect((await cellStatus(clientOf("t"), WITNESSES)).health.warnings).toEqual([`the host's limits could not be read for ${ref.org.slug}: connectors_max not checked there.`])
     } finally {
       registerOrgLimits(null)
       warn.mockRestore()

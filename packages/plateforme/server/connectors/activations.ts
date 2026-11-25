@@ -19,7 +19,7 @@ import { boundedList, inTransaction, invalidInput, PlatformError } from "../erro
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
-import { barrierIn, paidByHostKey, type ConnectorBarrier } from "./adoption"
+import { barrierIn, lockActivation, paidByHostKey, type ConnectorBarrier } from "./adoption"
 import { keepDeclaredConnector } from "./declaration"
 import { creatableModes } from "./modes"
 
@@ -183,21 +183,33 @@ async function checkedConnector(db: PlatformDb, identity: Identity, input: unkno
  * d'une organisation n'est plus limité.
  */
 export async function activateConnector(db: PlatformDb, identity: Identity, input: unknown): Promise<OrgConnector> {
+  return (await activateConnectorGesture(db, identity, input)).connector
+}
+
+/**
+ * Ce qu'a fait une activation : adopter un connecteur jamais touché (aucune ligne), débloquer un connecteur bloqué (une
+ * ligne `inactive`), ou rien (déjà actif). Le journal de la route les distingue.
+ */
+export type ActivationGesture = "adopted" | "unblocked" | "unchanged"
+
+/** `activateConnector`, avec ce qu'il a fait (`ActivationGesture`), décidé sur la ligne lue sous le verrou exclusif. */
+export async function activateConnectorGesture(db: PlatformDb, identity: Identity, input: unknown): Promise<{ connector: OrgConnector; gesture: ActivationGesture }> {
   const { connector, functions } = await checkedConnector(db, identity, input)
   const orgId = identity.org.id
-  // La ligne lue, puis écrite si elle n'est pas active, dans la même transaction.
-  const row = await inTransaction(db, "activateConnector: connector_activations", async (sql) => {
+  // La ligne lue, puis écrite si elle n'est pas active, dans la même transaction, sous le verrou de l'activation.
+  const { row, gesture } = await inTransaction(db, "activateConnector: connector_activations", async (sql) => {
+    await lockActivation(sql, orgId, connector, "exclusive")
     const current = await activationRow(sql, orgId, connector)
-    if (current?.state === "active") return current
+    if (current?.state === "active") return { row: current, gesture: "unchanged" as const }
     await keepDeclaredConnector(sql, connector)
     const [written] = await sql<ActivationRow[]>`
       insert into platform.connector_activations (org_id, connector, state, activated_by)
       values (${orgId}, ${connector}, 'active', ${identity.user.id})
       on conflict (org_id, connector) do update set state = excluded.state, activated_by = excluded.activated_by, closed_by = null
       returning connector, state, activated_by, closed_by, to_json(updated_at) as updated_at`
-    return written
+    return { row: written, gesture: current ? ("unblocked" as const) : ("adopted" as const) }
   }, "server")
-  return connectorView(connector, functions, row, await memberDirectory(db, orgId))
+  return { connector: connectorView(connector, functions, row, await memberDirectory(db, orgId)), gesture }
 }
 
 /**
@@ -213,6 +225,8 @@ export async function deactivateConnector(db: PlatformDb, identity: Identity, in
   const orgId = identity.org.id
   const userId = identity.user.id
   const { stillActive, closed } = await inTransaction(db, "deactivateConnector: connector_activations", async (sql) => {
+    // Exclusif : un compte en cours d'écriture finit d'abord, une écriture qui suit lit le blocage (`barrierIn`).
+    await lockActivation(sql, orgId, connector, "exclusive")
     const before = await activationRow(sql, orgId, connector)
     if (before?.state === "inactive") return { stillActive: false, closed: before }
     if (!before) {

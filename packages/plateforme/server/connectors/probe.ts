@@ -153,7 +153,8 @@ async function runProbe(declared: DeclaredAccess, accountId: string, open: () =>
  * Joue la sonde du connecteur déclaré sur un compte, le compte ouvert pour ce seul appel, et garde son issue sur lui
  * (`lastProbe`, par `platform.record_account_probe`). Réservée à qui gère le compte, désactivé compris (on vérifie une
  * clé neuve avant de le réactiver) ; hors `call`, elle n'écrit aucune ligne de journal et ne compte dans aucun quota.
- * Refus : compte inconnu ou non géré ; connecteur sans sonde déclarée (`invalid_arguments`, `no_probe`) ; plus de 10
+ * Refus : compte inconnu ou non géré ; connecteur bloqué ou à adopter (`not_enabled`, `closed` ou `not_adopted`), avant
+ * tout appel au tiers ; connecteur sans sonde déclarée (`invalid_arguments`, `no_probe`) ; plus de 10
  * tests par minute de la même personne, les deux sondes comptées ensemble (`rate_limited`, `retry_after_s`). Un compte
  * simulé, sans secret ou mal réglé, un refus ou une panne du tiers : non sain, avec la raison (une clé refusée rend la
  * réponse, jamais un refus de la route) ; une panne du coffre lève. Comme un appel, un refus qui marque le compte pose
@@ -166,6 +167,8 @@ export async function probeAccount(db: PlatformDb, identity: Identity, input: un
   if (!parsed.success) throw invalidInput(parsed.error)
   const id = parsed.data.account_id
   const row = await managedAccount(db, identity, id, { service: "probeAccount", gesture: "Probing" })
+  // Bloqué, ou payé par la clé de l'hôte sans adoption : le test d'un compte ne joint pas le tiers (`closed`, `not_adopted`).
+  await requireUsableConnector(db, identity, row.connector)
   const connector = declaredConnector(row.connector)
   // La sonde de l'accès que le compte retient, jouée par lui.
   const declared = connector ? accountAccess(connector, { label: row.label, access: row.access }) : null

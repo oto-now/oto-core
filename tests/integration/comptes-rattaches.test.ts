@@ -12,6 +12,7 @@ import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { activateConnector, callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
 import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
+import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
 import { startHostedLink } from "../../packages/plateforme/server/connectors/hosted-link"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
@@ -262,6 +263,31 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       expect((await back("lea", { request: request.id })).searchParams.get("hosted")).toBe("connected")
       const result = await callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) })
       expect([result.status, result.account?.label]).toEqual(["done", label("lea")])
+    } finally {
+      await admin`insert into platform.connector_activations (org_id, connector, state) values (${o.org.id}, ${CONNECTOR}, 'active')
+        on conflict (org_id, connector) do update set state = 'active'`
+    }
+  })
+
+  it("should not reach the third party on the host's key when testing an account of a blocked, or not adopted, connector", async () => {
+    const lea = person("lea", o)
+    await start("lea", o, { connector: CONNECTOR })
+    const request = await lastRequest("lea")
+    fake.state.accounts = [{ id: accountId("lea"), createdAt: near(request, 1), probe: "alive", who: who("lea") }]
+    expect((await back("lea", { request: request.id })).searchParams.get("hosted")).toBe("connected")
+    const [account] = await accountsOf("lea")
+    const reached = () => [fake.calls.length, sent.length]
+    try {
+      for (const [row, reason] of [
+        [() => admin`update platform.connector_activations set state = 'inactive' where org_id = ${o.org.id} and connector = ${CONNECTOR}`, "closed"],
+        [() => admin`delete from platform.connector_activations where org_id = ${o.org.id} and connector = ${CONNECTOR}`, "not_adopted"],
+      ] as const) {
+        await row()
+        const before = reached()
+        const refused = await refusal(probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: origin(o) }))
+        expect([refused.code, refused.details?.reason]).toEqual(["not_enabled", reason])
+        expect(reached()).toEqual(before)
+      }
     } finally {
       await admin`insert into platform.connector_activations (org_id, connector, state) values (${o.org.id}, ${CONNECTOR}, 'active')
         on conflict (org_id, connector) do update set state = 'active'`

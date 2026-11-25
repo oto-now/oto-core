@@ -10,23 +10,41 @@ import { memberDirectory } from "../directory"
 import { inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import type { Tx } from "../sql"
-import { hostFieldsOf } from "./host-fields"
+import { takesHostKey } from "./host-fields"
 
 /** Ce qui arrête un connecteur : bloqué par un administrateur, ou payé par l'hôte et pas encore adopté. */
 export type ConnectorBarrier = "closed" | "not_adopted"
 
 /**
- * Vrai pour un connecteur dont un accès en mode `platform` se sert d'une clé de l'hôte (un champ `holder: host`) :
- * chaque appel est payé par l'application, donc un administrateur l'adopte avant tout compte ou appel. Dérivé de la
- * déclaration (modes et champs de chaque accès), jamais d'une liste de noms.
+ * Vrai pour un connecteur dont un accès sort sur la clé de l'hôte : chaque appel de cet accès est payé par
+ * l'application, donc un administrateur l'adopte avant tout compte ou appel, même pour un membre qui apporterait sa
+ * propre clé sur un autre accès. Dérivé de la décision même du moteur (`takesHostKey`, ce que `readHostFields` ajoute à
+ * chaque appel), quels que soient les modes ou la forme de la déclaration ; jamais d'une liste de noms.
  */
 export function paidByHostKey(connector: string): boolean {
   const declared = declaredConnector(connector)
-  return declared !== null && declared.accesses.some(({ definition }) => definition.modes.includes("platform") && hostFieldsOf(definition).length > 0)
+  return declared !== null && declared.accesses.some(({ definition }) => takesHostKey(definition))
 }
 
-/** La barrière d'un connecteur, lue dans la transaction de l'appelant : `null` quand rien ne l'arrête. */
+/**
+ * Le verrou de l'activation d'un connecteur dans une organisation, pris pour la transaction : partagé par qui range un
+ * compte (après lui, la barrière se lit à jour), exclusif pour qui bloque, débloque ou adopte. Un blocage posé pendant
+ * l'écriture d'un compte attend donc sa fin, et une écriture qui suit un blocage le voit : jamais un compte rangé sur un
+ * connecteur que la même transaction a cru ouvert alors qu'il venait d'être bloqué.
+ */
+export async function lockActivation(sql: Tx, orgId: string, connector: string, mode: "shared" | "exclusive"): Promise<void> {
+  const key = `platform.connector_activations:${orgId}:${connector}`
+  if (mode === "shared") await sql`select pg_advisory_xact_lock_shared(hashtextextended(${key}, 0))`
+  else await sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`
+}
+
+/**
+ * La barrière d'un connecteur, lue dans la transaction de l'appelant, sous le verrou partagé de son activation, tenu
+ * jusqu'à la fin de la transaction (`lockActivation`) : la lecture et l'écriture qui la suit font un seul tenant.
+ * `null` quand rien ne l'arrête.
+ */
 export async function barrierIn(sql: Tx, orgId: string, connector: string): Promise<ConnectorBarrier | null> {
+  await lockActivation(sql, orgId, connector, "shared")
   const [row] = await sql<{ state: string }[]>`
     select state from platform.connector_activations where org_id = ${orgId} and connector = ${connector}`
   if (row) return row.state === "active" ? null : "closed"
