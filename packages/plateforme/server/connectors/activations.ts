@@ -237,7 +237,8 @@ export async function closedConnector(db: PlatformDb, identity: Identity, connec
   const directory = await memberDirectory(db, identity.org.id)
   const admins = directory
     .filter((person) => person.role === "admin")
-    .map((person) => ({ userId: person.userId, name: person.name }))
+    // Leurs noms seuls, comme `connectRefusal` : un refus n'expose jamais l'identifiant d'une personne.
+    .map((person) => ({ name: person.name }))
     .sort((a, b) => a.name.localeCompare(b.name, "fr"))
   return new PlatformError(
     "not_enabled",

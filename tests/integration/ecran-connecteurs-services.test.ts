@@ -147,7 +147,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       expect(seen).toMatchObject({ label: "Crm", state: "inactive", closedBy: { userId: o.people.ada.id, name: "Ada Martin" } })
 
       const refused = await refusal(personal("lea", `Perso Léa ${hex(3)}`, FRESH))
-      expect(said(refused)).toEqual({ code: "not_enabled", details: { reason: "closed", administrators: [{ userId: o.people.ada.id, name: "Ada Martin" }] } })
+      expect(said(refused)).toEqual({ code: "not_enabled", details: { reason: "closed", administrators: [{ name: "Ada Martin" }] } })
       expect(refused.message).toBe(`${FRESH} is deactivated at Acme Test: no account can be added or enabled. Ask the administrators of Acme Test (Ada Martin) to activate it.`)
       // Le compte gardé ne se réactive pas non plus tant que le connecteur reste fermé.
       await disableAccount(lea.db, lea.identity, { account_id: created.id })

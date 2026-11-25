@@ -258,13 +258,15 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(send).not.toHaveBeenCalled()
     })
 
-    it("should refuse a live account without secret before the function (AC12)", async () => {
+    it("should refuse a live account without secret before the function, with the link to its key for whoever manages it (AC12)", async () => {
       const bare = await orgAccount("reel")
       const tiers = stubTiers()
       const error = await refusal(call("lea", { function: `${LIVE}.list_contacts`, arguments: {}, account: bare.label }))
-      expect({ code: error.code, message: error.message }).toEqual({
+      const url = `${ORIGIN}/connect/${LIVE}?space=org&account_id=${bare.id}`
+      expect({ code: error.code, message: error.message, details: error.details }).toEqual({
         code: "not_enabled",
-        message: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
+        message: `Account « ${bare.label} » has no secret yet. Only the administrators of Acme Test (Ada Martin) can set the key of account « ${bare.label} »; ask the user to pass them the link and call again once it is done: open ${url}`,
+        details: { reason: "no_account", gesture: "key", connector: LIVE, space: "org", url, administrators: [{ name: "Ada Martin" }] },
       })
       expect(tiers.send).not.toHaveBeenCalled()
     })
@@ -324,7 +326,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }, { origin: "https://acme.example.test" }))).toEqual({
         healthy: false,
         code: "account_not_ready",
-        reason: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
+        reason: `Account « ${bare.label} » has no secret yet. Ask the user to paste the Crm key of account « ${bare.label} », then call again: open https://acme.example.test/connect/${LIVE}?space=org&account_id=${bare.id}`,
         balance: null,
       })
     })

@@ -90,6 +90,18 @@ describe("connection page of a connector", () => {
     expect(screen.getByRole("button", { name: "Relier mon compte Crm" })).toBeTruthy()
   })
 
+  it("should say an organisation the person left, whose name they no longer read, and still offer to link the account", async () => {
+    vi.mocked(connectionStep).mockResolvedValue({ kind: "authorize", gesture: "hosted_link", connector: "crm", label: "Crm", space: "me", elsewhere: ["Atelier Nord", null] })
+    await montrer({ space: "me" })
+    expect(screen.getByText("Votre compte Crm est déjà utilisé dans Atelier Nord, une autre organisation. Le bouton le relie aussi à cette organisation.")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Relier mon compte Crm" })).toBeTruthy()
+    cleanup()
+    vi.mocked(connectionStep).mockResolvedValue({ kind: "authorize", gesture: "hosted_link", connector: "crm", label: "Crm", space: "me", elsewhere: [null] })
+    await montrer({ space: "me" })
+    expect(screen.getByText("Votre compte Crm est déjà utilisé dans une autre organisation. Le bouton le relie aussi à cette organisation.")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Relier mon compte Crm" })).toBeTruthy()
+  })
+
   it("should tell the outcome of the return, inviting to go back to the assistant, without starting anything again nor showing the text of the address", async () => {
     await montrer({ space: "me", consent: "connected", account: "Votre compte est suspendu, appelez le 01 23 45 67 89" })
     expect(screen.getByText("Le compte est connecté.")).toBeTruthy()

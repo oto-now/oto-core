@@ -78,13 +78,14 @@ export type ConsentCredential = {
  * La marque du compte d'un appel (`accounts.health.mark`), ouverte avec lui : celle qu'il porte (`current`) ; `set`, qui
  * la pose (une raison) ou la lève (`null`) par `platform.mark_account`, sans rien écrire si rien ne change ; `effect`, ce
  * que l'appel en a fait, pour sa ligne de journal, une écriture qui a échoué comprise (`mark_failed`, `lift_failed`,
- * posé par le moteur) ; `remedy`, la phrase qui dit la marque, sa date et à qui demander.
+ * posé par le moteur) ; `refusal`, le refus que devient un refus du tiers qui vient de marquer le compte (`error`) : il dit
+ * la marque, sa date, et à qui demander ou l'adresse où poser une clé neuve (`account-secret.ts`).
  */
 export type AccountMarker = {
   current: AccountMark | null
   effect: "marked" | "lifted" | "mark_failed" | "lift_failed" | null
   set: (reason: AccountMarkReason | null) => Promise<void>
-  remedy: () => Promise<string>
+  refusal: (error: PlatformError) => Promise<PlatformError>
 }
 
 /**

@@ -2,11 +2,13 @@
 // lui reste (consentir chez le tiers, coller une clé, brancher son compte, ou, administrateur, confirmer l'activation),
 // `<origine>/connect/<connecteur>?space=…`, et le seul constructeur des refus « connecteur éteint », « pas de compte » et
 // « compte à reconnecter » (`connectRefusal`), qui la portent en `details.url` avec une phrase d'action. La même décision
-// (`planConnection`) sert le refus, la fonction `connector.connect` et la page de l'hôte (`connectionStep`). L'adresse ne
+// (`planConnection`) sert le refus, la fonction `connector.connect` et la page de l'hôte (`connectionStep`) ; un compte
+// existant à doter d'une clé (refusée par le tiers, ou jamais posée) a la sienne (`planAccountKey`, `accountKeyRefusal`),
+// dont l'adresse nomme le compte (`account_id=<id>`). L'adresse ne
 // porte ni secret ni jeton : elle ne vaut que sous la session de la personne, et l'espace qu'elle nomme est revérifié
 // contre ses droits à chaque ouverture, jamais cru. Sans ce module, un refus disait seulement à qui demander, et la
 // personne cherchait l'écran et la clé à la main.
-import { administratorNames, isOrgAdmin } from "../access"
+import { ACCOUNT_LEVELS, accountLevel, administratorNames, describeOwner, isOrgAdmin } from "../access"
 import { declaredConnector, type DeclaredAccess } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
@@ -16,6 +18,7 @@ import type { Identity } from "../identity"
 import { orgLimits } from "../limits"
 import { requestedAccess } from "./accesses"
 import { admittedOwnerKinds, formOwnerKinds, type OwnerKind } from "./account-owners"
+import type { AccountOwner } from "./accounts"
 import { requireActivable } from "./activations"
 import { mayCreateAccountFor } from "./creation-right"
 import { HOST_CONSENT_CONNECTOR } from "./definition"
@@ -73,12 +76,21 @@ function checkedOrigin(origin: string | null | undefined): string {
   )
 }
 
-/** L'adresse stable de la connexion d'un connecteur, dans un espace ; `activate` : celle qu'un administrateur ouvre pour l'activer. */
-export function connectionUrl(origin: string | null | undefined, connector: string, space: ConnectSpace, options: { access?: string | null; activate?: boolean } = {}): string {
+/**
+ * L'adresse stable de la connexion d'un connecteur, dans un espace ; `activate` : celle qu'un administrateur ouvre pour
+ * l'activer ; `account` : celle de la clé d'un compte existant (son identifiant, qui n'est pas un secret).
+ */
+export function connectionUrl(
+  origin: string | null | undefined,
+  connector: string,
+  space: ConnectSpace,
+  options: { access?: string | null; activate?: boolean; account?: string } = {},
+): string {
   const url = new URL(`${CONNECT_PATH}/${encodeURIComponent(connector)}`, checkedOrigin(origin))
   url.searchParams.set("space", spaceParam(space))
   if (options.access) url.searchParams.set("access", options.access)
   if (options.activate) url.searchParams.set("activate", "1")
+  if (options.account) url.searchParams.set("account_id", options.account)
   return url.toString()
 }
 
@@ -194,6 +206,11 @@ export type ConnectionPlan = {
   entersKey: boolean
   url: string
   team: { id: string; name: string } | null
+  /**
+   * Le compte existant dont la clé est à poser (`planAccountKey`) : son libellé, et qui le gère quand ce n'est pas la
+   * personne (« Léa Petit », « the administrators of Acme (Ada Martin) », « team Ventes (lead: Claire Morel) »).
+   */
+  account?: { id: string; label: string; managers: string }
 }
 
 /**
@@ -257,6 +274,9 @@ export function actionSentence(plan: ConnectionPlan, orgName: string, owner?: st
   const { url, label } = plan
   const relay = `ask the user to pass them the link and call again once it is done: open ${url}`
   if (owner !== undefined) return `Only its owner, ${owner}, can connect it again; ${relay}`
+  const { account } = plan
+  if (account && !plan.byCaller) return `Only ${account.managers} can set the key of account « ${account.label} »; ${relay}`
+  if (account) return `Ask the user to paste the ${label} key of account « ${account.label} », then call again: open ${url}`
   if (!plan.byCaller) {
     const names = plan.administratorNames ? ` (${plan.administratorNames})` : ""
     return `Only an administrator of ${orgName}${names} can do it; ${relay}`
@@ -311,4 +331,74 @@ export async function connectRefusal(
 ): Promise<PlatformError> {
   const plan = await planConnection(where, { connector: input.connector, access: input.access })
   return refusalFromPlan(input.label ? { ...plan, label: input.label } : plan, where.identity.org.name, input)
+}
+
+/** Le compte existant d'un refus de clé : son identifiant, son libellé, l'accès qu'il retient, son propriétaire. */
+export type KeyAccount = { id: string; label: string; access?: string; owner: AccountOwner }
+
+/** L'espace d'un compte existant : celui de sa personne, l'organisation, ou son équipe, lue par son slug. */
+export async function accountSpace(where: ConnectWhere, owner: AccountOwner): Promise<{ space: ConnectSpace; team: { id: string; name: string } | null }> {
+  if (owner.kind === "user") return { space: { kind: "user" }, team: null }
+  if (owner.kind === "org") return { space: { kind: "org" }, team: null }
+  const team = (await orgTeams(where.db, where.identity)).find((candidate) => candidate.id === owner.teamId)
+  if (!team) {
+    console.error(`[platform] connect link: team ${owner.teamId} of an account is not in org ${where.identity.org.id}`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return { space: { kind: "team", slug: team.slug }, team: { id: team.id, name: team.name } }
+}
+
+/** Le nom de la personne d'un compte personnel, tel que l'annuaire le dit ; absent, une erreur interne, jamais un nom deviné. */
+export async function ownerNameOf(where: ConnectWhere, account: { id: string; owner: AccountOwner }): Promise<string> {
+  const ownerId = account.owner.userId
+  const name = (await memberDirectory(where.db, where.identity.org.id)).find((person) => person.userId === ownerId)?.name
+  if (name === undefined) {
+    console.error(`[platform] connect link: no directory name for the owner of account ${account.id}`)
+    throw new PlatformError("internal", "Internal error.")
+  }
+  return name
+}
+
+/**
+ * La connexion d'un compte existant dont la clé est à poser : refusée par le tiers (`credential_rejected`), ou jamais
+ * posée. Le geste est `key`, l'espace celui du compte, l'adresse nomme le compte (`account_id=<id>`) : la page y ouvre la
+ * saisie de sa clé, pas la création d'un autre compte. La personne agit si elle gère le compte (`ACCOUNT_LEVELS.manage`) ;
+ * sinon l'adresse va à qui le gère, nommé (`account.managers`), et aux administrateurs (`administrators`) pour un compte
+ * de l'organisation. Le connecteur est ouvert : l'appel l'a déjà vérifié.
+ */
+export async function planAccountKey(where: ConnectWhere, input: { connector: string; account: KeyAccount }): Promise<ConnectionPlan> {
+  const { db, identity, origin } = where
+  const { connector, account } = input
+  const access = connectAccess(connector, account.access ?? null)
+  const { space, team } = await accountSpace(where, account.owner)
+  const byCaller = (await accountLevel(db, identity, account.id)) >= ACCOUNT_LEVELS.manage
+  const managers = byCaller ? "" : account.owner.kind === "user" ? await ownerNameOf(where, account) : await describeOwner(db, identity, account.owner)
+  const { administrators } = !byCaller && account.owner.kind === "org" ? await administratorsOf(db, identity) : { administrators: [] }
+  return {
+    connector,
+    label: connectorLabel(connector),
+    access,
+    space,
+    gesture: "key",
+    byCaller,
+    administrators,
+    administratorNames: "",
+    entersKey: true,
+    url: connectionUrl(origin, connector, space, { access: access?.name ?? null, account: account.id }),
+    team,
+    account: { id: account.id, label: account.label, managers },
+  }
+}
+
+/**
+ * Le refus d'un appel dont le compte attend une clé (`not_enabled`, geste `key`) : `reconnect` quand le tiers a refusé
+ * la sienne (le compte est marqué), `no_account` quand aucune n'a jamais été posée (aucun compte utilisable). L'adresse
+ * mène à la saisie de la clé de ce compte (`planAccountKey`).
+ */
+export async function accountKeyRefusal(
+  where: ConnectWhere,
+  input: { connector: string; account: KeyAccount; reason: Extract<ConnectReason, "no_account" | "reconnect">; said: string },
+): Promise<PlatformError> {
+  const plan = await planAccountKey(where, input)
+  return refusalFromPlan(plan, where.identity.org.name, { reason: input.reason, said: input.said })
 }

@@ -22,6 +22,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - From a third-party client, a host's function first asks the person to authorize oto once: the refusal carries the link to open.
 - Every refusal of a connector (off, no account, to reconnect) carries `details.url`, a stable link where the user makes the one gesture, and says who must open it.
 - `connector.connect {connector, space?, access?}` gives that link without waiting for a refusal, or says an account already works (gesture none); `find` finds it by « connect a connector ».
+- A refused key, or an account without one, links to the entry of that account's key, for whoever manages it.
+- Spent credits keep their refusal (`quota_exhausted`), without a link: they are bought at the third party.
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 
 ### Hosts
@@ -41,6 +43,14 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - UI: `EcranConnexionDUnConnecteur` (with `EcranConnexionDUnConnecteurProps`, `EtapeAffichee`): a host serves it at `/connect/[connector]` behind the session, sending the unauthenticated to the login with the way back; the outcome of a return shows a known reason only (`echecDuConsentement`, shared with the Connectors screen) and never the account named in the address; `FormulaireDAjout` gains `equipe?`.
 - Schemas: `connectorConnectSchema`, `ConnectorConnectArgs`, `ConnectionStepView`.
 - MCP: `connector.connect` (read), a new function of the built-in `connector` connector; a host that declares its surface (`registerHostSurface`) names it to serve it.
+- Server: in a call, a refused key (`credential_rejected`) is no longer returned as such: the account is marked, and the call is refused `not_enabled`, `reason: reconnect`, gesture `key` (the link to that account's key, `account_id=<id>`), or `oauth` / `hosted_link` for a consent or a linked account. An account without secret is refused `not_enabled`, `reason: no_account`, gesture `key`, with the same link. A key of the host and spent credits (`quota_exhausted`) keep their refusal and its sentence. The probe of an account keeps the third party's refusal (`credential_rejected`).
+- Server: `liveCredential(where, account, connector, use)` takes `use` (`call` or `probe`); `AccountMarker.remedy()` becomes `refusal(error)`, the refusal a marking error becomes. `connectionStep` takes `account_id` (not with `activate`) and serves the step `account_key` (the account, its form), reserved to whoever manages the account and checked against its connector, access and space.
+- UI: `FormulaireDeLaCle`, the key and settings form of an account, shared by the account detail and the connection page.
+- Server: the `authorize` step's `elsewhere` lists every other organisation where the hosted account is linked, one the person left included, as `null` (its name is no longer readable): its type is `(string | null)[]`.
+- Server: the refusal of a closed connector (`reason: "closed"`) names its administrators by name only: `administrators: [{ name }]`.
+- MCP: in `connector.connect`'s `{gesture: "none", account}`, a personal account's `owner` is `{kind: "user", name, yours}`, without `userId`.
+- UI: `IssueDuConsentement` loses `compte`: the Connectors screen says « Le compte est connecté. », never the label read in the address.
+- Schemas: `connectionPageSchema` gains `account_id`; `ConnectionStepView` gains `account_key`.
 
 ## 1.10.0 — 2026-11-25
 

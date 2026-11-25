@@ -3,7 +3,7 @@
 // (`gesture: "none"`). À part du contrat de la fonction, que le registre lit au chargement : ce module lit les comptes
 // et les déclarations, qui lisent le registre ; la fonction le charge à l'appel, sans cycle d'imports évalués.
 import type { ConnectorConnectArgs } from "../../schemas/connectors"
-import type { CallAccount } from "../calls"
+import type { CallAccount, CallAccountOwner } from "../calls"
 import { declaredConnector } from "../catalog/connector-source"
 import type { FunctionContext, FunctionOutput } from "../catalog/define"
 import { requestedAccess } from "./accesses"
@@ -19,11 +19,17 @@ function inSpace(account: ConnectorAccount, plan: ConnectionPlan, userId: string
 }
 
 /**
- * Le compte qui marche déjà dans l'espace du plan, pour l'accès du plan : actif, sans marque, dont la personne
- * n'est pas partie ; `null` quand le connecteur est éteint (le geste reste l'activation) ou qu'aucun ne marche. Rendu
- * sous la forme des données d'un appel (`CallAccount`).
+ * Le compte rendu à l'assistant : celui des données d'un appel (`CallAccount`), sauf l'identifiant de sa personne, qu'un
+ * client MCP ne reçoit jamais (`{kind: "user", name, yours}`, comme les noms des administrateurs d'un refus). Les données
+ * d'un appel le gardent : le journal en lit qui a prêté le compte (`lender`).
  */
-async function workingAccount(context: FunctionContext, plan: ConnectionPlan): Promise<CallAccount | null> {
+type ConnectedAccount = Omit<CallAccount, "owner"> & { owner: Exclude<CallAccountOwner, { kind: "user" }> | { kind: "user"; name: string; yours: boolean } }
+
+/**
+ * Le compte qui marche déjà dans l'espace du plan, pour l'accès du plan : actif, sans marque, dont la personne
+ * n'est pas partie ; `null` quand le connecteur est éteint (le geste reste l'activation) ou qu'aucun ne marche.
+ */
+async function workingAccount(context: FunctionContext, plan: ConnectionPlan): Promise<ConnectedAccount | null> {
   if (plan.gesture === "admin_activation") return null
   const { identity } = context
   const wanted = plan.access?.name
@@ -37,7 +43,7 @@ async function workingAccount(context: FunctionContext, plan: ConnectionPlan): P
     id: found.id,
     label: found.label,
     mode: found.mode,
-    owner: owner.kind === "user" ? { kind: "user", userId: identity.user.id, name: identity.user.name, yours: true } : { kind: owner.kind, description: owner.description },
+    owner: owner.kind === "user" ? { kind: "user", name: identity.user.name, yours: true } : { kind: owner.kind, description: owner.description },
   }
 }
 

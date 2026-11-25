@@ -5,7 +5,8 @@
 // `POST /api/platform/admin/accounts/<id>/secret`. Le secret ne
 // revient jamais : un champ posé le dit, laissé vide il est gardé, coché « Effacer » il est effacé ; un réglage vidé
 // est effacé. La validation est celle de l'API (`accountSecretInputSchema`), le refus du service dit le champ en
-// cause. Après un succès, la saisie se vide et la page se relit.
+// cause. Après un succès, la saisie se vide et la page se relit. La page de connexion d'un connecteur reprend le même
+// formulaire (`FormulaireDeLaCle`) pour la clé d'un compte que le tiers a refusée ou qui n'en a jamais eu.
 import { useRef, useState } from "react"
 import { FormProvider, useForm } from "react-hook-form"
 import { accountSecretInputSchema, type AccountView, type ConnectorAccountForm } from "../../../schemas"
@@ -19,8 +20,15 @@ const RIEN_A_ENREGISTRER = "Rien à enregistrer : saisissez un champ, cochez « 
 
 type SaisieProps = { compte: AccountView; formulaire: ConnectorAccountForm }
 
-function Formulaire({ compte, formulaire, fermer }: SaisieProps & { fermer: (annonce: string) => void }) {
-  const rafraichir = useRafraichir()
+type FormulaireDeLaCleProps = SaisieProps & {
+  /** Après l'enregistrement, avec l'annonce du succès. */
+  enregistre: (annonce: string) => void
+  /** « Annuler ». */
+  annule: () => void
+}
+
+/** Le formulaire de la clé et des réglages d'un compte, envoyé à `POST admin/accounts/<id>/secret`. */
+export function FormulaireDeLaCle({ compte, formulaire, enregistre, annule }: FormulaireDeLaCleProps) {
   const form = useForm<SaisieDesChamps>({ mode: "onBlur", values: saisieDeDepart(formulaire, compte) })
   const { errors, isSubmitting } = form.formState
 
@@ -35,8 +43,7 @@ function Formulaire({ compte, formulaire, fermer }: SaisieProps & { fermer: (ann
       form.setError("root", { type: "server", message: messageDErreur(reponse.erreur) })
       return
     }
-    fermer(`Clé et réglages de « ${compte.label} » enregistrés.`)
-    rafraichir()
+    enregistre(`Clé et réglages de « ${compte.label} » enregistrés.`)
   }
 
   return (
@@ -48,7 +55,7 @@ function Formulaire({ compte, formulaire, fermer }: SaisieProps & { fermer: (ann
           <Button type="submit" variant="primary" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? "Enregistrement…" : "Enregistrer"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => fermer("")}>
+          <Button type="button" variant="ghost" onClick={annule}>
             Annuler
           </Button>
         </div>
@@ -66,6 +73,7 @@ type SaisieDuCompteProps = SaisieProps & {
 
 /** Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. */
 export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieDuCompteProps) {
+  const rafraichir = useRafraichir()
   const [ouvert, setOuvert] = useState(ouverte)
   const [annonce, setAnnonce] = useState("")
   const bouton = useRef<HTMLButtonElement>(null)
@@ -87,7 +95,17 @@ export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieD
           {annonce}
         </p>
       </div>
-      {ouvert && <Formulaire compte={compte} formulaire={formulaire} fermer={fermer} />}
+      {ouvert && (
+        <FormulaireDeLaCle
+          compte={compte}
+          formulaire={formulaire}
+          enregistre={(texte) => {
+            fermer(texte)
+            rafraichir()
+          }}
+          annule={() => fermer("")}
+        />
+      )}
     </div>
   )
 }

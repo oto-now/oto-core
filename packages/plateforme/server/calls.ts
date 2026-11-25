@@ -282,7 +282,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   trace.lentBy = data.account ? (lender(data.account.owner)?.userId ?? null) : null
   // Un connecteur réel ne court que sur un compte réel qui a son secret, ses champs et ses réglages (H85), refusé avant
   // la fonction ; un connecteur simulé (`mail`) garde lui-même ses comptes simulés.
-  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential({ db, identity, origin: deps.origin }, account, fn.connector) : undefined
+  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential({ db, identity, origin: deps.origin }, account, fn.connector, "call") : undefined
   const context: FunctionContext = {
     db,
     identity,

@@ -21,8 +21,13 @@ export const CONNEXION_D_UN_CONNECTEUR = {
   ailleurs: (outil: string, organisations: string) =>
     `Votre compte ${outil} est déjà utilisé dans ${organisations}. Le bouton le relie aussi à cette organisation.`,
   relier: (outil: string) => `Relier mon compte ${outil}`,
+  /** Une organisation où le compte est relié, dont la personne ne lit plus le nom (elle l'a quittée). */
+  autreOrganisation: "une autre organisation",
   reessayer: "Réessayer",
   cle: (outil: string) => `Collez la clé de ${outil} ; elle part chiffrée, et ne se réaffiche jamais.`,
+  cleDuCompte: (outil: string, compte: string) =>
+    `Collez la clé de ${outil} du compte « ${compte} » ; elle remplace l'ancienne, part chiffrée, et ne se réaffiche jamais.`,
+  cleEnregistree: (compte: string) => `La clé de « ${compte} » est enregistrée.`,
   activation: (outil: string) => `${outil} n'est pas activé dans l'organisation. En tant qu'administrateur, confirmez son activation : ses fonctions deviendront disponibles, puis vous connecterez un compte.`,
   activer: (outil: string) => `Activer ${outil}`,
   administrateurs: (outil: string, noms: string) =>

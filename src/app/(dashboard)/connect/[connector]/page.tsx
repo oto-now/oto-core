@@ -19,9 +19,9 @@ export const metadata: Metadata = {
 
 type Query = Record<string, string | string[] | undefined>
 
-/** La query de l'étape : l'espace, l'accès, `activate` ; le reste (l'issue d'un retour) n'en est pas. */
+/** La query de l'étape : l'espace, l'accès, `activate`, le compte (`account_id`) ; le reste (l'issue d'un retour) n'en est pas. */
 function entreeDe(query: Query): Record<string, string> {
-  return Object.fromEntries(["space", "access", "activate"].flatMap((nom) => (typeof query[nom] === "string" ? [[nom, query[nom]]] : [])))
+  return Object.fromEntries(["space", "access", "activate", "account_id"].flatMap((nom) => (typeof query[nom] === "string" ? [[nom, query[nom]]] : [])))
 }
 
 export default async function ConnexionDUnConnecteurPage({ params, searchParams }: { params: Promise<{ connector: string }>; searchParams: Promise<Query> }) {
