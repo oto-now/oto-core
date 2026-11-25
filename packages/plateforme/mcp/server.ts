@@ -21,7 +21,8 @@ import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
-import { orgAssistantFunctions } from "../server/catalog/org-catalog"
+import { visibleOrgFunctions } from "../server/catalog/org-catalog"
+import { hostUnavailableNotice } from "../server/host-api/index-view"
 import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
 import { servesCapability } from "../server/catalog/surface-source"
 import { readBrand } from "../server/brand"
@@ -119,10 +120,14 @@ class JsonRpcError extends Error {
 
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
-  context: ({ db, identity, userAgent, gate, origin }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin }),
-  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: await orgAssistantFunctions(db, identity), activeConnectors: await activeConnectors() }),
+  // `accessToken` : la liste des fonctions de l'hôte que la personne voit se demande sous son jeton (`host-api/visibility.ts`).
+  context: ({ db, identity, userAgent, gate, origin, accessToken }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin, accessToken }),
+  find: async ({ db, identity, activeConnectors, accessToken, origin }, input, ctx) => {
+    const { instance, host, visibility } = await visibleOrgFunctions(db, identity, { accessToken, origin, ctx: ctx?.code ?? null, host: ctx?.host ?? null })
+    return find(db, identity, input, { functions: [...instance, ...host], activeConnectors: await activeConnectors(), notice: hostUnavailableNotice(visibility, identity.org.prefix) })
+  },
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
-  read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
+  read: ({ db, identity, origin, widgets, accessToken }, input, ctx) => readNode(db, identity, input, { origin, views: widgets, viewer: { accessToken, ctx: ctx?.code ?? null, host: ctx?.host ?? null } }),
   call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }, input, ctx) =>
     runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).

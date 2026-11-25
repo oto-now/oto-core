@@ -7,8 +7,10 @@ import { fromHostOpenApi, toDefinition, type SchemaCompiler, type SchemaIssue } 
 import Ajv2020, { type ValidateFunction } from "ajv/dist/2020"
 import { readBounded } from "../bounded-read"
 import { JsonSchemaArguments, PERSONAL_KEYWORD } from "../catalog/arguments"
+import type { FunctionClass } from "../catalog/define"
+import { actName } from "../catalog/registry"
 import { guardedFetch } from "../connectors/address-guard"
-import type { ConnectorDefinition } from "../connectors/definition"
+import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../connectors/definition"
 import type { Fetch } from "../connectors/http"
 import { PlatformError } from "../errors"
 import { issuerProblem } from "./exchange"
@@ -81,8 +83,20 @@ export async function readHostDocument(address: string, etag: string | null): Pr
 }
 
 /**
+ * Une fonction de l'API dans l'index de l'hôte (`visibility.ts`, `index-block.ts`) : son nom dans le document
+ * (`operationId`, celui que rend `/me/functions`), son nom servi au catalogue, sa famille, sa classe, son libellé pour la
+ * personne et sa ligne d'index (`summary`).
+ */
+export type HostIndexEntry = { operationId: string; served: string; family: string; class: FunctionClass; label: string; summary: string }
+
+/** Le nom qu'une fonction de l'API porte au catalogue : une fonction qui écrit est servie sous `<espace>_act.<verbe>`. */
+export function servedName(fn: Pick<ConnectorFunctionDefinition, "name" | "act">): string {
+  return fn.act ? (actName(fn.name) ?? fn.name) : fn.name
+}
+
+/**
  * Ce qu'oto garde d'un document accepté : son titre et sa version, l'API à l'émetteur, le scope de chaque fonction, ses
- * connecteurs, compilés.
+ * connecteurs, compilés, et ce qu'il faut à l'index : le chemin de `/me/functions`, les familles, les fonctions.
  */
 export type ImportedHost = {
   /** `info.title`, le nom de l'API dans les messages et sur le compte d'un consentement. */
@@ -99,6 +113,12 @@ export type ImportedHost = {
   consentScopes: string[]
   /** Un connecteur par espace de noms, dans la forme que le moteur court, et le schéma compilé de chaque fonction. */
   connectors: { definition: ConnectorDefinition; schemas: ReadonlyMap<string, JsonSchemaArguments> }[]
+  /** `x-oto.functions` : le chemin, sous l'adresse, des fonctions que la personne peut appeler (`/me/functions`). */
+  functionsPath: string
+  /** Les familles de `x-oto.families`, dans leur ordre, qui est celui de l'index. */
+  families: { key: string; label: string }[]
+  /** Les fonctions, dans l'ordre du document. */
+  index: HostIndexEntry[]
 }
 
 /**
@@ -138,7 +158,7 @@ export function importHostDocument(document: unknown, reserved: Iterable<string>
     return { problems: [{ code: "host_document_unreadable", path: "", message: "the document could not be judged by the host profile" }] }
   }
   if (!result.definition) return { problems: result.problems.map(({ code, path, message }) => ({ code, path, message })) }
-  const root = (document as { "x-oto": { issuer: string; resource: string } })["x-oto"]
+  const root = (document as { "x-oto": { issuer: string; resource: string; functions: string } })["x-oto"]
   const issuer = issuerProblem(root.issuer)
   if (issuer) return { problems: [{ code: "host_issuer_not_instance", path: "x-oto.issuer", message: issuer }] }
   const info = (document as { info: { title: unknown; version: unknown } }).info
@@ -160,8 +180,27 @@ export function importHostDocument(document: unknown, reserved: Iterable<string>
     connectors.push({ definition, schemas })
   }
   if (problems.length > 0) return { problems }
+  const host = result.definition.host as { families: Record<string, string | { label: string }> }
+  const families = Object.entries(host.families).map(([key, family]) => ({ key, label: typeof family === "string" ? family : family.label }))
+  const meta = result.definition.functions as Record<string, { family: string; label: string; summary: string }>
+  const byName = new Map(connectors.flatMap(({ definition }) => definition.functions.map((fn) => [fn.name, fn] as const)))
+  const index = Object.entries(meta).map(([name, { family, label, summary }]) => {
+    const fn = byName.get(name)
+    if (!fn) throw new Error(`[platform] host api: ${name} without its function in the definition`)
+    return { operationId: name, served: servedName(fn), family, class: fn.class, label, summary }
+  })
   return {
-    imported: { title: String(info.title).trim(), version: String(info.version), issuer: root.issuer, resource: root.resource, ...scoped, connectors },
+    imported: {
+      title: String(info.title).trim(),
+      version: String(info.version),
+      issuer: root.issuer,
+      resource: root.resource,
+      ...scoped,
+      connectors,
+      functionsPath: root.functions,
+      families,
+      index,
+    },
   }
 }
 

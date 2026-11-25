@@ -1,4 +1,4 @@
-// Le jeton de la personne pour l'API d'un hôte (`fonctions-d-un-hote.md` § Jeton) : l'échange RFC 8693 auprès de
+// Le jeton de la personne pour l'API d'un hôte (`fonctions-d-un-hote-jeton.md` § Ordre) : l'échange RFC 8693 auprès de
 // l'émetteur de l'instance, voie first-party. Le jeton vérifié de l'appelant (`subject_token`) s'échange au point de
 // jeton de la découverte OIDC contre un jeton de l'audience de l'API (`resource`), au scope de la fonction appelée ; oto
 // s'y authentifie en client M2M (`PLATFORM_OIDC_EXCHANGE_CLIENT_ID` et `_SECRET`, `cell.ts`). Le jeton de la personne ne
@@ -147,7 +147,8 @@ export async function exchangedToken(label: string, request: ExchangeRequest): P
     ["subject_token", request.subjectToken],
     ["subject_token_type", ACCESS_TOKEN_TYPE],
     ["resource", request.resource],
-    ["scope", request.scope],
+    // Un scope vide (la liste des fonctions de la personne, `visibility.ts`) : l'audience seule, aucun scope demandé.
+    ...(request.scope === "" ? [] : [["scope", request.scope] as [string, string]]),
   ]
   // `fetch` lu à l'appel : l'émetteur de l'instance est une adresse de sa configuration, jamais une saisie.
   const answer = await requestToken(api, { method: "POST", path: "", headers: { authorization: basicOf(client.id, client.secret) }, form, pacingKey: `exchange:${request.orgId}` }, (input, init) =>

@@ -1,4 +1,4 @@
-// Le consentement d'une personne à l'API de l'hôte de son organisation (`fonctions-d-un-hote.md` § Jeton, voie
+// Le consentement d'une personne à l'API de l'hôte de son organisation (`fonctions-d-un-hote-jeton.md` § Ordre, voie
 // third-party) : le parcours `oauth2_user` du paquet (`connectors/consent.ts`, `connectors/oauth-user.ts`), construit
 // depuis le document servi et l'émetteur de l'instance plutôt que depuis une description déclarée. La personne autorise
 // une fois l'instance, cliente de l'émetteur (`PLATFORM_OIDC_CONSENT_CLIENT_ID` et `_SECRET`, `cell.ts`), à appeler l'API

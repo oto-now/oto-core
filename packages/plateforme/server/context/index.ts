@@ -29,9 +29,11 @@ import {
 } from "../routing"
 import type { ToolOutput } from "../tool-output"
 import { token } from "../pseudonym/token"
+import type { HostViewer } from "../host-api/visibility"
 import { codeBlock } from "./blocks/code"
 import { changedContextParts, contextBodies, contextParts } from "./blocks/contexts"
 import { guestsBlock } from "./blocks/guests"
+import { hostFunctionsBlock } from "./blocks/host"
 import { orgAddress, orgFacts } from "./blocks/org"
 import { personFacts } from "./blocks/person"
 import { recentBlock } from "./blocks/recent"
@@ -60,10 +62,11 @@ const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision
  * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
  * routage (les procédures proches de la demande), puis les contenus proches, passent avant les Contextes, puis les
  * contenus récents et les nouveautés (un seul bloc depuis le 2026-10-27, à la plus basse des deux priorités qu'il
- * remplace). Sans elle, onze Contextes d'équipe faisaient couper ce qui est affiché après eux. La vue invité
- * (`blocks/guests.ts`), affichée après les Contextes, passe juste après les règles : elle n'est jamais coupée.
+ * remplace). Sans elle, onze Contextes d'équipe faisaient couper ce qui est affiché après eux. Les fonctions de l'hôte
+ * (`blocks/host.ts`, 3 000 caractères au plus), affichées juste après les règles, passent juste après elles ; la vue
+ * invité (`blocks/guests.ts`), affichée après les Contextes, ensuite : ni l'une ni l'autre n'est jamais coupée.
  */
-const PRIORITY = { code: 0, guests: 1, related: 2, contexts: 10, recent: 101 } as const
+const PRIORITY = { code: 0, host: 1, guests: 2, related: 3, contexts: 10, recent: 101 } as const
 
 /** Sans conversation antérieure, les nouveautés remontent à 14 jours (H34). */
 const NEWS_WINDOW_DAYS = 14
@@ -170,6 +173,8 @@ type Assembly = {
   /** Borne des nouveautés (`newsSince`) ; `null` : bloc omis. */
   since: string | null
   budget: number
+  /** Ce qui demande à l'hôte les fonctions que la personne voit (`blocks/host.ts`) ; absent de l'aperçu : bloc omis. */
+  viewer?: HostViewer
 }
 
 /**
@@ -192,7 +197,7 @@ type Assembled = { code: string; text: string; report: BlockReport[]; routing: R
  * L'assemblage commun de `context` et de l'aperçu (AC7, AC8, AC11) : en un seul `Promise.all`, le code, le routage,
  * les faits des équipes, les Contextes, et les contenus récents avec les nouveautés, chaque branche enchaînant ses
  * propres lectures ; puis les blocs dans l'ordre de P39 — code (l'adresse d'Oto, les règles, les procédures proches de la
- * demande), contenus proches, une partie par Contexte (Tout le monde, Privé, équipes, chacune ouverte par sa ligne de
+ * demande), fonctions de l'hôte que la personne voit (sauf dans l'aperçu), contenus proches, une partie par Contexte (Tout le monde, Privé, équipes, chacune ouverte par sa ligne de
  * faits, E05-S12 D109), la vue invité (ce que d'autres équipes ont ouvert à la personne), contenus récents et
  * nouveautés —, rendus dans le budget. Depuis le 2026-10-27 (JB) : ni étapes
  * d'une procédure, ni procédures utiles ; nouveautés et contenus récents en un bloc. Contextes illisibles : leurs parties
@@ -201,7 +206,8 @@ type Assembled = { code: string; text: string; report: BlockReport[]; routing: R
 export async function assembleContext(db: PlatformDb, identity: Identity, assembly: Assembly): Promise<Assembled> {
   const phrase = assembly.phrase?.trim() || undefined
   const { since } = assembly
-  const [code, routing, teams, bodies, recent, guests] = await Promise.all([
+  const { viewer } = assembly
+  const [code, routing, teams, bodies, recent, guests, host] = await Promise.all([
     assembly.code,
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
     teamFacts(db, identity),
@@ -211,6 +217,7 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
     }),
     orOmitted(() => recentBlock(db, identity, since), "recent content"),
     orOmitted(() => guestsBlock(db, identity), "guest views"),
+    viewer === undefined ? null : orOmitted(() => hostFunctionsBlock(db, identity, viewer, phrase), "host functions"),
   ])
   const { candidates, served, kind, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
@@ -218,6 +225,7 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
   const prefix = identity.org.prefix
   const blocks = [
     { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
+    ...withPriority(host, PRIORITY.host),
     ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
     ...contextParts(identity, facts, bodies, phrase).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
     ...withPriority(guests, PRIORITY.guests),
@@ -293,7 +301,7 @@ export const PSEUDONYM_NOTICE =
  * La requête d'un `context` : son agent, `pseudonymized` quand la porte pseudonymise ce qui part (l'avis des jetons), et
  * l'origine de la requête MCP, qui donne l'adresse d'Oto (`orgAddress`, première règle).
  */
-export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean; origin?: string }
+export type ContextRequest = { userAgent: string | null; pseudonymized?: boolean; origin?: string; accessToken?: string }
 
 export async function buildContext(
   db: PlatformDb,
@@ -321,6 +329,7 @@ async function fullContext(
     code: issued.then((ctx) => ctx.code),
     since,
     budget: CONTEXT_BUDGET,
+    viewer: { accessToken: request.accessToken, origin: request.origin },
   })
   const { host } = await issued
   return {
