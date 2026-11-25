@@ -32,6 +32,8 @@ const read = (p) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n')
 const walk = (dir, out = []) => {
   for (const e of readdirSync(dir)) {
     if (['node_modules', '.git', '.next', 'dist', 'coverage'].includes(e)) continue
+    // Les worktrees d'autres sessions portent d'autres branches : pas l'arbre de ce dépôt.
+    if (e === 'worktrees' && dir.replaceAll('\\', '/').endsWith('/.claude')) continue
     const p = join(dir, e)
     if (statSync(p).isDirectory()) walk(p, out)
     // Séparateurs POSIX : toutes les comparaisons du checker (exclusions, registry ↔ src/,
@@ -48,7 +50,7 @@ if (!existsSync(INDEX)) {
 
 const indexSrc = read(INDEX)
 const BASE_CONVENTIONS = ['coding-standards.md']
-const WORKFLOW_SKILLS = ['dev', 'plan', 'revue', 'verify', 'wrap-up', 'commit-push']
+const WORKFLOW_SKILLS = ['dev', 'design', 'plan', 'revue', 'verify', 'wrap-up', 'commit-push']
 const STANDALONE_SKILLS = ['conventions', 'audit']
 
 // ------------------------------------------------- 1. parsing de _index.md
@@ -185,7 +187,7 @@ for (const dir of skillDirs) {
     warn(`Skill ${dir} : description très courte (${desc.length} car.) — déclenchement peu fiable.`)
 
   if (![...WORKFLOW_SKILLS, ...STANDALONE_SKILLS].includes(dir)) {
-    err(`Skill ${dir} : inconnu. Les skills sont les 6 de workflow + ${STANDALONE_SKILLS.join(', ')} ; le routing des conventions passe par les globs de _index.md, pas par un skill par tag.`)
+    err(`Skill ${dir} : inconnu. Les skills sont les 7 de workflow + ${STANDALONE_SKILLS.join(', ')} ; le routing des conventions passe par les globs de _index.md, pas par un skill par tag.`)
   }
 }
 for (const s of [...WORKFLOW_SKILLS, ...STANDALONE_SKILLS]) {
