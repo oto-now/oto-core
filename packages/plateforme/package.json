@@ -61,7 +61,7 @@
     "@supabase/supabase-js": "^2",
     "@tailwindcss/postcss": "^4",
     "@vitejs/plugin-react": "^4",
-    "next": "^15",
+    "next": "^15 || ^16",
     "react": "^19",
     "react-dom": "^19",
     "react-hook-form": "^7.55",

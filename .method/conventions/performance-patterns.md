@@ -105,8 +105,8 @@ const inter = Inter({
 Pas de Lighthouse dans ce dépôt : ses pages sont derrière une authentification, et un score de
 page publique ne décrit pas l'usage réel.
 
-- **Poids JS par route** : la sortie de `pnpm build` (colonne First Load JS, qui ignore les
-  layouts), et les budgets du job CI `packed-host-build` (`scripts/ci/shared-first-load-js.mjs`,
+- **Poids JS par route** : `node scripts/ci/shared-first-load-js.mjs` après `pnpm build` (Next 16 n'affiche
+  plus la colonne First Load JS), et les budgets du job CI `packed-host-build` (`scripts/ci/shared-first-load-js.mjs`,
   § Bonnes pratiques). C'est le chiffre qu'un finding « bundle trop gros » doit citer.
 - **Web Vitals (LCP, INP, CLS)** : panneau Performance de Chrome DevTools sur `next start`, sur
   la page en cause, avec son chiffre. Un ressenti « la page est lente » sans mesure reste BASSE.
@@ -134,7 +134,7 @@ page publique ne décrit pas l'usage réel.
   les modules `"use client"` du graphe entier du barrel `ui/index.ts`, pas les seuls noms importés : un import du
   barrel par un fichier chargé à la racine met le code client de toute la face (éditeur, zod) dans le JavaScript de
   chaque page. **Vérifiable :** le job CI `packed-host-build` échoue si le JS partagé par toutes les pages dépasse
-  `SHARED_JS_BUDGET_KB` (`scripts/ci/shared-first-load-js.mjs`, 120 kB) ; en local, `node
+  `SHARED_JS_BUDGET_KB` (`scripts/ci/shared-first-load-js.mjs`, 160 kB) ; en local, `node
   scripts/ci/shared-first-load-js.mjs` après `pnpm build`.
 - **Un écran s'importe de `@otomata_tech/oto_platform/ui` par son nom, et l'hôte déclare
   `optimizePackageImports: ["@otomata_tech/oto_platform/ui"]`** (sous-chemin exact, dans `experimental` de
@@ -142,8 +142,8 @@ page publique ne décrit pas l'usage réel.
   client des écrans qu'elle monte (`/login` sans l'éditeur, `/n/<chemin>` avec). Sans cette ligne, ou avec le nom du
   paquet seul, qui ne couvre pas `/ui`, toute page ou tout layout qui importe du barrel charge le code client de toute
   la face. La réécriture exige un barrel de réexports seuls : `ui/index.ts` ne déclare rien lui-même (test « pure
-  re-export file » de `tests/unit/package-faces.test.ts`). Le JS d'une route se mesure page et layouts ensemble : la
-  colonne « First Load JS » de `next build` ignore les layouts. **Vérifiable :** `packed-host-build` échoue si `/login`
+  re-export file » de `tests/unit/package-faces.test.ts`). Le JS d'une route se mesure page et layouts ensemble, comme le fait ce script.
+  **Vérifiable :** `packed-host-build` échoue si `/login`
   ou la coque (`/admin`) dépasse son budget (`ROUTE_BUDGETS_KB`, même script).
 
 ### Tailles cibles — objectifs mesurés
