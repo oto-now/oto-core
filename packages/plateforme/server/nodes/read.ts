@@ -164,7 +164,7 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
     const { path } = target
     if (looksLikeFunction(path)) return readFunction(db, identity, path)
     if (path === JOURNAL_PATH) return readJournal(db, identity, input)
-    if (path === FUNCTIONS_PATH) return readFunctionCatalog(db, identity, { ...options.viewer, origin: options.origin })
+    if (path === FUNCTIONS_PATH) return readFunctionCatalog(db, identity, { ...options.viewer, origin: options.origin }, input.section)
     // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
     if (path === HELP_PATH) return helpGuide(input.section, prefix)
     checkNodePath(path)

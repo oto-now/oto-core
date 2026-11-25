@@ -80,7 +80,10 @@ type CodeBlockInput = {
    * sont pas redites, la ligne de `sinceLine` les remplace.
    */
   since?: { code: string; changed: readonly string[] }
-  /** Sans procédure servie (1.4.3) : les fonctions qui répondent à la demande et la section du guide la plus proche. */
+  /**
+   * Les fonctions qui répondent à la demande, procédure servie ou non, et, sans procédure servie (1.4.3), la section du
+   * guide la plus proche.
+   */
   hints?: RoutingHints
   /** L'adresse d'Oto (`orgAddress`), première règle ; ni dans l'aperçu, ni dans le `context` léger, qui ne redit pas les règles. */
   address?: string | null
@@ -166,7 +169,7 @@ export function codeBlock(input: CodeBlockInput): ContextBlock {
     phrase
       ? routingLine({ ...input, phrase })
       : `No request given: call ${prefix}_context again with the user's request as phrase to get the matching procedure.`,
-    ...(phrase && !input.served ? hintLines(input.hints, prefix) : []),
+    ...(phrase ? hintLines(input.hints, prefix, input.served !== null) : []),
   ]
   return { name: "code", text: lines.join("\n") }
 }

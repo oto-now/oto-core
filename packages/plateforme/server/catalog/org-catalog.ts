@@ -44,10 +44,11 @@ export async function visibleOrgFunctions(db: PlatformDb, identity: Identity, vi
 
 /**
  * `read functions` : les fonctions actives de l'instance, puis celles de l'hôte que la liste de la personne nomme, par
- * famille (`fonctions-d-un-hote-index.md` § Visibilité par personne) ; une liste indisponible dit sa raison.
+ * famille (`fonctions-d-un-hote-index.md` § Visibilité par personne) ; une liste indisponible dit sa raison. `section` : un
+ * connecteur, ou l'API de l'hôte par son nom, quand la liste entière dépasse 45 000 caractères (`functionCatalog`).
  */
-export async function readFunctionCatalog(db: PlatformDb, identity: Identity, viewer: HostViewer): Promise<ToolOutput> {
+export async function readFunctionCatalog(db: PlatformDb, identity: Identity, viewer: HostViewer, section?: string): Promise<ToolOutput> {
   const [{ instance, host, visibility }, active] = await Promise.all([visibleOrgFunctions(db, identity, viewer), loadActiveConnectors(db, identity.org.id)])
   const prefix = identity.org.prefix
-  return functionCatalog(instance.filter((fn) => isActive(fn, active)), contractNames(), prefix, { functions: host, lines: hostCatalogLines(visibility, prefix) })
+  return functionCatalog(instance.filter((fn) => isActive(fn, active)), contractNames(), prefix, { host: { functions: host, lines: hostCatalogLines(visibility, prefix) }, section })
 }

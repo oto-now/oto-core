@@ -13,6 +13,7 @@ import { candidate } from "../integration/fixtures/acme"
 import { SERVED_GUESTS } from "../../packages/plateforme/schemas"
 import { buildContext, previewContext } from "../../packages/plateforme/server/context"
 import { codeBlock, workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
+import { routingHints } from "../../packages/plateforme/server/context/hints"
 import { contextBodies } from "../../packages/plateforme/server/context/blocks/contexts"
 import { newsItems } from "../../packages/plateforme/server/context/blocks/news"
 import { orgAddress, orgFacts } from "../../packages/plateforme/server/context/blocks/org"
@@ -44,7 +45,8 @@ import {
 } from "../helpers/reference-org"
 import { seedReferenceTables, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import type { Row, Tables } from "../helpers/simulated-db"
-import { seedWithAdmin, sqlConfigured, type SeededData, portable } from "../helpers/sql"
+import { loggedText } from "../helpers/logs"
+import { seedWithAdmin, spyDb, sqlConfigured, type SeededData, portable } from "../helpers/sql"
 import { privateFolderPending, privateFolderSuite } from "../helpers/pending-migrations"
 
 // Ces tests supposent le dossier `private` en base (fiche D107) : sautés, la version nommée, tant que
@@ -257,6 +259,17 @@ describe("codeBlock", () => {
       [...head(how, "crée, projet"), other, 'It asks how: read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, explain its steps, and run them only if the user asks.'].join("\n"),
     )
     expect(routing(asked, "action", [served])).toBe([...head(asked, "créer, projet"), follow].join("\n"))
+  })
+
+  // Fonctions toujours proposées (AC2) : sous une procédure servie, après sa consigne, en recours, sans le guide.
+  it("should list the functions close to the request after a served procedure, as a fallback", () => {
+    const served = candidate("todo/creer_un_projet", 0.78)
+    const hints = { functions: [{ name: "brevo_act.update_template", sentence: "Update a transactional template, the fields given only." }], help: null }
+    const lines = codeBlock({ prefix: "demo", code: "7K3Q-M2XA", phrase: "mets à jour mon template Brevo", served, candidates: [served], kind: "edit", hints }).text.split("\n")
+    expect(lines.slice(-2)).toEqual([
+      "Functions close to the request, for what the procedure does not cover (read a contract with demo_read path <function>, run it with demo_call):",
+      "- brevo_act.update_template: Update a transactional template, the fields given only.",
+    ])
   })
 
   // 2026-10-27 (JB) : l'adresse d'Oto en première règle ; le `context` léger ne redit pas les règles, ni elle.
@@ -1044,5 +1057,26 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("f
     expect(section((await previewContext(db, lea, {})).text, "## Context: everyone")).toBe(everyoneNotLoaded)
     for (const message of log.mock.calls.flat()) expect(String(message)).not.toContain("statement timeout")
     for (const call of log.mock.calls) expect(call[0]).toMatch(/^\[platform\] /)
+  })
+})
+
+// Les propositions de `context` (AC2, AC4) : le guide seulement sans procédure servie ; une panne de lecture des connecteurs
+// actifs ne prive que des fonctions, dite au log.
+describe.skipIf(!sqlConfigured)(portable("routingHints (AC2, AC4)"), { timeout: REAL_BASE_TIMEOUT }, () => {
+  it("should propose functions with or without a served procedure, the guide only without, and no function when the active connectors cannot be read", async () => {
+    const ref = await seedO(oTables())
+    const db = await ref.db("claire")
+    const claire = ref.identityOf("claire")
+    const phrase = "importe un CSV dans le tableau"
+    const names = (hints: Awaited<ReturnType<typeof routingHints>>) => hints.functions.map(({ name }) => name)
+    const none = Promise.resolve(new Set<string>())
+    const free = await routingHints(db, claire, phrase, { served: false, used: none })
+    const underProcedure = await routingHints(db, claire, phrase, { served: true, used: none })
+    expect([names(free).includes("table.import"), free.help === null, names(underProcedure), underProcedure.help]).toEqual([true, false, names(free), null])
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    const down = spyDb(db, { fail: (query) => (query.target === "connector_activations" ? { code: "57014" } : null) }).db
+    expect(await routingHints(down, claire, phrase, { served: false, used: none })).toMatchObject({ functions: [], help: free.help })
+    expect(loggedText(error)).toContain("[platform] context: active connectors read failed")
+    error.mockRestore()
   })
 })

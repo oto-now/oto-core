@@ -23,6 +23,7 @@ import {
   rankCandidates,
   requestKind,
   roundScore,
+  usedPaths,
   type Candidate,
   type RequestKind,
   type RoutingSettings,
@@ -54,9 +55,11 @@ type Routing = {
   settings: RoutingSettings | null
   /** Les pages et tableaux proches de la phrase (`relatedBlock`) ; aucun sans phrase ou en panne. */
   related: Candidate[]
+  /** Les cibles récentes de la personne (`usedPaths`), lues une fois : bonus d'usage des procédures, des contenus et des fonctions. */
+  used: Promise<ReadonlySet<string>>
 }
 
-const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision: null, settings: null, related: [] }
+const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision: null, settings: null, related: [], used: Promise.resolve(new Set()) }
 
 /**
  * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
@@ -92,14 +95,16 @@ async function servedRevision(db: PlatformDb, served: Candidate): Promise<number
  * ni procédure ni candidat, la ligne de panne (N30), plutôt que des candidats entre lesquels faire choisir.
  */
 async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): Promise<Routing> {
+  // Une lecture du journal pour les deux classements et les fonctions proposées (`routingHints`) ; jamais en échec.
+  const used = usedPaths(db, identity)
   const [candidates, settings, related] = await Promise.all([
-    rankCandidates(db, identity, { query: phrase, limit: CANDIDATES_SHOWN }).catch((error: unknown) => {
+    rankCandidates(db, identity, { query: phrase, limit: CANDIDATES_SHOWN, used }).catch((error: unknown) => {
       console.error("[platform] context: routing failed", error)
       return null
     }),
     loadRoutingSettings(db, identity.org.id),
     // Les contenus proches ne font qu'aider : leur panne ne prive que d'eux.
-    rankCandidates(db, identity, { query: phrase, limit: RELATED_MAX, kinds: RELATED_KINDS }).catch((error: unknown) => {
+    rankCandidates(db, identity, { query: phrase, limit: RELATED_MAX, kinds: RELATED_KINDS, used }).catch((error: unknown) => {
       console.error("[platform] context: related contents failed", error)
       return []
     }),
@@ -111,8 +116,8 @@ async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): 
         return null
       })
     : null
-  if (decided && revision === null) return { candidates: null, served: null, kind: requestKind(phrase), revision: null, settings, related }
-  return { candidates, served: decided, kind: requestKind(phrase), revision, settings, related }
+  if (decided && revision === null) return { candidates: null, served: null, kind: requestKind(phrase), revision: null, settings, related, used }
+  return { candidates, served: decided, kind: requestKind(phrase), revision, settings, related, used }
 }
 
 /** Données en champs (H26) : la procédure décidée, les candidats montrés, scores à deux décimales. */
@@ -221,7 +226,7 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
   ])
   const { candidates, served, kind, settings } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
-  const hints = phrase !== undefined && served === null ? await routingHints(db, identity, phrase) : undefined
+  const hints = phrase !== undefined ? await routingHints(db, identity, phrase, { served: served !== null, used: routing.used }) : undefined
   const prefix = identity.org.prefix
   const blocks = [
     { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
@@ -266,7 +271,7 @@ async function lightContext(
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
   ])
   const { candidates, kind, settings } = routing
-  const hints = phrase !== undefined && routing.served === null ? await routingHints(db, identity, phrase) : undefined
+  const hints = phrase !== undefined ? await routingHints(db, identity, phrase, { served: routing.served !== null, used: routing.used }) : undefined
   const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed }, hints })
   const blocks = [code, ...withPriority(relatedBlock(routing.related, identity.org.prefix), PRIORITY.related), ...parts]
   return {

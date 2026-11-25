@@ -5,6 +5,7 @@ import * as z from "zod/v4"
 import { describe, expect, it } from "vitest"
 import { checkArguments } from "../../packages/plateforme/server/catalog/arguments"
 import { defineFunction, type CatalogFunction } from "../../packages/plateforme/server/catalog/define"
+import { rankFunctions } from "../../packages/plateforme/server/catalog/ranking"
 import {
   callExamples,
   catalogFunctions,
@@ -12,7 +13,6 @@ import {
   findFunction,
   isActive,
   looksLikeFunction,
-  searchFunctions,
 } from "../../packages/plateforme/server/catalog/registry"
 
 const ok = async () => ({ text: "ok" })
@@ -155,7 +155,7 @@ describe("catalog (AC23)", () => {
     expect(many && checkArguments(many.schema, { pages: [{ path: "sav/fiche", markdown: "# Fiche" }] }).success).toBe(false)
     expect(many && checkArguments(many.schema, { pages: Array.from({ length: 51 }, (_, rank) => ({ path: `sav/p${rank}` })) }).success).toBe(false)
     for (const query of ["move rename node path", "déplacer renommer dossier", "reorganize folder"]) {
-      expect(searchFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("node.move")
+      expect(rankFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("node.move")
     }
   })
 
@@ -165,7 +165,7 @@ describe("catalog (AC23)", () => {
     expect([connect?.class, connect?.origin, connect && isActive(connect, NONE)]).toEqual(["read", "paquet", true])
     expect(connect && checkArguments(connect.schema, { connector: "crm", space: "team:../x" }).success).toBe(false)
     for (const query of ["connecter fod", "activer un connecteur", "connect a connector", "connect crm account"]) {
-      expect(searchFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("connector.connect")
+      expect(rankFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("connector.connect")
     }
   })
 
@@ -183,7 +183,7 @@ describe("catalog (AC23)", () => {
     expect(deleteRows && checkArguments(deleteRows.schema, { table: "ventes/salons", keys: Array.from({ length: 51 }, (_, rank) => `K${rank}`) }).success).toBe(false)
     // Recherchées par leurs mots (AC-h1), jamais proposées ni citées en exemple (H87).
     for (const [query, name] of [["delete rows", "table.delete_rows"], ["trash", "node.trash"], ["discard draft", "node.discard_draft"]]) {
-      expect(searchFunctions(catalogFunctions(), query, 3).map((found) => found.fn.name), query).toContain(name)
+      expect(rankFunctions(catalogFunctions(), query, 3).map((found) => found.fn.name), query).toContain(name)
     }
     expect(callExamples(catalogFunctions(), new Set(["node"]))).not.toContain("node.trash")
   })
@@ -229,23 +229,39 @@ describe("catalog (AC23)", () => {
     expect(isActive(DRAFT, new Set(["mail"]))).toBe(true)
   })
 
-  it("should rank by share of words found, then by name", () => {
-    const found = searchFunctions(FUNCTIONS, "rows of a table", 3)
-    expect(found.map((result) => [result.fn.name, result.score])).toEqual([
-      ["table.rows", 1],
-      ["table.write", 1],
-    ])
-    expect(searchFunctions(FUNCTIONS, "email drafts", 5).map((result) => result.fn.name)).toEqual([
-      "mail.create_draft",
-      "mail.send_draft",
-    ])
-  })
-
-  it("should match 3-letter words whole and longer words by prefix both ways", () => {
-    expect(searchFunctions(FUNCTIONS, "row", 5)).toEqual([])
-    expect(searchFunctions(FUNCTIONS, "invoice", 5).map((result) => result.fn.name)).toEqual(["erp.list_invoices"])
-    expect(searchFunctions(FUNCTIONS, "erp", 5).map((result) => result.fn.name)).toEqual(["erp.list_invoices"])
-    expect(searchFunctions(FUNCTIONS, "a an", 5)).toEqual([])
+  // Le classement des fonctions (`ranking.ts`, `routage-et-recherche.md` § Classement des fonctions) : composantes des
+  // nœuds, seuil des nœuds, une faute de frappe corrigée (AC7), le genre de la demande et le nom pour départager (AC9).
+  it("should rank functions like nodes, above the show threshold, fixing one typo and breaking ties by request kind then name", () => {
+    const ranked = (query: string) => rankFunctions(FUNCTIONS, query, 5).map((result) => result.fn.name)
+    expect(
+      Object.fromEntries(
+        ["rows of a table", "rows of a table?", "email drafts", "invoices", "invocies", "erp", "row", "a an", "zzz qqq"].map((query) => [query, ranked(query)]),
+      ),
+    ).toEqual({
+      "rows of a table": ["table.write", "table.rows"],
+      // Une question de données : la lecture d'abord.
+      "rows of a table?": ["table.rows", "table.write"],
+      "email drafts": ["mail.send_draft", "mail.create_draft"],
+      invoices: ["erp.list_invoices"],
+      // AC7 : une lettre échangée, trouvée comme sans la faute.
+      invocies: ["erp.list_invoices"],
+      erp: ["erp.list_invoices"],
+      // Un mot de trois lettres se compare entier.
+      row: [],
+      "a an": [],
+      "zzz qqq": [],
+    })
+    // Le bonus d'usage (`USAGE_BONUS`) : une fonction appelée dans les 30 derniers jours, elle seule.
+    const draftScores = (used: ReadonlySet<string>) => rankFunctions(FUNCTIONS, "email drafts", 5, used).map((result) => [result.fn.name, result.score])
+    const [plain, used] = [Object.fromEntries(draftScores(new Set())), Object.fromEntries(draftScores(new Set(["mail.create_draft"])))]
+    expect([used["mail.create_draft"] - plain["mail.create_draft"], used["mail.send_draft"] - plain["mail.send_draft"]].map((gap) => gap.toFixed(2))).toEqual(["0.03", "0.00"])
+    expect(rankFunctions(FUNCTIONS, "invocies", 1)[0]?.score).toBe(rankFunctions(FUNCTIONS, "invoices", 1)[0]?.score)
+    // AC9 : à score égal, l'ordre des noms servis, quel que soit l'ordre reçu.
+    const twin = (name: string) => defineFunction({ name, connector: "erp", class: "read", origin: "erp", description: "Lists the invoices of the ERP.", schema: z.strictObject({}), examples: [], refusals: [], run: ok })
+    const [first, second] = [twin("erp.b_invoices"), twin("erp.a_invoices")]
+    const tied = (functions: CatalogFunction[]) => rankFunctions(functions, "invoices of the erp", 2).map((result) => [result.fn.name, result.score])
+    const forward = tied([first, second])
+    expect([forward.map(([name]) => name), forward[0][1] === forward[1][1], tied([second, first])]).toEqual([["erp.a_invoices", "erp.b_invoices"], true, forward])
   })
 
   it("should describe a function in the contract format", () => {

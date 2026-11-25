@@ -2,10 +2,20 @@
 // Le guide de la plateforme (`read {"path": "help"}`, 1.4.3) : son plan, une section par appel, le refus d'une section
 // inconnue ; la section la plus proche d'une demande, et les propositions de `context` quand aucune procédure ne
 // convient (fonctions, puis section du guide).
-import { describe, expect, it } from "vitest"
-import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
-import { hintLines, proposedFunctions } from "../../packages/plateforme/server/context/hints"
+import { describe, expect, it, vi } from "vitest"
+import { assistantFunctions, catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
+import type { PlatformDb } from "../../packages/plateforme/server/db"
+import { hintLines, proposedFunctions, routingHints } from "../../packages/plateforme/server/context/hints"
+import type { Identity } from "../../packages/plateforme/server/identity"
 import { closestHelpSection, helpGuide, HELP_PATH } from "../../packages/plateforme/server/help"
+import { loggedText } from "../helpers/logs"
+
+// La lecture des connecteurs actifs et le catalogue de l'assistant, simulés pour le seul test de la panne du classement (AC4).
+vi.mock("../../packages/plateforme/server/connectors/activations", () => ({ loadActiveConnectors: vi.fn(async () => new Set<string>()) }))
+vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
+  return { ...original, assistantFunctions: vi.fn(original.assistantFunctions) }
+})
 
 describe("helpGuide", () => {
   it("should serve its plan, then one section at a time with the organisation prefix, and refuse an unknown section", () => {
@@ -26,6 +36,19 @@ describe("helpGuide", () => {
   })
 })
 
+describe("routingHints when the ranking throws (AC4)", () => {
+  it("should propose no function, the failure logged, and still give the guide section", async () => {
+    // Une fonction du paquet (toujours active) dont la description ne se lit pas : la préparation du classement lève.
+    const broken = Object.defineProperty({ ...catalogFunctions().filter((fn) => fn.origin === "paquet")[0], name: "node.broken" }, "description", { get: () => { throw new Error("unreadable") } })
+    vi.mocked(assistantFunctions).mockReturnValueOnce([broken])
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    // Ni base ni identité lues au-delà du préfixe : la lecture des connecteurs actifs est simulée.
+    const hints = await routingHints({} as PlatformDb, { org: { id: "o" } } as Identity, "Exporte toutes les pages de l'équipe SAV", { served: false, used: Promise.resolve(new Set()) })
+    expect([hints.functions, hints.help?.id, loggedText(error).includes("[platform] context: function ranking failed")]).toEqual([[], "transfer", true])
+    error.mockRestore()
+  })
+})
+
 describe("closestHelpSection and hintLines", () => {
   it("should lead a request to its section by the beginnings of its words, French or English, and nowhere without one", () => {
     expect(closestHelpSection("Exporte toutes les pages de l'équipe SAV")?.id).toBe("transfer")
@@ -34,10 +57,12 @@ describe("closestHelpSection and hintLines", () => {
     expect(closestHelpSection("Bonjour")).toBeNull()
   })
 
-  it("should propose node.export_tree for a request to export a team's pages, and no function on a single common word", () => {
-    expect(proposedFunctions(catalogFunctions(), "Exporte toutes les pages de l'équipe SAV").map(({ name }) => name)).toContain("node.export_tree")
-    // Un seul mot commun avec `node.export_tree` et `node.import_tree` : rien n'est proposé.
-    expect(proposedFunctions(catalogFunctions(), "créer une tâche")).toEqual([])
+  it("should propose node.export_tree first for a request to export a team's pages, and neither transfer function to create a task", () => {
+    // Par sa formule française « exporter les pages d'une équipe ou d'un dossier », comptée comme une formulation.
+    expect(proposedFunctions(catalogFunctions(), "Exporte toutes les pages de l'équipe SAV").map(({ name }) => name)[0]).toBe("node.export_tree")
+    // Un seul mot commun avec `node.export_tree` et `node.import_tree` : ni l'une ni l'autre (AC3) ; `team.create` vient de
+    // sa formule « créer équipe » : un faux positif compté dans la mesure des fonctions.
+    expect(proposedFunctions(catalogFunctions(), "créer une tâche").map(({ name }) => name)).toEqual(["team.create"])
   })
 
   it("should list the functions that may do it, then the section of the guide, and nothing without hints", () => {

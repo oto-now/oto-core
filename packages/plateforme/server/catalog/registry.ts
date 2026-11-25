@@ -1,10 +1,12 @@
-// Catalogue des fonctions derrière `call` (H80, H81) : recherche, activation, contrat servi par
+// Catalogue des fonctions derrière `call` (H80, H81) : activation, contrat servi par
 // `read` (E03-S03), exemples cités par la description de `call` (H25). Sans lui, `find` n'a aucune
 // fonction à trouver ni `read` de contrat à servir. Fonctions pures sur un tableau passé en
-// argument : les tests passent leurs fonctions, la route passe `catalogFunctions()`.
+// argument : les tests passent leurs fonctions, la route passe `catalogFunctions()`. Le classement des
+// fonctions pour une demande vit à part (`ranking.ts`).
 //
-// Repris de la maquette (`mcp-test/src/proto/functions/registry.ts` l. 13-59) : recherche par mots,
-// contrat, forme du nom. Retiré : le catalogue en dur (sources : E07-S01, E04-S01, E08-S05).
+// Repris de la maquette (`mcp-test/src/proto/functions/registry.ts` l. 13-59) : contrat, forme du nom.
+// Retiré : le catalogue en dur (sources : E07-S01, E04-S01, E08-S05), la recherche par mots de `find` et `context` (→ `ranking.ts`) ;
+// `searchFunctions` ne sert plus que l'index des fonctions de l'hôte.
 import { normalizeTitle } from "../../schemas"
 import { commentAdd, commentDelete, commentEdit, commentList, commentResolve } from "../comments/functions"
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
@@ -158,8 +160,9 @@ function matches(wanted: string, found: string): boolean {
 }
 
 /**
- * Recherche lexicale (nom, connecteur, description) : score = part des mots de la requête
- * trouvés ; à score égal, par nom. `hits` : le nombre de mots trouvés.
+ * Recherche lexicale (nom, connecteur, description) : score = part des mots de la requête trouvés ; à score égal, par
+ * nom. `hits` : le nombre de mots trouvés. Seul lecteur : les fonctions de l'hôte proches de la demande dans leur index
+ * (`host-api/index-view.ts`) ; `context` et `find` classent par `rankFunctions` (`ranking.ts`).
  */
 export function searchFunctions(
   functions: readonly CatalogFunction[],

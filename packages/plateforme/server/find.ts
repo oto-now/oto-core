@@ -12,14 +12,15 @@
 import { blockRef, orderBlocks, sectionOfBlock, SERVED_RELATED } from "../schemas"
 import { ACCESS_LEVELS, nodeLevels } from "./access"
 import type { CatalogFunction } from "./catalog/define"
-import { connectorDescription, findFunction, isActive, looksLikeFunction, searchFunctions } from "./catalog/registry"
+import { firstSentence, rankFunctions } from "./catalog/ranking"
+import { connectorDescription, findFunction, isActive, looksLikeFunction } from "./catalog/registry"
 import type { PlatformDb } from "./db"
-import { inTransaction } from "./errors"
+import { boundedList, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { clip, cut, MAX_TARGET_CHARS } from "./journal"
 import { FUNCTIONS_PATH } from "./reserved-paths"
-import { formatScore, rankCandidates, requestKind, roundScore, type Candidate } from "./routing"
-import type { ToolOutput } from "./tool-output"
+import { formatScore, rankCandidates, requestKind, roundScore, usedPaths, type Candidate } from "./routing"
+import { MAX_RESULT_CHARS, type ToolOutput } from "./tool-output"
 
 /** Nœuds servis en détail et fonctions servies au plus : la description de `find` le promet (N13). */
 const FIND_LIMIT = 3
@@ -139,12 +140,6 @@ function rankNodes(found: readonly NodeMatch[], candidates: readonly Candidate[]
 
 const byPathOf = (a: { path: string }, b: { path: string }) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
 
-/** Première phrase d'une description : jusqu'au premier point suivi d'une espace ou de la fin, point final redit. */
-export function firstSentence(description: string): string {
-  const end = description.search(/\.(?:\s|$)/)
-  return `${(end === -1 ? description : description.slice(0, end)).trim()}.`
-}
-
 // Le chemin réservé vit dans un module feuille (`reserved-paths.ts`) ; redit ici pour ses lecteurs d'avant.
 export { FUNCTIONS_PATH }
 
@@ -156,37 +151,67 @@ const FUNCTION_LINE_MAX = 200
  * alphabétique des connecteurs, puis des noms ; en tête d'un connecteur décrit, la première phrase de sa description),
  * chacune avec sa classe et la première phrase de sa description, puis les contrats à lire avant d'écrire. Sans elle,
  * `find` en rend trois au plus : une absence ne s'affirmait pas. `host` : les fonctions de l'hôte que la personne voit et
- * leurs lignes, par famille (`host-api/index-view.ts`), après celles de l'instance.
+ * leurs lignes, par famille (`host-api/index-view.ts`), après celles de l'instance. Au-delà de 45 000 caractères
+ * (`MAX_RESULT_CHARS`, texte et données), la liste devient un plan, une ligne par connecteur et une pour l'API de l'hôte,
+ * et `section` (le champ de `read` qui lit une section du guide) en lit un, l'API de l'hôte par son nom : tous les
+ * connecteurs actifs d'une organisation y faisaient 220 000 caractères.
  */
 export function functionCatalog(
   active: readonly CatalogFunction[],
   contracts: readonly string[],
   prefix: string,
-  host: { functions: readonly CatalogFunction[]; lines: readonly string[] } = { functions: [], lines: [] },
+  options: { host?: { functions: readonly CatalogFunction[]; lines: readonly string[] }; section?: string } = {},
 ): ToolOutput {
+  const host = options.host ?? { functions: [], lines: [] }
   const sorted = [...active].sort((a, b) => a.connector.localeCompare(b.connector) || a.name.localeCompare(b.name))
   const connectors = [...new Set(sorted.map((fn) => fn.connector))]
-  const heading = (connector: string): string => {
+  const hostNames = [...new Set(host.functions.map((fn) => fn.connector))]
+  const about = (connector: string): string | null => {
     const first = sorted.find((fn) => fn.connector === connector)
     const description = first ? connectorDescription(first) : null
-    return description === null ? `${connector}:` : `${connector}: ${cut(firstSentence(description), FUNCTION_LINE_MAX)}`
+    return description === null ? null : cut(firstSentence(description), FUNCTION_LINE_MAX)
   }
-  const lines = [
-    `${sorted.length + host.functions.length} functions you can run, by connector:`,
-    ...connectors.flatMap((connector) => [
-      heading(connector),
-      ...sorted.filter((fn) => fn.connector === connector).map((fn) => `- ${fn.name} (${fn.class}): ${cut(firstSentence(fn.description), FUNCTION_LINE_MAX)}`),
-    ]),
-    ...host.lines,
+  const linesOf = (connector: string) => [
+    about(connector) === null ? `${connector}:` : `${connector}: ${about(connector)}`,
+    ...sorted.filter((fn) => fn.connector === connector).map((fn) => `- ${fn.name} (${fn.class}): ${cut(firstSentence(fn.description), FUNCTION_LINE_MAX)}`),
+  ]
+  const tail = [
     ...(contracts.length > 0 ? [`Contracts to read before writing: ${contracts.join(", ")}.`] : []),
     `Read a contract with ${prefix}_read {"path": "<function>"}, then run it with ${prefix}_call.`,
   ]
-  return {
-    text: lines.join("\n"),
-    data: { functions: [...sorted, ...host.functions].map((fn) => ({ name: fn.name, connector: fn.connector, class: fn.class })), contracts: [...contracts] },
-    nextActions: [`${prefix}_read`],
-    target: FUNCTIONS_PATH,
+  const served = (lines: string[], data: Record<string, unknown>): ToolOutput => ({ text: lines.join("\n"), data, nextActions: [`${prefix}_read`], target: FUNCTIONS_PATH })
+  const listed = (fns: readonly CatalogFunction[]) => fns.map((fn) => ({ name: fn.name, connector: fn.connector, class: fn.class }))
+  const wanted = options.section?.trim().toLowerCase()
+  if (wanted) {
+    // L'API de l'hôte se lit entière, par famille, comme dans la liste complète.
+    if (hostNames.includes(wanted)) return served([...host.lines, ...tail], { functions: listed(host.functions), contracts: [...contracts] })
+    if (!connectors.includes(wanted)) {
+      throw new PlatformError("invalid_arguments", `No active connector ${options.section} in functions. Connectors: ${boundedList([...connectors, ...hostNames])}.`)
+    }
+    const own = sorted.filter((fn) => fn.connector === wanted)
+    return served([`${own.length} functions of ${wanted} you can run:`, ...linesOf(wanted), ...tail], { functions: listed(own), contracts: [...contracts] })
   }
+  const total = sorted.length + host.functions.length
+  const whole = served([`${total} functions you can run, by connector:`, ...connectors.flatMap(linesOf), ...host.lines, ...tail], {
+    functions: listed([...sorted, ...host.functions]),
+    contracts: [...contracts],
+  })
+  if (whole.text.length + JSON.stringify(whole.data).length <= MAX_RESULT_CHARS) return whole
+  const count = (connector: string) => sorted.filter((fn) => fn.connector === connector).length
+  const hostCount = (name: string) => host.functions.filter((fn) => fn.connector === name).length
+  return served(
+    [
+      `${total} functions you can run, in ${connectors.length + hostNames.length} connectors; the whole list is too long, read one connector with ${prefix}_read {"path": "functions", "section": "<connector>"}:`,
+      ...connectors.map((connector) => `- ${connector}: ${count(connector)} functions${about(connector) === null ? "" : ` — ${about(connector)}`}`),
+      // L'API de l'hôte : une ligne par nom, ou, sans fonction ouverte, ses lignes courtes (liste vide ou indisponible).
+      ...(hostNames.length > 0 ? hostNames.map((name) => `- ${name}: ${hostCount(name)} functions — the API of the host, by family`) : host.lines),
+      ...tail,
+    ],
+    {
+      connectors: [...connectors.map((connector) => ({ name: connector, functions: count(connector) })), ...hostNames.map((name) => ({ name, functions: hostCount(name) }))],
+      contracts: [...contracts],
+    },
+  )
 }
 
 function functionLines(functions: readonly FunctionMatch[], prefix: string): string[] {
@@ -264,10 +289,13 @@ function renderFind(result: {
   return lines.join("\n")
 }
 
-/** Fonctions actives par leurs mots, trois au plus, un nom exact toujours en tête avec le score 1 (H44). */
-function matchFunctions(active: readonly CatalogFunction[], query: string): FunctionMatch[] {
+/**
+ * Fonctions actives par le classement des propositions de `context` (`rankFunctions`), trois au plus, un nom exact
+ * toujours en tête avec le score 1 (H44).
+ */
+function matchFunctions(active: readonly CatalogFunction[], query: string, used: ReadonlySet<string>): FunctionMatch[] {
   const exact = looksLikeFunction(query) ? findFunction(active, query) : null
-  const found = searchFunctions(active, query, FIND_LIMIT).filter((result) => result.fn !== exact)
+  const found = rankFunctions(active, query, FIND_LIMIT, used).filter((result) => result.fn !== exact)
   return (exact ? [{ fn: exact, score: 1 }, ...found] : found).slice(0, FIND_LIMIT)
 }
 
@@ -350,12 +378,15 @@ export async function find(
 ): Promise<ToolOutput> {
   const { query, type } = input
   const prefix = identity.org.prefix
+  // Les cibles récentes de la personne, lues une fois pour le classement des nœuds et celui des fonctions ; `type: "function"`
+  // ne classe aucun nœud et ne relit pas le journal : ses fonctions vont sans bonus d'usage, sans requête de plus.
+  const used = type === "function" ? Promise.resolve(new Set<string>()) : usedPaths(db, identity)
   const [readable, candidates] = await Promise.all([
     type === "function" ? null : readableRows(db, identity, query, type),
     // Le classement du routage ne fait qu'ordonner : sa panne laisse `find` à ses seules lignes.
     type === "function"
       ? []
-      : rankCandidates(db, identity, { query, limit: SEARCH_ROWS, kinds: type === undefined ? ALL_KINDS : KINDS[type] }).catch((error: unknown) => {
+      : rankCandidates(db, identity, { query, limit: SEARCH_ROWS, kinds: type === undefined ? ALL_KINDS : KINDS[type], used }).catch((error: unknown) => {
           console.error("[platform] find: routing rank failed", error)
           return []
         }),
@@ -363,7 +394,7 @@ export async function find(
   const { nodes, others, moreNodes } = readable === null ? { nodes: [], others: [], moreNodes: 0 } : rankNodes(groupMatches(readable.rows), candidates, query)
   if (readable) await withSections(db, identity, nodes, readable.levels)
   const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
-  const functions = type === undefined || type === "function" ? matchFunctions(active, query) : []
+  const functions = type === undefined || type === "function" ? matchFunctions(active, query, await used) : []
   return {
     // `notice` : ce que la recherche de fonctions ne couvre pas (les fonctions de l'hôte, quand leur liste est indisponible).
     text: [renderFind({ query, type, nodes, others, moreNodes, functions, prefix }), ...(catalog.notice && (type === undefined || type === "function") ? [catalog.notice] : [])].join("\n"),

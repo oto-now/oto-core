@@ -26,6 +26,10 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Spent credits keep their refusal (`quota_exhausted`), without a link: they are bought at the third party.
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 - A connector that opens by several accesses names the others in a refusal without account; its link lets the user choose, each access with its own gesture.
+- `context` proposes up to three functions for every request, also under a served procedure, ranked like procedures (full text, trigrams, typos); `find` ranks its functions the same way.
+- `find` scores a function between 0 and 1 like a node, no longer as the share of words found, and leaves out those under 0.40, as `context` does.
+- `read` of path `functions` becomes an outline by connector past 45,000 characters; `section` set to a connector name, or to the name of the host's API, reads its functions.
+- `context` names the personal accounts colleagues shared with you, with their owner and your level: used only when named in `call`, never one not shared with you.
 
 ### Hosts
 - Migrations: apply `20261123150000_platform_api_de_l_hote.sql`: the table `platform.host_apis` (the host API of an organisation: address, served OpenAPI document, version, ETag, last refusal). Additive; the package without it fails on the catalogue of an organisation.

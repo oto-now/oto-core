@@ -6,12 +6,14 @@
 // n'a de compte a la sienne dans la partie de Tout le monde (sans équipe). Le compte est décidé comme par
 // `call` (`chooseAccount`) : une seule source. Un compte marqué (clé refusée, crédits épuisés) se dit avec sa marque.
 import type { AccountMark, AccountMode } from "../../schemas"
+import { ACCOUNT_LEVELS } from "../access"
 import type { CatalogFunction } from "../catalog/define"
 import { catalogFunctions } from "../catalog/registry"
 import type { PlatformDb } from "../db"
+import { memberDirectory } from "../directory"
 import type { Identity } from "../identity"
 import { cut } from "../journal"
-import { connectorAccounts, markWords, type ConnectorAccount, type LevelName } from "./accounts"
+import { connectorAccounts, levelName, markWords, type ConnectorAccount, type LevelName } from "./accounts"
 import { activableConnectors, loadActiveConnectors } from "./activations"
 import { modeLabel } from "./modes"
 import { isPersonalConnector } from "./consent-accounts"
@@ -136,17 +138,57 @@ export function connectorLines(outlooks: readonly ConnectorOutlook[]): string[] 
   })
 }
 
-/** Les lignes connecteurs de la personne, par partie : celle de Tout le monde, puis par équipe (id). */
-export type ConnectorLinesByPart = { everyone: string[]; teams: Map<string, string[]> }
+/**
+ * Les lignes connecteurs de la personne, par partie : celle de Tout le monde, puis par équipe (id) ; et, pour la partie de
+ * Tout le monde, les comptes personnels que des collègues lui ont partagés (`sharedLines`).
+ */
+export type ConnectorLinesByPart = { everyone: string[]; teams: Map<string, string[]>; shared: string[] }
+
+/**
+ * Les comptes personnels d'autres personnes que l'appelant peut déjà servir en les nommant, ceux de la liste des comptes
+ * (`listUsableAccounts`) : actifs, visibles (niveau lecture au moins, sa règle de partage), d'une personne encore membre.
+ * Jamais un compte personnel qui ne lui est pas partagé : `connectorAccounts` ne rend pas un compte de niveau 0.
+ */
+function sharedWithCaller(accounts: readonly ConnectorAccount[], caller: string): ConnectorAccount[] {
+  return accounts.filter(
+    (account) =>
+      account.owner.kind === "user" &&
+      account.owner.userId !== caller &&
+      account.status === "active" &&
+      account.level >= ACCOUNT_LEVELS.read &&
+      account.ownerLeft !== true,
+  )
+}
+
+/**
+ * Une ligne par connecteur qui a des comptes partagés : `mail: « Mail Léa » (owner Léa Roux, simulated, write)`, sa marque
+ * comprise (`, marked: credits spent since …`, comme la ligne d'un compte que prend l'appel), le
+ * niveau de l'appelant sur chacun, 200 caractères au plus, libellés coupés à 40. Le nom de la personne vient de
+ * l'annuaire (`owners`) ; un propriétaire absent de l'annuaire (faute de câblage : un compte partagé est celui d'un
+ * membre) retire le compte de la ligne, au log, sans refuser `context`.
+ */
+function sharedLines(shared: readonly { connector: string; accounts: readonly ConnectorAccount[] }[], owners: ReadonlyMap<string, string>): string[] {
+  return shared.flatMap(({ connector, accounts }) => {
+    const named = accounts.flatMap((account) => {
+      const owner = owners.get(account.owner.userId ?? "")
+      if (owner === undefined) console.error(`[platform] context: no directory name for the owner of shared account ${account.id}`)
+      return owner === undefined ? [] : [`« ${cut(account.label, MAX_LABEL_CHARS)} » (owner ${cut(owner, MAX_LABEL_CHARS)}, ${modeLabel(account.mode)}, ${levelName(account.level)}${account.mark ? `, marked: ${markWords(account.mark)}` : ""})`]
+    })
+    return named.length === 0 ? [] : [cut(`${connector}: ${named.join(", ")}`, MAX_LINE_CHARS)]
+  })
+}
 
 /**
  * Lignes connecteurs de la personne : connecteurs activables et actifs, relus à chaque appel (N9),
  * leurs comptes visibles et niveaux lus en parallèle. Une équipe de la personne « a un compte » d'un
  * connecteur quand elle possède un compte actif qu'elle voit (quel que soit son niveau : un compte en
- * lecture seule se dit aussi) ; ses lignes vont dans sa partie, par nom d'équipe comme `identity.teams`.
+ * lecture seule se dit aussi) ; ses lignes vont dans sa partie, par nom d'équipe comme `identity.teams`. Les comptes
+ * personnels que des collègues lui ont partagés (`sharedWithCaller`) se disent à part, nommés avec leur propriétaire :
+ * sans eux, le contexte disait « no account you can use » à qui pouvait servir le compte d'un collègue en le nommant.
+ * L'annuaire ne se lit que s'il y en a un.
  */
 export async function teamConnectorLines(db: PlatformDb, identity: Identity): Promise<ConnectorLinesByPart> {
-  const lines: ConnectorLinesByPart = { everyone: [], teams: new Map() }
+  const lines: ConnectorLinesByPart = { everyone: [], teams: new Map(), shared: [] }
   const activable = activableConnectors(catalogFunctions())
   if (activable.size === 0) return lines
   const active = await loadActiveConnectors(db, identity.org.id)
@@ -166,5 +208,8 @@ export async function teamConnectorLines(db: PlatformDb, identity: Identity): Pr
     }
     if (owning.length === 0) lines.everyone.push(...connectorLines([connectorOutlook({ connector, functions, accounts, team: null, ...caller })]))
   }
-  return lines
+  const shared = connectors.map(({ connector, accounts }) => ({ connector, accounts: sharedWithCaller(accounts, identity.user.id) })).filter(({ accounts }) => accounts.length > 0)
+  if (shared.length === 0) return lines
+  const owners = new Map((await memberDirectory(db, identity.org.id)).map((person) => [person.userId, person.name]))
+  return { ...lines, shared: sharedLines(shared, owners) }
 }

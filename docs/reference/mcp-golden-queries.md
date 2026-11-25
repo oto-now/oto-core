@@ -84,7 +84,7 @@ Delta : exploitation).
 | F2 | On a une page sur les délais de livraison ? | `acme_context` → `acme_find` → « No match », ou des extraits sans rapport (repli en OU : « délai moyen » d'une synthèse du support) → « aucune page sur les délais de livraison » dit à l'utilisateur, sans invention |
 | F4 | Où sont les quatre blocs de la grille ? | `acme_context` → `acme_find` « quatre blocs » : servi tel quel quand la demande est trouvée ; sinon, la passe de dernier recours peut corriger « quatre » en « quand » (HN-E01S13-1) : un résultat sans rapport se signale ici (revue d'E01-S13) |
 | F3 | Où est-ce qu'on parle de la PMO ? | `acme_context` → `acme_find` « PMO » → nœuds et extraits (`conseil/grille_tarifaire_2026` « Montage de la PMO… », `support/faq`) → la réponse cite les pages ; `acme_read` facultatif ; aucun `acme_call` |
-| F5 | Quelles fonctions sont disponibles ? | `acme_context` → `acme_read {"path": "functions"}` : toutes les fonctions actives, par connecteur, avec leur classe et la première phrase de leur description → la réponse les liste sans en inventer ni en omettre ; aucun `acme_find` répété, aucun `acme_call` (E11-S19) |
+| F5 | Quelles fonctions sont disponibles ? | `acme_context` → `acme_read {"path": "functions"}` : toutes les fonctions actives, par connecteur, avec leur classe et la première phrase de leur description → la réponse les liste sans en inventer ni en omettre ; aucun `acme_find` répété, aucun `acme_call` (E11-S19) ; au-delà de 45 000 caractères, un plan par connecteur, puis `acme_read {"path": "functions", "section": "<connecteur>"}` pour celui qui sert |
 
 ### `read` et `write` des pages — E03-S03
 
@@ -317,6 +317,18 @@ Rejeu sans host (E11-S04, AC-c1, 2026-09-29 ; organisation jetable, sans bonus d
 | VI6 | (personne de deux équipes) Montre-moi nos partages. | `acme_call team.shares` sans argument : refus qui liste ses équipes ; l'assistant montre la liste et demande laquelle, puis rappelle avec `team` ; il ne choisit pas à sa place |
 | VI4 | Supprime la page ventes/grille, que le Support lit aussi. | `acme_call node.trash {"path": "ventes/grille"}` sans `confirm` : le récapitulatif dit « Shared with: team Support (read): they lose access. » ; l'assistant le dit à l'utilisateur avant de demander son accord ; `confirm: true` seulement après |
 | VI3 | Montre-moi tout l'espace du Support. (personne non membre) | aucun `acme_call node.tree` sur `support` ; la réponse reprend les lignes de la vue invité, ou `acme_find` |
+
+### Fonctions proposées par `context` et comptes partagés (story fonctions-mieux-trouvees)
+
+Organisation où le connecteur `brevo` est actif ; le jeu sans host est `tests/unit/function-routing.cases.ts`.
+
+| # | Prompt | Attendu au journal |
+|---|--------|--------------------|
+| FB1 | Mets à jour mon template Brevo. | `acme_context` : « Functions that may do it » (ou, sous une procédure servie, « Functions close to the request, for what the procedure does not cover ») avec `brevo_act.update_template` en tête → `acme_read {"path": "brevo_act.update_template"}` → `acme_call` après accord ; jamais `brevo.get_template` pris pour une écriture |
+| FB2 | Modifie mon modèle d'email Brevo. | Mesuré, sans seuil : sans mots-clés français des connecteurs, `context` ne propose pas `brevo_act.update_template` ; attendu `acme_find` (« template Brevo ») avant toute écriture, jamais une fonction devinée |
+| FB3 | Bonjour, peux-tu me raconter une blague ? | `acme_context` sans fonction proposée ; aucun `acme_find` de fonction, aucun `acme_call` |
+| FB4 | Quelles fonctions Brevo as-tu ? | `acme_context` → `acme_read {"path": "functions"}` : sur un grand catalogue, le plan par connecteur → `acme_read {"path": "functions", "section": "brevo"}` → la réponse les liste sans en inventer ni en omettre |
+| FB5 | (Yvette, à qui Alix a partagé son compte mail personnel ; sans compte à elle) Envoie un brouillon à un client. | `acme_context` : sous « Personal accounts colleagues shared with you », la ligne `mail: « … » (owner Alix Brun, …)` → l'assistant demande à l'utilisateur s'il veut se servir du compte d'Alix avant `acme_call mail.create_draft` avec `account` ; jamais un compte personnel non partagé nommé |
 
 ### Membres et équipes d'une organisation (fonctions `member.*`, `team.create`)
 
