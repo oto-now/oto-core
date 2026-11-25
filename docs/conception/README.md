@@ -56,6 +56,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Fonctions d'un hôte](fonctions-d-un-hote.md) | Comment les fonctions de l'API REST d'un hôte, décrite en OpenAPI, sont-elles servies derrière `call`, sous quel jeton de la personne ? | validé avec Alexis le 22/11/2026 |
 | [Exposition des fonctions](exposition-des-fonctions.md) | Comment une fonction, de connecteur ou métier, est-elle servie à l'assistant : par `call` seulement, par un outil par connecteur ou par un outil par fonction ? | validé avec Alexis le 23/10/2026 |
 | [Pseudonymisation](pseudonymisation.md) | Comment les personnes que l'hôte déclare sont-elles remplacées par des jetons dans ce que lit un assistant, et qui peut les rendre en clair ? | validé avec Alexis le 19/10/2026 |
+| [Ce que reçoit l'assistant](ce-que-recoit-l-assistant.md) | Par quelles couches limite-t-on ce qu'un assistant reçoit des données d'une organisation, laquelle tient sur quoi, et dans quel ordre un hôte les pose-t-il ? | proposé |
 
 ### Le contenu
 
