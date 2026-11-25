@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-25] — ui:shots se connecte pour capturer un écran protégé, et refuse une capture de /login
+**Quoi :** `scripts/ui-shots.mjs` se connecte une fois avec le compte des contrôles visuels (`E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, lus dans l'environnement puis `.env.local`), par les gestes des tests de bout en bout, et capture chaque route sous cette session. Une route renvoyée sur `/login` n'est plus capturée : le script sort en échec en la nommant (`landedOnLogin`, `scripts/lib/ui-shots-login.mjs`). `ui-patterns.md` § Preuve visuelle le dit.
+**Pourquoi :** les agents `designer` et `design-critic` capturaient la page de connexion à la place des écrans protégés, sans erreur.
+**Fichiers :** `scripts/ui-shots.mjs`, `scripts/lib/ui-shots-login.mjs`, `tests/unit/ui-shots.test.ts`, `.env.example`, `.method/conventions/ui-patterns.md`.
+
 ## [2026-11-23] — Fonctions d'un hôte (1/3) : source par organisation, échange de jeton, confirmation par l'hôte
 **Quoi :** une organisation a une « API de l'hôte » (`platform.host_apis`, migration `20261123150000`) : son document OpenAPI, lu à `<adresse>/openapi.json` par le transport gardé et jugé par le profil hôte de la lib (épinglée sur v1.246.0), donne des fonctions qui entrent au catalogue de l'organisation (`orgAssistantFunctions`) comme des fonctions de l'ERP. Elles courent par le moteur des connecteurs décrits sous un jeton échangé (RFC 8693) auprès de l'émetteur de l'instance, avec les en-têtes `Oto-Ctx`, `Oto-Client` et `Oto-Org` ; une fonction sensible se confirme par les deux temps de l'hôte (`202 needs_confirmation`, puis `?confirm=true`) ; un `problem+json` devient une `PlatformError`. Administration : `admin_connector host_api` et `refresh_host_api`. Test qui refuse deux têtes de migration.
 **Pourquoi :** issue #153 et ses décisions (jeton jamais transmis tel quel, un enregistrement par organisation, `call` seul).

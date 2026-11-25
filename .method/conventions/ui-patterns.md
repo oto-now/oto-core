@@ -306,9 +306,16 @@ Une UI se juge en la regardant, pas en lisant ses classes.
   pas versionné. Le script réutilise un serveur qui répond, sinon démarre `pnpm dev` et
   l'arrête. Sous Git Bash, `MSYS_NO_PATHCONV=1` devant la commande : sans lui, `/` est
   réécrit en chemin Windows. Le badge de dev de Next reste visible sur les captures ; c'est
-  voulu, il montre aussi l'overlay d'erreur quand l'écran casse.
+  voulu, il montre aussi l'overlay d'erreur quand l'écran casse. Un écran protégé se capture
+  connecté : avec `E2E_USER_EMAIL` et `E2E_USER_PASSWORD` (un compte de test, jamais la
+  production ; `UI_SHOTS_BASE_URL` peut viser l'adresse d'une organisation), le script se
+  connecte une fois puis capture sous cette session. Une route renvoyée sur `/login` fait sortir
+  le script en échec, sans capture : la page de connexion n'est jamais prise pour l'écran.
 - **La review lit les captures** et cite leurs chemins dans son rapport
   (`code-review.md § Preuve visuelle`). Capture absente sur un diff UI = review incomplète.
+- **Ce que `pnpm dev` laisse derrière lui** : Next 16 réécrit `next-env.d.ts` (chemins `.next/dev/`) et crée
+  `AGENTS.md` à chaque démarrage. Avant `pnpm verify`, `git status` ne les montre pas : `next-env.d.ts`
+  repris de `main`, `AGENTS.md` supprimé ; sinon le commit les emporte avec le diff.
 - **Ce que la capture doit montrer** : aucun débordement à 375, sidebar à partir de 768,
   les deux thèmes lisibles, titres sur deux lignes maximum, bouton principal visible sans
   scroll sur un formulaire court.
