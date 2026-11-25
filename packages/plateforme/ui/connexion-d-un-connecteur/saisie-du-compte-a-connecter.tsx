@@ -31,7 +31,14 @@ export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
     facon: etape.form ? connexionDe(etape.form) : ("sans_cle" as const),
     proprietaires: [etape.owner],
     mode: etape.mode,
-    ferme: false,
+    // La page n'ouvre que ce que le service admet : ni blocage ni plafond à dire, ni fonctions ni connecteurs déjà à soi à compter.
+    logo: null,
+    bloquePar: null,
+    actif: true,
+    fonctions: [],
+    miens: [],
+    mesComptes: [],
+    connectes: 0,
     formulaire: etape.form,
   }
   const equipes = etape.team ? [{ id: etape.team.id, name: etape.team.name }] : []
@@ -43,6 +50,11 @@ export function SaisieDuCompteAConnecter({ etape }: { etape: Saisie }) {
         equipes={equipes}
         equipe={etape.team?.id}
         nomPropose={etape.label}
+        bloque={false}
+        sujets={{ equipes: [], personnes: [] }}
+        moi=""
+        administre={false}
+        sansPartage
         annuler={() => window.history.back()}
         apresAjout={() => setConnecte(etape.label)}
       />

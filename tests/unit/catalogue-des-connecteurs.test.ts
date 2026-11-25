@@ -38,7 +38,7 @@ const ADMINISTRATEUR: AccountOwnerChoices = { user: true, org: true, teams: [EQU
 
 describe("outilsAAjouter", () => {
   it("should give a member the tools that admit a personal account, by name, a team lead the teams' too, and an administrator the organisation's", () => {
-    const lus = (choix: AccountOwnerChoices) => outilsAAjouter(CONNECTEURS, FORMULAIRES, choix).map((outil) => [outil.libelle, outil.facon, outil.proprietaires, outil.ferme])
+    const lus = (choix: AccountOwnerChoices) => outilsAAjouter(CONNECTEURS, FORMULAIRES, choix).map((outil) => [outil.libelle, outil.facon, outil.proprietaires, outil.bloquePar !== null])
     expect({ membre: lus(MEMBRE), responsable: lus(RESPONSABLE), administrateur: lus(ADMINISTRATEUR) }).toEqual({
       // Ni « mail » (sans formulaire) ni « Paie » (organisation et équipes seulement) ; « Réseau » n'a pas son port.
       membre: [
@@ -56,7 +56,7 @@ describe("outilsAAjouter", () => {
         ["Microsoft 365", "consentement", ["user"], false],
         ["Paie", "saisie", ["team"], true],
       ],
-      // Un outil connecté chez le tiers ne se connecte que pour soi ; un outil fermé le dit.
+      // Un outil connecté chez le tiers ne se connecte que pour soi ; un outil bloqué le dit.
       administrateur: [
         ["Crm Pro", "saisie", ["user", "org", "team"], false],
         ["Écritures", "saisie", ["user"], false],
@@ -66,6 +66,21 @@ describe("outilsAAjouter", () => {
         ["Paie", "saisie", ["org", "team"], true],
       ],
     })
+  })
+
+  it("should count the person's own connectors of each tool, those that work apart, and say who blocked a closed tool", () => {
+    const mes = [
+      { id: "c1", connecteur: "crm", libelle: "Crm Pro", fonctionne: true },
+      { id: "c2", connecteur: "crm", libelle: "Crm Pro 2", fonctionne: false },
+      { id: "e1", connecteur: "ecritures", libelle: "Écritures", fonctionne: true },
+    ]
+    const lus = outilsAAjouter(CONNECTEURS, FORMULAIRES, ADMINISTRATEUR, mes).map((outil) => [outil.connecteur, outil.miens, outil.connectes, outil.bloquePar])
+    expect(lus.filter(([connecteur]) => ["crm", "ecritures", "mail", "paie"].includes(String(connecteur)))).toEqual([
+      ["crm", ["Crm Pro", "Crm Pro 2"], 1, null],
+      ["ecritures", ["Écritures"], 1, null],
+      ["mail", [], 0, null],
+      ["paie", [], 0, { userId: "u", name: null }],
+    ])
   })
 
   it("should create the account in the mode the connector admits", () => {
@@ -111,5 +126,9 @@ describe("outilsCherches", () => {
 describe("nomLibre", () => {
   it("should propose the name of the tool, or the first free rank after it, whatever the case", () => {
     expect([nomLibre("Crm Pro", []), nomLibre("Crm Pro", ["crm pro"]), nomLibre("Crm Pro", ["Crm Pro", "CRM PRO 2", "Autre"])]).toEqual(["Crm Pro", "Crm Pro 2", "Crm Pro 3"])
+  })
+
+  it("should number a further connector of a tool after those the person already has, even named otherwise", () => {
+    expect([nomLibre("Compta", ["Compta · Atelier", "Compta · SCI"], 3), nomLibre("Compta", ["Compta 3"], 3)]).toEqual(["Compta 3", "Compta 4"])
   })
 })

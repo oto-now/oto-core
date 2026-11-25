@@ -3,8 +3,8 @@
 // « use client » : l'écran, rendu par le serveur, le calcule et ne passe à ses îlots que des données (comme
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
-import { normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type EtatDuCompte } from "./etat-du-compte"
+import { connectorLogoAddress, normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
+import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type BloqueurDeLOutil, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
 /**
@@ -21,7 +21,8 @@ const FILTRES = ["all", "mine", "shared"] as const
 type FiltreDesConnecteurs = (typeof FILTRES)[number]
 
 /** Ce que l'adresse de l'écran demande : le filtre, la recherche, et le compte dont le détail est ouvert. */
-export type VueDesConnecteurs = { filtre: FiltreDesConnecteurs; q: string; compte: string | null }
+/** `partager` : le détail ouvert l'est sur son partage (`?share=1`, au retour d'un partage qui n'a pas pu se poser). */
+export type VueDesConnecteurs = { filtre: FiltreDesConnecteurs; q: string; compte: string | null; partager?: true }
 
 /** La vue lue dans la query de l'écran (`?filter=mine&q=…&connector=<id>`) ; une valeur inconnue vaut son défaut. */
 export function vueDesConnecteurs(query: Readonly<Record<string, string | string[] | undefined>>): VueDesConnecteurs {
@@ -29,15 +30,17 @@ export function vueDesConnecteurs(query: Readonly<Record<string, string | string
     const valeur = query[nom]
     return typeof valeur === "string" ? valeur : ""
   }
-  return { filtre: FILTRES.find((filtre) => filtre === lu("filter")) ?? "all", q: lu("q").trim().slice(0, 80), compte: lu("connector") || null }
+  const compte = lu("connector") || null
+  return { filtre: FILTRES.find((filtre) => filtre === lu("filter")) ?? "all", q: lu("q").trim().slice(0, 80), compte, ...(compte && lu("share") === "1" ? { partager: true as const } : {}) }
 }
 
 /** Les paramètres d'une vue, sans ses valeurs par défaut. */
-function parametresDe({ filtre, q, compte }: VueDesConnecteurs): [string, string][] {
+function parametresDe({ filtre, q, compte, partager }: VueDesConnecteurs): [string, string][] {
   const parametres: [string, string][] = []
   if (filtre !== "all") parametres.push(["filter", filtre])
   if (q) parametres.push(["q", q])
   if (compte) parametres.push(["connector", compte])
+  if (compte && partager) parametres.push(["share", "1"])
   return parametres
 }
 
@@ -68,12 +71,15 @@ export type LigneDeConnecteur = {
   libelle: string
   /** Le nom lisible de l'outil. */
   outil: string
+  /** L'adresse du logo de l'outil (`logoDe`), `null` sans domaine déclaré. */
+  logo: string | null
   /** La description écrite par qui le gère : elle remplace le nom de l'outil sous le libellé. */
   description: string | null
   acces: string
   /** Sous l'accès : le niveau de la personne, ou « Vous seul ». */
   niveau: string
   etat: Pick<EtatDuCompte, "mot" | "precision" | "point">
+  /** Désactivé, ou bloqué avec son outil : plus aucun assistant ne s'en sert, la ligne se grise. */
   desactive: boolean
   geste: GesteDeLigne | null
   /** L'adresse qui ouvre le détail, filtre et recherche gardés. */
@@ -97,15 +103,19 @@ function accesDe(compte: AccountView, moi: string, partages: PartagesDuCompte | 
   if (compte.owner.kind === "org") return { acces: "Toute l'organisation", niveau }
   if (!estAMoi(compte, moi)) return { acces: `Partagé par ${compte.owner.userName ?? "une personne qui n'est plus membre"}`, niveau }
   const sujets = [...(partages?.general ? ["Toute l'organisation"] : []), ...(partages?.rules ?? []).map((regle) => (regle.subject.kind === "team" ? `Équipe ${regle.subject.name}` : regle.subject.name))]
-  if (sujets.length === 0) return { acces: "Privé", niveau: "Vous seul" }
+  if (sujets.length === 0) return { acces: "Privé", niveau: "Non partagé" }
   return { acces: sujets.length === 1 ? sujets[0] : `${sujets[0]} +${sujets.length - 1}`, niveau: "Partagé par vous" }
 }
 
-/** Ceux qui attendent un geste d'abord, les désactivés en dernier, et par libellé dans chaque rang. */
-const rang = (etat: EtatDuCompte) => (etat.code === "desactive" ? 2 : etat.demandeUnGeste ? 0 : 1)
+/** Désactivé ou bloqué : personne ne le répare seul, sauf qui le gère ou un administrateur. */
+const eteint = (etat: EtatDuCompte) => etat.code === "desactive" || etat.code === "bloque"
+
+/** Ceux qui attendent un geste d'abord, les désactivés et les bloqués en dernier, et par libellé dans chaque rang. */
+const rang = (etat: EtatDuCompte) => (eteint(etat) ? 2 : etat.demandeUnGeste ? 0 : 1)
 
 type Sources = {
   comptes: readonly AccountView[]
+  connecteurs: readonly OrgConnector[]
   formulaires: readonly ConnectorAccountForm[]
   partages: Partial<Record<string, PartagesDuCompte>>
   moi: string
@@ -116,7 +126,7 @@ type Sources = {
  * Les lignes de la vue, et le compte de chaque filtre (compté avant la recherche, qui ne change pas ses pastilles) :
  * « À moi », les comptes personnels de la personne ; « Partagés avec moi », tous les autres.
  */
-export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici }: Sources, vue: VueDesConnecteurs) {
+export function lignesDesConnecteurs({ comptes, connecteurs, formulaires, partages, moi, ici }: Sources, vue: VueDesConnecteurs) {
   const miens = comptes.filter((compte) => estAMoi(compte, moi))
   const retenus = vue.filtre === "mine" ? miens : vue.filtre === "shared" ? comptes.filter((compte) => !estAMoi(compte, moi)) : comptes
   // Sans casse ni accent : « Écritures » se trouve en tapant « ecritures ».
@@ -124,17 +134,18 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
   const lignes = retenus
     .map((compte) => {
       const formulaire = formulaireDuCompte(formulaires, compte)
-      const etat = etatDuCompte(compte, formulaire, moi)
+      const etat = etatDuCompte(compte, formulaire, moi, bloquePar(compte.connector, connecteurs))
       const ligne: LigneDeConnecteur = {
         id: compte.id,
         libelle: compte.label,
         outil: libelleDuConnecteur(compte.connector, formulaires),
+        logo: logoDe(compte.connector, connecteurs),
         description: compte.description,
         ...accesDe(compte, moi, partages[compte.id]),
         etat: { mot: etat.mot, precision: etat.precision, point: etat.point },
-        desactive: etat.code === "desactive",
+        desactive: eteint(etat),
         geste: gesteDe(etat, compte, formulaire),
-        ouverture: adresseDeLaVue(ici, { ...vue, compte: compte.id }),
+        ouverture: adresseDeLaVue(ici, { filtre: vue.filtre, q: vue.q, compte: compte.id }),
       }
       return { ligne, rang: rang(etat) }
     })
@@ -142,6 +153,17 @@ export function lignesDesConnecteurs({ comptes, formulaires, partages, moi, ici 
     .sort((a, b) => a.rang - b.rang || a.ligne.libelle.localeCompare(b.ligne.libelle, "fr"))
     .map(({ ligne }) => ligne)
   return { lignes, comptes: { tous: comptes.length, moi: miens.length, partages: comptes.length - miens.length } }
+}
+
+/** L'adresse du logo d'un connecteur qui déclare le domaine de son outil ; `null` sinon, et la tuile garde l'initiale. */
+export function logoDe(connecteur: string, catalogue: readonly OrgConnector[]): string | null {
+  return catalogue.some((candidat) => candidat.connector === connecteur && candidat.logoDomain !== undefined) ? connectorLogoAddress(connecteur) : null
+}
+
+/** Qui a bloqué l'outil d'un compte pour l'organisation (`closedBy` d'un connecteur fermé) ; `null` : il ne l'est pas. */
+export function bloquePar(connecteur: string, catalogue: readonly OrgConnector[]): BloqueurDeLOutil {
+  const outil = catalogue.find((candidat) => candidat.connector === connecteur)
+  return outil && outil.state !== "active" ? outil.closedBy : null
 }
 
 /** Les fonctions d'un connecteur, telles que le catalogue les décrit ; aucune pour un connecteur qu'il ne décrit plus. */

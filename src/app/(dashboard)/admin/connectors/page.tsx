@@ -63,18 +63,17 @@ async function administration(db: PlatformDb, identity: Identity, connectors: Do
 }
 
 async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {
-  // Quatre lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
-  const [accounts, connectors, teams, proprietaires] = await Promise.all([
+  // Cinq lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`). L'annuaire sert au
+  // partage, dans le détail comme dans la fiche d'ajout (« Qui pourra s'en servir »).
+  const [accounts, connectors, teams, proprietaires, members] = await Promise.all([
     listOrgAccounts(db, identity),
     listConnectorsForOrg(db, identity),
     listTeams(db, identity),
     accountOwnerChoices(db, identity),
+    listMembers(db, identity),
   ])
-  // L'annuaire ne sert qu'au partage du compte ouvert, pour qui le gère : hors de là, il ne se lit pas.
-  const partageOuvert = accounts.some((compte) => compte.id === ouvert && compte.viewerLevel === "manage")
-  const [partages, members, reserve] = await Promise.all([
+  const [partages, reserve] = await Promise.all([
     partagesDe(db, identity, accounts, ouvert),
-    partageOuvert ? listMembers(db, identity) : [],
     isOrgAdmin(identity) ? administration(db, identity, connectors) : undefined,
   ])
   return {

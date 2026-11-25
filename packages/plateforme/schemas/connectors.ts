@@ -4,6 +4,7 @@
 // que les écrans d'E08-S03 reprendront (forms-patterns.md § Principe, H02). `zod/v4`, comme tout
 // schemas/ (P1). Les arguments des fonctions `mail.*` restent dans `server/connectors/simulated/`.
 import * as z from "zod/v4"
+import { PLATFORM_API_PREFIX } from "./api"
 import type { AccountLevelName } from "./rules"
 
 /** La contrainte de `connector_activations.connector` (E01-S06). */
@@ -163,6 +164,9 @@ export const connectorProbeSchema = z.object({ connector: connectorNameSchema, i
  * (E04-S01) et que le voient l'écran « Connecteurs » (E08-S03) et le MCP admin (E08-S06). Ici, et non
  * dans `server/` : l'écran, qui n'importe pas `server/`, le reçoit tel quel (H02, H03).
  */
+/** L'adresse du logo d'un connecteur, que la porte sert (`GET connectors/<nom>/logo`) et que la tuile de l'écran affiche. */
+export const connectorLogoAddress = (connector: string): string => `${PLATFORM_API_PREFIX}connectors/${encodeURIComponent(connector)}/logo`
+
 export type OrgConnector = {
   connector: string
   /** Le nom que la déclaration lui donne (« Pennylane ») ; le nom technique pour un connecteur non déclaré (`mail`). */
@@ -171,7 +175,7 @@ export type OrgConnector = {
   description?: string
   /**
    * Le domaine de l'outil (`attio.com`), en minuscules, sans schéma ni chemin, tel que sa déclaration le donne
-   * (`ConnectorDefinition.logoDomain`), d'où l'écran tirera son logo ; absent sans lui.
+   * (`ConnectorDefinition.logoDomain`), d'où l'écran tire son logo (`connectorLogoAddress`) ; absent sans lui.
    */
   logoDomain?: string
   state: "active" | "inactive"

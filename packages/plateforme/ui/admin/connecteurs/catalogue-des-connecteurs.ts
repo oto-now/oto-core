@@ -3,8 +3,8 @@
 // s'y connecter et les propriétaires qu'elle peut choisir.
 // Module sans « use client » : l'écran, rendu par le serveur, le calcule et ne passe à la fenêtre que des données. Sans
 // lui, la fenêtre proposerait un ajout que le service refuse (un propriétaire non admis, un outil sans port chez le tiers).
-import { normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, type Connexion } from "./etat-du-compte"
+import { connectorLogoAddress, normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
+import { connexionDe, type BloqueurDeLOutil, type Connexion } from "./etat-du-compte"
 
 type Proprietaire = ConnectorAccountForm["ownerKinds"][number]
 
@@ -13,6 +13,8 @@ export type OutilAAjouter = {
   connecteur: string
   /** Le nom lisible de l'outil. */
   libelle: string
+  /** L'adresse du logo de l'outil, `null` sans domaine déclaré (`OrgConnector.logoDomain`). */
+  logo: string | null
   /**
    * L'accès du compte à créer, pour un connecteur à plusieurs accès : son nom (envoyé à la création, au consentement et
    * à la sonde) et son libellé (montré sous le nom de l'outil) ; absent pour un connecteur à un seul accès.
@@ -24,10 +26,23 @@ export type OutilAAjouter = {
   proprietaires: Proprietaire[]
   /** Le mode du compte à créer, celui que le connecteur admet (`OrgConnector.accountModes`). */
   mode: AccountMode
-  /** Fermé par un administrateur : l'ajout n'est pas proposé. */
-  ferme: boolean
+  /** Bloqué pour l'organisation par un administrateur, et par qui : l'ajout n'est pas proposé ; `null` : il ne l'est pas. */
+  bloquePar: BloqueurDeLOutil
+  /** Ouvert dans l'organisation : un connecteur au moins l'a ouvert (`OrgConnector.state`). */
+  actif: boolean
+  /** Ses fonctions, groupées dans la fiche par ce qu'elles font. */
+  fonctions: OrgConnector["functions"]
+  /** Les noms des connecteurs personnels de la personne pour cet outil : un de plus demande un nom qui le distingue. */
+  miens: string[]
+  /** Les identifiants de ces connecteurs : un retour de chez le tiers reconnaît le nouveau, absent de cette liste. */
+  mesComptes: string[]
+  /** Combien de ces connecteurs servent (`fonctionne`) : « Connecté » au catalogue. */
+  connectes: number
   formulaire: ConnectorAccountForm | null
 }
+
+/** Un connecteur personnel de la personne, tel que le catalogue le compte. */
+export type MonConnecteur = { id: string; connecteur: string; libelle: string; fonctionne: boolean }
 
 /** L'ordre dans lequel les propriétaires se proposent : soi d'abord. */
 const ORDRE: readonly Proprietaire[] = ["user", "org", "team"]
@@ -45,8 +60,9 @@ export const cleDeLOutil = (outil: Pick<OutilAAjouter, "connecteur" | "acces">):
  * que pour soi, et seulement si l'hôte a fourni son port. Un connecteur à plusieurs accès donne un outil par accès qui
  * a un formulaire : « Connecter mon compte » pour un accès à consentement, la saisie de sa clé pour un autre.
  */
-export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires: readonly ConnectorAccountForm[], choix: AccountOwnerChoices): OutilAAjouter[] {
+export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires: readonly ConnectorAccountForm[], choix: AccountOwnerChoices, mes: readonly MonConnecteur[] = []): OutilAAjouter[] {
   const ouvert = (genre: Proprietaire) => genre === "user" || (genre === "org" ? choix.org : choix.teams.length > 0)
+  const deLOutil = (connecteur: string) => mes.filter((un) => un.connecteur === connecteur)
   return connecteurs
     .flatMap((connecteur): OutilAAjouter[] => {
       const siens = formulaires.filter((candidat) => candidat.connector === connecteur.connector)
@@ -59,7 +75,26 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
         if (proprietaires.length === 0) return []
         const mode = connecteur.accountModes[0] ?? "reel"
         const acces = formulaire?.access ? { acces: { nom: formulaire.access.name, libelle: formulaire.access.label } } : {}
-        return [{ connecteur: connecteur.connector, libelle: connecteur.label, ...acces, facon, proprietaires, mode, ferme: connecteur.closedBy !== null, formulaire }]
+        const logo = connecteur.logoDomain !== undefined ? connectorLogoAddress(connecteur.connector) : null
+        const miens = deLOutil(connecteur.connector)
+        return [
+          {
+            connecteur: connecteur.connector,
+            libelle: connecteur.label,
+            logo,
+            ...acces,
+            facon,
+            proprietaires,
+            mode,
+            bloquePar: connecteur.state === "active" ? null : connecteur.closedBy,
+            actif: connecteur.state === "active",
+            fonctions: connecteur.functions,
+            miens: miens.map((un) => un.libelle),
+            mesComptes: miens.map((un) => un.id),
+            connectes: miens.filter((un) => un.fonctionne).length,
+            formulaire,
+          },
+        ]
       })
     })
     .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr") || (a.acces?.libelle ?? "").localeCompare(b.acces?.libelle ?? "", "fr"))
@@ -71,11 +106,14 @@ export function outilsCherches(outils: readonly OutilAAjouter[], q: string): Out
   return outils.filter((outil) => cherche === "" || normalizeTitle(outil.libelle).includes(cherche))
 }
 
-/** Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre (« Crm 2 »). */
-export function nomLibre(base: string, pris: readonly string[]): string {
+/**
+ * Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre (« Crm 2 ») ; à
+ * partir de `depuis` quand elle a déjà des connecteurs de l'outil (le troisième : « Crm 3 »).
+ */
+export function nomLibre(base: string, pris: readonly string[], depuis = 1): string {
   const portes = new Set(pris.map((nom) => nom.toLowerCase()))
-  if (!portes.has(base.toLowerCase())) return base
-  let rang = 2
+  if (depuis <= 1 && !portes.has(base.toLowerCase())) return base
+  let rang = Math.max(2, depuis)
   while (portes.has(`${base} ${rang}`.toLowerCase())) rang += 1
   return `${base} ${rang}`
 }
