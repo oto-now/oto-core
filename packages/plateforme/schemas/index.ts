@@ -48,12 +48,13 @@ export {
   ACCOUNT_DESCRIPTION_MAX,
   accountChangeSchema,
   accountSecretInputSchema,
+  connectorConnectSchema,
   connectorProbeInputSchema,
   connectorRefSchema,
   createAccountSchema,
   disableAccountSchema,
 } from "./connectors"
-export type { AccountChange, AccountMode, AccountSecretInput, ConnectorProbeInput } from "./connectors"
+export type { AccountChange, AccountMode, AccountSecretInput, ConnectionStepView, ConnectorConnectArgs, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
 export { BROKEN_LINKS_MAX, teamSharesArgsSchema } from "./team-shares"

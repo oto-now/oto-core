@@ -63,16 +63,15 @@ client tiers, le consentement rangé de la personne ; sinon le refus qui porte l
   consentie dans `settings.resource`), avec les mêmes renouvellement, rotation et passage à reconnecter qu'un compte
   `oauth2_user`. Le connecteur `host_api` n'est jamais déclaré : `registerConnectors` et l'import d'un document refusent
   ce nom ; il s'inscrit dans `platform.connectors` (« Host API ») à la première demande.
-- **Sans consentement** : `not_enabled`, `details.reason = host_consent_required`, `details.url` = le lien
-  d'autorisation : « Authorize oto to act on <titre> for you: <url> (… within 5 minutes …) ». Le lien est celui de la
-  demande encore ouverte de la personne pour cette organisation, cette ressource, cette version du document et cette
-  adresse de retour, relue en base par son `state` (`consentStillOpen`), tant qu'il lui reste au moins cinq minutes ;
-  sinon une demande neuve (à usage unique, dix minutes, liée à la personne). Les liens servis sont gardés en mémoire du
-  processus : une lecture de la liste des fonctions ([index](fonctions-d-un-hote-index.md)) ne pose pas une demande de
-  plus. Le même refus vaut pour un compte désactivé, à reconnecter (renouvellement refusé), consenti pour une
-  autre ressource, ou dont le jeton porte un autre `sub` que celui de l'appelant (consentement donné sous un autre compte
-  de l'émetteur : le compte passe à reconnecter, son jeton ne part pas). Le même départ se fait de l'écran Connecteurs
-  (« Reconnecter », `POST /api/platform/connector-consent` avec `connector: host_api`).
+- **Sans consentement** : `not_enabled`, `details.reason = no_account` (ou `reconnect`), `details.gesture = oauth`,
+  `details.url` = l'adresse stable de la [connexion menée par l'agent](connexion-par-l-agent.md),
+  `<adresse>/connect/host_api?space=me` : « Ask the user to authorize <titre>, then call again: open <url> ».
+  Le refus ne pose aucune demande : la page, ouverte par la personne connectée, la pose (à usage unique, dix minutes,
+  liée à la personne) et l'envoie aussitôt chez l'émetteur. Le même refus vaut pour un compte désactivé, à reconnecter
+  (renouvellement refusé), consenti pour une autre ressource, ou dont le jeton porte un autre `sub` que celui de
+  l'appelant (consentement donné sous un autre compte de l'émetteur : le compte passe à reconnecter, son jeton ne part
+  pas). Le même départ se fait de l'écran Connecteurs (« Reconnecter », `POST /api/platform/connector-consent` avec
+  `connector: host_api`).
 - **Révocation** : la personne désactive son compte `host_api` dans l'écran Connecteurs (`disableAccount`, comme tout
   compte `oauth2_user`) ; l'appel suivant rend le lien. Consentir de nouveau reprend le même compte.
 

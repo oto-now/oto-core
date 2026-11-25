@@ -20,6 +20,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ### Assistants
 - An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 - From a third-party client, a host's function first asks the person to authorize oto once: the refusal carries the link to open.
+- Every refusal of a connector (off, no account, to reconnect) carries `details.url`, a stable link where the user makes the one gesture, and says who must open it.
+- `connector.connect {connector, space?, access?}` gives that link without waiting for a refusal, or says an account already works (gesture none); `find` finds it by « connect a connector ».
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 
 ### Hosts
@@ -34,7 +36,11 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Server: `ConnectorFunctionDefinition.confirm` is now `{ summary } | { by: "host" }`, and `ConnectorAuth` gains `host_delegated`: both are reserved to the functions of a host's API, refused by `registerConnectors`.
 - Server: the host serves `GET <address><x-oto.functions>` (`/me/functions`) → `200 {"functions": ["<operationId>", …]}`, the functions the person may call, under a token for its API without scope; oto keeps it 5 minutes per person and filters `context`, `find` and `read functions` with it, never `call`. A refusal or another answer: the index says the list is unavailable, with its reason.
 - Server: `readNode` options gain `viewer` (`accessToken`, `ctx`, `host`) and `ContextRequest` gains `accessToken`: without them, `read functions` says the host's list is unavailable and `context` serves no host block (the Context preview). `activeOrgFunctions` is replaced by `visibleOrgFunctions` and `readFunctionCatalog`.
-- Server: the authorization link of a host's API reuses the person's open consent request (5 minutes left at least, `consentStillOpen`) instead of opening one per reading; it now says « within 5 minutes ».
+- Server: every refusal of a connector (off, no account, account to reconnect) is built by `connectRefusal` and keeps the code `not_enabled`; its `details` carry `reason` (`connector_off`, `no_account`, `reconnect`), `gesture` (`oauth`, `key`, `hosted_link`, `admin_activation`), `connector`, `access?`, `space`, `url`, `administrators?` (`[{ name }]`, names only), `shared_accounts?`. The host API's `host_consent_required` becomes `no_account` or `reconnect`; `consentStillOpen` and the in-memory link cache are removed.
+- Server: `connectionStep(db, identity, {connector, space?, access?, activate?}, {origin})` decides the connection page without writing anything: `authorize` (the button that starts the consent or hosted link by a same-origin `POST`; `elsewhere`: the person's other organisations where that hosted account is already linked), `key`, `activate`, `ask_admin`; the space is checked against the caller's rights. Without a usable public address, the link is a configuration error (`internal`). `probeAccount` now takes `{origin}`.
+- UI: `EcranConnexionDUnConnecteur` (with `EcranConnexionDUnConnecteurProps`, `EtapeAffichee`): a host serves it at `/connect/[connector]` behind the session, sending the unauthenticated to the login with the way back; the outcome of a return shows a known reason only (`echecDuConsentement`, shared with the Connectors screen) and never the account named in the address; `FormulaireDAjout` gains `equipe?`.
+- Schemas: `connectorConnectSchema`, `ConnectorConnectArgs`, `ConnectionStepView`.
+- MCP: `connector.connect` (read), a new function of the built-in `connector` connector; a host that declares its surface (`registerHostSurface`) names it to serve it.
 
 ## 1.10.0 — 2026-11-25
 

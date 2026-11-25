@@ -308,7 +308,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       const live = await orgAccount("reel")
       const secret = newSecret()
       await setAccountSecret(ada.db, ada.identity, { account_id: live.id, input: { secret: { api_key: secret } } })
-      const probe = async () => outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))
+      const probe = async () => outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))
       const tiers = stubTiers({ company: "Acme", scopes: ["contacts:read"] })
       expect(await probe()).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(tiers.authorizations()).toEqual([`Bearer ${secret}`])
@@ -321,7 +321,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(refused).toEqual({ healthy: false, code: "upstream_error", reason: "Crm refused access: the key is invalid or lacks the scope. (access_rejected)", balance: null })
       expect(`${JSON.stringify(refused)} ${loggedText(errors)}`).not.toContain(secret)
       const bare = await orgAccount("reel")
-      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }))).toEqual({
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }, { origin: "https://acme.example.test" }))).toEqual({
         healthy: false,
         code: "account_not_ready",
         reason: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
@@ -338,14 +338,14 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         vi.spyOn(console, "error").mockImplementation(() => {})
         const sent = vi.spyOn(AbortSignal, "timeout")
         stubTiers({ company: "Acme", scopes: ["contacts:read"] })
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
         vi.stubGlobal(
           "fetch",
           vi.fn<Fetch>(async () => {
             throw Object.assign(new Error("aborted"), { name: "TimeoutError" })
           }),
         )
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: false, code: "timeout", reason: "Crm did not answer within 2 s. Retry later.", balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: false, code: "timeout", reason: "Crm did not answer within 2 s. Retry later.", balance: null })
         expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000, 2_000])
       } finally {
         registerConnectors([describedConnector(LIVE), describedConnector(FRESH)])
@@ -355,14 +355,14 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
     it("should reserve the probe to whoever manages the account, and refuse a connector without a probe", async () => {
       const live = await orgAccount("reel")
       const marc = as("marc")
-      const forbidden = await refusal(probeAccount(marc.db, marc.identity, { account_id: live.id }))
+      const forbidden = await refusal(probeAccount(marc.db, marc.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))
       expect({ code: forbidden.code, message: forbidden.message }).toEqual({
         code: "forbidden",
         message: `Probing « ${live.label} » is reserved to those who manage it: the administrators of Acme Test (Ada Martin).`,
       })
       const mail = await fx.createAccount(o.org.id, { connector: "mail", ownerKind: "org", label: `Mail ${hex(3)}` })
       const ada = as("ada")
-      const none = await refusal(probeAccount(ada.db, ada.identity, { account_id: mail }))
+      const none = await refusal(probeAccount(ada.db, ada.identity, { account_id: mail }, { origin: "https://acme.example.test" }))
       expect({ code: none.code, message: none.message, details: none.details }).toEqual({
         code: "invalid_arguments",
         message: "Connector mail declares no probe: it cannot be tested.",

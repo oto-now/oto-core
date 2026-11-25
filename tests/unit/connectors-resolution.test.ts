@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import type { AccountLevel } from "../../packages/plateforme/server/access-levels"
 import type { ConnectorAccount } from "../../packages/plateforme/server/connectors/accounts"
 import { accountRefusal, type RefusalWords } from "../../packages/plateforme/server/connectors/account-refusals"
+import type { ConnectionPlan } from "../../packages/plateforme/server/connectors/connect-link"
 import {
   chooseAccount,
   chooseTeam,
@@ -38,11 +39,27 @@ const LIST: FunctionTraits = { name: "mail.list_drafts", connector: "mail", clas
 const ROWS: FunctionTraits = { name: "table.rows", connector: "table", class: "read", origin: "paquet" }
 const INVOICES: FunctionTraits = { name: "erp.list_invoices", connector: "erp", class: "read", origin: "erp" }
 
+/** La connexion qu'un refus faute de compte porte (`planConnection`) : l'adresse va aux administrateurs. */
+const CONNECT_URL = "https://acme.example.test/connect/mail?space=org"
+const PLAN: ConnectionPlan = {
+  connector: "mail",
+  label: "mail",
+  access: null,
+  space: { kind: "org" },
+  gesture: "key",
+  byCaller: false,
+  administrators: [{ name: "Ada Martin" }],
+  administratorNames: "Ada Martin",
+  entersKey: false,
+  url: CONNECT_URL,
+  team: null,
+}
+
 const WORDS: RefusalWords = {
   orgName: "Acme Test",
   administrators: "Ada Martin",
-  origin: "https://acme.example.test",
   ask: "team Ventes (lead: Claire Morel)",
+  connect: PLAN,
 }
 
 type Owned = { team?: TeamRef; personal?: boolean; owner?: string; status?: string; ownerLeft?: boolean }
@@ -303,14 +320,24 @@ describe("chooseAccount: named account (AC15, N3)", () => {
 })
 
 describe("chooseAccount: nothing usable (AC16, N5, N6)", () => {
-  it("should refuse when no account is visible, with the dashboard link", () => {
+  it("should refuse when no account is visible, with the connection link to give an administrator", () => {
     const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: VENTES }))
     expect(error.code).toBe("not_enabled")
     expect(error.message).toBe(
-      "No mail account is connected for you (your own, team Ventes, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.example.test/admin/connectors.",
+      `No mail account is connected for you (your own, team Ventes, then the organisation). Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open ${CONNECT_URL}`,
     )
+    expect(error.details).toEqual({
+      reason: "no_account",
+      gesture: "key",
+      connector: "mail",
+      space: "org",
+      url: CONNECT_URL,
+      administrators: [{ name: "Ada Martin" }],
+    })
     const alone = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: null }))
-    expect(alone.message).toContain("(your own, then the organisation). Ask an administrator of Acme Test (Ada Martin)")
+    expect(alone.message).toContain("(your own, then the organisation). Only an administrator of Acme Test (Ada Martin)")
+    // Sans la connexion décidée, une faute de câblage : jamais un refus sans adresse.
+    expect(() => refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [], team: null }), { ...WORDS, connect: undefined })).toThrow("Internal error.")
   })
 
   it("should refuse when the visible accounts are all below the level, saying whom to ask", () => {
@@ -372,10 +399,11 @@ describe("chooseAccount: personal accounts and shares (#68)", () => {
     const error = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: VENTES }), OWNERS)
     expect(error.code).toBe("not_enabled")
     expect(error.message).toBe(
-      "No mail account is connected for you (your own, team Ventes, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.example.test/admin/connectors." +
-        ' Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".',
+      "No mail account is connected for you (your own, team Ventes, then the organisation)." +
+        ' Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".' +
+        ` Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open ${CONNECT_URL}`,
     )
-    expect(error.details).toEqual({ shared_accounts: [{ id: "a-claire", label: "Mail Claire", owner: "Claire Morel", description: null }] })
+    expect(error.details).toMatchObject({ reason: "no_account", url: CONNECT_URL, shared_accounts: [{ id: "a-claire", label: "Mail Claire", owner: "Claire Morel", description: null }] })
     // Sous le niveau partout ailleurs, la même mention suit le refus.
     const readOnly = account("a-acme", "Mail Acme", {}, 1)
     const below = refusalOf(chooseAccount({ caller: ADA, fn: CREATE, accounts: [readOnly, MAIL_CLAIRE], team: null }), OWNERS)
@@ -405,12 +433,23 @@ describe("chooseAccount: personal accounts and shares (#68)", () => {
     const choice = chooseAccount({ caller: ADA, fn: CREATE, accounts: [MAIL_CLAIRE], team: null, personal: true })
     expect(choice).toEqual({ kind: "connect_needed", account: null, shared: [MAIL_CLAIRE] })
     expect(refusalOf(choice, OWNERS).message).toContain("Personal accounts shared with you, used only when named: « Mail Claire » (owner Claire Morel, simulated).")
+    // La personne consent elle-même : l'adresse lui va, au compte personnel.
+    const own = "https://acme.example.test/connect/mail?space=me"
+    const consent: RefusalWords = { ...OWNERS, connect: { ...PLAN, space: { kind: "user" }, gesture: "oauth", byCaller: true, administrators: [], administratorNames: "", url: own } }
+    const refused = refusalOf(choice, consent)
+    expect(refused.message).toMatch(/^No mail account of yours is connected: each person connects their own to mail\. Personal accounts shared with you/)
+    expect(refused.message.endsWith(` Ask the user to authorize mail, then call again: open ${own}`)).toBe(true)
+    expect(refused.details).toMatchObject({ reason: "no_account", gesture: "oauth", space: "me", url: own })
+    expect(refused.details).not.toHaveProperty("administrators")
     const broken = account("a-ada", "Mail Ada", { personal: true, owner: ADA, status: "error" }, 4)
     expect(chooseAccount({ caller: ADA, fn: CREATE, accounts: [broken, MAIL_CLAIRE], team: null, personal: true })).toEqual({
       kind: "connect_needed",
       account: broken,
       shared: [MAIL_CLAIRE],
     })
+    const again = refusalOf({ kind: "connect_needed", account: broken, shared: [] }, consent)
+    expect(again.message).toContain(`Your mail account « Mail Ada » must be connected again. Ask the user to authorize mail, then call again: open ${own}`)
+    expect(again.details).toMatchObject({ reason: "reconnect", gesture: "oauth", url: own })
   })
 
   it("should refuse a sensitive function on an account shared in write, and serve it once shared up to sensitive", () => {

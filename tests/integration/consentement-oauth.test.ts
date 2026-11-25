@@ -13,6 +13,7 @@ import { createHash, randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountSecret, setAccountRule } from "@otomata_tech/oto_platform/server"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { decryptCredential, decryptToken } from "../../packages/plateforme/server/connectors/vault"
@@ -144,11 +145,16 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     registerConnectors([consentConnector(CONNECTOR), leveledConsentConnector(LEVELED)], withApplication ? { oauthApplications: { [CONNECTOR]: TEST_APPLICATION, [LEVELED]: TEST_APPLICATION } } : {})
 
   async function gate(caller: Caller, method: string, path: string, body?: unknown): Promise<Response> {
+    return gateFrom(origin(), caller, { method, path, body })
+  }
+
+  /** La porte appelée depuis `from` : l'origine de l'écran, ou celle d'un autre site pour un envoi forgé. */
+  async function gateFrom(from: string, caller: Caller, { method, path, body }: { method: string; path: string; body?: unknown }): Promise<Response> {
     const tasks: Task[] = []
     const request = new Request(`${origin()}/api/platform/${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { origin: origin(), "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "consentement-test" },
+      headers: { origin: from, "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "consentement-test" },
     })
     const response = await handlePlateforme(request, { accessToken: tokens.get(caller) ?? null, host: o.host, verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
     for (const task of tasks) await task()
@@ -303,10 +309,56 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const [accessToken] = provider.latest()
     expect([result.status, result.account?.label, provider.sent.at(-1)?.authorization]).toEqual(["done", label("lea"), `Bearer ${accessToken}`])
     const none = await refusal(call("claire"))
+    const link = `${origin()}/connect/${CONNECTOR}?space=me`
     expect([none.code, none.message]).toEqual([
       "not_enabled",
-      `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}. Ask the user to connect theirs in the application (Connect my account).`,
+      `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}. Ask the user to authorize Crm, then call again: open ${link}`,
     ])
+    expect(none.details).toEqual({ reason: "no_account", gesture: "oauth", connector: CONNECTOR, space: "me", url: link })
+  })
+
+  it("should show the stable link's button without writing anything, start the consent only on a same-origin POST, and come back to the page with its outcome; the link holds no secret and its space is checked again", async () => {
+    const claire = people.get("claire")
+    if (!claire) throw new Error("no claire")
+    const none = await refusal(call("claire"))
+    const link = new URL(String(none.details?.url))
+    // Rien de secret dans le lien : son connecteur et son espace, ni `state`, ni code, ni client.
+    expect([link.pathname, [...link.searchParams.entries()]]).toEqual([`/connect/${CONNECTOR}`, [["space", "me"]]])
+    const requests = async () => (await admin`select 1 from platform.connector_consents where org_id = ${o.org.id} and user_id = ${o.people.claire.id}`).length
+    const before = await requests()
+    // La page ouverte (un GET) montre le bouton, sans poser de demande ni appeler le tiers.
+    const sent = provider.sent.length
+    const step = await connectionStep(claire.db, claire.identity, { connector: CONNECTOR, space: "me" }, { origin: origin() })
+    expect(step).toEqual({ kind: "authorize", gesture: "oauth", connector: CONNECTOR, label: "Crm", space: "me" })
+    expect([await requests(), provider.sent.length]).toEqual([before, sent])
+    // Le bouton : un POST d'une autre origine est refusé, sans demande posée.
+    const forged = await gateFrom("https://evil.example.test", "claire", { method: "POST", path: "connector-consent", body: { connector: CONNECTOR, return_to: `${link.pathname}${link.search}` } })
+    expect([forged.status, await requests()]).toEqual([403, before])
+    // De la même origine : la demande posée, le navigateur part chez le tiers, cette page pour retour.
+    const { status, url } = await start("claire", { connector: CONNECTOR, return_to: `${link.pathname}${link.search}` })
+    expect([status, await requests()]).toEqual([200, before + 1])
+    const address = new URL(url)
+    expect(address.origin + address.pathname).toBe("https://login.crm.example.test/authorize")
+    expect(address.searchParams.get("redirect_uri")).toBe(`${origin()}/api/platform/connector-consent/callback`)
+    // Le retour ramène sur la page, qui dit l'issue ; la demande servie ne ressert pas.
+    const granted = provider.authorize(url, who("claire"))
+    const returned = await back("claire", granted)
+    expect([returned.origin, returned.pathname, Object.fromEntries(returned.searchParams)]).toEqual([
+      origin(),
+      `/connect/${CONNECTOR}`,
+      { space: "me", consent: "connected", account: label("claire") },
+    ])
+    expect(Object.fromEntries((await back("claire", granted)).searchParams)).toMatchObject({ consent: "failed", reason: "invalid_arguments" })
+    expect((await call("claire")).status).toBe("done")
+    // L'espace du lien n'est jamais cru : un compte d'organisation ou d'équipe, refusé nommément ; une équipe inconnue
+    // de l'organisation de l'adresse (celle d'une autre organisation comprise), introuvable.
+    expect(await refusal(connectionStep(claire.db, claire.identity, { connector: CONNECTOR, space: "org" }, { origin: origin() }))).toMatchObject({
+      code: "forbidden",
+      details: { reason: "space", space: "org" },
+    })
+    expect((await refusal(connectionStep(claire.db, claire.identity, { connector: CONNECTOR, space: "team:hors-de-l-organisation" }, { origin: origin() }))).code).toBe("not_found")
+    expect((await refusal(connectionStep(claire.db, claire.identity, { connector: CONNECTOR, space: "team:../x" }, { origin: origin() }))).code).toBe("invalid_arguments")
+    await admin`delete from platform.accounts where org_id = ${o.org.id} and connector = ${CONNECTOR} and owner_user_id = ${o.people.claire.id}`
   })
 
   it("should renew at expiry and once after a 401, keeping the rotated refresh token; a refused renewal asks to connect again, and reconnecting restores the account", async () => {
@@ -325,7 +377,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     await admin`update platform.accounts set token_expires_at = now() - interval '1 minute' where id = ${id}`
     const revoked = await refusal(call("lea"))
     const reason = "Crm no longer accepts its authorization (expired or revoked)"
-    expect([revoked.code, revoked.message]).toEqual(["not_enabled", `Your ${CONNECTOR} account « ${label("lea")} » must be connected again: ${reason}. Ask the user to connect it again in the application (Connect my account).`])
+    const link = `${origin()}/connect/${CONNECTOR}?space=me`
+    expect([revoked.code, revoked.message]).toEqual(["not_enabled", `Your ${CONNECTOR} account « ${label("lea")} » must be connected again: ${reason}. Ask the user to authorize Crm, then call again: open ${link}`])
+    expect(revoked.details).toMatchObject({ reason: "reconnect", gesture: "oauth", url: link })
     expect(await accountOf("lea")).toMatchObject({ status: "error", status_reason: reason })
     // Un consentement révoqué passe à reconnecter, jamais purgé : ses jetons restent sur le compte (oto-core#69).
     const kept = await accountOf("lea")
@@ -359,10 +413,10 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     await admin`update platform.accounts set token_expires_at = now() - interval '1 minute' where id = ${id}`
     const revoked = await refusal(call("claire", label("lea")))
     const reason = "Crm no longer accepts its authorization (expired or revoked)"
-    expect([revoked.code, revoked.message]).toEqual([
-      "not_enabled",
-      `The ${CONNECTOR} account « ${label("lea")} » must be connected again: ${reason}. Only its owner can, in the application (Connect my account): ask them.`,
-    ])
+    expect(revoked.code).toBe("not_enabled")
+    expect(revoked.message).toContain(`The ${CONNECTOR} account « ${label("lea")} » must be connected again: ${reason}. Only its owner, `)
+    expect(revoked.message).toContain(`, can connect it again; ask the user to pass them the link and call again once it is done: open ${origin()}/connect/${CONNECTOR}?space=me`)
+    expect(revoked.details).toMatchObject({ reason: "reconnect", gesture: "oauth", url: `${origin()}/connect/${CONNECTOR}?space=me` })
     expect((await refusal(call("claire", label("lea")))).message).toBe(`Account « ${label("lea")} » is in error. Ask its owner to fix it, or name another account.`)
   })
 

@@ -120,7 +120,7 @@ describe.skipIf(!sqlConfigured)(portable("callFunction on a real database"), { t
   it("should refuse a function whose connector is off as call does, run nothing, and journal the refusal", async () => {
     await seed.admin`delete from platform.connector_activations where org_id = ${ref.org.id} and connector = 'mail'`
     const message =
-      "Function mail.create_draft is not enabled at Acme Test: the mail connector is off. Ask an administrator of Acme Test (Ada Martin) to activate it."
+      "Function mail.create_draft is not enabled at Acme Test: the mail connector is off. Ask the user to add the mail account, then call again: open https://acme.test/connect/mail?space=team%3Aventes"
     await expect(call(ref.identityOf("claire"), { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({ code: "not_enabled", message })
     expect(await outbox()).toHaveLength(1)
     expect(await journal()).toEqual([

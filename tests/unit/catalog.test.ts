@@ -120,6 +120,7 @@ describe("catalog (AC23)", () => {
       "node.public_link",
       // E10-S02 (lot f) : le dépôt par lien à usage unique.
       "upload.link",
+      "connector.connect",
       // Étape 3 du chantier « fichier » : garder un fichier en transit sur une page.
       "file.keep",
       // Les fonctions longues : relever un travail en tâche de fond.
@@ -155,6 +156,16 @@ describe("catalog (AC23)", () => {
     expect(many && checkArguments(many.schema, { pages: Array.from({ length: 51 }, (_, rank) => ({ path: `sav/p${rank}` })) }).success).toBe(false)
     for (const query of ["move rename node path", "déplacer renommer dossier", "reorganize folder"]) {
       expect(searchFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("node.move")
+    }
+  })
+
+  // connexion-par-l-agent.md § Fonction : trouvée par ses mots, anglais comme français, connecteur inconnu compris.
+  it("should serve connector.connect as a native read function, found by asking to connect or activate a connector", () => {
+    const connect = findFunction(catalogFunctions(), "connector.connect")
+    expect([connect?.class, connect?.origin, connect && isActive(connect, NONE)]).toEqual(["read", "paquet", true])
+    expect(connect && checkArguments(connect.schema, { connector: "crm", space: "team:../x" }).success).toBe(false)
+    for (const query of ["connecter fod", "activer un connecteur", "connect a connector", "connect crm account"]) {
+      expect(searchFunctions(catalogFunctions(), query, 3)[0]?.fn.name, query).toBe("connector.connect")
     }
   })
 

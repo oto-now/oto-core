@@ -327,3 +327,52 @@ export type ConnectorAccountForm = {
  * et les capacités de l'hôte (`account_owner_kinds`) restreignent encore ce choix, connecteur par connecteur.
  */
 export type AccountOwnerChoices = { user: true; org: boolean; teams: { id: string; name: string }[] }
+
+/** L'espace d'une connexion tel que l'adresse le dit : la personne, l'organisation, ou une équipe par son slug. */
+const connectSpaceSchema = z.string().regex(/^(me|org|team:[a-z0-9][a-z0-9-]{0,62})$/, "a space: me, org or team:<slug>")
+
+/**
+ * La page de connexion d'un connecteur (`/connect/<connecteur>?space=…`, `connectionStep`) : le connecteur, l'espace,
+ * l'accès pour un connecteur à plusieurs, et `activate=1` pour l'adresse d'un administrateur, qui n'active rien à
+ * l'ouverture (la page demande sa confirmation).
+ */
+export const connectionPageSchema = z
+  .object({ connector: connectorNameSchema, space: connectSpaceSchema.optional(), access: accessNameSchema.optional(), activate: z.literal("1").optional() })
+  .strict()
+export type ConnectionPageInput = z.input<typeof connectionPageSchema>
+
+/** `connector.connect` : le connecteur, et l'espace et l'accès s'il faut les nommer. */
+export const connectorConnectSchema = z
+  .object({ connector: connectorNameSchema, space: connectSpaceSchema.optional(), access: accessNameSchema.optional() })
+  .strict()
+export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
+
+/**
+ * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,
+ * par la porte du consentement ou du branchement, en `POST` de même origine ; `elsewhere` : les autres organisations de
+ * la personne où son compte hébergé est déjà relié, qu'un clic relie ici), saisir le compte (`key`, l'espace posé),
+ * confirmer l'activation (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
+ */
+export type ConnectionStepView =
+  | {
+      kind: "authorize"
+      gesture: "oauth" | "hosted_link"
+      connector: string
+      label: string
+      space: string
+      access?: string
+      elsewhere?: string[]
+    }
+  | {
+      kind: "key"
+      connector: string
+      label: string
+      space: string
+      access?: { name: string; label: string }
+      owner: "org" | "team" | "user"
+      team?: { id: string; name: string }
+      mode: AccountMode
+      form: ConnectorAccountForm | null
+    }
+  | { kind: "activate"; connector: string; label: string; space: string }
+  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[] }

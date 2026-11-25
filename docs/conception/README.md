@@ -53,6 +53,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Procédures](procedures.md) | Qu'est-ce qu'une procédure, comment s'écrit-elle, se contrôle-t-elle et se sert-elle ? | proposé |
 | [Connecteurs et comptes](connecteurs-et-comptes.md) | Comment un appel de fonction atteint-il un service tiers, sous quel compte et avec quel secret ? | validé avec JB le 30/09/2026 |
 | [Fonctions longues](fonctions-longues.md) | Comment une fonction de connecteur qui répond en minutes s'exécute-t-elle sans faire attendre l'assistant ? | validé avec Alexis le 22/10/2026 |
+| [Connexion menée par l'agent](connexion-par-l-agent.md) | Comment un assistant mène-t-il une personne au seul geste qui connecte un connecteur (consentir, coller une clé, activer) ? | proposé |
 | [Fonctions d'un hôte](fonctions-d-un-hote.md) | Comment les fonctions de l'API REST d'un hôte, décrite en OpenAPI, sont-elles servies derrière `call` ? | validé avec Alexis le 22/11/2026 |
 | [Fonctions d'un hôte : jeton et consentement](fonctions-d-un-hote-jeton.md) | Sous quel jeton de la personne une fonction d'un hôte court-elle, et comment un client tiers obtient-il le consentement ? | validé avec Alexis le 22/11/2026 |
 | [Fonctions d'un hôte : visibilité et index](fonctions-d-un-hote-index.md) | Quelles fonctions d'un hôte la personne voit-elle, et comment l'index tient-il dans `context` ? | validé avec Alexis le 22/11/2026 |

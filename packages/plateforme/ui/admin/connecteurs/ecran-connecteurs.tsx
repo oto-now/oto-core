@@ -103,9 +103,17 @@ const ECHECS_DU_CONSENTEMENT: Readonly<Record<string, string>> = {
   forbidden: "Ce connecteur ne peut pas être connecté par vous.",
 }
 
+/**
+ * Ce que dit l'échec d'un consentement ou d'un branchement dont la raison est lue dans l'adresse : une raison connue
+ * seule, jamais le texte de l'adresse, qu'un lien forgé écrirait ; une autre, la phrase générique.
+ */
+export function echecDuConsentement(raison: string): string {
+  return Object.hasOwn(ECHECS_DU_CONSENTEMENT, raison) ? ECHECS_DU_CONSENTEMENT[raison] : "La connexion a échoué. Réessayez."
+}
+
 function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsentement }) {
   if (consentement.issue === "connected") return <Alert tone="ok" title={`« ${consentement.compte} » est connecté.`} />
-  return <Alert tone="fail" title={ECHECS_DU_CONSENTEMENT[consentement.raison] ?? "La connexion a échoué. Réessayez."} />
+  return <Alert tone="fail" title={echecDuConsentement(consentement.raison)} />
 }
 
 /** Le titre de l'îlot de l'administrateur : le focus y va quand un geste emporte sa ligne. */

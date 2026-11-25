@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -75,12 +76,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     })
 
   async function gate(caller: Caller, org: SqlReferenceOrg, path: string, body?: unknown): Promise<Response> {
+    return gateFrom(origin(org), caller, org, { path, body })
+  }
+
+  /** La porte appelée depuis `from` : l'origine de l'écran, ou celle d'un autre site pour un envoi forgé. */
+  async function gateFrom(from: string, caller: Caller, org: SqlReferenceOrg, { path, body }: { path: string; body?: unknown }): Promise<Response> {
     const method = body === undefined ? "GET" : "POST"
     const tasks: Task[] = []
     const request = new Request(`${origin(org)}/api/platform/${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { origin: origin(org), "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
+      headers: { origin: from, "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
     })
     const response = await handlePlateforme(request, { accessToken: tokens.get(caller) ?? null, host: org.host, verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
     for (const task of tasks) await task()
@@ -219,8 +225,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const lea = person("lea", o)
     const claire = person("claire", o)
     const none = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
-    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}. Ask the user to connect theirs in the application (Connect my account).`
-    expect([none.code, none.message]).toEqual(["not_enabled", yours])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}.`
+    const action = ` Ask the user to link their ${LABEL} account, then call again: open ${link}`
+    expect([none.code, none.message]).toEqual(["not_enabled", yours + action])
+    expect(none.details).toEqual({ reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link })
     const id = accountId("lea")
     await connect("lea", id)
     const own = await callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) })
@@ -234,8 +243,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const shared = ` Personal accounts shared with you, used only when named: « ${label("lea")} » (owner Léa Roux, live). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".`
     expect([unnamed.code, unnamed.message, unnamed.details]).toEqual([
       "not_enabled",
-      yours + shared,
-      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
+      yours + shared + action,
+      { reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link, shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
     ])
     const named = await callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts`, account: label("lea") }, { origin: origin(o) })
     expect([named.status, named.account?.label, sent.at(-1)?.url]).toEqual(["done", label("lea"), `${API}/${id}/contacts?view=full`])
@@ -307,6 +316,23 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const id = accountId("lea")
     await connect("lea", id)
     fake.calls.length = 0
+    // La page de connexion ouverte dans la seconde organisation (un GET) dit le compte déjà relié ailleurs, sans rien
+    // relier, poser ni demander au tiers : un lien forgé n'y relie rien.
+    const lea2 = person("lea", o2)
+    const requestsIn = async (org: SqlReferenceOrg) => (await admin`select 1 from platform.hosted_link_requests where org_id = ${org.org.id} and user_id = ${o.people.lea.id}`).length
+    const before = await requestsIn(o2)
+    expect(await connectionStep(lea2.db, lea2.identity, { connector: CONNECTOR, space: "me" }, { origin: origin(o2) })).toEqual({
+      kind: "authorize",
+      gesture: "hosted_link",
+      connector: CONNECTOR,
+      label: LABEL,
+      space: "me",
+      elsewhere: [o.org.name],
+    })
+    expect([await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([before, 0, 1])
+    // Le relier ne se fait que par le POST du bouton, de la même origine : d'une autre, refusé sans rien relier.
+    const forged = await gateFrom("https://evil.example.test", "lea", o2, { path: "hosted-link", body: { connector: CONNECTOR, return_to: "/mes-comptes" } })
+    expect([forged.status, await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([403, before, 0, 1])
     const { url } = await start("lea", o2, { connector: CONNECTOR, return_to: "/mes-comptes" })
     const location = new URL(url)
     expect([location.origin, location.pathname, Object.fromEntries(location.searchParams)]).toEqual([origin(o2), "/mes-comptes", { hosted: "connected", account: label("lea") }])
@@ -465,7 +491,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const hostField = await refusal(setAccountSecret(ada.db, ada.identity, { account_id: manual.id, input: { secret: { api_key: "mine" } } }))
     expect([idInput.code, hostField.code, hostField.message]).toEqual(["invalid_arguments", "invalid_arguments", `Field api_key of ${CONNECTOR} is provided by this application, never set on an account.`])
     const notLinked = await refusal(callFunction(ada.db, ada.identity, { function: `${CONNECTOR}.list_contacts`, account: manual.label }, { origin: origin(o) }))
-    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", expect.stringMatching(new RegExp(`^Account « ${manual.label} » is not connected to ${LABEL} yet\\. Ask .+ to connect it \\(Connect my account\\)\\.$`))])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", `Account « ${manual.label} » is not connected to ${LABEL} yet. Ask the user to link their ${LABEL} account, then call again: open ${link}`])
+    expect(notLinked.details).toMatchObject({ reason: "reconnect", gesture: "hosted_link", url: link })
     expect(sent).toEqual([])
   })
 

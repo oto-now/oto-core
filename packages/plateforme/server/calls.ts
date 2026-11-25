@@ -14,18 +14,17 @@
 // stable, le même sur toutes les faces (H04) ; retiré : `retryable`, `hint` et l'enveloppe `data.oto`,
 // comme le `confirm=<N>` et l'envoi d'essai d'`oto_mcp\capabilities\outreach.py` (H86).
 import { ERP_VIEW_PREFIX } from "../schemas/views"
-import { administratorNames } from "./access"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
 import { personalValues } from "./catalog/personal"
 import { orgAssistantFunctions } from "./catalog/org-catalog"
 import { actName, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
+import { connectRefusal } from "./connectors/connect-link"
 import type { AccountCredential } from "./connectors/auth"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
 import { resolveAccount, runningTeam, type ResolvedAccount, type RunningTeam } from "./connectors/resolution"
 import type { PlatformDb } from "./db"
-import { memberDirectory } from "./directory"
 import { issuesText, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import type { Dictionary } from "./pseudonym/dictionary"
@@ -121,15 +120,13 @@ export type CallDeps = {
 
 const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true."
 
-/** Refus d'une fonction dont le connecteur est inactif (AC2), qui nomme les administrateurs qui l'activent. */
-async function notEnabled(db: PlatformDb, identity: Identity, fn: CatalogFunction): Promise<PlatformError> {
-  const org = identity.org.name
-  const names = administratorNames(await memberDirectory(db, identity.org.id))
-  const who = names ? ` (${names})` : ""
-  return new PlatformError(
-    "not_enabled",
-    `Function ${fn.name} is not enabled at ${org}: the ${fn.connector} connector is off. Ask an administrator of ${org}${who} to activate it.`,
-  )
+/**
+ * Refus d'une fonction dont le connecteur est inactif (AC2) : l'adresse de la connexion (`connectRefusal`), qui active
+ * puis connecte, à ouvrir par l'appelant s'il administre l'organisation, sinon à transmettre aux administrateurs nommés.
+ */
+async function notEnabled(deps: Pick<CallDeps, "db" | "identity" | "origin">, fn: CatalogFunction): Promise<PlatformError> {
+  const said = `Function ${fn.name} is not enabled at ${deps.identity.org.name}: the ${fn.connector} connector is off.`
+  return connectRefusal(deps, { reason: "connector_off", connector: fn.connector, said })
 }
 
 /**
@@ -269,7 +266,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   const personal = personalValues(fn, input.arguments ?? {})
   if (personal.length > 0) trace.personal = personal
   const active = await deps.activeConnectors()
-  if (!isActive(fn, active)) throw await notEnabled(db, identity, fn)
+  if (!isActive(fn, active)) throw await notEnabled(deps, fn)
   // Les jetons de l'assistant (pseudonymisation) : résolus avant le contrôle du schéma, qui attend un identifiant.
   const received = deps.dictionary ? await resolvedCallArguments({ db, identity, dictionary: deps.dictionary }, fn, input.arguments ?? {}) : (input.arguments ?? {})
   const args = checkedArguments(fn, received, prefix)
@@ -285,7 +282,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   trace.lentBy = data.account ? (lender(data.account.owner)?.userId ?? null) : null
   // Un connecteur réel ne court que sur un compte réel qui a son secret, ses champs et ses réglages (H85), refusé avant
   // la fonction ; un connecteur simulé (`mail`) garde lui-même ses comptes simulés.
-  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential(db, identity, account, fn.connector) : undefined
+  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential({ db, identity, origin: deps.origin }, account, fn.connector) : undefined
   const context: FunctionContext = {
     db,
     identity,

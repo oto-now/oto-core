@@ -132,9 +132,11 @@ type FormulaireDAjoutProps = {
   annuler: () => void
   /** Le compte est créé : la fenêtre se ferme et son détail s'ouvre. */
   apresAjout: (compte: { id: string }) => void
+  /** L'équipe déjà choisie, pour un compte d'équipe : la page de connexion d'un connecteur la pose depuis son adresse. */
+  equipe?: string
 }
 
-export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjout }: FormulaireDAjoutProps) {
+export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjout, equipe }: FormulaireDAjoutProps) {
   const rafraichir = useRafraichir()
   const { formulaire } = outil
   const sonde = formulaire?.probe.available === true
@@ -146,7 +148,14 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, annuler, apresAjo
     // `raw` : la clé, les réglages et la description, hors du schéma de création, restent dans la saisie rendue.
     resolver: zodResolver(createAccountSchema, undefined, { raw: true }),
     mode: "onBlur",
-    defaultValues: { connector: outil.connecteur, owner_kind: outil.proprietaires[0], label: nomPropose, description: "", ...(formulaire ? saisieDeDepart(formulaire) : SANS_CHAMPS) },
+    defaultValues: {
+      connector: outil.connecteur,
+      owner_kind: outil.proprietaires[0],
+      ...(equipe ? { team_id: equipe } : {}),
+      label: nomPropose,
+      description: "",
+      ...(formulaire ? saisieDeDepart(formulaire) : SANS_CHAMPS),
+    },
   })
   const { errors, isSubmitting } = form.formState
   const erreurDuNom = errors.label ? (errors.label.type === "server" ? errors.label.message : NOM_INVALIDE) : undefined
