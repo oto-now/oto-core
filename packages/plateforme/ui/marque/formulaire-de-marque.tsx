@@ -134,6 +134,8 @@ export function FormulaireDeMarque({ marque, nomOrganisation, enregistre }: Form
       form.setError("root", { type: "server", message: messageDErreur(reponse.erreur) })
       return
     }
+    // Rechargement complet voulu : la coque relit la couleur servie ; ui/ n'a pas de routeur (ADR-008 § 2).
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign(`${window.location.pathname}?saved=1`)
   }
 
