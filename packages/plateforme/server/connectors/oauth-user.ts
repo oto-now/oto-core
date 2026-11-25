@@ -1,10 +1,11 @@
 // Le consentement d'une personne, `oauth2_user` (`connecteurs-et-comptes.md` § Consentement d'une personne) : ce que le
 // moteur en exécute à partir de la seule description. Contrôle de la description à la déclaration ; adresse
 // d'autorisation (scopes joints par des espaces, ceux du niveau `full` pour un connecteur à niveaux d'accès,
-// `authorizeParams`, `state`, PKCE S256) ; échange du code contre les
+// `authorizeParams`, `state`, PKCE S256, `resource`) ; échange du code contre les
 // jetons au point de jeton, en formulaire, avec l'application OAuth que fournit l'hôte ; puis, à chaque appel, le jeton
 // d'accès gardé tant qu'il n'est pas échu, renouvelé selon `refresh` (jeton de rafraîchissement, rotation comprise, ou
-// échange du jeton courant). Un renouvellement refusé (`invalid_grant`) passe le compte à reconnecter ; une
+// échange du jeton courant). `resource` (RFC 8707), déclaré, part aux trois demandes : autorisation, échange du code,
+// renouvellement. Un renouvellement refusé (`invalid_grant`) passe le compte à reconnecter ; une
 // application refusée ou une panne ne change pas l'état du compte. Sans ce module, un compte ne porterait qu'un jeton
 // posé à la main. Aucun jeton ni secret n'en sort ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import { PlatformError } from "../errors"
@@ -21,8 +22,27 @@ export const EXPIRY_MARGIN_MS = 60_000
 
 /** Ce que l'hôte pose lui-même dans l'adresse d'autorisation : jamais une constante de la description. */
 const RESERVED_AUTHORIZE_PARAMS = ["client_id", "redirect_uri", "response_type", "scope", "state", "code_challenge", "code_challenge_method"]
+/**
+ * L'indicateur de ressource : une adresse `https` fixe, un hôte et un chemin seuls. Plus strict que le motif du schéma
+ * de la lib, qui admet la query : ni partie userinfo (`https://user@hôte`), ni query, ni fragment (RFC 8707 § 2), ni
+ * gabarit, ni espace, ni barre oblique inverse (qu'un analyseur d'URL lit comme `/`).
+ */
+const RESOURCE = /^https:\/\/[^\s{}#/?@\\]+(\/[^\s{}#?\\]*)?$/
 const PARAM_NAME = /^[A-Za-z0-9_.-]+$/
 const GRANT_TYPE = /^[A-Za-z0-9_.:-]+$/
+/** Ce que dit le refus d'un indicateur de ressource, à la déclaration d'un connecteur comme à l'import d'une API d'hôte. */
+export const RESOURCE_RULE = "resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."
+
+/** Un indicateur de ressource que le paquet pose tel quel à l'autorisation et aux demandes de jeton (`RESOURCE`). */
+export function isResource(value: unknown): value is string {
+  if (typeof value !== "string" || !RESOURCE.test(value)) return false
+  try {
+    const url = new URL(value)
+    return url.hostname !== "" && url.username === "" && url.password === "" && url.search === "" && url.hash === ""
+  } catch {
+    return false
+  }
+}
 /** Qui a consenti : une fonction du connecteur, ou une adresse complète lue avec le jeton, et ses droits. */
 export type ConsentIdentity = { function: string; path: string } | { url: string; path: string; scopes: string[] }
 
@@ -49,10 +69,11 @@ export type ConsentFlow = {
   scopeImplies: Record<string, string[]>
   authorizeParams: Record<string, string>
   /**
-   * Les paires ajoutées à chaque demande au point de jeton (code, renouvellement) : vide pour un connecteur déclaré ;
-   * `resource` pour l'API d'un hôte (RFC 8707), sans laquelle l'émetteur ne rend pas un jeton de son audience.
+   * L'indicateur de ressource (RFC 8707), posé tel quel en paramètre `resource` à l'adresse d'autorisation et dans le
+   * corps de chaque demande de jeton (code, renouvellement) ; `null` : aucun. Posé à l'autorisation seule, un émetteur
+   * rend un jeton sans l'audience de l'API (un jeton opaque).
    */
-  tokenParams: Record<string, string>
+  resource: string | null
   refresh: "refresh_token" | "exchange" | "none"
   exchange: { grantType: string; tokenParam: string } | null
   expiresInDefault: number | null
@@ -128,7 +149,11 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
   }
   const reserved = Object.keys(params).find((name) => RESERVED_AUTHORIZE_PARAMS.includes(name))
   if (reserved !== undefined) return `${head}: authorizeParams must not set ${reserved}, which the package sets itself.`
+  // Règle 2 de la lib de connecteurs : dans `authorizeParams`, `resource` ne partirait qu'à l'autorisation.
+  if ("resource" in params) return `${head}: authorizeParams must not set resource: declare it as resource, which the package sets at the authorization, the code exchange and each renewal.`
   if (pkce !== undefined && pkce !== "S256") return `${head}: pkce must be S256.`
+  const resource = auth.resource
+  if (resource !== undefined && !isResource(resource)) return `${head}: ${RESOURCE_RULE}`
   const expires = auth.expiresInDefault
   if (expires !== undefined && !isPositiveInteger(expires)) return `${head}: expiresInDefault must be a positive integer.`
   const identity = identityOf(definition, head, auth.identity)
@@ -144,7 +169,7 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
     accessLevels: declared.accessLevels,
     scopeImplies: declared.scopeImplies,
     authorizeParams: { ...(params as Record<string, string>) },
-    tokenParams: {},
+    resource: (resource as string | undefined) ?? null,
     ...refresh,
     expiresInDefault: expires ?? null,
     identity,
@@ -154,7 +179,7 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
 /**
  * L'adresse d'autorisation où la personne consent : `response_type=code`, l'identifiant du client de l'hôte, l'adresse
  * de retour, les scopes joints par des espaces, le `state`, la preuve PKCE (S256, toujours : un serveur ignore un
- * paramètre qu'il ne connaît pas, RFC 6749 § 3.1), puis les constantes de la description.
+ * paramètre qu'il ne connaît pas, RFC 6749 § 3.1), `resource` s'il est déclaré, puis les constantes de la description.
  */
 export function authorizationAddress(auth: ConsentFlow, request: { clientId: string; redirectUri: string; state: string; codeChallenge: string }): string {
   const { url } = resolveAddress(auth.authorize, {}, [])
@@ -166,10 +191,14 @@ export function authorizationAddress(auth: ConsentFlow, request: { clientId: str
     ["state", request.state],
     ["code_challenge", request.codeChallenge],
     ["code_challenge_method", "S256"],
+    ...resourcePair(auth),
     ...Object.entries(auth.authorizeParams),
   ])
   return `${url}?${query.toString()}`
 }
+
+/** Le paramètre `resource` d'une demande, s'il est déclaré : le même à l'autorisation et à chaque demande de jeton. */
+const resourcePair = (auth: ConsentFlow): [string, string][] => (auth.resource === null ? [] : [["resource", auth.resource]])
 
 /** Ce qu'il faut pour joindre le point de jeton d'un connecteur. */
 export type TokenEndpointCall = { definition: ConnectorView; auth: ConsentFlow; application: OAuthApplication; pacingKey: string; fetcher: Fetch }
@@ -184,14 +213,15 @@ const applicationRefused = (label: string) =>
   new PlatformError("upstream_error", `${label} refused the OAuth application of this application: ask whoever runs this application to check its client id and secret.`)
 
 /**
- * Envoie une demande au point de jeton (`grant_type` et ses paires, le client posé selon `clientAuth`) et rend les
+ * Envoie une demande au point de jeton (`grant_type` et ses paires, `resource` s'il est déclaré, le client posé selon
+ * `clientAuth`) et rend les
  * jetons, ou la raison d'un refus du tiers : `invalid_grant` (code ou autorisation refusés), l'application refusée.
  */
 async function tokenRequest(call: TokenEndpointCall, pairs: [string, string][]): Promise<ConsentTokens | { refused: "grant" }> {
   const { definition, auth, application } = call
   const client = clientPlacement(auth.clientAuth, application.clientId, application.clientSecret)
   const { url } = resolveAddress(auth.token, {}, [])
-  const form: [string, string][] = [...pairs, ...Object.entries(auth.tokenParams), ...client.pairs]
+  const form: [string, string][] = [...pairs, ...resourcePair(auth), ...client.pairs]
   const request: ApiRequest = { method: "POST", path: "", headers: client.headers, form, pacingKey: call.pacingKey }
   const api = { label: definition.label, baseUrl: url, timeoutMs: definition.timeoutMs, errors: [] }
   const answer = await requestToken(api, request, call.fetcher)

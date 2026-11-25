@@ -267,8 +267,8 @@ importers:
         specifier: 1.32.1
         version: 1.32.1(supports-color@7.2.0)(zod@3.25.76)
       '@otomata_tech/connectors':
-        specifier: github:oto-now/connectors#7e3bc776ad17cff88538ca1a1ee91119af38de7f&path:/ts
-        version: https://codeload.github.com/oto-now/connectors/tar.gz/7e3bc776ad17cff88538ca1a1ee91119af38de7f#path:/ts
+        specifier: github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts
+        version: https://codeload.github.com/oto-now/connectors/tar.gz/92aa6bb39d032e72533482125332dba67a38ff41#path:/ts
       '@playwright/test':
         specifier: ^1
         version: 1.58.2
@@ -394,8 +394,8 @@ importers:
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
       '@otomata_tech/connectors':
-        specifier: github:oto-now/connectors#7e3bc776ad17cff88538ca1a1ee91119af38de7f&path:/ts
-        version: https://codeload.github.com/oto-now/connectors/tar.gz/7e3bc776ad17cff88538ca1a1ee91119af38de7f#path:/ts
+        specifier: github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts
+        version: https://codeload.github.com/oto-now/connectors/tar.gz/92aa6bb39d032e72533482125332dba67a38ff41#path:/ts
       '@tailwindcss/postcss':
         specifier: 4.2.1
         version: 4.2.1
@@ -1160,9 +1160,9 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
-  '@otomata_tech/connectors@https://codeload.github.com/oto-now/connectors/tar.gz/7e3bc776ad17cff88538ca1a1ee91119af38de7f#path:/ts':
-    resolution: {gitHosted: true, integrity: sha512-pyXLe04iai+1QWsaMDcLBDKeD3G867+MY2H5abDpZutruMn5QfZES/KDRspMOOz7luiJgDJhChYoHx1gykvaMA==, path: /ts, tarball: https://codeload.github.com/oto-now/connectors/tar.gz/7e3bc776ad17cff88538ca1a1ee91119af38de7f}
-    version: 1.248.0
+  '@otomata_tech/connectors@https://codeload.github.com/oto-now/connectors/tar.gz/92aa6bb39d032e72533482125332dba67a38ff41#path:/ts':
+    resolution: {gitHosted: true, integrity: sha512-qJynmkWB2TBFzFMd2llHlxZZUkImjTU9V0ggq6gToVE9eJ1/Bk5VbeqDjgkEh+MuNhLBd0rdg5d75LexQhskdw==, path: /ts, tarball: https://codeload.github.com/oto-now/connectors/tar.gz/92aa6bb39d032e72533482125332dba67a38ff41}
+    version: 1.249.0
 
   '@phosphor-icons/react@2.1.10':
     resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
@@ -5201,7 +5201,7 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@otomata_tech/connectors@https://codeload.github.com/oto-now/connectors/tar.gz/7e3bc776ad17cff88538ca1a1ee91119af38de7f#path:/ts': {}
+  '@otomata_tech/connectors@https://codeload.github.com/oto-now/connectors/tar.gz/92aa6bb39d032e72533482125332dba67a38ff41#path:/ts': {}
 
   '@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:

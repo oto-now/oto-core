@@ -166,6 +166,8 @@ export type ConnectorOAuthUser = {
   readonly clientAuth: "body" | "basic"
   readonly authorizeParams?: { readonly [param: string]: string }
   readonly pkce?: "S256"
+  /** L'indicateur de ressource (RFC 8707), posé à l'autorisation, à l'échange du code et à chaque renouvellement. */
+  readonly resource?: string
   readonly expiresInDefault?: number
   readonly identity: ConnectorConsentIdentity
   readonly fromToken?: readonly string[]

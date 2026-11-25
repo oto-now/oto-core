@@ -131,10 +131,13 @@ une adresse relative.
   contre le compte : son connecteur, son accès, son espace ; un compte qui ne prend pas de clé, ou `activate` avec
   `account_id`, sont refusés nommément (`invalid_arguments`). L'envoi passe par `setAccountSecret`, qui revérifie.
 - Connecteur à plusieurs accès, adresse sans accès (hors `activate`) : la page fait choisir (`choose_access`), chaque
-  accès un lien vers la même page qui le nomme (`?access=<nom>`, l'espace choisi ensuite selon l'accès), avec son
-  libellé et son geste ; aucun accès n'est pris à la place de la personne. Adresse avec un accès : son étape, et les
-  autres accès offerts de même (`others`), sauf à l'activation. Rien n'en est cru : l'accès revient par l'adresse,
-  revérifié (`requestedAccess`).
+  accès un lien vers la même page qui le nomme (`?access=<nom>`, avec l'espace de l'adresse quand elle en nomme un ;
+  sans lui, l'espace choisi ensuite selon l'accès), avec son libellé et son geste ; aucun accès n'est pris à la place de
+  la personne. Le choix ne se sert qu'après les contrôles du plan de chaque accès (`planConnection`) : un connecteur
+  inconnu ou natif est refusé comme sans choix, un espace nommé qu'aucun accès ne permet est refusé (`forbidden`), et un
+  accès qu'il ne permet pas n'est pas offert. Adresse avec un accès : son étape, et les autres accès offerts de même
+  (`others`, l'espace nommé gardé), sauf à l'activation. Rien n'en est cru : l'accès revient par l'adresse, revérifié
+  (`requestedAccess`).
 - Activation : un bouton qui confirme. Rien ne s'active à l'ouverture.
 - Une autre personne doit agir : l'adresse à copier et les administrateurs.
 - L'issue d'un retour s'affiche sans rien relancer et sans croire l'adresse. Réussi : « Le compte est connecté. Vous

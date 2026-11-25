@@ -168,6 +168,28 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
     }
   })
 
+  it("should answer not_found on the page and its account_key step for an account of another organisation or one that does not exist, even to an administrator", async () => {
+    const elsewhere = await fx.createOrg()
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(elsewhere.id, { connector: LIVE, ownerKind: "org", label, mode: "reel" })
+    try {
+      const cases = (["ada", "claire", "lea"] as const).flatMap((who) =>
+        [id, "00000000-0000-4000-8000-000000000000"].flatMap((account) =>
+          ([{}, { space: "org" }, { space: "me" }] as Record<string, string>[]).map((space): [ReferencePerson, Record<string, string>] => [who, { ...space, account_id: account }]),
+        ),
+      )
+      for (const [who, query] of cases) {
+        const error = await refusal(step(who, query))
+        expect([who, error.code], JSON.stringify(query)).toEqual([who, "not_found"])
+        // Le refus ne dit rien du compte d'une autre organisation : ni son libellé, ni son organisation.
+        expect(error.message).not.toContain(label)
+        expect(error.message).not.toContain(elsewhere.name)
+      }
+    } finally {
+      await fx.admin`delete from platform.accounts where id = ${id}`
+    }
+  })
+
   it("should give the link of a team account without key to its lead when a member, Léa, calls with it", async () => {
     const label = `Crm ${hex(3)}`
     const id = await fx.createAccount(o.org.id, { connector: LIVE, ownerKind: "team", ownerTeamId: o.teams.ventes, label, mode: "reel" })
