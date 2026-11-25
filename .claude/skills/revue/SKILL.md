@@ -74,6 +74,19 @@ Si aucun tag n'est actif, le dire explicitement — c'est une information, pas u
 Lire **chaque fichier du périmètre en entier**, pas seulement le diff. Un diff correct dans un
 fichier incohérent reste un problème.
 
+**Si le tag `ui` est actif** : lire aussi les captures. `pnpm ui:shots <routes touchées>`
+(ou les captures déjà produites par `dev`), puis ouvrir avec l'outil Read, pour chaque route,
+au minimum 375 et 1280 px en clair et en sombre. Noter en une phrase par capture ce qu'elle
+montre. Sans capture, la review d'un diff UI est incomplète et le verdict est ❌
+(`code-review.md § Preuve visuelle`).
+
+**Si le changement visible est Standard ou Module** : la critique design est due. Si le skill
+`design` ne l'a pas déjà rendue, lancer l'agent `design-critic` (`subagent_type: "design-critic"`) avec le
+brief, les routes et les captures avant. Ses findings HAUTE et MOYENNE entrent dans le tableau
+de cette review avec leur source (`checklists/design-review.md § <section>`, `ui-patterns.md
+§ <section>` ou un critère d'acceptation design du brief). Pas de brief du tout : finding HAUTE
+`code-review.md § Preuve visuelle`.
+
 ## Étape 5 — Confrontation règle par règle
 
 Pour **chaque fichier de conventions chargé**, dérouler ses règles et les confronter aux
@@ -119,6 +132,8 @@ citations présentes dans les fichiers versionnés, pas celles produites à la v
 Périmètre   : <n> fichiers
 Conventions : <liste>
 Arbitrage   : <option d'un cran plus simple écartée> — <raison de l'écarter>
+Captures    : <chemins .ui-shots/ lus, une phrase par largeur> — ou « tag ui inactif »
+Design      : <verdict du design-critic>, <n> cycle(s), brief en <story § Design | plan> — ou « Micro » / « rien de visible »
 
 ### Problèmes
 
