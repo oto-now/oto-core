@@ -58,6 +58,7 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Fonctions d'un hôte : visibilité et index](fonctions-d-un-hote-index.md) | Quelles fonctions d'un hôte la personne voit-elle, et comment l'index tient-il dans `context` ? | validé avec Alexis le 22/11/2026 |
 | [Exposition des fonctions](exposition-des-fonctions.md) | Comment une fonction, de connecteur ou métier, est-elle servie à l'assistant : par `call` seulement, par un outil par connecteur ou par un outil par fonction ? | validé avec Alexis le 23/10/2026 |
 | [Pseudonymisation](pseudonymisation.md) | Comment les personnes que l'hôte déclare sont-elles remplacées par des jetons dans ce que lit un assistant, et qui peut les rendre en clair ? | validé avec Alexis le 19/10/2026 |
+| [Ce que reçoit l'assistant](ce-que-recoit-l-assistant.md) | Par quelles couches limite-t-on ce qu'un assistant reçoit des données d'une organisation, laquelle tient sur quoi, et dans quel ordre un hôte les pose-t-il ? | proposé |
 
 ### Le contenu
 

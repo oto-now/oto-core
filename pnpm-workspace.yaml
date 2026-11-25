@@ -4,6 +4,11 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+# eslint-config-next 16 tire eslint-plugin-react-hooks 7, dont le preset ajoute les règles du React Compiler
+# (refs, set-state-in-effect, immutability…) : 79 constats dans ui/ du paquet, à adopter dans un chantier à part.
+# Retrait : quand ces constats sont corrigés (tech-stack.md, ligne ESLint).
+overrides:
+  eslint-config-next>eslint-plugin-react-hooks: ^5.2.0
 minimumReleaseAgeExclude:
   - '@supabase/auth-js@2.117.1'
   - '@supabase/functions-js@2.117.1'

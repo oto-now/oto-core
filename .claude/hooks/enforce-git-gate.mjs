@@ -26,6 +26,11 @@
  * sécurité — quelqu'un de déterminé écrira le reçu à la main.
  */
 
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 const MARKER = /#\s*checks-ok\s*$/
 
 // Le programme git, quelle que soit sa graphie : `Git` (le nom d'un programme ne distingue pas la
@@ -36,6 +41,43 @@ const MARKER = /#\s*checks-ok\s*$/
 // corps d'un heredoc Bash est lu comme des commandes, et le code en ligne d'un texte markdown
 // (`git push` entre accents graves) y serait refusé.
 const GIT = '(?<![\\w.`-])[gG][iI][tT](?:\\.[eE][xX][eE])?'
+
+/**
+ * Le dépôt que la commande VISE : `cd <dir> &&` en tête, puis `git -C <dir>`, depuis le cwd de
+ * la session. Le hook tourne depuis le dossier de la session : sans ce calcul, un commit lancé
+ * dans un autre dépôt était jugé sur le reçu de ce checkout. `undefined` : dépôt de la session.
+ */
+function racineVisee(command, cwd) {
+  const chemin = (m) => (m ? (m[1] ?? m[2] ?? m[3]) : undefined)
+  // Git Bash écrit `/c/apps/…` ; git.exe lancé par Node attend `c:/apps/…`.
+  const natif = (p) => (process.platform === 'win32' ? p.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : p)
+  const ARG = `(?:"([^"]+)"|'([^']+)'|([^\\s;&|]+))`
+  // Le motif se cherche sur une copie où le texte entre quotes est masqué à longueur égale : un
+  // message de commit qui cite `git -C …` ne déplace pas le dépôt visé. L'argument retenu se relit
+  // ensuite dans la commande brute, aux mêmes positions.
+  const masque = command.replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, (m) => m[0] + 'x'.repeat(m.length - 2) + m[m.length - 1])
+  const trouver = (re) => {
+    const m = new RegExp(re, 'd').exec(masque)
+    const i = m?.indices?.slice(1).findIndex(Boolean)
+    if (!m || i === undefined || i < 0) return undefined
+    const [debut, fin] = m.indices[i + 1]
+    return [undefined, command.slice(debut, fin)]
+  }
+  let dir = cwd
+  const cd = chemin(trouver(`^\\s*cd\\s+${ARG}\\s*&&`))
+  if (cd) dir = resolve(dir, natif(cd))
+  const c = chemin(trouver(`${GIT}\\s+(?:-{1,2}[^\\s]+(?:\\s+[^-\\s][^\\s]*)?\\s+)*?-C\\s+${ARG}`))
+  if (c) dir = resolve(dir, natif(c))
+  if (!cd && !c) return undefined
+  try {
+    return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return undefined
+  }
+}
 
 /**
  * Le module qui lit la commande (`scripts/hook-command.mjs`), ou la raison pour laquelle il ne se
@@ -83,10 +125,12 @@ process.stdin.on('data', (c) => (raw += c))
 process.stdin.on('end', async () => {
   let command = ''
   let outil
+  let cwd = process.cwd()
   try {
     const payload = JSON.parse(raw)
     command = payload?.tool_input?.command ?? ''
     outil = payload?.tool_name
+    if (typeof payload?.cwd === 'string') cwd = payload.cwd
   } catch {
     process.exit(0) // payload illisible : ne pas bloquer un appel qu'on ne comprend pas
   }
@@ -132,14 +176,25 @@ process.stdin.on('end', async () => {
 
   // Verbes qui créent ou publient des commits. `merge`, `revert`, `cherry-pick`, `rebase` et
   // `am` produisent des commits sans passer par `commit` : les exclure laissait un chemin
-  // complet pour publier du code jamais vérifié.
-  const VERBES_COMMIT = 'commit|merge|revert|cherry-pick|rebase|am'
+  // complet pour publier du code jamais vérifié. `commit-tree` écrit un commit par la plomberie.
+  const VERBES_COMMIT = 'commit|commit-tree|merge|revert|cherry-pick|rebase|am'
   const VERBES = `${VERBES_COMMIT}|push`
   // `git` peut porter des options globales avant la sous-commande : -C <path>, -c k=v, --no-pager…
+  // Le verbe finit sur un blanc ou une ponctuation, jamais sur un tiret : `merge-file` et
+  // `merge-base` ne créent aucun commit.
   const motif = (verbes) =>
-    new RegExp(`${GIT}((?:\\s+-{1,2}[^\\s]+(?:\\s+[^-\\s][^\\s]*)?)*)\\s+(${verbes})\\b`)
+    new RegExp(`${GIT}((?:\\s+-{1,2}[^\\s]+(?:\\s+[^-\\s][^\\s]*)?)*)\\s+(${verbes})(?![\\w-])`)
 
   if (!motif(VERBES).test(bare)) process.exit(0)
+
+  // Dépôt visé qui n'utilise pas cette méthode (ni `scripts/verify-receipt.mjs`, ni reçu) : il a son
+  // propre gate. Lui appliquer celui-ci, sans reçu possible, refusait tout commit et ne laissait que
+  // le contournement. Les interdits absolus (--no-verify, --force) restent appliqués partout ; le
+  // dépôt de la session, lui, est toujours gardé.
+  const vise = racineVisee(command, cwd)
+  const methode = (root) =>
+    existsSync(join(root, 'scripts/verify-receipt.mjs')) || existsSync(join(root, '.claude/.verify-receipt.json'))
+  const etranger = vise !== undefined && !methode(vise)
 
   if (/\s--no-verify\b/.test(bare)) {
     deny(
@@ -159,6 +214,8 @@ process.stdin.on('end', async () => {
     )
   }
 
+  if (etranger) process.exit(0)
+
   if (!marked) deny(BLOCK_MESSAGE)
 
   // Le marqueur est une déclaration ; le reçu est une preuve. Il n'est exigé que des verbes qui
@@ -171,6 +228,24 @@ process.stdin.on('end', async () => {
   // le reçu. Il faudrait relancer `pnpm verify` entre le commit et le push — soit exactement la
   // double exécution que le reçu existe pour supprimer.
   if (!motif(VERBES_COMMIT).test(bare)) process.exit(0)
+
+  // Autre dépôt de la méthode qui a son propre `verify-receipt.mjs` : il est jugé par SON script,
+  // qu'il a pu adapter (exclusions, empreinte) ; l'algorithme de ce checkout refusait un reçu valide.
+  const racineSession = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+  const meme = (a, b) =>
+    process.platform === 'win32' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b)
+  if (vise !== undefined && !meme(vise, racineSession) && existsSync(join(vise, 'scripts/verify-receipt.mjs'))) {
+    try {
+      execFileSync('node', [join(vise, 'scripts/verify-receipt.mjs'), 'check'], { cwd: vise, stdio: 'pipe' })
+      process.exit(0)
+    } catch (e) {
+      deny(
+        `BLOQUÉ: marqueur posé mais le reçu de ${vise} ne couvre pas son arbre.\n\n` +
+          `${String(e.stdout ?? '')}${String(e.stderr ?? '')}`.trim() +
+          `\n\nLancer la vérification de CE dépôt (son \`verify\`), puis relancer la commande.`
+      )
+    }
+  }
 
   let receipt
   try {
