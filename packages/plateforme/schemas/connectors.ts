@@ -355,12 +355,17 @@ export const connectorConnectSchema = z
   .strict()
 export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
 
+/** Un accès offert au choix par la page de connexion d'un connecteur à plusieurs accès : son nom, son libellé, son geste. */
+export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link" }
+
 /**
  * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,
  * par la porte du consentement ou du branchement, en `POST` de même origine ; `elsewhere` : les autres organisations de
  * la personne où son compte hébergé est déjà relié, qu'un clic relie ici), saisir le compte (`key`, l'espace posé),
  * poser la clé d'un compte existant (`account_key`, refusée par le tiers ou jamais posée), confirmer l'activation
- * (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`).
+ * (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`). Un connecteur à plusieurs
+ * accès dont l'adresse n'en nomme aucun fait choisir l'accès (`choose_access`) ; une adresse qui en nomme un propose
+ * aussi les autres (`others`) à côté de son geste.
  */
 export type ConnectionStepView =
   | {
@@ -372,6 +377,7 @@ export type ConnectionStepView =
       access?: string
       /** Les autres organisations où le compte hébergé est déjà relié : leur nom, `null` quand la personne ne le lit plus. */
       elsewhere?: (string | null)[]
+      others?: ConnectAccessChoice[]
     }
   | {
       kind: "key"
@@ -383,7 +389,9 @@ export type ConnectionStepView =
       team?: { id: string; name: string }
       mode: AccountMode
       form: ConnectorAccountForm | null
+      others?: ConnectAccessChoice[]
     }
   | { kind: "account_key"; connector: string; label: string; space: string; account: AccountView; form: ConnectorAccountForm }
   | { kind: "activate"; connector: string; label: string; space: string }
-  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[] }
+  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[]; others?: ConnectAccessChoice[] }
+  | { kind: "choose_access"; connector: string; label: string; accesses: ConnectAccessChoice[] }

@@ -50,6 +50,17 @@ Il fait le plan (`planConnection`), puis bâtit le refus (`refusalFromPlan`) :
   plusieurs), `space` (`me`, `org` ou `team:<slug>`), `url`, `administrators` (quand seul un administrateur peut
   agir, `[{name}]` : leurs noms seuls, jamais leur identifiant) et `shared_accounts`.
 
+**Plusieurs accès.** Un connecteur à plusieurs accès ([connecteurs et comptes](connecteurs-et-comptes.md) § Plusieurs
+accès) se connecte toujours par un accès nommé, le geste étant celui de cet accès : `oauth` pour une connexion
+`oauth2_user`, `key` pour une clé, `hosted_link` pour un compte rattaché. Le compte qui en naît retient l'accès.
+- Le refus sans compte (`no_account`) n'a qu'un accès dans `details` (contrat de la lib, schéma fermé) : celui à
+  consentement, que la personne fait elle-même, sinon le premier déclaré (`connectAccess`). Son message nomme les
+  autres avant la phrase d'action (« Crm also opens by another access, key (Key of the organization), which the link
+  offers too. »), et la page de son adresse les offre (`accessChoices`). Un compte à reconnecter ou à doter d'une clé
+  garde son accès, et un connecteur éteint attend l'activation, commune à tous les accès : leur refus ne nomme pas
+  d'autre accès.
+- `connector.connect` exige l'accès, comme l'exécution : l'agent choisit d'après la demande de la personne.
+
 **La clé d'un compte existant.** Une clé refusée par le tiers et un compte créé sans secret visent un compte précis :
 l'adresse le nomme, et la page y ouvre la saisie de sa clé, pas la création d'un autre compte. `planAccountKey` en fait
 le plan, `accountKeyRefusal` le refus (`connect-link.ts`) :
@@ -119,6 +130,11 @@ une adresse relative.
   (`FormulaireDeLaCle`), réservé à qui gère le compte (`forbidden` sinon, qui dit qui le gère). L'adresse est revérifiée
   contre le compte : son connecteur, son accès, son espace ; un compte qui ne prend pas de clé, ou `activate` avec
   `account_id`, sont refusés nommément (`invalid_arguments`). L'envoi passe par `setAccountSecret`, qui revérifie.
+- Connecteur à plusieurs accès, adresse sans accès (hors `activate`) : la page fait choisir (`choose_access`), chaque
+  accès un lien vers la même page qui le nomme (`?access=<nom>`, l'espace choisi ensuite selon l'accès), avec son
+  libellé et son geste ; aucun accès n'est pris à la place de la personne. Adresse avec un accès : son étape, et les
+  autres accès offerts de même (`others`), sauf à l'activation. Rien n'en est cru : l'accès revient par l'adresse,
+  revérifié (`requestedAccess`).
 - Activation : un bouton qui confirme. Rien ne s'active à l'ouverture.
 - Une autre personne doit agir : l'adresse à copier et les administrateurs.
 - L'issue d'un retour s'affiche sans rien relancer et sans croire l'adresse. Réussi : « Le compte est connecté. Vous
@@ -181,7 +197,7 @@ pas : l'adresse va à une personne.
   admet les deux) ; une origine `http` est admise (poste local), le contrat demande `https` ; `connector.connect` rend
   en plus `connector`, `access` et `by` ; l'API d'un hôte (`host_api`), qui demande un consentement pour un client
   tiers, sert `gesture: oauth`, là où le contrat ne prévoit aucun geste pour `host_delegated` ; un refus de connecteur
-  sans compte, à plusieurs accès, prend l'accès à consentement par défaut ; l'adresse de la clé d'un compte existant
+  sans compte, à plusieurs accès, prend l'accès à consentement par défaut et nomme les autres dans son seul message ; l'adresse de la clé d'un compte existant
   porte `account_id=<id>`, que le contrat ne prévoit pas ; un compte sans secret est `no_account` (le contrat ne dit pas
   ce cas) ; pour un compte d'équipe que la personne ne gère pas, les responsables de l'équipe peuvent agir, mais
   `details` n'a que `administrators` : ils ne sont nommés que dans la phrase, et `administrators` est absent ; pour un
@@ -190,6 +206,9 @@ pas : l'adresse va à une personne.
 - Un hôte qui déclare sa surface (`registerHostSurface`) doit y nommer `connector.connect` pour la servir.
 
 ## Questions ouvertes
+
+- Un refus sans compte d'un connecteur à plusieurs accès : faut-il porter tous les accès dans `details` (une liste
+  `accesses: [{name, gesture, url}]`) ? Le schéma de la lib est fermé ; seul le message les nomme aujourd'hui.
 
 - Les crédits épuisés : la lib pourrait déclarer la page du fournisseur où les racheter ; le refus la porterait alors,
   hors du contrat `not_enabled`.

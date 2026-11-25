@@ -8,6 +8,7 @@
 // porte ni secret ni jeton : elle ne vaut que sous la session de la personne, et l'espace qu'elle nomme est revérifié
 // contre ses droits à chaque ouverture, jamais cru. Sans ce module, un refus disait seulement à qui demander, et la
 // personne cherchait l'écran et la clé à la main.
+import type { ConnectAccessChoice } from "../../schemas/connectors"
 import { ACCOUNT_LEVELS, accountLevel, administratorNames, describeOwner, isOrgAdmin } from "../access"
 import { declaredConnector, type DeclaredAccess } from "../catalog/connector-source"
 import { catalogFunctions } from "../catalog/registry"
@@ -16,7 +17,7 @@ import { memberDirectory, teamsWithLeads } from "../directory"
 import { inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { orgLimits } from "../limits"
-import { requestedAccess } from "./accesses"
+import { hasAccesses, requestedAccess } from "./accesses"
 import { admittedOwnerKinds, formOwnerKinds, type OwnerKind } from "./account-owners"
 import type { AccountOwner } from "./accounts"
 import { requireActivable } from "./activations"
@@ -112,6 +113,21 @@ export function gestureOf(connector: string, access: DeclaredAccess | null): Exc
   if (connector === HOST_CONSENT_CONNECTOR || access?.auth.kind === "user_consent") return "oauth"
   if (access?.definition.accountIdentity !== undefined) return "hosted_link"
   return "key"
+}
+
+
+/**
+ * Les accès d'un connecteur à plusieurs accès offerts au choix, chacun avec le geste qui l'ouvre quand le connecteur
+ * est ouvert, sauf `except` (celui que l'adresse nomme déjà) : la page
+ * les propose à côté de son geste, et le refus d'un appel sans compte les nomme. Vide pour un connecteur à un seul accès
+ * ou non déclaré. Rien n'en est cru : l'accès choisi revient par l'adresse, revérifié (`connectAccess`).
+ */
+export function accessChoices(connector: string, except: string | null = null): ConnectAccessChoice[] {
+  const declared = declaredConnector(connector)
+  if (!declared || !hasAccesses(declared)) return []
+  return declared.accesses.flatMap((access) =>
+    access.name === null || access.label === null || access.name === except ? [] : [{ name: access.name, label: access.label, gesture: gestureOf(connector, access) }],
+  )
 }
 
 /**
@@ -302,12 +318,26 @@ export type ConnectRefusalInput = {
 }
 
 /**
+ * La phrase qui offre les autres accès d'un connecteur à plusieurs accès, dans un refus sans compte (`no_account`) : le
+ * refus nomme l'accès de son plan (`details.access`, son geste), la page de son adresse propose aussi les autres. Vide
+ * pour un compte à reconnecter ou à doter d'une clé, qui garde son accès, et pour un connecteur éteint, que tout accès
+ * attend activé.
+ */
+function otherAccesses(plan: ConnectionPlan, input: ConnectRefusalInput): string {
+  if (input.reason !== "no_account" || plan.account || plan.gesture === "admin_activation") return ""
+  const others = accessChoices(plan.connector, plan.access?.name ?? null)
+  if (others.length === 0) return ""
+  const named = others.map((access) => `${access.name} (${access.label})`).join(", ")
+  return ` ${plan.label} also opens by ${others.length > 1 ? "other accesses" : "another access"}, ${named}, which the link offers too.`
+}
+
+/**
  * Le refus d'un appel faute de connexion (`not_enabled`), une fois la connexion décidée (`planConnection`) : ce qui
  * manque, l'action en clair avec l'adresse finale, et en `details` : `reason`, `gesture`, `connector`, `access`
  * (connecteur à plusieurs accès), `space`, `url`, les `administrators` quand l'adresse leur va, et les comptes partagés.
  */
 export function refusalFromPlan(plan: ConnectionPlan, orgName: string, input: ConnectRefusalInput): PlatformError {
-  return new PlatformError("not_enabled", `${input.said}${input.shared?.text ?? ""} ${actionSentence(plan, orgName, input.owner)}`, {
+  return new PlatformError("not_enabled", `${input.said}${input.shared?.text ?? ""}${otherAccesses(plan, input)} ${actionSentence(plan, orgName, input.owner)}`, {
     reason: input.reason,
     gesture: plan.gesture,
     connector: plan.connector,

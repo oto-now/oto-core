@@ -236,8 +236,8 @@ const levelsOf = (auth: PreparedAuth): AccessLevels | null => (auth.kind === "us
 /**
  * Le problème d'un accès, sur le connecteur tel qu'il le voit, dans l'ordre : ses `modes`, une authentification que le
  * moteur n'exécute pas (refusée par son nom, avant ses champs : `oauth2_user` n'en a pas), les champs de son secret et
- * les réglages, leurs titulaires, l'identité d'un compte rattaché ; pour un connecteur à plusieurs accès, des niveaux
- * d'accès, les droits de ses fonctions étant communs. Puis son authentification préparée. Un refus nomme l'accès.
+ * les réglages, leurs titulaires, l'identité d'un compte rattaché. Puis son authentification préparée. Un refus nomme
+ * l'accès. Les niveaux d'accès d'un connecteur à plusieurs accès se jugent ensemble (`levelsProblem`).
  */
 function preparedAccess(access: AccessView): PreparedAuth {
   const { view } = access
@@ -247,11 +247,22 @@ function preparedAccess(access: AccessView): PreparedAuth {
   if (problem) throw new CatalogRegistrationError(accessProblem(access, problem) ?? problem)
   const auth = prepareAuth(view)
   if (typeof auth === "string") throw new CatalogRegistrationError(accessProblem(access, auth) ?? auth)
-  if (access.name !== null && levelsOf(auth) === null) {
-    const levels = `${view.name}: auth ${String(view.auth.kind)} needs access levels (accessLevels): the accesses of a connector share the scopes its functions declare.`
-    throw new CatalogRegistrationError(accessProblem(access, levels) ?? levels)
-  }
   return auth
+}
+
+/**
+ * Les niveaux d'accès d'un connecteur à plusieurs accès : dans tous ses accès ou dans aucun, les droits de ses fonctions
+ * étant communs. Sans niveaux, chaque accès ouvre tout le connecteur (un accès par clé, `bearer`, n'en déclare jamais) ;
+ * avec, chacun dit les droits de chaque fonction. Un mélange est refusé, l'accès sans niveaux nommé. `null` : aucun
+ * problème, ou un connecteur à un seul accès.
+ */
+function levelsProblem(definition: ConnectorDefinition, accesses: readonly PreparedAccess[]): string | null {
+  const without = accesses.filter(({ auth }) => levelsOf(auth) === null)
+  if (without.length === 0 || without.length === accesses.length) return null
+  const [first] = without
+  const leveled = accesses.filter(({ auth }) => levelsOf(auth) !== null).map(({ access }) => access.name)
+  const problem = `${definition.name}: access levels (accessLevels) go in every access or in none: ${leveled.join(", ")} declare${leveled.length > 1 ? "" : "s"} them, auth ${String(first.access.view.auth.kind)} declares none.`
+  return accessProblem(first.access, problem)
 }
 
 /** Un accès préparé : sa vue, son authentification, sa sonde et l'identité d'un consentement. */
@@ -272,6 +283,8 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   if (shape) throw new CatalogRegistrationError(shape)
   const views = accessViews(definition)
   const prepared: PreparedAccess[] = views.map((access) => ({ access, auth: preparedAccess(access), probe: null, identity: null }))
+  const levels = levelsProblem(definition, prepared)
+  if (levels) throw new CatalogRegistrationError(levels)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
   const addressFault = baseAddressProblem(definition, address)

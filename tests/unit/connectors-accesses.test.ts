@@ -12,6 +12,8 @@ import { CatalogRegistrationError } from "../../packages/plateforme/server/catal
 import { accountAccess, requestedAccess } from "../../packages/plateforme/server/connectors/accesses"
 import { admittedOwnerKinds, formOwnerKinds } from "../../packages/plateforme/server/connectors/account-owners"
 import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
+import { accessChoices, connectAccess, refusalFromPlan, type ConnectionPlan } from "../../packages/plateforme/server/connectors/connect-link"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
 import { isPersonalConnector } from "../../packages/plateforme/server/connectors/consent-accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
@@ -20,6 +22,8 @@ import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import {
   describedConnector,
+  KEY_OR_SIGN_IN,
+  keyOrSignInConnector,
   memoryConsent,
   memoryTokens,
   SERVICE_ACCOUNT_TOKEN_URL,
@@ -135,7 +139,7 @@ describe("a connector with several accesses: declaration", () => {
       'Access service_account of crm: crm: mode "byo_team" is unknown: platform, byo_user, byo_org.',
       "Access sign_in of crm: crm: credential must be empty with oauth2_user: the tokens of a consent are not fields, and the OAuth application is the host's.",
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: key must name the one credential field, secret (the JSON key file).",
-      "Access service_account of crm: crm: auth oauth2_jwt_bearer needs access levels (accessLevels): the accesses of a connector share the scopes its functions declare.",
+      "Access service_account of crm: crm: access levels (accessLevels) go in every access or in none: sign_in declares them, auth oauth2_jwt_bearer declares none.",
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: accessLevels needs the level full.",
       "Access service_account of crm: crm: auth none is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user and oauth2_jwt_bearer.",
     ])
@@ -265,5 +269,89 @@ describe("a connector with several accesses: the engine", () => {
     const sent = stub()
     const error = await refusal(() => getCompany({ fields: { api_key: token() }, settings: {}, tokens: memoryTokens() }, SERVICE))
     expect([error.code, error.message, sent()]).toEqual(["not_enabled", "Account « Crm Ventes » opens by access service_account, which Crm no longer declares. Connect another account of Crm.", []])
+  })
+})
+
+describe("a connector with several accesses, without access levels", () => {
+  it("should declare accesses with no levels at all, each opening the whole connector, and refuse levels in some accesses only", () => {
+    expect(verdict(keyOrSignInConnector())).toBe("declared")
+    const declared = declaredConnector("crm")
+    expect(declared?.accesses.map((access) => [access.name, access.auth.kind, access.definition.modes])).toEqual([
+      [KEY_OR_SIGN_IN.signIn, "user_consent", ["byo_user"]],
+      [KEY_OR_SIGN_IN.key, "header", ["platform", "byo_org"]],
+    ])
+    const signIn = (twoAccessConnector().accesses ?? []).find((access) => access.name === SIGN_IN)
+    if (!signIn) throw new Error("no sign-in access")
+    const base = keyOrSignInConnector()
+    if (!base.accesses) throw new Error("no accesses")
+    const mixed = { ...base, accesses: base.accesses.map((access) => (access.name === KEY_OR_SIGN_IN.signIn ? { ...access, auth: signIn.auth } : access)) }
+    expect(verdict(mixed)).toBe("Access key of crm: crm: access levels (accessLevels) go in every access or in none: oauth declares them, auth bearer declares none.")
+  })
+
+  it("should sign each call by the access of its account: the key of the organization, or the token of the person", async () => {
+    verdict(keyOrSignInConnector())
+    const key = token()
+    const sent = stub(json({ scopes: ["contacts.read"] }), json({ scopes: ["contacts.read"] }))
+    await getCompany({ fields: { api_key: key }, settings: {}, tokens: memoryTokens() }, KEY_OR_SIGN_IN.key)
+    const access = token()
+    await getCompany({ fields: {}, settings: {}, tokens: memoryTokens({ token: access, expiresAt: new Date(Date.now() + 600_000) }), consent: memoryConsent(token()) }, KEY_OR_SIGN_IN.signIn)
+    expect(sent().map((request) => request.authorization)).toEqual([`Bearer ${key}`, `Bearer ${access}`])
+  })
+
+  it("should sign by the access the account retains, never by another secret the account would carry", async () => {
+    verdict(keyOrSignInConnector())
+    const [key, access] = [token(), token()]
+    const sent = stub(json({ scopes: ["contacts.read"] }), json({ scopes: ["contacts.read"] }))
+    const both = () => ({ fields: { api_key: key }, settings: {}, tokens: memoryTokens({ token: access, expiresAt: new Date(Date.now() + 600_000) }), consent: memoryConsent(token()) })
+    await getCompany(both(), KEY_OR_SIGN_IN.key)
+    await getCompany(both(), KEY_OR_SIGN_IN.signIn)
+    expect(sent().map((request) => request.authorization)).toEqual([`Bearer ${key}`, `Bearer ${access}`])
+  })
+})
+
+describe("a connector with several accesses: the choice of access", () => {
+  it("should offer each access with its gesture: oauth for the sign-in, key for the key", () => {
+    verdict(keyOrSignInConnector())
+    expect(accessChoices("crm")).toEqual([
+      { name: KEY_OR_SIGN_IN.signIn, label: "Sign-in of a person", gesture: "oauth" },
+      { name: KEY_OR_SIGN_IN.key, label: "Key of the organization", gesture: "key" },
+    ])
+    expect(accessChoices("crm", KEY_OR_SIGN_IN.signIn).map((access) => access.name)).toEqual([KEY_OR_SIGN_IN.key])
+    registerConnectors([describedConnector()])
+    expect(accessChoices("crm")).toEqual([])
+  })
+
+  it("should make the page choose the access when its link names none, before any plan", async () => {
+    verdict(keyOrSignInConnector())
+    expect(await connectionStep({} as never, {} as never, { connector: "crm", space: "org" }, { origin: "https://acme.example.test" })).toEqual({
+      kind: "choose_access",
+      connector: "crm",
+      label: "Crm",
+      accesses: accessChoices("crm"),
+    })
+  })
+
+  it("should name the other accesses in a refusal without account, never in one that keeps its account's access", () => {
+    verdict(keyOrSignInConnector())
+    const plan: ConnectionPlan = {
+      connector: "crm",
+      label: "Crm",
+      access: connectAccess("crm"),
+      space: { kind: "user" },
+      gesture: "oauth",
+      byCaller: true,
+      administrators: [],
+      administratorNames: "",
+      entersKey: false,
+      url: "https://acme.example.test/connect/crm?space=me&access=oauth",
+      team: null,
+    }
+    const none = refusalFromPlan(plan, "Acme", { reason: "no_account", said: "No Crm account of yours is connected." })
+    expect([none.message, none.details]).toEqual([
+      "No Crm account of yours is connected. Crm also opens by another access, key (Key of the organization), which the link offers too. Ask the user to authorize Crm, then call again: open https://acme.example.test/connect/crm?space=me&access=oauth",
+      { reason: "no_account", gesture: "oauth", connector: "crm", access: KEY_OR_SIGN_IN.signIn, space: "me", url: plan.url },
+    ])
+    const again = refusalFromPlan(plan, "Acme", { reason: "reconnect", said: "Your Crm consent expired." })
+    expect(again.message).not.toContain("also opens by")
   })
 })

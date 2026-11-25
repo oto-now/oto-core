@@ -3,10 +3,11 @@
 // écrire. L'écran montre : l'issue du retour du tiers (réussi, avec l'invitation à revenir à l'assistant, ou échoué, sa
 // raison connue seule, avec « Réessayer »), le bouton qui part chez le tiers (`POST` de même origine, jamais à
 // l'ouverture), la saisie du compte, celle de la clé d'un compte existant, la confirmation de l'activation par un
-// administrateur (un bouton), ou l'adresse à transmettre aux administrateurs. Server Component ; données, erreur (`role="alert"`). Sans lui, l'adresse d'un refus
+// administrateur (un bouton), ou l'adresse à transmettre aux administrateurs ; pour un connecteur à plusieurs accès, le
+// choix de l'accès, ou les autres accès à côté du geste de l'un. Server Component ; données, erreur (`role="alert"`). Sans lui, l'adresse d'un refus
 // ne mènerait à aucun geste.
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
-import type { ConnectionStepView } from "../../schemas"
+import type { ConnectAccessChoice, ConnectionStepView } from "../../schemas"
 import { ConnexionParConsentement } from "../admin/connecteurs/connexion-par-consentement"
 import { echecDuConsentement, type IssueDuConsentement } from "../admin/connecteurs/ecran-connecteurs"
 import type { Resultat } from "../api/resultat"
@@ -22,6 +23,36 @@ import { SaisieDeLaCleDuCompte, SaisieDuCompteAConnecter } from "./saisie-du-com
 
 /** Une étape que l'écran rend. */
 export type EtapeAffichee = ConnectionStepView
+
+/**
+ * Les accès d'un connecteur à plusieurs accès, chacun un lien vers la même page qui le nomme (l'espace choisi ensuite
+ * par le service, selon l'accès), et le geste qu'il demande. Le lien ne fait rien de plus qu'une ouverture.
+ */
+function Acces({ connecteur, acces }: { connecteur: string; acces: ConnectAccessChoice[] }) {
+  return (
+    <ul className="flex flex-col gap-1 text-sm text-ink" aria-label={MOTS.listeDesAcces}>
+      {acces.map((choix) => (
+        <li key={choix.name}>
+          <a className="underline" href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name }).toString()}`}>
+            {choix.label}
+          </a>{" "}
+          : {MOTS.geste[choix.gesture]}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Les autres accès offerts à côté du geste d'un accès : rien pour un connecteur à un seul accès. */
+function AutresAcces({ etape }: { etape: { connector: string; others?: ConnectAccessChoice[] } }) {
+  if (!etape.others || etape.others.length === 0) return null
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-sm text-ink">{MOTS.autres}</p>
+      <Acces connecteur={etape.connector} acces={etape.others} />
+    </div>
+  )
+}
 
 /** Le bouton qui démarre le consentement ou le branchement, et le compte hébergé déjà relié ailleurs. */
 function Autorisation({ etape, retour }: { etape: Extract<EtapeAffichee, { kind: "authorize" }>; retour: string }) {
@@ -48,10 +79,27 @@ function Autorisation({ etape, retour }: { etape: Extract<EtapeAffichee, { kind:
 
 function Etape({ etape, retour }: { etape: EtapeAffichee; retour: string }) {
   switch (etape.kind) {
+    case "choose_access":
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink">{MOTS.choisir(etape.label)}</p>
+          <Acces connecteur={etape.connector} acces={etape.accesses} />
+        </div>
+      )
     case "authorize":
-      return <Autorisation etape={etape} retour={retour} />
+      return (
+        <>
+          <Autorisation etape={etape} retour={retour} />
+          <AutresAcces etape={etape} />
+        </>
+      )
     case "key":
-      return <SaisieDuCompteAConnecter etape={etape} />
+      return (
+        <>
+          <SaisieDuCompteAConnecter etape={etape} />
+          <AutresAcces etape={etape} />
+        </>
+      )
     case "account_key":
       return <SaisieDeLaCleDuCompte etape={etape} />
     case "activate":
@@ -73,6 +121,7 @@ function Etape({ etape, retour }: { etape: EtapeAffichee; retour: string }) {
         <div className="flex flex-col gap-3">
           <p className="text-sm text-ink">{MOTS.administrateurs(etape.label, etape.administrators.map((admin) => admin.name).join(", "))}</p>
           <ValeurCopiable valeur={etape.url} cible={MOTS.lien} />
+          <AutresAcces etape={etape} />
         </div>
       )
   }
