@@ -12,9 +12,13 @@ Chaque problème remonté doit pointer une règle existante dans `.method/conven
 `CLAUDE.md` ou dans les critères d'acceptation de la story. Sans source citée, ce n'est pas
 un défaut — c'est une suggestion, et elle ne bloque pas.
 
-Cette review tourne dans le contexte courant (pas d'agent isolé). La contrepartie de cette
-perte de recul est **la mécanique** : on ne demande pas au reviewer d'avoir des idées, on lui
-demande de dérouler des règles lues juste avant. Ne jamais reviewer de mémoire.
+**Qui relit.** À l'échelle Standard, cette review tourne dans le contexte courant. La
+contrepartie de cette perte de recul est **la mécanique** : on ne demande pas au reviewer
+d'avoir des idées, on lui demande de dérouler des règles lues juste avant. **Dès l'échelle
+Module**, ou sur demande, le pilote lance l'agent `reviewer` (`subagent_type: "reviewer"`) qui
+déroule ce même protocole à contexte neuf ; il lui transmet le périmètre, l'issue ou la story, et
+le récap des surfaces nouvelles, jamais le raisonnement de l'implémenteur. Son rapport est le
+rapport de cette review ; l'étape 8 reste au pilote. Ne jamais reviewer de mémoire.
 
 **Échelle.** Ce protocole complet s'applique à partir de l'échelle Standard (≥ 3 fichiers, ou
 création d'une surface : route, table, Server Action, composant, fonction exportée). Sur un

@@ -5,7 +5,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "dev": "next dev --turbopack",
-    "build": "pnpm widgets:build && next build",
+    "build": "node scripts/long-run.mjs build --freeze -- \"pnpm widgets:build && next build\"",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "type-check": "node packages/plateforme/widgets/build.mjs --if-missing && tsc --noEmit",
@@ -14,7 +14,7 @@
     "check:public": "node scripts/check-public.mjs",
     "migrations:sync": "node scripts/sync-migrations.mjs",
     "widgets:build": "node packages/plateforme/widgets/build.mjs",
-    "verify": "node scripts/verify.mjs check:framework,type-check,lint test && node scripts/verify-receipt.mjs write",
+    "verify": "node scripts/long-run.mjs verify --freeze -- \"node scripts/verify.mjs check:framework,type-check,lint test && node scripts/verify-receipt.mjs write\"",
     "verify:cached": "node scripts/verify-receipt.mjs check || pnpm verify",
     "commit:export": "node scripts/commit-depuis-export.mjs",
     "test": "vitest run",

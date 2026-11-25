@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-24] — Méthode synchronisée sur le template dev-framework
+**Quoi :** agents nommés `implementer`, `reviewer`, `auditor` lancés par `dev`, `revue` et `audit` (contrôlés par `check:framework`) ; `verify` et `build` passent par `scripts/long-run.mjs` (file d'attente, gel, mutualisation entre sessions), hook `coordinate-sessions` sur Bash, PowerShell et les écritures ; gate du dépôt visé (`cd`/`git -C`, dépôt hors méthode, autre dépôt jugé par son propre reçu, `merge-file`/`merge-base`, `commit-tree`) ; Lighthouse retiré des conventions ; tampon `.method/sync-state.json` (46 fichiers confrontés, 38 exclus : bloc UI reporté, starters, ADR du socle, Dependabot, Scaleway).
+**Pourquoi :** synchro de la méthode commune ; plusieurs sessions travaillent sur ce checkout.
+**Fichiers :** `.claude/`, `.method/conventions/`, `.method/sync-state.json`, `scripts/`, `tests/unit/`, `CLAUDE.md`, `package.json`, `.gitignore`.
+
 ## [2026-11-23] — Version 1.10.0 du paquet : une seule migration, `20261123153610_v1_10_0.sql`
 **À appliquer :** un hôte qui monte de 1.9.x applique le seul fichier `20261123153610_v1_10_0.sql` avec le paquet, et suit la section 1.10.0 du `CHANGELOG.md` du paquet (`node.describe` et les fonctions `member.*`, `team.create` à nommer s'il déclare sa surface par `registerHostSurface`).
 **Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 1.10.0 — 2026-11-23` (les membres et les équipes d'une organisation par le MCP métier, les pages désignées par leur identifiant stable et `node.describe`) ; `packages/plateforme/package.json` passe à 1.10.0. La seule migration ajoutée depuis 1.9.0 (`20261122184838`) est réunie par `scripts/reunir-migrations.mjs` dans `20261123153610_v1_10_0.sql`, au contenu identique, dans le paquet comme dans `supabase/migrations` ; le fichier d'origine est retiré. Le README des migrations décrit le fichier de version et dit quoi faire d'une base qui avait appliqué le fichier d'origine.
