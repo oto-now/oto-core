@@ -71,6 +71,8 @@ describe("envReport (AC10)", () => {
       { name: "NEXT_PUBLIC_SITE_URL", present: true },
       { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_ID", present: false, optional: true },
       { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET", present: false, optional: true },
+      { name: "PLATFORM_OIDC_CONSENT_CLIENT_ID", present: false, optional: true },
+      { name: "PLATFORM_OIDC_CONSENT_CLIENT_SECRET", present: false, optional: true },
     ])
   })
 })

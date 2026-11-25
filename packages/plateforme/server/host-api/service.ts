@@ -1,10 +1,8 @@
 // L'API de l'hôte d'une organisation (`fonctions-d-un-hote.md` § Source par organisation) : sa ligne `platform.host_apis`
-// lue, ses fonctions tirées du document servi (gardées en mémoire tant que l'adresse et la date de service ne changent
-// pas), et son rafraîchissement par l'équipe plateforme. Un document refusé ne remplace jamais celui qui est servi : la
+// lue, ses fonctions tirées du document servi (`served.ts`, gardé en mémoire tant que l'adresse et la date de service ne
+// changent pas), et son rafraîchissement par l'équipe plateforme. Un document refusé ne remplace jamais celui qui est servi : la
 // version précédente reste servie, et le refus est enregistré avec ses problèmes. Sans ce module, une organisation
 // n'aurait pas d'API d'hôte.
-import { catalogFunctions } from "../catalog/registry"
-import { contractNames } from "../catalog/contracts"
 import type { CatalogFunction } from "../catalog/define"
 import { httpsAddressProblem } from "../connectors/settings"
 import type { PlatformDb } from "../db"
@@ -12,6 +10,7 @@ import { inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { importHostDocument, readHostDocument, type HostDocumentProblem } from "./document"
 import { hostCatalogFunctions } from "./functions"
+import { forgetServedHosts, reservedNamespaces, servedHost, type ServedHost } from "./served"
 
 /** La ligne de l'API de l'hôte d'une organisation, telle que l'administration la montre. */
 export type HostApiView = {
@@ -42,53 +41,26 @@ const viewOf = (row: HostApiRow): HostApiView => ({
   refused: row.refused_at && row.refused_address ? { address: row.refused_address, at: row.refused_at, problems: row.problems ?? [] } : null,
 })
 
-/** Les espaces de noms que l'instance sert déjà, qu'aucun espace de l'hôte ne reprend. */
-function reservedNamespaces(): Set<string> {
-  const names = catalogFunctions().flatMap((fn) => [fn.connector, fn.name.split(".")[0], fn.name.split(".")[0].replace(/_act$/, "")])
-  return new Set([...names, ...contractNames().map((name) => name.split(".")[0])])
-}
+/** Les fonctions tirées de l'API servie, par organisation, gardées avec le document importé dont elles viennent. */
+const built = new Map<string, { host: ServedHost; functions: CatalogFunction[] }>()
 
-/** Les fonctions tirées du document servi d'une organisation, par organisation, sous la clé adresse + date de service. */
-const built = new Map<string, { key: string; functions: CatalogFunction[] }>()
-
-/** Vide les fonctions gardées ; les tests seuls. */
+/** Vide les fonctions et les documents gardés ; les tests seuls. */
 export function forgetHostFunctions(): void {
   built.clear()
+  forgetServedHosts()
 }
 
-/**
- * Les fonctions de l'API de l'hôte de l'organisation de `identity`, lues sous sa session ; `[]` sans API servie. Le
- * document servi a été accepté à son rafraîchissement : un échec à le relire ici est une panne (`internal`, journalisée),
- * jamais un catalogue amputé en silence.
- */
+/** Les fonctions de l'API de l'hôte de l'organisation de `identity`, lues sous sa session ; `[]` sans API servie. */
 export async function hostApiFunctions(db: PlatformDb, identity: Identity): Promise<CatalogFunction[]> {
-  const orgId = identity.org.id
-  const [head] = await inTransaction(
-    db,
-    "hostApiFunctions: host_apis",
-    (sql) => sql<{ address: string | null; served_at: string | null }[]>`select address, to_json(served_at)#>>'{}' as served_at from platform.host_apis where org_id = ${orgId}`,
-  )
-  if (!head?.address || !head.served_at) {
-    built.delete(orgId)
+  const host = await servedHost(db, identity)
+  if (!host) {
+    built.delete(identity.org.id)
     return []
   }
-  const key = `${head.address} ${head.served_at}`
-  const kept = built.get(orgId)
-  if (kept?.key === key) return kept.functions
-  const [row] = await inTransaction(
-    db,
-    "hostApiFunctions: host_apis document",
-    (sql) => sql<{ address: string; document: unknown; served_at: string }[]>`
-      select address, document, to_json(served_at)#>>'{}' as served_at from platform.host_apis where org_id = ${orgId} and address is not null`,
-  )
-  if (!row) return []
-  const imported = importHostDocument(row.document, reservedNamespaces())
-  if ("problems" in imported) {
-    console.error(`[platform] host api: the served document of org ${orgId} no longer imports (${imported.problems.map((problem) => problem.code).join(", ")})`)
-    throw new PlatformError("internal", "Internal error.")
-  }
-  const functions = hostCatalogFunctions(imported.imported, row.address)
-  built.set(orgId, { key: `${row.address} ${row.served_at}`, functions })
+  const kept = built.get(identity.org.id)
+  if (kept?.host === host) return kept.functions
+  const functions = hostCatalogFunctions(host.imported, host.address)
+  built.set(identity.org.id, { host, functions })
   return functions
 }
 

@@ -17,9 +17,10 @@ type IssuerConfig = { kind: "supabase"; issuer: string } | { kind: "oidc"; issue
 
 /**
  * Ce que le paquet lit de la découverte d'un émetteur OIDC ; `tokenEndpoint` : son point de jeton, où s'échange le jeton
- * d'une personne contre celui de l'API d'un hôte (`host-api/exchange.ts`), `null` s'il n'en publie pas.
+ * d'une personne contre celui de l'API d'un hôte (`host-api/exchange.ts`) ; `authorizationEndpoint` : là où une personne
+ * consent à ce que l'instance appelle cette API pour elle (`host-api/consent-access.ts`) ; `null` s'il n'en publie pas.
  */
-type Discovery = { jwksUri: string; userinfoEndpoint: string | null; tokenEndpoint: string | null }
+type Discovery = { jwksUri: string; userinfoEndpoint: string | null; tokenEndpoint: string | null; authorizationEndpoint: string | null }
 
 /** La machine locale, seule à se joindre en `http` (un émetteur de développement). `URL` rend une adresse IPv6 entre crochets. */
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
@@ -102,6 +103,7 @@ function discoveryOf(issuer: string, document: unknown): Discovery {
     jwksUri,
     userinfoEndpoint: optionalEndpoint(document.userinfo_endpoint, "userinfo_endpoint"),
     tokenEndpoint: optionalEndpoint(document.token_endpoint, "token_endpoint"),
+    authorizationEndpoint: optionalEndpoint(document.authorization_endpoint, "authorization_endpoint"),
   }
 }
 

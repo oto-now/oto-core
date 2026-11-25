@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-23] — Fonctions d'un hôte (2/3) : consentement OAuth pour les clients tiers, scope par fonction
+**Quoi :** lib de connecteurs épinglée sur v1.248.0 (famille `{label, scope}`). Chaque fonction d'un hôte demande le scope de sa famille ; une famille sans scope refuse le document à l'import (`host_scope_missing`). Quand l'émetteur refuse l'échange pour un client tiers (`invalid_grant` + « grant request is invalid », seul couple qui le désigne chez Logto), oto prend le consentement de la personne : parcours `oauth2_user` construit depuis le document (client « traditional » `PLATFORM_OIDC_CONSENT_CLIENT_ID`/`_SECRET`, `resource`, `offline_access`, `prompt=consent`), jetons chiffrés sur son compte `host_api`, renouvelés comme tout consentement ; sans lui, refus `not_enabled` qui porte le lien d'autorisation ; désactiver le compte révoque. Un jeton consenti sous un autre `sub` ne part jamais.
+**Pourquoi :** issue #153, décision d'Alexis du 22/11/2026 (deux voies, aucun repli silencieux).
+**Fichiers :** `packages/plateforme/server/host-api/{consent,consent-access,served,exchange,document,functions,service}.ts`, `server/connectors/{consent,oauth-user,account-secret,http,definition,declaration}.ts`, `server/issuer.ts`, `server/cell.ts`, `.env.example`, `docs/conception/fonctions-d-un-hote.md`, tests.
+
 ## [2026-11-25] — Conception : « Ce que reçoit l'assistant », vue d'ensemble des couches de confidentialité
 **Quoi :** nouveau document de conception, proposé : les cinq couches qui limitent ce qu'un assistant reçoit des données d'une organisation (ne pas servir, transformer un champ connu, jeton d'identité stable, dictionnaire des personnes déclarées, modèle de reconnaissance), ce sur quoi chacune tient, le livré et le proposé, et l'ordre de mise en place pour un hôte. Renvoie à `pseudonymisation.md` pour le détail.
 **Pourquoi :** donner une vue d'ensemble qu'aucun document ne portait.
