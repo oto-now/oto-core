@@ -17,6 +17,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 
 ## Unreleased
 
+## 1.10.0 — 2026-11-25
+
 ### Assistants
 - `read`, `write` and `node.move` take `id`, a node's stable id, instead of `path`; `read`, `find`, `write` and `node.tree` serve it.
 - `node.describe {ids}` gives up to 200 ids at once: present (path, title), trashed or missing; one you cannot read answers missing.
