@@ -398,7 +398,7 @@ test.describe("E10-S02 lot c : « Voir » et l'isolation d'un fichier HTML", () 
 
     // O1 : la navigation de l'iframe part, et l'écran la remplace par l'avis ; « Recharger » rend le fichier.
     await cadre.evaluate((exterieure) => {
-      location.href = `${exterieure}/ailleurs`
+      location.href = new URL("/ailleurs", exterieure).href
     }, ext)
     await attendre(page.getByRole("alert").filter({ hasText: QUITTE })).toBeVisible()
     expect(exterieur.recues).toContain("/ailleurs")
@@ -417,7 +417,7 @@ test.describe("E10-S02 lot c : « Voir » et l'isolation d'un fichier HTML", () 
     // O2 : une navigation vers une réponse 204 part, et l'écran ne voit rien.
     const sans = await cadreDe(page)
     await sans.evaluate((exterieure) => {
-      location.href = `${exterieure}/204`
+      location.href = new URL("/204", exterieure).href
     }, ext)
     await attendre.poll(() => exterieur.recues.includes("/204")).toBe(true)
     await expect(page.getByRole("alert").filter({ hasText: QUITTE })).toHaveCount(0)
