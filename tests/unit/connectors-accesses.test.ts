@@ -13,7 +13,6 @@ import { accountAccess, requestedAccess } from "../../packages/plateforme/server
 import { admittedOwnerKinds, formOwnerKinds } from "../../packages/plateforme/server/connectors/account-owners"
 import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
 import { accessChoices, connectAccess, refusalFromPlan, type ConnectionPlan } from "../../packages/plateforme/server/connectors/connect-link"
-import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
 import { isPersonalConnector } from "../../packages/plateforme/server/connectors/consent-accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
@@ -334,16 +333,6 @@ describe("a connector with several accesses: the choice of access", () => {
     expect(accessChoices("crm", KEY_OR_SIGN_IN.signIn).map((access) => access.name)).toEqual([KEY_OR_SIGN_IN.key])
     registerConnectors([describedConnector()])
     expect(accessChoices("crm")).toEqual([])
-  })
-
-  it("should make the page choose the access when its link names none, before any plan", async () => {
-    verdict(keyOrSignInConnector())
-    expect(await connectionStep({} as never, {} as never, { connector: "crm", space: "org" }, { origin: "https://acme.example.test" })).toEqual({
-      kind: "choose_access",
-      connector: "crm",
-      label: "Crm",
-      accesses: accessChoices("crm"),
-    })
   })
 
   it("should name the other accesses in a refusal without account, never in one that keeps its account's access", () => {

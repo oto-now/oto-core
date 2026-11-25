@@ -101,4 +101,19 @@ describe("EcranConnexionDUnConnecteur, a connector with several accesses", () =>
     expect(screen.getByText("Ou connectez-vous autrement :")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Sign-in of a person" })).toHaveAttribute("href", "/connect/fod?access=oauth")
   })
+
+  it("should keep in each access link the space the link names", () => {
+    render(
+      <EcranConnexionDUnConnecteur
+        outil="fod"
+        resultat={{ data: { kind: "choose_access", connector: "fod", label: "Fod", accesses: ACCES.map((acces) => ({ ...acces, space: "team:ventes" })) } }}
+        reessayer="/connect/fod?space=team%3Aventes"
+      />,
+    )
+    const liste = within(screen.getByRole("list", { name: "Les façons de se connecter" }))
+    expect(liste.getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual([
+      "/connect/fod?access=oauth&space=team%3Aventes",
+      "/connect/fod?access=key&space=team%3Aventes",
+    ])
+  })
 })

@@ -44,8 +44,9 @@ plateforme.
 transport gardé (`address-guard.ts` : `https`, IP publiques seules, aucune redirection suivie), 10 s, 5 Mo au plus,
 `If-None-Match` quand l'adresse n'a pas changé. Chaque échec est un refus nommé (`host_address_refused`,
 `host_document_unreachable`, `host_document_status`, `host_document_too_large`, `host_document_not_json`). Le document passe
-ensuite le profil hôte (`host_*`, `openapi_*`), puis deux contrôles d'oto : l'émetteur `x-oto.issuer` est celui de
-l'instance (`host_issuer_not_instance`), chaque fonction a un scope (`host_scope_missing`, [jeton](fonctions-d-un-hote-jeton.md) § Scopes), chaque schéma
+ensuite le profil hôte (`host_*`, `openapi_*`), puis les contrôles d'oto : l'émetteur `x-oto.issuer` est celui de
+l'instance (`host_issuer_not_instance`), l'indicateur de ressource `x-oto.resource` est une adresse `https` fixe, hôte et
+chemin seuls, le contrôle de `resource` d'un connecteur `oauth2_user` (`host_resource_invalid`), chaque fonction a un scope (`host_scope_missing`, [jeton](fonctions-d-un-hote-jeton.md) § Scopes), chaque schéma
 d'entrée se compile (`host_schema_invalid`). Les espaces de noms déjà servis par l'instance (paquet, ERP, connecteurs
 déclarés, contrats) et `host_api` ([jeton](fonctions-d-un-hote-jeton.md)) sont réservés.
 

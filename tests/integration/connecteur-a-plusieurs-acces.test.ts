@@ -162,7 +162,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       connectionStep(who.db, who.identity, { connector: CONNECTOR, ...query }, { origin: origin() })
     const service = { name: SERVICE, label: "Service account of the organization", gesture: "key" }
     const signIn = { name: SIGN_IN, label: "Sign-in of a person", gesture: "oauth" }
-    expect(await step(lea, { space: "org" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [service, signIn] })
+    expect(await step(lea, {})).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [service, signIn] })
+    // Un espace nommé : contrôlé pour chaque accès avant toute liste ; un accès qu'il ne permet pas n'est pas offert, et
+    // chaque lien garde l'espace.
+    expect(await step(ada, { space: "org" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...service, space: "org" }] })
+    expect(await step(lea, { space: "me" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...signIn, space: "me" }] })
+    // Un espace refusé pour tous les accès : refusé nommément, aucun accès listé.
+    const forbidden = await refusal(step(lea, { space: "org" }))
+    expect([forbidden.code, forbidden.details]).toEqual(["forbidden", { reason: "space", space: "org" }])
+    expect((await refusal(step(lea, { space: "team:inconnue" }))).code).toBe("not_found")
+    // Les autres accès offerts à côté du geste d'un accès gardent aussi l'espace nommé.
+    expect(await step(lea, { access: SIGN_IN, space: "me" })).toMatchObject({ kind: "authorize", space: "me", others: [{ ...service, space: "me" }] })
     expect(await step(lea, { access: SIGN_IN })).toEqual({ kind: "authorize", gesture: "oauth", connector: CONNECTOR, label: "Crm", space: "me", access: SIGN_IN, others: [service] })
     const key = await step(ada, { access: SERVICE })
     const asked = await step(lea, { access: SERVICE })

@@ -113,9 +113,19 @@ describe("oauth2_user declaration", () => {
       consentVariant({ authorizeParams: { resource: RESOURCE } }),
       "crm: auth oauth2_user: authorizeParams must not set resource: declare it as resource, which the package sets at the authorization, the code exchange and each renewal.",
     ],
-    ["a resource in http", consentVariant({ resource: "http://api.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address without fragment."],
-    ["a resource with a fragment", consentVariant({ resource: `${RESOURCE}#v2` }), "crm: auth oauth2_user: resource must be a fixed https:// address without fragment."],
-    ["a resource as a template", consentVariant({ resource: "https://{tenant}.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address without fragment."],
+    ["a resource in http", consentVariant({ resource: "http://api.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a fragment", consentVariant({ resource: `${RESOURCE}#v2` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource as a template", consentVariant({ resource: "https://{tenant}.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with userinfo", consentVariant({ resource: "https://user@api.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a user and password", consentVariant({ resource: ["https://user", "pass@api.crm.example.test/v2"].join(":") }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a query", consentVariant({ resource: `${RESOURCE}?tenant=acme` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with an empty query", consentVariant({ resource: `${RESOURCE}?` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a query and no path", consentVariant({ resource: "https://api.crm.example.test?x=1" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a space", consentVariant({ resource: `${RESOURCE}/a b` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a backslash", consentVariant({ resource: "https://api.crm.example.test\\@evil.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource as a path template", consentVariant({ resource: `${RESOURCE}/{tenant}` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource without host", consentVariant({ resource: "https:///v2" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource that is not a text", consentVariant({ resource: 42 as unknown as string }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
   ])("should refuse %s by name", (_case, definition, message) => {
     expect(registrationProblem(definition, { crm: TEST_APPLICATION })).toBe(message)
   })

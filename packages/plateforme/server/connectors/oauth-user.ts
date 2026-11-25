@@ -22,10 +22,27 @@ export const EXPIRY_MARGIN_MS = 60_000
 
 /** Ce que l'hôte pose lui-même dans l'adresse d'autorisation : jamais une constante de la description. */
 const RESERVED_AUTHORIZE_PARAMS = ["client_id", "redirect_uri", "response_type", "scope", "state", "code_challenge", "code_challenge_method"]
-/** L'indicateur de ressource : une adresse `https` fixe, sans fragment ni gabarit (le motif du schéma de la lib). */
-const RESOURCE = /^https:\/\/[^\s{}#/?]+([/?][^\s{}#]*)?$/
+/**
+ * L'indicateur de ressource : une adresse `https` fixe, un hôte et un chemin seuls. Plus strict que le motif du schéma
+ * de la lib, qui admet la query : ni partie userinfo (`https://user@hôte`), ni query, ni fragment (RFC 8707 § 2), ni
+ * gabarit, ni espace, ni barre oblique inverse (qu'un analyseur d'URL lit comme `/`).
+ */
+const RESOURCE = /^https:\/\/[^\s{}#/?@\\]+(\/[^\s{}#?\\]*)?$/
 const PARAM_NAME = /^[A-Za-z0-9_.-]+$/
 const GRANT_TYPE = /^[A-Za-z0-9_.:-]+$/
+/** Ce que dit le refus d'un indicateur de ressource, à la déclaration d'un connecteur comme à l'import d'une API d'hôte. */
+export const RESOURCE_RULE = "resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."
+
+/** Un indicateur de ressource que le paquet pose tel quel à l'autorisation et aux demandes de jeton (`RESOURCE`). */
+export function isResource(value: unknown): value is string {
+  if (typeof value !== "string" || !RESOURCE.test(value)) return false
+  try {
+    const url = new URL(value)
+    return url.hostname !== "" && url.username === "" && url.password === "" && url.search === "" && url.hash === ""
+  } catch {
+    return false
+  }
+}
 /** Qui a consenti : une fonction du connecteur, ou une adresse complète lue avec le jeton, et ses droits. */
 export type ConsentIdentity = { function: string; path: string } | { url: string; path: string; scopes: string[] }
 
@@ -136,7 +153,7 @@ export function prepareUserConsent(definition: ConnectorView, auth: Record<strin
   if ("resource" in params) return `${head}: authorizeParams must not set resource: declare it as resource, which the package sets at the authorization, the code exchange and each renewal.`
   if (pkce !== undefined && pkce !== "S256") return `${head}: pkce must be S256.`
   const resource = auth.resource
-  if (resource !== undefined && (typeof resource !== "string" || !RESOURCE.test(resource))) return `${head}: resource must be a fixed https:// address without fragment.`
+  if (resource !== undefined && !isResource(resource)) return `${head}: ${RESOURCE_RULE}`
   const expires = auth.expiresInDefault
   if (expires !== undefined && !isPositiveInteger(expires)) return `${head}: expiresInDefault must be a positive integer.`
   const identity = identityOf(definition, head, auth.identity)
