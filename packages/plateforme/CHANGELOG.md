@@ -37,6 +37,8 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Install: the `next` peer widens from `^15` to `^15 || ^16`: the package imports nothing from Next but the `Metadata` type, and the reference host builds on Next 16.4 (workspace build and packed-host build). Next 15 hosts change nothing.
 - Install: on Next 16, `eslint-config-next` 16 pulls `eslint-plugin-react-hooks` 7, whose preset adds the React Compiler rules; the package's `ui/` does not pass them yet. A host that lints the package sources (workspace, `transpilePackages`) pins `eslint-config-next>eslint-plugin-react-hooks: ^5.2.0` in `overrides`, as the reference host does, until a version says these rules pass.
 - Install: on Next 16, `experimental.devtoolSegmentExplorer` no longer exists: remove it from `next.config.ts`. `src/middleware.ts` still works (deprecated in favour of `proxy.ts`); the reference host keeps it for now.
+- UI: the header of a page or a procedure gains, for who writes it, an icon button showing its kind (« Page ⇄ Procédure »): one click publishes the other kind, without confirmation, then reads the page again. A write from the screen that changes only `kind` is now all or nothing: a refused `call` block leaves the page a page, with no draft kept. Nothing to change on the host's side.
+- MCP: `write`'s structured result gains `warnings` (the publication warnings: links, procedure writing advice; the first 20, with `warnings_total` beyond) when a page or a procedure is published with some; a table keeps its header warnings there as before. Added only.
 
 ## 1.9.0 — 2026-11-19
 

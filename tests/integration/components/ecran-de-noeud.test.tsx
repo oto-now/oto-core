@@ -696,7 +696,8 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
     gestionAccordable: false,
     moi: null,
   }
-  const commandes = () => Array.from(document.querySelectorAll(".oto-screen-header-access button")).map((bouton) => bouton.textContent)
+  // Le nom de chaque bouton : son `aria-label` pour une icône seule (« Télécharger en .md », le genre), sinon son texte.
+  const commandes = () => Array.from(document.querySelectorAll(".oto-screen-header-access button")).map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)
 
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -707,14 +708,17 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
     for (const [kind, libelle] of [["page", "Télécharger en .md"], ["procedure", "Télécharger en .md"], ["context", "Télécharger en .md"], ["table", "Télécharger en .csv"]] as const) {
       rendre({ noeud: { data: vueDuNoeud({ kind, blocks: [] }) }, partage })
       expect(commandes()).toEqual([libelle, "Partager · Ventes"])
+      // « .md » en icône seule, nommé et expliqué par son libellé ; « .csv » garde son texte.
+      expect(screen.getByRole("button", { name: libelle }).textContent).toBe(kind === "table" ? libelle : "")
       cleanup()
     }
     // Sans panneau de partage, le bouton est seul ; jamais publié, aucun bouton (HN-E11S05-9).
     rendre()
     expect(commandes()).toEqual(["Télécharger en .md"])
     cleanup()
+    // Au niveau écriture, « Page ⇄ Procédure » reste.
     rendre({ noeud: { data: vueDuNoeud({ status: "draft", revision: 0, level: 2 }) }, partage })
-    expect(commandes()).toEqual(["Partager · Ventes"])
+    expect(commandes()).toEqual(["Page : passer en procédure", "Partager · Ventes"])
   })
 
   it("should download the published file of the export route, the button disabled meanwhile, and say a refusal in an alert without any file (AC-c2, AC-c3)", async () => {

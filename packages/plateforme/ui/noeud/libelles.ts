@@ -161,6 +161,26 @@ export const EN_TETE = {
   aRenvoyer: "Le brouillon a changé pendant l'enregistrement : enregistrez de nouveau.",
 } as const
 
+/**
+ * Le geste « Page ⇄ Procédure » de l'en-tête : son nom (le genre et l'action), son infobulle (ce que le genre change
+ * pour l'assistant), ce qui le bloque, et son issue.
+ */
+export const GENRE = {
+  nom: { page: "Page : passer en procédure", procedure: "Procédure : repasser en page" },
+  aide: {
+    page: "Page : l'assistant ne la lit que si on la cite ou qu'il la cherche. En procédure, il la proposera quand une demande lui correspond.",
+    procedure: "Procédure : l'assistant la propose quand une demande lui correspond. Repassée en page, il ne la lira que si on la cite ou qu'il la cherche.",
+  },
+  sousUneProcedure: "Rangée sous une procédure : ses sous-étapes restent des pages.",
+  enAttente: "Un brouillon attend sur cette page. Demandez à l'assistant de le publier ou de l'abandonner, puis rechargez la page.",
+  /** Les avertissements servis après un passage en procédure : des phrases du service, en anglais, repliées sous ce titre. */
+  conseils: (nombre: number) => `${nombre > 1 ? `${nombre} avertissements` : "1 avertissement"} de la publication (texte du service, en anglais)`,
+  devenue: {
+    procedure: (titre: string) => `« ${titre} » est maintenant une procédure : l'assistant peut la proposer.`,
+    page: (titre: string) => `« ${titre} » est maintenant une page : l'assistant ne la propose plus.`,
+  },
+} as const
+
 /** Le genre que l'écran montre et écrit (E05-S04) : celui du brouillon s'il en change, sinon celui du nœud. */
 export function genreDuNoeud(vue: Pick<NodeView, "kind" | "draft">): NodeKind {
   return vue.draft?.kind ?? vue.kind

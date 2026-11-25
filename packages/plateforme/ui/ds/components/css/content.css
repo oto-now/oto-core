@@ -428,6 +428,8 @@
 .oto-fil-etat { flex: none; }
 .oto-fil-etat[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .oto-fil-etat[aria-disabled="true"]:hover { background: var(--island); }
+/* Le genre d'un contenu (« Page ⇄ Procédure ») bloqué ou en cours d'envoi : désactivé par la couleur, comme un bouton `disabled` (`_interaction.css`), le focus et l'infobulle qui dit pourquoi restant (`aria-disabled`). */
+.oto-genre[aria-disabled="true"] { background: var(--hair); border-color: var(--hair); color: var(--faint); box-shadow: none; }
 .oto-fil-citation { padding-inline-start: var(--space-2); border-inline-start: var(--space-0-5) solid var(--primary); font-size: var(--fs-xs); color: var(--mute); overflow-wrap: anywhere; }
 .oto-fil-commentaires { display: flex; flex-direction: column; gap: var(--space-2); }
 .oto-fil-pied { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1-5); }

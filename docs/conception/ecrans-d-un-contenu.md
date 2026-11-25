@@ -1,12 +1,12 @@
 # Écrans d'un contenu
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-11-25
 
 ## Résumé
 
 Une page, une procédure, un Contexte ou un tableau s'ouvrent à la même adresse de nœud, dans une carte de document avec, à droite, des encarts repliables (« À quoi sert cette page », « Cité dans », « Cite », « Sous-pages »).
-L'écran offre les gestes du contenu : créer, ranger, dupliquer, mettre à la corbeille, restaurer, partager, télécharger, importer un fichier dans un tableau, revoir les lignes.
+L'écran offre les gestes du contenu : créer, ranger, changer le genre d'une page ou d'une procédure, dupliquer, mettre à la corbeille, restaurer, partager, télécharger, importer un fichier dans un tableau, revoir les lignes.
 Ce document répond à : que montre l'écran d'un contenu, et quels gestes offre-t-il ?
 
 ## Contexte
@@ -58,6 +58,13 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - Dupliquer exige la lecture du nœud et l'écriture sous son parent ; la copie est publiée (révision 1), sans règle ni propriétaire explicite, sans descendant que la personne ne lit pas, sans brouillon, lignes sans bail, titrée « <titre> (copie) » (HN-E05S10e-6) ; `duplicate_subtree` ne calcule aucun niveau, le service décide avant l'appel, la fonction borne l'organisation de l'appelant et la forme, `execute` à `authenticated` seul (HN-E05S10e-18).
 - Corbeille : un nœud à la corbeille vaut 0 pour tout service ; la purge (30 jours, le nœud et son sous-arbre) se fait au passage de qui lit la corbeille ou y met un contenu, par une fonction `security definer` bornée à son organisation (`purge_trash`, `20261021140000`), qui emporte aussi les pages qu'il ne lit pas ; l'export d'une organisation garde la corbeille avec sa date, l'import la restitue (HN-E05S10e-2). « Supprimer » exige la gestion et refuse un sous-arbre qui porte un contenu que la personne ne voit pas (HN-E05S10e-3). « Restaurer » remet le nœud sous son parent s'il est vivant, sinon sous son plus proche ancêtre vivant (jamais hors de son espace), au premier chemin libre de son segment, l'écriture exigée sur cet ancêtre ; ce qui était parti avec lui revient avec lui (HN-E05S10e-4).
 
+### Page ⇄ Procédure
+
+- Pour qui écrit une page ou une procédure, hors de la version publiée (la condition de « Réglages » d'un tableau), l'en-tête porte, à gauche de « Télécharger en .md » (lui aussi en icône seule, nommé et expliqué par son libellé ; « .csv » d'un tableau et la page publique gardent leur texte), un bouton en icône seule : le glyphe du genre courant, celui du rail (`FileText` pour une page, `Play` pour une procédure). Son nom dit le genre et l'action (« Page : passer en procédure », « Procédure : repasser en page ») ; son infobulle, ce que le genre change pour l'assistant : une procédure lui est proposée quand une demande lui correspond, une page n'est lue que si on la cite ou qu'il la cherche. Ni sur un tableau ni sur un Contexte, dont le genre ne change pas.
+- Le geste part au clic, sans confirmation dans un sens ni dans l'autre, en une écriture publiée `{kind, publish: true}` par la file d'opérations de la page, puis la page se relit : glyphe et nom du bouton, glyphe du titre et chapô (le résumé d'une procédure) suivent le genre relu, le rail aussi. Le bouton reste focalisable pendant l'envoi (`aria-disabled`, `aria-busy`), un double geste n'envoie rien de plus. Le succès s'annonce en `role="status"` (« « <titre> » est maintenant une procédure : l'assistant peut la proposer. », « … une page : l'assistant ne la propose plus. »). Après un passage en procédure, les avertissements que sert la publication (`data.warnings` de la réponse d'écriture : conseils de `procedureAdvice`, liens) se montrent sous l'en-tête, sans bloquer, repliés sous leur compte : des phrases anglaises du service, sans code stable, montrées telles quelles.
+- Un refus se dit sous la rangée de l'en-tête, en `role="alert"` : le contrôle des blocs `call` refus par refus, chacun menant à son bloc (`RefusDePublication`, comme la publication), sinon la phrase de `messageDErreur`. Le service écrit le genre seul tout ou rien ([procédures](procedures.md)) : la page reste une page, sans brouillon.
+- Bloqué, et dit dans l'infobulle : une page rangée sous une procédure de l'arbre visible (« Rangée sous une procédure : ses sous-étapes restent des pages. ») ; tout brouillon ouvert que la page n'a pas écrit (le tampon servi, sans écriture de la page depuis le chargement) : celui d'un assistant, mais aussi celui qu'une publication échouée de la personne a laissé, jusqu'à sa prochaine frappe ; le geste le publierait sans qu'on l'ait vu. C'est plus large que « Réglages » d'un tableau, qui ne regarde qu'un en-tête en attente : tout brouillon partirait avec le genre. Repasser une procédure en page n'est jamais bloqué par l'arbre.
+
 ### « Partager »
 
 - Le niveau d'accès d'une ligne se choisit dans le `Select` du design system : un `DropdownMenu`, monté hors du popover, le refermerait (HN-E05S10b-4). Une personne ou une équipe ajoutée reçoit « Peut lire », son menu change ensuite le niveau (HN-E05S10b-5).
@@ -73,6 +80,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - **Une infobulle au survol pour la provenance** : écartée pour un panneau ouvert au clic ou au clavier ; une infobulle ne peut porter de lien cliquable (la preuve) et ne s'ouvre pas au toucher.
 - **Lire les titres des nœuds cités dans les cellules** : écarté pour l'instant, une lecture de plus par page de lignes ; un lien sans libellé se nomme par le dernier segment de son chemin.
 - **« Aucun ⋯ sur un Contexte »** (E05-S10 AC-b8) : remplacé par « Télécharger en .md » (D139, [écrans et coque](ecrans-et-coque.md)).
+- **Confirmer le changement de genre** : écarté par JB, dans les deux sens ; le geste se défait par le geste inverse.
 - **Un menu déroulant (`DropdownMenu`) pour le niveau d'accès** : écarté, il refermait le panneau « Partager » (HN-E05S10b-4).
 
 ## Sécurité et confidentialité
@@ -89,6 +97,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - M66 : `ContenusLies` (`ui/noeud/sous-pages.tsx`) recopie les sous-pages dans son repli pendant le flux.
 - M101 : `TableCell` force une mise en page par cellule (troncature du texte).
 - M103 : à 375 px, l'en-tête de la visionneuse d'un fichier fait défiler la zone de contenu en largeur.
+- Page ⇄ Procédure : les conseils d'écriture se lisent en anglais, faute de code stable pour les traduire ; l'infobulle du bouton n'a pas été contrôlée à l'œil (elle s'ouvre dans la couche du dessus, hors des captures statiques des deux thèmes).
 
 ## Questions ouvertes
 
@@ -101,3 +110,4 @@ Aucune à ce jour.
 - 2026-09-30 : retours sur la 1.1.1, livrés dans la 1.1.2 : encarts de la vue « Contexte », mise en page centrée, panneaux larges, liens au repos, contenus récents de « @ » — décidé par JB (source : story E11-S15).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend P18, les fiches D97, D140 et les choix des stories E05-S10, E11-S05, E11-S15 — décidé par Alexis, accord de JB.
 - 2026-10-20 : provenance par une icône « info » et un panneau, cellules de texte qui vont à la ligne, liens suivis dans les cellules, adresses raccourcies — décidé par JB (source : session du 20/10/2026).
+- 2026-11-25 : geste Page ⇄ Procédure dans l'en-tête, sans confirmation, bloqué sous une procédure — décidé par JB (source : design retenu le 25/11/2026) ; bloqué aussi sur tout brouillon que la page n'a pas écrit, plus large que « Réglages » d'un tableau.

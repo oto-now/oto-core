@@ -182,11 +182,12 @@ franchit une de ces règles passe par un ADR.
   suite (`25P02`), postgres.js 3.4.9 fait échouer la fin (`uncaughtError`). Une course sur une clé unique se lit
   par `insert … on conflict do nothing returning …` sans ligne, jamais par un `23505` rattrapé. **Vérifiable :**
   aucun `catch` du `fn` d'un `db.tx` ne rattrape une erreur de base (`regles-transaction.test.ts` joue la course).
-  **Exception écrite, l'écriture d'un assistant** (`server/nodes/write-atomic.ts`, E11-S18) : elle tient dans une
+  **Exception écrite, l'écriture d'un assistant, et une écriture publiée de genre seul quelle que soit la porte**
+  (`server/nodes/write-atomic.ts`, E11-S18 ; « Page ⇄ Procédure », `procedures.md`) : elle tient dans une
   transaction des services qui, pour l'écran, rattrapent une erreur de base dans la leur (purge d'après publication et
   `evolution-publish.ts`, `followTitle`, refus relu de `publish_node` dans `publish.ts`) ; sous elle, une telle erreur
   perd toute l'écriture, rejouée une fois (le refus relu dit alors l'état d'après la course), puis refusée. La tolérance
-  de ces services (N6 : publication faite, avertissement) ne vaut plus que pour l'écran. **Vérifiable :** la course
+  de ces services (N6 : publication faite, avertissement) ne vaut plus que pour les autres écritures de l'écran. **Vérifiable :** la course
   d'AC30 de `tests/unit/nodes-publish.test.ts` (rejouée pour un assistant, tenue en deux temps pour l'écran).
 - **Tout `update` et tout `delete` de la face SQL portent un `where`** : le rôle de
   PostgREST charge `safeupdate` (`session_preload_libraries` d'`authenticator`),

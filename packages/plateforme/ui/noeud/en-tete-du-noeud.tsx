@@ -13,6 +13,7 @@
 // Retiré : la pile d'avatars ; « Déplacer » (AC-b4), que le rail porte (E05-S13, AC-20).
 // E11-S05 : « Télécharger en .csv » d'un tableau, « Télécharger en .md » sinon, à gauche de « Partager », pour qui
 // lit un nœud publié (lot c) ; le chapô ne montre le résumé que d'une procédure (AC-f1).
+// « Page ⇄ Procédure » : à gauche de « Télécharger », le glyphe du genre, pour qui écrit une page ou une procédure.
 import type { ReactNode } from "react"
 import type { NodeView, TreeNode } from "../../schemas"
 import { natureDuGenre } from "../arbre/depuis-l-arbre"
@@ -27,6 +28,7 @@ import { ilYA } from "../format/dates"
 import { ResumeModifiable, TitreModifiable } from "./en-tete-modifiable"
 import { filDuChemin, porteeDeLaSection, sectionDuChemin } from "./fil"
 import { FilDuNoeud } from "./fil-du-noeud"
+import { GenreDuNoeud } from "./genre-du-noeud"
 import { GlypheDeNature, GlypheDePortee } from "./glyphes"
 import { detailsDuNoeud, ECRAN, genreDuNoeud, INFOBULLE, modifieeDuNoeud, NATURES, resumeMontre } from "./libelles"
 
@@ -82,19 +84,39 @@ function MetaDuNoeud({ vue }: { vue: NodeView }) {
   )
 }
 
+/** Un ancêtre du chemin, dans l'arbre visible, est une procédure : ses sous-étapes restent des pages (1.4.11). */
+function sousUneProcedure(arbre: readonly TreeNode[], chemin: string): boolean {
+  return arbre.some((noeud) => (noeud.kind === "procedure" && chemin.startsWith(`${noeud.path}/`)) || sousUneProcedure(noeud.children, chemin))
+}
+
+/**
+ * « Page ⇄ Procédure », le geste de l'en-tête, monté sous la file d'écriture seulement (`modifiable`), sur une page ou
+ * une procédure ; un arbre en échec ne bloque rien, le service tranche.
+ */
+function Genre({ vue, titre, arbre }: { vue: NodeView; titre: string; arbre: readonly TreeNode[] | null }) {
+  const genre = genreDuNoeud(vue)
+  if (genre !== "page" && genre !== "procedure") return null
+  const blocs = (vue.draft?.blocks ?? vue.blocks).map((bloc) => ({ id: bloc.id, ref: bloc.ref }))
+  return <GenreDuNoeud genre={genre} titre={titre} sousUneProcedure={sousUneProcedure(arbre ?? [], vue.path)} blocs={blocs} />
+}
+
 /** « Télécharger en .csv » ou « en .md » (E11-S05, AC-c1) : la version publiée, que le service exporte. */
 function Telechargement({ vue }: { vue: NodeView }) {
   const tableau = vue.kind === "table"
-  return <BoutonTelecharger chemin={vue.path} format={tableau ? "csv" : "md"} libelle={tableau ? EXPORTS.csv : EXPORTS.markdown} />
+  // « .md » en icône seule : « Page ⇄ Procédure » prend la place de son texte dans la rangée.
+  return tableau ? <BoutonTelecharger chemin={vue.path} format="csv" libelle={EXPORTS.csv} /> : <BoutonTelecharger chemin={vue.path} format="md" libelle={EXPORTS.markdown} iconeSeule />
 }
 
 export function EnTeteDuNoeud({ vue, titre, arbre, equipes, handle, prefixeDesPages, modifiable, partage, reglages }: EnTeteDuNoeudProps) {
   const section = sectionDuChemin(vue.path, equipes, handle)
   // Un nœud jamais publié n'a rien à télécharger (HN-E11S05-9).
   const telechargeable = vue.status === "published"
-  // Dans cet ordre, à l'écran comme au clavier : télécharger, les réglages d'un tableau, puis partager (AC-c1, HN-E11S01-16).
+  // Pour qui écrit une page ou une procédure, hors de la version publiée : « Page ⇄ Procédure ».
+  const genre = modifiable && vue.kind !== "table" && vue.kind !== "context"
+  // Dans cet ordre, à l'écran comme au clavier : le genre, télécharger, les réglages d'un tableau, puis partager (AC-c1, HN-E11S01-16).
   const acces = (
     <>
+      {genre && <Genre vue={vue} titre={titre} arbre={arbre} />}
       {telechargeable && <Telechargement vue={vue} />}
       {reglages}
       {partage && (
@@ -117,7 +139,7 @@ export function EnTeteDuNoeud({ vue, titre, arbre, equipes, handle, prefixeDesPa
         icon={<GlypheDeNature nature={natureDuGenre(genreDuNoeud(vue))} taille="sm" />}
         title={modifiable ? <TitreModifiable titre={titre} revisionServie={vue.revision} tamponServi={vue.draft?.draftStamp ?? null} /> : titre}
         meta={<MetaDuNoeud vue={vue} />}
-        access={telechargeable || reglages || partage ? acces : undefined}
+        access={genre || telechargeable || reglages || partage ? acces : undefined}
       />
     </>
   )

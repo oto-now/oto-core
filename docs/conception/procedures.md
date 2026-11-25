@@ -1,7 +1,7 @@
 # Procédures
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-27
+- **Dernière révision** : 2026-11-25
 
 ## Résumé
 
@@ -51,6 +51,8 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Une procédure est une page comme les autres tant que les connecteurs ne sont pas là : même éditeur et même lecture, texte seul, un bloc d'appel déjà écrit lu en texte (D104). Un bloc `call` déjà écrit se lit comme un texte (« Appel de <fonction> : { … } »), jamais exécuté par l'écran ; un appel dont le texte ne change pas reste un appel, et rien ne part pour lui (HN-M59-1).
 - Écrire un appel : deux champs, fonction et arguments JSON relus en objet, et le bloc part structuré `{ type: "call", data: { function, args } }` ; les espaces réservés `"<…>"` sont admis (HN-E05S04-8). « Appel de fonction » n'est offert que sur une procédure ; ailleurs, un bloc `call` se lit, se déplace et se supprime (HN-E05S04-11). Insérer un appel dans une liste numérotée la coupe, et la suite reprend son numéro (`start`) ; une liste numérotée ajoutée juste après un appel continue la numérotation (HN-E05S04-9).
 - Les refus du contrôle se disent un par un : emplacement (section, rang, étape, sinon « Avant le premier titre » ou « Procédure »), genre traduit, lien vers le bloc, texte anglais sous « Détail technique » (HN-E05S04-2).
+- **Page ⇄ Procédure** : pour qui écrit une page ou une procédure, hors de la version publiée, un bouton en icône seule de l'en-tête (le glyphe du genre, celui du rail) change le genre, sans confirmation dans un sens ni dans l'autre (décision de JB), en une écriture publiée `{kind, publish: true}` par la file d'opérations de la page, puis la relecture. Repassée en page, une procédure n'est plus routée ni listée, ses blocs `call` restent dans le texte : c'est la façon de la « désactiver » sans la supprimer. Le passage en procédure contrôle ses blocs `call` comme toute publication ; un refus se dit refus par refus sous l'en-tête et la page reste une page. Bloqué, et dit dans l'infobulle : une page rangée sous une procédure de l'arbre visible (« ses sous-étapes restent des pages »), et un brouillon que la page n'a pas écrit, que le geste publierait sans qu'on l'ait vu. Le détail de l'écran : [écrans d'un contenu](ecrans-d-un-contenu.md).
+- Une écriture publiée qui ne change que le genre (`kind`, sans `ops`, `title`, `summary` ni `header`) est atomique par toute porte (`writesAtomically`, `server/nodes/write-atomic.ts`) : un refus de publier annule tout, aucun brouillon ne garde le genre refusé. Les autres écritures de l'écran gardent leur brouillon après un refus, qui sauve la frappe d'une personne.
 - **Tester une phrase** : un formulaire GET (`?phrase=`, 2 000 caractères au plus) calculé par la page serveur avec `previewContext` (procédure servie, score, candidats) ; aucune route API d'aperçu (HN-E05S04-1).
 
 ### Éditer un Contexte et sa fiche
@@ -58,7 +60,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - Un Contexte s'édite sur son écran de nœud (`/n/<chemin>`), ses annexes à droite (qui le reçoit, ce que le modèle recevra) ; aucune route `/contexte`, aucun lien de navigation « Contexte » (HN-E05S04-6). Publier un Contexte vide demande confirmation (« Publier quand même »), sans prendre le focus de qui écrit (HN-E05S04-10). Le Contexte Perso d'une autre personne se dit reçu par « la personne de cet espace seulement » et « Personne d'autre ne le reçoit, vous non plus. » ; il se reconnaît à l'absence de « Ma fiche » (HN-E05S04-22). Ce que sert un Contexte : [contexte servi](contexte-servi.md).
 - « Ma fiche » vit dans les annexes du Contexte Perso de la personne, sur le sien seulement (HN-E05S04-7). Elle s'écrit par `PATCH /api/platform/profile`, puis `update_my_profile(p_org, p_patch)` : seuls les champs changés partent ; une personne peut vider un champ, un agent non (HN-E05S04-4). Les langues de la fiche sont `fr` et `en` (HN-E05S04-5). `updateProfile` refuse avant sa requête un appelant sans ligne `members` (entré par un accès plateforme) : `forbidden` `Only members of <org> have a profile here.` (HN-E05S04-12).
 
-- Avertissements à la publication (1.4.3, `server/procedure-advice.ts`), jamais des refus : une procédure sans partie « Quand l'utiliser » (« When to use it »), une procédure qui nomme ses outils avec le préfixe d'une organisation. Une dépendance à un connecteur de l'assistant, hors de la plateforme, s'écrit dans une partie « Prérequis » (« Prerequisites »), lue avec les étapes : l'assistant qui ne l'a pas le dit à la personne au lieu d'échouer à l'étape. Les règles de qualité se lisent au guide de la plateforme, section `procedures`.
+- Avertissements à la publication (1.4.3, `server/procedure-advice.ts`), jamais des refus, servis aussi en champ `warnings` de la réponse de `write` quand il y en a : une procédure sans partie « Quand l'utiliser » (« When to use it »), une procédure qui nomme ses outils avec le préfixe d'une organisation. Une dépendance à un connecteur de l'assistant, hors de la plateforme, s'écrit dans une partie « Prérequis » (« Prerequisites »), lue avec les étapes : l'assistant qui ne l'a pas le dit à la personne au lieu d'échouer à l'étape. Les règles de qualité se lisent au guide de la plateforme, section `procedures`.
 
 ## Décisions et alternatives écartées
 
@@ -68,6 +70,8 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 - **La page de liste `/procedures`** : plus en vigueur, elle a disparu (tout nœud s'ouvre à son adresse, ADR-008 § 7) ; un espace personnel se nomme « Privé », reconnu à son chemin `perso/…` (HN-E05S04-21).
 - **Refuser une procédure sous une procédure à l'écriture** : écarté ; l'arborescence existante et importée resterait bloquée à la moindre écriture, alors qu'une consigne, l'écran et `node.check` suffisent à l'éviter et à la retrouver.
 - **Une borne de taille d'une procédure** (R1, genre de refus `too_long`, P24, E03-S06 N6 : 8 000 caractères, puis 12 000 le 2026-10-19, `PROCEDURE_MAX_CHARS` lue par le contrôle, l'écran, le contrat `write.procedure` et le guide) : retirée le 2026-10-27 par JB ; elle existait parce que `context` servait la procédure entière, ce qu'il ne fait plus. Une procédure longue se lit par `read`, entière.
+- **Un état « active / inactive » propre aux procédures** : écarté pour le geste Page ⇄ Procédure ; il demanderait une colonne et sa migration, et une règle de plus dans le routage, `context` et `node.check`, quand repasser la procédure en page la retire déjà du routage sans rien supprimer. À rouvrir si le geste ne suffit pas.
+- **Garder le brouillon d'un passage en procédure refusé**, comme toute écriture de l'écran : écarté ; le brouillon porterait `kind: procedure`, l'en-tête montrerait « Procédure » et chaque frappe republierait le refus.
 - **Une route `/contexte` et une route API d'aperçu** : écartées ; le Contexte s'édite sur son écran de nœud (HN-E05S04-6), l'aperçu est calculé par la page serveur (HN-E05S04-1).
 
 ## Sécurité et confidentialité
@@ -79,6 +83,7 @@ Oto faisait de la procédure un objet à part (slots liés par projet, équipeme
 ## Écart avec le code
 
 - L'écran n'édite qu'en texte un bloc `call` déjà écrit (HN-M59-1) ; l'éditeur d'appels complet attend les connecteurs réels (V2).
+- Les avertissements de `procedureAdvice` n'ont pas de code stable : l'écran les montre en anglais, tels que le service les sert (`data.warnings` de `write`), après un passage en procédure.
 
 ## Questions ouvertes
 
@@ -90,3 +95,4 @@ Aucune à ce jour.
 - 2026-09-29 : à l'écran, une procédure est une page comme les autres tant que les connecteurs ne sont pas là — décidé par JB, date de la fiche non conservée, en vigueur à la 1.0.0 (source : fiche D104, tâche M59).
 - 2026-10-27 : plus de borne de taille d'une procédure ; `context` ne sert plus ses étapes, `read` la sert entière — décidé par JB (source : session du 27/10/2026, `context` trop lourd).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend la fiche D104, les choix H59, H60, H62, P19, P37, P38 et ceux des stories E03-S06 et E05-S04 — décidé par Alexis, accord de JB.
+- 2026-11-25 : geste Page ⇄ Procédure dans l'en-tête, sans confirmation — décidé par JB (source : design retenu le 25/11/2026) ; une écriture de genre seul est atomique par toute porte — décidé par JB le 25/11/2026.

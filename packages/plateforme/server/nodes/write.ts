@@ -367,7 +367,8 @@ function createsElsewhere(body: WriteAtPath, found: { node: NodeRow; movedFrom?:
 export async function writeNode(db: PlatformDb, identity: Identity, input: unknown, origin: WriteOrigin): Promise<ToolOutput> {
   const target = await atPath(db, identity, parseBody(input))
   const { body } = target
-  // Un assistant qui publie écrit tout ou rien (E11-S18, AC-1) ; l'écran et `publish: false` gardent leur brouillon.
+  // Un assistant qui publie écrit tout ou rien (E11-S18, AC-1), comme toute porte qui publie le seul genre ; les autres
+  // écritures de l'écran et `publish: false` gardent leur brouillon.
   if (!writesAtomically(body, origin)) return writeParsed(db, identity, target, origin)
   const output = await writeAtomically(db, identity, body, () => writeParsed(db, identity, target, origin))
   return keepAuthorCtx(db, identity, origin, output)
