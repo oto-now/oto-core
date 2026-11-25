@@ -28,7 +28,7 @@ import { executeDescribed, valueAt, type PreparedFunction } from "./engine"
 import type { Fetch } from "./http"
 import { authorizationAddress, exchangeCode, type ConsentFlow, type ConsentTokens, type UserConsentAuth } from "./oauth-user"
 import { consentVerifier, encryptCredential, encryptToken } from "./vault"
-import { closedConnector, isConnectorClosed } from "./activations"
+import { barrierIn, closedConnector, requireUsableConnector } from "./adoption"
 
 /** Le chemin de l'adresse de retour, sous la porte du paquet, à déclarer chez le tiers avec l'origine de chaque adresse. */
 export const CONNECTOR_CONSENT_CALLBACK_PATH = "/api/platform/connector-consent/callback"
@@ -144,7 +144,7 @@ export async function startConnectorConsent(db: PlatformDb, identity: Identity, 
   const parsed = connectorConsentSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const connector = await consentAccessOf(db, identity, parsed.data.connector, parsed.data.access)
-  if (await isConnectorClosed(db, identity, parsed.data.connector)) throw await closedConnector(db, identity, parsed.data.connector)
+  await requireUsableConnector(db, identity, parsed.data.connector)
   return { url: await beginConsent(db, identity, connector, { returnTo: parsed.data.return_to ?? null, origin: options.origin }) }
 }
 
@@ -238,8 +238,11 @@ async function keepConsent(
   const access = connector.name
   const orgId = identity.org.id
   const userId = identity.user.id
-  return db
+  const kept = await db
     .tx(async (sql) => {
+      // Bloqué depuis le départ : ni compte ni jeton.
+      const barrier = await barrierIn(sql, orgId, name)
+      if (barrier) return { barrier }
       const [own] = await sql<{ id: string }[]>`
         select id from platform.accounts
          where org_id = ${orgId} and connector = ${name} and access is not distinct from ${access}::text and owner_kind = 'user'
@@ -266,12 +269,14 @@ async function keepConsent(
         console.error(`[platform] completeConnectorConsent: account ${id} written but not read back`)
         throw new PlatformError("internal", "Internal error.")
       }
-      return summary(written)
+      return { ...summary(written) }
     }, "server")
     .catch((error) => {
       if (isUniqueViolation(error)) throw labelTaken(label, identity.org.name)
       throw fromDatabaseError(error, "completeConnectorConsent: accounts")
     })
+  if ("barrier" in kept) throw await closedConnector(db, identity, name, kept.barrier)
+  return kept
 }
 
 /**
@@ -282,7 +287,8 @@ async function keepConsent(
  * refus, en `details`). Refus : demande
  * inconnue, servie, échue ou d'une autre personne, consentement refusé par la personne ou le tiers, code refusé
  * (`invalid_arguments`) ; application refusée, identité absente, panne du tiers (`upstream_error`) ; libellé pris par un
- * autre compte (`conflict`). Rien n'est rangé sur un refus.
+ * autre compte (`conflict`) ; connecteur bloqué depuis le départ (`not_enabled`, `closed`), avant l'échange du code et
+ * encore à l'écriture. Rien n'est rangé sur un refus.
  */
 export async function completeConnectorConsent(
   db: PlatformDb,
@@ -295,6 +301,8 @@ export async function completeConnectorConsent(
   if (!parsed.success || !pending) throw unknownConsent()
   try {
     const connector = await consentAccessOf(db, identity, pending.connector, pending.access ?? undefined)
+    // Un connecteur bloqué entre le départ et le retour : refusé avant d'échanger le code (`closed`).
+    await requireUsableConnector(db, identity, pending.connector)
     const label = connector.definition.label
     const { code, error, state } = parsed.data
     if (error !== undefined) {

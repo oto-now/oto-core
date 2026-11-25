@@ -60,6 +60,25 @@ function sourceFailure(slug: string, what: string): PlatformError {
   return new PlatformError("internal", "Internal error.")
 }
 
+/** L'avertissement d'une clé dépréciée, nommée : sans effet aujourd'hui, refusée demain, jamais ignorée en silence. */
+export const CONNECTORS_MAX_DEPRECATED = "connectors_max has no effect any more; the key will be refused at the next major version"
+
+/** Les organisations dont les capacités chargées posent `connectors_max`, depuis le démarrage (`admin_cell health`). */
+const connectorsMaxSetFor = new Set<string>()
+
+/** Avertit au chargement des capacités qui posent `connectors_max`, une fois par organisation et par processus. */
+function warnDeprecated(slug: string, limits: OrgLimits): void {
+  if (limits.connectors_max === undefined || connectorsMaxSetFor.has(slug)) return
+  connectorsMaxSetFor.add(slug)
+  console.warn(`[platform] limits: ${CONNECTORS_MAX_DEPRECATED} (set for ${slug}).`)
+}
+
+/** Les avertissements des capacités chargées depuis le démarrage : une ligne par clé dépréciée posée, avec ses organisations. */
+export function deprecatedLimitWarnings(): string[] {
+  if (connectorsMaxSetFor.size === 0) return []
+  return [`${CONNECTORS_MAX_DEPRECATED} (set for ${[...connectorsMaxSetFor].sort().join(", ")}).`]
+}
+
 /** Les capacités de l'organisation, lues chez l'hôte et validées ; `{}` sans source. */
 export async function orgLimits(org: { id: string; slug: string }): Promise<OrgLimits> {
   if (!source) return {}
@@ -71,6 +90,7 @@ export async function orgLimits(org: { id: string; slug: string }): Promise<OrgL
   }
   const parsed = orgLimitsSchema.safeParse(returned ?? {})
   if (!parsed.success) throw sourceFailure(org.slug, "function returned invalid limits")
+  warnDeprecated(org.slug, parsed.data)
   return parsed.data
 }
 

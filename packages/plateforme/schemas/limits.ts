@@ -18,7 +18,7 @@ export const orgLimitsSchema = z
     members_max: count("Members at most, pending invitations included; checked when inviting."),
     teams_max: count("Teams at most; 0 closes team creation."),
     // Gardée pour les hôtes qui la posent encore : plus lue, les connecteurs étant ouverts par défaut.
-    connectors_max: count("Unused: connectors are open by default and their number is not limited; accepted and ignored."),
+    connectors_max: count("Deprecated: connectors are open by default and their number is not limited; accepted with a named warning, refused at the next major version."),
     storage_bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).describe("Bytes of attached files at most; 10 GB when absent."),
     account_owner_kinds: z
       .array(z.enum(ACCOUNT_OWNER_KINDS))

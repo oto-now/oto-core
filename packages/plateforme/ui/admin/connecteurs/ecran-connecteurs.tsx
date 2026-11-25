@@ -1,37 +1,36 @@
-// « Connecteurs » du tableau de bord : les outils que l'assistant de la personne peut utiliser. Une seule vue, la même
-// pour un administrateur et pour un membre : chaque compte que la personne voit (les siens, ceux de ses équipes, de
-// l'organisation, ceux qu'un autre partage avec elle), dit « connecteur », avec son accès, son état en un mot et le geste
-// qui le répare ; des filtres et une recherche tenus par l'adresse ; le détail d'un connecteur dans un tiroir, ouvert par
-// l'adresse (`detail-du-connecteur.tsx`), où qui le gère le partage comme une page, remplace sa clé, lit le journal de
-// ses partages et le désactive ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ; l'issue du retour d'un
-// consentement. Pour un administrateur, en plus, « Outils de l'organisation » : les outils ouverts (tout outil déclaré
-// l'est par défaut), ceux qu'il a fermés, qu'il ferme ou rouvre. Server Component : il calcule les
-// lignes (`lignes-des-connecteurs.ts`) et le catalogue de l'ajout (`catalogue-des-connecteurs.ts`), et ne passe à ses
-// îlots clients que des données.
+// « Connecteurs » du tableau de bord : les outils que l'assistant de la personne peut utiliser. Un seul objet à l'écran,
+// le connecteur, et une seule vue, la même pour un administrateur et pour un membre : chaque compte que la personne voit
+// (les siens, ceux de ses équipes, de l'organisation, ceux qu'un autre partage avec elle), avec son accès, son état en
+// un mot et le geste qui le répare ; des filtres et une recherche tenus par l'adresse ; le détail d'un connecteur dans
+// un tiroir, ouvert par l'adresse (`detail-du-connecteur.tsx`) ; « Ajouter un connecteur » (`ajout-d-un-connecteur.tsx`) ;
+// l'issue du retour d'un consentement. Sans connecteur, un état vide qui apprend à s'en servir : trois étapes, un mur de
+// logos, le même pour un administrateur. La gouvernance d'un administrateur est un geste sur l'outil, là où il apparaît :
+// bloquer ou débloquer un outil pour toute l'organisation, dans le catalogue de l'ajout et dans le détail. Server
+// Component : il calcule les lignes (`lignes-des-connecteurs.ts`) et le catalogue de l'ajout
+// (`catalogue-des-connecteurs.ts`), et ne passe à ses îlots clients que des données.
 //
-// Les mots « activation », « compte » et « secret » ne s'écrivent plus pour un membre (`connecteurs-et-comptes.md`
+// Les mots « activation », « compte » et « secret » ne s'écrivent pas pour un membre (`connecteurs-et-comptes.md`
 // § Écran Connecteurs). L'écran masque un geste, le service le décide.
+import type { ReactNode } from "react"
+import { Info } from "@phosphor-icons/react/dist/ssr/Info"
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
 import type { AccountOwnerChoices, AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector, OrgLimitsView } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
-import { ActionPlateforme } from "../../components/action-plateforme"
-import { Alert } from "../../ds/react/primitives"
-import { EmptyState } from "../../ds/react/empty-state"
-import { Icon } from "../../ds/react/icon"
-import { Row, RowList } from "../../ds/react/row-list"
-import type { SujetsDeRegle } from "../../equipes/types"
-import { dateLisible } from "../../format/dates"
-import { EnTeteDAdministration } from "../en-tete"
 import { ErreurDeLecture } from "../../components/erreur-de-lecture"
-import { Chargement, Ilot } from "../ilot"
-import { questionDeDesactivation } from "../textes"
+import { Icon } from "../../ds/react/icon"
+import { Island, IslandBody } from "../../ds/react/island"
+import { Alert } from "../../ds/react/primitives"
+import { Skeleton } from "../../ds/react/skeleton"
+import type { SujetsDeRegle } from "../../equipes/types"
+import { EnTeteDAdministration } from "../en-tete"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
-import { outilsAAjouter } from "./catalogue-des-connecteurs"
+import { outilsAAjouter, type MonConnecteur } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
-import { estAMoi, formulaireDuCompte } from "./etat-du-compte"
-import { adresseDeLaVue, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
+import { estAMoi, etatDuCompte, fonctionne, formulaireDuCompte } from "./etat-du-compte"
+import { adresseDeLaVue, bloquePar, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, logoDe, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
+import { PartageAuRetour } from "./partage-au-retour"
 
 /** Ce que la page lit pour l'écran : les comptes que la personne voit, le catalogue, leurs partages, et à qui partager. */
 export type DonneesDesConnecteurs = {
@@ -48,8 +47,8 @@ export type DonneesDesConnecteurs = {
   /** Pour qui la personne peut ajouter un connecteur (`accountOwnerChoices`) : elle-même, l'organisation, ses équipes. */
   proprietaires: AccountOwnerChoices
   /**
-   * Pour qui administre l'organisation : ce que la fermeture de chaque connecteur ouvert arrête (AC5). Absent pour un
-   * membre. `limites` n'est plus lu : le nombre de connecteurs n'est plus limité, rien n'est grisé ; gardé pour les hôtes.
+   * Pour qui administre l'organisation : ce que le blocage de chaque outil ouvert arrête (`deactivationImpact`), et ses
+   * capacités (`orgLimitsView`, E12-S02 ; absentes : aucun déblocage grisé). Absent pour un membre.
    */
   administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
 }
@@ -118,83 +117,67 @@ function AnnonceDuConsentement({ consentement }: { consentement: IssueDuConsente
   return <Alert tone="fail" title={echecDuConsentement(consentement.raison)} />
 }
 
-/** Le titre de l'îlot de l'administrateur : le focus y va quand un geste emporte sa ligne. */
-const ANCRE_DES_CONNECTEURS = "admin-connecteurs"
-
-function pluriel(nombre: number, singulier: string, pluriel: string): string {
-  return `${nombre} ${nombre > 1 ? pluriel : singulier}`
+/** Les connecteurs personnels de la personne, outil par outil, et ceux qui servent : « Connecté » au catalogue. */
+function mesConnecteurs(donnees: DonneesDesConnecteurs, moi: string): MonConnecteur[] {
+  const formulaires = donnees.formulaires ?? []
+  return donnees.accounts
+    .filter((compte) => estAMoi(compte, moi))
+    .map((compte) => ({
+      id: compte.id,
+      connecteur: compte.connector,
+      libelle: compte.label,
+      fonctionne: fonctionne(etatDuCompte(compte, formulaireDuCompte(formulaires, compte), moi, bloquePar(compte.connector, donnees.connectors))),
+    }))
 }
 
-/** Ouvert depuis son adoption, ouvert par défaut (personne ne l'a encore ajouté), ou fermé par un administrateur. */
-function etat(connecteur: OrgConnector): string {
-  if (connecteur.state !== "active") return `Fermé par ${connecteur.closedBy?.name ?? "un administrateur"}`
-  if (connecteur.activatedAt === null) return "Ouvert"
-  const qui = connecteur.activatedBy?.name
-  return `Ouvert depuis le ${dateLisible(connecteur.activatedAt) ?? "?"}${qui ? ` (${qui})` : ""}`
-}
+type AjoutProps = { donnees: DonneesDesConnecteurs; moi: string; ici: string; vide?: ReactNode }
 
-/** La réouverture d'un outil fermé (îlot réservé aux administrateurs) : aucun plafond, le nombre d'outils n'est pas limité. */
-function Activation({ nom, ressource }: { nom: string; ressource: string }) {
-  // Réversible : sans question (N5).
-  return <ActionPlateforme libelle="Rouvrir" nomAccessible={`Rouvrir ${nom}`} requete={{ methode: "POST", ressource, corps: {} }} ancre={ANCRE_DES_CONNECTEURS} />
-}
-
-type LigneDeConnecteurProps = { connecteur: OrgConnector; impact: DeactivationImpact | undefined }
-
-function LigneDeConnecteur({ connecteur, impact }: LigneDeConnecteurProps) {
-  const nom = connecteur.label
-  const ressource = `admin/connectors/${encodeURIComponent(connecteur.connector)}/activation`
-  // Fermé : la ligne garde qui l'a fermé, même inconnu. Ouvert, adopté ou par défaut, un outil se ferme.
-  const ferme = connecteur.state !== "active"
-  // `flex-wrap` : la question d'une désactivation, ou un refus, passe sous la ligne au lieu de l'écraser.
-  return (
-    <Row className="flex-wrap gap-3" lead={<Icon as={Plug} size="sm" />}>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="font-medium">{nom}</span>
-        <span className="oto-caption">{pluriel(connecteur.functions.length, "fonction", "fonctions")}</span>
-      </div>
-      <span className="oto-caption">{etat(connecteur)}</span>
-      {!ferme && (
-        <ActionPlateforme
-          libelle="Fermer"
-          nomAccessible={`Fermer ${nom}`}
-          requete={{ methode: "DELETE", ressource }}
-          confirmation={{ question: questionDeDesactivation(nom, impact), libelleConfirmer: "Fermer" }}
-          ancre={ANCRE_DES_CONNECTEURS}
-        />
-      )}
-      {ferme && <Activation nom={nom} ressource={ressource} />}
-    </Row>
-  )
-}
-
-type ConnecteursProps = { connecteurs: OrgConnector[]; impacts: Partial<Record<string, DeactivationImpact>> }
-
-/** « Outils de l'organisation », pour un administrateur : les outils du catalogue, qu'il ferme ou rouvre pour toute l'organisation. */
-function Connecteurs({ connecteurs, impacts }: ConnecteursProps) {
-  return (
-    <Ilot id={ANCRE_DES_CONNECTEURS} titre="Outils de l'organisation" compte={pluriel(connecteurs.length, "outil", "outils")}>
-      <div className="flex flex-col gap-3">
-        <p className="oto-caption">Chaque outil est ouvert par défaut : l&apos;assistant le trouve et propose à chacun de connecter son compte. Fermer un outil le retire aussitôt pour toute l&apos;organisation. Les fonctions de tableau (table.*) et celles de l&apos;application sont toujours ouvertes.</p>
-        <RowList rules empty={<EmptyState compact title="Aucun outil dans cette version de la plateforme." />}>
-          {connecteurs.map((connecteur) => (
-            <LigneDeConnecteur key={connecteur.connector} connecteur={connecteur} impact={impacts[connecteur.connector]} />
-          ))}
-        </RowList>
-      </div>
-    </Ilot>
-  )
-}
-
-/** « Ajouter un connecteur » : le catalogue de la personne, les équipes qu'elle peut doter, et les noms qu'elle porte déjà. */
-function Ajout({ donnees, moi, ici }: { donnees: DonneesDesConnecteurs; moi: string; ici: string }) {
+/** « Ajouter un connecteur » : le catalogue de la personne, les équipes qu'elle peut doter, et ce qu'elle a déjà. */
+function Ajout({ donnees, moi, ici, vide }: AjoutProps) {
+  const mes = mesConnecteurs(donnees, moi)
   return (
     <AjoutDUnConnecteur
-      outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.proprietaires)}
+      outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.proprietaires, mes)}
       equipes={donnees.proprietaires.teams}
-      mesNoms={donnees.accounts.filter((compte) => estAMoi(compte, moi)).map((compte) => compte.label)}
+      mesNoms={mes.map((un) => un.libelle)}
       ici={ici}
+      moi={moi}
+      gouvernance={donnees.administration}
+      sujets={donnees.sujets}
+      vide={vide}
     />
+  )
+}
+
+/** Les trois étapes de l'état vide : ce qu'on fait, dans l'ordre, et un exemple de demande. */
+const ETAPES = [
+  { titre: "Choisissez un outil", texte: "Votre messagerie, votre CRM, votre comptabilité…" },
+  { titre: "Connectez votre compte", texte: "Autorisez l'accès chez l'outil, ou collez une clé. Une minute." },
+  { titre: "Demandez à votre assistant", texte: "« Cherche dans mes mails ceux du fournisseur de la semaine dernière. »" },
+]
+
+/** Sans connecteur : ce qu'est un connecteur, les trois étapes, puis (dans l'îlot de l'ajout) le bouton et le mur de logos. */
+function EtatVide() {
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <h2 className="text-2xl font-bold text-ink">Votre assistant n&apos;a encore accès à aucun outil</h2>
+        <p className="text-mute">Ajoutez un connecteur avec votre propre compte de l&apos;outil. Il reste privé tant que vous ne le partagez pas.</p>
+      </div>
+      <ol className="flex flex-col gap-3">
+        {ETAPES.map(({ titre, texte }, rang) => (
+          <li key={titre} className="flex items-start gap-3">
+            <span aria-hidden="true" className="flex size-7 flex-none items-center justify-center rounded-full bg-card text-sm font-bold text-ink">
+              {rang + 1}
+            </span>
+            <span className="flex flex-col">
+              <span className="font-semibold text-ink">{titre}</span>
+              <span className="oto-caption">{texte}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </>
   )
 }
 
@@ -205,16 +188,21 @@ function recherche(vue: VueDesConnecteurs, ici: string): { chemin: string; param
   return { chemin: ici, parametres: vue.filtre === "all" ? [] : [["filter", vue.filtre]] }
 }
 
-/** La liste, ses filtres et sa recherche ; sans aucun compte visible, la page vide. */
+/** La liste, ses filtres et sa recherche ; sans aucun compte visible, l'état vide. */
 function Liste({ donnees, moi, vue, ici }: VueProps) {
   if (donnees.accounts.length === 0) {
     return (
-      <EmptyState icon={<Icon as={Plug} />} title="Aucun connecteur pour l'instant" action={<Ajout donnees={donnees} moi={moi} ici={ici} />}>
-        Branchez un outil pour que votre assistant puisse y lire et y agir. Il reste privé tant que vous ne le partagez pas.
-      </EmptyState>
+      <>
+        <Island aria-label="Connecteurs">
+          <IslandBody>
+            <Ajout donnees={donnees} moi={moi} ici={ici} vide={<EtatVide />} />
+          </IslandBody>
+        </Island>
+        <p className="oto-caption">Ces connecteurs servent votre assistant à travers Oto, dans toutes vos conversations. Ils n&apos;apparaissent pas dans les réglages de votre assistant.</p>
+      </>
     )
   }
-  const sources = { comptes: donnees.accounts, formulaires: donnees.formulaires ?? [], partages: donnees.partages, moi, ici }
+  const sources = { comptes: donnees.accounts, connecteurs: donnees.connectors, formulaires: donnees.formulaires ?? [], partages: donnees.partages, moi, ici }
   const { lignes, comptes } = lignesDesConnecteurs(sources, vue)
   const filtres = [
     { valeur: "all", libelle: `Tous · ${comptes.tous}`, adresse: adresseDeLaVue(ici, { ...vue, filtre: "all", compte: null }) },
@@ -224,7 +212,15 @@ function Liste({ donnees, moi, vue, ici }: VueProps) {
   return (
     <>
       <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={recherche(vue, ici)} ici={ici} />
-      <p className="oto-caption">Un connecteur est privé tant que vous ne le partagez pas.</p>
+      <p className="flex items-start gap-3 rounded-lg bg-card p-3 text-sm text-ink">
+        <span aria-hidden="true" className="mt-0.5 flex-none">
+          <Icon as={Info} size="sm" />
+        </span>
+        <span>
+          Un <strong>connecteur</strong>, c&apos;est un outil (votre messagerie, votre comptabilité…) relié à un compte : le vôtre, celui d&apos;une équipe ou de
+          l&apos;organisation. Il est privé tant que vous ne le partagez pas.
+        </span>
+      </p>
     </>
   )
 }
@@ -234,6 +230,8 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
   const compte = donnees.accounts.find((candidat) => candidat.id === vue.compte)
   if (!compte) return null
   const formulaires = donnees.formulaires ?? []
+  const { administration } = donnees
+  const actif = donnees.connectors.some((connecteur) => connecteur.connector === compte.connector && connecteur.state === "active")
   return (
     <DetailDuConnecteur
       // Une instance par compte : le tiroir refermé d'un compte ne sert jamais, encore fermé, à un autre.
@@ -241,25 +239,29 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
       compte={compte}
       formulaire={formulaireDuCompte(formulaires, compte)}
       outil={libelleDuConnecteur(compte.connector, formulaires)}
+      logo={logoDe(compte.connector, donnees.connectors)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
+      bloquePar={bloquePar(compte.connector, donnees.connectors)}
+      gouvernance={administration ? { impact: administration.impacts[compte.connector], limites: administration.limites, actif } : undefined}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}
       moi={moi}
       ici={ici}
-      fermer={adresseDeLaVue(ici, { ...vue, compte: null })}
+      fermer={adresseDeLaVue(ici, { filtre: vue.filtre, q: vue.q, compte: null })}
+      partagerDAbord={vue.partager === true}
     />
   )
 }
 
-function Donnees(props: VueProps) {
-  const { administration, connectors } = props.donnees
-  return (
-    <div className="flex flex-col gap-6">
-      <Liste {...props} />
-      {administration && <Connecteurs connecteurs={connectors} impacts={administration.impacts} />}
-      <Detail {...props} />
-    </div>
-  )
+// `data-entete-empile`, posé sur la phrase : elle passe sous le titre, et sous 640 px le titre, la phrase et le bouton
+// s'empilent (variante opt-in de `product.css`, sans effet avec un fil d'Ariane).
+/**
+ * Au retour de chez le tiers, réussi ou non : le partage choisi avant de partir est repris et effacé ; réussi, il se pose
+ * sur le seul connecteur de la personne apparu depuis le départ (`PartageAuRetour`).
+ */
+function Retour({ donnees, moi, ici, issue }: { donnees: DonneesDesConnecteurs; moi: string; ici: string; issue: IssueDuConsentement["issue"] }) {
+  const miens = donnees.accounts.filter((compte) => estAMoi(compte, moi)).map(({ id, connector }) => ({ id, connector }))
+  return <PartageAuRetour issue={issue} miens={miens} ici={ici} />
 }
 
 const SOUS_TITRE = "Les outils que votre assistant peut utiliser pour vous."
@@ -267,18 +269,56 @@ const SOUS_TITRE = "Les outils que votre assistant peut utiliser pour vous."
 export function EcranConnecteurs({ resultat, moi, vue, Lien, ici, fil, consentement }: EcranConnecteursProps) {
   // Une lecture nourrit tout l'écran : son échec se dit une fois, sans « Ajouter », qui a besoin d'elle.
   const lu = resultat.error === undefined ? resultat.data : null
-  // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans la page vide sinon, jamais deux fois.
+  // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans l'état vide sinon, jamais deux fois.
   const ajout = lu && lu.accounts.length > 0 ? <Ajout donnees={lu} moi={moi} ici={ici} /> : undefined
   return (
     <>
-      <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} meta={SOUS_TITRE} actions={ajout} />
+      <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} meta={<span data-entete-empile="">{SOUS_TITRE}</span>} actions={ajout} />
       {consentement && <AnnonceDuConsentement consentement={consentement} />}
-      {lu ? <Donnees donnees={lu} moi={moi} vue={vue} ici={ici} /> : <ErreurDeLecture message={resultat.error ?? ""} href={ici} Lien={Lien} />}
+      {consentement && lu && <Retour donnees={lu} moi={moi} ici={ici} issue={consentement.issue} />}
+      {lu ? (
+        <div className="flex flex-col gap-6">
+          <Liste donnees={lu} moi={moi} vue={vue} ici={ici} />
+          <Detail donnees={lu} moi={moi} vue={vue} ici={ici} />
+        </div>
+      ) : (
+        <ErreurDeLecture titre="Les connecteurs n'ont pas pu être lus." message={resultat.error ?? ""} href={ici} Lien={Lien} />
+      )}
     </>
   )
 }
 
 /** L'état de chargement, rendu par le `loading.tsx` de l'hôte (AC12). */
+// Trois lignes de connecteur : la tuile, le nom et sa ligne fine, l'état. Largeurs en propriété du squelette : la règle du
+// design system, hors couche, l'emporterait sur un utilitaire.
+const LIGNES_DU_SQUELETTE = [
+  ["34%", "22%", "18%"],
+  ["28%", "16%", "22%"],
+  ["38%", "20%", "16%"],
+]
+
 export function EcranConnecteursChargement() {
-  return <Chargement texte="Chargement des connecteurs…" />
+  return (
+    <div role="status" aria-busy="true" className="flex flex-col gap-6">
+      <span className="oto-sr-only">Chargement des connecteurs…</span>
+      <Skeleton width="16rem" height="1.75rem" />
+      <Island>
+        <IslandBody>
+          <ul className="flex flex-col gap-4">
+            {LIGNES_DU_SQUELETTE.map(([nom, sous, etat], rang) => (
+              // Aucune donnée n'existe encore : le rang est l'identité de la ligne, qui ne se réordonne jamais.
+              <li key={rang} className="flex items-center gap-3">
+                <Skeleton shape="card" width="2.5rem" height="2.5rem" />
+                <span className="flex flex-1 flex-col gap-1.5">
+                  <Skeleton width={nom} />
+                  <Skeleton width={sous} height="0.625rem" />
+                </span>
+                <Skeleton width={etat} />
+              </li>
+            ))}
+          </ul>
+        </IslandBody>
+      </Island>
+    </div>
+  )
 }

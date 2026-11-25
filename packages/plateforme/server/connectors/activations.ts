@@ -9,7 +9,7 @@
 // Repris d'Oto : rien. Retiré : l'activation « prochaine session », les kits (architecture § 10) et le plafond
 // `connectors_max` (connecteurs ouverts par défaut).
 import { connectorRefSchema, type DeactivationImpact, type OrgConnector } from "../../schemas"
-import { ACCESS_LEVELS, accountLevels, administratorNames, administrators, isOrgAdmin, nodeLevels, type AccessLevel, type AccountLevel } from "../access"
+import { ACCESS_LEVELS, accountLevels, administratorNames, isOrgAdmin, nodeLevels, type AccessLevel, type AccountLevel } from "../access"
 import type { CatalogFunction } from "../catalog/define"
 import { declaredConnector } from "../catalog/connector-source"
 import { ACT_SUFFIX, catalogFunctions, NATIVE_CONNECTOR } from "../catalog/registry"
@@ -19,6 +19,7 @@ import { boundedList, inTransaction, invalidInput, PlatformError } from "../erro
 import type { Identity } from "../identity"
 import { isJsonObject } from "../json"
 import type { Tx } from "../sql"
+import { barrierIn, paidByHostKey, type ConnectorBarrier } from "./adoption"
 import { keepDeclaredConnector } from "./declaration"
 import { creatableModes } from "./modes"
 
@@ -114,7 +115,8 @@ function connectorView(
   directory: DirectoryEntry[],
 ): OrgConnector {
   const active = row?.state === "active"
-  const closed = row !== null && !active
+  // Payé par la clé de l'hôte et jamais adopté : arrêté (`inactive`) sans auteur de fermeture (`closedBy` nul).
+  const closed = row !== null ? !active : paidByHostKey(connector)
   const person = (userId: string | null) => (userId ? { userId, name: directory.find((entry) => entry.userId === userId)?.name ?? null } : null)
   const closer = (userId: string | null): NonNullable<OrgConnector["closedBy"]> => {
     const entry = userId ? directory.find((candidate) => candidate.userId === userId) : undefined
@@ -126,12 +128,12 @@ function connectorView(
     label: definition?.label ?? connector,
     ...(definition?.description !== undefined ? { description: definition.description } : {}),
     ...(definition?.logoDomain !== undefined ? { logoDomain: definition.logoDomain } : {}),
-    // Ouvert par défaut : `inactive` ne dit qu'un connecteur bloqué ; `activatedAt` et `activatedBy`, une adoption.
+    // Ouvert par défaut : `inactive` dit un connecteur bloqué, ou payé par l'hôte et à adopter ; `activatedAt` et `activatedBy`, une adoption.
     state: closed ? "inactive" : "active",
     activatedAt: active ? row.updated_at : null,
     activatedBy: active ? person(row.activated_by) : null,
     functions: functions.map((fn) => ({ name: fn.name, class: fn.class })).sort((a, b) => a.name.localeCompare(b.name)),
-    closedBy: closed ? closer(row.closed_by) : null,
+    closedBy: closed && row !== null ? closer(row.closed_by) : null,
     accountModes: creatableModes(connector),
   }
 }
@@ -242,39 +244,20 @@ export async function deactivateConnector(db: PlatformDb, identity: Identity, in
 /**
  * Adopte le connecteur d'un compte qui s'ajoute ou se réactive, dans la transaction qui l'écrit
  * (`connecteurs-et-comptes.md` § Écran Connecteurs) : actif, rien ; jamais touché, une ligne `active` au nom de
- * l'appelant, sans plafond ; bloqué par un administrateur (une ligne `inactive`), `closed` : rien n'est écrit, et
- * l'appelant refuse par `closedConnector`, hors de la transaction.
+ * l'appelant, sans plafond ; bloqué par un administrateur (une ligne `inactive`, `closed`) ou payé par la clé de l'hôte
+ * sans adoption (`not_adopted`, que seul `activateConnector` lève) : rien n'est écrit, et l'appelant refuse par
+ * `closedConnector`, hors de la transaction.
  */
-export async function openConnectorForAccount(sql: Tx, identity: Identity, connector: string): Promise<"open" | "closed"> {
+export async function openConnectorForAccount(sql: Tx, identity: Identity, connector: string): Promise<"open" | ConnectorBarrier> {
+  const barrier = await barrierIn(sql, identity.org.id, connector)
+  if (barrier) return barrier
   const current = await activationRow(sql, identity.org.id, connector)
-  if (current?.state === "active") return "open"
-  if (current) return "closed"
+  if (current) return "open"
   await keepDeclaredConnector(sql, connector)
   await sql`
     insert into platform.connector_activations (org_id, connector, state, activated_by)
     values (${identity.org.id}, ${connector}, 'active', ${identity.user.id})`
   return "open"
-}
-
-/** Vrai quand un administrateur a fermé le connecteur dans l'organisation (une ligne `inactive`), lu sous l'appelant. */
-export async function isConnectorClosed(db: PlatformDb, identity: Identity, connector: string): Promise<boolean> {
-  const row = await inTransaction(db, "isConnectorClosed: connector_activations", (sql) => activationRow(sql, identity.org.id, connector))
-  return row !== null && row.state !== "active"
-}
-
-/** Le refus d'un connecteur fermé par un administrateur (`not_enabled`, `reason: "closed"`), qui nomme les administrateurs. */
-export async function closedConnector(db: PlatformDb, identity: Identity, connector: string): Promise<PlatformError> {
-  const directory = await memberDirectory(db, identity.org.id)
-  const admins = directory
-    .filter((person) => person.role === "admin")
-    // Leurs noms seuls, comme `connectRefusal` : un refus n'expose jamais l'identifiant d'une personne.
-    .map((person) => ({ name: person.name }))
-    .sort((a, b) => a.name.localeCompare(b.name, "fr"))
-  return new PlatformError(
-    "not_enabled",
-    `${connector} is deactivated at ${identity.org.name}: no account can be added or enabled. Ask ${administrators(identity, directory)} to activate it.`,
-    { reason: "closed", administrators: admins },
-  )
 }
 
 /**
@@ -293,29 +276,49 @@ const readable = (level: AccessLevel | AccountLevel | undefined) => (level ?? AC
  * Ce que coûte la désactivation d'un connecteur activable (E08-S03, AC5, AC11 ; `admin_connector`
  * d'E08-S06) : ses fonctions ; les procédures publiées dont un bloc `call` publié appelle l'une d'elles
  * (les blocs d'un brouillon sont exclus par la requête), avec leur chemin ; le nombre de ses comptes.
- * Blocs et comptes se lisent dans une transaction, toutes leurs lignes ; une procédure ou un compte de
- * niveau 0 pour l'appelant est retiré par le service, en un lot (`nodeLevels`, `accountLevels`), jamais
- * par la RLS (H123) : ni nommé, ni compté. Un connecteur inconnu ou natif est refusé comme à l'activation.
+ * Un connecteur inconnu ou natif est refusé comme à l'activation. Une lecture de `deactivationImpacts`.
  */
 export async function deactivationImpact(db: PlatformDb, identity: Identity, connector: string): Promise<DeactivationImpact> {
-  const functions = requireActivable(connector, catalogFunctions())
+  const impacts = await deactivationImpacts(db, identity, [connector])
+  return impacts[connector]
+}
+
+/**
+ * Ce que coûte la fermeture de chacun des connecteurs nommés, en une seule lecture quel que soit leur nombre (l'îlot
+ * des outils la lit pour tout connecteur ouvert, ouvert par défaut compris) : blocs et comptes dans une transaction,
+ * toutes leurs lignes, les comptes de tous les connecteurs nommés ensemble ; puis les niveaux de l'appelant, en un lot
+ * pour les procédures et un pour les comptes. Une procédure ou un compte de niveau 0 pour l'appelant est retiré par le
+ * service (`nodeLevels`, `accountLevels`), jamais par la RLS (H123) : ni nommé, ni compté. Chaque connecteur inconnu ou
+ * natif est refusé comme à l'activation, avant toute lecture ; aucun connecteur : rien n'est lu.
+ */
+export async function deactivationImpacts(db: PlatformDb, identity: Identity, connectors: readonly string[]): Promise<Record<string, DeactivationImpact>> {
+  const catalog = catalogFunctions()
+  const functions = new Map(connectors.map((connector) => [connector, requireActivable(connector, catalog)]))
+  if (functions.size === 0) return {}
   const orgId = identity.org.id
-  const { blocks, accounts } = await inTransaction(db, "deactivationImpact: blocks, accounts", async (sql) => ({
+  const names = [...functions.keys()]
+  const { blocks, accounts } = await inTransaction(db, "deactivationImpacts: blocks, accounts", async (sql) => ({
     blocks: await sql<{ data: unknown; node_id: string; path: string }[]>`
       select b.data, n.id as node_id, n.path
         from platform.blocks b join platform.nodes n on n.id = b.node_id
        where b.org_id = ${orgId} and b.state = 'published' and b.type = 'call'
          and n.kind = 'procedure' and n.status = 'published'`,
-    accounts: await sql<{ id: string }[]>`select id from platform.accounts where org_id = ${orgId} and connector = ${connector}`,
+    accounts: await sql<{ id: string; connector: string }[]>`
+      select id, connector from platform.accounts where org_id = ${orgId} and connector = any(${names}::text[])`,
   }))
-  const calling = new Map(blocks.filter((block) => callsConnector(block.data, connector)).map((block) => [block.node_id, block.path]))
+  const calling = new Map(names.map((connector) => [connector, new Map(blocks.filter((block) => callsConnector(block.data, connector)).map((block) => [block.node_id, block.path]))]))
   const [nodeLevel, accountLevel] = await Promise.all([
-    nodeLevels(db, identity, [...calling.keys()]),
+    nodeLevels(db, identity, [...new Set([...calling.values()].flatMap((nodes) => [...nodes.keys()]))]),
     accountLevels(db, identity, accounts.map((account) => account.id)),
   ])
-  return {
-    functions: functions.map((fn) => fn.name).sort(),
-    procedures: [...calling].flatMap(([id, path]) => (readable(nodeLevel.get(id)) ? [path] : [])).sort(),
-    accounts: accounts.filter((account) => readable(accountLevel.get(account.id))).length,
-  }
+  return Object.fromEntries(
+    names.map((connector) => [
+      connector,
+      {
+        functions: (functions.get(connector) ?? []).map((fn) => fn.name).sort(),
+        procedures: [...(calling.get(connector) ?? [])].flatMap(([id, path]) => (readable(nodeLevel.get(id)) ? [path] : [])).sort(),
+        accounts: accounts.filter((account) => account.connector === connector && readable(accountLevel.get(account.id))).length,
+      },
+    ]),
+  )
 }

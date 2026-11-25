@@ -11,7 +11,8 @@ import type { Identity } from "../identity"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
 import { ownerNames } from "../directory"
 import { accountOwner, accountRows, accountView, labelTaken, managedAccount, summary, type AccountSummary } from "./accounts"
-import { closedConnector, openConnectorForAccount } from "./activations"
+import { openConnectorForAccount } from "./activations"
+import { closedConnector } from "./adoption"
 
 /**
  * Désactive un compte (AC9) : réservé à qui le gère (la gestion : responsable d'un compte d'équipe,
@@ -116,13 +117,14 @@ export async function enableAccount(db: PlatformDb, identity: Identity, input: u
     db,
     "enableAccount: accounts update",
     async (sql) => {
-      if ((await openConnectorForAccount(sql, identity, row.connector)) === "closed") return null
+      const opened = await openConnectorForAccount(sql, identity, row.connector)
+      if (opened !== "open") return opened
       await requireUnderAccountsPerOwner(sql, scope, { connector: row.connector, owner })
       return sql`update platform.accounts set status = 'active' where id = ${id} and status = 'disabled' returning id`
     },
     "server",
   )
-  if (enabled === null) throw await closedConnector(db, identity, row.connector)
+  if (typeof enabled === "string") throw await closedConnector(db, identity, row.connector, enabled)
   // Aucune ligne après la décision : le compte a changé entre la lecture et l'écriture.
   if (enabled.length === 0) {
     console.error(`[platform] enableAccount: no row written for account ${id}`)

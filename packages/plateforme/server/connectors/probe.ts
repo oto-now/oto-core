@@ -15,7 +15,8 @@ import type { Identity } from "../identity"
 import { accountAccess, requestedAccess } from "./accesses"
 import { checkedSettings, liveCredential, missingField } from "./account-secret"
 import { accountOwner, lastProbeOf, managedAccount } from "./accounts"
-import { closedConnector, isConnectorClosed, requireActivable } from "./activations"
+import { requireActivable } from "./activations"
+import { requireUsableConnector } from "./adoption"
 import type { AccountCredential, AccountMarker, StoredToken } from "./auth"
 import type { ConnectorProbeBalance } from "./definition"
 import { executeDescribed, nonEmpty, settleMark, valueAt } from "./engine"
@@ -227,7 +228,7 @@ export async function probeConnector(db: PlatformDb, identity: Identity, input: 
   if (!parsed.success) throw invalidInput(parsed.error)
   const { connector, input: given } = parsed.data
   requireActivable(connector, catalogFunctions())
-  if (await isConnectorClosed(db, identity, connector)) throw await closedConnector(db, identity, connector)
+  await requireUsableConnector(db, identity, connector)
   const found = declaredConnector(connector)
   if (!found) throw noProbe(connector)
   // L'accès du compte à créer : celui que la saisie nomme pour un connecteur à plusieurs accès.

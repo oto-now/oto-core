@@ -24,6 +24,7 @@ import { requireActivable } from "./activations"
 import { mayCreateAccountFor } from "./creation-right"
 import { HOST_CONSENT_CONNECTOR } from "./definition"
 import { accountFieldNames } from "./host-fields"
+import { paidByHostKey } from "./adoption"
 
 /** Le chemin de la page de connexion d'un connecteur, sous l'adresse de l'organisation. */
 export const CONNECT_PATH = "/connect"
@@ -252,8 +253,8 @@ export async function planConnection(where: ConnectWhere, input: { connector: st
   const team = space.kind === "team" ? ((await teams()).find((candidate) => candidate.slug === space.slug) ?? null) : null
   const state = await connectorState(db, identity, connector)
   const base = gestureOf(connector, access)
-  // Ouvert par défaut : seul un connecteur bloqué demande sa réouverture par un administrateur.
-  const off = state === "closed"
+  // Ouvert par défaut : seul un connecteur bloqué, ou payé par la clé de l'hôte et jamais adopté, demande un administrateur.
+  const off = state === "closed" || (state === "never" && paidByHostKey(connector))
   const gesture: ConnectGesture = off ? "admin_activation" : base
   const byCaller = off ? isOrgAdmin(identity) : problem === null
   const { administrators, names } = byCaller ? { administrators: [], names: "" } : await administratorsOf(db, identity)

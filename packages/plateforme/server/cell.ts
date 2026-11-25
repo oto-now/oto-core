@@ -10,6 +10,7 @@ import pkg from "../package.json"
 import type { PlatformDb } from "./db"
 import { databaseFailure, PlatformError } from "./errors"
 import { oidcMode } from "./issuer"
+import { deprecatedLimitWarnings } from "./limits"
 
 /** Version du paquet qui tourne (`packages/plateforme/package.json`). */
 export const packageVersion: string = pkg.version
@@ -56,6 +57,8 @@ export type CellStatus = {
     env: EnvPresence[]
     /** La base répond et chaque variable requise est présente. */
     ok: boolean
+    /** Les clés dépréciées que les capacités de l'hôte posent encore (`connectors_max`), nommées ; n'entament pas `ok`. */
+    warnings: string[]
   }
   checkedAt: string
 }
@@ -104,6 +107,7 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
       database: { ok: true, latencyMs },
       env: presence,
       ok: presence.every((variable) => variable.present || variable.optional === true),
+      warnings: deprecatedLimitWarnings(),
     },
     checkedAt: new Date().toISOString(),
   }

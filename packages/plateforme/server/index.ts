@@ -131,7 +131,7 @@ export { listFeedback } from "./feedback"
 export { handlesFeedback } from "./feedback"
 // Tableau de bord (E08-S03) : services de connecteurs d'E04-S01, qui lui laissait ces exports, impact
 // d'une désactivation et comptes de l'organisation ; les comptes personnels de qui regarde, pour l'écran ouvert aux membres.
-export { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "./connectors/activations"
+export { activateConnector, deactivateConnector, deactivationImpact, deactivationImpacts, listConnectorsForOrg } from "./connectors/activations"
 export { disableAccount, enableAccount, updateAccount } from "./connectors/account-changes"
 export { createAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
 export { accountOwnerChoices } from "./connectors/creation-right"

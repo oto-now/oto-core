@@ -44,7 +44,8 @@ import type { Tx } from "../sql"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
 import { creationAccess } from "./accesses"
 import { requireAdmittedOwner } from "./account-owners"
-import { closedConnector, openConnectorForAccount, requireActivable } from "./activations"
+import { openConnectorForAccount, requireActivable } from "./activations"
+import { closedConnector } from "./adoption"
 import { mayCreateAccountFor } from "./creation-right"
 import { keepDeclaredConnector } from "./declaration"
 import { accountMode, creatableModes, isSimulatedConnector, modeLabel } from "./modes"
@@ -327,7 +328,8 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   const orgId = identity.org.id
   const row = await db
     .tx(async (sql) => {
-      if ((await openConnectorForAccount(sql, identity, account.connector)) === "closed") return null
+      const opened = await openConnectorForAccount(sql, identity, account.connector)
+      if (opened !== "open") return opened
       await requireUnderAccountsPerOwner(sql, scope, { connector: account.connector, owner: { kind: account.owner_kind, teamId, userId } })
       await keepDeclaredConnector(sql, account.connector)
       const [created] = await sql<{ id: string }[]>`
@@ -347,7 +349,7 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
       if (isUniqueViolation(error)) throw labelTaken(account.label, identity.org.name)
       throw fromDatabaseError(error, "createAccount: accounts")
     })
-  if (!row) throw await closedConnector(db, identity, account.connector)
+  if (typeof row === "string") throw await closedConnector(db, identity, account.connector, row)
   return summary(row)
 }
 

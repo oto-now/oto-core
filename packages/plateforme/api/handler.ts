@@ -18,6 +18,7 @@ import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
 import { fileAddressRoute, filesRoutes } from "./files"
 import { hostedLinkRoutes } from "./hosted-link"
+import { connectorLogoResponse, isConnectorLogoRoute } from "./connector-logo"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
 import { homeRoutes } from "./home"
 import { invitationsRoutes } from "./invitations"
@@ -357,6 +358,8 @@ export async function handlePlateforme(request: Request, options: PlatformReques
     if (isPublicRoute(publicSegments, request.method)) return await publicResponse(request, options.host, publicSegments)
     // La route isolée d'un fichier HTML (E10-S02, AC-c3, ADR-017) : du texte, jamais du JSON, 401 compris ; elle vérifie le jeton elle-même.
     if (isFileHtmlRoute(publicSegments, request.method)) return await fileHtmlResponse(request, options, publicSegments)
+    // Le logo d'un outil de l'écran Connecteurs : une image, jamais du JSON ; elle vérifie le jeton elle-même.
+    if (isConnectorLogoRoute(publicSegments, request.method)) return await connectorLogoResponse(request, options, publicSegments)
     // Le dépôt par lien (E10-S02 lot f, ADR-018) : la seule porte sans session qui écrit, le ticket en tient lieu, en texte
     // brut ; puis le formulaire de dépôt, à session, qui vérifie le jeton lui-même. Le corps de l'une et l'autre est le fichier.
     if (isUploadRoute(publicSegments)) return await uploadResponse(request, options, publicSegments)

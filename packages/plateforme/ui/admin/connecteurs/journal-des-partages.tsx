@@ -44,7 +44,7 @@ export function JournalDesPartages({ compte }: { compte: Pick<AccountView, "id" 
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex items-center gap-3">
-        <Button type="button" variant="ghost" aria-expanded={ouvert} onClick={() => void ouvrir()}>
+        <Button type="button" variant="link" size="sm" aria-expanded={ouvert} onClick={() => void ouvrir()}>
           Journal des partages
           <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>

@@ -23,6 +23,7 @@ import { liveCredential } from "./connectors/account-secret"
 import { connectRefusal } from "./connectors/connect-link"
 import type { AccountCredential } from "./connectors/auth"
 import { isKeylessConnector } from "./connectors/keyless"
+import { connectorBarrier, paidByHostKey } from "./connectors/adoption"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
 import { resolveAccount, runningTeam, type ResolvedAccount, type RunningTeam } from "./connectors/resolution"
 import type { PlatformDb } from "./db"
@@ -128,6 +129,15 @@ const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explic
  */
 async function notEnabled(deps: Pick<CallDeps, "db" | "identity" | "origin">, fn: CatalogFunction): Promise<PlatformError> {
   const said = `Function ${fn.name} is not enabled at ${deps.identity.org.name}: an administrator blocked the ${fn.connector} connector.`
+  return connectRefusal(deps, { reason: "connector_off", connector: fn.connector, said })
+}
+
+/**
+ * Refus d'une fonction d'un connecteur payé par la clé de l'hôte que nul administrateur n'a encore adopté : l'adresse de
+ * la connexion (`connectRefusal`, `connector_off`), qui l'adopte, à transmettre aux administrateurs nommés.
+ */
+async function notAdopted(deps: Pick<CallDeps, "db" | "identity" | "origin">, fn: CatalogFunction): Promise<PlatformError> {
+  const said = `Function ${fn.name} is not enabled at ${deps.identity.org.name}: the ${fn.connector} connector runs on this application's key and an administrator adopts it first.`
   return connectRefusal(deps, { reason: "connector_off", connector: fn.connector, said })
 }
 
@@ -269,6 +279,8 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   if (personal.length > 0) trace.personal = personal
   const active = await deps.activeConnectors()
   if (!isActive(fn, active)) throw await notEnabled(deps, fn)
+  // Payé par la clé de l'hôte : visible, mais appelable seulement une fois adopté par un administrateur.
+  if (fn.origin === "connecteur" && paidByHostKey(fn.connector) && (await connectorBarrier(db, identity, fn.connector))) throw await notAdopted(deps, fn)
   // Les jetons de l'assistant (pseudonymisation) : résolus avant le contrôle du schéma, qui attend un identifiant.
   const received = deps.dictionary ? await resolvedCallArguments({ db, identity, dictionary: deps.dictionary }, fn, input.arguments ?? {}) : (input.arguments ?? {})
   const args = checkedArguments(fn, received, prefix)
