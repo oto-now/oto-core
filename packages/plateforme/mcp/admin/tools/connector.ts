@@ -16,6 +16,7 @@ import { isSimulatedConnector, modeLabel } from "../../../server/connectors/mode
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../../server/rules"
 import { day, firstOf, listLines, nothingWas, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { noRuleFor, readSubject, ruleOf, rulesOutput, ruleSetText } from "../rule-texts"
+import { HOST_API_OPS } from "./host-api"
 
 /** Chemins de procédures nommés au plus par le récapitulatif d'une désactivation (AC9). */
 const PROCEDURES_NAMED = 10
@@ -316,4 +317,6 @@ export const CONNECTOR_OPS: OpTable = {
     refusals: [unknownAccount, homonyms, "not_found: No rule for <subject> on account <label>."],
     run: removeAccountRuleOp,
   },
+  // L'API de l'hôte de l'organisation (fonctions d'un hôte), ajoutée en dernier : le contrat n'évolue que par ajout.
+  ...HOST_API_OPS,
 }

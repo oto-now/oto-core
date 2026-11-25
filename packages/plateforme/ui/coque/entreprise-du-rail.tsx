@@ -55,7 +55,7 @@ export type EntrepriseDuRailProps = {
 /** L'organisation choisie a sa propre adresse : on y part, la session s'y reprend. Celle qu'on regarde ne mène nulle part. */
 function allerA(organisation: PersonOrganisation | undefined) {
   if (!organisation || organisation.current || !organisation.host) return
-  window.location.assign(`${window.location.protocol}//${organisation.host}/`)
+  window.location.assign(new URL("/", `${window.location.protocol}//${organisation.host}`).href)
 }
 
 /** La pastille d'entreprise et son menu. */

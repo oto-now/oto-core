@@ -190,6 +190,14 @@ describe("enforce-git-gate", { timeout: SPAWN_TIMEOUT }, () => {
     expect(await gate(`git push -uf origin main ${MARKER}`)).toBe(BLOCKED)
   })
 
+  it("ne prend pas une commande git voisine pour un verbe de commit", async () => {
+    // `git merge-file` fusionne trois fichiers sans créer de commit : `\b` coupait sur le tiret
+    // et le gate le bloquait comme un merge. `commit-tree` écrit un commit par la plomberie.
+    expect(await gate("git merge-file mine.md base.md theirs.md")).toBe(ALLOWED)
+    expect(await gate("git merge-base main HEAD")).toBe(ALLOWED)
+    expect(await gate("git commit-tree abc1234 -m x")).toBe(BLOCKED)
+  })
+
   it("exige un reçu de tout verbe qui produit un commit, mais pas du push", async () => {
     onTestFailed(() => {
       gateReceipt("write")
@@ -235,6 +243,55 @@ describe("enforce-git-gate", { timeout: SPAWN_TIMEOUT }, () => {
     expect(await gate('bash -c "ls -la"')).toBe(ALLOWED)
     expect(await gate('timeout 5 sh -c "echo ok"')).toBe(ALLOWED)
     expect(await gate('docker run alpine sh -c "cat /etc/os-release"')).toBe(ALLOWED)
+  })
+})
+
+describe("enforce-git-gate, dépôt visé par `cd <dir> &&` ou `git -C <dir>`", { timeout: SPAWN_TIMEOUT }, () => {
+  it("juge un autre dépôt de la méthode avec SON script de reçu, pas celui de ce checkout", async () => {
+    // Un dépôt de la méthode peut avoir adapté `verify-receipt.mjs` (exclusions, empreinte) : jugé
+    // avec l'algorithme de ce checkout, son reçu valide était refusé.
+    const repo = mkdtempSync(join(tmpdir(), "derived-repo-"))
+    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
+    try {
+      mkdirSync(join(repo, "scripts"))
+      writeFileSync(
+        join(repo, "scripts/verify-receipt.mjs"),
+        "import { existsSync } from 'node:fs'\nprocess.exit(process.argv[2] === 'check' && existsSync('recu-ok') ? 0 : 1)\n"
+      )
+      expect(await gate(`cd ${repo} && git commit -m "x" ${MARKER}`)).toBe(BLOCKED)
+      writeFileSync(join(repo, "recu-ok"), "")
+      expect(await gate(`cd ${repo} && git commit -m "x" ${MARKER}`)).toBe(ALLOWED)
+      expect(await gate(`git -C "${repo}" commit -m "x" ${MARKER}`)).toBe(ALLOWED)
+      // Un message qui cite `git -C …` ne déplace pas le dépôt visé.
+      expect(await gate(`cd ${repo} && git commit -m "fix: gate cd/git -C et dépôt hors méthode" ${MARKER}`)).toBe(ALLOWED)
+      // Le marqueur reste exigé, et les interdits absolus aussi.
+      expect(await gate(`cd ${repo} && git commit -m "x"`)).toBe(BLOCKED)
+      expect(await gate(`cd ${repo} && git commit --no-verify -m "x" ${MARKER}`)).toBe(BLOCKED)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it("laisse passer un commit dans un dépôt qui n'utilise pas cette méthode", async () => {
+    // Une session ouverte ici travaille aussi dans d'autres dépôts, qui ont leur propre gate. Le
+    // hook leur appliquait celui-ci, sans reçu possible : la seule issue était de le contourner.
+    const repo = mkdtempSync(join(tmpdir(), "foreign-repo-"))
+    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
+    try {
+      expect(await gate(`cd ${repo} && git commit -m "x"`)).toBe(ALLOWED)
+      expect(await gate(`git -C "${repo}" push origin HEAD:main`)).toBe(ALLOWED)
+      if (process.platform === "win32") {
+        // La forme Git Bash (`/c/…`) que produisent les sessions sous Windows.
+        const posix = repo.replace(/\\/g, "/").replace(/^([a-zA-Z]):/, (_, d: string) => `/${d.toLowerCase()}`)
+        expect(await gate(`cd ${posix} && git commit -m "x"`)).toBe(ALLOWED)
+      }
+      // Les interdits absolus restent, quel que soit le dépôt.
+      expect(await gate(`cd ${repo} && git push --force origin main`)).toBe(BLOCKED)
+      // Le dépôt de la session reste gardé.
+      expect(await gate(`git commit -m "x"`)).toBe(BLOCKED)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
   })
 })
 
@@ -458,8 +515,14 @@ describe(".claude/settings.json", () => {
     expect(entries).toEqual([
       {
         matcher: "Bash|PowerShell",
-        commands: [expect.stringContaining("enforce-bash-rules.mjs"), expect.stringContaining("enforce-git-gate.mjs")],
+        commands: [
+          expect.stringContaining("enforce-bash-rules.mjs"),
+          expect.stringContaining("enforce-git-gate.mjs"),
+          expect.stringContaining("coordinate-sessions.mjs"),
+        ],
       },
+      // Coordination des sessions : une écriture de fichier pendant le gel d'une autre session est refusée.
+      { matcher: "Edit|Write|MultiEdit|NotebookEdit", commands: [expect.stringContaining("coordinate-sessions.mjs")] },
     ])
   })
 })

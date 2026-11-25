@@ -76,7 +76,8 @@ type Place = { match: string; block: string | null; block_type: string | null; c
 
 /**
  * Un nœud trouvé ; `revision` (E11-S19, AC-e5) : sa révision publiée, lue pour un nœud dont des blocs de page sont
- * montrés ; `editable` : la personne l'écrit. `nodeId` et `editable` ne sont jamais servis en données. `blocksTotal` :
+ * montrés ; `editable` : la personne l'écrit, jamais servi en données. `nodeId` : l'identifiant stable du nœud, servi en
+ * données (`id`), pour qui garde ses pages par lui ; le texte garde le chemin. `blocksTotal` :
  * les blocs que la recherche trouve dans le nœud, montrés ou non (`block_total`), absent d'un nœud trouvé sans bloc.
  */
 type NodeMatch = { nodeId: string; path: string; kind: string; title: string; summary: string; score: number; places: Place[]; revision?: number; editable?: boolean; blocksTotal?: number }
@@ -314,7 +315,7 @@ async function withSections(db: PlatformDb, identity: Identity, nodes: NodeMatch
   }
 }
 
-/** Un nœud en données (AC16) : ses champs servis, sans l'identifiant du nœud ni ceux des blocs. */
+/** Un nœud en données (AC16) : ses champs servis, l'identifiant stable du nœud compris, jamais ceux des blocs. */
 function matchData(node: NodeMatch) {
   const places = node.places.map((place) => ({
     match: place.match,
@@ -326,7 +327,7 @@ function matchData(node: NodeMatch) {
   }))
   const revision = node.revision === undefined ? {} : { revision: node.revision }
   const blocksTotal = node.blocksTotal === undefined ? {} : { blocks_total: node.blocksTotal }
-  return { path: node.path, kind: node.kind, title: node.title, summary: node.summary, score: roundScore(node.score), places, ...revision, ...blocksTotal }
+  return { id: node.nodeId, path: node.path, kind: node.kind, title: node.title, summary: node.summary, score: roundScore(node.score), places, ...revision, ...blocksTotal }
 }
 
 /**
@@ -360,7 +361,7 @@ export async function find(
     text: renderFind({ query, type, nodes, others, moreNodes, functions, prefix }),
     data: {
       matches: nodes.map(matchData),
-      others: others.map((node) => ({ path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),
+      others: others.map((node) => ({ id: node.nodeId, path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),
       more_nodes: moreNodes,
       functions: functions.map(({ fn, score }) => ({ name: fn.name, class: fn.class, connector: fn.connector, score: roundScore(score) })),
     },

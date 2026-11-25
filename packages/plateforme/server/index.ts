@@ -67,7 +67,7 @@ export { addTeamMember, createTeam, deleteTeam, listTeams, removeTeamMember, tea
 export { listNodeRules, listRuledNodes, removeRule, setNodeRule } from "./rules"
 export { connectAddress, lastConnections } from "./connect"
 export type { ConnectAddress, LastConnection } from "./connect"
-export { closestExisting, findNode, parentPath, ROOT_PATH } from "./nodes/lookup"
+export { closestExisting, findNode, findNodeById, parentPath, ROOT_PATH } from "./nodes/lookup"
 export type { NodeRow } from "./nodes/lookup"
 export { loadBlocks } from "./nodes/store"
 export { loadNode, readNode } from "./nodes/read"

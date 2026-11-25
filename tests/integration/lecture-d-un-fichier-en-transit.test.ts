@@ -142,7 +142,8 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
         true,
         expect.stringMatching(new RegExp(`^File ${id} was deleted on \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC \\(sent to a third party\\): run the function that produced it again, or upload it again\\.$`)),
       ])
-      expect([nothing.isError, nothing.text]).toEqual([true, "Give path, or file alone to read a file by its id."])
+      // Ni chemin, ni identifiant, ni fichier : le schéma de `read` le refuse, avec la phrase du service.
+      expect([nothing.isError, nothing.text]).toEqual([true, expect.stringMatching(/^Invalid arguments for [a-z0-9]+_read: path: Give path or id, or file alone to read a file by its id\.$/)])
     })
 
     it("should cut a long transit file with a cursor bound to the file, its continuation without path", async () => {

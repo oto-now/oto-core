@@ -27,7 +27,8 @@ export type LigneDInvitation = {
   equipe: string | null
   /** Le nom de qui l'a envoyée, ou `null` : hors de l'organisation. */
   invitePar: string | null
-  expiration: string
+  /** `null` : une inscription sans email, qui n'expire pas. */
+  expiration: string | null
   /** L'administrateur, ou qui l'a envoyée (E02-S01). */
   annulable: boolean
 }

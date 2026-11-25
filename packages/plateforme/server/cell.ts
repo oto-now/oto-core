@@ -25,7 +25,15 @@ const REQUIRED_ENV = {
   oidc: ["PLATFORM_OIDC_ISSUER", "PLATFORM_OIDC_AUDIENCE", "PLATFORM_SMTP_URL", "PLATFORM_MAIL_FROM", "NEXT_PUBLIC_SITE_URL"],
 } as const
 
-type EnvPresence = { name: string; present: boolean }
+/**
+ * Le client de l'instance chez son émetteur, en mode OIDC : l'échange du jeton d'une personne contre celui de l'API de
+ * l'hôte d'une organisation (`host-api/exchange.ts`). Dites présentes ou non, sans compter dans la santé : une instance
+ * dont aucune organisation n'a d'API d'hôte s'en passe, et l'appel d'une de ses fonctions les nomme quand elles manquent.
+ */
+export const EXCHANGE_CLIENT_ENV = { id: "PLATFORM_OIDC_EXCHANGE_CLIENT_ID", secret: "PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET" } as const
+
+/** Une variable dite présente ou non ; `optional` : elle ne compte pas dans la santé. */
+type EnvPresence = { name: string; present: boolean; optional?: true }
 
 export type CellStatus = {
   packageVersion: string
@@ -50,9 +58,15 @@ export type CellStatus = {
  */
 const DATABASE_UNREACHABLE = "Database unreachable."
 
-/** Présence de chaque variable requise dans le mode de `env` ; vide ou blanche, elle est absente. Aucune valeur n'en sort. */
+/**
+ * Présence de chaque variable requise dans le mode de `env`, puis, en mode OIDC, du client d'échange (`optional`) ; vide
+ * ou blanche, elle est absente. Aucune valeur n'en sort.
+ */
 export function envReport(env: Record<string, string | undefined>): EnvPresence[] {
-  return REQUIRED_ENV[oidcMode(env) ? "oidc" : "supabase"].map((name) => ({ name, present: Boolean(env[name]?.trim()) }))
+  const present = (name: string) => Boolean(env[name]?.trim())
+  const required = REQUIRED_ENV[oidcMode(env) ? "oidc" : "supabase"].map((name): EnvPresence => ({ name, present: present(name) }))
+  if (!oidcMode(env)) return required
+  return [...required, ...Object.values(EXCHANGE_CLIENT_ENV).map((name): EnvPresence => ({ name, present: present(name), optional: true }))]
 }
 
 /**
@@ -81,7 +95,7 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
     health: {
       database: { ok: true, latencyMs },
       env: presence,
-      ok: presence.every((variable) => variable.present),
+      ok: presence.every((variable) => variable.present || variable.optional === true),
     },
     checkedAt: new Date().toISOString(),
   }

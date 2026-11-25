@@ -59,6 +59,11 @@ function Personne({ ligne }: { ligne: LigneDePersonne }) {
   )
 }
 
+/** L'échéance d'une invitation ; une inscription sans email n'en a pas. */
+function echeance(expiration: string | null): string {
+  return expiration === null ? PERSONNES.sansEcheance : PERSONNES.expire(dateLisible(expiration) ?? "?")
+}
+
 function colonnes({ moi, nomOrganisation, toutes, apresUnDepart }: Contexte, avecActions: boolean): Column<LigneDePersonne>[] {
   const c = COLONNES_DES_PERSONNES
   const communes: Column<LigneDePersonne>[] = [
@@ -79,7 +84,7 @@ function colonnes({ moi, nomOrganisation, toutes, apresUnDepart }: Contexte, ave
     {
       key: "connexion",
       header: c.connexion,
-      render: (ligne) => (ligne.genre === "membre" ? (dateLisible(ligne.derniereConnexion) ?? PERSONNES.jamais) : PERSONNES.expire(dateLisible(ligne.expiration) ?? "?")),
+      render: (ligne) => (ligne.genre === "membre" ? (dateLisible(ligne.derniereConnexion) ?? PERSONNES.jamais) : echeance(ligne.expiration)),
     },
   ]
   if (!avecActions) return communes

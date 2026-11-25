@@ -62,7 +62,8 @@ describe("package manifest (AC1)", () => {
 
     expect(pkg.peerDependencies).toMatchObject({
       "@supabase/supabase-js": "^2",
-      next: "^15",
+      // Next 16 accepté : le paquet n'importe de Next que le type `Metadata`.
+      next: "^15 || ^16",
       react: "^19",
       "react-dom": "^19",
       "@phosphor-icons/react": "^2",
@@ -77,6 +78,10 @@ describe("package manifest (AC1)", () => {
     // fflate : les ZIP du transfert d'une arborescence (`server/transfer/formats.ts`).
     expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.32.1", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
     expect(pkg.peerDependencies.zod).toBe("^3.25")
+    // Fonctions d'un hôte : la lib de connecteurs (profil hôte, `server/host-api/document.ts`), installée par l'hôte depuis
+    // git, faute d'être publiée sur npm : pnpm refuse une dépendance git dans les sous-dépendances, et une version venue de
+    // git ne satisfait aucun intervalle semver.
+    expect(pkg.peerDependencies["@otomata_tech/connectors"]).toBe("*")
   })
 })
 

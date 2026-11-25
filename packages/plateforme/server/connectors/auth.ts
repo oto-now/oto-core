@@ -4,7 +4,8 @@
 // secret du client, rangé en base (chiffré, `token_ciphertext`) et non dans la mémoire du processus, renouvelé à son
 // échéance, et une fois de plus après un 401 ; `oauth2_user` : le jeton d'accès du consentement d'une personne, rangé
 // de même, renouvelé par `oauth-user.ts` ; `oauth2_jwt_bearer` : le jeton d'un compte de service, rangé et renouvelé
-// comme celui d'un échange, par `service-account.ts`. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
+// comme celui d'un échange, par `service-account.ts` ; `host_delegated` : le jeton de la personne pour l'API d'un hôte,
+// obtenu à l'appel (`host-api/exchange.ts`), sans compte. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
 // secret ne sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import type { AccountMark, AccountMarkReason } from "../../schemas"
 import { PlatformError } from "../errors"
@@ -39,6 +40,14 @@ export type PreparedAuth =
     }
   | UserConsentAuth
   | ServiceAccountAuth
+  | HostDelegatedAuth
+
+/**
+ * Le jeton de la personne pour l'API d'un hôte (`host_delegated`, `host-api/`) : jamais celui d'un compte. `token` le rend
+ * pour l'appel, obtenu de l'émetteur pour l'audience de l'API (`host-api/exchange.ts`) ; préparée à chaque appel, sous la
+ * personne qui appelle.
+ */
+export type HostDelegatedAuth = { kind: "host_delegated"; token: () => Promise<string> }
 
 /**
  * Le jeton d'un échange tel que le garde un compte ; `scopes` : les droits qu'il porte, rangés avec lui par un compte de
@@ -159,6 +168,7 @@ export function requiredFields(auth: PreparedAuth): string[] {
   if (auth.kind === "client_credentials") return [auth.clientId, auth.clientSecret]
   if (auth.kind === "user_consent") return []
   if (auth.kind === "service_account") return [auth.key]
+  if (auth.kind === "host_delegated") return []
   return [auth.field]
 }
 
@@ -213,6 +223,7 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   if (auth.kind === "basic") return { headers: { authorization: basicOf(auth.username === null ? "" : field(auth.username), field(auth.password)) }, query: [] }
   if (auth.kind === "user_consent") return { headers: { authorization: `Bearer ${await consentAccessToken({ ...signer, auth }, fresh)}` }, query: [] }
   if (auth.kind === "service_account") return { headers: { authorization: `Bearer ${await serviceAccountToken({ ...signer, auth }, fresh)}` }, query: [] }
+  if (auth.kind === "host_delegated") return { headers: { authorization: `Bearer ${await auth.token()}` }, query: [] }
   const kept = fresh ? null : await credential.tokens.read()
   const usable = kept !== null && (kept.expiresAt === null || kept.expiresAt.getTime() - EXPIRY_MARGIN_MS > Date.now())
   const exchange = { auth, label: signer.definition.label, timeoutMs: signer.definition.timeoutMs, accountId: signer.accountId, fetcherFor: signer.fetcherFor }

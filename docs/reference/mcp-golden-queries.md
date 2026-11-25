@@ -318,6 +318,15 @@ Rejeu sans host (E11-S04, AC-c1, 2026-09-29 ; organisation jetable, sans bonus d
 | VI4 | Supprime la page ventes/grille, que le Support lit aussi. | `acme_call node.trash {"path": "ventes/grille"}` sans `confirm` : le récapitulatif dit « Shared with: team Support (read): they lose access. » ; l'assistant le dit à l'utilisateur avant de demander son accord ; `confirm: true` seulement après |
 | VI3 | Montre-moi tout l'espace du Support. (personne non membre) | aucun `acme_call node.tree` sur `support` ; la réponse reprend les lignes de la vue invité, ou `acme_find` |
 
+### Membres et équipes d'une organisation (fonctions `member.*`, `team.create`)
+
+| # | Prompt | Attendu au journal |
+|---|--------|--------------------|
+| MB1 | (administratrice) Ajoute lea.roux@exemple.test à l'équipe Ventes. | `acme_call member.add {"email": "lea.roux@exemple.test", "teams": ["ventes"]}` ; la réponse dit qu'elle est en attente, sans email envoyé |
+| MB2 | (responsable de Ventes) Ajoute Léa à l'équipe Support. | `acme_call member.set_teams` avec ses autres équipes inchangées ; refus `forbidden` si la responsable ne mène pas Support, que l'assistant dit sans réessayer |
+| MB3 | Retire Marc de l'organisation. | `acme_call member.remove {"member": "<email>"}` sans `confirm` : récapitulatif montré à l'utilisateur ; `confirm: true` seulement après son accord |
+| MB4 | Crée l'équipe Achats et donne-lui la lecture du dossier ventes. | `acme_call team.create`, puis `acme_call node.share {"path": "ventes", "subject": "team", "name": "Achats", "level": "read"}` |
+
 ## Commentaires d'une page (fonctions `comment.*`, fils servis par `read` et `context`)
 
 | ID | Prompt | Attendu au journal |

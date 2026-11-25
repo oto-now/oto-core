@@ -7,7 +7,8 @@
 import { FILE_ADDRESS, type BlockView, type CommentThreadView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
 import { contractNames, getContract, renderContract } from "../catalog/contracts"
-import { assistantFunctions, catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
+import { activeOrgFunctions, orgAssistantFunctions } from "../catalog/org-catalog"
+import { catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
 import { blockRefs, bodyWithComments, commentsLine, waitingCount } from "../comments/served"
 import { openThreads } from "../comments/threads"
 import { loadActiveConnectors } from "../connectors/activations"
@@ -26,10 +27,10 @@ import type { ToolOutput } from "../tool-output"
 import { displayRefs, type DocBlock } from "./document"
 import { OUTLINE_DATA_MAX, REFERENCES_DATA_MAX, REVISIONS_LISTED } from "./limits"
 import { linkHeader } from "./link-lines"
-import { checkNodePath, findNode, movedNotice, unknownNode, type NodeRow } from "./lookup"
+import { checkNodePath, findNode, findTarget, movedNotice, nodeTarget, type FoundNode, type NodeRow } from "./lookup"
 import { serveBody, type Served } from "./read-body"
 import { checkFileModes, readFileAlone, readNodeFile } from "./read-file"
-import { headerLines, outlineOf, type PendingDraft, type Version } from "./read-format"
+import { headerLines, outlineOf, pendingOf, type Version } from "./read-format"
 import { checkCursor, paginate } from "./read-pages"
 import { withPageView } from "./read-view"
 import { withCurrentLinks } from "./current-links"
@@ -43,7 +44,7 @@ import { familyOf, kindOf, memberNames, ownerOf, ownerTexts, ownerView, statusOf
  */
 async function readFunction(db: PlatformDb, identity: Identity, name: string): Promise<ToolOutput> {
   const prefix = identity.org.prefix
-  const fn = findFunction(assistantFunctions(), name)
+  const fn = findFunction(await orgAssistantFunctions(db, identity), name)
   const contract = fn ? null : getContract(name)
   if (contract) return { ...renderContract(contract, prefix), nextActions: [`${prefix}_write`], target: contract.name }
   if (!fn || !isActive(fn, await loadActiveConnectors(db, identity.org.id))) {
@@ -53,8 +54,7 @@ async function readFunction(db: PlatformDb, identity: Identity, name: string): P
   return { text, data, nextActions: [`${prefix}_call`], target: fn.name }
 }
 
-function checkRequest(input: ReadNodeInput, path: string): void {
-  checkNodePath(path)
+function checkRequest(input: ReadNodeInput): void {
   const modes = [input.section !== undefined, input.outline === true, input.since_revision !== undefined].filter(Boolean)
   // `file` (E10-S02, AC-d2) : le texte d'un fichier seul, ou l'une de ses parties par `section` ; sans plan, écart ni brouillon.
   checkFileModes(input)
@@ -109,7 +109,7 @@ type Context = {
   threads: CommentThreadView[]
 }
 
-async function contextOf(db: PlatformDb, identity: Identity, found: NonNullable<Awaited<ReturnType<typeof findNode>>>): Promise<Context> {
+async function contextOf(db: PlatformDb, identity: Identity, found: FoundNode): Promise<Context> {
   const { node, level } = found
   const writer = level >= ACCESS_LEVELS.write
   const [owner, { parent, ...children }, draft, links, threads] = await Promise.all([
@@ -145,10 +145,6 @@ function fileRouteOf(origin: string | undefined): string {
   return url ? `${new URL(url).origin}${FILE_ADDRESS}` : FILE_ADDRESS
 }
 
-function pendingOf(draft: Context["draft"]): PendingDraft | null {
-  return draft ? { baseRevision: draft.baseRevision, savedAt: draft.savedAt, title: draft.title, summary: draft.summary, kind: draft.kind } : null
-}
-
 /**
  * `read` (AC4 à AC18) : un nom de fonction sert son contrat ; `journal` sert le journal des appels
  * (E05-S05) ; `functions`, toutes les fonctions actives (E11-S19) ; `help`, le guide de la plateforme (1.4.3) ; un chemin sert l'en-tête du nœud et ses blocs rendus selon le mode demandé, coupés en
@@ -159,20 +155,21 @@ function pendingOf(draft: Context["draft"]): PendingDraft | null {
  */
 export async function readNode(db: PlatformDb, identity: Identity, input: ReadNodeInput, options: { origin?: string; views?: boolean } = {}): Promise<ToolOutput> {
   const prefix = identity.org.prefix
+  // Un chemin et un identifiant ensemble sont refusés par le service aussi, quelle que soit la porte.
+  const target = nodeTarget(input)
   // `file` seul : un fichier désigné par son identifiant, joint (lu sur son nœud) ou en transit.
-  if (input.path === undefined) return readFileAlone(db, identity, input, (path) => readNode(db, identity, { ...input, path }, options))
-  const path = input.path.trim()
-  if (looksLikeFunction(path)) return readFunction(db, identity, path)
-  if (path === JOURNAL_PATH) return readJournal(db, identity, input)
-  if (path === FUNCTIONS_PATH) {
-    const active = await loadActiveConnectors(db, identity.org.id)
-    return functionCatalog(assistantFunctions().filter((fn) => isActive(fn, active)), contractNames(), prefix)
+  if (target === null) return readFileAlone(db, identity, input, (path) => readNode(db, identity, { ...input, path }, options))
+  if ("path" in target) {
+    const { path } = target
+    if (looksLikeFunction(path)) return readFunction(db, identity, path)
+    if (path === JOURNAL_PATH) return readJournal(db, identity, input)
+    if (path === FUNCTIONS_PATH) return functionCatalog(await activeOrgFunctions(db, identity), contractNames(), prefix)
+    // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
+    if (path === HELP_PATH) return helpGuide(input.section, prefix)
+    checkNodePath(path)
   }
-  // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
-  if (path === HELP_PATH) return helpGuide(input.section, prefix)
-  checkRequest(input, path)
-  const found = await findNode(db, identity, path)
-  if (!found) throw unknownNode(path, prefix)
+  checkRequest(input)
+  const found = await findTarget(db, identity, target)
   if (input.file !== undefined) {
     // Un curseur périmé est refusé avant la lecture de l'objet (AC14).
     checkCursor(input, found.node)
@@ -183,7 +180,7 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
   if (input.draft && found.level < ACCESS_LEVELS.write) {
     const owner = await ownerOf(db, found.node.id)
     const who = owner ? await describeOwner(db, identity, owner) : "its writers"
-    throw new PlatformError("forbidden", `Drafts of ${path} are shown to its writers: ${who}. Read the published revision without draft.`)
+    throw new PlatformError("forbidden", `Drafts of ${found.node.path} are shown to its writers: ${who}. Read the published revision without draft.`)
   }
   const context = await contextOf(db, identity, found)
   const draftMode = input.draft === true
@@ -275,6 +272,7 @@ function dataOf(context: Context, served: Body, input: ReadNodeInput): Record<st
   }))
   return {
     ...(context.movedFrom === null ? {} : { moved_from: context.movedFrom }),
+    id: node.id,
     path: node.path,
     title: node.title,
     summary: node.summary,

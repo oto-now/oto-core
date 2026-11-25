@@ -18,7 +18,8 @@ import { administratorNames } from "./access"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
 import { personalValues } from "./catalog/personal"
-import { actName, assistantFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
+import { orgAssistantFunctions } from "./catalog/org-catalog"
+import { actName, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
 import type { AccountCredential } from "./connectors/auth"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
@@ -97,7 +98,7 @@ export type CallDeps = {
   /** Connecteurs actifs de l'organisation, lus une fois pour la requête (`McpDeps`, E04-S01 N27). */
   activeConnectors: () => Promise<ReadonlySet<string>>
   /**
-   * Le catalogue (défaut : `assistantFunctions()`, ce que l'assistant voit ; `callFunction` passe `catalogFunctions()`,
+   * Le catalogue (défaut : `orgAssistantFunctions()`, ce que l'assistant voit dans l'organisation, API de son hôte comprise ; `callFunction` passe `catalogFunctions()`,
    * fonctions réservées au serveur comprises). Les tests passent leurs fonctions : sans elles, la matrice des classes ne
    * se teste pas, faute de fonction de lecture ou native en V1 avant E07.
    */
@@ -235,7 +236,7 @@ async function confirmationRequest(
 function unknownFunction(functions: readonly CatalogFunction[], name: string, prefix: string): PlatformError {
   const served = actName(name.trim().toLowerCase())
   const engaging = served === null ? null : findFunction(functions, served)
-  if (engaging?.origin === "connecteur") {
+  if (engaging) {
     return new PlatformError("not_found", `Unknown function ${name}: it engages or destroys, so it is served as ${engaging.name}. Call ${engaging.name}.`)
   }
   return new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
@@ -260,7 +261,7 @@ const pseudonymizerOf = (dictionary: Dictionary) => (text: string): string => ps
 export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOutput> {
   const { db, identity } = deps
   const prefix = identity.org.prefix
-  const functions = deps.functions ?? assistantFunctions()
+  const functions = deps.functions ?? (await orgAssistantFunctions(db, identity))
   const fn = findFunction(functions, input.function.trim().toLowerCase())
   if (!fn) throw unknownFunction(functions, input.function, prefix)
   const trace: CallTrace = deps.trace ?? {}

@@ -9,8 +9,8 @@ import { arbreDeCodeDuCommit } from "../../scripts/lib/arbre-de-code.mjs"
 
 /**
  * `scripts/ci/recu.mjs`, le job `recu` de la CI : chaque commit poussé porte le `Verified-tree:` de son arbre de code,
- * sauf s'il laisse inchangé celui de son parent ; en avertissement (`--avertir`), il le dit sans échouer. Testé sur
- * un dépôt jetable.
+ * sauf s'il laisse inchangé celui de son parent, ou s'il fusionne une branche couverte sans en changer l'arbre ; en
+ * avertissement (`--avertir`), il le dit sans échouer. Testé sur un dépôt jetable.
  */
 
 const root = path.resolve(__dirname, "../..")
@@ -55,6 +55,40 @@ function monter() {
   const absent = commiter(depot, "a vaut 3", { "a.ts": "export const a = 3\n" })
   const faux = commiter(depot, "a vaut 4", { "a.ts": "export const a = 4\n" }, arbreDeCodeDuCommit(depot, absent))
   return { depot, base, atteste, documents, absent, faux }
+}
+
+/** Fusionne `branche` dans `main` par un commit de fusion, comme le bouton de GitHub. */
+function fusionner(depot: string, branche: string) {
+  git(depot, "checkout", "--quiet", "main")
+  git(depot, "merge", "--quiet", "--no-ff", "--no-verify", "-m", `Merge ${branche}`, branche)
+  return git(depot, "rev-parse", "HEAD")
+}
+
+/**
+ * Trois fusions sur `main` : une branche attestée, une branche sans reçu, une branche attestée pendant que `main` a
+ * bougé ; puis un commit de documents seuls.
+ */
+function monterFusions() {
+  const depot = fs.mkdtempSync(path.join(dir, "fusions-"))
+  git(depot, "init", "--quiet", "--initial-branch=main")
+  const base = commiter(depot, "base", { "a.ts": "export const a = 1\n", "docs/changelog.md": "# Changelog\n" }, "vrai")
+
+  git(depot, "checkout", "--quiet", "-b", "attestee")
+  const brancheAttestee = commiter(depot, "a vaut 2", { "a.ts": "export const a = 2\n" }, "vrai")
+  const fusionAttestee = fusionner(depot, "attestee")
+
+  git(depot, "checkout", "--quiet", "-b", "sans-recu")
+  commiter(depot, "a vaut 3", { "a.ts": "export const a = 3\n" })
+  const fusionSansRecu = fusionner(depot, "sans-recu")
+
+  git(depot, "checkout", "--quiet", "-b", "depassee")
+  commiter(depot, "b vaut 1", { "b.ts": "export const b = 1\n" }, "vrai")
+  git(depot, "checkout", "--quiet", "main")
+  commiter(depot, "c vaut 1", { "c.ts": "export const c = 1\n" }, "vrai")
+  const fusionDepassee = fusionner(depot, "depassee")
+
+  const documents = commiter(depot, "changelog", { "docs/changelog.md": "# Changelog\n\n## b et c\n" })
+  return { depot, base, brancheAttestee, fusionAttestee, fusionSansRecu, fusionDepassee, documents }
 }
 
 const lancer = (depot: string, ...args: string[]) => {
@@ -113,5 +147,38 @@ describe("receipt of pushed commits", { timeout: 60_000 }, () => {
     const usage = lancer(cas.depot, "--depuis", cas.base)
     expect(usage.status).toBe(2)
     expect(usage.output).toContain("usage")
+  })
+})
+
+describe("receipt of merge commits", { timeout: 60_000 }, () => {
+  let cas: ReturnType<typeof monterFusions>
+  beforeAll(() => {
+    cas = monterFusions()
+  }, 30_000)
+
+  it("should accept a merge whose second parent carries a valid receipt and whose code tree is that parent's", () => {
+    expect(verdict(cas.depot, cas.brancheAttestee).etat).toBe("atteste")
+    expect(verdict(cas.depot, cas.fusionAttestee).etat).toBe("fusion")
+  })
+
+  it("should flag a merge whose second parent has no receipt", () => {
+    expect(verdict(cas.depot, cas.fusionSansRecu).etat).toBe("absent")
+  })
+
+  it("should flag a merge of a covered branch when main moved meanwhile, its code tree never verified", () => {
+    expect(verdict(cas.depot, cas.fusionDepassee).etat).toBe("ecart")
+  })
+
+  it("should still accept an ordinary commit that leaves the code tree unchanged", () => {
+    expect(verdict(cas.depot, cas.documents).etat).toBe("inchange")
+  })
+
+  it("should say each merge's verdict, and only warn with --avertir", () => {
+    const avertir = lancer(cas.depot, "--depuis", cas.base, "--jusqua", cas.documents, "--avertir")
+    expect(avertir.status, avertir.output).toBe(0)
+    expect(avertir.output).toMatch(/^✔ .* Merge attestee : fusion d'une branche couverte par son reçu/m)
+    expect(avertir.output).toMatch(/^::warning title=Reçu du commit::.* Merge sans-recu : sans `Verified-tree:`/m)
+    expect(avertir.output).toMatch(/^::warning title=Reçu du commit::.* Merge depassee : fusion d'une branche couverte, mais/m)
+    expect(avertir.output).not.toContain("::error")
   })
 })

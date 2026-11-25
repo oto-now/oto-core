@@ -12,7 +12,7 @@ import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededDat
 
 const NETWORK_TIMEOUT = 60_000
 const SETUP_TIMEOUT = 180_000
-const VERSION = "20261120120000"
+const VERSION = "20261125160000"
 const SUITE = "members_profile_on_arrival"
 
 describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_REASON})`, { timeout: NETWORK_TIMEOUT }, () => {
