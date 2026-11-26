@@ -13,7 +13,7 @@
 // `read` et `write` sont composés des entrées partagées avec l'API (`schemas/nodes.ts`, E03-S03) :
 // mêmes champs, même ordre, mêmes descriptions ; seuls les ajouts d'E03-S03 changent leur JSON Schema.
 import * as z from "zod/v4"
-import { feedbackInputSchema, feedbackTypeSchema, readNodeSchema, strictWriteOpsSchema, writeNodeSchema, writeOpSchema } from "../schemas"
+import { feedbackInputSchema, feedbackTypeSchema, readNodeSchema, refinePathOrId, refineReadTarget, strictWriteOpsSchema, writeNodeSchema, writeOpSchema } from "../schemas"
 import { boundedList, issuesText } from "../server/errors"
 import { cut } from "../server/journal"
 import type { ToolKey } from "./tools"
@@ -53,7 +53,8 @@ export function inputSchemas(prefix: string) {
         .optional()
         .describe("Restrict to one kind of result: procedure, page, table or function (default: all kinds, functions included)."),
     }),
-    read: z.object({ ctx, ...readNodeSchema.shape }),
+    // `path` ou `id`, jamais les deux (`refineReadTarget`) : un JSON Schema plat ne le dit pas (ADR-002 § 5), la description le dit.
+    read: z.object({ ctx, ...readNodeSchema.shape }).superRefine(refineReadTarget),
     call: z.object({
       ctx,
       function: z.string().trim().min(1).max(100).describe("Function name, e.g. table.rows or mail.create_draft."),
@@ -87,7 +88,7 @@ export function inputSchemas(prefix: string) {
       ...writeNodeSchema.shape,
       ops: strictWriteOpsSchema,
       header: writeNodeSchema.shape.header.describe(`Header of a table; its contract: ${prefix}_read with path write.table (default: unchanged).`),
-    }),
+    }).superRefine(refinePathOrId()),
     // Les champs de `schemas/feedback.ts` (E03-S05), partagés avec l'administration des retours ;
     // descriptions et ordre des champs inchangés : même JSON Schema qu'en E03-S01.
     feedback: z.object({

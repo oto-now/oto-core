@@ -8,6 +8,7 @@ import { memberDirectory, type DirectoryEntry } from "../directory"
 import { boundedList, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { levelName, type ConnectorAccount } from "./accounts"
+import { planConnection, refusalFromPlan, type ConnectionPlan } from "./connect-link"
 import { consentRefusal } from "./consent-accounts"
 import { modeLabel } from "./modes"
 import type { AccountRefusal, FunctionTraits } from "./resolution"
@@ -34,10 +35,17 @@ export const ASK_WHICH = "Show them to the user and ask which one to use; do not
 
 /**
  * Ce que disent les refus qui nomment des personnes : à qui demander (`describeOwner`), les noms
- * des administrateurs, l'origine de l'adresse appelée (lien du tableau de bord), et le nom de la personne à qui est
- * chaque compte personnel nommé (`owners`, par identifiant).
+ * des administrateurs, le nom de la personne à qui est chaque compte personnel nommé (`owners`, par identifiant), et,
+ * faute de compte, la connexion à mener (`connect`, `planConnection`), dont le refus porte l'adresse.
  */
-export type RefusalWords = { orgName: string; administrators: string; origin: string; ask: string; owners?: ReadonlyMap<string, string> }
+export type RefusalWords = { orgName: string; administrators: string; ask: string; owners?: ReadonlyMap<string, string>; connect?: ConnectionPlan }
+
+/** La connexion d'un refus faute de compte, décidée par `refusalWords` ; son absence est une faute de câblage. */
+function connectionOf(words: RefusalWords): ConnectionPlan {
+  if (words.connect) return words.connect
+  console.error("[platform] accountRefusal: a refusal for lack of an account without its connection plan")
+  throw new PlatformError("internal", "Internal error.")
+}
 
 /**
  * Un compte nommé dans un refus qui propose un choix : son libellé, son propriétaire, son mode, et sa description citée
@@ -138,16 +146,11 @@ export function accountRefusal(refusal: AccountRefusal, fn: FunctionTraits, word
     }
     case "none": {
       const steps = refusal.team ? `your own, team ${refusal.team.name}, then the organisation` : "your own, then the organisation"
-      const names = words.administrators ? ` (${words.administrators})` : ""
-      const shared = sharedMention(refusal.shared, words)
-      return new PlatformError(
-        "not_enabled",
-        `No ${fn.connector} account is connected for you (${steps}). Ask an administrator of ${words.orgName}${names} to connect one on the dashboard: ${words.origin}/admin/connectors.${shared.text}`,
-        shared.details,
-      )
+      const said = `No ${fn.connector} account is connected for you (${steps}).`
+      return refusalFromPlan(connectionOf(words), words.orgName, { reason: "no_account", said, shared: sharedMention(refusal.shared, words) })
     }
     case "connect_needed":
-      return consentRefusal(fn.connector, refusal.account, sharedMention(refusal.shared, words))
+      return consentRefusal(connectionOf(words), words.orgName, refusal.account, sharedMention(refusal.shared, words))
   }
 }
 
@@ -164,7 +167,7 @@ function ownerNames(directory: readonly DirectoryEntry[], accounts: readonly Con
  * possède chaque compte personnel partagé que le refus mentionne, lu dans l'annuaire (un membre : le compte d'une
  * personne partie ne se mentionne pas).
  */
-export async function refusalWords(db: PlatformDb, identity: Identity, refusal: AccountRefusal, origin: string): Promise<RefusalWords> {
+export async function refusalWords(db: PlatformDb, identity: Identity, refusal: AccountRefusal, where: { origin: string; connector: string }): Promise<RefusalWords> {
   const accounts =
     refusal.kind === "named_below_level" || refusal.kind === "named_unavailable"
       ? [refusal.account]
@@ -174,15 +177,17 @@ export async function refusalWords(db: PlatformDb, identity: Identity, refusal: 
   const personal = "shared" in refusal ? refusal.shared : []
   const owners = [...new Map(accounts.map((account) => [JSON.stringify([account.owner.kind, account.owner.teamId, account.owner.userId]), account.owner])).values()]
   const needsDirectory = refusal.kind === "none" || personal.length > 0
-  const [asks, directory] = await Promise.all([
+  const missing = refusal.kind === "none" || refusal.kind === "connect_needed"
+  const [asks, directory, connect] = await Promise.all([
     Promise.all(owners.map((owner) => describeOwner(db, identity, owner))),
     needsDirectory ? memberDirectory(db, identity.org.id) : Promise.resolve([]),
+    missing ? planConnection({ db, identity, origin: where.origin }, { connector: where.connector, access: refusal.kind === "connect_needed" ? refusal.account?.access : undefined }) : undefined,
   ])
   return {
     orgName: identity.org.name,
     administrators: refusal.kind === "none" ? administratorNames(directory) : "",
-    origin,
     ask: boundedList([...new Set(asks)], " or "),
     owners: ownerNames(directory, personal),
+    ...(connect ? { connect } : {}),
   }
 }

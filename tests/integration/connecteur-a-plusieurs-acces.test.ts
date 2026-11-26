@@ -4,13 +4,15 @@
 // se signe par une assertion échangée ; la création sans accès, par un accès inconnu ou par l'accès à consentement,
 // refusée nommément ; le consentement d'une personne par l'accès de connexion, son retour qui range un compte retenant
 // cet accès, appelé par le jeton de la personne ; un consentement qui ne nomme pas d'accès, refusé ; le formulaire de
-// chaque accès. Un tiers simulé tient lieu de fournisseur : `fetch` remplacé, aucun réseau ; jetons tirés à l'exécution.
+// chaque accès ; la page de connexion qui fait choisir l'accès, puis offre les autres à côté du geste de l'un, et le
+// refus sans compte qui les nomme. Un tiers simulé tient lieu de fournisseur : `fetch` remplacé, aucun réseau ; jetons tirés à l'exécution.
 import { randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { credentialValue, jwtBearerCases } from "@otomata_tech/connectors/jwt-bearer-cases"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountSecret } from "@otomata_tech/oto_platform/server"
 import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -152,6 +154,33 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       [SERVICE, false, ["org", "team"]],
       [SIGN_IN, true, ["user"]],
     ])
+  })
+
+  it("should let the page choose the access, offer the others beside the gesture of one, and name them in a refusal without account", async () => {
+    const [ada, lea] = [person("ada"), person("lea")]
+    const step = (who: { db: PlatformDb; identity: Identity }, query: Record<string, string>) =>
+      connectionStep(who.db, who.identity, { connector: CONNECTOR, ...query }, { origin: origin() })
+    const service = { name: SERVICE, label: "Service account of the organization", gesture: "key" }
+    const signIn = { name: SIGN_IN, label: "Sign-in of a person", gesture: "oauth" }
+    expect(await step(lea, {})).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [service, signIn] })
+    // Un espace nommé : contrôlé pour chaque accès avant toute liste ; un accès qu'il ne permet pas n'est pas offert, et
+    // chaque lien garde l'espace.
+    expect(await step(ada, { space: "org" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...service, space: "org" }] })
+    expect(await step(lea, { space: "me" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...signIn, space: "me" }] })
+    // Un espace refusé pour tous les accès : refusé nommément, aucun accès listé.
+    const forbidden = await refusal(step(lea, { space: "org" }))
+    expect([forbidden.code, forbidden.details]).toEqual(["forbidden", { reason: "space", space: "org" }])
+    expect((await refusal(step(lea, { space: "team:inconnue" }))).code).toBe("not_found")
+    // Les autres accès offerts à côté du geste d'un accès gardent aussi l'espace nommé.
+    expect(await step(lea, { access: SIGN_IN, space: "me" })).toMatchObject({ kind: "authorize", space: "me", others: [{ ...service, space: "me" }] })
+    expect(await step(lea, { access: SIGN_IN })).toEqual({ kind: "authorize", gesture: "oauth", connector: CONNECTOR, label: "Crm", space: "me", access: SIGN_IN, others: [service] })
+    const key = await step(ada, { access: SERVICE })
+    const asked = await step(lea, { access: SERVICE })
+    expect([key.kind, "space" in key ? key.space : null, "others" in key ? key.others : null, asked.kind, "others" in asked ? asked.others : null]).toEqual(["key", "org", [signIn], "ask_admin", [signIn]])
+    const refused = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin() }))
+    expect([refused.code, refused.details?.reason, refused.details?.gesture, refused.details?.access, refused.details?.space]).toEqual(["not_enabled", "no_account", "oauth", SIGN_IN, "me"])
+    expect(refused.message).toContain(`Crm also opens by another access, ${SERVICE} (Service account of the organization), which the link offers too. Ask the user to authorize Crm`)
+    expect(tier.sent).toEqual([])
   })
 
   it("should create an account of the organisation by the service account, retain its access, take its key and sign a call by an exchanged assertion", async () => {

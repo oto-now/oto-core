@@ -245,7 +245,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
   describe("the kept Contextes through MCP (E11-S03, AC-a2, AC-a5, AC-a6)", () => {
     async function session() {
       const lea = ref.identityOf("lea")
-      return connectDeps({ db: await dbOf("lea"), org: lea.org, caller: { kind: "member", identity: lea }, userAgent: "vitest", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${ref.org.host}` })
+      return connectDeps({ db: await dbOf("lea"), org: lea.org, caller: { kind: "member", identity: lea }, userAgent: "vitest", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${ref.org.host}` })
     }
 
     it("should serve read once a served Contexte is published changed, under a new ctx said first with the change, record feedback on the old code, and say nothing after another person's Privé is published", async () => {

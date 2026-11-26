@@ -15,7 +15,7 @@ import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
 import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
 import { createAccount, listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
-import { activateConnector, loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { activateConnector, loadActiveConnectors, loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { decryptCredential } from "../../packages/plateforme/server/connectors/vault"
@@ -97,7 +97,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
 
   const call = (who: ReferencePerson, input: CallInput) => {
     const { db, identity } = as(who)
-    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(db, o.org.id) }, input)
+    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(db, o.org.id) }, input)
   }
 
   /** Un compte de l'organisation, au libellé propre au cas : chaque appel le nomme (`account`), sans ambiguïté. */
@@ -258,13 +258,15 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(send).not.toHaveBeenCalled()
     })
 
-    it("should refuse a live account without secret before the function (AC12)", async () => {
+    it("should refuse a live account without secret before the function, with the link to its key for whoever manages it (AC12)", async () => {
       const bare = await orgAccount("reel")
       const tiers = stubTiers()
       const error = await refusal(call("lea", { function: `${LIVE}.list_contacts`, arguments: {}, account: bare.label }))
-      expect({ code: error.code, message: error.message }).toEqual({
+      const url = `${ORIGIN}/connect/${LIVE}?space=org&account_id=${bare.id}`
+      expect({ code: error.code, message: error.message, details: error.details }).toEqual({
         code: "not_enabled",
-        message: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
+        message: `Account « ${bare.label} » has no secret yet. Only the administrators of Acme Test (Ada Martin) can set the key of account « ${bare.label} »; ask the user to pass them the link and call again once it is done: open ${url}`,
+        details: { reason: "no_account", gesture: "key", connector: LIVE, space: "org", url, administrators: [{ name: "Ada Martin" }] },
       })
       expect(tiers.send).not.toHaveBeenCalled()
     })
@@ -284,7 +286,8 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         caller: { kind: "member", identity: ada.identity },
         userAgent: "vitest",
         journal,
-        activeConnectors: () => loadActiveConnectors(ada.db, o.org.id),
+        activeConnectors: () => loadOpenConnectors(ada.db, o.org.id),
+        adoptedConnectors: () => loadActiveConnectors(ada.db, o.org.id),
         origin: ORIGIN,
       })
       const opened = await gate.openContext()
@@ -308,7 +311,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       const live = await orgAccount("reel")
       const secret = newSecret()
       await setAccountSecret(ada.db, ada.identity, { account_id: live.id, input: { secret: { api_key: secret } } })
-      const probe = async () => outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))
+      const probe = async () => outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))
       const tiers = stubTiers({ company: "Acme", scopes: ["contacts:read"] })
       expect(await probe()).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(tiers.authorizations()).toEqual([`Bearer ${secret}`])
@@ -321,10 +324,10 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
       expect(refused).toEqual({ healthy: false, code: "upstream_error", reason: "Crm refused access: the key is invalid or lacks the scope. (access_rejected)", balance: null })
       expect(`${JSON.stringify(refused)} ${loggedText(errors)}`).not.toContain(secret)
       const bare = await orgAccount("reel")
-      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }))).toEqual({
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: bare.id }, { origin: "https://acme.example.test" }))).toEqual({
         healthy: false,
         code: "account_not_ready",
-        reason: `Account « ${bare.label} » has no secret yet. Ask the administrators of Acme Test (Ada Martin) to set it.`,
+        reason: `Account « ${bare.label} » has no secret yet. Ask the user to paste the Crm key of account « ${bare.label} », then call again: open https://acme.example.test/connect/${LIVE}?space=org&account_id=${bare.id}`,
         balance: null,
       })
     })
@@ -338,14 +341,14 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         vi.spyOn(console, "error").mockImplementation(() => {})
         const sent = vi.spyOn(AbortSignal, "timeout")
         stubTiers({ company: "Acme", scopes: ["contacts:read"] })
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
         vi.stubGlobal(
           "fetch",
           vi.fn<Fetch>(async () => {
             throw Object.assign(new Error("aborted"), { name: "TimeoutError" })
           }),
         )
-        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }))).toEqual({ healthy: false, code: "timeout", reason: "Crm did not answer within 2 s. Retry later.", balance: null })
+        expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: false, code: "timeout", reason: "Crm did not answer within 2 s. Retry later.", balance: null })
         expect(sent.mock.calls.map(([ms]) => ms)).toEqual([2_000, 2_000])
       } finally {
         registerConnectors([describedConnector(LIVE), describedConnector(FRESH)])
@@ -355,14 +358,14 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
     it("should reserve the probe to whoever manages the account, and refuse a connector without a probe", async () => {
       const live = await orgAccount("reel")
       const marc = as("marc")
-      const forbidden = await refusal(probeAccount(marc.db, marc.identity, { account_id: live.id }))
+      const forbidden = await refusal(probeAccount(marc.db, marc.identity, { account_id: live.id }, { origin: "https://acme.example.test" }))
       expect({ code: forbidden.code, message: forbidden.message }).toEqual({
         code: "forbidden",
         message: `Probing « ${live.label} » is reserved to those who manage it: the administrators of Acme Test (Ada Martin).`,
       })
       const mail = await fx.createAccount(o.org.id, { connector: "mail", ownerKind: "org", label: `Mail ${hex(3)}` })
       const ada = as("ada")
-      const none = await refusal(probeAccount(ada.db, ada.identity, { account_id: mail }))
+      const none = await refusal(probeAccount(ada.db, ada.identity, { account_id: mail }, { origin: "https://acme.example.test" }))
       expect({ code: none.code, message: none.message, details: none.details }).toEqual({
         code: "invalid_arguments",
         message: "Connector mail declares no probe: it cannot be tested.",

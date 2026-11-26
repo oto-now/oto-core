@@ -355,7 +355,7 @@ const isMarkReason = (code: PlatformErrorCode): code is AccountMarkReason => cod
 
 /**
  * Un refus du tiers qui marque le compte (`marksAccount` : `credential_rejected`, `quota_exhausted`) pose la marque,
- * puis se dit avec elle, sa date et à qui demander ; tout autre refus passe tel quel. Sans marque ouverte (l'identité
+ * puis devient le refus que la marque dit (`AccountMarker.refusal`) ; tout autre refus passe tel quel. Sans marque ouverte (l'identité
  * lue au consentement, avant le compte), le refus passe tel quel. Une pose qui échoue rend le refus du tiers tel quel,
  * sans la phrase de la marque, qui n'est pas posée.
  */
@@ -367,7 +367,7 @@ async function markedRefusal(mark: AccountMarker | undefined, error: unknown, wh
     markWriteFailed(mark, "mark_failed", where, failure)
     return error
   }
-  return new PlatformError(error.code, `${error.message} ${await mark.remedy()}`, error.details)
+  return mark.refusal(error)
 }
 
 /**

@@ -8,8 +8,9 @@
 // de version posé sur chaque réponse (une ressource réservée à l'équipe plateforme suffit).
 import pkg from "../package.json"
 import type { PlatformDb } from "./db"
-import { databaseFailure, PlatformError } from "./errors"
+import { databaseFailure, inTransaction, PlatformError } from "./errors"
 import { oidcMode } from "./issuer"
+import { deprecatedLimitWarnings } from "./limits"
 
 /** Version du paquet qui tourne (`packages/plateforme/package.json`). */
 export const packageVersion: string = pkg.version
@@ -25,7 +26,23 @@ const REQUIRED_ENV = {
   oidc: ["PLATFORM_OIDC_ISSUER", "PLATFORM_OIDC_AUDIENCE", "PLATFORM_SMTP_URL", "PLATFORM_MAIL_FROM", "NEXT_PUBLIC_SITE_URL"],
 } as const
 
-type EnvPresence = { name: string; present: boolean }
+/**
+ * Le client de l'instance chez son émetteur, en mode OIDC : l'échange du jeton d'une personne contre celui de l'API de
+ * l'hôte d'une organisation (`host-api/exchange.ts`). Dites présentes ou non, sans compter dans la santé : une instance
+ * dont aucune organisation n'a d'API d'hôte s'en passe, et l'appel d'une de ses fonctions les nomme quand elles manquent.
+ */
+export const EXCHANGE_CLIENT_ENV = { id: "PLATFORM_OIDC_EXCHANGE_CLIENT_ID", secret: "PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET" } as const
+
+/**
+ * Le client de l'instance chez son émetteur pour le consentement d'une personne à l'API de l'hôte de son organisation,
+ * quand son client MCP est tiers et que l'émetteur refuse d'échanger son jeton (`host-api/consent-access.ts`) : une
+ * application « traditional » (`authorization_code`, `refresh_token`), distincte du client M2M, qui ne sait pas faire
+ * d'autorisation. Dites présentes ou non, hors de la santé, comme celles de l'échange.
+ */
+export const CONSENT_CLIENT_ENV = { id: "PLATFORM_OIDC_CONSENT_CLIENT_ID", secret: "PLATFORM_OIDC_CONSENT_CLIENT_SECRET" } as const
+
+/** Une variable dite présente ou non ; `optional` : elle ne compte pas dans la santé. */
+type EnvPresence = { name: string; present: boolean; optional?: true }
 
 export type CellStatus = {
   packageVersion: string
@@ -40,6 +57,8 @@ export type CellStatus = {
     env: EnvPresence[]
     /** La base répond et chaque variable requise est présente. */
     ok: boolean
+    /** Les clés dépréciées que les capacités de l'hôte posent encore (`connectors_max`), nommées ; n'entament pas `ok`. */
+    warnings: string[]
   }
   checkedAt: string
 }
@@ -50,9 +69,15 @@ export type CellStatus = {
  */
 const DATABASE_UNREACHABLE = "Database unreachable."
 
-/** Présence de chaque variable requise dans le mode de `env` ; vide ou blanche, elle est absente. Aucune valeur n'en sort. */
+/**
+ * Présence de chaque variable requise dans le mode de `env`, puis, en mode OIDC, des clients d'échange et de consentement
+ * (`optional`) ; vide ou blanche, elle est absente. Aucune valeur n'en sort.
+ */
 export function envReport(env: Record<string, string | undefined>): EnvPresence[] {
-  return REQUIRED_ENV[oidcMode(env) ? "oidc" : "supabase"].map((name) => ({ name, present: Boolean(env[name]?.trim()) }))
+  const present = (name: string) => Boolean(env[name]?.trim())
+  const required = REQUIRED_ENV[oidcMode(env) ? "oidc" : "supabase"].map((name): EnvPresence => ({ name, present: present(name) }))
+  if (!oidcMode(env)) return required
+  return [...required, ...[...Object.values(EXCHANGE_CLIENT_ENV), ...Object.values(CONSENT_CLIENT_ENV)].map((name): EnvPresence => ({ name, present: present(name), optional: true }))]
 }
 
 /**
@@ -74,6 +99,9 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
       throw databaseFailure(error, "cellStatus", DATABASE_UNREACHABLE)
     })
 
+  // Les capacités de l'hôte, relues pour chaque organisation sous le rôle du serveur, après le contrôle de l'équipe.
+  const orgs = await inTransaction(db, "cellStatus: orgs", (sql) => sql<{ id: string; slug: string }[]>`select id, slug from platform.orgs`, "server")
+  const warnings = await deprecatedLimitWarnings(orgs)
   const presence = envReport(env)
   return {
     packageVersion,
@@ -81,7 +109,8 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
     health: {
       database: { ok: true, latencyMs },
       env: presence,
-      ok: presence.every((variable) => variable.present),
+      ok: presence.every((variable) => variable.present || variable.optional === true),
+      warnings,
     },
     checkedAt: new Date().toISOString(),
   }

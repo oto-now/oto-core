@@ -13,6 +13,7 @@ import { diffBlocks } from "./diff"
 import { blockMarkdown, formatCount, HEADING_BASE, headingLevel, sectionSizes, type DocBlock } from "./document"
 import { CHILDREN_SHOWN, LISTED_MAX } from "./limits"
 import type { NodeRow } from "./lookup"
+import type { DraftRow } from "./store"
 
 /**
  * La date UTC d'un horodatage ISO de la base (`YYYY-MM-DD`), lu comme un instant : un décalage autre que
@@ -26,6 +27,11 @@ export function day(iso: string): string {
 export type ChildLine = { path: string; title: string; summary: string; kind: string }
 
 export type PendingDraft = { baseRevision: number; savedAt: string; title: string | null; summary: string | null; kind: string | null }
+
+/** Le brouillon en attente que l'en-tête dit, tiré du brouillon lu (`loadDraft`) et de sa date ; ici pour la borne de `read.ts`. */
+export function pendingOf(draft: (DraftRow & { savedAt: string }) | null): PendingDraft | null {
+  return draft ? { baseRevision: draft.baseRevision, savedAt: draft.savedAt, title: draft.title, summary: draft.summary, kind: draft.kind } : null
+}
 
 export type HeaderInput = {
   node: NodeRow
@@ -81,13 +87,17 @@ function draftLines(input: HeaderInput): string[] {
   ]
 }
 
-/** L'en-tête de `read` (AC4) : titre, chemin, résumé, propriétaire, accès, parent, enfants, liens, brouillon. */
+/**
+ * L'en-tête de `read` (AC4) : titre, chemin, identifiant stable (`id`, qui ne change pas au déplacement : `read`, `write`
+ * et `node.move` le prennent à la place du chemin), résumé, propriétaire, accès, parent, enfants, liens, brouillon.
+ */
 export function headerLines(input: HeaderInput): string[] {
   const { node } = input
   return [
     ...(input.moved === null ? [] : [input.moved]),
     `# ${node.title}`,
     `path: ${node.path} · ${node.kind} · ${node.status} · revision ${node.revision} · updated ${day(node.updated_at)}`,
+    `id: ${node.id}`,
     `summary: ${node.summary}`,
     `owner: ${input.owner}`,
     accessLine(input.level, input.publisher),

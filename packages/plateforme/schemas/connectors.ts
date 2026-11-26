@@ -4,6 +4,7 @@
 // que les écrans d'E08-S03 reprendront (forms-patterns.md § Principe, H02). `zod/v4`, comme tout
 // schemas/ (P1). Les arguments des fonctions `mail.*` restent dans `server/connectors/simulated/`.
 import * as z from "zod/v4"
+import { PLATFORM_API_PREFIX } from "./api"
 import type { AccountLevelName } from "./rules"
 
 /** La contrainte de `connector_activations.connector` (E01-S06). */
@@ -163,6 +164,9 @@ export const connectorProbeSchema = z.object({ connector: connectorNameSchema, i
  * (E04-S01) et que le voient l'écran « Connecteurs » (E08-S03) et le MCP admin (E08-S06). Ici, et non
  * dans `server/` : l'écran, qui n'importe pas `server/`, le reçoit tel quel (H02, H03).
  */
+/** L'adresse du logo d'un connecteur, que la porte sert (`GET connectors/<nom>/logo`) et que la tuile de l'écran affiche. */
+export const connectorLogoAddress = (connector: string): string => `${PLATFORM_API_PREFIX}connectors/${encodeURIComponent(connector)}/logo`
+
 export type OrgConnector = {
   connector: string
   /** Le nom que la déclaration lui donne (« Pennylane ») ; le nom technique pour un connecteur non déclaré (`mail`). */
@@ -171,7 +175,7 @@ export type OrgConnector = {
   description?: string
   /**
    * Le domaine de l'outil (`attio.com`), en minuscules, sans schéma ni chemin, tel que sa déclaration le donne
-   * (`ConnectorDefinition.logoDomain`), d'où l'écran tirera son logo ; absent sans lui.
+   * (`ConnectorDefinition.logoDomain`), d'où l'écran tire son logo (`connectorLogoAddress`) ; absent sans lui.
    */
   logoDomain?: string
   state: "active" | "inactive"
@@ -185,7 +189,8 @@ export type OrgConnector = {
    * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory` ;
    * le connecteur reste fermé, l'ajout d'un compte est refusé. Fermé par une personne qui n'est plus membre, ou avant
    * que la fermeture ne garde son auteur : `{ userId: null, name: null }` (l'un nul, l'autre aussi). `null` : jamais
-   * fermé, et rien d'autre.
+   * fermé ; avec `state: "inactive"`, un connecteur payé par la clé de l'hôte qu'aucun administrateur n'a encore adopté
+   * (visible, mais ni compte ni appel avant son adoption).
    */
   closedBy: { userId: string | null; name: string | null } | null
   /**
@@ -327,3 +332,74 @@ export type ConnectorAccountForm = {
  * et les capacités de l'hôte (`account_owner_kinds`) restreignent encore ce choix, connecteur par connecteur.
  */
 export type AccountOwnerChoices = { user: true; org: boolean; teams: { id: string; name: string }[] }
+
+/** L'espace d'une connexion tel que l'adresse le dit : la personne, l'organisation, ou une équipe par son slug. */
+const connectSpaceSchema = z.string().regex(/^(me|org|team:[a-z0-9][a-z0-9-]{0,62})$/, "a space: me, org or team:<slug>")
+
+/**
+ * La page de connexion d'un connecteur (`/connect/<connecteur>?space=…`, `connectionStep`) : le connecteur, l'espace,
+ * l'accès pour un connecteur à plusieurs, et `activate=1` pour l'adresse d'un administrateur, qui n'active rien à
+ * l'ouverture (la page demande sa confirmation) ; ou `account_id`, le compte existant dont poser la clé, sans `activate` (`account` est le libellé que rend le retour
+ * d'un consentement).
+ */
+export const connectionPageSchema = z
+  .object({
+    connector: connectorNameSchema,
+    space: connectSpaceSchema.optional(),
+    access: accessNameSchema.optional(),
+    activate: z.literal("1").optional(),
+    account_id: z.uuid().optional(),
+  })
+  .strict()
+  .refine((input) => !(input.account_id && input.activate), { message: "an account link activates nothing", path: ["activate"] })
+export type ConnectionPageInput = z.input<typeof connectionPageSchema>
+
+/** `connector.connect` : le connecteur, et l'espace et l'accès s'il faut les nommer. */
+export const connectorConnectSchema = z
+  .object({ connector: connectorNameSchema, space: connectSpaceSchema.optional(), access: accessNameSchema.optional() })
+  .strict()
+export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
+
+/**
+ * Un accès offert au choix par la page de connexion d'un connecteur à plusieurs accès : son nom, son libellé, son geste,
+ * et l'espace que l'adresse de la page nomme, que le lien de l'accès garde (absent : l'adresse n'en nomme aucun).
+ */
+export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link"; space?: string }
+
+/**
+ * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,
+ * par la porte du consentement ou du branchement, en `POST` de même origine ; `elsewhere` : les autres organisations de
+ * la personne où son compte hébergé est déjà relié, qu'un clic relie ici), saisir le compte (`key`, l'espace posé),
+ * poser la clé d'un compte existant (`account_key`, refusée par le tiers ou jamais posée), confirmer l'activation
+ * (`activate`, un administrateur), ou transmettre l'adresse aux administrateurs (`ask_admin`). Un connecteur à plusieurs
+ * accès dont l'adresse n'en nomme aucun fait choisir l'accès (`choose_access`) ; une adresse qui en nomme un propose
+ * aussi les autres (`others`) à côté de son geste.
+ */
+export type ConnectionStepView =
+  | {
+      kind: "authorize"
+      gesture: "oauth" | "hosted_link"
+      connector: string
+      label: string
+      space: string
+      access?: string
+      /** Les autres organisations où le compte hébergé est déjà relié : leur nom, `null` quand la personne ne le lit plus. */
+      elsewhere?: (string | null)[]
+      others?: ConnectAccessChoice[]
+    }
+  | {
+      kind: "key"
+      connector: string
+      label: string
+      space: string
+      access?: { name: string; label: string }
+      owner: "org" | "team" | "user"
+      team?: { id: string; name: string }
+      mode: AccountMode
+      form: ConnectorAccountForm | null
+      others?: ConnectAccessChoice[]
+    }
+  | { kind: "account_key"; connector: string; label: string; space: string; account: AccountView; form: ConnectorAccountForm }
+  | { kind: "activate"; connector: string; label: string; space: string }
+  | { kind: "ask_admin"; connector: string; label: string; space: string; url: string; administrators: { name: string }[]; others?: ConnectAccessChoice[] }
+  | { kind: "choose_access"; connector: string; label: string; accesses: ConnectAccessChoice[] }

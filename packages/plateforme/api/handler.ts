@@ -18,6 +18,7 @@ import { connectorConsentRoutes } from "./connector-consent"
 import { feedbackRoutes } from "./feedback"
 import { fileAddressRoute, filesRoutes } from "./files"
 import { hostedLinkRoutes } from "./hosted-link"
+import { connectorLogoResponse, isConnectorLogoRoute } from "./connector-logo"
 import { fileHtmlResponse, isFileHtmlRoute } from "./files-html"
 import { homeRoutes } from "./home"
 import { invitationsRoutes } from "./invitations"
@@ -74,7 +75,8 @@ type RouteResult = {
    * Ce que le service rend pour le journal : sa cible et son équipe ; `error`, le refus qu'une route sert autrement
    * qu'en erreur (le retour d'un consentement, une redirection), journalisé comme un échec.
    */
-  journal?: { target?: string | null; teamId?: string | null; error?: PlatformError }
+  /** `args` : les arguments de la ligne, posés par la route sur un succès (ce que le geste a fait), à la place du corps. */
+  journal?: { target?: string | null; teamId?: string | null; error?: PlatformError; args?: Json }
   /**
    * Une redirection (`status` 302 ou 308) vers cette adresse, sans corps et jamais gardée en cache (`private, no-store`) :
    * la lecture d'un fichier, vers son URL présignée (E10-S02, AC-a5), ou son ancienne adresse, vers `/f/<id>`. `data`
@@ -307,11 +309,13 @@ async function serve(match: MatchedRoute, context: Omit<RouteContext, "params" |
     if (request.method === "POST" || request.method === "PATCH") body = await readJson(request)
     const result = await match.route.handle({ ...context, params: match.params, body })
     const failure = result.journal?.error ?? null
+    const lined = journaled(match.route, { params: match.params, body, data: result.data }, failure, result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null)
     return {
       response: result.redirect ? redirection(result.redirect, result.status) : Response.json({ data: result.data }, { status: result.status }),
       failure,
       teamId: result.journal?.teamId ?? null,
-      ...journaled(match.route, { params: match.params, body, data: result.data }, failure, result.journal?.target ?? match.route.target?.({ params: match.params, body }) ?? null),
+      ...lined,
+      ...(result.journal?.args !== undefined ? { args: wellFormed(result.journal.args) } : {}),
     }
   } catch (error) {
     const failure = asPlatformError(error)
@@ -357,6 +361,8 @@ export async function handlePlateforme(request: Request, options: PlatformReques
     if (isPublicRoute(publicSegments, request.method)) return await publicResponse(request, options.host, publicSegments)
     // La route isolée d'un fichier HTML (E10-S02, AC-c3, ADR-017) : du texte, jamais du JSON, 401 compris ; elle vérifie le jeton elle-même.
     if (isFileHtmlRoute(publicSegments, request.method)) return await fileHtmlResponse(request, options, publicSegments)
+    // Le logo d'un outil de l'écran Connecteurs : une image, jamais du JSON ; elle vérifie le jeton elle-même.
+    if (isConnectorLogoRoute(publicSegments, request.method)) return await connectorLogoResponse(request, options, publicSegments)
     // Le dépôt par lien (E10-S02 lot f, ADR-018) : la seule porte sans session qui écrit, le ticket en tient lieu, en texte
     // brut ; puis le formulaire de dépôt, à session, qui vérifie le jeton lui-même. Le corps de l'une et l'autre est le fichier.
     if (isUploadRoute(publicSegments)) return await uploadResponse(request, options, publicSegments)

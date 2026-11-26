@@ -132,20 +132,21 @@ describe.skipIf(!sqlConfigured || privatePending)(
     })
 
     describe("examples of call (AC22)", () => {
-      it("should cite mail.create_draft while mail is active, then no mail function once it is off", async () => {
+      it("should cite no function of a connector open by default, cite mail.create_draft once mail has an account, and none once it is blocked", async () => {
         const b = await fx.buildReferenceOrg(o.people)
-        await fx.createAccount(b.org.id, { ownerKind: "team", ownerTeamId: b.teams.ventes, label: "Mail Ventes" })
-        const before = await callDescription(b, "claire")
+        // Ouvert par défaut, jamais adopté : `find` le trouve, mais les exemples ne citent pas tout le catalogue.
+        const untouched = await callDescription(b, "claire")
         // `table.rows`, fonction native toujours active, est citée pour toute organisation (E07-S01).
-        expect(before).toContain(`Runs a function of Acme Test's catalog (e.g. table.rows) with arguments`)
-        expect(before).not.toContain("mail.")
+        expect(untouched).toContain(`Runs a function of Acme Test's catalog (e.g. table.rows) with arguments`)
+        expect(untouched).not.toContain("mail.")
 
-        await fx.addActivation(b.org.id, "mail")
-        const active = await callDescription(b, "claire")
-        expect(active).toContain("Runs a function of Acme Test's catalog (e.g. mail.create_draft, table.rows) with arguments")
-        expect(active).not.toContain("mail.send_draft")
+        // Un compte adopte le connecteur : ses exemples entrent dans la description.
+        await fx.createAccount(b.org.id, { ownerKind: "team", ownerTeamId: b.teams.ventes, label: "Mail Ventes" })
+        const adopted = await callDescription(b, "claire")
+        expect(adopted).toContain("Runs a function of Acme Test's catalog (e.g. mail.create_draft, table.rows) with arguments")
+        expect(adopted).not.toContain("mail.send_draft")
 
-        await admin`update platform.connector_activations set state = 'inactive' where org_id = ${b.org.id}`
+        await fx.addActivation(b.org.id, "mail", "inactive")
         const off = await callDescription(b, "claire")
         expect(off).toContain(`Runs a function of Acme Test's catalog (e.g. table.rows) with arguments`)
         expect(off).not.toContain("mail.")

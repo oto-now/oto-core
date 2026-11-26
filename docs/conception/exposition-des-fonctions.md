@@ -126,7 +126,9 @@ fournisseurs, un pour les écritures.
 
 ### Le message d'activation
 
-L'activation (écran et MCP admin) rend un message calculé sur l'état réel :
+Depuis le 25/11, tout connecteur déclaré est ouvert par défaut (`connecteurs-et-comptes.md` § Catalogue et activation) :
+l'activation n'est plus qu'un déblocage, ou l'adoption explicite d'un connecteur, et un connecteur jamais touché se
+trouve et s'appelle sans elle. Elle (écran et MCP admin) rend un message calculé sur l'état réel :
 
 - toujours : « `<c>` est actif : ses fonctions s'appellent tout de suite par `call`. » ;
 - si le connecteur est exposé en `connector` ou en `function` : « Votre client Claude mettra un moment à afficher ses

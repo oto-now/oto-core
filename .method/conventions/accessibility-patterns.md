@@ -221,8 +221,8 @@ test de ce focus joue une réponse immédiate (`fetch` simulé résolu sans atte
 
 | Élément | Ratio minimum | Outil de vérification |
 |---------|--------------|----------------------|
-| Texte normal | 4.5:1 | `pnpm audit:lh` (audit `color-contrast`) |
-| Grand texte (> 18px bold) | 3:1 | `pnpm audit:lh` |
+| Texte normal | 4.5:1 | axe DevTools à la main (règle `color-contrast`), en clair et en sombre |
+| Grand texte (> 18px bold) | 3:1 | axe DevTools à la main |
 | Éléments UI (bordures, icônes) | 3:1 | contrôle manuel (hors périmètre de l'audit automatique) |
 
 **Seule exception au 3:1 d'une icône : le chevron d'un pli vide** (titre sans section, menu dépliant sans corps), à demi-opacité (`[data-vide]`, `content.css`) : il ne replie rien et reste cliquable pour ouvrir un corps à écrire ; aucune autre icône active ne descend sous 3:1.
@@ -285,9 +285,6 @@ sous la même garde (plus aucune classe `border-<couleur>`). Sous `.oto`, une bo
 ## Testing
 
 ```bash
-# Lighthouse accessibility audit
-npx lighthouse http://localhost:3000 --only-categories=accessibility
-
 # axe-core dans les tests
 pnpm add -D jest-axe @axe-core/playwright
 ```

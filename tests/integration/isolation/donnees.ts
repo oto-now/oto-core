@@ -322,6 +322,12 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   // L'état de l'email groupé des commentaires de B (`20261112090000`) : écrit par la commande de l'hôte, jamais sous une session.
   await admin`insert into platform.comment_mails (org_id, user_id, sent_at) values (${b.id}, ${people.b.id}, now())`
   await admin`insert into platform.comment_mail_items (comment_id, user_id, org_id, sent_at) values (${comment.id}, ${people.b.id}, ${b.id}, now())`
+  // L'API de l'hôte de B (fonctions d'un hôte, `20261123150000`) : un document servi et un refus, posés par l'équipe
+  // plateforme ; lue par les membres de B seuls.
+  await admin`
+    insert into platform.host_apis (org_id, address, document, version, served_at, refused_address, refused_at, problems)
+    values (${b.id}, 'https://hote-b.example.test', ${admin.json({ openapi: "3.1.0", info: { title: "B", version: "1" } })}, '1', now(),
+      'https://hote-b.example.test', now(), ${admin.json([{ code: "host_document_status", message: "HTTP 500" }])})`
   // Un fichier joint de B (E10-S02, ADR-016) : sa ligne seule, aucun objet dans un bucket.
   await admin`
     insert into platform.files (org_id, node_id, name, mime, size, status, created_by)

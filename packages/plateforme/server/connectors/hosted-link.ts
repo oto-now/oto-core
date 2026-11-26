@@ -21,6 +21,7 @@ import { keepDeclaredConnector } from "./declaration"
 import type { ConnectorAccountIdentity, HostedLinkProvider } from "./definition"
 import { readHostFields } from "./host-fields"
 import { returnAddress } from "./return-address"
+import { barrierIn, closedConnector, requireUsableConnector } from "./adoption"
 
 /** Le chemin de l'adresse de retour du branchement, sous la porte du paquet. */
 export const HOSTED_LINK_CALLBACK_PATH = "/api/platform/hosted-link/callback"
@@ -204,8 +205,11 @@ type PostedRequest = { id: string; created_at: Date; expires_at: Date }
 async function link(db: PlatformDb, identity: Identity, connector: HostedConnector, linking: { requestId: string; id: string; createdAt: Date | null; who: string }): Promise<AccountSummary> {
   const name = connector.definition.name
   const label = consentLabel(linking.who, name)
-  return db
+  const linked = await db
     .tx(async (sql) => {
+      // Bloqué depuis le départ : rien n'est lié.
+      const barrier = await barrierIn(sql, identity.org.id, name)
+      if (barrier) return { barrier }
       const [outcome] = await sql<{ account_id: string | null; refusal: string | null }[]>`
         select account_id, refusal from platform.link_hosted_account(${linking.requestId}::uuid, ${linking.id}, ${linking.createdAt?.toISOString() ?? null}::timestamptz, ${label})`
       if (outcome?.refusal) {
@@ -227,6 +231,8 @@ async function link(db: PlatformDb, identity: Identity, connector: HostedConnect
       if (isUniqueViolation(error)) throw labelTaken(label, identity.org.name)
       throw fromDatabaseError(error, "linkHostedAccount: link_hosted_account")
     })
+  if ("barrier" in linked) throw await closedConnector(db, identity, name, linked.barrier)
+  return linked
 }
 
 /**
@@ -254,19 +260,37 @@ async function ownedPlan(identity: Identity, connector: HostedConnector, owned: 
 }
 
 /**
+ * Les autres organisations où le compte hébergé de ce connecteur de la personne est déjà relié : la page de connexion le
+ * dit avant le clic qui le relierait ici (`startHostedLink`). Chaque ligne de `my_hosted_accounts` hors de
+ * l'organisation courante compte, celle d'une organisation que la personne a quittée comprise : son nom, si la personne
+ * le lit encore (RLS de `orgs`), sinon `null`, que l'écran dit « une autre organisation ». Les noms d'abord, triés, puis
+ * les organisations sans nom lisible. Lecture seule, sans appel au tiers ni demande posée.
+ */
+export async function hostedLinkedElsewhere(db: PlatformDb, identity: Identity, connectorName: string): Promise<(string | null)[]> {
+  return inTransaction(db, "hostedLinkedElsewhere: my_hosted_accounts", async (sql) => {
+    const others = [...new Set((await myHostedAccounts(sql, connectorName)).filter((row) => row.org_id !== identity.org.id).map((row) => row.org_id))]
+    if (others.length === 0) return []
+    const readable = await sql<{ id: string; name: string }[]>`select id, name from platform.orgs where id = any(${others}::uuid[])`
+    const named = readable.map((org) => org.name).sort((a, b) => a.localeCompare(b, "fr"))
+    return [...named, ...others.filter((id) => !readable.some((org) => org.id === id)).map(() => null)]
+  })
+}
+
+/**
  * Démarre le branchement hébergé de la personne connectée à un connecteur à `accountIdentity` (`POST hosted-link`) et
  * rend l'adresse où l'envoyer. Une demande datée d'une heure est posée (les demandes échues de l'organisation purgées
  * au passage) ; un identifiant déjà à la personne et vivant se relie sans repasser par le tiers, et l'adresse rendue
  * est alors l'écran de retour, `?hosted=connected&account=<libellé>` ; un identifiant à elle dont la session est morte
  * se reconnecte (`reconnect`), sinon le lien crée un compte (`create`). `return_to` : l'écran de l'hôte où revenir
  * (l'écran Connecteurs par défaut). Refus : saisie invalide, connecteur sans compte rattaché (`invalid_arguments`),
- * port ou champ de l'hôte absent (`not_enabled`), panne du tiers ou adresse qui n'est pas `https` (`upstream_error`).
+ * port ou champ de l'hôte absent, connecteur bloqué par un administrateur (`not_enabled`, `closed`), panne du tiers ou adresse qui n'est pas `https` (`upstream_error`).
  */
 export async function startHostedLink(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<{ url: string }> {
   const parsed = hostedLinkSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   const connector = hostedConnector(parsed.data.connector, identity.org)
   const name = connector.definition.name
+  await requireUsableConnector(db, identity, name)
   const returnTo = parsed.data.return_to ?? CONSENT_DEFAULT_RETURN
   const owned = await inTransaction(db, "startHostedLink: my_hosted_accounts", async (sql) => {
     await sql`delete from platform.hosted_link_requests where org_id = ${identity.org.id} and expires_at < now()`
@@ -337,7 +361,8 @@ async function listedAccounts(connector: HostedConnector): Promise<HostedListed[
  * aussi sur un refus postérieur à la lecture de la demande (`details.returnTo`). Refus : `not_found` (demande inconnue,
  * d'une autre personne ou consommée ; `no_candidate`), `invalid_arguments` (indice hors liste blanche ; `expired`),
  * `not_enabled` (`candidates_dead`, port ou champ de l'hôte absent), `conflict` (`ambiguous_candidates`, libellé pris),
- * `forbidden`, `upstream_error`. Rien n'est rangé sur un refus, et la demande reste ouverte.
+ * `forbidden`, `upstream_error` ; `not_enabled` (`closed`) : connecteur bloqué depuis le départ, avant tout appel au tiers et
+ * encore à l'écriture. Rien n'est rangé sur un refus, et la demande reste ouverte.
  */
 export async function linkHostedAccount(db: PlatformDb, identity: Identity, query: Record<string, string>): Promise<{ account: AccountSummary; returnTo: string }> {
   const parsed = hostedLinkReturnSchema.safeParse(query)
@@ -352,6 +377,8 @@ export async function linkHostedAccount(db: PlatformDb, identity: Identity, quer
     const declaredLabel = declaredConnector(pending.connector)?.definition.label ?? pending.connector
     if (pending.expires) throw hostedRefusal("expired", declaredLabel)
     const connector = hostedConnector(pending.connector, identity.org)
+    // Un connecteur bloqué entre le départ et le retour : refusé avant tout appel au tiers (`closed`).
+    await requireUsableConnector(db, identity, pending.connector)
     const label = connector.definition.label
     const hint = query[connector.identityOf.name]
     if (hint !== undefined && !acceptedId(connector, hint)) throw hostedRefusal("invalid_arguments", label)

@@ -1,7 +1,7 @@
 # Nœuds et arbre
 
 - **Statut** : validé avec JB le 24/09/2026
-- **Dernière révision** : 2026-11-17
+- **Dernière révision** : 2026-11-22
 
 ## Résumé
 
@@ -9,7 +9,7 @@ Tout contenu est un nœud typé (page, procédure, Contexte, tableau) rangé dan
 
 ## Contexte
 
-Le contenu se présente sous quatre formes ; les garder dans un seul modèle de nœuds faits de blocs (ADR-011) donne un seul index, un seul chemin d'écriture et un seul contrôle de droits. Les assistants adressent le contenu par chemin, jamais par identifiant : le chemin doit donc rester stable pour eux même quand une personne renomme ou déplace. Les retours de la démo (2026-09-29) ont montré qu'un brouillon laissé ouvert bloquait l'assistant : la publication est devenue directe (D135). Ce document dit comment l'arbre se range et comment un nœud naît, change d'adresse, se publie et se retire. Le contenu d'un nœud (blocs) est dans [pages et blocs](pages-et-blocs.md), sa lecture et son écriture par un assistant dans [lecture et écriture des pages](lecture-et-ecriture-des-pages.md), les niveaux d'accès dans [droits d'accès](droits-d-acces.md).
+Le contenu se présente sous quatre formes ; les garder dans un seul modèle de nœuds faits de blocs (ADR-011) donne un seul index, un seul chemin d'écriture et un seul contrôle de droits. Les assistants adressent le contenu par chemin : le chemin doit donc rester stable pour eux même quand une personne renomme ou déplace. Un hôte qui garde dans sa propre base les pages qui l'intéressent les désigne par leur identifiant stable (`nodes.id`), qui ne change jamais. Les retours de la démo (2026-09-29) ont montré qu'un brouillon laissé ouvert bloquait l'assistant : la publication est devenue directe (D135). Ce document dit comment l'arbre se range et comment un nœud naît, change d'adresse, se publie et se retire. Le contenu d'un nœud (blocs) est dans [pages et blocs](pages-et-blocs.md), sa lecture et son écriture par un assistant dans [lecture et écriture des pages](lecture-et-ecriture-des-pages.md), les niveaux d'accès dans [droits d'accès](droits-d-acces.md).
 
 ## Objectifs et non-objectifs
 
@@ -32,6 +32,13 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 - P22 : les chemins racines `journal`, `functions` et `help` sont réservés : `read journal` sert le journal, `read functions` la liste des fonctions (E11-S19), `read help` le guide de la plateforme, servi par le paquet, le même partout, une section par appel (1.4.3, `server/help.ts`) ; `write` refuse d'y créer un nœud, et aucune équipe ne prend ces slugs (E11-S19, E11-S18 ; `help` dans `teams_slug_reserved` par la migration de la 1.4.3).
 - Inventaire et contrôle (1.4.3) : `node.tree` (classe `read`) liste ce qu'on lit sous une racine, 200 nœuds par réponse ; `node.check` (classe `read`) y cherche les liens vers un chemin qui n'existe pas (ni nœud ni ancien chemin : un contenu qu'on ne voit pas compte comme existant, H68), les blocs `call` que la publication refuserait, les cellules qui valent un chemin inconnu et les outils nommés avec le préfixe d'une autre organisation ; l'import d'une arborescence le lance sur ce qu'il a importé (`server/transfer/inspect.ts`).
 - Le refus d'un chemin pris dit ses causes possibles sans dire laquelle (H68) : « a content holds it (perhaps one you cannot see), a moved content had it, or the name is reserved ».
+
+### L'identifiant stable
+
+- Un nœud se désigne aussi par son identifiant (`nodes.id`, un uuid), qui ne change ni au déplacement, ni au renommage, ni à la restauration : `read`, `write` et `node.move` prennent `id` à la place de `path`, jamais les deux (`refinePathOrId`, refus nommé) ; `read`, `find`, `write` et `node.tree` le servent (en-tête `id: …` de `read`, champ `id` des données). Sans outil ajouté (ADR-002) : des champs facultatifs, en dernier dans les schémas, et `path` n'est plus requis par celui de `write`.
+- Résolution en un point, `findNodeById` (`server/nodes/lookup.ts`), à côté de `findNode` : même niveau (`nodeDecisions`), même refus qu'un chemin inconnu pour un identifiant inconnu, d'une autre organisation ou invisible (H68). Un nœud à la corbeille que l'appelant lisait est refusé par un `conflict` qui le dit, avec son chemin : ni contenu, ni faux « introuvable ».
+- Par identifiant, `write` ne fait que modifier : il ne crée jamais, pas même la création « Sans titre » redirigée (M68) ; `node.move` résout l'identifiant en chemin courant puis déplace comme par chemin. Publier une page (la ranger dans un autre dossier) est ce déplacement. `node.write_many`, la route `nodes/move` et le formulaire « Déplacer… » restent par chemin.
+- `node.describe {ids}` (classe `read`, 200 identifiants au plus) rend pour chacun `{id, state, can_read, title?, path?}` : `present` (lu : chemin et titre), `trashed` (à la corbeille, et l'appelant le lisait : ni chemin ni titre), `missing` (inconnu, purgé, d'une autre organisation ou invisible, sans distinction). Une lecture des lignes et un lot de décisions (`nodeLevels` avec `trashed`), quel que soit le nombre d'identifiants.
 
 ### L'espace personnel
 
@@ -96,11 +103,12 @@ Le contenu se présente sous quatre formes ; les garder dans un seul modèle de 
 - **Refuser un chemin pris** : écarté par D125 : un chemin n'est pas une information que la personne doit gérer ; on prend le premier libre.
 - **Espace personnel sous `perso/<handle>`** : renommé `private/<handle>` (D89, D107) ; les anciens chemins restent des alias, le journal n'est pas réécrit.
 - **Un bouton d'abandon de brouillon à l'écran** (HN-E11S02-12) : écarté, l'écran publiant toujours ; **une corbeille de lignes** (HN-E11S02-10) : écartée, une ligne supprimée l'est pour de bon.
+- **Un outil par identifiant, ou `node.describe` qui dit « à la corbeille » ou « présent mais illisible » à tout appelant** : écartés ; la surface reste figée (ADR-002), et un identifiant que l'appelant ne lit pas ne révèle ni l'existence du nœud, ni son état (H68) : `trashed` ne se dit qu'à qui le lisait avant. **Une page à la corbeille lue par identifiant comme introuvable** : écartée, l'hôte confondrait une page supprimée, restaurable 30 jours, avec une page qui n'existe plus.
 - **Un identifiant dans l'URL** : écarté (D125) ; **sections dans le nœud** : écartées par ADR-011 (ni écriture ni ancre au bloc, voir [pages et blocs](pages-et-blocs.md)).
 
 ## Sécurité et confidentialité
 
-- Un nœud invisible répond comme un chemin inconnu ; un ancien chemin d'un nœud invisible reste « does not exist » (E03-S07 N17), et un refus de déplacement ne nomme personne (E03-S07 N25).
+- Un nœud invisible répond comme un chemin inconnu ; un ancien chemin d'un nœud invisible reste « does not exist » (E03-S07 N17), et un refus de déplacement ne nomme personne (E03-S07 N25). Par identifiant de même : inconnu, d'une autre organisation ou invisible, le même refus ; `node.describe` les dit tous `missing`.
 - Les liens se relisent pour le lecteur : une cible qu'il ne voit pas est « sans cible » (E03-S07 N2) ; les droits se décident dans le service ([droits d'accès](droits-d-acces.md)) et, pour le contenu, aussi en base depuis `20261021130000` : blocs publiés, versions, liens sortants et fichiers joints à la lecture du nœud, brouillon à l'écriture, lien public à la gestion ; le titre et le résumé restent lus par l'organisation (`nodes_select_level`, en attente d'une décision).
 - Abandon, corbeille et suppression de lignes sont `sensitive` : récapitulatif d'abord, exécution sur `confirm: true`.
 
@@ -132,3 +140,4 @@ Aucune à ce jour.
 - 2026-10-20 : `open_draft`, `publish_node`, `discard_draft` et `duplicate_subtree` exigent en base le niveau de leur service (`20261021100000`) ; la duplication ne copie plus une page ni des descendants cachés — décidé par Alexis (source : revue des fonctions `security definer`).
 - 2026-10-20 : la base juge les gestes d'une mise à jour d'un nœud et sa suppression au niveau du service (déclencheur `nodes_gesture_guard`, `nodes_delete_manager`, `20261021090000`) — décidé par Alexis (source : revue des policies d'écriture).
 - 2026-11-17 : un assistant ne laisse plus de brouillon : `publish: false` est retiré à sa porte (`write`, `node.write_many`, `upload.link`), l'écriture est publiée et la réponse le dit ; l'écran garde son brouillon d'une publication refusée — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).
+- 2026-11-22 : un nœud se désigne aussi par son identifiant stable (`read`, `write`, `node.move`), servi par `read`, `find`, `write` et `node.tree` ; `node.describe` en lot ; une page à la corbeille lue par identifiant refusée en le disant — proposé pour un hôte qui garde ses pages par identifiant, à valider par JB.

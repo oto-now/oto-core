@@ -37,14 +37,6 @@ export function questionDeDesactivation(connecteur: string, impact: Deactivation
   return impact ? `${question} ${procedures(impact.procedures)} ${comptes(impact.accounts)}` : question
 }
 
-/**
- * La question de la fermeture d'avance d'un outil que personne n'a encore ajouté : rien ne s'arrête, et le rouvrir ne
- * le ramène pas à cet état, il l'ouvre pour toute l'organisation.
- */
-export function questionDeFermetureDAvance(connecteur: string): string {
-  return `Fermer « ${connecteur} » d'avance ? Plus personne ne pourra l'ajouter. Le rouvrir l'ouvrira pour toute l'organisation.`
-}
-
 /** La question de la désactivation d'un compte de connecteur, dans les mots de l'écran : « connecteur », jamais « compte ». */
 export function questionDeDesactivationDuCompte(libelle: string): string {
   return `Désactiver « ${libelle} » ? Aucun assistant ne pourra plus s'en servir, dès maintenant. Vous pourrez le réactiver.`

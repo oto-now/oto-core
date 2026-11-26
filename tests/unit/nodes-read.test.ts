@@ -111,6 +111,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
         [
           "# Modèle d'email de relance",
           `path: ventes/modele_relance · page · published · revision 2 · updated ${DAY}`,
+          `id: ${ref.nodeId(MODELE.path)}`,
           "summary: Le modèle d'email de relance d'un devis, à personnaliser.",
           "owner: team Ventes (lead: Claire Morel)",
           "access: write (write and publish; sharing, moving and deleting are reserved to team Ventes (lead: Claire Morel))",
@@ -125,6 +126,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
         ].join("\n"),
       )
       expect(lea.data).toMatchObject({
+        id: ref.nodeId(MODELE.path),
         path: MODELE.path,
         title: MODELE.title,
         kind: "page",
@@ -530,8 +532,8 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       const contract = await read("lea", { path: "table.rows" })
       const expected = describeFunction(rows, "acme")
       expect([contract.text, contract.data, contract.nextActions, contract.target]).toEqual([expected.text, expected.data, ["acme_call"], "table.rows"])
-      // `mail` activé pour une autre organisation seulement : inactif pour O.
-      await content({ ...base(), connector_activations: [{ org_id: OTHER_ORG.id, connector: "mail", state: "active" }] })
+      // `mail` bloqué dans O, actif dans une autre organisation : invisible pour O (ouvert par défaut sinon).
+      await content({ ...base(), connector_activations: [{ org_id: OTHER_ORG.id, connector: "mail", state: "active" }, { org_id: ORG.id, connector: "mail", state: "inactive" }] })
       for (const name of ["x.y", "mail.send"]) {
         expect(await refusal("lea", { path: name })).toMatchObject({ code: "not_found", message: `Unknown function ${name}. Use acme_find with type function.` })
       }
@@ -544,7 +546,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       expect((await read("lea", { path: "journal" })).text.split("\n")[0]).toBe("# Journal — last 24 hours")
     })
 
-    // E11-S19 (AC-e3, HN-E11S19-8) : toutes les fonctions actives, par connecteur, avec leur classe ; un connecteur inactif absent.
+    // E11-S19 (AC-e3, HN-E11S19-8) : toutes les fonctions ouvertes, par connecteur, avec leur classe ; un connecteur bloqué absent.
     it("should list every active function by connector with its class and first sentence, then the contracts", async () => {
       const define = (name: string, fields: { connector: string; class: "read" | "write" | "sensitive"; origin: "paquet" | "connecteur"; description: string }) =>
         defineFunction({ name, ...fields, schema: z.strictObject({}), examples: [], refusals: [], run: async () => ({ text: "" }) })
@@ -552,7 +554,8 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       const trash = define("node.trash", { connector: "node", class: "write", origin: "paquet", description: "Moves a node to the trash." })
       const send = define("mail.send", { connector: "mail", class: "sensitive", origin: "connecteur", description: "Sends a draft." })
       vi.mocked(catalogFunctions).mockReturnValue([rows, send, trash])
-      await content(base())
+      // `mail` bloqué dans O : absent de la liste.
+      await content({ ...base(), connector_activations: [{ org_id: ORG.id, connector: "mail", state: "inactive" }] })
       const tail = ["Contracts to read before writing: write.procedure, write.table.", 'Read a contract with acme_read {"path": "<function>"}, then run it with acme_call.']
       const listed = await read("lea", { path: "functions" })
       expect(listed.text.split("\n")).toEqual([

@@ -15,6 +15,15 @@
  */
 export type ConnectorMode = "platform" | "byo_user" | "byo_org"
 
+/**
+ * Le connecteur des consentements à l'API de l'hôte d'une organisation (`host-api/consent-access.ts`) : le compte
+ * personnel où se range le consentement d'une personne, quand son client MCP est tiers. Jamais déclaré par l'hôte :
+ * `registerConnectors` refuse ce nom, l'import d'un document d'hôte aussi.
+ */
+export const HOST_CONSENT_CONNECTOR = "host_api"
+/** Son libellé dans la liste `platform.connectors`, commune aux organisations ; le compte porte le titre de l'API. */
+export const HOST_CONSENT_CONNECTOR_LABEL = "Host API"
+
 /** L'application OAuth d'un connecteur `oauth2_user`, fournie par l'hôte (jamais lue de l'environnement par le paquet). */
 export type OAuthApplication = { readonly clientId: string; readonly clientSecret: string }
 
@@ -157,6 +166,8 @@ export type ConnectorOAuthUser = {
   readonly clientAuth: "body" | "basic"
   readonly authorizeParams?: { readonly [param: string]: string }
   readonly pkce?: "S256"
+  /** L'indicateur de ressource (RFC 8707), posé à l'autorisation, à l'échange du code et à chaque renouvellement. */
+  readonly resource?: string
   readonly expiresInDefault?: number
   readonly identity: ConnectorConsentIdentity
   readonly fromToken?: readonly string[]
@@ -171,7 +182,9 @@ export type ConnectorOAuthUser = {
  * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
  * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
  * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`),
- * contre les droits de `scopes` ou du niveau du compte.
+ * contre les droits de `scopes` ou du niveau du compte. `host_delegated` (profil hôte de la lib) : le jeton de la personne
+ * obtenu de `issuer` pour l'audience `resource`, réservé aux fonctions de l'API d'un hôte (`host-api/`), refusé par
+ * `registerConnectors`.
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -189,6 +202,7 @@ export type ConnectorAuth =
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
   | ({ readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly key: string } & ConnectorServiceAccountScopes)
+  | { readonly kind: "host_delegated"; readonly issuer: string; readonly resource: string }
   | { readonly kind: string }
 
 /**
@@ -417,8 +431,12 @@ export type ConnectorFunctionDefinition = {
   readonly background?: true
   /** Ce que coûte un appel ; contrôlé à la déclaration, lu par `costOf` et `settledQuantity`, ni réservé ni réglé par le moteur. */
   readonly cost?: ConnectorFunctionCost
-  /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */
-  readonly confirm?: { readonly summary: string }
+  /**
+   * La confirmation d'une fonction sensible : le gabarit du récapitulatif, avec des `{argument}` ; ou `by: "host"`, les
+   * deux temps de l'API elle-même (profil hôte de la lib, règle 26 de la fabrique), réservés aux fonctions de l'API d'un
+   * hôte (`host-api/`) et refusés par `registerConnectors`.
+   */
+  readonly confirm?: { readonly summary: string; readonly by?: never } | { readonly by: "host"; readonly summary?: never }
 }
 
 /**
