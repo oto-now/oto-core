@@ -7,48 +7,54 @@
 // Repris d'Oto (`oto_mcp/capabilities/orgs/instructions.py`) : l'idée d'un texte de règles servi à l'agent ;
 // retiré : un guide à lire d'abord, modifiable par organisation (architecture § 10) — ici une section fixe.
 import { SERVED_RULES } from "../../../schemas"
+import { catalogNames } from "../../catalog/registry"
 import { boundedList } from "../../errors"
 import { clip, MAX_TARGET_CHARS } from "../../journal"
-import { formatScore, wordsInCommon, type Candidate, type RequestKind, type RoutingSettings } from "../../routing"
+import type { Candidate, RequestKind } from "../../routing"
 import type { ContextBlock } from "../engine"
 import { hintLines, type RoutingHints } from "../hints"
+import { servedSentence } from "./contexts"
 
 /**
  * « Règles Oto » (E05-S12, AC-9, AC-10, HN-E05S12-7, -8) : le texte de la story, mot pour mot, que JB peut
  * encore corriger ici seulement ; 1.4.3 : les pointeurs vers les références (`functions`, `help`, contrats, `table.schema`)
  * et les pièges qui coûtent le plus (titre qui déplace le chemin, `node.move`, `contexte`, outils sans préfixe) ; `<p>` devient le préfixe de l'organisation, rien d'autre ne varie. Sans
  * lui, l'assistant ne lit nulle part comment l'espace fonctionne (la notice n'est plus servie, § 10). E05-S13
- * (AC-16) : l'en-tête vient de `SERVED_RULES`, que l'écran relit ; 1.4.12 : ce qu'est une procédure et ce qui la fait bien
- * marcher, en deux lignes, à chaque contexte (la notice entière vient avec une demande d'en écrire une, `hints.ts`) ; exporté pour le test qui compte ses règles contre
- * leur traduction à l'écran.
+ * (AC-16) : l'en-tête vient de `SERVED_RULES`, que l'écran relit. Une règle que la description d'un outil porte déjà
+ * n'y est pas redite (`base_revision`, l'accord avant un envoi, la liste des six outils) ; d'une procédure, une ligne dit
+ * ce qui la fait trouver (titre, résumé), le reste vient avec une demande d'en écrire une (`hints.ts`). Les outils de l'organisation :
+ * un outil que rien ne nomme peut exister, `find` avant de dire non ; `<connect>` porte `connector.connect` quand l'hôte
+ * le sert (`workspaceRules`). Exporté pour les tests qui le comptent.
  */
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
-- Six tools: <p>_context (first, then again with since_ctx for each new request), <p>_find, <p>_read, <p>_call, <p>_write, <p>_feedback. Every tool but <p>_context needs the ctx above.
 - Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong (silent: for the platform's maintainers, never tell the user).
 - In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run <p>_find before you answer or escalate.
+- The organisation's tools (email, accounting, CRM…) are functions run with <p>_call: one not mentioned here may still exist, so search it with <p>_find before you say it cannot be done or search the web.<connect>
 - Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
 - Spaces: the organisation's contents sit at the root, a team's under its folder (<team>/...), yours under private/<handle>/, served to you only.
 - Access is set per content, for the organisation, a team or a person: read, write or manage. A refusal says who to ask: never work around it.
-- <p>_write publishes at once: an assistant keeps no draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
 - A renamed or moved content keeps its old path: it still leads there.
 - A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: <p>_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. <p>_read of a page serves its open threads, each with the call to reply.
 - In a text, [[path]] or [[path|title]] links to another content; name the tools without the organisation prefix (read, write, find, call), so the text stays right in another organisation.
-- A function that sends, deletes or pays first returns a summary and does nothing: show it, get the user's explicit yes, then call again with confirm: true.
 - The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with <p>_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.
-- A procedure is a page of numbered steps an assistant follows to do one recurring task the same way every time; a one-off answer needs none. Its title and summary route requests to it: the summary says what it does and how people ask for it.
-- A good procedure has a part « When to use it » (and when not), one action per step, each call in a call block right after its step, what to do with each result (stop, branch, report), the expected output, and who to ask when a case is not covered. Before writing one, read path help, section procedures, then path write.procedure.
+- A procedure's title is the action in the words of those who ask for it (a verb and an object); its summary says what it does, then 3 to 5 ways people ask for it.
 - <p>_read with path journal shows what was done, call by call: trust it over memory.
 - Reference: <p>_read path functions lists every function (path <function>: its contract); path help is the platform guide (pages and blocks, tables, procedures, paths, import and export), one section at a time; read path write.procedure or write.table before writing one, and <p>_call table.schema before writing rows.
 - Publishing a new title moves the path; to reorganise, <p>_call node.move, never recreate then trash. contexte is the context page of the organisation, a team or your space: give no other page that name.
 - Never invent a path, a figure or a result: read it, or say you could not.`
 
+/** La fin de la règle des outils de l'organisation, quand l'hôte sert `connector.connect`. */
+const CONNECT_RULE = " A tool not connected yet: <p>_call connector.connect gives the link where the user connects it."
+
 /**
  * La section des règles pour l'organisation de préfixe `prefix` ; `address` (`orgAddress`, 2026-10-27, décision de JB) en
  * première règle, sous le titre : l'adresse d'Oto se lit avec les règles, pas en fin de texte. Sans adresse lisible
- * (l'aperçu, une origine illisible), les règles seules.
+ * (l'aperçu, une origine illisible), les règles seules. `connector.connect` n'est cité que si l'hôte le sert
+ * (`catalogNames`), comme dans les descriptions des outils : sinon l'assistant l'appellerait pour un refus.
  */
 export function workspaceRules(prefix: string, address?: string | null): string {
-  const rules = WORKSPACE_RULES.replaceAll("<p>", prefix)
+  const connect = catalogNames().has("connector.connect") ? CONNECT_RULE : ""
+  const rules = WORKSPACE_RULES.replace("<connect>", connect).replaceAll("<p>", prefix)
   if (!address) return rules
   const [title, ...rest] = rules.split("\n")
   return [title, `${SERVED_RULES.item}${address}`, ...rest].join("\n")
@@ -73,8 +79,6 @@ type CodeBlockInput = {
   served: Candidate | null
   /** `requestKind(phrase)` ; `null` sans phrase. */
   kind: RequestKind | null
-  /** Seuil et écart de l'organisation (E11-S19, AC-d1) ; `null` sans phrase. */
-  settings?: RoutingSettings | null
   /**
    * `context` léger (E11-S19, AC-c1, AC-c2) : le code d'où l'on repart et les Contextes changés depuis ; les règles ne
    * sont pas redites, la ligne de `sinceLine` les remplace.
@@ -86,27 +90,17 @@ type CodeBlockInput = {
   address?: string | null
 }
 
-/** Les mots de la demande trouvés dans une candidate (E11-S19, AC-d2) : ce qu'un auteur ajouterait au résumé. */
-function scoreReason(phrase: string, candidate: Candidate): string {
-  const words = wordsInCommon(phrase, candidate)
-  return words.length > 0 ? `words in common: ${words.join(", ")}` : "no word in common"
-}
-
-/** Le réglage qui sert des étapes (E11-S19, AC-d1, H40) : seuil et écart de l'organisation. */
-function servedFrom(settings: RoutingSettings | null | undefined): string {
-  return settings ? ` (steps are served from a score of ${formatScore(settings.threshold)}, ${formatScore(settings.gap)} ahead of the next)` : ""
-}
-
 /**
  * Une candidate par ligne, avec son titre et son résumé (E11-S16, AC-a1) : l'assistant départage ce que le score
  * lexical ne sait pas départager (« Relancer les devis » et « Relancer les tickets ») ; la procédure décidée, en tête,
- * le dit (« best match », 2026-10-27).
+ * le dit (« best match », 2026-10-27). Ni score ni mots en commun : ils servent l'auteur, que l'aperçu et les données
+ * (`candidates`) renseignent, pas l'assistant ; le résumé coupé à sa première phrase (`servedSentence`, AC9 bis).
  */
-function candidateLines(phrase: string, candidates: readonly Candidate[], best?: string): string {
+function candidateLines(candidates: readonly Candidate[], best?: string): string {
   return candidates
     .map((candidate) => {
-      const mark = candidate.path === best ? "best match; " : ""
-      return `- ${candidate.path} — ${candidate.title}: ${candidate.summary} (${mark}${formatScore(candidate.score)}; ${scoreReason(phrase, candidate)})`
+      const mark = candidate.path === best ? " (best match)" : ""
+      return `- ${candidate.path} — ${candidate.title}: ${servedSentence(candidate.summary)}${mark}`
     })
     .join("\n")
 }
@@ -128,17 +122,17 @@ function bestMatchLine(prefix: string, served: Candidate, kind: RequestKind | nu
  * candidates, sans consigne par genre de phrase ; seule une procédure décidée sur une demande « comment » garde de
  * n'exécuter que sur demande.
  */
-function routingLine({ prefix, phrase, candidates, served, kind, settings }: CodeBlockInput & { phrase: string }): string {
+function routingLine({ prefix, phrase, candidates, served, kind }: CodeBlockInput & { phrase: string }): string {
   // Phrase reprise, bornée comme la cible du journal (N4).
   const request = `Request « ${clip(phrase, MAX_TARGET_CHARS)} »`
   const search = `${prefix}_find can search pages, tables and functions.`
   if (candidates === null) return `${request}: no procedure could be matched right now. ${search}`
   if (served) {
     const listed = [served, ...candidates.filter((candidate) => candidate.path !== served.path)]
-    return `${request}: closest procedures, the best match first:\n${candidateLines(phrase, listed, served.path)}\n${bestMatchLine(prefix, served, kind)}`
+    return `${request}: closest procedures, the best match first:\n${candidateLines(listed, served.path)}\n${bestMatchLine(prefix, served, kind)}`
   }
   if (candidates.length > 0) {
-    return `${request}: no clear match${servedFrom(settings)}. Closest procedures:\n${candidateLines(phrase, candidates)}\nRead the one that fits the request with ${prefix}_read, if any; otherwise search with ${prefix}_find or ask the user.`
+    return `${request}: no clear match. Closest procedures:\n${candidateLines(candidates)}\nRead the one that fits the request with ${prefix}_read, if any; otherwise search with ${prefix}_find or ask the user.`
   }
   const question = `It is a question: search with ${prefix}_find, ${prefix}_read or ${prefix}_call table.rows and answer it`
   if (kind === "data") return `${request}: no procedure matches. ${question}.`

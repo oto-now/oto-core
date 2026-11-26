@@ -504,13 +504,25 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
         name: "guests",
         texte: [
           "## Shared with you by other teams (generated from access rights)",
-          "You are not a member of these teams: you read only what is listed here and what sits under a listed folder. Read one with demo_read; search them with demo_find.",
+          "You are not a member of these teams: you read only what they shared with you, whether listed here or not. Read one with demo_read; search them with demo_find.",
           "### Team Finance. Lead: Paul Girard, Marc Petit.",
           "- finance/mandat — Mandat SEPA — Quand un client paie par prélèvement.",
           "- finance/esg (+4 under it) — Politique ESG — Ce que nous publions chaque année.",
           "### Team Support. Lead: Paul Girard.",
           "- support/contexte — Contexte — Les règles du Support.",
           "- support/faq — FAQ",
+          // Contexte plus court : au-delà de 25 points d'entrée, la ligne qui compte les autres.
+          "and 12 more shared with you: search them with demo_find and the words of what you need.",
+        ].join("\n"),
+      },
+      {
+        // Contexte plus court (AC7) : le texte servi sans score ; l'écran le lit, avec les mots en commun, dans `related`.
+        name: "related",
+        texte: [
+          "## Pages and tables close to the request",
+          "- ventes/tarifs (table): Tarifs 2026. La grille de l'année.",
+          "- ventes/notes (page): Notes",
+          'Read one with demo_read {"path": "<path>"}.',
         ].join("\n"),
       },
       {
@@ -524,11 +536,18 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
         ].join("\n"),
       },
     ]
+    /** Les données de l'aperçu des contenus proches (`previewContext`) : `ventes/notes` sans mot en commun. */
+    const PROCHES = [
+      { path: "ventes/tarifs", title: "Tarifs 2026", kind: "table", score: 0.73, words: ["tarifs", "grille"] },
+      { path: "ventes/notes", title: "Notes", kind: "page", score: 0.4, words: [] },
+    ]
+    // L'aperçu tel que `previewContext` le rend, contenus proches compris (`related`).
+    const AVEC_PROCHES: DonneesDeLApercu = { ...apercu(PARTIES), related: PROCHES }
 
     function monter() {
       render(
         <ContexteServi
-          donnees={{ apercu: { data: apercu(PARTIES) }, contextes: {}, equipes: [] }}
+          donnees={{ apercu: { data: AVEC_PROCHES }, contextes: {}, equipes: [] }}
           Lien={LienDeTest}
           prefixeDesPages="/n/"
           ici="/context"
@@ -571,6 +590,16 @@ describe("les parties servies en français (E05-S13, lot A)", () => {
         ["Contexte · SupportLes règles du Support.", "/n/support/contexte"],
         ["FAQ", "/n/support/faq"],
       ])
+      // Contexte plus court : les points d'entrée au-delà des 25 listés, comptés.
+      expect(invites.getByText("et 12 autres contenus partagés avec vous")).toBeInTheDocument()
+    })
+
+    // Contexte plus court (AC7, décision de JB) : le score et les mots en commun d'un contenu proche viennent des données
+    // de l'aperçu, le texte servi à l'assistant ne les portant plus.
+    it("should read each content close to the request with its kind, its score and its words in common from the preview data", () => {
+      monter()
+      const proches = carte("Pages et tableaux proches de la demande").getAllByRole("listitem").map((ligne) => ligne.textContent ?? "")
+      expect([proches[0].includes("tableau (score 0,73 ; mots en commun : tarifs, grille)"), proches[1].includes("page (score 0,40 ; aucun mot en commun)")]).toEqual([true, true])
     })
 
     it("should leave none of the served English headers in the page", () => {

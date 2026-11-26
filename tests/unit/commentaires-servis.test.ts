@@ -106,7 +106,7 @@ describe("recentText with contents waiting for an assistant", () => {
   // La consigne servie après les lignes, mot pour mot (texte figé du contrat).
   const HINT = "Comments: read a page marked above to get its open comment threads, each with the exact call to reply and to resolve."
 
-  it("should mark the line that already names the content, add a line for the others at the date of the last request, keep 20 lines at most, and say once, after them, where to read the threads (AC5)", () => {
+  it("should mark the line that already names the content, add a line for the others at the date of the last request, keep 10 lines at most, and say once, after them, where to read the threads (AC5)", () => {
     const news = { versions: [{ path: "ventes/devis", kind: "page", revision: 3, title: "Devis 2026", at: "2026-10-26T08:00:00.000Z" }], activations: [] }
     const documents = [{ path: "ventes/suivi", kind: "table", title: "Suivi", at: "2026-10-24T08:00:00.000Z" }]
     const waiting = [
@@ -122,19 +122,19 @@ describe("recentText with contents waiting for an assistant", () => {
       HINT,
     ])
     const many = Array.from({ length: 20 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
-    // Le titre, les 20 lignes, puis la consigne, hors des 20.
+    // Le titre, les 10 lignes (contexte plus court, AC9 ; 20 avant), puis la consigne, hors des 10.
     const lines = recentText(many, null, null, [waiting[2]])?.text.split("\n") ?? []
-    expect([lines.length, lines[2], lines.at(-2), lines.at(-1)]).toEqual([22, "- ventes/faq (page, 1 comment for the assistant, 2026-10-25): FAQ", "- ventes/p18 (page, 2026-10-08): P18", HINT])
+    expect([lines.length, lines[2], lines.at(-2), lines.at(-1)]).toEqual([12, "- ventes/faq (page, 1 comment for the assistant, 2026-10-25): FAQ", "- ventes/p08 (page, 2026-10-18): P8", HINT])
     expect(recentText([], null, null, [waiting[2]])?.text).toBe(`## Recent content\n- ventes/faq (page, 1 comment for the assistant, 2026-10-25): FAQ\n${HINT}`)
   })
 
-  it("should not serve the hint when no shown line is marked: no marked content, or one that falls beyond the 20 lines", () => {
+  it("should not serve the hint when no shown line is marked: no marked content, or one that falls beyond the 10 lines", () => {
     const many = Array.from({ length: 20 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
     const older = { id: "n4", path: "ventes/ancien", kind: "page", title: "Ancien", threads: 1, at: "2026-09-01T08:00:00.000Z" }
     const unmarked = recentText(many, null, null)?.text.split("\n") ?? []
     const beyond = recentText(many, null, null, [older])?.text.split("\n") ?? []
 
-    expect([unmarked.length, unmarked.includes(HINT), unmarked.at(-1)]).toEqual([21, false, "- ventes/p19 (page, 2026-10-07): P19"])
+    expect([unmarked.length, unmarked.includes(HINT), unmarked.at(-1)]).toEqual([11, false, "- ventes/p09 (page, 2026-10-17): P9"])
     expect(beyond).toEqual(unmarked)
   })
 })

@@ -56,6 +56,10 @@ describe("closestHelpSection and hintLines", () => {
     const lines = hintLines({ functions: [], help: procedures }, "acme").join("\n")
     expect(lines).toContain("From the platform guide (section procedures):\n## Procedures\nA procedure is a page of steps an assistant follows.")
     expect(lines).toContain("acme_read path write.procedure")
+    // Contexte plus court (AC5) : la règle du titre et du résumé, que les règles servies ne détaillent plus.
+    expect(lines).toContain(
+      "The title is the action in the words of those who ask for it, a verb and an object (« Relancer les devis en attente »), never the name of a deliverable alone. The summary says what it does, then three to five ways people ask for it, abbreviations included.",
+    )
     expect(lines).not.toContain("<p>")
     expect(closestHelpSection("Exporte toutes les pages de l'équipe SAV")?.text).toBeUndefined()
   })

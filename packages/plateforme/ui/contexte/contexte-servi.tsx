@@ -33,6 +33,7 @@ import type { DonneesDeLApercu } from "./apercu-du-contexte"
 import { APERCU_DU_CONTEXTE, CONTEXTE_SERVI, nomDuBloc, type EquipesNommees } from "./libelles"
 import { ListesServies } from "./listes-servies"
 import {
+  auteursDesProches,
   cheminDuContexte,
   estUnContexte,
   morceauxDeLaFin,
@@ -62,7 +63,8 @@ export type ContexteServiProps = {
   ici: string
 }
 
-type CorpsProps = Omit<ContexteServiProps, "donnees"> & Pick<DonneesDuContexteServi, "contextes" | "equipes"> & { partie: PartieServie }
+type CorpsProps = Omit<ContexteServiProps, "donnees"> &
+  Pick<DonneesDuContexteServi, "contextes" | "equipes"> & { partie: PartieServie; auteurs?: ReturnType<typeof auteursDesProches> }
 
 /** La carte d'une partie lue (AC-14) : sa carte, comme celle de l'éditeur d'un Contexte, sans éditeur. */
 function Carte({ children }: { children: ReactNode }) {
@@ -125,12 +127,12 @@ function CorpsDuContexte({ partie, contextes, prefixeDesPages, ici, Lien }: Corp
 
 /** Le corps d'une partie : omise, elle dit pourquoi ; un Contexte, sa tête puis son Contexte ; un autre bloc, sa carte. */
 function CorpsDeLaPartie(props: CorpsProps) {
-  const { partie, prefixeDesPages, Lien } = props
+  const { partie, prefixeDesPages, Lien, auteurs } = props
   if (partie.texte === "") return <p className="oto-caption">{CONTEXTE_SERVI.omise}</p>
   if (estUnContexte(partie.name)) return <CorpsDuContexte {...props} />
   return (
     <Carte>
-      <ListesServies morceaux={morceauxDuBloc(partie.name, partie.texte)} ancre={partie.ancre} prefixeDesPages={prefixeDesPages} Lien={Lien} />
+      <ListesServies morceaux={morceauxDuBloc(partie.name, partie.texte, auteurs)} ancre={partie.ancre} prefixeDesPages={prefixeDesPages} Lien={Lien} />
     </Carte>
   )
 }
@@ -149,7 +151,7 @@ function Partie({ nom, ...corps }: PartieProps) {
   )
 }
 
-type PartiesProps = Omit<CorpsProps, "partie"> & { apercu: DonneesDeLApercu }
+type PartiesProps = Omit<CorpsProps, "partie" | "auteurs"> & { apercu: DonneesDeLApercu }
 
 /**
  * Les parties, dans l'ordre servi, sans « Règles Oto » (le bloc `code`, AC-f4 : chacune garde l'ancre de son rang
@@ -158,12 +160,14 @@ type PartiesProps = Omit<CorpsProps, "partie"> & { apercu: DonneesDeLApercu }
  */
 function Parties({ apercu, ...corps }: PartiesProps) {
   const { parties, reste } = partiesDuContexte(apercu)
+  // Le score et les mots en commun des contenus proches : dans les données de l'aperçu, jamais dans le texte servi.
+  const auteurs = auteursDesProches(apercu)
   const montrees = parties.filter((partie) => partie.name !== "code")
   return (
     <>
       {montrees.map((partie) => (
         // Une partie n'a pas d'identité propre : son ancre, tirée de son rang dans l'ordre servi, que rien ne réordonne.
-        <Partie key={partie.ancre} partie={partie} nom={nomDuBloc(partie, corps.equipes)} {...corps} />
+        <Partie key={partie.ancre} partie={partie} nom={nomDuBloc(partie, corps.equipes)} auteurs={auteurs} {...corps} />
       ))}
       {reste !== "" && (
         <section aria-label={CONTEXTE_SERVI.fin} className="flex flex-col gap-2">

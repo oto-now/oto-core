@@ -44,7 +44,10 @@ export type DonneesDeLApercu = {
   whole?: { total: number; blocks: readonly { name: string; chars: number }[] }
   /** Ce que le routage a trouvé pour la demande testée (`ContextPreview`) : la procédure décidée, puis les candidates ; absents d'un hôte qui ne les sert pas. */
   served?: { path: string; score: number } | null
-  candidates?: readonly { path: string; title: string; score: number }[]
+  /** `words` : les mots de la demande trouvés dans le titre ou le résumé, pour l'auteur (le texte servi ne les porte pas). */
+  candidates?: readonly { path: string; title: string; score: number; words?: readonly string[] }[]
+  /** Les pages et tableaux proches de la demande testée, avec leur score et leurs mots en commun ; absents d'un hôte qui ne les sert pas. */
+  related?: readonly { path: string; title: string; kind: string; score: number; words: readonly string[] }[]
 }
 
 type ApercuDuContexteProps = {

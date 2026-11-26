@@ -1,84 +1,68 @@
 // Bloc « Shared with you by other teams » de `context` : la vue invité de la personne (`nodes/guest-entries.ts`), une équipe
-// par intertitre, un point d'entrée par ligne avec son résumé, qui dit quand s'en servir. Le même texte quelle que soit la
-// demande : ni classement, ni plafond en lignes ; le repli ne dépend que de la taille. Sans lui, un assistant ne cherche
-// pas ce qu'une autre équipe a ouvert à la sienne : il ignore que cela existe.
+// par intertitre, un point d'entrée par ligne avec la première phrase de son résumé, qui dit quand s'en servir. Le même
+// texte quelle que soit la demande : ni classement, ni coupe par le budget ; 25 points d'entrée au plus, puis une ligne
+// qui dit combien d'autres et comment les trouver (contexte plus court, décision de JB). Sans lui, un assistant ne
+// cherche pas ce qu'une autre équipe a ouvert à la sienne : il ignore que cela existe.
 import { CONTEXT_INDEX, SERVED_GUESTS } from "../../../schemas"
 import type { PlatformDb } from "../../db"
 import type { Identity } from "../../identity"
-import { clip } from "../../journal"
 import { formatCount } from "../../nodes/document"
 import { guestTeams, type GuestEntry, type GuestTeam } from "../../nodes/guest-entries"
 import type { ContextBlock } from "../engine"
+import { servedSentence } from "./contexts"
 import { leadsByTeam, teamLine } from "./team"
 
-/** Le bloc servi aux résumés entiers, puis coupés, tant qu'il tient dans cette taille. */
-export const GUESTS_FULL_MAX = 5_000
-
-/** Sans résumé, le bloc tient dans cette taille ; au-delà, une ligne par équipe. */
-export const GUESTS_PLAIN_MAX = 10_000
-
-/** Caractères d'un résumé coupé, à un mot. */
-export const GUEST_SUMMARY_MAX = 100
+/**
+ * Points d'entrée servis au plus, toutes équipes comprises, dans l'ordre des équipes (par nom) puis des chemins ; au-delà,
+ * la ligne `SERVED_GUESTS.moreStart` … `moreEnd` (JB : « 20/30 max »). Remplace les paliers de taille d'avant (résumés entiers, coupés à
+ * 100 caractères, retirés, puis une ligne par équipe).
+ */
+export const GUESTS_MAX = 25
 
 /** Une équipe invitante et ses responsables nommés. */
 export type GuestView = GuestTeam & { leads: string[] }
 
-type Summaries = "whole" | "short" | "none"
-
-/** Le résumé coupé à son dernier mot entier dans la borne, suivi de « … ». */
-function shortened(summary: string): string {
-  if (summary.length <= GUEST_SUMMARY_MAX) return summary
-  const cut = clip(summary, GUEST_SUMMARY_MAX)
-  // Un mot qui finit juste à la borne est entier : seul un mot coupé est retiré.
-  const space = summary[cut.length] === " " ? -1 : cut.lastIndexOf(" ")
-  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}${SERVED_GUESTS.cutMark}`
-}
-
-function entryLine(entry: GuestEntry, summaries: Summaries): string {
+function entryLine(entry: GuestEntry): string {
   const { item, separator } = CONTEXT_INDEX
   const under = entry.under > 0 ? `${SERVED_GUESTS.underStart}${formatCount(entry.under)}${SERVED_GUESTS.underEnd}` : ""
-  // Un résumé n'est jamais vide : la base l'exige (`nodes_summary_check`).
-  const summary = summaries === "none" ? "" : `${separator}${summaries === "short" ? shortened(entry.summary) : entry.summary}`
-  return `${item}${entry.path}${under}${separator}${entry.title}${summary}`
+  // Un résumé n'est jamais vide : la base l'exige (`nodes_summary_check`) ; servi à sa première phrase (AC9 bis).
+  return `${item}${entry.path}${under}${separator}${entry.title}${separator}${servedSentence(entry.summary)}`
 }
 
 const heading = (team: GuestView) => `${SERVED_GUESTS.team}${teamLine(team.name, team.leads)}`
 
 const notice = (prefix: string) => `${SERVED_GUESTS.noticeStart}${prefix}${SERVED_GUESTS.noticeMiddle}${prefix}${SERVED_GUESTS.noticeEnd}`
 
-function listed(teams: readonly GuestView[], prefix: string, summaries: Summaries): string {
-  return [SERVED_GUESTS.title, notice(prefix), ...teams.flatMap((team) => [heading(team), ...team.entries.map((entry) => entryLine(entry, summaries))])].join("\n")
-}
-
-/** Une ligne par équipe : ses responsables, le compte de ses contenus lisibles, et comment les trouver. */
-function counted(teams: readonly GuestView[], prefix: string): string {
-  const line = (team: GuestView) => {
-    const count = team.entries.reduce((sum, entry) => sum + 1 + entry.under, 0)
-    return `${heading(team)} ${formatCount(count)}${count === 1 ? SERVED_GUESTS.countOne : SERVED_GUESTS.countMany}${prefix}${SERVED_GUESTS.countEnd}`
-  }
-  return [SERVED_GUESTS.title, notice(prefix), ...teams.map(line)].join("\n")
+/** Les équipes réduites à leurs `GUESTS_MAX` premiers points d'entrée, sans équipe vide, et le nombre des autres. */
+function bounded(teams: readonly GuestView[]): { shown: GuestView[]; more: number } {
+  let left = GUESTS_MAX
+  const shown = teams.flatMap((team) => {
+    const entries = team.entries.slice(0, Math.max(left, 0))
+    left -= entries.length
+    return entries.length > 0 ? [{ ...team, entries }] : []
+  })
+  const total = teams.reduce((sum, team) => sum + team.entries.length, 0)
+  return { shown, more: total - Math.min(total, GUESTS_MAX) }
 }
 
 /**
- * Le texte du bloc et son palier, par la taille seule, le palier valant pour tout le bloc : 1, résumés entiers tant
- * que le bloc tient en `GUESTS_FULL_MAX` ; 2, tous coupés à `GUEST_SUMMARY_MAX` ; 3, s'il dépasse encore, sans résumé ;
- * 4, si le bloc sans résumé dépasse `GUESTS_PLAIN_MAX`, une ligne par équipe.
+ * Le texte du bloc : le titre, la consigne, puis par équipe son intertitre et ses points d'entrée, `GUESTS_MAX` au plus ;
+ * au-delà, `and <n> more shared with you: search them with <p>_find and the words of what you need.` : `find` les
+ * trouve (il cherche tout ce que la personne lit), alors que le dossier d'une équipe dont elle n'est pas membre ne se lit
+ * pas. `more` : les points d'entrée non listés.
  */
-export function guestsText(teams: readonly GuestView[], prefix: string): { text: string; tier: 1 | 2 | 3 | 4 } {
-  const whole = listed(teams, prefix, "whole")
-  if (whole.length <= GUESTS_FULL_MAX) return { text: whole, tier: 1 }
-  const short = listed(teams, prefix, "short")
-  if (short.length <= GUESTS_FULL_MAX) return { text: short, tier: 2 }
-  const plain = listed(teams, prefix, "none")
-  if (plain.length <= GUESTS_PLAIN_MAX) return { text: plain, tier: 3 }
-  return { text: counted(teams, prefix), tier: 4 }
+export function guestsText(teams: readonly GuestView[], prefix: string): { text: string; more: number } {
+  const { shown, more } = bounded(teams)
+  const tail = more > 0 ? [`${SERVED_GUESTS.moreStart}${formatCount(more)}${SERVED_GUESTS.moreMiddle}${prefix}${SERVED_GUESTS.moreEnd}`] : []
+  const lines = [SERVED_GUESTS.title, notice(prefix), ...shown.flatMap((team) => [heading(team), ...team.entries.map(entryLine)]), ...tail]
+  return { text: lines.join("\n"), more }
 }
 
-/** Le bloc, ou `null` sans vue invité ; `cut` dès qu'un repli retire quelque chose, pour que l'aperçu le dise. */
+/** Le bloc, ou `null` sans vue invité ; `cut` quand des points d'entrée ne sont pas listés, pour que l'aperçu le dise. */
 export async function guestsBlock(db: PlatformDb, identity: Identity): Promise<ContextBlock | null> {
   const teams = await guestTeams(db, identity)
   if (teams.length === 0) return null
   const leads = await leadsByTeam(db, identity.org.id, teams.map((team) => team.id))
-  const { text, tier } = guestsText(teams.map((team) => ({ ...team, leads: leads.get(team.id) ?? [] })), identity.org.prefix)
-  return { name: "guests", text, ...(tier > 1 ? { cut: true } : {}) }
+  const { text, more } = guestsText(teams.map((team) => ({ ...team, leads: leads.get(team.id) ?? [] })), identity.org.prefix)
+  return { name: "guests", text, ...(more > 0 ? { cut: true } : {}) }
 }

@@ -126,8 +126,9 @@ describe("/context page tests a request", () => {
     ...APERCU,
     served: { path: "ventes/relance_devis", revision: 3, score: 0.82 },
     candidates: [
-      { path: "ventes/relance_devis", title: "Relancer les devis en attente", kind: "procedure", score: 0.82 },
-      { path: "ventes/relance_prospects", title: "Relancer les prospects", kind: "procedure", score: 0.5 },
+      // Contexte plus court (AC7) : les mots en commun en données de l'aperçu, que l'écran montre à l'auteur.
+      { path: "ventes/relance_devis", title: "Relancer les devis en attente", kind: "procedure", score: 0.82, words: ["relance", "devis", "attente"] },
+      { path: "ventes/relance_prospects", title: "Relancer les prospects", kind: "procedure", score: 0.5, words: [] },
     ],
   }
 
@@ -148,9 +149,9 @@ describe("/context page tests a request", () => {
     expect(screen.getByText(/^Ce que votre assistant recevrait pour : « relance les devis en attente »/)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Revenir au contexte sans demande" })).toHaveAttribute("href", "/context")
     const routage = partie("Procédures pour cette demande")
-    expect(routage.getByText(/^Procédure retenue : /).textContent).toBe("Procédure retenue : Relancer les devis en attente — score 0,82")
+    expect(routage.getByText(/^Procédure retenue : /).textContent).toBe("Procédure retenue : Relancer les devis en attente (score 0,82 ; mots en commun : relance, devis, attente)")
     expect(routage.getByRole("link", { name: "Relancer les devis en attente" })).toHaveAttribute("href", "/n/ventes/relance_devis")
-    expect(within(routage.getByRole("list", { name: "Procédures proches" })).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual(["Relancer les prospects — score 0,50"])
+    expect(within(routage.getByRole("list", { name: "Procédures proches" })).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual(["Relancer les prospects (score 0,50 ; aucun mot en commun)"])
     const exact = screen.getByRole("group", { name: "Texte exact envoyé à l'assistant" })
     expect(exact).toHaveAttribute("open")
     expect(exact.querySelector("summary")?.textContent).toMatch(new RegExp(`${TEXTE.length} caractères sur 20\\s000$`))

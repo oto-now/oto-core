@@ -25,6 +25,7 @@ import { ACCESS_LEVELS, nodeLevels, type AccessLevel } from "../../access"
 import type { PlatformDb } from "../../db"
 import { inTransaction } from "../../errors"
 import type { Identity } from "../../identity"
+import { clip } from "../../journal"
 import type { DocBlock } from "../../nodes/document"
 import { resolveTargets, targetKey, type TargetNode, type TargetResolution } from "../../nodes/link-resolution"
 import { contextReference, extractReferences, referenceLines, resolvedReferences, type ReferenceBlock } from "../../nodes/references"
@@ -67,8 +68,8 @@ export const FULL_TEAM_CONTEXTS = 3
 /** La ligne d'un Contexte d'équipe servi en résumé, avant le pointeur vers `read`. */
 const CONDENSED = "Summarised here: other team contexts are closer to this request. Read it in full with"
 
-/** Une première phrase au plus de cette longueur, coupée à un mot. */
-const SUMMARY_MAX = 200
+/** Un résumé servi au plus de cette longueur, « … » compris (`servedSentence` ; 200 jusqu'à l'AC9 bis). */
+const SUMMARY_MAX = 160
 
 /** Une ligne d'index d'un Contexte : sous-page, tableau, procédure ou page liée (« cité n'est pas injecté »). */
 type IndexNode = { path: string; title: string; summary: string }
@@ -147,7 +148,7 @@ function readable(levels: ReadonlyMap<string, AccessLevel>, id: string): boolean
  */
 function contextBody(input: { markdown: string; children: readonly IndexNode[]; linked: readonly IndexNode[] }): ContextBody {
   const { item, separator } = CONTEXT_INDEX
-  const line = (node: IndexNode) => `${item}${node.path}${separator}${node.title}${separator}${node.summary}`
+  const line = (node: IndexNode) => `${item}${node.path}${separator}${node.title}${separator}${servedSentence(node.summary)}`
   const children = input.children.slice(0, CONTEXT_LIST_MAX)
   const linked = input.linked.slice(0, CONTEXT_LIST_MAX - children.length)
   const lists = [
@@ -316,13 +317,22 @@ function renderContextNode(node: ContextNode, reads: ContextReads): ContextBody 
   return { ...contextBody({ markdown, children, linked }), summary: (node.summary ?? "").trim() || firstSentence(markdown) }
 }
 
-/** La première phrase du texte d'un Contexte : la première ligne de prose (ni titre, ni liste, ni tableau, ni citation), coupée à 200 caractères. */
+/** La première phrase du texte d'un Contexte : la première ligne de prose (ni titre, ni liste, ni tableau, ni citation), coupée comme un résumé servi. */
 function firstSentence(markdown: string): string {
-  const line = markdown.split("\n").map((text) => text.trim()).find((text) => text !== "" && !/^[#>|`*-]|^\d+\./.test(text)) ?? ""
+  return servedSentence(markdown.split("\n").map((text) => text.trim()).find((text) => text !== "" && !/^[#>|`*-]|^\d+\./.test(text)) ?? "")
+}
+
+/**
+ * Un résumé tel que `context` le sert (AC9 bis) : sa première phrase, `SUMMARY_MAX` caractères au plus, « … » compris,
+ * coupée à un mot ; `read` sert le résumé entier. Lu par les lignes des procédures proches (`code.ts`), des contenus
+ * proches (`related.ts`) et des enfants d'un Contexte : une seule coupe pour tous.
+ */
+export function servedSentence(text: string): string {
+  const line = text.trim()
   const end = line.search(/[.!?](\s|$)/)
   const sentence = end >= 0 ? line.slice(0, end + 1) : line
   if (sentence.length <= SUMMARY_MAX) return sentence
-  const cut = sentence.slice(0, SUMMARY_MAX)
+  const cut = clip(sentence, SUMMARY_MAX - 1)
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1))}…`
 }
 

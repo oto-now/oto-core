@@ -19,8 +19,8 @@ export type Activation = { connector: string; at: string }
 
 export type News = { versions: NewVersion[]; activations: Activation[] }
 
-/** Connecteurs lus au plus : le bloc des contenus récents n'en sert pas davantage (`RECENT_MAX`). */
-const ACTIVATIONS_MAX = 20
+/** Connecteurs lus au plus : le bloc des contenus récents n'en sert pas davantage (`RECENT_LINES_MAX` de `recent.ts`, qui importe ce module). */
+const ACTIVATIONS_MAX = 10
 
 /**
  * Les versions publiées depuis `since` des nœuds de l'organisation (jointure sur `nodes`, filtrée par `org_id` dans la

@@ -56,7 +56,7 @@ const SECTIONS: readonly HelpSection[] = [
     summary: "what makes a procedure valid, and what makes it work well",
     stems: ["procédure", "procedure", "étape", "step", "appel"],
     lines: [
-      "A procedure is a page of steps an assistant follows. Its title and summary route requests to it: the summary says what it does and how people ask for it.",
+      "A procedure is a page of steps an assistant follows. Its title and summary route requests to it. The title is the action in the words of those who ask for it, a verb and an object (« Relancer les devis en attente »), never the name of a deliverable alone. The summary says what it does, then three to five ways people ask for it, abbreviations included.",
       "Valid: read <p>_read path write.procedure before writing. Each step that runs a function has a call block right after it: ```call <function> {\"argument\": \"<value known when it runs>\"}```; confirm, team and account never go in the arguments; every call is checked at publication against the functions and the tables that exist.",
       "Sub-procedures: never a procedure under a procedure, which would be routed in place of the main one; each sub-step is a page under the main procedure, whose steps link to it with [[path]].",
       "Works well: a part « When to use it », with the cases where not to use it and where to go instead; numbered steps, one action each; each step says what to do with the result (a condition to stop, a branch, a value to report); the expected output, in its format; who to ask when the case is not covered.",

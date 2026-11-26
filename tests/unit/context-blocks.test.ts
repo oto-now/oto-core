@@ -176,35 +176,30 @@ describe("codeBlock", () => {
       { ...candidate("ventes/relance_prospects", 0.62), title: "Relancer les prospects", summary: "Relance les prospects à traiter." },
       { ...candidate("ventes/qualifier_prospects", 0.6), title: "Qualifier les prospects", summary: "Complète les fiches des prospects." },
     ]
-    const settings = { threshold: 0.65, gap: 0.1 }
     const routing = (phrase: string, fields: { candidates: Candidate[]; kind: RequestKind }) =>
-      routingLineOf(codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase, served: null, settings, ...fields }).text)
-    // E11-S19 (AC-d2) : chaque candidate dit les mots de la demande trouvés dans son titre ou son résumé.
-    const closest = (first: string, second: string) => [
-      `- ventes/relance_prospects — Relancer les prospects: Relance les prospects à traiter. (0.62; ${first})`,
-      `- ventes/qualifier_prospects — Qualifier les prospects: Complète les fiches des prospects. (0.60; ${second})`,
+      routingLineOf(codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase, served: null, ...fields }).text)
+    // Contexte plus court (AC7) : ni score ni mots en commun, ils servent l'auteur (données, aperçu).
+    const closest = [
+      "- ventes/relance_prospects — Relancer les prospects: Relance les prospects à traiter.",
+      "- ventes/qualifier_prospects — Qualifier les prospects: Complète les fiches des prospects.",
       "Read the one that fits the request with acme_read, if any; otherwise search with acme_find or ask the user.",
     ]
-    const prospects = "words in common: prospects"
     // AC-a4 : la règle du routage renvoie aux candidates, au lieu de faire demander.
     expect(workspaceRules("acme")).toContain(
       "\n- The procedures closest to the request are listed right after this part, the best match first when there is one: read the one that fits with acme_read, then follow its steps in order; otherwise search, and ask the user when nothing fits.\n",
     )
     const question = "Combien de prospects avons-nous à Valbrune, et lesquels ?"
     const cases = [
-      ["prospects", "action", prospects, prospects],
-      [question, "data", prospects, prospects],
-      ["Comment je relance ?", "how", "words in common: relance", "no word in common"],
-      ["Peux-tu relancer ?", "request", "words in common: relancer", "no word in common"],
+      ["prospects", "action"],
+      [question, "data"],
+      ["Comment je relance ?", "how"],
+      ["Peux-tu relancer ?", "request"],
     ] as const
-    // E11-S19 (AC-d1) : le seuil et l'écart du réglage de l'organisation.
-    const unclear = (phrase: string, threshold = "0.65", gap = "0.10") =>
-      `Request « ${phrase} »: no clear match (steps are served from a score of ${threshold}, ${gap} ahead of the next). Closest procedures:`
-    for (const [phrase, kind, first, second] of cases) {
-      expect(routing(phrase, { candidates, kind })).toBe([unclear(phrase), ...closest(first, second)].join("\n"))
+    // Contexte plus court : ni seuil ni écart du réglage (« steps are served from a score of … »), qui servaient l'auteur.
+    const unclear = (phrase: string) => `Request « ${phrase} »: no clear match. Closest procedures:`
+    for (const [phrase, kind] of cases) {
+      expect(routing(phrase, { candidates, kind })).toBe([unclear(phrase), ...closest].join("\n"))
     }
-    const strict = codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase: "prospects", served: null, candidates, kind: "action", settings: { threshold: 0.8, gap: 0.2 } })
-    expect(routingLineOf(strict.text).split("\n")[0]).toBe(unclear("prospects", "0.80", "0.20"))
     expect(routing(question, { candidates: [], kind: "data" })).toBe(
       `Request « ${question} »: no procedure matches. It is a question: search with acme_find, acme_read or acme_call table.rows and answer it.`,
     )
@@ -242,21 +237,30 @@ describe("codeBlock", () => {
       routingLineOf(codeBlock({ prefix: "demo", code: "7K3Q-M2XA", phrase, served, candidates, kind }).text)
     const how = "Comment je crée un projet ?"
     const asked = "Peux-tu créer un projet ?"
-    const head = (phrase: string, words: string) => [
-      `Request « ${phrase} »: closest procedures, the best match first:`,
-      `- todo/creer_un_projet — Créer un nouveau projet: Crée un projet de la todo. (best match; 0.78; words in common: ${words})`,
-    ]
-    const other = "- todo/ajouter_une_tache — Ajouter une tâche: Ajoute une tâche à ma todo. (0.58; no word in common)"
+    const head = (phrase: string) => [`Request « ${phrase} »: closest procedures, the best match first:`, "- todo/creer_un_projet — Créer un nouveau projet: Crée un projet de la todo. (best match)"]
+    const other = "- todo/ajouter_une_tache — Ajouter une tâche: Ajoute une tâche à ma todo."
     const follow =
       'If the request is about « Créer un nouveau projet », read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, then follow its steps in order (if it is about another one listed, read and follow that one instead). ' +
       'Each ```call block in it holds <function> <arguments JSON>: run it with demo_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one. ' +
       "Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for."
 
-    expect(routing(asked, "request", [served, task])).toBe([...head(asked, "créer, projet"), other, follow].join("\n"))
+    expect(routing(asked, "request", [served, task])).toBe([...head(asked), other, follow].join("\n"))
     expect(routing(how, "how", [served, task])).toBe(
-      [...head(how, "crée, projet"), other, 'It asks how: read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, explain its steps, and run them only if the user asks.'].join("\n"),
+      [...head(how), other, 'It asks how: read todo/creer_un_projet with demo_read {"path": "todo/creer_un_projet"}, explain its steps, and run them only if the user asks.'].join("\n"),
     )
-    expect(routing(asked, "action", [served])).toBe([...head(asked, "créer, projet"), follow].join("\n"))
+    expect(routing(asked, "action", [served])).toBe([...head(asked), follow].join("\n"))
+  })
+
+  // Contexte plus court (AC9 bis) : un résumé servi par `context` est sa première phrase, 160 caractères au plus.
+  it("should serve the first sentence of a summary, cut at a word to 160 characters at most", () => {
+    const long = `${"Relance les devis ".repeat(12)}en attente.`
+    const candidates = [
+      { ...candidate("ventes/a", 0.5), title: "A", summary: "Relance les devis. Se demande : « relance devis », « devis en attente »." },
+      { ...candidate("ventes/b", 0.4), title: "B", summary: long },
+    ]
+    const lines = routingLineOf(codeBlock({ prefix: "acme", code: "7K3Q-M2XA", phrase: "devis", served: null, candidates, kind: "action" }).text).split("\n")
+    const cut = `${"Relance les devis ".repeat(8)}Relance les…`
+    expect([lines[1], lines[2], cut.length <= 160, long.length > 160]).toEqual(["- ventes/a — A: Relance les devis.", `- ventes/b — B: ${cut}`, true, true])
   })
 
   // 2026-10-27 (JB) : l'adresse d'Oto en première règle ; le `context` léger ne redit pas les règles, ni elle.
@@ -547,7 +551,7 @@ const NEWS_NODES = ["guide", "contexte", "ventes", "ventes/contexte", "ventes/de
 const kindOf = (path: string) => (path === "contexte" || path.endsWith("/contexte") ? "context" : "page")
 
 // 2026-10-27 (JB) : les nouveautés sont servies dans le bloc des contenus récents, marquées `new v<rév>`, sous la borne
-// dite dans son titre ; 20 lignes au plus en tout.
+// dite dans son titre ; 10 lignes au plus en tout (contexte plus court, AC9).
 describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { timeout: REAL_BASE_TIMEOUT }, () => {
   it("should list the last visible version of each node and the activations since the previous ctx in this organisation, most recent first, among the recent content (AC2 ; E11-S16, AC-b1)", async () => {
     const tables = oTables()
@@ -565,7 +569,7 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
       // Sept autres nœuds lus de Léa : les lignes 4 à 10.
       ...NEWS_NODES.map((path, rank) => version(path, 2, `Révision ${rank}`, `2026-09-22T0${8 - rank}:00:00.000Z`)),
       version("annonces", 1, "Annonce 1", "2026-09-21T10:00:00.000Z"),
-      // Onzième nœud : servi, la borne étant de 20 lignes en tout depuis le 2026-10-27.
+      // Onzième ligne : pas servie, la borne étant de 10 lignes en tout (contexte plus court, AC9 ; 20 avant).
       version("ventes/tarifs", 2, "Tarifs révisés", "2026-09-21T09:00:00.000Z"),
       version("ventes/tarifs", 1, "Tarifs", "2026-09-19T09:00:00.000Z"),
       // Sur la base réelle, la requête ne se lit plus : une page de versions de P, plus récentes que celles
@@ -592,7 +596,6 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
         "- annonces (page, new v9, 2026-09-23): Annonce 9",
         "- ventes/devis (page, new v2, 2026-09-22): Devis révisé",
         ...NEWS_NODES.map((path, rank) => `- ${path} (${kindOf(path)}, new v2, 2026-09-22): Révision ${rank}`),
-        "- ventes/tarifs (page, new v2, 2026-09-21): Tarifs révisés",
       ].join("\n"),
     )
     // Désactivé après la borne du code émis à l'instant : une activation inactive n'est pas une nouveauté.
@@ -637,7 +640,7 @@ describe.skipIf(!sqlConfigured)(portable("pages and tables close to the request"
 
 // 2026-10-27 (JB) : nouveautés et contenus récents en un bloc, une ligne par contenu, jamais deux fois le même.
 describe("recentText", () => {
-  it("should serve one line per content, the new version winning over the recent read, connectors kept, most recent first, 20 at most", () => {
+  it("should serve one line per content, the new version winning over the recent read, connectors kept, most recent first, 10 at most", () => {
     const since = "2026-10-20T09:00:00.000Z"
     const news = {
       versions: [{ path: "ventes/devis", kind: "page", revision: 3, title: "Devis 2026", at: "2026-10-26T08:00:00.000Z" }],
@@ -658,7 +661,8 @@ describe("recentText", () => {
     })
     const many = Array.from({ length: 25 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
     const lines = recentText(many, null, null)?.text.split("\n") ?? []
-    expect([lines[0], lines.length, lines.at(-1)]).toEqual(["## Recent content", 21, "- ventes/p19 (page, 2026-10-07): P19"])
+    // Contexte plus court (AC9) : 10 lignes (20 avant).
+    expect([lines[0], lines.length, lines.at(-1)]).toEqual(["## Recent content", 11, "- ventes/p09 (page, 2026-10-17): P9"])
     expect(recentText([], { versions: [], activations: [] }, since)).toBeNull()
   })
 })
@@ -779,7 +783,8 @@ describe.skipIf(!sqlConfigured)(portable("recent content (E03-S08, AC5 ; E05-S12
 // E11-S03 (AC-b1, HN-E11S03-15, fiche D134) : plus de taille par bloc ; les bornes en lignes restent, et un arrêt se dit.
 describe.skipIf(!sqlConfigured)(portable("the dynamic blocks served whole (E03-S08, AC6 ; E11-S03, AC-b1)"), { timeout: REAL_BASE_TIMEOUT }, () => {
   it("should serve the recent documents whole", async () => {
-    const documents = Array.from({ length: 20 }, (_, index): ContentNode => ({ path: `annonces/doc${String(index).padStart(2, "0")}`, title: `${"Un document au titre long ".repeat(4)}${index}` }))
+    // Les 10 lignes servies (contexte plus court, AC9), aux titres assez longs pour dépasser l'ancienne taille.
+    const documents = Array.from({ length: 10 }, (_, index): ContentNode => ({ path: `annonces/doc${String(index).padStart(2, "0")}`, title: `${"Un document au titre long ".repeat(6)}${index}` }))
     const updated = documents.map((_, index) => ago(index + 1))
     const tables = oTables(documents)
     documents.forEach((document, index) => {
@@ -825,11 +830,16 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
     expect(preview.whole.total).toBeGreaterThanOrEqual(preview.blocks.reduce((somme, bloc) => somme + bloc.chars, 0))
     const built = await buildContext(db, lea, { phrase }, { userAgent: null })
     expect(preview.text).toBe(built.text.replace(/^ctx: \S+/, "ctx: XXXX-XXXX"))
+    // Contexte plus court (AC7, décision de JB) : les mots en commun en données de l'aperçu seulement, pour l'auteur ; ni
+    // eux ni le score dans le texte servi, contenus proches compris.
     expect({ budget: preview.budget, served: preview.served, candidates: preview.candidates }).toEqual({
       budget: CONTEXT_BUDGET,
       served: built.data?.served,
-      candidates: built.data?.candidates,
+      candidates: (built.data?.candidates as { path: string }[]).map((one) => ({ ...one, words: one.path === "ventes/relance" ? ["relance", "devis"] : expect.any(Array) })),
     })
+    expect(preview.related?.length).toBeGreaterThan(0)
+    expect(preview.related?.every((one) => typeof one.score === "number" && Array.isArray(one.words))).toBe(true)
+    expect(preview.text).not.toMatch(/score \d|words in common/)
     // E05-S12 (AC-4) : une partie par Contexte, nommée par son chemin, `path` seulement quand son corps est servi.
     expect(preview.blocks.map(({ name, status, path }) => [name, status, path])).toEqual([
       ["code", "full", null],
@@ -843,7 +853,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(portable("p
     ])
     // 2026-10-27 : ni étapes, ni procédures utiles ; la procédure décidée en tête des proches, à lire.
     expect(preview.text).not.toContain("Étape. ")
-    expect(preview.text).toContain(`(best match; `)
+    expect(preview.text).toContain(" (best match)")
     const included = preview.blocks.filter((block) => block.chars > 0)
     expect(included.reduce((sum, block) => sum + block.chars, 0) + 2 * (included.length - 1)).toBe(preview.text.length)
     const ventes = preview.blocks.find((block) => block.name === "ventes/contexte")

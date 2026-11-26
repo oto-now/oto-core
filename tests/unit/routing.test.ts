@@ -20,6 +20,7 @@ import { acmeNode, acmeSearchRow, candidate, NO_CATALOG, simulatedBlockId } from
 import { seedAcme } from "../integration/fixtures/acme-sql"
 import type { McpDeps } from "../../packages/plateforme/mcp/server"
 import { buildContext } from "../../packages/plateforme/server/context"
+import { servedSentence } from "../../packages/plateforme/server/context/blocks/contexts"
 import { find } from "../../packages/plateforme/server/find"
 import {
   applyBonuses,
@@ -332,20 +333,17 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
 
         const relance = acmeNode(path)
         const [code] = text.split("\n\n## ")
-        // E11-S19 (AC-d2) : les mots de la demande trouvés dans chacune.
-        const reason = (otherPath: string) => {
-          const words = wordsInCommon(phrase, acmeNode(otherPath))
-          return words.length > 0 ? `words in common: ${words.join(", ")}` : "no word in common"
-        }
-        const line = (otherPath: string, score: string, mark = "") => `- ${otherPath} — ${acmeNode(otherPath).title}: ${acmeNode(otherPath).summary} (${mark}${score}; ${reason(otherPath)})`
+        // Contexte plus court (AC7, AC9 bis) : ni score ni mots en commun dans le texte, qui restent aux données ; le
+        // résumé coupé à sa première phrase.
+        const line = (otherPath: string, mark = "") => `- ${otherPath} — ${acmeNode(otherPath).title}: ${servedSentence(acmeNode(otherPath).summary)}${mark}`
         const prefix = ref.org.prefix
         expect(code.slice(code.indexOf("Request « "))).toBe(
           [
             `Request « ${phrase} »: closest procedures, the best match first:`,
-            line(path, "1.00", "best match; "),
-            line("ventes/relance_prospects", "0.43"),
-            line("ventes/qualifier_prospects", "0.40"),
-            line("ventes/point_pipeline", "0.34"),
+            line(path, " (best match)"),
+            line("ventes/relance_prospects"),
+            line("ventes/qualifier_prospects"),
+            line("ventes/point_pipeline"),
             `If the request is about « ${relance.title} », read ${path} with ${prefix}_read {"path": "${path}"}, then follow its steps in order (if it is about another one listed, read and follow that one instead). ` +
               `Each \`\`\`call block in it holds <function> <arguments JSON>: run it with ${prefix}_call {"function": "<function>", "arguments": <arguments JSON>}, replacing each "<…>" value with the real one. ` +
               "Ask the user's explicit approval before anything that sends, or that changes data beyond the steps of the procedure the user asked for.",
@@ -466,7 +464,7 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
         expect(text.split("\n\n")[0].split("\n").at(-1), failure).toBe(
           `Request « relance les devis en attente »: no procedure could be matched right now. ${ref.org.prefix}_find can search pages, tables and functions.`,
         )
-        expect(text, failure).not.toContain("(best match;")
+        expect(text, failure).not.toContain("(best match)")
         expect(result.structuredContent, failure).toMatchObject({ served: null, candidates: [], data_question: false })
         expect(session.journal.at(-1)?.target, failure).toBe("relance les devis en attente")
         expect(log).toHaveBeenCalledWith(`[platform] context: ${failure}`, expect.anything())

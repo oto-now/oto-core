@@ -161,15 +161,15 @@ describe("new comments in the recent content of context", () => {
     ])
   })
 
-  it("should keep the block within its twenty lines, a page with new comments taking its place by its date", () => {
+  it("should keep the block within its ten lines, a page with new comments taking its place by its date", () => {
     const many = Array.from({ length: 20 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
     const lines = recentText(many, null, since, markedPages([], [commented[2]]))?.text.split("\n") ?? []
 
-    // Le titre, les 20 lignes, puis la consigne, qui ne prend la place d'aucune.
+    // Le titre, les 10 lignes (contexte plus court, AC9 ; 20 avant), puis la consigne, qui ne prend la place d'aucune.
     expect([lines.length, lines.indexOf("- ventes/suivi (table, 3 new comments, 2026-10-23): Suivi"), lines.at(-2), lines.at(-1)]).toEqual([
-      22,
+      12,
       5,
-      "- ventes/p18 (page, 2026-10-08): P18",
+      "- ventes/p08 (page, 2026-10-18): P8",
       SERVED_RECENT.commentsHint,
     ])
   })
