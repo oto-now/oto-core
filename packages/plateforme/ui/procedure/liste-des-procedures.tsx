@@ -13,8 +13,9 @@ import type { Resultat } from "../api/resultat"
 import { PERSO, SECTION_PERSO } from "../arbre/depuis-l-arbre"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { Choix, optionsDe } from "../components/choix"
-import { BOUTON, LIEN } from "../components/classes"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
+import { Button } from "../ds/react/primitives"
 import { LienDeCellule, TableServeur } from "../components/table-serveur"
 import { etatDeLaProcedure, LISTE } from "./libelles"
 
@@ -52,9 +53,9 @@ function FiltreDEquipe({ equipes, equipe, action, ici, Lien }: FiltreProps) {
         ici={ici}
         Lien={Lien}
       />
-      <button type="submit" className={BOUTON}>
+      <Button type="submit" variant="secondary">
         {LISTE.filtrer}
-      </button>
+      </Button>
     </form>
   )
 }

@@ -110,6 +110,7 @@ function Gestes({ retour }: { retour: FeedbackTicketView }) {
             requete={{ methode: "PATCH", ressource: `feedback/${retour.ticket}`, corps: { state: etat } }}
             ancre={ANCRE_DES_RETOURS}
             messages={MESSAGES_DU_RETOUR}
+            taille="sm"
           />
         ),
       )}

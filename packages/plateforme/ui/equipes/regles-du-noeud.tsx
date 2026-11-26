@@ -47,6 +47,7 @@ function lignesDesRegles(noeud: NodeRulesView) {
         requete={{ methode: "DELETE", ressource: `rules/${regle.id}` }}
         confirmation={{ question: `Retirer la règle ${deSujet} sur ${noeud.path} ?`, libelleConfirmer: "Retirer la règle" }}
         ancre={ANCRE_DU_PANNEAU}
+        taille="sm"
       />
     )
     return { cle: regle.id, cellules: gere ? [sujet, NIVEAUX[regle.level], retrait] : [sujet, NIVEAUX[regle.level]] }

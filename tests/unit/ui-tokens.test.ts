@@ -73,6 +73,20 @@ function bordersColorees(fichiers: string[]): string[] {
   )
 }
 
+// Un bouton des écrans du paquet est le `Button` du design system (`oto-btn`) : une chaîne qui porte à la fois un
+// arrondi et les deux marges internes dessine un bouton à la main, hors des tailles et de la pilule du DS
+// (`portage-ecrans.md § 3`). Lue chaîne par chaîne, elle se trouve aussi rangée dans une constante.
+const FORME_DE_BOUTON = /["'`][^"'`\n]*["'`]/g
+const dessineUnBouton = (chaine: string) => /\brounded\b|\brounded-/.test(chaine) && /\bpx-/.test(chaine) && /\bpy-/.test(chaine)
+// Nommée : la ligne de l'arbre, un lien qui n'agit pas.
+const FORMES_ADMISES = new Set(["packages/plateforme/ui/arbre/navigateur-d-arbre.tsx"])
+
+function boutonsDessines(fichiers: string[]): string[] {
+  return fichiers
+    .filter((f) => !FORMES_ADMISES.has(relatif(f)))
+    .flatMap((f) => [...fs.readFileSync(f, "utf8").matchAll(FORME_DE_BOUTON)].filter((m) => dessineUnBouton(m[0])).map((m) => `${relatif(f)} : ${m[0]}`))
+}
+
 describe("ui/ design tokens (ADR-008)", () => {
   it("should find host-only tokens to guard against", () => {
     expect(HOTE_SEUL).toContain("muted-foreground")
@@ -84,6 +98,27 @@ describe("ui/ design tokens (ADR-008)", () => {
 
   it("should use no colored border in a ported screen", () => {
     expect(bordersColorees(ecransOto)).toEqual([])
+  })
+
+  it("should tell a hand-drawn button from the chains it lets through", () => {
+    const chaines = {
+      bouton: "`rounded-md px-3 py-2 text-sm font-medium ${FOCUS}`",
+      lien: "`rounded-sm text-ink underline ${FOCUS}`",
+      carte: '"rounded-lg bg-island p-3 ring-1 ring-hair"',
+      tuile: '"rounded-lg px-1.5 pb-2.5 pt-3.5"',
+      design: '"oto-btn"',
+    }
+    expect(Object.fromEntries(Object.entries(chaines).map(([cas, chaine]) => [cas, dessineUnBouton(chaine)]))).toEqual({
+      bouton: true,
+      lien: false,
+      carte: false,
+      tuile: false,
+      design: false,
+    })
+  })
+
+  it("should draw no button by hand in a ported screen, the design system's Button instead", () => {
+    expect(boutonsDessines(fichiersTsEtTsx(uiDir).filter((f) => !relatif(f).startsWith("packages/plateforme/ui/ds/")))).toEqual([])
   })
 
   // La compilation Tailwind scanne tout le dépôt : au-delà des 5 s par défaut sur Windows. Une seule

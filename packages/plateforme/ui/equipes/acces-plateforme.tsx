@@ -59,6 +59,7 @@ function cellulesDAcces(acces: PlatformAccessView, nomOrganisation: string) {
           libelleConfirmer: "Révoquer l'accès",
         }}
         ancre={ANCRE_DES_ACCES}
+        taille="sm"
       />
     ),
   ]

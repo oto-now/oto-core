@@ -12,13 +12,13 @@
 // Porté d'oto-frontend (`components/settings/team-people-rows.tsx`, `AnnulationDeLInvitation` ;
 // `member-actions.tsx` l. 74-81, `replierLeFocusSur`). Repris : la confirmation sur place, « Garder »
 // avant le geste destructeur, qui n'est jamais le bouton par défaut ; le focus replié sur une ancre
-// nommée de la liste, jamais laissé à `<body>`. Retiré : le `Dialog` modal et son piège à focus,
-// `Button` et glyphes du DS. La question elle-même est `useConfirmationEnLigne` (E05-S04).
+// nommée de la liste, jamais laissé à `<body>`, le `Button` du DS. Retiré : le `Dialog` modal et son piège à
+// focus, les glyphes du DS. La question elle-même est `useConfirmationEnLigne` (E05-S04).
 import { useEffect, useRef, useState } from "react"
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../api/messages"
 import { useRafraichir } from "../hote/rafraichir"
-import { BOUTON_DISCRET } from "./classes"
+import { Button } from "../ds/react/primitives"
 import { useConfirmationEnLigne } from "./confirmation-en-ligne"
 import { replierLeFocusSur } from "./focus"
 
@@ -45,9 +45,11 @@ type ActionPlateformeProps = {
    * libellé visible (WCAG 2.5.3) et nomme la cible.
    */
   nomAccessible: string
+  /** La taille de ses voisins : `sm` dans la cellule d'un tableau, à côté des gestes de ligne ; `md` ailleurs. */
+  taille?: "sm" | "md"
 }
 
-export function ActionPlateforme({ libelle, requete, confirmation, ancre, messages, nomAccessible }: ActionPlateformeProps) {
+export function ActionPlateforme({ libelle, requete, confirmation, ancre, messages, nomAccessible, taille = "md" }: ActionPlateformeProps) {
   const rafraichir = useRafraichir()
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState("")
@@ -60,6 +62,7 @@ export function ActionPlateforme({ libelle, requete, confirmation, ancre, messag
     libelleConfirmer: confirmation?.libelleConfirmer ?? "",
     confirmer: () => void envoyer(),
     envoi,
+    taille,
   })
 
   useEffect(() => {
@@ -99,17 +102,18 @@ export function ActionPlateforme({ libelle, requete, confirmation, ancre, messag
       {confirmation && question.ouverte ? (
         question.rendu
       ) : (
-        <button
+        <Button
           ref={question.depart}
           type="button"
+          variant="secondary"
+          size={taille}
           aria-label={nomAccessible}
           disabled={envoi}
           aria-busy={envoi || undefined}
           onClick={() => (confirmation ? question.demander() : void envoyer())}
-          className={BOUTON_DISCRET}
         >
           {libelle}
-        </button>
+        </Button>
       )}
       {erreur && (
         <p role="alert" className="text-sm text-ink">

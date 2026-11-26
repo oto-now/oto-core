@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "../ds/react/primitives"
 
 type PackageVersionProps = {
   version: string
@@ -24,13 +25,9 @@ export function PackageVersion({ version }: PackageVersionProps) {
   return (
     <div className="flex items-center gap-3 rounded-md bg-card p-3 text-ink ring-1 ring-mute">
       <code className="font-mono select-all">{version}</code>
-      <button
-        type="button"
-        onClick={copyVersion}
-        className="rounded-md px-3 py-1 text-sm ring-1 ring-mute hover:bg-island focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
-      >
+      <Button type="button" variant="secondary" size="sm" onClick={copyVersion}>
         Copier la version
-      </button>
+      </Button>
       <span role="status" aria-live="polite" className="text-sm text-mute">
         {status}
       </span>

@@ -4,8 +4,6 @@
 // (`portage-ecrans.md § 3`). Sans ce module, huit fichiers redisaient ces chaînes.
 export const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
 export const LIBELLE = "block text-sm font-medium text-ink"
-export const BOUTON = `rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-on disabled:opacity-60 ${FOCUS}`
-export const BOUTON_DISCRET = `rounded-md px-3 py-2 text-sm font-medium text-ink ring-1 ring-mute hover:bg-card disabled:opacity-60 ${FOCUS}`
 /** Un lien de texte : souligné, jamais distingué par la couleur seule. */
 export const LIEN = `rounded-sm text-ink underline underline-offset-2 ${FOCUS}`
 export const TITRE_DE_SECTION = "text-lg font-semibold text-ink"
