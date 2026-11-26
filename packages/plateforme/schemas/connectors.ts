@@ -189,7 +189,8 @@ export type OrgConnector = {
    * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory` ;
    * le connecteur reste fermé, l'ajout d'un compte est refusé. Fermé par une personne qui n'est plus membre, ou avant
    * que la fermeture ne garde son auteur : `{ userId: null, name: null }` (l'un nul, l'autre aussi). `null` : jamais
-   * fermé, et rien d'autre.
+   * fermé ; avec `state: "inactive"`, un connecteur payé par la clé de l'hôte qu'aucun administrateur n'a encore adopté
+   * (visible, mais ni compte ni appel avant son adoption).
    */
   closedBy: { userId: string | null; name: string | null } | null
   /**

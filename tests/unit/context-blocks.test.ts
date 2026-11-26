@@ -346,7 +346,7 @@ describe.skipIf(!sqlConfigured)(portable("teamFacts (AC22)"), { timeout: REAL_BA
     expect((await teamFacts(await ref.db("claire"), claireOf(ref))).teams).toEqual(["Team Ventes.", "Team Support."])
   })
 
-  // E04-S01 N17 : sans équipe, les faits lisent encore les connecteurs actifs (aucun ici).
+  // E04-S01 N17 : sans équipe, les faits lisent encore les connecteurs adoptés (aucun ici : `mail` est bloqué).
   it("should give no team line when the identity has none", async () => {
     const ref = await seedO(oTables())
     expect(await teamFacts(await ref.db("claire"), ref.identityOf("claire", { teams: [] }))).toEqual({ teams: [], teamConnectors: [], connectors: [] })
@@ -414,7 +414,9 @@ function ago(hours: number): string {
 
 /** O et son contenu (E03-S03), plus les tables que lit E03-S08. */
 function oTables(nodes: ContentNode[] = [], rules: RuleSpec[] = []): Tables {
-  return { ...contentTables(rules, nodes), ctx: [], journal: [], connector_activations: [], node_aliases: [] }
+  // `mail` bloqué : ouvert par défaut, il dirait ses comptes ; ces cas portent sur les Contextes, pas sur les connecteurs.
+  const blocked = [{ org_id: O.id, connector: "mail", state: "inactive" }]
+  return { ...contentTables(rules, nodes), ctx: [], journal: [], connector_activations: blocked, node_aliases: [] }
 }
 
 /** Le bloc de niveau 2 du texte qui commence par `heading`, jusqu'au bloc de niveau 2 suivant. */
@@ -572,7 +574,8 @@ describe.skipIf(!sqlConfigured)(portable("what's new (E03-S08, AC2, AC3)"), { ti
     )
     const activation = (orgId: string, connector: string, state: string, at: string) => ({ org_id: orgId, connector, state, created_at: "2026-09-01T00:00:00.000Z", updated_at: at })
     // Des connecteurs de `platform.connectors` (clés étrangères) : `notion`, activé avant la borne, est désactivé plus
-    // bas, après elle.
+    // bas, après elle. Les activations de ce cas remplacent le blocage de `mail` d'`oTables`.
+    tables.connector_activations.splice(0)
     tables.connector_activations.push(
       activation(O.id, "mail", "active", "2026-09-24T12:00:00.000Z"),
       activation(O.id, "notion", "active", "2026-09-18T12:00:00.000Z"),
@@ -902,7 +905,7 @@ describe.skipIf(!sqlConfigured)(portable("acme_context through MCP (E03-S08, AC1
     const ref = await seedO(tables)
     const lea = leaOf(ref)
     const deps = { db: await ref.db("lea"), org: lea.org, caller: { kind: "member" as const, identity: lea }, userAgent: "unit-test", journal: [], origin: "https://acme.test" }
-    const session = await connectDeps({ ...deps, activeConnectors: () => Promise.resolve(new Set<string>()) })
+    const session = await connectDeps({ ...deps, activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()) })
 
     const { text, result, isError } = await session.call("context", { phrase: "bonjour" })
     expect(isError).toBe(false)

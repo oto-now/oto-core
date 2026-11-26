@@ -18,6 +18,7 @@ import type { Tx } from "../sql"
 import { accessesProblem, accessProblem, accessViews, type AccessView } from "./accesses"
 import { modesProblem } from "./account-owners"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
+import { keylessAccessesProblem } from "./keyless"
 import { bodyArgumentProblem } from "./body-argument"
 import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
@@ -89,7 +90,8 @@ function accountProblem(definition: ConnectorView): string | null {
   }
   const fields = Array.isArray(credential) ? credential : []
   const badField = fields.find((field) => typeof field?.name !== "string" || !FIELD_NAME.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
-  if (fields.length === 0 || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
+  // Sans clé (`none`), aucun champ : `prepareAuth` refuse ceux qu'il déclarerait.
+  if ((fields.length === 0 && definition.auth?.kind !== "none") || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
   const settings = definition.settings ?? []
   if (!Array.isArray(settings)) return `${name}: settings must be a list.`
   const names = [...fields.map((field) => field.name), ...settings.map((setting) => setting?.name), ...(definition.accountIdentity ? [definition.accountIdentity.name] : [])]
@@ -283,7 +285,7 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   if (shape) throw new CatalogRegistrationError(shape)
   const views = accessViews(definition)
   const prepared: PreparedAccess[] = views.map((access) => ({ access, auth: preparedAccess(access), probe: null, identity: null }))
-  const levels = levelsProblem(definition, prepared)
+  const levels = keylessAccessesProblem(definition.name, prepared.map(({ auth }) => auth.kind)) ?? levelsProblem(definition, prepared)
   if (levels) throw new CatalogRegistrationError(levels)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)

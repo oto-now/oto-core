@@ -117,10 +117,10 @@ describe.skipIf(!sqlConfigured)(portable("callFunction on a real database"), { t
     ])
   })
 
-  it("should refuse a function whose connector is off as call does, run nothing, and journal the refusal", async () => {
-    await seed.admin`delete from platform.connector_activations where org_id = ${ref.org.id} and connector = 'mail'`
+  it("should refuse a function whose connector an administrator blocked as call does, run nothing, and journal the refusal", async () => {
+    await seed.admin`update platform.connector_activations set state = 'inactive' where org_id = ${ref.org.id} and connector = 'mail'`
     const message =
-      "Function mail.create_draft is not enabled at Acme Test: the mail connector is off. Ask the user to add the mail account, then call again: open https://acme.test/connect/mail?space=team%3Aventes"
+      "Function mail.create_draft is not enabled at Acme Test: an administrator blocked the mail connector. Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open https://acme.test/connect/mail?space=team%3Aventes&activate=1"
     await expect(call(ref.identityOf("claire"), { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({ code: "not_enabled", message })
     expect(await outbox()).toHaveLength(1)
     expect(await journal()).toEqual([

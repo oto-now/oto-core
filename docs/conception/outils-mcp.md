@@ -48,7 +48,7 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - H25 : descriptions en anglais, sous 1 000 caractères, ouvertes par « Requires the ctx code from <p>_context; call it first. » ; celle de `context` nomme les domaines et borne son usage ; celle de `call` cite deux ou trois fonctions actives.
 - E03-S01 N6 : `settings.domains` est une chaîne libre en anglais ; un tableau de chaînes est joint par « , » ; absent ou vide, la description de `context` n'a pas de domaines.
 - E03-S01 N14 : dans les descriptions, le nom affiché est coupé à 60 caractères et les domaines à 100, pour tenir sous 1 000 caractères.
-- E03-S01 N15 : exemples de `call` : la première fonction non sensible, par nom, de deux connecteurs actifs au plus, puis `table.rows` s'il est actif ; trois noms au plus, jamais une fonction de l'ERP.
+- E03-S01 N15 : exemples de `call` : la première fonction non sensible, par nom, de deux connecteurs adoptés au plus (une ligne `active` ou un compte ; jamais tout le catalogue ouvert), puis `table.rows` s'il est actif ; trois noms au plus, jamais une fonction de l'ERP.
 - E03-S01 N7 : les instructions du serveur MCP tiennent en une phrase qui renvoie à `context` et porte la borne (« for any request about {org}'s work ») : claude.ai ne montre jamais les instructions.
 - H23 : annotations `readOnlyHint: true` sur `context`, `find` et `read` ; `destructiveHint: false` sur `feedback` seul ; `openWorldHint: true` sur `call` seul ; `call` et `write` gardent les autres défauts (ADR-002 § 7).
 

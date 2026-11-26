@@ -44,7 +44,8 @@ import type { Tx } from "../sql"
 import { orgLimits, requireAdmittedAccountOwner, requireUnderAccountsPerOwner, type LimitScope } from "../limits"
 import { creationAccess } from "./accesses"
 import { requireAdmittedOwner } from "./account-owners"
-import { closedConnector, openConnectorForAccount, requireActivable } from "./activations"
+import { openConnectorForAccount, requireActivable } from "./activations"
+import { closedConnector } from "./adoption"
 import { mayCreateAccountFor } from "./creation-right"
 import { keepDeclaredConnector } from "./declaration"
 import { accountMode, creatableModes, isSimulatedConnector, modeLabel } from "./modes"
@@ -297,9 +298,9 @@ export function labelTaken(label: string, orgName: string): PlatformError {
 /**
  * Crée un compte pour un connecteur activable, au mode que son connecteur admet (`requireCreatableMode`), pour un
  * propriétaire qu'admettent les `modes` de sa déclaration (`requireAdmittedOwner`) et les capacités de l'hôte
- * (`account_owner_kinds`, `accounts_per_owner_max`, un compte désactivé hors du compte). Le connecteur s'ouvre dans la
- * même transaction (`openConnectorForAccount`) : jamais activé, il l'est au nom de l'appelant, compté contre
- * `connectors_max` ; fermé par un administrateur, le compte est refusé (`not_enabled`, `closed`). Le mode est posé
+ * (`account_owner_kinds`, `accounts_per_owner_max`, un compte désactivé hors du compte). Le connecteur est adopté dans
+ * la même transaction (`openConnectorForAccount`) : jamais touché, une ligne active au nom de l'appelant ; bloqué par un
+ * administrateur, le compte est refusé (`not_enabled`, `closed`). Le mode est posé
  * explicitement : le défaut de la colonne est `reel`. Un libellé déjà pris par le même propriétaire, sans casse, tous
  * connecteurs compris, est refusé par l'index unique (`23505` → `conflict`, `label_taken`). L'identifiant chez un tiers
  * (`linked_id`) n'est jamais une saisie. Pour un connecteur à plusieurs accès, `access` nomme celui du compte, exigé,
@@ -327,7 +328,8 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
   const orgId = identity.org.id
   const row = await db
     .tx(async (sql) => {
-      if ((await openConnectorForAccount(sql, scope, account.connector)) === "closed") return null
+      const opened = await openConnectorForAccount(sql, identity, account.connector)
+      if (opened !== "open") return opened
       await requireUnderAccountsPerOwner(sql, scope, { connector: account.connector, owner: { kind: account.owner_kind, teamId, userId } })
       await keepDeclaredConnector(sql, account.connector)
       const [created] = await sql<{ id: string }[]>`
@@ -347,7 +349,7 @@ export async function createAccount(db: PlatformDb, identity: Identity, input: u
       if (isUniqueViolation(error)) throw labelTaken(account.label, identity.org.name)
       throw fromDatabaseError(error, "createAccount: accounts")
     })
-  if (!row) throw await closedConnector(db, identity, account.connector)
+  if (typeof row === "string") throw await closedConnector(db, identity, account.connector, row)
   return summary(row)
 }
 

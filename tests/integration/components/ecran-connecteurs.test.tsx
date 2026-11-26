@@ -887,7 +887,10 @@ describe("EcranConnecteurs, several connectors of one tool", () => {
 
 describe("EcranConnecteurs, blocking a tool for the organisation (administrator)", () => {
   const BLOQUE: OrgConnector = { ...CRM, state: "inactive", activatedAt: null, activatedBy: null, closedBy: { userId: LEA, name: "Léa Bernard" } }
-  const JAMAIS: OrgConnector = { ...CRM, connector: "agenda", label: "Agenda", state: "inactive", activatedAt: null, activatedBy: null, functions: [] }
+  // Jamais touché : ouvert par défaut, adopté par personne.
+  const JAMAIS: OrgConnector = { ...CRM, connector: "agenda", label: "Agenda", state: "active", activatedAt: null, activatedBy: null, functions: [] }
+  // Payé par la clé de l'application et jamais adopté : arrêté sans auteur de fermeture.
+  const A_ADOPTER: OrgConnector = { ...JAMAIS, connector: "agenda", label: "Agenda", state: "inactive", closedBy: null }
   const FORMULAIRE_AGENDA: ConnectorAccountForm = { ...FORMULAIRE_CRM, connector: "agenda", label: "Agenda" }
   const IMPACT = { functions: [], procedures: ["ventes/qualifier_prospects"], accounts: 1 }
 
@@ -925,17 +928,17 @@ describe("EcranConnecteurs, blocking a tool for the organisation (administrator)
     expect(screen.queryByRole("alertdialog")).toBeNull()
   })
 
-  it("should say that nothing stops when blocking a tool nobody has added yet", () => {
+  it("should block a tool open by default like any other: its connectors stop answering", () => {
     rendre({ connectors: [CRM, JAMAIS], formulaires: [FORMULAIRE_CRM, FORMULAIRE_AGENDA], ...ADMINISTRE })
     fireEvent.click(ouvrirLaFenetre().getByRole("button", { name: "Bloquer Agenda pour l'organisation" }))
     expect(within(screen.getByRole("alertdialog")).getAllByRole("listitem").map((effet) => effet.textContent)).toEqual([
-      "Personne n'a encore ajouté de connecteur Agenda : rien ne s'arrête.",
+      "Tous les connecteurs Agenda de l'organisation cessent de répondre aussitôt. Ils ne sont pas supprimés.",
       "Plus personne ne pourra ajouter de connecteur Agenda.",
-      "Vous pourrez le débloquer depuis « Ajouter un connecteur ».",
+      "Vous pourrez le débloquer depuis « Ajouter un connecteur » : les connecteurs repartiront tels quels.",
     ])
   })
 
-  it("should put a blocked tool at the bottom with who blocked it, unblock it without a question, and grey the unblocking at the ceiling of tools", async () => {
+  it("should put a blocked tool at the bottom with who blocked it, unblock it without a question, and never grey the unblocking: the number of tools is not limited", async () => {
     fetchMock.mockImplementation(async () => reponse(200, { data: { connector: CRM } }))
     const { unmount } = rendre({ connectors: [MAIL, BLOQUE], ...ADMINISTRE })
     const fenetre = ouvrirLaFenetre()
@@ -947,22 +950,32 @@ describe("EcranConnecteurs, blocking a tool for the organisation (administrator)
     unmount()
 
     rendre({ connectors: [MAIL, BLOQUE], ...ADMINISTRE, administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 1, used: 1 }, raiseUrl: "https://acme.test/billing" } } })
-    const auPlafond = within(ouvrirLaFenetre().getByRole("region", { name: "Bloqués pour l'organisation" }))
-    expect(auPlafond.getByRole("button", { name: "Débloquer" })).toBeDisabled()
-    expect(auPlafond.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?capacity=connectors_max")
+    const sansPlafond = within(ouvrirLaFenetre().getByRole("region", { name: "Bloqués pour l'organisation" }))
+    expect(sansPlafond.getByRole("button", { name: "Débloquer Crm Pro" })).toBeEnabled()
+    expect(sansPlafond.queryByRole("link", { name: "Relever la limite" })).toBeNull()
   })
 
-  it("should say the ceiling of tools before the entry of a tool the organisation does not use yet, and keep the add closed", () => {
-    rendre({ connectors: [CRM, JAMAIS], formulaires: [FORMULAIRE_CRM, FORMULAIRE_AGENDA], ...ADMINISTRE, administration: { impacts: {}, limites: { members: null, teams: null, connectors: { max: 1, used: 1 }, raiseUrl: "https://acme.test/billing" } } })
-    const fenetre = ouvrirLaFenetre()
-    fireEvent.click(fenetre.getByRole("button", { name: /^Agenda/ }))
-    expect(fenetre.getByText("Votre organisation utilise déjà 1 outil, le maximum de son offre. Agenda n'en fait pas partie. Ajoutez un connecteur à un outil déjà utilisé, ou relevez la limite.")).toBeInTheDocument()
-    // Rien à saisir au plafond : ni clé, ni partage, ni « Ajouter le connecteur » ; « Annuler » reste.
-    expect(fenetre.queryByRole("form")).toBeNull()
-    expect(fenetre.queryByRole("region", { name: "Qui pourra s'en servir" })).toBeNull()
+  it("should say a tool paid by the application's key waits for an administrator, keep its add closed, and let the administrator adopt it", async () => {
+    fetchMock.mockImplementation(async () => reponse(200, { data: { connector: JAMAIS } }))
+    const { unmount } = rendre({ connectors: [CRM, A_ADOPTER], formulaires: [FORMULAIRE_CRM, FORMULAIRE_AGENDA] })
+    const membre = ouvrirLaFenetre()
+    const carte = membre.getByRole("button", { name: /^Agenda/ })
+    expect(within(carte).getByText("À adopter par un administrateur")).toBeInTheDocument()
+    fireEvent.click(carte)
+    expect(membre.getByText("Agenda est payé par la clé de l'application : un administrateur l'adopte avant tout ajout.")).toBeInTheDocument()
+    expect(membre.getByText("Demandez à un administrateur de l'adopter.")).toBeInTheDocument()
+    // Rien à saisir avant l'adoption : ni clé, ni partage, ni « Ajouter le connecteur » ; ni « Adopter » pour un membre.
+    expect(membre.queryByRole("form")).toBeNull()
     expect(screen.queryByRole("button", { name: "Ajouter le connecteur" })).toBeNull()
-    expect(screen.getByRole("button", { name: "Annuler" })).toBeInTheDocument()
-    expect(fenetre.getByRole("link", { name: "Relever la limite" })).toHaveAttribute("href", "https://acme.test/billing?capacity=connectors_max")
+    expect(membre.queryByRole("button", { name: "Adopter Agenda" })).toBeNull()
+    unmount()
+
+    rendre({ connectors: [CRM, A_ADOPTER], formulaires: [FORMULAIRE_CRM, FORMULAIRE_AGENDA], ...ADMINISTRE })
+    const admin = ouvrirLaFenetre()
+    fireEvent.click(admin.getByRole("button", { name: /^Agenda/ }))
+    fireEvent.click(admin.getByRole("button", { name: "Adopter Agenda" }))
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envois()).toEqual([{ url: "/api/platform/admin/connectors/agenda/activation", methode: "POST", corps: {} }])
   })
 
   it("should say to the owner that an administrator blocked the tool of their connector, put it last, and offer the administrator to unblock it in the detail", () => {

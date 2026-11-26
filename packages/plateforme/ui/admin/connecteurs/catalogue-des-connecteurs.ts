@@ -28,8 +28,13 @@ export type OutilAAjouter = {
   mode: AccountMode
   /** Bloqué pour l'organisation par un administrateur, et par qui : l'ajout n'est pas proposé ; `null` : il ne l'est pas. */
   bloquePar: BloqueurDeLOutil
-  /** Ouvert dans l'organisation : un connecteur au moins l'a ouvert (`OrgConnector.state`). */
+  /** Ouvert dans l'organisation (`OrgConnector.state`) : par défaut, adopté, ou rouvert. */
   actif: boolean
+  /**
+   * Payé par la clé de l'application et pas encore adopté (`inactive` sans auteur de fermeture) : visible, mais ni
+   * ajout ni appel avant qu'un administrateur l'adopte.
+   */
+  aAdopter: boolean
   /** Ses fonctions, groupées dans la fiche par ce qu'elles font. */
   fonctions: OrgConnector["functions"]
   /** Les noms des connecteurs personnels de la personne pour cet outil : un de plus demande un nom qui le distingue. */
@@ -88,6 +93,7 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
             mode,
             bloquePar: connecteur.state === "active" ? null : connecteur.closedBy,
             actif: connecteur.state === "active",
+            aAdopter: connecteur.state !== "active" && connecteur.closedBy === null,
             fonctions: connecteur.functions,
             miens: miens.map((un) => un.libelle),
             mesComptes: miens.map((un) => un.id),

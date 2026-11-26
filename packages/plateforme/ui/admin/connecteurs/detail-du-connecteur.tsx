@@ -9,7 +9,7 @@
 // ouvert). L'écran masque un geste, le service le décide : rien de ce qui est réservé à qui gère le compte ne s'offre
 // sous le niveau `manage`, rien de la gouvernance de l'outil à qui n'administre pas.
 import type { ReactNode } from "react"
-import type { AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector, OrgLimitsView } from "../../../schemas"
+import type { AccountView, ConnectorAccountForm, DeactivationImpact, OrgConnector } from "../../../schemas"
 import { ActionPlateforme } from "../../components/action-plateforme"
 import { Avatar } from "../../ds/react/primitives"
 import type { SujetsDeRegle } from "../../equipes/types"
@@ -204,7 +204,7 @@ function Ligne({ titre, texte, children }: { titre: string; texte: string; child
 }
 
 /** Ce qu'un administrateur lit et fait de l'outil d'un connecteur : son blocage pour toute l'organisation. */
-export type GouvernanceDeLOutil = { impact: DeactivationImpact | undefined; limites?: OrgLimitsView; actif: boolean }
+export type GouvernanceDeLOutil = { impact: DeactivationImpact | undefined; actif: boolean }
 
 type ArreterProps = { compte: AccountView; outil: string; bloquePar: Blocage; gouvernance: GouvernanceDeLOutil | undefined }
 
@@ -238,7 +238,7 @@ function Arreter({ compte, outil, bloquePar, gouvernance }: ArreterProps) {
       )}
       {gouvernance && bloquePar !== null && (
         <Ligne titre={`Débloquer ${outil} pour l'organisation`} texte="Ses connecteurs repartent tels quels.">
-          <DeblocageDeLOutil connecteur={compte.connector} outil={outil} limites={gouvernance.limites} ancre={ANCRE_DE_L_ETAT} />
+          <DeblocageDeLOutil connecteur={compte.connector} outil={outil} ancre={ANCRE_DE_L_ETAT} />
         </Ligne>
       )}
     </Section>

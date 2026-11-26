@@ -69,7 +69,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   async function session(person: Person) {
     const { db, identity } = as(person)
     const journal: Parameters<typeof connectDeps>[0]["journal"] = []
-    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `transit-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `transit-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const { code } = await mcp.openContext("Lis la pièce")
     return { call: (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args }), journal }
   }

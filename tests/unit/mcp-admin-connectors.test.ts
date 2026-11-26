@@ -195,7 +195,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       expect(uploads.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["upload.link (write)"])
       expect(listed.text).toBe(
         [
-          `- crm (live): inactive — ${crm.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
+          `- crm (live): open by default — ${crm.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           "- mail (simulated): active since 2026-09-24 by Ada Martin — mail.create_draft (write), mail.send_draft (sensitive)",
           `- table (built in): always active — ${native.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           `- node (built in): always active — ${nodes.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
@@ -210,7 +210,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         ].join("\n"),
       )
       expect(isoInstants(listed.structured?.connectors)).toEqual([
-        { name: "crm", kind: "live", activable: true, state: "inactive", since: null, functions: crm.map((fn) => ({ name: fn.name, class: fn.class })) },
+        { name: "crm", kind: "live", activable: true, state: "active", since: null, functions: crm.map((fn) => ({ name: fn.name, class: fn.class })) },
         {
           name: "mail",
           kind: "simulated",
@@ -268,10 +268,10 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         },
         { name: "application", kind: "application", activable: false, state: "always_active", since: null, functions: [{ name: "erp.lookup_customer", class: "read" }] },
       ])
-      // Sans activation, le connecteur activable est dit inactif (HN-E08S06-9).
+      // Sans ligne d'activation, le connecteur activable est ouvert par défaut (HN-E08S06-9, décision du 2026-11-25).
       await withoutActivation()
-      const inactive = await session()
-      expect((await inactive.connector({ op: "catalogue" })).text.split("\n")[1]).toBe("- mail (simulated): inactive — mail.create_draft (write), mail.send_draft (sensitive)")
+      const untouched = await session()
+      expect((await untouched.connector({ op: "catalogue" })).text.split("\n")[1]).toBe("- mail (simulated): open by default — mail.create_draft (write), mail.send_draft (sensitive)")
     })
   })
 

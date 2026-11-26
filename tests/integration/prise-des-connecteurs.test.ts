@@ -15,7 +15,7 @@ import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
 import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
 import { createAccount, listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
-import { activateConnector, loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { activateConnector, loadActiveConnectors, loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { decryptCredential } from "../../packages/plateforme/server/connectors/vault"
@@ -97,7 +97,7 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
 
   const call = (who: ReferencePerson, input: CallInput) => {
     const { db, identity } = as(who)
-    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(db, o.org.id) }, input)
+    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(db, o.org.id) }, input)
   }
 
   /** Un compte de l'organisation, au libellé propre au cas : chaque appel le nomme (`account`), sans ambiguïté. */
@@ -286,7 +286,8 @@ describe.skipIf(!sqlConfigured || fieldsPending)(suite, { timeout: NETWORK_TIMEO
         caller: { kind: "member", identity: ada.identity },
         userAgent: "vitest",
         journal,
-        activeConnectors: () => loadActiveConnectors(ada.db, o.org.id),
+        activeConnectors: () => loadOpenConnectors(ada.db, o.org.id),
+        adoptedConnectors: () => loadActiveConnectors(ada.db, o.org.id),
         origin: ORIGIN,
       })
       const opened = await gate.openContext()

@@ -47,8 +47,9 @@ export type DonneesDesConnecteurs = {
   /** Pour qui la personne peut ajouter un connecteur (`accountOwnerChoices`) : elle-même, l'organisation, ses équipes. */
   proprietaires: AccountOwnerChoices
   /**
-   * Pour qui administre l'organisation : ce que le blocage de chaque outil ouvert arrête (`deactivationImpact`), et ses
-   * capacités (`orgLimitsView`, E12-S02 ; absentes : aucun déblocage grisé). Absent pour un membre.
+   * Pour qui administre l'organisation : ce que le blocage de chaque outil ouvert arrête (`deactivationImpacts`, une
+   * lecture pour tous), ouvert par défaut compris. Absent pour un membre. `limites` n'est plus lu : le nombre d'outils
+   * n'est plus limité (`connectors_max` déprécié), rien n'est grisé ; gardé pour les hôtes.
    */
   administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
 }
@@ -242,7 +243,7 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
       logo={logoDe(compte.connector, donnees.connectors)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
       bloquePar={bloquePar(compte.connector, donnees.connectors)}
-      gouvernance={administration ? { impact: administration.impacts[compte.connector], limites: administration.limites, actif } : undefined}
+      gouvernance={administration ? { impact: administration.impacts[compte.connector], actif } : undefined}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}
       moi={moi}

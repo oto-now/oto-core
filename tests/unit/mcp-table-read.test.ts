@@ -41,7 +41,7 @@ describe.skipIf(!sqlConfigured)(portable("acme_read of a table (AC18)"), { timeo
   async function session(person: keyof typeof CTX, overrides: Partial<Identity> = {}) {
     const identity = acmeIdentity(ref, person, overrides)
     const { db, calls } = spyDb(await ref.db(person))
-    const connected = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
+    const connected = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
     return { ...connected, calls, read: (args: Record<string, unknown>) => connected.call("read", { ctx: ref.id(CTX[person]), ...args }) }
   }
 

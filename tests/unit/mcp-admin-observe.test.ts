@@ -520,6 +520,13 @@ describe.skipIf(!sqlConfigured)(portable("admin observation on a real database")
       expect(health.split("\n")[0]).toMatch(/^Database: reachable \(\d+ ms\)\.$/)
       expect(health.split("\n").slice(1, 2)).toEqual(["Settings: NEXT_PUBLIC_SUPABASE_URL present, NEXT_PUBLIC_SUPABASE_ANON_KEY present, NEXT_PUBLIC_SITE_URL missing."])
       expect(health.split("\n")[2]).toMatch(/^Checked at \d{4}-\d{2}-\d{2}T/)
+      // Une clé dépréciée que les capacités de l'hôte posent encore : nommée, sur sa ligne, avant la date.
+      const said = "connectors_max has no effect any more; the key will be refused at the next major version (set for acme)."
+      vi.mocked(cellStatus).mockImplementationOnce(async (db, env) => {
+        const status = await actual.cellStatus(db, env)
+        return { ...status, health: { ...status.health, warnings: [said] } }
+      })
+      expect((await call("admin_cell", { op: "health" })).text.split("\n")[2]).toBe(`Warning: ${said}`)
       const values = { url: "https://cell-secret.example", key: "anon-value-123" }
       expect(Object.entries(values).filter(([, value]) => JSON.stringify(deps.journal).includes(value) || health.includes(value)).map(([name]) => name)).toEqual([])
       expect((await call("admin_cell", { op: "version", org: "acme" })).text).toBe(

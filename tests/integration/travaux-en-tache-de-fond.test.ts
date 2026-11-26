@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { runCall, type CallInput, type CallOutput } from "../../packages/plateforme/server/calls"
 import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
 import { setAccountSecret } from "../../packages/plateforme/server/connectors/account-secret"
-import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../../packages/plateforme/server/connectors/definition"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -135,7 +135,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     return { db, identity: await resolveIdentity(db, o.host, { userId: user.id, email: user.email }) }
   }
   const call = (who: Session, input: CallInput): Promise<CallOutput> =>
-    runCall({ db: who.db, identity: who.identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(who.db, o.org.id), functions: catalogFunctions() }, { account: account.label, ...input })
+    runCall({ db: who.db, identity: who.identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(who.db, o.org.id), functions: catalogFunctions() }, { account: account.label, ...input })
   const readJob = (who: Session, job: string) => call(who, { function: "job.read", arguments: { job }, account: undefined })
   const jobRow = async (id: string) =>
     (await fx.admin<{ state: string; reason: string | null; arguments_ciphertext: string | null; outcome_ciphertext: string | null; erased_at: string | null }[]>`

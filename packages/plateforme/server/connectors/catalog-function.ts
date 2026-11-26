@@ -13,6 +13,7 @@ import { backgroundTraits, servedDescription } from "./background-declaration"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView } from "./definition"
 import { describedSummary, runDescribed, type DescribedCall, type PreparedFunction } from "./engine"
 import { errorTable } from "./error-table"
+import { keylessCall } from "./keyless"
 import { callerTransitFiles } from "./multipart"
 import type { UserConsentAuth } from "./oauth-user"
 
@@ -46,6 +47,8 @@ export function identityAddress(definition: ConnectorView, auth: UserConsentAuth
  * clé, ou les deux), puis la table du connecteur.
  */
 export function refusalLines(definition: ConnectorDefinition, accesses: readonly AccessView[], fn: ConnectorFunctionDefinition): string[] {
+  // Sans clé (`auth: none`) : aucun compte, aucun refus de compte.
+  const keyless = accesses.every((access) => access.view.auth.kind === "none")
   const consents = accesses.filter((access) => access.view.auth.kind === "oauth2_user").length
   const account =
     consents === accesses.length
@@ -55,7 +58,7 @@ export function refusalLines(definition: ConnectorDefinition, accesses: readonly
         : `No ${definition.name} account you can use, or one to connect again or without its secret: connect your own, or ask for one; the refusal says how.`
   return [
     ...fn.refusals.map((refusal) => `${refusal.code}: ${refusal.message}${typeof refusal.when === "number" ? ` (HTTP ${refusal.when})` : ""}`),
-    account,
+    ...(keyless ? [] : [account]),
     ...definition.errors.map((error) => `${error.code}: ${error.message}`),
   ]
 }
@@ -66,9 +69,13 @@ function describedCall(prepared: PreparedFunction, context: FunctionContext): De
     console.error(`[platform] call: ${prepared.fn.name} without a resolved account`)
     throw new PlatformError("internal", "Internal error.")
   }
+  return { credential: context.credential, accountId: context.account.id, ...transit(prepared, context) }
+}
+
+/** Les fichiers en transit de l'appelant, quand la fonction en envoie ou en rend, et le relevé d'un travail en tâche de fond. */
+function transit(prepared: PreparedFunction, context: FunctionContext): Pick<DescribedCall, "files" | "answered"> {
   const files = prepared.fn.request.files !== undefined || prepared.fn.output?.file !== undefined
-  const answered = context.answered ? { answered: context.answered } : {}
-  return { credential: context.credential, accountId: context.account.id, ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}), ...answered }
+  return { ...(files ? { files: callerTransitFiles(context, prepared.fn.name) } : {}), ...(context.answered ? { answered: context.answered } : {}) }
 }
 
 /**
@@ -113,6 +120,9 @@ export function catalogFunction({ connector, fn, byAccess, schema, refusals }: S
     examples: fn.examples.map((example) => ({ ...example.input })),
     refusals,
     run: (context, args: Record<string, unknown>) => {
+      // Sans clé : l'accès unique, sur un credential vide, sans compte (`runCall` n'en résout aucun).
+      const keyless = byAccess.get(null)
+      if (keyless?.auth.kind === "none") return runDescribed(keyless, { ...keylessCall(context.identity), ...transit(keyless, context) }, args)
       const prepared = preparedFor(byAccess, fn, context)
       return runDescribed(prepared, describedCall(prepared, context), args)
     },

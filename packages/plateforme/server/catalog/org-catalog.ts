@@ -3,7 +3,7 @@
 // fonctions de l'ERP. Lu par les portes qui servent un assistant dans une organisation : `read` d'une fonction, `call` et
 // le contrôle d'une procédure, entier ; `find`, `read functions` et `context`, filtré par la liste de la personne
 // (`visibleOrgFunctions`, § Visibilité par personne). Module à part : le registre reste synchrone et sans base.
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import type { PlatformDb } from "../db"
 import { functionCatalog } from "../find"
 import { hostCatalogLines, visibleHostFunctions } from "../host-api/index-view"
@@ -47,7 +47,7 @@ export async function visibleOrgFunctions(db: PlatformDb, identity: Identity, vi
  * famille (`fonctions-d-un-hote-index.md` § Visibilité par personne) ; une liste indisponible dit sa raison.
  */
 export async function readFunctionCatalog(db: PlatformDb, identity: Identity, viewer: HostViewer): Promise<ToolOutput> {
-  const [{ instance, host, visibility }, active] = await Promise.all([visibleOrgFunctions(db, identity, viewer), loadActiveConnectors(db, identity.org.id)])
+  const [{ instance, host, visibility }, active] = await Promise.all([visibleOrgFunctions(db, identity, viewer), loadOpenConnectors(db, identity.org.id)])
   const prefix = identity.org.prefix
   return functionCatalog(instance.filter((fn) => isActive(fn, active)), contractNames(), prefix, { functions: host, lines: hostCatalogLines(visibility, prefix) })
 }

@@ -8,8 +8,9 @@
 // de version posé sur chaque réponse (une ressource réservée à l'équipe plateforme suffit).
 import pkg from "../package.json"
 import type { PlatformDb } from "./db"
-import { databaseFailure, PlatformError } from "./errors"
+import { databaseFailure, inTransaction, PlatformError } from "./errors"
 import { oidcMode } from "./issuer"
+import { deprecatedLimitWarnings } from "./limits"
 
 /** Version du paquet qui tourne (`packages/plateforme/package.json`). */
 export const packageVersion: string = pkg.version
@@ -56,6 +57,8 @@ export type CellStatus = {
     env: EnvPresence[]
     /** La base répond et chaque variable requise est présente. */
     ok: boolean
+    /** Les clés dépréciées que les capacités de l'hôte posent encore (`connectors_max`), nommées ; n'entament pas `ok`. */
+    warnings: string[]
   }
   checkedAt: string
 }
@@ -96,6 +99,9 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
       throw databaseFailure(error, "cellStatus", DATABASE_UNREACHABLE)
     })
 
+  // Les capacités de l'hôte, relues pour chaque organisation sous le rôle du serveur, après le contrôle de l'équipe.
+  const orgs = await inTransaction(db, "cellStatus: orgs", (sql) => sql<{ id: string; slug: string }[]>`select id, slug from platform.orgs`, "server")
+  const warnings = await deprecatedLimitWarnings(orgs)
   const presence = envReport(env)
   return {
     packageVersion,
@@ -104,6 +110,7 @@ export async function cellStatus(db: PlatformDb, env: Record<string, string | un
       database: { ok: true, latencyMs },
       env: presence,
       ok: presence.every((variable) => variable.present || variable.optional === true),
+      warnings,
     },
     checkedAt: new Date().toISOString(),
   }

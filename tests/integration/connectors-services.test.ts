@@ -17,6 +17,7 @@ import {
   deactivateConnector,
   listConnectorsForOrg,
   loadActiveConnectors,
+  loadOpenConnectors,
 } from "../../packages/plateforme/server/connectors/activations"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
@@ -127,21 +128,25 @@ describe.skipIf(!sqlConfigured || privatePending)(
         // La fermeture a son auteur (`closed_by`) ; `activated_by` reste qui avait activé.
         expect(await activationRows()).toEqual([{ connector: "mail", state: "inactive", activated_by: o.people.ada.id, closed_by: o.people.ada.id }])
         expect(await loadActiveConnectors(db, o.org.id)).toEqual(new Set())
-        // La ligne inactive, relue : ni date ni auteur, comme sans ligne (N18, écran « Inactif » d'E08-S03).
+        // Bloqué : hors des connecteurs ouverts, que lisent `find`, `read` et `call`.
+        expect((await loadOpenConnectors(db, o.org.id)).has("mail")).toBe(false)
+        // La ligne inactive, relue : ni date ni auteur d'adoption, et qui l'a bloqué (N18, écran « Inactif » d'E08-S03).
         expect(await listConnectorsForOrg(db, identity)).toEqual([
           { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy, accountModes: ["simule"] },
         ])
         expect((await accountRow(account)).status).toBe("active")
         expect((await activateConnector(db, identity, { connector: "mail" })).state).toBe("active")
+        expect((await loadOpenConnectors(db, o.org.id)).has("mail")).toBe(true)
         // Rouvert : la fermeture n'a plus d'auteur.
         expect(await activationRows()).toEqual([{ connector: "mail", state: "active", activated_by: o.people.ada.id, closed_by: null }])
       })
 
-      it("should list each activable connector with its state, who activated it and its functions, to any member (AC3)", async () => {
+      it("should list each activable connector with its state, who adopted it and its functions, to any member (AC3)", async () => {
         await resetActivations()
         const lea = as("lea")
+        // Jamais touché : ouvert par défaut, adopté par personne.
         expect(await listConnectorsForOrg(lea.db, lea.identity)).toEqual([
-          { connector: "mail", label: "mail", state: "inactive", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy: null, accountModes: ["simule"] },
+          { connector: "mail", label: "mail", state: "active", activatedAt: null, activatedBy: null, functions: FUNCTIONS, closedBy: null, accountModes: ["simule"] },
         ])
         const ada = as("ada")
         await activateConnector(ada.db, ada.identity, { connector: "mail" })

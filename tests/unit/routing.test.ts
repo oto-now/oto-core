@@ -250,7 +250,7 @@ describe.skipIf(!sqlConfigured)(portable("routing on the real database, Acme on 
 
   function mcpDeps(db: McpDeps["db"], person: Person): McpDeps {
     const identity = ref.identityOf(person)
-    return { db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" }
+    return { db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" }
   }
 
   describe("decide at the organisation's setting (AC3)", () => {
