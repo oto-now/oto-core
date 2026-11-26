@@ -28,7 +28,9 @@ les checks sur l'arbre courant, `verify:cached` le constate et ne rejoue rien.
 **Une seule commande, et surtout : ne pas rejouer ce qui vient de passer.** `verify:cached`
 compare l'état exact du code au reçu laissé par le dernier `pnpm verify`. Identique → il
 affiche « checks déjà passés » et rend la main immédiatement. Différent → il enchaîne les 4
-checks puis réécrit le reçu.
+checks puis réécrit le reçu. Seule de la documentation de méthode a changé → il ne lance que
+`check:framework` et le contrôle de secrets (`check-public --secrets-only`), puis écrit un reçu doc, valable pour ce commit de doc et le rebase qui le suit
+(`CLAUDE.md § Vérifier, commiter, pousser`).
 
 | # | Commande | Si échec |
 |---|----------|----------|
@@ -124,7 +126,8 @@ supposé vert : une CI qui ne démarre plus ne se voit que là.
 - Les 4 checks passent **avant** le commit, sans exception
 - **Un seul commit par `pnpm verify`** : un commit change `HEAD` et invalide le reçu, donc un
   second commit exige un second `verify` complet. Documents et code d'une même fusion partent
-  dans le même commit.
+  dans le même commit. Seule exception : un reçu doc, jugé sur l'arbre et non sur `HEAD`, reste
+  valable après son commit de doc, pour le rebase ou le merge qui le suit.
 - `--no-verify`, `--force`, `--force-with-lease` : bloqués par le hook, sans échappement
 - `--amend` : uniquement sur demande explicite de l'utilisateur
 - Ne jamais commiter sur `main` si une branche de travail est attendue

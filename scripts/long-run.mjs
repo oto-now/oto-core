@@ -22,7 +22,7 @@
  *
  * Tout l'état vit sous `.claude/.long-run/` (ignoré par git, donc hors du reçu de vérification).
  */
-import { execFileSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync, closeSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -109,10 +109,15 @@ async function waitForFree(log) {
   return announced
 }
 
-const receiptCovers = () => {
+/**
+ * Le reçu couvre l'arbre ET déclare un verify complet. Un reçu doc (`scope: "docs"`, seuls `check:framework` et
+ * `check:public` ont tourné) ne dispense pas d'un `verify` : le gate le demande justement quand le commit touche du code.
+ */
+export async function receiptCovers() {
   try {
-    execFileSync(process.execPath, [join(ROOT, 'scripts/verify-receipt.mjs'), 'check'], { stdio: 'pipe' })
-    return true
+    const { checkReceipt } = await import('./verify-receipt.mjs')
+    const { valid, receipt } = checkReceipt()
+    return valid && receipt?.scope !== 'docs'
   } catch {
     return false
   }
@@ -125,7 +130,7 @@ async function run(task, freeze, command) {
   for (;;) {
     const waited = await waitForFree(log)
     // Mutualisation : le `verify` d'une autre session vient peut-être de couvrir cet arbre.
-    if (waited && task === 'verify' && receiptCovers()) {
+    if (waited && task === 'verify' && (await receiptCovers())) {
       log('✔  Mutualisé : les checks viennent de passer sur ce code dans une autre session. Rien à rejouer.')
       return 0
     }

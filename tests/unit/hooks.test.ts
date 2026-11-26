@@ -1,9 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Worker } from "node:worker_threads"
-import { afterAll, afterEach, beforeAll, describe, expect, it, onTestFailed } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed } from "vitest"
 
 /**
  * Le gate git est la seule garantie non probabiliste du framework : si un `git push` nu passe,
@@ -437,6 +437,250 @@ describe("verify-receipt", { timeout: RECEIPT_TIMEOUT }, () => {
     expect(realGate(`git commit -m "feat: x" ${MARKER}`)).toBe(BLOCKED)
     expect(run(["write"])).toBe(0)
     expect(realGate(`git commit -m "feat: x" ${MARKER}`)).toBe(ALLOWED)
+  })
+
+  it("should refuse, in another repository, a receipt that does not declare the required checks", () => {
+    // Pour un autre dépôt, le gate se fie au `check --commit` du script de ce dépôt : ce `check` doit relire lui-même
+    // les checks déclarés, sans quoi un reçu « test » seul y ouvrait un commit de code.
+    const repo = mkdtempSync(join(tmpdir(), "derived-checks-"))
+    const g = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" })
+    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
+    try {
+      g("config", "user.email", "test@test")
+      g("config", "user.name", "test")
+      mkdirSync(join(repo, "scripts/lib"), { recursive: true })
+      copyFileSync(RECEIPT_SCRIPT, join(repo, "scripts/verify-receipt.mjs"))
+      copyFileSync(join(process.cwd(), "scripts/lib/arbre-de-code.mjs"), join(repo, "scripts/lib/arbre-de-code.mjs"))
+      writeFileSync(join(repo, ".gitignore"), ".claude/.verify-receipt.json\n")
+      writeFileSync(join(repo, "a.ts"), "export const a = 1\n")
+      g("add", ".")
+      g("commit", "--quiet", "--no-verify", "-m", "init")
+      mkdirSync(join(repo, ".claude"))
+      writeFileSync(join(repo, "a.ts"), "export const a = 2\n")
+      // Sans VERIFY_RECEIPT_*, le script copié hache SA racine et lit SON reçu : le dépôt jetable.
+      const env: NodeJS.ProcessEnv = { ...process.env }
+      delete env.VERIFY_RECEIPT_ROOT
+      delete env.VERIFY_RECEIPT_PATH
+      const ecrireRecu = (...args: string[]) =>
+        execFileSync("node", ["scripts/verify-receipt.mjs", "write", ...args], { cwd: repo, stdio: "pipe", env })
+      ecrireRecu("test")
+      expect(runHookProcess("enforce-git-gate.mjs", `cd ${repo} && git commit -m "x" ${MARKER}`, env)).toBe(BLOCKED)
+      ecrireRecu()
+      expect(runHookProcess("enforce-git-gate.mjs", `cd ${repo} && git commit -m "x" ${MARKER}`, env)).toBe(ALLOWED)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("reçu doc", { timeout: RECEIPT_TIMEOUT }, () => {
+  // Une modification qui ne touche que la documentation de méthode ne demande que `check:framework` : rejouer
+  // type-check, lint et tests sur un code inchangé ne prouvait rien. En contrepartie, un reçu doc ne fait jamais
+  // passer du code. Chaque cas monte un dépôt jetable, qu'il hache par VERIFY_RECEIPT_ROOT.
+  const FICHIERS = {
+    "a.ts": "export const a = 1\n",
+    "CLAUDE.md": "# Méthode\n",
+    "README.md": "# Lisez-moi\n",
+    "docs/guide.md": "guide\n",
+    ".method/checklists/x.md": "checklist\n",
+    "package.json": "{}\n",
+  }
+  let repo = ""
+  const g = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" })
+  const ecrire = (path: string, contenu: string) => {
+    mkdirSync(join(repo, path, ".."), { recursive: true })
+    writeFileSync(join(repo, path), contenu)
+  }
+  // Le reçu vit DANS le dépôt, ignoré, comme dans le checkout : sinon il compterait dans sa propre empreinte.
+  const recu = () => join(repo, ".claude/.verify-receipt.json")
+  const envDuDepot = (): NodeJS.ProcessEnv => ({ ...process.env, VERIFY_RECEIPT_ROOT: repo, VERIFY_RECEIPT_PATH: recu() })
+  const script = (...args: string[]): number => {
+    try {
+      execFileSync("node", [RECEIPT_SCRIPT, ...args], { cwd: repo, stdio: "pipe", env: envDuDepot() })
+      return 0
+    } catch (error) {
+      return (error as { status: number }).status
+    }
+  }
+  // Le gate de la session, dont la racine est le dépôt jetable (VERIFY_RECEIPT_ROOT).
+  const gateDuDepot = (command: string) => runHookProcess("enforce-git-gate.mjs", `${command} ${MARKER}`, envDuDepot())
+  const commit = () => gateDuDepot('git commit -m "docs: x"')
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), "docs-repo-"))
+    execFileSync("git", ["init", "--quiet", "--initial-branch=main", repo], { stdio: "pipe" })
+    g("config", "user.email", "test@test")
+    g("config", "user.name", "test")
+    ecrire(".gitignore", ".claude/.verify-receipt.json\n")
+    for (const [path, contenu] of Object.entries(FICHIERS)) ecrire(path, contenu)
+    g("add", ".")
+    g("commit", "--quiet", "--no-verify", "-m", "init")
+    mkdirSync(join(repo, ".claude"), { recursive: true })
+  }, RECEIPT_TIMEOUT)
+
+  afterEach(() => rmSync(repo, { recursive: true, force: true }))
+
+  it("should answer docs-only with 1 without changes, 0 on staged, untracked or deleted documentation", () => {
+    expect(script("docs-only")).toBe(1)
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("docs-only")).toBe(0)
+    ecrire(".claude/skills/dev/SKILL.md", "skill\n") // non suivi
+    ecrire(".claude/agents/implementer.md", "agent\n")
+    ecrire("README.md", "# Lisez-moi v2\n")
+    g("add", "README.md") // indexé
+    rmSync(join(repo, ".method/checklists/x.md")) // supprimé
+    g("rm", "--quiet", "--cached", "CLAUDE.md") // suppression indexée, fichier gardé non suivi
+    expect(script("docs-only")).toBe(0)
+    // Un chemin exclu du reçu (écrit après les checks) ne compte pas.
+    ecrire(".method/sprint/status.md", "sprint\n")
+    ecrire("docs/changelog.d/2026-11-26-sujet.md", "## [2026-11-26] — Sujet\n")
+    expect(script("docs-only")).toBe(0)
+  })
+
+  it("should answer docs-only with 1 as soon as a path is not documentation", () => {
+    ecrire("docs/guide.md", "guide v2\n")
+    for (const [path, contenu] of [
+      ["a.ts", "export const a = 2\n"],
+      ["package.json", '{"x":1}\n'],
+      ["pnpm-lock.yaml", "lockfileVersion: '9.0'\n"],
+      [".claude/settings.json", "{}\n"],
+      [".claude/hooks/gate.mjs", "export {}\n"],
+      [".githooks/pre-commit", "exit 0\n"],
+      [".github/workflows/ci.yml", "name: CI\n"],
+      ["scripts/outil.md", "# lu par un script\n"],
+      ["packages/plateforme/changelog.d/2026-11-26-x.md", "### Hosts\n"],
+      ["supabase/migrations/README.md", "# Migrations\n"],
+      ["tests/README.md", "# Tests\n"],
+      ["src/README.md", "# pas à la racine\n"],
+      ["docs/schema.json", "{}\n"],
+    ]) {
+      const avant = existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : null
+      ecrire(path, contenu)
+      expect(script("docs-only"), path).toBe(1)
+      if (avant === null) rmSync(join(repo, path))
+      else ecrire(path, avant)
+    }
+    expect(script("docs-only")).toBe(0)
+    // Suppression de code : pas de la doc non plus.
+    rmSync(join(repo, "a.ts"))
+    expect(script("docs-only")).toBe(1)
+  })
+
+  it("should write a docs receipt declaring check:framework, check:public and scope docs, and refuse it on code", () => {
+    ecrire("a.ts", "export const a = 2\n")
+    expect(script("write", "check:framework,check:public", "docs")).toBe(1)
+    expect(existsSync(recu())).toBe(false)
+    ecrire("a.ts", FICHIERS["a.ts"])
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("write", "check:framework,check:public", "docs")).toBe(0)
+    const ecrit = JSON.parse(readFileSync(recu(), "utf8"))
+    expect(ecrit.checks).toEqual(["check:framework", "check:public"])
+    expect(ecrit.scope).toBe("docs")
+  })
+
+  it("should let the gate accept a docs receipt on a docs commit, and refuse it once the code moves", () => {
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("write", "check:framework,check:public", "docs")).toBe(0)
+    expect(commit()).toBe(ALLOWED)
+    ecrire("a.ts", "export const a = 2\n")
+    expect(commit()).toBe(BLOCKED)
+    // Un reçu complet sur le même arbre reste accepté pour tout commit.
+    expect(script("write")).toBe(0)
+    expect(commit()).toBe(ALLOWED)
+  })
+
+  it("should let the gate refuse a docs receipt whose covered tree carries code compared with HEAD", () => {
+    // Le reçu doc se juge sur le contenu (son arbre de code), pas sur HEAD : après un `git reset --soft`, le même
+    // contenu contient du code jamais vérifié par rapport au nouveau HEAD. Le gate juge le commit visé.
+    ecrire("a.ts", "export const a = 2\n")
+    g("commit", "--quiet", "--no-verify", "-am", "code")
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("write", "check:framework,check:public", "docs")).toBe(0)
+    expect(script("check")).toBe(0)
+    g("reset", "--quiet", "--soft", "HEAD~1")
+    expect(script("check")).toBe(0) // le contenu seul ne voit rien
+    expect(script("check", "--commit")).toBe(1)
+    expect(commit()).toBe(BLOCKED)
+    // Le hook git `.githooks/pre-commit`, qui couvre les commits lancés par un script, pose le même refus.
+    expect(readFileSync(join(process.cwd(), ".githooks/pre-commit"), "utf8")).toContain("verify-receipt.mjs\" check --commit")
+  })
+
+  it("should let the gate accept a docs receipt after the docs commit: rebase and merge without a full verify", () => {
+    // Le commit de doc change HEAD, qu'un reçu complet contient : le reçu doc, jugé sur son arbre de code, reste
+    // valide tant que rien d'autre que la doc ne diffère de HEAD, et le rebase qui suit passe sans verify complet.
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("write", "check:framework,check:public", "docs")).toBe(0)
+    g("commit", "--quiet", "--no-verify", "-am", "docs")
+    expect(script("docs-only")).toBe(1) // aucun changement : pas un arbre de doc à vérifier
+    expect(script("check", "--commit")).toBe(0)
+    expect(gateDuDepot("git rebase main")).toBe(ALLOWED)
+    expect(gateDuDepot("git merge feature/x")).toBe(ALLOWED)
+    // Un reçu complet, lui, ne survit pas au commit (son empreinte contient HEAD) : règle inchangée.
+    expect(script("write")).toBe(0)
+    g("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "vide")
+    expect(gateDuDepot("git rebase main")).toBe(BLOCKED)
+  })
+
+  it("should let the gate refuse a docs receipt that does not declare check:framework or check:public", () => {
+    ecrire("docs/guide.md", "guide v2\n")
+    expect(script("write", "test", "docs")).toBe(0)
+    expect(commit()).toBe(BLOCKED)
+    // Sans le contrôle de secrets, un reçu doc ne vaut rien non plus.
+    expect(script("write", "check:framework", "docs")).toBe(0)
+    expect(script("check", "--commit")).toBe(1)
+    expect(commit()).toBe(BLOCKED)
+    expect(script("write", "check:framework,check:public", "docs")).toBe(0)
+    expect(commit()).toBe(ALLOWED)
+  })
+
+  // Mesuré le 2026-11-26 dans l'export, sept fichiers de test en parallèle : 25,5 s (cinq lancements de pnpm, chacun
+  // avec node et git). 60 s : le plafond d'un test synchrone (`testing-strategy.md § Anti-patterns`).
+  it("should make verify:cached run nothing on a covered tree, the method and secrets checks on docs, and a full verify otherwise", { timeout: 60_000 }, () => {
+    // La commande exécutée est celle du package.json de ce dépôt, dans un dépôt jetable où `check:framework`, le
+    // contrôle de secrets et `verify` sont remplacés par des traces : on observe lesquels tournent.
+    const reel = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).scripts["verify:cached"]
+    mkdirSync(join(repo, "scripts/lib"), { recursive: true })
+    copyFileSync(RECEIPT_SCRIPT, join(repo, "scripts/verify-receipt.mjs"))
+    copyFileSync(join(process.cwd(), "scripts/lib/arbre-de-code.mjs"), join(repo, "scripts/lib/arbre-de-code.mjs"))
+    // `check:framework` échoue tant que le fichier ignoré `casse` existe.
+    const trace = (nom: string) =>
+      `node -e "const fs=require('fs');fs.appendFileSync('trace.log','${nom} ');process.exit(fs.existsSync('casse')?1:0)"`
+    ecrire("scripts/check-public.mjs", "import { appendFileSync } from 'node:fs'\nappendFileSync('trace.log', 'check:public ')\n")
+    ecrire(
+      "package.json",
+      JSON.stringify({
+        scripts: {
+          "check:framework": trace("check:framework"),
+          verify: `node -e "require('fs').appendFileSync('trace.log','verify ')" && node scripts/verify-receipt.mjs write`,
+          "verify:cached": reel,
+        },
+      })
+    )
+    ecrire(".gitignore", ".claude/.verify-receipt.json\ntrace.log\ncasse\n")
+    g("add", ".")
+    g("commit", "--quiet", "--no-verify", "-m", "outillage")
+    const cached = () => {
+      rmSync(join(repo, "trace.log"), { force: true })
+      // Sans VERIFY_RECEIPT_*, le script copié prend SA racine : le dépôt jetable.
+      const env = { ...process.env }
+      delete env.VERIFY_RECEIPT_PATH
+      delete env.VERIFY_RECEIPT_ROOT
+      const { status } = spawnSync("pnpm", ["run", "--silent", "verify:cached"], { cwd: repo, stdio: "pipe", env, shell: true })
+      const traces = existsSync(join(repo, "trace.log")) ? readFileSync(join(repo, "trace.log"), "utf8").trim() : ""
+      return { status, traces }
+    }
+    ecrire("docs/guide.md", "guide v2\n")
+    // Un contrôle de la doc en échec rend la main en échec, sans repli sur un verify complet.
+    writeFileSync(join(repo, "casse"), "")
+    expect(cached()).toEqual({ status: 1, traces: "check:framework" })
+    expect(existsSync(recu())).toBe(false)
+    rmSync(join(repo, "casse"))
+    expect(cached()).toEqual({ status: 0, traces: "check:framework check:public" })
+    const ecrit = JSON.parse(readFileSync(recu(), "utf8"))
+    expect([ecrit.scope, ecrit.checks]).toEqual(["docs", ["check:framework", "check:public"]])
+    expect(cached()).toEqual({ status: 0, traces: "" }) // le reçu doc couvre l'arbre : rien ne rejoue
+    ecrire("a.ts", "export const a = 2\n")
+    expect(cached()).toEqual({ status: 0, traces: "verify" })
   })
 })
 

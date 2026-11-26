@@ -13,15 +13,18 @@
  * s'en sert pour que le marqueur ` # checks-ok` ne puisse plus être posé par réflexe sur un
  * arbre jamais vérifié.
  *
- *   node scripts/verify-receipt.mjs write [check1,check2,...]   → écrit le reçu
- *   node scripts/verify-receipt.mjs check                        → exit 0 si valide, 1 sinon
+ *   node scripts/verify-receipt.mjs write [check1,check2,...] [docs] → écrit le reçu (`docs` : reçu doc)
+ *   node scripts/verify-receipt.mjs check [--commit]             → exit 0 si valide, 1 sinon
+ *   node scripts/verify-receipt.mjs docs-only                    → exit 0 si seule la doc diffère de HEAD
+ *   node scripts/verify-receipt.mjs cached                       → `pnpm verify:cached` : reçu valide → rien ;
+ *     doc seule → `check:framework` et `check-public --secrets-only`, puis reçu doc ; sinon `pnpm verify`
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arbreDeCodeDuDossier, estExclu } from './lib/arbre-de-code.mjs'
+import { arbreDeCodeDuDossier, estDoc, estExclu } from './lib/arbre-de-code.mjs'
 
 // La racine est celle du SCRIPT, pas le cwd : le reçu doit couvrir le projet entier même quand
 // la commande est lancée depuis un sous-dossier. `VERIFY_RECEIPT_ROOT` la redirige — réservé aux
@@ -35,6 +38,17 @@ const ROOT = process.env.VERIFY_RECEIPT_ROOT ?? join(dirname(fileURLToPath(impor
 // autorisait un commit sans que type-check ni lint n'aient jamais été lancés.
 const RECEIPT = process.env.VERIFY_RECEIPT_PATH ?? join(ROOT, '.claude/.verify-receipt.json')
 const MAX_AGE_MS = 60 * 60 * 1000 // 1 h : au-delà, l'environnement a pu bouger (deps, node)
+// Checks qu'un reçu doit déclarer pour être valide. Le contrôle vit ici, pas dans le seul gate : pour un autre
+// dépôt, le gate se fie au `check --commit` du script de ce dépôt, qui doit donc relire ce champ lui-même.
+export const CHECKS_REQUIS = ['check:framework', 'type-check', 'lint', 'test']
+/**
+ * Reçu doc (`scope: "docs"`, écrit par `verify:cached` sur un arbre de doc seule) : contrôle de méthode et de
+ * secrets seulement. `check:public` y est le passage de `node scripts/check-public.mjs --secrets-only` : un
+ * document peut porter un secret recopié, que type-check, lint et tests ne voyaient pas non plus.
+ */
+export const CHECKS_DOC = ['check:framework', 'check:public']
+/** Les commandes du reçu doc, dans l'ordre, lancées par `cached` depuis la racine. */
+const COMMANDES_DOC = ['pnpm check:framework', 'node scripts/check-public.mjs --secrets-only']
 
 
 const git = (args, options = {}, root = ROOT) =>
@@ -55,10 +69,11 @@ const git = (args, options = {}, root = ROOT) =>
   )
 
 /**
- * Empreinte de tout ce qui est susceptible de faire échouer un check :
- * le HEAD, le diff complet (indexé et non indexé), et le contenu des fichiers non suivis.
+ * Chemins qui diffèrent de HEAD (indexés ou non, non suivis, suppressions), hors `EXCLUS`.
+ * Une seule énumération, partagée par l'empreinte et par `docsOnly` : deux calculs de la liste
+ * finiraient par diverger, et un reçu doc couvrirait alors un chemin que l'empreinte voit.
  */
-export function worktreeHash(root = ROOT) {
+function cheminsChanges(root) {
   const g = (args, options) => git(args, options, root)
   // Hors dépôt git, aucune empreinte n'a de sens. Le cas arrive quand le template est récupéré
   // en ZIP ou via degit, sans `git init` : `ls-files` levait alors une exception APRÈS que les
@@ -105,6 +120,9 @@ export function worktreeHash(root = ROOT) {
       if (status.startsWith('D')) supprimes.add(path)
       else modifies.push(path)
     }
+    // Ce que l'index change par rapport à HEAD, même quand l'arbre de travail est revenu à HEAD (fichier modifié,
+    // indexé, puis restauré sur le disque) : c'est l'index que le commit prendra, et la liste doit le nommer.
+    modifies.push(...lines(g(['diff', '--cached', 'HEAD', '--name-only', '--no-renames'])))
   } else {
     // Sans commit, l'index est tout le contenu suivi : l'ignorer rendait l'empreinte aveugle à tout
     // fichier indexé, et `git add -A` avant le commit initial invalidait le reçu (coupe en oto-pkg et oto-saas).
@@ -117,6 +135,39 @@ export function worktreeHash(root = ROOT) {
   ]
 
   const uniques = [...new Set([...paths, ...supprimes])].filter((f) => !estExclu(f)).sort()
+  return { g, head, lines, uniques, supprimes }
+}
+
+/** Vrai si au moins un chemin diffère de HEAD et que tous sont de la documentation (`estDoc`). */
+export function docsOnly(root = ROOT) {
+  const { head, uniques } = cheminsChanges(root)
+  return head !== 'sans-commit' && uniques.length > 0 && uniques.every(estDoc)
+}
+
+// Pour un commit : rien ne diffère de HEAD compte aussi. Après le commit de doc, un rebase ou un merge ne rejoue
+// que des commits déjà passés par le gate ; exiger un verify complet pour rebaser sur un `main` qui avait bougé
+// annulait le gain du reçu doc. Sans HEAD, tout diffère : jamais de la doc seule.
+const docsOuRien = (root) => {
+  const { head, uniques } = cheminsChanges(root)
+  return head !== 'sans-commit' && uniques.every(estDoc)
+}
+
+/** Vrai si le dossier est un dépôt git qui a un HEAD (le checkout) ; faux dans un export (sans dépôt ni commit). */
+function aUnHead(root) {
+  try {
+    git(['rev-parse', '--verify', '--quiet', 'HEAD'], {}, root)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Empreinte de tout ce qui est susceptible de faire échouer un check :
+ * le HEAD, le diff complet (indexé et non indexé), et le contenu des fichiers non suivis.
+ */
+export function worktreeHash(root = ROOT) {
+  const { g, head, lines, uniques, supprimes } = cheminsChanges(root)
 
   // Un processus git par fichier : lent (~40 ms chacun), mais isole un chemin que git ne sait
   // pas hacher (symlink cassé, socket, permission) et le signale dans l'empreinte plutôt que de
@@ -164,8 +215,16 @@ function readReceipt(path = RECEIPT) {
   }
 }
 
-/** @returns {{valid: boolean, reason: string, receipt: object|null}} */
-export function checkReceipt() {
+/**
+ * `commit` : le contrôle est fait pour un commit (gate, `.githooks/pre-commit`, `verify:cached`).
+ *
+ * Un reçu doc (`scope: "docs"`) se juge sur son arbre de code (`tree`), pas sur l'empreinte : elle contient
+ * HEAD, et le commit de doc l'invaliderait avant le rebase qui le suit. Pour un commit, il n'est valide que si ce
+ * qui diffère de HEAD est encore de la doc seule, ou rien : après un `git reset --soft`, le même arbre porte du
+ * code jamais vérifié.
+ * @returns {{valid: boolean, reason: string, receipt: object|null}}
+ */
+export function checkReceipt({ commit = false } = {}) {
   const receipt = readReceipt(RECEIPT)
   if (!receipt) return { valid: false, reason: "aucun reçu — les checks n'ont pas été lancés", receipt: null }
 
@@ -184,14 +243,39 @@ export function checkReceipt() {
     return { valid: false, reason: `reçu périmé (${Math.round(age / 60000)} min, limite ${MAX_AGE_MS / 60000} min)`, receipt }
   }
 
+  const doc = receipt.scope === 'docs'
   let current
   try {
-    current = worktreeHash()
+    current = doc ? arbreDeCodeDuDossier(ROOT) : worktreeHash()
   } catch (error) {
     return { valid: false, reason: `empreinte de l'arbre illisible : ${error.message}`, receipt }
   }
-  if (current !== receipt.hash) {
+  if (current !== (doc ? receipt.tree : receipt.hash)) {
     return { valid: false, reason: 'le code a changé depuis les derniers checks', receipt }
+  }
+  const declares = Array.isArray(receipt.checks) ? receipt.checks : []
+  const manquants = (doc ? CHECKS_DOC : CHECKS_REQUIS).filter((c) => !declares.includes(c))
+  if (manquants.length) {
+    return {
+      valid: false,
+      reason: `le reçu ne déclare pas tous les checks (manquant : ${manquants.join(', ')}) — lancer \`pnpm verify\``,
+      receipt,
+    }
+  }
+  let seuleLaDoc = false
+  if (commit && doc) {
+    try {
+      seuleLaDoc = docsOuRien(ROOT)
+    } catch (error) {
+      return { valid: false, reason: `chemins illisibles : ${error.message}`, receipt }
+    }
+  }
+  if (commit && doc && !seuleLaDoc) {
+    return {
+      valid: false,
+      reason: 'reçu doc seule (check:framework, check:public), mais le commit touche autre chose que la documentation — lancer `pnpm verify`',
+      receipt,
+    }
   }
   return { valid: true, reason: `checks déjà passés il y a ${Math.max(1, Math.round(age / 60000))} min sur ce code`, receipt }
 }
@@ -225,16 +309,22 @@ function passageRecent(maintenant) {
 }
 
 function runCli() {
-const [, , command, checksArg] = process.argv
+const [, , command, checksArg, scopeArg] = process.argv
 
 if (command === 'write') {
   const checks = (checksArg ?? 'check:framework,type-check,lint,test').split(',').map((c) => c.trim())
   try {
+    // Un reçu doc ne s'écrit dans le checkout que sur un arbre de doc seule : sinon il attesterait du code que seuls
+    // `check:framework` et `check:public` ont vu. Un export n'a pas de HEAD : c'est `commit-depuis-export.mjs` qui y compare le
+    // commit à sa base, et refuse un reçu doc dès qu'un chemin hors de la doc a changé.
+    if (scopeArg === 'docs' && aUnHead(ROOT) && !docsOnly()) {
+      throw new Error("l'arbre ne diffère pas de HEAD que par de la documentation — lancer `pnpm verify`")
+    }
     const at = new Date().toISOString()
     // L'arbre de code (`scripts/lib/arbre-de-code.mjs`) : ce que `commit-depuis-export.mjs` compare à l'arbre
     // du commit qu'il construit, et qu'il écrit en trailer `Verified-tree:`. Il se calcule hors de tout dépôt,
     // dans un export de `git archive` comme dans le checkout.
-    const recu = { checks, at, tree: arbreDeCodeDuDossier(ROOT) }
+    const recu = { checks, ...(scopeArg === 'docs' ? { scope: 'docs' } : {}), at, tree: arbreDeCodeDuDossier(ROOT) }
     // L'empreinte du gate de commit n'a de sens que dans un dépôt git (le checkout) ; un export n'en a pas.
     try {
       recu.hash = worktreeHash()
@@ -252,8 +342,46 @@ if (command === 'write') {
     process.exit(1)
   }
   console.log(`Reçu écrit — ${checks.join(', ')}`)
+} else if (command === 'docs-only') {
+  let ok
+  try {
+    ok = docsOnly()
+  } catch (error) {
+    console.error(error.message)
+    process.exit(1)
+  }
+  console.log(ok ? 'Documentation seule : check:framework et check:public suffisent.' : 'Pas de la documentation seule (ou aucun changement).')
+  process.exit(ok ? 0 : 1)
+} else if (command === 'cached') {
+  // `pnpm verify:cached`. En node plutôt qu'en `a || (b && c) || d` dans package.json : là, un `check:framework`
+  // ou un secret en échec sur de la doc retombait sur un `pnpm verify` complet, qui échouait de même plusieurs
+  // minutes plus tard. Ici, l'échec d'un contrôle de la doc rend la main avec son code.
+  const { valid, reason, receipt } = checkReceipt({ commit: true })
+  if (valid) {
+    console.log(`✔  ${reason} : ${receipt.checks.join(', ')}. Inutile de les rejouer.`)
+    process.exit(0)
+  }
+  const lancer = (commande) => spawnSync(commande, { cwd: ROOT, stdio: 'inherit', shell: true }).status ?? 1
+  let doc = false
+  try {
+    doc = docsOnly()
+  } catch {
+    /* chemins illisibles : le verify complet tranche */
+  }
+  if (!doc) {
+    console.log(`→  Checks à lancer : ${reason}.`)
+    process.exit(lancer('pnpm verify'))
+  }
+  console.log('Documentation seule : contrôle de méthode et de secrets (check:framework, check-public --secrets-only).')
+  for (const commande of [...COMMANDES_DOC, `node scripts/verify-receipt.mjs write ${CHECKS_DOC.join(',')} docs`]) {
+    const code = lancer(commande)
+    if (code !== 0) {
+      console.error(`✘  ${commande} en échec : le corriger, puis relancer \`pnpm verify:cached\`.`)
+      process.exit(code)
+    }
+  }
 } else if (command === 'check') {
-  const { valid, reason, receipt } = checkReceipt()
+  const { valid, reason, receipt } = checkReceipt({ commit: checksArg === '--commit' })
   if (valid) {
     console.log(`✔  ${reason} : ${receipt.checks.join(', ')}. Inutile de les rejouer.`)
     process.exit(0)
@@ -263,7 +391,7 @@ if (command === 'write') {
 } else if (command === 'clear') {
   if (existsSync(RECEIPT)) unlinkSync(RECEIPT)
 } else {
-  console.error('usage: verify-receipt.mjs write|check|clear')
+  console.error('usage: verify-receipt.mjs write|check|docs-only|cached|clear')
   process.exit(2)
 }
 }

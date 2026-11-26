@@ -153,3 +153,44 @@ describe("long-run", () => {
     expect(existsSync(join(dir, "lock.json"))).toBe(false)
   })
 })
+
+describe("long-run mutualisation", () => {
+  // Un `verify` qui a attendu celui d'une autre session ne rejoue rien si le reçu couvre l'arbre. Un reçu doc
+  // (check:framework seul) ne couvre pas un verify complet : sinon le verify que le gate demande pour un commit de
+  // code ne tournait jamais. Le reçu hache un dépôt jetable (VERIFY_RECEIPT_ROOT), lu au chargement du module.
+  let repo: string
+  const avant = { root: process.env.VERIFY_RECEIPT_ROOT, path: process.env.VERIFY_RECEIPT_PATH }
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), "long-run-receipt-"))
+    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
+    writeFileSync(join(repo, "a.ts"), "export const a = 1\n")
+    execFileSync("git", ["-C", repo, "add", "a.ts"], { stdio: "pipe" })
+    execFileSync("git", ["-C", repo, "-c", "user.email=test@test", "-c", "user.name=test", "commit", "--quiet", "--no-verify", "-m", "init"], { stdio: "pipe" })
+  })
+  afterEach(() => {
+    rmSync(repo, { recursive: true, force: true })
+    for (const [cle, valeur] of [["VERIFY_RECEIPT_ROOT", avant.root], ["VERIFY_RECEIPT_PATH", avant.path]] as const) {
+      if (valeur === undefined) delete process.env[cle]
+      else process.env[cle] = valeur
+    }
+  })
+
+  it("counts a full receipt as covering the tree, never a docs receipt", { timeout: 60_000 }, async () => {
+    // Hors du dépôt : dedans, non ignoré, le reçu compterait dans sa propre empreinte.
+    const recu = `${repo}-receipt.json`
+    process.env.VERIFY_RECEIPT_ROOT = repo
+    process.env.VERIFY_RECEIPT_PATH = recu
+    try {
+      const { worktreeHash } = await import("../../scripts/verify-receipt.mjs")
+      const { arbreDeCodeDuDossier } = await import("../../scripts/lib/arbre-de-code.mjs")
+      const { receiptCovers } = await import("../../scripts/long-run.mjs")
+      const base = { hash: worktreeHash(), tree: arbreDeCodeDuDossier(repo), at: new Date().toISOString() }
+      writeFileSync(recu, JSON.stringify({ ...base, checks: ["check:framework", "type-check", "lint", "test"] }))
+      expect(await receiptCovers()).toBe(true)
+      writeFileSync(recu, JSON.stringify({ ...base, checks: ["check:framework"], scope: "docs" }))
+      expect(await receiptCovers()).toBe(false)
+    } finally {
+      rmSync(recu, { force: true })
+    }
+  })
+})
