@@ -16,7 +16,7 @@ import { empreinteDesMigrations } from "../../scripts/lib/empreinte-des-migratio
  */
 
 const root = path.resolve(__dirname, "../..")
-const SCRIPTS = ["scripts/commit-depuis-export.mjs", "scripts/lib/arbre-de-code.mjs", "scripts/lib/empreinte-des-migrations.mjs", "scripts/sauts-toleres.txt"]
+const SCRIPTS = ["scripts/commit-depuis-export.mjs", "scripts/verify-receipt.mjs", "scripts/lib/arbre-de-code.mjs", "scripts/lib/empreinte-des-migrations.mjs", "scripts/sauts-toleres.txt"]
 const MIGRATION = "supabase/migrations/20261021190000_purge.sql"
 const TOLERE = lireLaListe(fs.readFileSync(path.join(root, "scripts/sauts-toleres.txt"), "utf8"))[0]
 
@@ -252,6 +252,50 @@ describe("commit-depuis-export on a throwaway repository", { timeout: 60_000 }, 
     expect([git(cas.depot, "show", `${recale.sha!}:a.ts`), git(cas.depot, "show", `${recale.sha!}:c.ts`)]).toEqual(["export const a = 3", "export const c = 1"])
   })
 
+  /** Le reçu doc que `… && node scripts/verify-receipt.mjs write check:framework,check:public docs` écrit dans l'export. */
+  function recuDoc(exporte: string) {
+    fs.mkdirSync(path.join(exporte, ".claude"), { recursive: true })
+    const recu = { checks: ["check:framework", "check:public"], scope: "docs", at: new Date().toISOString(), tree: arbreDeCodeDuDossier(exporte) }
+    fs.writeFileSync(path.join(exporte, ".claude/.verify-receipt.json"), JSON.stringify(recu))
+    return recu
+  }
+
+  it("should commit an export of documentation only on a docs receipt, with trailers that say so", () => {
+    const cas = monter()
+    fs.writeFileSync(path.join(cas.exporte, "CLAUDE.md"), "# Méthode\n")
+    fs.mkdirSync(path.join(cas.exporte, ".claude/skills/dev"), { recursive: true })
+    fs.writeFileSync(path.join(cas.exporte, ".claude/skills/dev/SKILL.md"), "skill\n")
+    const recu = recuDoc(cas.exporte)
+    fs.mkdirSync(path.join(cas.exporte, "docs/changelog.d"))
+    fs.writeFileSync(path.join(cas.exporte, "docs/changelog.d/2026-11-26-recu-doc.md"), "## [2026-11-26] — Reçu doc\n")
+
+    const result = lancer(cas)
+
+    expect(result.status, result.output).toBe(0)
+    const sha = result.sha!
+    expect(git(cas.depot, "rev-parse", `${sha}^`)).toBe(cas.base)
+    expect(git(cas.depot, "show", `${sha}:CLAUDE.md`)).toBe("# Méthode")
+    expect(git(cas.depot, "log", "-1", "--format=%(trailers:key=Verified-tree,valueonly)", sha)).toBe(arbreDeCodeDuCommit(cas.depot, sha))
+    expect(git(cas.depot, "log", "-1", "--format=%(trailers:key=Verified,valueonly)", sha)).toBe(`docs seule, check:framework, check:public, ${recu.at}`)
+  })
+
+  it("should refuse a docs receipt when the export changes code, a script or a migration", () => {
+    for (const [chemin, contenu] of [
+      ["a.ts", "export const a = 2\n"],
+      ["scripts/outil.mjs", "export {}\n"],
+      [MIGRATION, "select 1;\n"],
+    ]) {
+      const cas = monter()
+      fs.writeFileSync(path.join(cas.exporte, "CLAUDE.md"), "# Méthode\n")
+      fs.writeFileSync(path.join(cas.exporte, chemin), contenu)
+      recuDoc(cas.exporte)
+      const result = lancer(cas)
+      expect(result.status, `${chemin} : ${result.output}`).toBe(1)
+      expect(result.output).toContain(`autre chose que de la documentation : ${chemin}`)
+      expect(git(cas.origin, "rev-parse", "main")).toBe(cas.base)
+    }
+  })
+
   it("should refuse a commit that changes nothing, and say its usage without its three options", () => {
     const cas = monter()
     recuVert(cas.exporte)
@@ -298,6 +342,16 @@ describe("lireLeRecu", () => {
     ["with a wholly skipped file out of the list", { tests: { ...VERT.tests, fichiersSautes: ["tests/integration/files.test.ts"] } }, "tests/integration/files.test.ts"],
   ])("should refuse a receipt %s", (_cas, surcharge, raison) => {
     expect(() => lireLeRecu(ecrire({ ...VERT, ...surcharge }), [TOLERE])).toThrow(raison)
+  })
+
+  it("should accept a docs receipt without tests nor test base, and refuse one without check:framework or check:public", () => {
+    const DOC = { checks: ["check:framework", "check:public"], scope: "docs", at: new Date().toISOString(), tree: "a".repeat(40) }
+    expect(lireLeRecu(ecrire(DOC), [TOLERE]).scope).toBe("docs")
+    expect(() => lireLeRecu(ecrire({ ...DOC, checks: ["check:public"] }), [TOLERE])).toThrow("check:framework")
+    // Le contrôle de secrets fait partie du reçu doc : sans lui, refusé.
+    expect(() => lireLeRecu(ecrire({ ...DOC, checks: ["check:framework"] }), [TOLERE])).toThrow("check:public")
+    // Sans `scope: "docs"`, le même reçu est un reçu complet incomplet.
+    expect(() => lireLeRecu(ecrire({ ...DOC, scope: undefined }), [TOLERE])).toThrow("type-check")
   })
 
   it("should refuse a missing receipt", () => {

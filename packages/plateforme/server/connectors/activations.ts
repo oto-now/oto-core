@@ -128,6 +128,8 @@ function connectorView(
     label: definition?.label ?? connector,
     ...(definition?.description !== undefined ? { description: definition.description } : {}),
     ...(definition?.logoDomain !== undefined ? { logoDomain: definition.logoDomain } : {}),
+    // Ce que sert `connectorLogo` : l'image déclarée, sinon le favicon du domaine.
+    ...(definition?.logo !== undefined || definition?.logoDomain !== undefined ? { hasLogo: true as const } : {}),
     // Ouvert par défaut : `inactive` dit un connecteur bloqué, ou payé par l'hôte et à adopter ; `activatedAt` et `activatedBy`, une adoption.
     state: closed ? "inactive" : "active",
     activatedAt: active ? row.updated_at : null,

@@ -35,6 +35,31 @@ export const EXCLUS = [
 ]
 export const estExclu = (path) => EXCLUS.some((r) => r.test(path))
 
+// Documentation de méthode : parmi les checks, seuls `check:framework` (routing, citations, références de skills) et
+// le contrôle de secrets de `check:public` la lisent ; aucun type-check, lint ni test n'en dépend. Un changement qui
+// ne touche qu'elle (et des chemins `EXCLUS`) se vérifie par un reçu doc (`scope: "docs"`, contrôle de méthode et
+// de secrets seulement). Liste fermée, pas « tout `.md` » : un `.md` lu par
+// des tests (`packages/plateforme/changelog.d/`, le README des migrations) n'en est pas, ni rien sous
+// `scripts/`, `packages/`, `src/`, `tests/`, `supabase/`, `.github/`, ni `package.json`, ni les hooks.
+export const DOC = [/^(?:\.method|docs|\.claude\/skills|\.claude\/agents)\/.+\.md$/, /^(?:CLAUDE|README)\.md$/]
+export const estDoc = (path) => DOC.some((r) => r.test(path))
+
+/**
+ * Les chemins que `apres` (commit ou arbre) change par rapport à `avant` dans le dépôt `depot`, hors documentation
+ * (`estDoc`) et hors `EXCLUS` : vide quand le changement ne touche que de la doc. `avant` absent (commit racine) :
+ * tous les chemins de `apres`.
+ */
+export function cheminsHorsDoc(depot, avant, apres) {
+  const args = avant ? [avant, apres] : ['--root', apres]
+  return execFileSync('git', ['-C', depot, '-c', 'core.quotePath=false', 'diff-tree', '-r', '--no-commit-id', '--no-renames', '--name-only', '-z', ...args], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+    .split('\0')
+    .filter((chemin) => chemin && !estDoc(chemin) && !estExclu(chemin))
+}
+
 /** git dans le dépôt jetable `depot`, index `index` ; `env` ajoute ses variables (arbre de travail, objets). */
 function gitJetable(depot, index, args, { env = {}, input } = {}) {
   return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {

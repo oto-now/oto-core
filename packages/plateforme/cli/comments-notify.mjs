@@ -9,7 +9,7 @@
  * ni du relais n'est jamais écrit. TLS sauf `sslmode` écrit dans l'URL (`ssl-option.mjs`).
  */
 import postgres from 'postgres'
-import { commentsDigestMail, dueBefore, isDue, linkOrigin, recipientsOf } from './comments-mail.mjs'
+import { commentsDigestMail, dueBefore, isDue, linkOrigin, managersOf, recipientsOf } from './comments-mail.mjs'
 import { failureCode, relaySettings, smtpTransport } from './mail.mjs'
 import { mask, urlPassword } from './masking.mjs'
 import { sslOption } from './ssl-option.mjs'
@@ -20,9 +20,10 @@ const NOTIFY = { method: 'cli', tool: 'comments', op: 'notify' }
 /**
  * Les commentaires qui peuvent encore prévenir quelqu'un, du plus ancien au plus récent : ceux d'un fil ouvert, sur une
  * page hors corbeille (un commentaire supprimé n'a plus de ligne). Avec chacun, ce que `recipientsOf` lit : s'il ouvre
- * son fil, les auteurs qui le précèdent, et les responsables de l'équipe propriétaire de la page (le propriétaire
- * effectif, porté par la page ou par son ancêtre le plus proche, comme `platform.node_owner`, que cette connexion sans
- * personne ne peut pas appeler).
+ * son fil, les auteurs qui le précèdent, et les faits de `managersOf` : le propriétaire effectif de la page (porté par
+ * elle ou par son ancêtre le plus proche, comme `platform.node_owner`, que cette connexion sans personne ne peut pas
+ * appeler), les administrateurs, les responsables de l'équipe propriétaire, et les membres qu'une règle « Accès
+ * complet » de la page ou d'un ancêtre vise (eux, leur équipe ou toute l'organisation).
  * @param {import('postgres').Sql} sql
  */
 function readComments(sql) {
@@ -32,14 +33,23 @@ function readComments(sql) {
            not exists (select 1 from platform.comments e where e.thread_id = c.thread_id and (e.created_at, e.id) < (c.created_at, c.id)) as first,
            coalesce((select array_agg(distinct e.author::text) from platform.comments e
                       where e.thread_id = c.thread_id and e.author is not null and (e.created_at, e.id) < (c.created_at, c.id)), '{}') as earlier_authors,
+           o.owner_kind, o.owner_user_id::text as owner_user,
            coalesce((select array_agg(tm.user_id::text) from platform.team_members tm
-                      where tm.role = 'lead'
-                        and tm.team_id = (select a.owner_team_id from platform.nodes a
-                                           where a.org_id = n.org_id and a.lpath operator(extensions.@>) n.lpath and a.owner_kind is not null
-                                           order by extensions.nlevel(a.lpath) desc limit 1)), '{}') as team_leads
+                      where tm.role = 'lead' and o.owner_kind = 'team' and tm.team_id = o.owner_team_id), '{}') as team_leads,
+           coalesce((select array_agg(m.user_id::text) from platform.members m where m.org_id = n.org_id and m.role = 'admin'), '{}') as admins,
+           coalesce((select array_agg(distinct m.user_id::text)
+                       from platform.nodes a
+                       join platform.access_rules r on r.node_id = a.id and r.level = 'manage'
+                       join platform.members m on m.org_id = a.org_id
+                      where a.org_id = n.org_id and a.lpath operator(extensions.@>) n.lpath
+                        and (r.subject_user_id = m.user_id or r.subject_org
+                             or exists (select 1 from platform.team_members tm where tm.team_id = r.subject_team_id and tm.user_id = m.user_id))), '{}') as full_access
       from platform.comments c
       join platform.comment_threads t on t.id = c.thread_id and t.status = 'open'
       join platform.nodes n on n.id = t.node_id and n.org_id = t.org_id and n.deleted_at is null
+      left join lateral (select a.owner_kind, a.owner_team_id, a.owner_user_id from platform.nodes a
+                          where a.org_id = n.org_id and a.lpath operator(extensions.@>) n.lpath and a.owner_kind is not null
+                          order by extensions.nlevel(a.lpath) desc limit 1) o on true
      order by c.created_at, c.id`
 }
 
@@ -62,7 +72,13 @@ async function pendingByPerson(sql) {
       first: comment.first,
       threadAuthor: comment.thread_author,
       earlierAuthors: comment.earlier_authors,
-      teamLeads: comment.team_leads,
+      managers: managersOf({
+        ownerKind: comment.owner_kind,
+        ownerUser: comment.owner_user,
+        admins: comment.admins,
+        teamLeads: comment.team_leads,
+        fullAccess: comment.full_access,
+      }),
     })
     for (const userId of recipients.filter((person) => !already.has(`${comment.id}:${person}`))) {
       const key = `${comment.org_id}:${userId}`

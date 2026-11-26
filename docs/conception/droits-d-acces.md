@@ -1,7 +1,7 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-11-25
+- **Dernière révision** : 2026-11-26
 
 ## Résumé
 
@@ -54,7 +54,7 @@ service, la RLS ne gardant que l'isolation par organisation) est porté par
 
 ### Refus
 
-- Un nœud invisible répond `not_found`, comme un chemin inconnu ; sur un nœud visible sans le niveau voulu, le refus dit à qui demander (« … is reserved to team Ventes (lead: …). Ask them for access. ») (H68).
+- Un nœud invisible répond `not_found`, comme un chemin inconnu ; sur un nœud visible sans le niveau voulu, le refus dit à qui demander (« … is reserved to team Ventes (lead: …). Ask them for access. ») (H68) ; un refus d'écrire à qui lit le nœud propose d'abord le changement par un commentaire, l'appel exact de `comment.add`, avant l'accès ([commentaires](commentaires.md)).
 - Une écriture qui ne rend aucune ligne après une décision positive est un `conflict` (« … changed meanwhile. Reload … and retry. »), nommé au log serveur, jamais `forbidden` ni `not_found` (HN-E01S07-6). Une règle posée puis retirée pendant sa pose (`23505`, puis relecture vide) rend `conflict` (« Rechargez la page »), sans nouvel essai (HN-E05S03-39).
 
 ### Règles d'accès

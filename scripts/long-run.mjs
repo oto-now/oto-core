@@ -110,9 +110,8 @@ async function waitForFree(log) {
 }
 
 /**
- * Le reçu couvre l'arbre ET déclare un verify complet. Un reçu doc (`scope: "docs"`, seul
- * `check:framework` a tourné) ne dispense pas d'un `verify` : le gate le demande justement quand
- * le commit touche du code (décision JB, 2026-11-26).
+ * Le reçu couvre l'arbre ET déclare un verify complet. Un reçu doc (`scope: "docs"`, seuls `check:framework` et
+ * `check:public` ont tourné) ne dispense pas d'un `verify` : le gate le demande justement quand le commit touche du code.
  */
 export async function receiptCovers() {
   try {

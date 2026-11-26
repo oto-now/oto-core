@@ -158,9 +158,9 @@ export function lignesDesConnecteurs({ comptes, connecteurs, formulaires, partag
   return { lignes, comptes: { tous: comptes.length, moi: miens.length, partages: comptes.length - miens.length } }
 }
 
-/** L'adresse du logo d'un connecteur qui déclare le domaine de son outil ; `null` sinon, et la tuile garde l'initiale. */
+/** L'adresse du logo d'un connecteur qui en a un (`OrgConnector.hasLogo`) ; `null` sinon, et la tuile garde l'initiale. */
 export function logoDe(connecteur: string, catalogue: readonly OrgConnector[]): string | null {
-  return catalogue.some((candidat) => candidat.connector === connecteur && candidat.logoDomain !== undefined) ? connectorLogoAddress(connecteur) : null
+  return catalogue.some((candidat) => candidat.connector === connecteur && candidat.hasLogo === true) ? connectorLogoAddress(connecteur) : null
 }
 
 /** Qui a bloqué l'outil d'un compte pour l'organisation (`closedBy` d'un connecteur fermé) ; `null` : il ne l'est pas. */

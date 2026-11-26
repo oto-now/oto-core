@@ -222,7 +222,7 @@ export function consentLabel(who: string, connector: string): string {
 /**
  * Range le consentement sur le compte personnel de la personne : le sien de ce connecteur, de cet accès et de ce
  * libellé s'il existe (pour un connecteur à un seul compte par personne, `single`, le sien de ce connecteur, quel que soit
- * son libellé, qui prend le nouveau) : une reconnexion, actif de nouveau, raison effacée ; sinon un compte neuf, réel,
+ * son libellé, qui prend le nouveau) : une reconnexion, actif de nouveau, raison et dernier test effacés ; sinon un compte neuf, réel,
  * qui retient l'accès (`null` pour un connecteur à un seul accès). Le même libellé sur un compte d'un autre accès est pris
  * (`conflict`) : un compte ne change jamais d'accès. Jetons chiffrés : le jeton de rafraîchissement dans le secret du
  * compte, le jeton d'accès et son échéance à part, les droits accordés en clair, et pour un compte `single` ses réglages et
@@ -264,6 +264,8 @@ async function keepConsent(
                settings = case when ${connector.single} then ${sql.json(connector.settings)} else settings end,
                label = case when ${connector.single} then ${label} else label end, status = 'active', status_reason = null
          where id = ${id}`
+      // Le dernier test portait sur l'ancienne connexion : il s'efface avec elle, comme à une nouvelle clé (`setAccountSecret`).
+      await sql`select platform.forget_account_probe(${id})`
       const [written] = await accountRows(sql, orgId, { id })
       if (!written) {
         console.error(`[platform] completeConnectorConsent: account ${id} written but not read back`)

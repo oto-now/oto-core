@@ -43,14 +43,14 @@ export function TesterUneDemande({ ici, demande, Lien }: { ici: string; demande:
 
 type Candidat = NonNullable<DonneesDeLApercu["candidates"]>[number]
 
-/** Une procédure, par son titre (son chemin sans titre), puis son score. */
-function Procedure({ candidat, prefixeDesPages, Lien }: Navigation & { candidat: Pick<Candidat, "path" | "title" | "score"> }) {
+/** Une procédure, par son titre (son chemin sans titre), puis son score et ses mots en commun avec la demande. */
+function Procedure({ candidat, prefixeDesPages, Lien }: Navigation & { candidat: Pick<Candidat, "path" | "title" | "score" | "words"> }) {
   return (
     <>
       <Lien href={`${prefixeDesPages}${candidat.path}`} className={LIEN}>
         {candidat.title || candidat.path}
       </Lien>
-      {` — ${TEST_D_UNE_DEMANDE.score(candidat.score)}`}
+      {` ${TEST_D_UNE_DEMANDE.score(candidat.score, candidat.words)}`}
     </>
   )
 }
@@ -60,7 +60,8 @@ const TITRE_DU_ROUTAGE = "routage-de-la-demande"
 /** Ce que le routage a trouvé pour la demande : la procédure retenue, ou qu'aucune ne l'est, puis les proches. */
 export function RoutageDeLaDemande({ apercu, ...navigation }: Navigation & { apercu: DonneesDeLApercu }) {
   const candidats = apercu.candidates ?? []
-  const retenue = apercu.served ? { ...apercu.served, title: candidats.find((candidat) => candidat.path === apercu.served?.path)?.title ?? "" } : null
+  const lue = candidats.find((candidat) => candidat.path === apercu.served?.path)
+  const retenue = apercu.served ? { ...apercu.served, title: lue?.title ?? "", words: lue?.words } : null
   const proches = candidats.filter((candidat) => candidat.path !== retenue?.path)
   return (
     <section aria-labelledby={TITRE_DU_ROUTAGE} className="flex flex-col gap-2">

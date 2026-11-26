@@ -175,9 +175,15 @@ export type OrgConnector = {
   description?: string
   /**
    * Le domaine de l'outil (`attio.com`), en minuscules, sans schéma ni chemin, tel que sa déclaration le donne
-   * (`ConnectorDefinition.logoDomain`), d'où l'écran tire son logo (`connectorLogoAddress`) ; absent sans lui.
+   * (`ConnectorDefinition.logoDomain`), d'où le serveur tire son logo à défaut d'image déclarée ; absent sans lui.
    */
   logoDomain?: string
+  /**
+   * `true` : l'adresse du logo (`connectorLogoAddress`) a une image à servir, déclarée (`ConnectorDefinition.logo`) ou le
+   * favicon de `logoDomain`, et l'écran la montre ; absent sans l'une ni l'autre, la tuile garde l'initiale. Les octets
+   * ne voyagent pas avec la liste.
+   */
+  hasLogo?: true
   state: "active" | "inactive"
   /** Actif : depuis quand ; inactif : `null`. */
   activatedAt: string | null

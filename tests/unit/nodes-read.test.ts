@@ -162,7 +162,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       openDraftRow(annonces, "annonces")
       await content(annonces)
       const marc = await read("marc", { path: "annonces" })
-      expect(marc.text).toContain("owner: organisation Acme Test\naccess: read\nparent: guide — guide\n")
+      expect(marc.text).toContain("owner: organisation Acme Test\naccess: read (suggest changes with comment.add)\nparent: guide — guide\n")
       expect(marc.text).not.toContain("draft:")
       expect(marc.text).not.toContain("To edit")
       expect([marc.nextActions, marc.data?.has_draft]).toEqual([[], false])
@@ -173,7 +173,7 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       // Partagé par une règle sous l'espace de Claire, qu'Ada ne voit pas (D5) : le titre du parent serait une fuite (N56).
       await content(base([], [{ node: "private/claire/notes", user: "ada", level: "read" }]))
       const notes = await read("ada", { path: "private/claire/notes" })
-      expect(notes.text).toContain("owner: Claire Morel (personal)\naccess: read\nparent: none\n")
+      expect(notes.text).toContain("owner: Claire Morel (personal)\naccess: read (suggest changes with comment.add)\nparent: none\n")
       expect(notes.data?.parent).toBeNull()
     })
 

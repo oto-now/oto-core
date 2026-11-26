@@ -87,6 +87,31 @@ describe("EcranConnexion address (AC1)", () => {
   })
 })
 
+// Contexte plus court (AC2) : la phrase en quatre lignes, dont la dernière couvre plusieurs Oto ; la note qui
+// déconseillait la phrase à qui a plusieurs connecteurs d'organisation part.
+describe("EcranConnexion preference sentence", () => {
+  it("should copy the four lines of the preference sentence, named after the organisation, with no note against several spaces", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    poserLePressePapiers(writeText)
+    rendre()
+    const guide = screen.getByRole("tabpanel", { name: "claude.ai" })
+
+    await act(async () => fireEvent.click(within(guide).getByRole("button", { name: "Copier la phrase de préférences" })))
+    // Espaces insécables dans les guillemets et avant les deux-points, composés (jamais en littéral).
+    const n = String.fromCharCode(160)
+    const acme = `«${n}Acme Énergies${n}»`
+    expect(writeText).toHaveBeenCalledWith(
+      [
+        `Au début de chaque conversation, charge le contexte de mon Oto ${acme} avec son outil context.`,
+        `Dans ${acme}, tu peux${n}: suivre nos procédures, lire et écrire nos pages et tableaux, utiliser nos connecteurs (emails, comptabilité, CRM…).`,
+        `Réflexes${n}: cherche d'abord dans ${acme} avant de répondre de mémoire, de chercher sur le web ou de dire que tu ne peux pas ; suis la procédure trouvée pas à pas.`,
+        "Si j'ai plusieurs Oto, charge seulement celui que la demande concerne.",
+      ].join("\n"),
+    )
+    expect(within(guide).queryByText(/plusieurs connecteurs d'organisation/)).toBeNull()
+  })
+})
+
 describe("EcranConnexion connections (AC7)", () => {
   it("should give one line per assistant family, newest first, with its readable date and signature", () => {
     const connexions: DerniereConnexion[] = [

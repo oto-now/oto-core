@@ -18,6 +18,7 @@
 //   d'index d'un Contexte sont écrites en toutes lettres (le corps d'un Contexte se lit en base, `contextBody`) : ce
 //   sont celles du contrat, M71. Une ligne non reconnue reste telle que servie.
 import { describe, expect, it } from "vitest"
+import { registerHostSurface } from "../../packages/plateforme/server/catalog/surface"
 import { workspaceRules } from "../../packages/plateforme/server/context/blocks/code"
 import { contextParts, type ContextBody, type PartFacts } from "../../packages/plateforme/server/context/blocks/contexts"
 import { guestsText } from "../../packages/plateforme/server/context/blocks/guests"
@@ -28,6 +29,7 @@ import { CONTEXT_BUDGET, renderContext, type ContextBlock } from "../../packages
 import type { Identity, IdentityTeam } from "../../packages/plateforme/server/identity"
 import {
   ancreDeLaPartie,
+  auteursDesProches,
   cheminDuContexte,
   morceauxDeLaFin,
   morceauxDuBloc,
@@ -182,11 +184,12 @@ describe("contextParts (E05-S12, AC-1 to AC-4)", () => {
 // E11-S03 (lot b, fiche D134) : plus de taille par bloc ; seul le plafond de `renderContext` coupe, et toute coupe
 // est dite (le plafond : `context-engine.test.ts`).
 describe("whole blocks under the cap (E11-S03, AC-b1, AC-b2)", () => {
-  it("should serve a 10,000-character Contexte and 20 recent or new contents whole, without pointer nor notice, every report line full", () => {
+  it("should serve a 10,000-character Contexte and 10 recent or new contents whole, without pointer nor notice, every report line full", () => {
     const long = Array.from({ length: 200 }, (_, index) => `Règle ${index} de l'organisation, relue chaque trimestre.`).join("\n").slice(0, 10_000)
     expect(long.length).toBe(10_000)
     const parts = contextParts(identity(), FACTS, new Map([["contexte", body(long)]]))
-    const versions = Array.from({ length: 20 }, (_, index) => ({ path: `annonces/a${index}`, kind: "page", revision: index + 1, title: `${"Une annonce ".repeat(6)}${index}`, at: `2026-09-2${index % 9}T08:00:00.000Z` }))
+    // Contexte plus court (AC9) : 10 lignes servies ; des titres plus longs gardent le bloc au-delà des anciennes tailles.
+    const versions = Array.from({ length: 10 }, (_, index) => ({ path: `annonces/a${index}`, kind: "page", revision: index + 1, title: `${"Une annonce ".repeat(12)}${index}`, at: `2026-09-2${index % 9}T08:00:00.000Z` }))
     const recent = recentText([], { versions, activations: [] }, "2026-09-20T10:00:00.000Z")
     const blocks = [{ name: "code", text: "ctx: XXXX-XXXX" }, ...parts, ...(recent ? [recent] : [])]
     // Plus long que les anciennes tailles nominales des nouveautés et des contenus récents (600, 1 400), un total sous le plafond.
@@ -234,19 +237,24 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 describe("How this workspace works (E05-S12, AC-10)", () => {
   // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB) ;
   // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus ; la règle des commentaires, une ligne,
-  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus.
-  it("should hold 20 lines and 3,950 characters at most with a 10-character prefix, the same for everyone", () => {
+  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus. Contexte plus
+  // court (AC3, AC5) : les règles que les descriptions des outils portent, et la notice d'une procédure, partent.
+  it("should hold 17 lines and 3,300 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
-    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(20)
-    expect(rules.length).toBeLessThanOrEqual(3_950)
-    expect(rules.split("\n")[3]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
+    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(17)
+    expect(rules.length).toBeLessThanOrEqual(3_300)
+    // AC5 (décision de JB) : une ligne, la plus courte, sur ce qui fait trouver une procédure ; le guide et le contrat gardent le détail.
+    expect(rules).toContain(
+      "\n- A procedure's title is the action in the words of those who ask for it (a verb and an object); its summary says what it does, then 3 to 5 ways people ask for it.\n",
+    )
+    expect(rules.split("\n")[2]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
     expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
-    expect(rules).toContain("A procedure is a page of numbered steps")
-    expect(rules).toContain("A good procedure has a part « When to use it »")
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
     expect(rules.split("\n")[0]).toBe("## How this workspace works")
-    expect(rules).toContain("abcdefghij_context (first, then again with since_ctx for each new request), abcdefghij_find, abcdefghij_read, abcdefghij_call, abcdefghij_write, abcdefghij_feedback.")
+    expect(rules.split("\n")[1]).toMatch(/^- Usual order: context, then find/)
+    // AC3 : ce que disent déjà les descriptions de `write` et de `call`, et la liste des six outils ; AC5 : la notice d'une procédure.
+    for (const gone of ["Six tools:", "base_revision", "confirm: true", "A procedure is a page of numbered steps", "A good procedure has"]) expect(rules).not.toContain(gone)
     // Aucune donnée d'une identité, aucun nom de produit ni de client : seul le préfixe varie.
     expect(workspaceRules("acme").replaceAll("acme_", "abcdefghij_")).toBe(rules)
     for (const word of ["<p>", "Oto", "Claude", "ChatGPT", "Acme", "ventes"]) expect(rules).not.toContain(word)
@@ -254,7 +262,21 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     const address = orgAddress("https://demo.example.test/api/mcp")
     const withAddress = workspaceRules("abcdefghij", address)
     expect(withAddress.split("\n")).toEqual([rules.split("\n")[0], `- ${address}`, ...rules.split("\n").slice(1)])
-    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(21)
+    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(18)
+  })
+
+  // Contexte plus court (AC4) : un outil que rien ne nomme peut exister ; `connector.connect` cité seulement si l'hôte le sert.
+  it("should tell to find a tool of the organisation before saying no, and cite connector.connect only when the host serves it", () => {
+    const tools =
+      "- The organisation's tools (email, accounting, CRM…) are functions run with acme_call: one not mentioned here may still exist, so search it with acme_find before you say it cannot be done or search the web."
+    const connect = " A tool not connected yet: acme_call connector.connect gives the link where the user connects it."
+    const served = workspaceRules("acme").split("\n")
+    registerHostSurface({ functions: [], capabilities: [], fetchCallerUrls: false })
+    try {
+      expect([served[3], workspaceRules("acme").split("\n")[3]]).toEqual([`${tools}${connect}`, tools])
+    } finally {
+      registerHostSurface(null)
+    }
   })
 })
 
@@ -523,22 +545,27 @@ describe("the end of the text read back (AC-14)", () => {
 })
 
 describe("the contents close to a tested request read back by the screen", () => {
-  it("should read each content by its kind, its score, its title and the start of its summary, without the reading instruction", () => {
+  // Contexte plus court (AC7) : le texte servi ne porte plus le score ; l'écran le lit, avec les mots en commun, dans les
+  // données de l'aperçu (`related`), par chemin.
+  it("should read each content by its kind, its title and the start of its summary from the text, its score and words from the data", () => {
     const close = [
       { nodeId: "n1", path: "ventes/suivi_prospects", kind: "table", title: "Suivi des prospects", summary: "Les prospects de l'équipe. Leur statut.", score: 0.49 },
       { nodeId: "n2", path: "ventes/notes", kind: "page", title: "Notes", summary: "", score: 0.4 },
     ]
     // La doublure ne porte que ce que `otherLine` lit d'un candidat.
     const block = relatedBlock(close as unknown as Parameters<typeof relatedBlock>[0], "demo")
+    const auteurs = auteursDesProches({ related: [{ path: "ventes/suivi_prospects", title: "Suivi des prospects", kind: "table", score: 0.49, words: ["prospects"] }] })
 
     expect(ancreDeLaPartie({ name: "related" }, 1)).toBe("related-content")
-    expect(relu(block)).toEqual([
+    expect(block?.text.split("\n")[1]).toBe("- ventes/suivi_prospects (table): Suivi des prospects. Les prospects de l'équipe.")
+    expect(morceauxDuBloc("related", block?.text ?? "", auteurs)).toEqual([
       {
         genre: "liste",
         legende: null,
         lignes: [
-          { genre: "proche", chemin: "ventes/suivi_prospects", nature: "table", score: "0.49", titre: "Suivi des prospects", resume: "Les prospects de l'équipe. Leur statut." },
-          { genre: "proche", chemin: "ventes/notes", nature: "page", score: "0.40", titre: "Notes", resume: "" },
+          // Contexte plus court (AC9 bis) : la première phrase du résumé seule ; sans score aux données, aucun.
+          { genre: "proche", chemin: "ventes/suivi_prospects", nature: "table", auteur: { score: 0.49, mots: ["prospects"] }, titre: "Suivi des prospects", resume: "Les prospects de l'équipe." },
+          { genre: "proche", chemin: "ventes/notes", nature: "page", titre: "Notes", resume: "" },
         ],
       },
     ])
@@ -573,16 +600,16 @@ describe("the guest view read back by the screen", () => {
     ])
   })
 
-  it("should read the last tier, one line per team, as the team with the count of what it shares", () => {
-    const many = { ...teams[0], entries: Array.from({ length: 400 }, (_, rank) => ({ path: `finance/page_${rank}`, title: `Page ${rank}`, summary: "s", kind: "page" as const, under: 0 })) }
-    const { text, tier } = guestsText([many], "demo")
+  // Contexte plus court : au-delà de 25 points d'entrée, la dernière ligne les compte ; l'écran la lit en une liste sans légende.
+  it("should read the line after the 25 entry points as the count of the others", () => {
+    const many = { ...teams[0], entries: Array.from({ length: 1030 }, (_, rank) => ({ path: `finance/page_${String(rank).padStart(4, "0")}`, title: `Page ${rank}`, summary: "s", kind: "page" as const, under: 0 })) }
+    const { text } = guestsText([many], "demo")
+    const morceaux = morceauxDuBloc("guests", text)
 
-    expect(tier).toBe(4)
-    expect(morceauxDuBloc("guests", text)).toEqual([{ genre: "liste", legende: { genre: "equipe", nom: "Finance", responsables: "" }, lignes: [{ genre: "partages", nombre: 400 }] }])
-    // Avec ses responsables, et un seul contenu.
-    const seul = "### Team Support. Lead: Paul Girard. 1 content shared with you: search it with demo_find."
-    expect(morceauxDuBloc("guests", [...text.split("\n").slice(0, 2), seul].join("\n"))).toEqual([
-      { genre: "liste", legende: { genre: "equipe", nom: "Support", responsables: "Paul Girard" }, lignes: [{ genre: "partages", nombre: 1 }] },
+    expect([text.split("\n").at(-1), morceaux.at(-1), morceaux.length]).toEqual([
+      "and 1,005 more shared with you: search them with demo_find and the words of what you need.",
+      { genre: "liste", legende: null, lignes: [{ genre: "partages", nombre: 1005 }] },
+      2,
     ])
   })
 })

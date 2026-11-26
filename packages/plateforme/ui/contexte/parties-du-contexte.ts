@@ -119,10 +119,16 @@ export type LigneServie =
   | { genre: "index"; chemin: string; titre: string; resume: string }
   /** Un point d'entrée de la vue invité : `dessous`, les contenus lisibles sous lui. */
   | { genre: "invite"; chemin: string; titre: string; resume: string; dessous: number }
-  /** Une page ou un tableau proche de la demande testée : son genre, son score, son titre et le début de son résumé. */
-  | { genre: "proche"; chemin: string; nature: string; score: string; titre: string; resume: string }
-  /** Le dernier repli de la vue invité : les contenus qu'une équipe partage, comptés au lieu d'être listés. */
+  /**
+   * Une page ou un tableau proche de la demande testée : son genre, son titre et le début de son résumé ; `auteur` : son
+   * score et ses mots en commun avec la demande, lus dans les données de l'aperçu (le texte servi ne les porte plus).
+   */
+  | { genre: "proche"; chemin: string; nature: string; auteur?: PourLAuteur; titre: string; resume: string }
+  /** La dernière ligne de la vue invité : les points d'entrée au-delà de ceux listés, comptés. */
   | { genre: "partages"; nombre: number }
+
+/** Ce que l'auteur lit d'un contenu proche : son score (`DonneesDeLApercu.related`) et les mots de la demande trouvés dans son titre ou son résumé. */
+export type PourLAuteur = { score: number; mots: readonly string[] }
 
 /**
  * La légende d'une liste servie : la borne des nouveautés lue dans l'en-tête des contenus récents, ou le titre d'une
@@ -265,16 +271,15 @@ function recents(lignes: readonly string[]): MorceauServi[] | null {
 }
 
 /**
- * La ligne d'équipe du dernier repli, `### Team <nom>. Lead: <responsables>. <n> contents shared with you: search them
- * with <p>_find.` : la ligne de l'équipe, et le compte de ses contenus ; `null` pour toute autre ligne.
+ * La dernière ligne de la vue invité, `and <n> more shared with you: search them with <p>_find and the words of what you
+ * need.` : le nombre des points d'entrée non listés ; `null` pour toute autre ligne.
  */
-function equipeComptee(ligne: string): { equipe: string; nombre: number } | null {
-  const marque = [SERVED_GUESTS.countOne, SERVED_GUESTS.countMany].map((compte) => ligne.lastIndexOf(compte)).find((rang) => rang > 0)
-  if (marque === undefined || !ligne.endsWith(SERVED_GUESTS.countEnd)) return null
-  const avant = ligne.slice(0, marque)
-  const espace = avant.lastIndexOf(" ")
-  const nombre = avant.slice(espace + 1).replaceAll(",", "")
-  return espace > 0 && NOMBRE_SERVI.test(nombre) ? { equipe: avant.slice(0, espace), nombre: Number(nombre) } : null
+function autresPartages(ligne: string): number | null {
+  const { moreStart, moreMiddle, moreEnd } = SERVED_GUESTS
+  const milieu = ligne.indexOf(moreMiddle)
+  if (!ligne.startsWith(moreStart) || milieu < 0 || !ligne.endsWith(moreEnd)) return null
+  const nombre = ligne.slice(moreStart.length, milieu).replaceAll(",", "")
+  return NOMBRE_SERVI.test(nombre) ? Number(nombre) : null
 }
 
 /** `### Team <nom>. Lead: <responsables>.` : l'équipe d'une vue invité ; `null` pour toute autre ligne. */
@@ -303,54 +308,65 @@ function ligneInvitee(ligne: string): LigneServie | null {
 
 /**
  * La vue invité : son titre et sa consigne (dite à l'assistant, non montrée), puis une liste par équipe, sous son nom et
- * ses responsables : ses points d'entrée, ou, au dernier repli, le compte de ses contenus. Une ligne d'une autre forme
- * reste telle que servie.
+ * ses responsables : ses points d'entrée ; au-delà de ceux listés, une liste sans légende qui compte les autres. Une ligne
+ * d'une autre forme reste telle que servie.
  */
 function invites(lignes: readonly string[]): MorceauServi[] | null {
   if (lignes[0] !== SERVED_GUESTS.title || !lignes[1]?.startsWith(SERVED_GUESTS.noticeStart)) return null
   const { morceaux, brut, ligne } = assembleur()
   for (const texte of lignes.slice(2)) {
-    const comptee = equipeComptee(texte)
-    const equipe = equipeInvitante(comptee?.equipe ?? texte)
-    const lue = equipe ? null : ligneInvitee(texte)
-    if (equipe) morceaux.push({ genre: "liste", legende: equipe, lignes: comptee ? [{ genre: "partages", nombre: comptee.nombre }] : [] })
+    const autres = autresPartages(texte)
+    const equipe = autres === null ? equipeInvitante(texte) : null
+    const lue = equipe || autres !== null ? null : ligneInvitee(texte)
+    if (autres !== null) morceaux.push({ genre: "liste", legende: null, lignes: [{ genre: "partages", nombre: autres }] })
+    else if (equipe) morceaux.push({ genre: "liste", legende: equipe, lignes: [] })
     else if (lue && morceaux.at(-1)?.genre === "liste") ligne(lue)
     else brut(texte)
   }
   return morceaux
 }
 
-/** `- <chemin> (<genre>, score <s>): <titre>. <résumé>` ; sans « . », tout le texte est le titre. */
-function ligneProche(ligne: string): LigneServie | null {
+/**
+ * `- <chemin> (<genre>): <titre>. <résumé>` ; sans « . », tout le texte est le titre. Le score et les mots en commun
+ * viennent des données de l'aperçu (`auteurs`, par chemin), jamais du texte servi.
+ */
+function ligneProche(ligne: string, auteurs: ReadonlyMap<string, PourLAuteur>): LigneServie | null {
   const lue = cheminEtReste(ligne, SERVED_RELATED.kindStart)
   const fin = lue ? lue.reste.indexOf(SERVED_RELATED.textStart) : -1
   if (!lue || fin < 0) return null
-  const [nature, score, ...autres] = lue.reste.slice(0, fin).split(SERVED_RELATED.score)
-  if (!nature || score === undefined || autres.length > 0) return null
+  const nature = lue.reste.slice(0, fin)
+  if (!nature) return null
   const texte = lue.reste.slice(fin + SERVED_RELATED.textStart.length)
   const coupe = texte.indexOf(SERVED_RELATED.summaryStart)
-  return { genre: "proche", chemin: lue.chemin, nature, score, titre: coupe < 0 ? texte : texte.slice(0, coupe), resume: coupe < 0 ? "" : texte.slice(coupe + SERVED_RELATED.summaryStart.length) }
+  const auteur = auteurs.get(lue.chemin)
+  const titre = coupe < 0 ? texte : texte.slice(0, coupe)
+  return { genre: "proche", chemin: lue.chemin, nature, ...(auteur ? { auteur } : {}), titre, resume: coupe < 0 ? "" : texte.slice(coupe + SERVED_RELATED.summaryStart.length) }
 }
 
 /** `## Pages and tables close to the request` : une ligne par contenu ; la consigne de lecture, dite à l'assistant, n'est pas montrée. */
-function proches(lignes: readonly string[]): MorceauServi[] | null {
+function proches(lignes: readonly string[], auteurs: ReadonlyMap<string, PourLAuteur>): MorceauServi[] | null {
   if (lignes[0] !== SERVED_RELATED.title) return null
-  return lignesDuBloc(lignes.slice(1).filter((ligne) => !ligne.startsWith(SERVED_RELATED.readHint)), null, ligneProche)
+  return lignesDuBloc(lignes.slice(1).filter((ligne) => !ligne.startsWith(SERVED_RELATED.readHint)), null, (ligne) => ligneProche(ligne, auteurs))
 }
 
-const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[]) => MorceauServi[] | null>> = {
+const LECTURES_DES_BLOCS: Readonly<Record<string, (lignes: readonly string[], auteurs: ReadonlyMap<string, PourLAuteur>) => MorceauServi[] | null>> = {
   guests: invites,
   related: proches,
   "recent content": recents,
 }
 
+/** Le score et les mots en commun de chaque contenu proche de la demande testée, par chemin, lus dans les données de l'aperçu. */
+export function auteursDesProches(apercu: Pick<DonneesDeLApercu, "related">): Map<string, PourLAuteur> {
+  return new Map((apercu.related ?? []).map((proche) => [proche.path, { score: proche.score, mots: proche.words }]))
+}
+
 /**
  * Un bloc qui n'est pas un Contexte, relu par son nom (AC-14) ; un bloc inconnu, ou dont l'en-tête n'a pas la forme
- * servie, reste entier tel que servi.
+ * servie, reste entier tel que servi. `auteurs` : le score et les mots des contenus proches, par chemin (`auteursDesProches`).
  */
-export function morceauxDuBloc(nom: string, texte: string): MorceauServi[] {
+export function morceauxDuBloc(nom: string, texte: string, auteurs: ReadonlyMap<string, PourLAuteur> = new Map()): MorceauServi[] {
   if (texte === "") return []
-  return LECTURES_DES_BLOCS[nom]?.(texte.split("\n")) ?? [{ genre: "brut", texte }]
+  return LECTURES_DES_BLOCS[nom]?.(texte.split("\n"), auteurs) ?? [{ genre: "brut", texte }]
 }
 
 /**

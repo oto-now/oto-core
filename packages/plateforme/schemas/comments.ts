@@ -62,10 +62,17 @@ const servedText = commentTextSchema.describe(`Text of the comment, ${COMMENT_MA
 /** Les fils que `comment.list` sert : les ouverts (défaut), les résolus, ou tous. */
 export const COMMENT_LIST_STATUSES = [...COMMENT_THREAD_STATUSES, "all"] as const
 
-/** `comment.list` : les fils d'un nœud, ouverts par défaut. */
+/** Fils servis au plus par `comment.list` sous un dossier (`under`), toutes pages confondues. */
+export const COMMENT_THREADS_UNDER = 50
+
+/** `comment.list` : les fils d'un nœud, ouverts par défaut ; avec `under`, ceux des pages qu'il range. */
 export const commentListArgsSchema = z.strictObject({
   path: commentedPath,
   status: z.enum(COMMENT_LIST_STATUSES).default("open").describe("open (default): the threads still to handle; resolved; or all."),
+  under: z
+    .boolean()
+    .default(false)
+    .describe(`true: the threads of this page and of every page under it that the user reads, grouped by page, ${COMMENT_THREADS_UNDER} at most with the count of the rest; false (default): this page only.`),
 })
 
 /**

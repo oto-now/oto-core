@@ -303,7 +303,7 @@ describe.skipIf(!sqlConfigured)(portable("table.write on a real database"), { ti
           const reader = dbSpy()
           expect(await refusal(fn, marc, { table: PROSPECTS.path, ...args }, reader), fn.name).toMatchObject({
             code: "forbidden",
-            message: "Writing ventes/suivi_prospects is reserved to team Ventes (lead: Claire Morel). Ask them for access.",
+            message: expect.stringContaining("Writing ventes/suivi_prospects is reserved to team Ventes (lead: Claire Morel). You can read it: suggest the change"),
           })
           expect(blockCalls(reader.calls), fn.name).toEqual([])
         }

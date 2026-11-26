@@ -26,7 +26,7 @@ import {
   usedPaths,
   type Candidate,
   type RequestKind,
-  type RoutingSettings,
+  wordsInCommon,
 } from "../routing"
 import type { ToolOutput } from "../tool-output"
 import { token } from "../pseudonym/token"
@@ -51,15 +51,13 @@ type Routing = {
   kind: RequestKind | null
   /** La révision de la procédure décidée (`served` en données) ; ses étapes ne sont plus servies (2026-10-27). */
   revision: number | null
-  /** Seuil et écart de l'organisation, dits sans procédure servie (E11-S19, AC-d1) ; `null` sans phrase. */
-  settings: RoutingSettings | null
   /** Les pages et tableaux proches de la phrase (`relatedBlock`) ; aucun sans phrase ou en panne. */
   related: Candidate[]
   /** Les cibles récentes de la personne (`usedPaths`), lues une fois : bonus d'usage des procédures, des contenus et des fonctions. */
   used: Promise<ReadonlySet<string>>
 }
 
-const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision: null, settings: null, related: [], used: Promise.resolve(new Set()) }
+const NO_REQUEST: Routing = { candidates: [], served: null, kind: null, revision: null, related: [], used: Promise.resolve(new Set()) }
 
 /**
  * La priorité des blocs dans le budget (`renderContext`), l'ordre d'affichage restant celui de P39 : les règles et le
@@ -116,8 +114,8 @@ async function routePhrase(db: PlatformDb, identity: Identity, phrase: string): 
         return null
       })
     : null
-  if (decided && revision === null) return { candidates: null, served: null, kind: requestKind(phrase), revision: null, settings, related, used }
-  return { candidates, served: decided, kind: requestKind(phrase), revision, settings, related, used }
+  if (decided && revision === null) return { candidates: null, served: null, kind: requestKind(phrase), revision: null, related, used }
+  return { candidates, served: decided, kind: requestKind(phrase), revision, related, used }
 }
 
 /** Données en champs (H26) : la procédure décidée, les candidats montrés, scores à deux décimales. */
@@ -224,12 +222,12 @@ export async function assembleContext(db: PlatformDb, identity: Identity, assemb
     orOmitted(() => guestsBlock(db, identity), "guest views"),
     viewer === undefined ? null : orOmitted(() => hostFunctionsBlock(db, identity, viewer, phrase), "host functions"),
   ])
-  const { candidates, served, kind, settings } = routing
+  const { candidates, served, kind } = routing
   const facts = { everyone: orgFacts(identity.org), private: personFacts(identity), ...teams }
   const hints = phrase !== undefined ? await routingHints(db, identity, phrase, { served: served !== null, used: routing.used }) : undefined
   const prefix = identity.org.prefix
   const blocks = [
-    { ...codeBlock({ prefix, code, phrase, candidates, served, kind, settings, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
+    { ...codeBlock({ prefix, code, phrase, candidates, served, kind, hints, address: orgAddress(assembly.origin) }), priority: PRIORITY.code },
     ...withPriority(host, PRIORITY.host),
     ...withPriority(relatedBlock(routing.related, prefix), PRIORITY.related),
     ...contextParts(identity, facts, bodies, phrase).map((part, rank) => ({ ...part, priority: PRIORITY.contexts + rank })),
@@ -270,9 +268,9 @@ async function lightContext(
     changed ? issueWithHost(db, identity, { userAgent: request.userAgent, contexts: since.seen }) : { code: since.code, host: since.host },
     phrase === undefined ? NO_REQUEST : routePhrase(db, identity, phrase),
   ])
-  const { candidates, kind, settings } = routing
+  const { candidates, kind } = routing
   const hints = phrase !== undefined ? await routingHints(db, identity, phrase, { served: routing.served !== null, used: routing.used }) : undefined
-  const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, settings, since: { code: since.code, changed: since.changed }, hints })
+  const code = codeBlock({ prefix: identity.org.prefix, code: issued.code, phrase, candidates, served: routing.served, kind, since: { code: since.code, changed: since.changed }, hints })
   const blocks = [code, ...withPriority(relatedBlock(routing.related, identity.org.prefix), PRIORITY.related), ...parts]
   return {
     text: renderContext(blocks, CONTEXT_BUDGET, identity.org.prefix).text,
@@ -354,7 +352,14 @@ export type ContextPreview = {
   budget: number
   /** Le poids sans plafond (`WholeWeights`) : la jauge du budget sur la page d'un Contexte. */
   whole: WholeWeights
-} & Pick<ReturnType<typeof routingData>, "served" | "candidates">
+  /**
+   * Les procédures proches, chacune avec les mots de la demande trouvés dans son titre ou son résumé, pour l'auteur ;
+   * `words` et `related` facultatifs dans le type, toujours rendus : un aperçu d'avant (une doublure d'hôte) reste valide.
+   */
+  candidates: (ReturnType<typeof routingData>["candidates"][number] & { words?: string[] })[]
+  /** Les pages et tableaux proches (`relatedBlock`), leur score et leurs mots en commun, pour l'auteur. */
+  related?: { path: string; title: string; kind: string; score: number; words: string[] }[]
+} & Pick<ReturnType<typeof routingData>, "served">
 
 /**
  * Ce que `context` servirait à la personne pour cette phrase, maintenant (AC8, N14) : le même
@@ -366,5 +371,19 @@ export async function previewContext(db: PlatformDb, identity: Identity, input: 
   const since = await newsSince(db, identity)
   const { text, report, routing, whole } = await assembleContext(db, identity, { phrase: input.phrase, code: PREVIEW_CODE, since, budget: CONTEXT_BUDGET })
   const { served, candidates } = routingData(routing)
-  return { text, blocks: report, budget: CONTEXT_BUDGET, whole, served, candidates }
+  // Score et mots en commun servent l'auteur, jamais l'assistant (contexte plus court, AC7) : en données de l'aperçu seulement.
+  const words = (candidate: Candidate) => (input.phrase === undefined ? [] : wordsInCommon(input.phrase, candidate))
+  const byPath = new Map((routing.candidates ?? []).map((candidate) => [candidate.path, candidate]))
+  return {
+    text,
+    blocks: report,
+    budget: CONTEXT_BUDGET,
+    whole,
+    served,
+    candidates: candidates.map((candidate) => {
+      const found = byPath.get(candidate.path)
+      return { ...candidate, words: found ? words(found) : [] }
+    }),
+    related: routing.related.map((candidate) => ({ path: candidate.path, title: candidate.title, kind: candidate.kind, score: roundScore(candidate.score), words: words(candidate) })),
+  }
 }

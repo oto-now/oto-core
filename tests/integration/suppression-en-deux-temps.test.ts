@@ -179,7 +179,7 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
         values (${ref.org.id}, ${await realId(path)}, ${ref.people.marc.id}, 'read') returning id`
       try {
         const reader = await call("marc", { function: "node.discard_draft", arguments: { path }, confirm: true })
-        expect(reader.error).toMatchObject({ code: "forbidden", message: `Writing ${path} is reserved to team Ventes (lead: Claire Morel). Ask them for access.` })
+        expect(reader.error).toMatchObject({ code: "forbidden", message: expect.stringContaining(`Writing ${path} is reserved to team Ventes (lead: Claire Morel). You can read it: suggest the change`) })
         expect([writesOf(reader.sent), reader.sent.filter((query) => query.target === "discard_draft")]).toEqual([[], []])
       } finally {
         await seed.admin`delete from platform.access_rules where id = ${rule}`
@@ -424,7 +424,7 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
       const [rule] = await ref.addRules([{ node: PROSPECTS.path, user: "marc", level: "read" }])
       try {
         const reader = await call("marc", { function: "table.delete_rows", arguments: { table: PROSPECTS.path, keys: ["Atelier 2"] }, confirm: true })
-        expect(reader.error).toMatchObject({ code: "forbidden", message: `Writing ${PROSPECTS.path} is reserved to team Ventes (lead: Claire Morel). Ask them for access.` })
+        expect(reader.error).toMatchObject({ code: "forbidden", message: expect.stringContaining(`Writing ${PROSPECTS.path} is reserved to team Ventes (lead: Claire Morel). You can read it: suggest the change`) })
         expect(writesOf(reader.sent)).toEqual([])
       } finally {
         await seed.admin`delete from platform.access_rules where id = ${rule}`

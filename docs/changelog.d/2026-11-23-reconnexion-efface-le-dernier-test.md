@@ -1,0 +1,4 @@
+## [2026-11-23] — Connecteurs : une reconnexion efface le dernier test du compte
+**Quoi :** le retour d'un consentement (`keepConsent`, `server/connectors/consent.ts`) et le rattachement d'un compte hébergé (`link`, `server/connectors/hosted-link.ts`) appellent `platform.forget_account_probe` dans la transaction qui range la connexion, comme `setAccountSecret` à une nouvelle clé ; un jeton renouvelé garde le test.
+**Pourquoi :** un compte reconnecté avec succès restait « Test en échec » à l'écran jusqu'au test suivant, le test portant sur l'ancienne connexion.
+**Fichiers :** `packages/plateforme/server/connectors/{consent,hosted-link}.ts`, `tests/integration/{consentement-oauth,comptes-rattaches}.test.ts`, `docs/conception/connecteurs-et-comptes.md`, `docs/reference/schema-platform.md`, `packages/plateforme/CHANGELOG.md`.

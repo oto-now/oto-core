@@ -655,7 +655,7 @@ describe("RailApplication, moving from the rail (E05-S10, AC-b7)", () => {
     const dialogue = within(await screen.findByRole("dialog", { name: "Déplacer « Grille tarifaire » ?" }))
     expect(dialogue.getByText("Il quitte Tout le monde pour Privé.")).toBeInTheDocument()
     expect(dialogue.getByText("Perdent l'accès : Ada, Léo et 3 autres.")).toBeInTheDocument()
-    expect(dialogue.getByText("Leur accès change : Claire (Peut lire → Accès complet).")).toBeInTheDocument()
+    expect(dialogue.getByText("Leur accès change : Claire (Peut lire → Accès complet - Responsable).")).toBeInTheDocument()
     expect(appels).toEqual([{ url: "/api/platform/nodes/impact?path=conseil%2Fgrille&new_path=private%2Fclaire%2Fnotes%2Fgrille", methode: "GET", corps: undefined }])
     fireEvent.click(dialogue.getByRole("button", { name: "Déplacer" }))
 

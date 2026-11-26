@@ -178,17 +178,17 @@ describe("Partager, who has access (AC-b5)", () => {
     const menu = liste.getByRole("combobox", { name: "Accès de Léa Martin" })
     expect(menu).toHaveValue("read")
     // 1.4.12 : « Aucun accès » rend le contenu et ce qu'il range invisibles à la personne ou à l'équipe.
-    expect(libellesDesChoix(menu)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
+    expect(libellesDesChoix(menu)).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
     expect(liste.getByRole("combobox", { name: "Accès de Marc Dupont" })).toHaveValue("manage")
     expect(panneau().getByRole("heading", { name: "Personnes et équipes ajoutées · 2" })).toBeInTheDocument()
 
     // L'accès par défaut : l'équipe, lue à l'ouverture, et toute l'organisation, chacune à son niveau.
     const equipe = await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
     expect(equipe).toHaveValue("write")
-    expect(libellesDesChoix(equipe)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    expect(libellesDesChoix(equipe)).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès"])
     const organisation = panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" })
     expect(organisation).toHaveValue("none")
-    expect(libellesDesChoix(organisation)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    expect(libellesDesChoix(organisation)).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès"])
     // 1.4.13 : chaque niveau de la liste dit ce qu'il permet, en une ligne fine sous son nom.
     fireEvent.click(equipe)
     expect(screen.getByRole("option", { name: "Peut modifier" })).toHaveAccessibleDescription("Lit, écrit et publie.")
@@ -205,7 +205,7 @@ describe("Partager, who has access (AC-b5)", () => {
     await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
     expect(options("Niveau de l'équipe Ventes")).toEqual(["Peut modifier", "Peut lire", "Aucun accès"])
     expect(options("Niveau de toute l'organisation")).toEqual(["Peut modifier", "Peut lire", "Aucun accès"])
-    expect(options("Accès de Marc Dupont")).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
+    expect(options("Accès de Marc Dupont")).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
   })
 
   it("should show the levels as pills and change nothing for someone without full access", async () => {
@@ -258,7 +258,7 @@ describe("Partager, default access of the owner team and of the organisation", (
     servis.team = { ...EQUIPE, level: "manage", inherited: "write" }
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, general: { id: "regle-org", level: "read" } } } })
     const equipe = await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
-    expect(libellesDesChoix(equipe)).toEqual(["Accès complet", "Peut modifier", "Peut lire"])
+    expect(libellesDesChoix(equipe)).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire"])
     choisirDansLaListe(equipe, "Peut modifier")
     await waitFor(() => expect(envoye()).toEqual({ url: `/api/platform/rules/${REGLE_VENTES}`, methode: "DELETE", corps: undefined }))
   })
@@ -330,7 +330,7 @@ describe("Partager, members of the owner team", () => {
     expect(membres.getAllByRole("listitem")[1]).not.toHaveTextContent("exception")
     const paul = membres.getByRole("combobox", { name: "Accès de Paul Henry" })
     expect(paul).toHaveValue("write")
-    expect(libellesDesChoix(paul)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    expect(libellesDesChoix(paul)).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès"])
     choisirDansLaListe(paul, "Peut lire")
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
     expect(envoye()).toEqual({ url: "/api/platform/rules", methode: "POST", corps: { path: "ventes/modele_relance", subject: { kind: "user", id: PAUL }, level: "read" } })
@@ -511,7 +511,7 @@ describe("Partager, access of the whole organisation (AC-b13)", () => {
   it("should show a served full access to a manager who is not an administrator, with its option", () => {
     const { panneau } = ouvrir({ ...partage({ id: "r1", level: "manage" }), gestionAccordable: false })
     expect(organisation(panneau)).toHaveValue("manage")
-    expect(libellesDesChoix(organisation(panneau))).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès"])
+    expect(libellesDesChoix(organisation(panneau))).toEqual(["Accès complet - Responsable", "Peut modifier", "Peut lire", "Aucun accès"])
   })
 
   it("should give a level in Tout le monde, where each member already reads, « Peut lire » removing the rule", async () => {

@@ -106,13 +106,16 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
 
     it("should give the node levels and the node refusals of E01-S04 AC21", async () => {
       const [ada, lea, paul] = [ref.identityOf("ada"), ref.identityOf("lea"), ref.identityOf("paul")]
+      // Un lecteur qui ne peut pas écrire : proposer d'abord par un commentaire, puis demander l'accès.
+      const suggest = (path: string) =>
+        `You can read it: suggest the change with ${paul.org.prefix}_call {"function": "comment.add", "arguments": {"path": "${path}", "block": "<ref>", "quote": "<passage>", "text": "<the change>"}}, then tell the user it waits for them. If the user must write it themselves, ask them for access.`
       const levels = [nodeLevel(dbOf("paul"), paul, devis().id), nodeLevel(dbOf("lea"), lea, ref.nodeId("guide")), nodeLevel(dbOf("lea"), lea, devis().id)]
       expect(await Promise.all([...levels, nodeLevel(dbOf("lea"), lea, ref.nodeId("private/lea"))])).toEqual([0, 1, 2, 3])
       await expect(requireNodeLevel(dbOf("paul"), paul, devis(), "write")).rejects.toMatchObject({ code: "not_found", message: "Unknown path ventes/devis." })
       await withRules([{ node: "ventes/devis", team: "support", level: "read" }], async () => {
         await expect(requireNodeLevel(dbOf("paul"), paul, devis(), "write")).rejects.toMatchObject({
           code: "forbidden",
-          message: "Writing ventes/devis is reserved to team Ventes (lead: Claire Morel). Ask them for access.",
+          message: `Writing ventes/devis is reserved to team Ventes (lead: Claire Morel). ${suggest("ventes/devis")}`,
         })
       })
       expect(await requireNodeLevel(dbOf("lea"), lea, devis(), "write")).toBe(2)
@@ -126,14 +129,14 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       })
       await expect(requireNodeLevel(dbOf("lea"), lea, { id: ref.nodeId("annonces"), path: "annonces" }, "write")).rejects.toMatchObject({
         code: "forbidden",
-        message: "Writing annonces is reserved to the administrators of Acme Test (Ada Martin). Ask them for access.",
+        message: `Writing annonces is reserved to the administrators of Acme Test (Ada Martin). ${suggest("annonces")}`,
       })
       const faq = { id: ref.nodeId("support/faq"), path: "support/faq" }
       await withRules([{ node: "support/faq", team: "ventes", level: "read" }], () =>
         withSupportLead(null, async () => {
           await expect(requireNodeLevel(dbOf("lea"), lea, faq, "write")).rejects.toMatchObject({
             code: "forbidden",
-            message: "Writing support/faq is reserved to team Support. Ask them for access.",
+            message: `Writing support/faq is reserved to team Support. ${suggest("support/faq")}`,
           })
         }),
       )
@@ -141,7 +144,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       await withRules([{ node: "private/claire/notes", user: "ada", level: "read" }], async () => {
         await expect(requireNodeLevel(dbOf("ada"), ada, notes, "write")).rejects.toMatchObject({
           code: "forbidden",
-          message: "Writing private/claire/notes is reserved to its owner. Ask them for access.",
+          message: `Writing private/claire/notes is reserved to its owner. ${suggest("private/claire/notes")}`,
         })
       })
       expect(levelFunctions()).toEqual([])

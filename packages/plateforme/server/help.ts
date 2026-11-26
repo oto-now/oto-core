@@ -56,7 +56,7 @@ const SECTIONS: readonly HelpSection[] = [
     summary: "what makes a procedure valid, and what makes it work well",
     stems: ["procédure", "procedure", "étape", "step", "appel"],
     lines: [
-      "A procedure is a page of steps an assistant follows. Its title and summary route requests to it: the summary says what it does and how people ask for it.",
+      "A procedure is a page of steps an assistant follows. Its title and summary route requests to it. The title is the action in the words of those who ask for it, a verb and an object (« Relancer les devis en attente »), never the name of a deliverable alone. The summary says what it does, then three to five ways people ask for it, abbreviations included.",
       "Valid: read <p>_read path write.procedure before writing. Each step that runs a function has a call block right after it: ```call <function> {\"argument\": \"<value known when it runs>\"}```; confirm, team and account never go in the arguments; every call is checked at publication against the functions and the tables that exist.",
       "Sub-procedures: never a procedure under a procedure, which would be routed in place of the main one; each sub-step is a page under the main procedure, whose steps link to it with [[path]].",
       "Works well: a part « When to use it », with the cases where not to use it and where to go instead; numbered steps, one action each; each step says what to do with the result (a condition to stop, a branch, a value to report); the expected output, in its format; who to ask when the case is not covered.",
@@ -96,7 +96,8 @@ const SECTIONS: readonly HelpSection[] = [
     stems: ["commentaire", "comments", "commenté", "remarque", "relecture"],
     lines: [
       "People comment a page, a procedure or a table without editing it: a thread sits on one published block (with an optional quote) or on the whole page; reading is enough to comment and to reply.",
-      "<p>_read of a page serves its open threads after the body, with a header line « comments: n open (m for the assistant) »; with section, outline or since_revision, the header line only: <p>_call comment.list serves them.",
+      "<p>_read of a page serves its open threads after the body, with a header line « comments: n open (m for the assistant) »; with section, outline or since_revision, the header line only: <p>_call comment.list serves them, and with under: true on a folder, those of every page under it, grouped by page.",
+      "A user who only reads a page suggests a change with comment.add (block, quote, text), and asks for access only to write it themselves; a comment changes nothing until a writer applies it.",
       "A comment that says @assistant asks the next assistant of a person who can edit the page; no assistant runs in between. Such a thread shows « waiting for an assistant » until an assistant replies or the thread is resolved.",
       "Handling a thread that waits for an assistant: tell the user what it asks and who asks, and only once they agree do it (<p>_write on the page), reply with comment.add (thread, text), then comment.resolve. A user who only reads the page: reply, and say who can edit it.",
       "comment.add writes in the user's name, signed « Assistant of <name> »; @Full Name mentions a member who reads the page. A new thread on a block takes its short reference (<p>_read with refs: true).",

@@ -20,6 +20,22 @@ const COPIE = "Copié"
 /** « Copié » s'efface : resté à l'écran, il se lirait encore après une copie faite ailleurs. */
 const DUREE_DE_COPIE_MS = 2000
 
+/**
+ * Une valeur en plusieurs lignes (la phrase de préférences) : chaque ligne voulue dans son bloc, une petite marge entre
+ * elles, pour qu'on la distingue d'un retour automatique ; une valeur d'une ligne, telle quelle. Ce qui se copie reste la
+ * valeur entière (`copier`).
+ */
+function LignesDeLaValeur({ valeur }: { valeur: string }) {
+  const lignes = valeur.split("\n")
+  if (lignes.length === 1) return valeur
+  // L'ordre des lignes ne change jamais pour une même valeur : leur rang suffit comme clé.
+  return lignes.map((ligne, rang) => (
+    <span key={rang} className="mb-1 block last:mb-0">
+      {ligne}
+    </span>
+  ))
+}
+
 type ValeurCopiableProps = {
   /** Ce qui s'affiche et ce qui se copie, à l'identique. */
   valeur: string
@@ -44,7 +60,9 @@ export function ValeurCopiable({ valeur, cible }: ValeurCopiableProps) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-2">
-        <code className="oto-mono min-w-0 flex-1 select-all break-words">{valeur}</code>
+        <code className="oto-mono min-w-0 flex-1 select-all break-words">
+          <LignesDeLaValeur valeur={valeur} />
+        </code>
         <Button
           variant="secondary"
           size="sm"

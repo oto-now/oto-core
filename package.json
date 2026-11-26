@@ -15,7 +15,7 @@
     "migrations:sync": "node scripts/sync-migrations.mjs",
     "widgets:build": "node packages/plateforme/widgets/build.mjs",
     "verify": "node scripts/long-run.mjs verify --freeze -- \"node scripts/verify.mjs check:framework,type-check,lint test && node scripts/verify-receipt.mjs write\"",
-    "verify:cached": "node scripts/verify-receipt.mjs check || pnpm verify",
+    "verify:cached": "node scripts/verify-receipt.mjs cached",
     "commit:export": "node scripts/commit-depuis-export.mjs",
     "changelog:version": "node scripts/changelog-version.mjs",
     "test": "vitest run",

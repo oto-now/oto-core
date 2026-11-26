@@ -11,8 +11,18 @@ export type NotifiedComment = {
   first: boolean
   threadAuthor: string | null
   earlierAuthors: readonly string[]
-  teamLeads: readonly string[]
+  managers: readonly string[]
 }
+
+export type PageManagerFacts = {
+  ownerKind: string | null
+  ownerUser: string | null
+  admins: readonly string[]
+  teamLeads: readonly string[]
+  fullAccess: readonly string[]
+}
+
+export declare function managersOf(facts: PageManagerFacts): string[]
 
 export declare function recipientsOf(comment: NotifiedComment): string[]
 

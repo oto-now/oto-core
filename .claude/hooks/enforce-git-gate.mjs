@@ -22,8 +22,9 @@
  *
  * Échappement : ` # checks-ok` **en fin de commande**, posé par le skill commit-push une fois
  * `pnpm verify` passé. Le marqueur seul ne suffit pas : le reçu doit couvrir l'état exact du
- * code ET déclarer les 4 checks. C'est un garde-fou contre l'oubli, pas une barrière de
- * sécurité — quelqu'un de déterminé écrira le reçu à la main.
+ * code ET déclarer les 4 checks (ou `check:framework` seul pour un reçu doc, accepté sur un
+ * commit qui ne touche que de la documentation). C'est un garde-fou contre l'oubli, pas une
+ * barrière de sécurité — quelqu'un de déterminé écrira le reçu à la main.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -101,9 +102,6 @@ const LECTURE_ILLISIBLE = (raison) => `BLOQUÉ: scripts/hook-command.mjs ne se c
 Sans lui, le gate ne lit plus les commandes : il refuse toute commande qui cite git, au lieu de la
 laisser passer sans contrôle. Réparer scripts/hook-command.mjs avec l'outil Edit ou Write, ou dans un
 terminal hors de Claude Code (git checkout -- scripts/hook-command.mjs), puis relancer la commande.`
-
-/** Les 4 checks que `pnpm verify` enchaîne. Un reçu qui n'en déclare pas la totalité est refusé. */
-const CHECKS_REQUIS = ['check:framework', 'type-check', 'lint', 'test']
 
 const BLOCK_MESSAGE = `BLOQUÉ: écriture git directe interdite.
 
@@ -236,8 +234,8 @@ process.stdin.on('end', async () => {
     process.platform === 'win32' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b)
   if (vise !== undefined && !meme(vise, racineSession) && existsSync(join(vise, 'scripts/verify-receipt.mjs'))) {
     try {
-      // `--commit` (synchro du template du 2026-11-26) : un reçu doc d'un autre dépôt n'y vaut que sur
-      // un commit de doc seule. Un script antérieur, comme celui de ce dépôt, ignore l'argument.
+      // `--commit` : un reçu doc n'y vaut que sur un commit de doc seule. Un script antérieur
+      // ignore l'argument, et n'écrit pas de reçu doc.
       execFileSync('node', [join(vise, 'scripts/verify-receipt.mjs'), 'check', '--commit'], { cwd: vise, stdio: 'pipe' })
       process.exit(0)
     } catch (e) {
@@ -252,7 +250,7 @@ process.stdin.on('end', async () => {
   let receipt
   try {
     receipt = await import('../../scripts/verify-receipt.mjs').then((m) =>
-      m.checkReceipt()
+      m.checkReceipt({ commit: true })
     )
   } catch {
     process.exit(0) // outillage absent ou illisible : ne pas bloquer sur le framework lui-même
@@ -267,18 +265,7 @@ process.stdin.on('end', async () => {
     )
   }
 
-  // Le champ `checks` du reçu était écrit puis jamais relu : un reçu déclarant
-  // « aucun-check-na-tourne » ouvrait le gate. Le reçu prouvait l'identité de l'arbre, pas que
-  // quoi que ce soit avait été vérifié.
-  const declares = Array.isArray(receipt.receipt?.checks) ? receipt.receipt.checks : []
-  const manquants = CHECKS_REQUIS.filter((c) => !declares.includes(c))
-  if (manquants.length) {
-    deny(
-      `BLOQUÉ: le reçu ne déclare pas tous les checks — manquant(s) : ${manquants.join(', ')}.\n\n` +
-        `Reçu trouvé : ${declares.join(', ') || '(aucun)'}\n` +
-        `Lancer \`pnpm verify\`, qui les enchaîne tous les quatre et écrit le reçu.`
-    )
-  }
-
+  // Les checks déclarés par le reçu (les 4, ou `check:framework` pour un reçu doc) sont contrôlés par
+  // `checkReceipt` (verify-receipt.mjs), pour ce dépôt comme pour un autre dépôt jugé par son propre script.
   process.exit(0)
 })

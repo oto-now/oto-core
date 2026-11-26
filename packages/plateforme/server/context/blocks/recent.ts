@@ -23,8 +23,14 @@ import { daysAgo, type ContextBlock } from "../engine"
 import { byPath } from "./contexts"
 import { newsItems, type News } from "./news"
 
-/** Lignes servies au plus, nouveautés comprises (H36 ; 2026-10-27). */
+/** Documents récents lus au plus : ceux que la liste de « @ » de l'éditeur montre (`recentDocuments`). */
 const RECENT_MAX = 20
+
+/**
+ * Lignes servies au plus par `context`, nouveautés comprises (H36 ; 20 jusqu'au contexte plus court, AC9) ;
+ * la règle du journal dit où lire le reste. Distinct de `RECENT_MAX`, que la liste de « @ » garde à 20.
+ */
+const RECENT_LINES_MAX = 10
 
 const RECENT_DAYS = 90
 
@@ -142,7 +148,7 @@ export function markedPages(waiting: readonly WaitingPage[], commented: readonly
  * Le texte du bloc (AC5, AC6 ; E05-S12, AC-20 ; 2026-10-27, « What's new » et « Recent content » fusionnés, décision de
  * JB) : « ## Recent content », la borne des nouveautés quand elle est connue, puis une ligne par contenu, jamais deux fois
  * le même : une version publiée depuis la borne, marquée `new v<rév>` (elle l'emporte sur la ligne du même contenu lu
- * ou écrit), un contenu de la personne, un connecteur activé ; les plus récentes d'abord, 20 au plus, servi entier
+ * ou écrit), un contenu de la personne, un connecteur activé ; les plus récentes d'abord, `RECENT_LINES_MAX` au plus, servi entier
  * (E11-S03, AC-b1) ; `null` sans ligne. Un contenu de `waiting` (la personne l'écrit, des fils y attendent un assistant)
  * porte leur nombre avant sa date, sur la ligne qui le nomme déjà, sinon sur une ligne à lui, datée de la dernière demande ;
  * de même, avant lui, le nombre des commentaires nouveaux d'un fil destiné à la personne (`2 new comments`). Formats de
@@ -181,7 +187,7 @@ export function recentText(
     })),
   ]
   if (lines.length === 0) return null
-  const shown = lines.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || byPath(a, b)).slice(0, RECENT_MAX)
+  const shown = lines.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || byPath(a, b)).slice(0, RECENT_LINES_MAX)
   const head = since === null ? title : `${title}${sinceStart}${day(since)}${sinceEnd}`
   // Une consigne, une fois, quand une ligne montrée porte une marque de commentaires : où lire les fils et comment y répondre.
   const hint = shown.some((line) => line.path !== "" && mark(line.path) !== "") ? [SERVED_RECENT.commentsHint] : []

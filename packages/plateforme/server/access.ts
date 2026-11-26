@@ -254,16 +254,23 @@ export function unknownPath(path: string): string {
   return `Unknown path ${path}.`
 }
 
-/** « Writing ventes/devis is reserved to team Ventes (lead: Claire Morel). Ask them for access. » */
-export function reservedTo(action: AccessAction, target: string, who: string): string {
+/**
+ * « Writing ventes/devis is reserved to team Ventes (lead: Claire Morel). Ask them for access. » `reader` : l'appelant lit
+ * le nœud qu'il ne peut pas écrire ; le refus d'écrire propose d'abord le changement par un commentaire, l'appel exact de
+ * `comment.add` au préfixe de l'organisation, puis l'accès si la personne doit écrire elle-même.
+ */
+export function reservedTo(action: AccessAction, target: string, who: string, reader?: { prefix: string }): string {
   const { verb, ask } = ACTIONS[action]
-  return `${verb} ${target} is reserved to ${who}. ${ask}`
+  if (action !== "write" || !reader) return `${verb} ${target} is reserved to ${who}. ${ask}`
+  const call = `${reader.prefix}_call {"function": "comment.add", "arguments": {"path": ${JSON.stringify(target)}, "block": "<ref>", "quote": "<passage>", "text": "<the change>"}}`
+  return `${verb} ${target} is reserved to ${who}. You can read it: suggest the change with ${call}, then tell the user it waits for them. If the user must write it themselves, ask them for access.`
 }
 
 /**
  * Exige sur un nœud le niveau de l'action (écrire et publier : 2, gérer : 3) et rend le niveau de
  * l'appelant. Invisible : `not_found` (H68) ; visible sans le niveau : `forbidden`, qui dit à qui
- * demander. Décidé comme `nodeLevel`, exact depuis E01-S08.
+ * demander, et à qui lit le nœud sans l'écrire, de proposer d'abord le changement par un commentaire (`reservedTo`).
+ * Décidé comme `nodeLevel`, exact depuis E01-S08.
  */
 export async function requireNodeLevel(
   db: PlatformDb,
@@ -275,7 +282,8 @@ export async function requireNodeLevel(
   const { level, owner } = await nodeDecision(db, identity, node.id, action === "restore")
   if (level >= NODE_ACTIONS[action]) return level
   if (level === ACCESS_LEVELS.none || !owner) throw new PlatformError("not_found", unknownPath(node.path))
-  throw new PlatformError("forbidden", reservedTo(action, node.path, await describeOwner(db, identity, owner)))
+  const reader = level === ACCESS_LEVELS.read ? { prefix: identity.org.prefix } : undefined
+  throw new PlatformError("forbidden", reservedTo(action, node.path, await describeOwner(db, identity, owner), reader))
 }
 
 /**
