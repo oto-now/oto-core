@@ -1,0 +1,4 @@
+## [2026-11-25] — ui:shots se connecte pour capturer un écran protégé, et refuse une capture de /login
+**Quoi :** `scripts/ui-shots.mjs` se connecte une fois avec le compte des contrôles visuels (`E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, lus dans l'environnement puis `.env.local`), par les gestes des tests de bout en bout, et capture chaque route sous cette session. Une route renvoyée sur `/login` n'est plus capturée : le script sort en échec en la nommant (`landedOnLogin`, `scripts/lib/ui-shots-login.mjs`). `ui-patterns.md` § Preuve visuelle le dit.
+**Pourquoi :** les agents `designer` et `design-critic` capturaient la page de connexion à la place des écrans protégés, sans erreur.
+**Fichiers :** `scripts/ui-shots.mjs`, `scripts/lib/ui-shots-login.mjs`, `tests/unit/ui-shots.test.ts`, `.env.example`, `.method/conventions/ui-patterns.md`.
