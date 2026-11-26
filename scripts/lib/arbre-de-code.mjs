@@ -28,7 +28,10 @@ export const EXCLUS = [
   /^\.method\/sprint\//,
   /^docs\/produit\/stories\//,
   /^docs\/conception\//,
-  /^\.method\/conventions\/component-registry\.md$/,
+  // Conventions (registry compris) et système de design : de la documentation, que seul `check:framework` lit ;
+  // les en exclure laisse le reçu servir à un changement de doc seule (décision JB, 2026-11-26).
+  /^\.method\/conventions\//,
+  /^docs\/design\//,
 ]
 export const estExclu = (path) => EXCLUS.some((r) => r.test(path))
 

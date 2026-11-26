@@ -1,7 +1,7 @@
 {
   "template": "app-mcp-template",
-  "commit": "0d807e0bdbc4523cb6d34681c2f9ee6fae7365ed",
-  "date": "2026-11-25T12:51:47.626Z",
+  "commit": "80c2c2dbce36c1fe06424961e9d09ba107516e08",
+  "date": "2026-11-26T15:38:53.147Z",
   "exclude": [
     ".github/dependabot.yml",
     ".method/conventions/deployment-scaleway.md",
@@ -44,7 +44,7 @@
     ".claude/agents/implementer.md": "0edb078a2d0a429669190a51cfdc92da8f641871eda1adb1d4b733254949b7c3",
     ".claude/agents/reviewer.md": "f97d9bda0c1d65f9de29459ffa5efc27d3e78e65a5587b183e1152cfa54c3852",
     ".claude/hooks/coordinate-sessions.mjs": "80de22d3add4a1807fe995a63c2e3da4d4fd1c45743f63fd1844b59ade0b8e43",
-    ".githooks/pre-commit": "d728c5d11319a042bce5edffb2f734dcf61ba7a7673736f8691df5dfd74f9b54",
+    ".githooks/pre-commit": "61357e6f08af85a49213f5c7fc99cc00458570e7076cc3dc6cbd8088eed07887",
     ".method/checklists/design-review.md": "3abec6f9084d4be3f51ed70774a34d6dc097745e03214b4bf9a375888898144d",
     ".method/templates/brief.tmpl.md": "536af07f9d863d206b51a219c6fe085bb8a18323ee7914dfe1f1693b8567d1e4",
     ".method/templates/design-brief.tmpl.md": "4a91d2179921700d5bd0430ab0c26920c24a60e309967fe1028374ee2378bfdf",
@@ -52,17 +52,17 @@
     ".method/conventions/feature-flags-patterns.md": "980b294eb3fda611c6ef021ca264edc9afe8479f981e21d85ad64da32c67a860",
     ".method/conventions/monitoring-patterns.md": "e1908a070524022e31e56736c6596aa06cad8d900894788ce6b23f36210d1ed8",
     ".method/conventions/ui-patterns.md": "ced0bcef4889a9d2a21a78fd7040c3f8fb7b8962797d4eadc0676b4d34948a51",
-    "scripts/long-run.mjs": "72237dc157520dd9087ce811a4241a61b4ee45572b5893e64c64c21ba86f0d5e",
+    "scripts/long-run.mjs": "680f1dd2f28beb12f1cbe5642ceca1aedf214b8a8b0520495d0b368e7379b1b7",
     "scripts/ui-shots.mjs": "d2ab4c1f21808e54bcddefd37194a9b6de71072b671d395c4c7982fcefafd8dc",
-    "tests/unit/long-run.test.ts": "ecb12841e085973697a835be4c2498719258df7e0b701b5b8e2b3b0dff90d9c2"
+    "tests/unit/long-run.test.ts": "cfcaf0ab1e59e5d8d704687948781452f850c1f535fad971a3254bc51a9144cd"
   },
   "bases": {
     ".claude/skills/dev/SKILL.md": "22274df76d45203a959d250002940375f3de7e3a901b1b3b714e30cd487d4335",
     ".claude/skills/design/SKILL.md": "c4bb275fe0886552f6b7f2652e09084e3a1012b9153a7b1677ebdee2b748bb9a",
     ".claude/skills/plan/SKILL.md": "16b999ddecca4253792b4d63f446812301eddc4f3d0e28f3243fb979cb04e4bd",
     ".claude/skills/revue/SKILL.md": "a48e7a8ae07e49660f5811ed8ec98bacc561aee376bea370ee52ffb4eab13663",
-    ".claude/skills/verify/SKILL.md": "c2bcc0e540e2eaf6eb7e39a584bfc1e8e82d8da508542593fb3d90e71f631071",
-    ".claude/skills/commit-push/SKILL.md": "12a106d7dd9f2587179c5701e679f2635bf13f988d9c03a2df0649d0effe0834",
+    ".claude/skills/verify/SKILL.md": "6b6a70b23983411674329d89adb6960542d276779527e476c50a0bf289d75ad2",
+    ".claude/skills/commit-push/SKILL.md": "422df304c126b5161a64e2ca2c2847ebfe76c2947341aafe3c981a503d1551c1",
     ".claude/skills/wrap-up/SKILL.md": "cf55f9cfbe6904062be8e6b2e2a4390de48f74fb16b2d0b2245803f1cfd731c9",
     ".claude/skills/audit/SKILL.md": "bd70a954b00638d40cb7593c0b3246435b6de2dba04d5a3b14a078c37bcac126",
     ".claude/agents/auditor.md": "755e3914fa3a5e16abbbb5a98af2ab4ccee96ded53f9ddbe7d6589007c220233",
@@ -70,7 +70,7 @@
     ".claude/agents/implementer.md": "0edb078a2d0a429669190a51cfdc92da8f641871eda1adb1d4b733254949b7c3",
     ".claude/agents/reviewer.md": "f97d9bda0c1d65f9de29459ffa5efc27d3e78e65a5587b183e1152cfa54c3852",
     ".claude/hooks/enforce-bash-rules.mjs": "ce6aabf19662ac4b2574ad72c31214a470da1af4f59c020d9eec659efda1f68e",
-    ".claude/hooks/enforce-git-gate.mjs": "f8aad8d101125a64eabad8f2c3e74b9bbf010dbf56ae3a433a056a18f91ef9b7",
+    ".claude/hooks/enforce-git-gate.mjs": "35a92ec9a9fb0439ce71414bb1dfa7466ec4af3f74588a842d8dea64286f5f60",
     ".method/checklists/code-review.md": "cc14933e656849242ecf19f13efe66d1d136ef22d0640f427c7f4e23772b0ec9",
     ".method/checklists/mcp-design.md": "f6187747ebb1e03ad4f2de19c9c96d17f8f6b762e6fe3cbb3d53270ddb6bfe5c",
     ".method/checklists/prd-evolution.md": "a831a16e0095586ff5a12db5ec5205b68fbe3303daf37c3a4ecc501725c6bf1a",
@@ -100,10 +100,11 @@
     ".method/conventions/tables-patterns.md": "1bfe7084afa62a2906fee1798567f7aa80b51c586d9856d594f85d28740dd9b2",
     ".method/conventions/testing-strategy.md": "37bef4a28537f174eb903e239a6726e6e05664495637960cdd494a76ca95765e",
     ".method/conventions/typescript-patterns.md": "14cfa6398b87971f010649485efcea7dd1ef8c1cd647ee8f39cdc2f4b422102a",
+    ".method/conventions/ui-patterns.md": "9b10f0ae45e01a85a92f04a80110294510e30b817cfb2ddf5422e05145cd85d0",
     ".method/conventions/uploads-patterns.md": "bf991f075d94f9c694181a5f81dcd8c147ee6f0623f6a2d3a1b8b6a42d2b65c0",
     "scripts/check-framework.mjs": "2405612bad98bec6fc9d3b7ca6d51e0dd625ef08c5d2a4accede9ab6a387299d",
-    "scripts/check-framework-invariants.mjs": "72e5ba82ee185328c56f10a0a2804fbdf329911e2d8e6a00650314980e1fb1a8",
-    "scripts/verify-receipt.mjs": "7a6f1f610cc3ed132bf33d20e3fdbf73337ee75fe3c3dc1a43b21f2dfb9cf2c4",
-    "tests/unit/hooks.test.ts": "ccad53018fa33beab79c9630c8f8ccb303109a1f0357ef347ce790f4fcb165f5"
+    "scripts/check-framework-invariants.mjs": "d1f2e5e5583adb01084855df98b86beef272eb9dd42cdde8ab974d632f9ffd87",
+    "scripts/verify-receipt.mjs": "d84a6aa3d0bb37d07c688036fc17ba1c18b93abb247924c778a683bc69773e13",
+    "tests/unit/hooks.test.ts": "944d042162ed0cdfbe336d8a802ff616d2f3171739b733def08659afa3b5902d"
   }
 }
