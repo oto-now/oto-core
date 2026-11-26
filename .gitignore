@@ -21,6 +21,8 @@ supabase/.temp/
 test-results/
 playwright-report/
 coverage/
+# Rapport JSON que rtk fait écrire à Vitest dans le dossier où il tourne
+.vitest/
 
 # OS
 .DS_Store

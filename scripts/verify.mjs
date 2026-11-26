@@ -15,7 +15,7 @@
  * Pourquoi : lancés l'un après l'autre, check:framework, type-check et lint coûtaient la somme de
  * leurs durées avant même les tests (M12). Aucun ne lit ce qu'un autre produit.
  *
- * `test` tourne avec `VITEST_MAX_FORKS=4` (le poste est partagé : ~6 min, 4 cœurs, 2,7 Go mesurés le
+ * `test` tourne avec `VITEST_MAX_WORKERS=4` (le poste est partagé : ~6 min, 4 cœurs, 2,7 Go mesurés le
  * 21/10/2026) et écrit son rapport JSON. Une fois tout passé, le script écrit le résumé du passage
  * (`.claude/.verify-run.json`) : durée, plafond, tests verts et sautés, fichiers sautés en entier. Le reçu le
  * reprend (`verify-receipt.mjs write`), puis le trailer `Verified:` d'un commit (`commit-depuis-export.mjs`).
@@ -45,7 +45,8 @@ export const PASSAGE = join(ROOT, '.claude/.verify-run.json')
 const OPTIONS = {
   test: {
     arguments: `--reporter=default --reporter=json --outputFile.json=${JSON.stringify(RAPPORT_DES_TESTS)}`,
-    env: { VITEST_MAX_FORKS },
+    // Vitest 5 ne lit plus `VITEST_MAX_FORKS` : son plafond de processus est `VITEST_MAX_WORKERS`.
+    env: { VITEST_MAX_WORKERS: VITEST_MAX_FORKS },
   },
 }
 
