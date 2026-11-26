@@ -1,10 +1,10 @@
-// Le catalogue de la fenêtre « Ajouter un connecteur » : les outils que la personne peut ajouter, tirés des connecteurs de
-// l'organisation et de leurs formulaires (un par accès pour un connecteur qui s'ouvre par plusieurs), avec la façon de
-// s'y connecter et les propriétaires qu'elle peut choisir.
+// Le catalogue de la fenêtre « Ajouter un connecteur » : les outils que la personne peut ajouter, un par connecteur, tirés
+// des connecteurs de l'organisation et de leurs formulaires (un par accès pour un connecteur qui s'ouvre par plusieurs,
+// et autant de façons de s'y connecter), avec la façon de s'y connecter et les propriétaires qu'elle peut choisir.
 // Module sans « use client » : l'écran, rendu par le serveur, le calcule et ne passe à la fenêtre que des données. Sans
 // lui, la fenêtre proposerait un ajout que le service refuse (un propriétaire non admis, un outil sans port chez le tiers).
 import { connectorLogoAddress, normalizeTitle, type AccountMode, type AccountOwnerChoices, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, type BloqueurDeLOutil, type Connexion } from "./etat-du-compte"
+import { connexionDe, faconDeLAcces, type BloqueurDeLOutil, type Connexion } from "./etat-du-compte"
 
 type Proprietaire = ConnectorAccountForm["ownerKinds"][number]
 
@@ -17,9 +17,15 @@ export type OutilAAjouter = {
   logo: string | null
   /**
    * L'accès du compte à créer, pour un connecteur à plusieurs accès : son nom (envoyé à la création, au consentement et
-   * à la sonde) et son libellé (montré sous le nom de l'outil) ; absent pour un connecteur à un seul accès.
+   * à la sonde) et son libellé déclaré ; absent pour un connecteur à un seul accès. Celui de la première façon (`facons`).
    */
   acces?: { nom: string; libelle: string }
+  /**
+   * Pour un connecteur à plusieurs accès, les façons de s'y connecter ouvertes à la personne, soi d'abord : chacune
+   * remplace dans la fiche l'accès, la façon, les propriétaires et le formulaire de l'outil. Absent pour un connecteur
+   * à un seul accès.
+   */
+  facons?: FaconDeLOutil[]
   /** Comment on s'y connecte ; `sans_cle` : un connecteur sans formulaire, simulé ou servi par la clé de l'hôte. */
   facon: Connexion | "sans_cle"
   /** Les propriétaires que la personne peut choisir, le compte personnel d'abord. */
@@ -46,64 +52,79 @@ export type OutilAAjouter = {
   formulaire: ConnectorAccountForm | null
 }
 
+/** Une façon de se connecter à un outil à plusieurs accès : son accès et ce qui en dépend, et sa phrase (`faconDeLAcces`). */
+export type FaconDeLOutil = Required<Pick<OutilAAjouter, "acces">> & Pick<OutilAAjouter, "facon" | "proprietaires" | "formulaire"> & { phrase: string }
+
 /** Un connecteur personnel de la personne, tel que le catalogue le compte. */
 export type MonConnecteur = { id: string; connecteur: string; libelle: string; fonctionne: boolean }
 
-/** L'ordre dans lequel les propriétaires se proposent : soi d'abord. */
-const ORDRE: readonly Proprietaire[] = ["user", "org", "team"]
+/** L'ordre dans lequel les propriétaires se proposent : soi d'abord ; la page de connexion range ses façons de même. */
+export const ORDRE: readonly Proprietaire[] = ["user", "org", "team"]
 
 /** Sans formulaire (connecteur simulé, ou servi par la clé de l'hôte), un compte est d'organisation ou d'équipe. */
 const SANS_FORMULAIRE: readonly Proprietaire[] = ["org", "team"]
 
-/** Ce qui distingue un outil du catalogue : son connecteur, et son accès pour un connecteur à plusieurs. */
-export const cleDeLOutil = (outil: Pick<OutilAAjouter, "connecteur" | "acces">): string => (outil.acces ? `${outil.connecteur}:${outil.acces.nom}` : outil.connecteur)
+/** Une façon d'ouvrir un compte de l'outil, par un formulaire ou sans, avant sa phrase. */
+type FaconOuverte = Pick<OutilAAjouter, "acces" | "facon" | "proprietaires" | "formulaire">
+
+const parSoiDAbord = (a: FaconOuverte, b: FaconOuverte) => ORDRE.indexOf(a.proprietaires[0]) - ORDRE.indexOf(b.proprietaires[0])
+
+const chezLeTiersDe = (facon: OutilAAjouter["facon"]) => facon === "consentement" || facon === "branchement"
+
+/** Les façons d'un connecteur à plusieurs accès, chacune avec sa phrase ; aucune pour un connecteur à un seul accès. */
+function faconsDeLOutil(outil: string, ouvertes: readonly FaconOuverte[]): FaconDeLOutil[] {
+  const parAcces = ouvertes.flatMap(({ acces, ...reste }) => (acces ? [{ acces, ...reste }] : []))
+  const aDire = parAcces.map(({ acces, facon, proprietaires }) => ({ ...acces, chezLeTiers: chezLeTiersDe(facon), proprietaires }))
+  return parAcces.map((facon, rang) => ({ ...facon, phrase: faconDeLAcces(outil, aDire[rang], aDire) }))
+}
 
 /**
- * Les outils que la personne peut ajouter, par nom : ceux dont un propriétaire lui est ouvert, d'après la règle de la
- * création que le service rend (`accountOwnerChoices` : le compte personnel pour tout membre, l'organisation pour qui
- * administre, une équipe pour qui administre ou la dirige). Un outil à consentement ou à compte rattaché ne se connecte
- * que pour soi, et seulement si l'hôte a fourni son port. Un connecteur à plusieurs accès donne un outil par accès qui
- * a un formulaire : « Connecter mon compte » pour un accès à consentement, la saisie de sa clé pour un autre.
+ * Les outils que la personne peut ajouter, un par connecteur, par nom : ceux dont un propriétaire lui est ouvert,
+ * d'après la règle de la création que le service rend (`accountOwnerChoices` : le compte personnel pour tout membre,
+ * l'organisation pour qui administre, une équipe pour qui administre ou la dirige). Un outil à consentement ou à compte
+ * rattaché ne se connecte que pour soi, et seulement si l'hôte a fourni son port. Un connecteur à plusieurs accès donne
+ * un outil et ses façons (`facons`), une par accès qui a un formulaire et un propriétaire ouvert, soi d'abord :
+ * « Connecter mon compte » pour un accès à consentement, la saisie de sa clé pour un autre.
  */
 export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires: readonly ConnectorAccountForm[], choix: AccountOwnerChoices, mes: readonly MonConnecteur[] = []): OutilAAjouter[] {
   const ouvert = (genre: Proprietaire) => genre === "user" || (genre === "org" ? choix.org : choix.teams.length > 0)
   const deLOutil = (connecteur: string) => mes.filter((un) => un.connecteur === connecteur)
+  const faconDe = (formulaire: ConnectorAccountForm | null): FaconOuverte[] => {
+    const facon = formulaire ? connexionDe(formulaire) : "sans_cle"
+    if (facon === "branchement" && formulaire?.hosted?.ready !== true) return []
+    const admis = formulaire ? formulaire.ownerKinds : SANS_FORMULAIRE
+    const proprietaires = ORDRE.filter((genre) => admis.includes(genre) && ouvert(genre) && (genre === "user" || !chezLeTiersDe(facon)))
+    if (proprietaires.length === 0) return []
+    return [{ ...(formulaire?.access ? { acces: { nom: formulaire.access.name, libelle: formulaire.access.label } } : {}), facon, proprietaires, formulaire }]
+  }
   return connecteurs
     .flatMap((connecteur): OutilAAjouter[] => {
       const siens = formulaires.filter((candidat) => candidat.connector === connecteur.connector)
-      return (siens.length > 0 ? siens : [null]).flatMap((formulaire): OutilAAjouter[] => {
-        const facon = formulaire ? connexionDe(formulaire) : "sans_cle"
-        if (facon === "branchement" && formulaire?.hosted?.ready !== true) return []
-        const admis = formulaire ? formulaire.ownerKinds : SANS_FORMULAIRE
-        const chezLeTiers = facon === "consentement" || facon === "branchement"
-        const proprietaires = ORDRE.filter((genre) => admis.includes(genre) && ouvert(genre) && (genre === "user" || !chezLeTiers))
-        if (proprietaires.length === 0) return []
-        const mode = connecteur.accountModes[0] ?? "reel"
-        const acces = formulaire?.access ? { acces: { nom: formulaire.access.name, libelle: formulaire.access.label } } : {}
-        const logo = connecteur.logoDomain !== undefined ? connectorLogoAddress(connecteur.connector) : null
-        const miens = deLOutil(connecteur.connector)
-        return [
-          {
-            connecteur: connecteur.connector,
-            libelle: connecteur.label,
-            logo,
-            ...acces,
-            facon,
-            proprietaires,
-            mode,
-            bloquePar: connecteur.state === "active" ? null : connecteur.closedBy,
-            actif: connecteur.state === "active",
-            aAdopter: connecteur.state !== "active" && connecteur.closedBy === null,
-            fonctions: connecteur.functions,
-            miens: miens.map((un) => un.libelle),
-            mesComptes: miens.map((un) => un.id),
-            connectes: miens.filter((un) => un.fonctionne).length,
-            formulaire,
-          },
-        ]
-      })
+      const ouvertes = (siens.length > 0 ? siens : [null]).flatMap(faconDe).sort(parSoiDAbord)
+      const [premiere] = ouvertes
+      if (!premiere) return []
+      const facons = faconsDeLOutil(connecteur.label, ouvertes)
+      const logo = connecteur.logoDomain !== undefined ? connectorLogoAddress(connecteur.connector) : null
+      const miens = deLOutil(connecteur.connector)
+      return [
+        {
+          connecteur: connecteur.connector,
+          libelle: connecteur.label,
+          logo,
+          ...premiere,
+          ...(facons.length > 0 ? { facons } : {}),
+          mode: connecteur.accountModes[0] ?? "reel",
+          bloquePar: connecteur.state === "active" ? null : connecteur.closedBy,
+          actif: connecteur.state === "active",
+          aAdopter: connecteur.state !== "active" && connecteur.closedBy === null,
+          fonctions: connecteur.functions,
+          miens: miens.map((un) => un.libelle),
+          mesComptes: miens.map((un) => un.id),
+          connectes: miens.filter((un) => un.fonctionne).length,
+        },
+      ]
     })
-    .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr") || (a.acces?.libelle ?? "").localeCompare(b.acces?.libelle ?? "", "fr"))
+    .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"))
 }
 
 /** Les outils dont le nom contient le texte cherché, sans casse ni accent ; un texte vide les garde tous. */
@@ -113,13 +134,57 @@ export function outilsCherches(outils: readonly OutilAAjouter[], q: string): Out
 }
 
 /**
- * Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre (« Crm 2 ») ; à
- * partir de `depuis` quand elle a déjà des connecteurs de l'outil (le troisième : « Crm 3 »).
+ * Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre entre parenthèses
+ * (« Crm (2) ») ; à partir de `depuis` quand elle a déjà des connecteurs de l'outil (le troisième : « Crm (3) »).
  */
 export function nomLibre(base: string, pris: readonly string[], depuis = 1): string {
   const portes = new Set(pris.map((nom) => nom.toLowerCase()))
   if (depuis <= 1 && !portes.has(base.toLowerCase())) return base
   let rang = Math.max(2, depuis)
-  while (portes.has(`${base} ${rang}`.toLowerCase())) rang += 1
-  return `${base} ${rang}`
+  while (portes.has(`${base} (${rang})`.toLowerCase())) rang += 1
+  return `${base} (${rang})`
+}
+
+/** Le propriétaire d'un connecteur à créer, tel que le partage le décide (`proprietaireDuPartage`). */
+export type ProprietaireDuConnecteur = { owner_kind: "user" } | { owner_kind: "org" } | { owner_kind: "team"; team_id: string; nom: string }
+
+/**
+ * Un connecteur que la personne voit, rangé par son propriétaire (`user` : les siens ; `org` ; `team:<nom de l'équipe>`,
+ * la vue d'un compte ne portant que le nom de son équipe) : le nom proposé n'en reprend aucun, et compte ceux de l'outil.
+ */
+export type CompteExistant = { connecteur: string; libelle: string; proprietaire: string }
+
+/** Ce que le nom proposé lit : les connecteurs vus, le prénom de la personne, le nom de l'organisation (absent : non lu). */
+export type Nommage = { comptes: CompteExistant[]; prenom: string | null; organisation: string | null }
+
+const cleDuProprietaire = (proprietaire: ProprietaireDuConnecteur) => (proprietaire.owner_kind === "team" ? `team:${proprietaire.nom}` : proprietaire.owner_kind)
+
+/** Qui en a déjà : « Vous en avez », « L'équipe en a », « L'organisation en a ». */
+const DEJA: Record<ProprietaireDuConnecteur["owner_kind"], string> = { user: "Vous en avez", team: "L'équipe en a", org: "L'organisation en a" }
+
+/**
+ * Le nom proposé d'un connecteur, d'après son propriétaire : « Pennylane de Nadia » (le sien), « Pennylane · Ventes »
+ * (une équipe), « Pennylane · Mortier & Co » (l'organisation) ; suivi du rang quand ce propriétaire a déjà des connecteurs
+ * de l'outil (« Pennylane · Mortier & Co (3) »), jamais un nom qu'il porte. L'aide dit à qui le nom sert, ou combien il en a
+ * déjà et comment les distinguer ; `deja` : ce nombre.
+ */
+export function nomDuConnecteur(outil: Pick<OutilAAjouter, "connecteur" | "libelle">, proprietaire: ProprietaireDuConnecteur, { comptes, prenom, organisation }: Nommage): { nom: string; aide: string; deja: number } {
+  const siens = comptes.filter((compte) => compte.proprietaire === cleDuProprietaire(proprietaire))
+  const deja = siens.filter((compte) => compte.connecteur === outil.connecteur).length
+  const { libelle } = outil
+  const base =
+    proprietaire.owner_kind === "team"
+      ? `${libelle} · ${proprietaire.nom}`
+      : proprietaire.owner_kind === "org"
+        ? organisation ? `${libelle} · ${organisation}` : `${libelle} de l'organisation`
+        : prenom ? `${libelle} de ${prenom}` : libelle
+  const nom = nomLibre(base, siens.map((compte) => compte.libelle), deja + 1)
+  const rang = nom.slice(base.length).trim()
+  const aide =
+    deja > 0
+      ? `${DEJA[proprietaire.owner_kind]} déjà ${deja}. Remplacez « ${rang} » par ce qui les distingue, par exemple « ${libelle} · Filiale ABC ».`
+      : proprietaire.owner_kind === "team"
+        ? "C'est ce nom que l'équipe dira à son assistant."
+        : "C'est ce nom que vous direz à votre assistant."
+  return { nom, aide, deja }
 }

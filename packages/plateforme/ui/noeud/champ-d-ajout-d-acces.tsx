@@ -5,6 +5,10 @@
 // les personnes qu'on lui donne, et propose jusqu'à huit réponses ; les flèches les parcourent, Entrée ou un clic choisit,
 // Échap efface la saisie avant de laisser le panneau se fermer. Ce que fait le choix (la règle posée, sur un nœud ou sur
 // un compte) appartient au panneau, qui passe `ajouter`. Sans lui, chaque panneau de partage recopiait le champ.
+// Deux ajouts facultatifs, que seule la fiche d'ajout d'un connecteur passe : « Toute l'organisation » parmi les
+// réponses (`organisation`), et un candidat que la personne ne peut pas donner, grisé (`refus`) : il se parcourt au
+// clavier (`aria-disabled`), ne se choisit pas, et dit sa raison sous son nom, lue par le lecteur d'écran
+// (`aria-describedby`). Le partage d'une page ne passe ni l'un ni l'autre.
 //
 // Sorti de `partage-du-noeud.tsx` (`AjoutDAcces`, `Suggestions`), sans changement de geste ni de mot (`PARTAGE`) ; la ref
 // est celle du champ de saisie, pour le panneau qui replie le focus quand la relecture l'emporte.
@@ -20,29 +24,51 @@ import { PARTAGE } from "./libelles"
 /** Ce qu'on ajoute : une équipe ou une personne de l'organisation. */
 export type Candidat = { kind: "team" | "user"; id: string; nom: string }
 
+/** Une réponse du champ : un candidat, ou toute l'organisation ; `refus` : grisée, avec la raison qui la refuse. */
+type Reponse = (Candidat | { kind: "org"; id: "org"; nom: string }) & { refus?: string }
+
+const TOUTE_L_ORGANISATION = "Toute l'organisation"
+
 /** Le nom d'un candidat tel qu'une ligne le dit : « Équipe Ventes », ou le nom de la personne. */
 export const nomDuCandidat = (candidat: Pick<Candidat, "kind" | "nom">) => (candidat.kind === "team" ? PARTAGE.equipe(candidat.nom) : candidat.nom)
 
-/** Les suggestions du champ : l'équipe ou la personne, et ce qu'elle est. */
-function Suggestions({ id, trouves, rang, choisir }: { id: string; trouves: Candidat[]; rang: number; choisir: (candidat: Candidat) => void }) {
+const nomDeLaReponse = (reponse: Reponse) => (reponse.kind === "org" ? reponse.nom : nomDuCandidat(reponse))
+
+type SuggestionsProps = { id: string; trouves: Reponse[]; rang: number; choisir: (reponse: Reponse) => void }
+
+/** Les suggestions du champ : l'équipe, la personne ou l'organisation, et ce qu'elle est ; une réponse refusée, grisée. */
+function Suggestions({ id, trouves, rang, choisir }: SuggestionsProps) {
   return (
     <div id={id} role="listbox" aria-label={PARTAGE.suggestions} className="oto-share-suggestions">
-      {trouves.map((candidat, index) => (
+      {trouves.map((reponse, index) => (
         <button
-          key={`${candidat.kind}:${candidat.id}`}
+          key={`${reponse.kind}:${reponse.id}`}
           id={`${id}-${index}`}
           type="button"
           role="option"
           tabIndex={-1}
           aria-selected={index === rang}
+          aria-disabled={reponse.refus ? true : undefined}
+          // Grisée, son nom reste le sien : la raison la décrit, sans entrer dans le nom.
+          aria-labelledby={reponse.refus ? `${id}-${index}-nom` : undefined}
+          aria-describedby={reponse.refus ? `${id}-${index}-refus` : undefined}
           data-highlighted={index === rang ? "" : undefined}
-          className="oto-menu-item"
+          className="oto-menu-item aria-disabled:text-mute"
           // Le focus reste dans le champ : le choix se fait au clic, sans le lui retirer.
           onMouseDown={(evenement) => evenement.preventDefault()}
-          onClick={() => choisir(candidat)}
+          onClick={() => choisir(reponse)}
         >
-          {candidat.kind === "team" ? <AnimatedIcon as={UsersThree} size="xs" /> : <Avatar name={candidat.nom} size="sm" aria-hidden="true" />}
-          <span>{nomDuCandidat(candidat)}</span>
+          {reponse.kind === "user" ? <Avatar name={reponse.nom} size="sm" aria-hidden="true" /> : <AnimatedIcon as={UsersThree} size="xs" />}
+          {reponse.refus ? (
+            <span className="flex min-w-0 flex-col items-start text-start">
+              <span id={`${id}-${index}-nom`}>{nomDeLaReponse(reponse)}</span>
+              <span id={`${id}-${index}-refus`} className="oto-caption whitespace-normal text-mute">
+                {reponse.refus}
+              </span>
+            </span>
+          ) : (
+            <span>{nomDeLaReponse(reponse)}</span>
+          )}
         </button>
       ))}
     </div>
@@ -50,22 +76,33 @@ function Suggestions({ id, trouves, rang, choisir }: { id: string; trouves: Cand
 }
 
 type ChampDAjoutDAccesProps = {
-  /** Les équipes et les personnes qu'on peut encore ajouter. */
-  candidats: Candidat[]
+  /** Les équipes et les personnes qu'on peut encore ajouter ; `refus` : proposée grisée, avec sa raison. */
+  candidats: (Candidat & { refus?: string })[]
   /** Ajoute le candidat choisi ; `true` s'il a abouti : la saisie se vide alors. */
   ajouter: (candidat: Candidat) => Promise<boolean>
   enCours: boolean
+  /** « Toute l'organisation » parmi les réponses (fiche d'ajout d'un connecteur) : son ajout, et sa raison si elle est refusée. */
+  organisation?: { ajouter: () => void; refus?: string }
 }
 
-export const ChampDAjoutDAcces = forwardRef<HTMLInputElement, ChampDAjoutDAccesProps>(function ChampDAjoutDAcces({ candidats, ajouter, enCours }, ref) {
+/** Les réponses à la saisie : toute l'organisation d'abord, si le panneau la propose, puis les candidats ; huit au plus. */
+function reponsesA(cherche: string, candidats: ChampDAjoutDAccesProps["candidats"], organisation: ChampDAjoutDAccesProps["organisation"]): Reponse[] {
+  if (!cherche) return []
+  const toutes: Reponse[] = [...(organisation ? [{ kind: "org" as const, id: "org" as const, nom: TOUTE_L_ORGANISATION, refus: organisation.refus }] : []), ...candidats]
+  return toutes.filter((reponse) => normalizeTitle(reponse.nom).includes(cherche)).slice(0, 8)
+}
+
+export const ChampDAjoutDAcces = forwardRef<HTMLInputElement, ChampDAjoutDAccesProps>(function ChampDAjoutDAcces({ candidats, ajouter, enCours, organisation }, ref) {
   const id = useId()
   const [saisie, setSaisie] = useState("")
   const [rang, setRang] = useState(-1)
   const cherche = normalizeTitle(saisie)
-  const trouves = cherche ? candidats.filter((candidat) => normalizeTitle(candidat.nom).includes(cherche)).slice(0, 8) : []
+  const trouves = reponsesA(cherche, candidats, organisation)
 
-  async function choisir(candidat: Candidat) {
-    if (enCours || !(await ajouter(candidat))) return
+  async function choisir(reponse: Reponse) {
+    if (enCours || reponse.refus) return
+    if (reponse.kind === "org") organisation?.ajouter()
+    else if (!(await ajouter(reponse))) return
     setSaisie("")
     setRang(-1)
   }
@@ -112,7 +149,7 @@ export const ChampDAjoutDAcces = forwardRef<HTMLInputElement, ChampDAjoutDAccesP
         onKeyDown={clavier}
         start={<AnimatedIcon as={MagnifyingGlass} anim="magnify" size="xs" />}
       />
-      {ouverte && (trouves.length > 0 ? <Suggestions id={`${id}-liste`} trouves={trouves} rang={rang} choisir={(candidat) => void choisir(candidat)} /> : <p className="oto-caption">{PARTAGE.rienTrouve}</p>)}
+      {ouverte && (trouves.length > 0 ? <Suggestions id={`${id}-liste`} trouves={trouves} rang={rang} choisir={(reponse) => void choisir(reponse)} /> : <p className="oto-caption">{PARTAGE.rienTrouve}</p>)}
     </div>
   )
 })

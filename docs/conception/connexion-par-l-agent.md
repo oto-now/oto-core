@@ -132,8 +132,9 @@ une adresse relative.
   `account_id`, sont refusés nommément (`invalid_arguments`). L'envoi passe par `setAccountSecret`, qui revérifie.
 - Connecteur à plusieurs accès, adresse sans accès (hors `activate`) : la page fait choisir (`choose_access`), chaque
   accès un lien vers la même page qui le nomme (`?access=<nom>`, avec l'espace de l'adresse quand elle en nomme un ;
-  sans lui, l'espace choisi ensuite selon l'accès), avec son libellé et son geste ; aucun accès n'est pris à la place de
-  la personne. Le choix ne se sert qu'après les contrôles du plan de chaque accès (`planConnection`) : un connecteur
+  sans lui, l'espace choisi ensuite selon l'accès), dit par sa façon et rangé soi d'abord, comme dans la fiche d'ajout de
+  l'écran Connecteurs (`faconDeLAcces`, d'après le genre de l'espace que le plan de l'accès retient,
+  `ConnectAccessChoice.owner` ; jamais par son libellé déclaré seul) ; aucun accès n'est pris à la place de la personne. Le choix ne se sert qu'après les contrôles du plan de chaque accès (`planConnection`) : un connecteur
   inconnu ou natif est refusé comme sans choix, un espace nommé qu'aucun accès ne permet est refusé (`forbidden`), et un
   accès qu'il ne permet pas n'est pas offert. Adresse avec un accès : son étape, et les autres accès offerts de même
   (`others`, l'espace nommé gardé), sauf à l'activation. Rien n'en est cru : l'accès revient par l'adresse, revérifié

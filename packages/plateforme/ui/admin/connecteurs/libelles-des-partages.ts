@@ -58,3 +58,9 @@ export function sujetDuPartage({ kind, name }: AccountShareEventView["subject"])
 
 /** Le nom de qui regarde, dans l'annuaire de l'organisation ; « Vous » s'il n'y est pas. */
 export const nomDe = (sujets: SujetsDeRegle, moi: string) => sujets.personnes.find((personne) => personne.id === moi)?.nom ?? "Vous"
+
+/** Ce qui se grise à l'ajout, et pourquoi : l'infobulle de ce que la personne ne peut pas donner. */
+export const REFUS_DE_L_OUVERTURE = {
+  organisation: "Seul un administrateur peut le donner à toute l'organisation",
+  equipe: "Seul le responsable de l'équipe ou un administrateur peut le donner à l'équipe",
+} as const

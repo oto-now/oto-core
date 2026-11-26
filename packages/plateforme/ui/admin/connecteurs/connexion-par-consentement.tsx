@@ -7,8 +7,10 @@
 // que rend la porte, chez le tiers, qui le ramène ici par l'adresse de retour du paquet. L'interface d'un hôte reste la
 // sienne : ce bouton n'est que le défaut du paquet.
 import { useState } from "react"
+import { ArrowSquareOut } from "@phosphor-icons/react/dist/csr/ArrowSquareOut"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
+import { Icon } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
 
 type ConnexionProps = {
@@ -30,9 +32,14 @@ type ConnexionProps = {
   apresUnEchec?: () => void
   /** Le bouton principal d'une fiche d'ajout ; secondaire ailleurs (une ligne, le détail). */
   variante?: "primary" | "secondary"
+  /**
+   * Dans le pied de la fiche d'ajout : sous `sm`, le bouton prend toute la largeur et son libellé passe à la ligne (« Connecter
+   * mon compte Google Search Console » ne tient pas à 375 px) ; l'icône dit qu'on part chez le tiers.
+   */
+  dansLePied?: boolean
 }
 
-export function ConnexionParConsentement({ ressource, connecteur, acces, libelle, nomAccessible, retour, avantDePartir, apresUnEchec, variante = "secondary" }: ConnexionProps) {
+export function ConnexionParConsentement({ ressource, connecteur, acces, libelle, nomAccessible, retour, avantDePartir, apresUnEchec, variante = "secondary", dansLePied = false }: ConnexionProps) {
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState("")
 
@@ -53,8 +60,18 @@ export function ConnexionParConsentement({ ressource, connecteur, acces, libelle
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant={variante} disabled={enCours} aria-busy={enCours} aria-label={nomAccessible} onClick={() => void connecter()}>
-        {enCours ? "Redirection…" : libelle}
+      <Button
+        type="button"
+        variant={variante}
+        disabled={enCours}
+        aria-busy={enCours}
+        aria-label={nomAccessible}
+        onClick={() => void connecter()}
+        className={dansLePied ? "max-sm:w-full" : undefined}
+        iconEnd={dansLePied ? <Icon as={ArrowSquareOut} size="xs" /> : undefined}
+      >
+        {/* Sur deux lignes au plus dans la hauteur du bouton : `.oto-btn` ne passe pas à la ligne, son libellé si. */}
+        {dansLePied ? <span className="block whitespace-normal text-center leading-tight">{enCours ? "Redirection…" : libelle}</span> : enCours ? "Redirection…" : libelle}
       </Button>
       {erreur && <Alert tone="fail" title={erreur} />}
     </div>

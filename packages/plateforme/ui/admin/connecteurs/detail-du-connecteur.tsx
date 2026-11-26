@@ -1,9 +1,10 @@
-// Le détail d'un connecteur (écran Connecteurs), dans un tiroir ouvert par l'adresse. En tête : la tuile de l'outil,
-// l'outil et la façon de s'y connecter, puis pour qui le gère les gestes courants (« Partager », « Modifier le nom »),
-// et l'état, avec son geste (« Tester », « Reconnecter »). Puis qui peut s'en servir, comment s'en servir pour qui le
-// reçoit en partage, ce que l'assistant peut y faire (les groupes que son niveau ouvre), la connexion et sa clé, et à
-// part, en bas, « Arrêter » : désactiver ou réactiver le connecteur, et pour un administrateur bloquer ou débloquer son
-// outil pour toute l'organisation.
+// Le détail d'un connecteur (écran Connecteurs), dans un tiroir ouvert par l'adresse. En tête : la tuile de l'outil et
+// son nom, puis l'outil et la façon de s'y connecter, avec le crayon de « Modifier le nom » pour qui le gère, et la bande
+// d'état, avec ses gestes (« Remplacer la clé », « Tester », « Reconnecter »). Puis qui peut s'en servir (pour qui le
+// gère, le champ d'ajout et la liste, comme à l'ajout, le journal des partages en lien à droite du titre), comment s'en
+// servir pour qui le reçoit en partage, ce que l'assistant peut y faire (les groupes que son niveau ouvre), et à part, en
+// bas, « Arrêter » : désactiver ou réactiver le connecteur, et pour un administrateur bloquer ou débloquer son outil pour
+// toute l'organisation.
 // Rendu par le serveur : les gestes sont des îlots clients qui ne reçoivent que des données. Le tiroir est celui du
 // journal en large (`TiroirDeConversation`, `taille="lg"`, un `<dialog>` natif : Échap et le bouton le ferment, le focus revient au lien qui l'a
 // ouvert). L'écran masque un geste, le service le décide : rien de ce qui est réservé à qui gère le compte ne s'offre
@@ -19,24 +20,32 @@ import { EtiquetteDeLigne } from "../../noeud/partage-visuel"
 import { questionDeDesactivationDuCompte } from "../textes"
 import { BlocageDeLOutil, DeblocageDeLOutil } from "./blocage-de-l-outil"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
-import { ANCRE_DE_L_ETAT, connexionDe, echecDuDernierTest, estAMoi, etatDuCompte, type BloqueurDeLOutil as Blocage, type EtatDuCompte } from "./etat-du-compte"
+import { ANCRE_DE_L_ETAT, ANCRE_DU_PARTAGE, connexionDe, echecDuDernierTest, estAMoi, etatDuCompte, type BloqueurDeLOutil as Blocage, type EtatDuCompte } from "./etat-du-compte"
 import { classesDuNiveau, FonctionsDuConnecteur } from "./fonctions-du-connecteur"
 import { JournalDesPartages } from "./journal-des-partages"
 import { actionsParClasse, NIVEAUX_DU_COMPTE, nomDe, TON_DU_NIVEAU } from "./libelles-des-partages"
 import type { PartagesDuCompte } from "./lignes-des-connecteurs"
 import { ModificationDuConnecteur } from "./modification-du-connecteur"
-import { OuvrirLePartage, PartageDuConnecteur, PorteeDuPartage } from "./partage-du-connecteur"
+import { PartageDuConnecteur } from "./partage-du-connecteur"
 import { REFUS_DE_LA_REACTIVATION } from "./refus-des-connecteurs"
 import { SaisieDuCompte } from "./saisie-du-compte"
 import { DetailDuTest, TestDuConnecteur } from "./test-de-connexion"
 import { TuileDeLOutil } from "./tuile-de-l-outil"
 
-function Section({ titre, children, zone = false }: { titre: string; children: ReactNode; zone?: boolean }) {
+type SectionProps = { titre: string; children: ReactNode; zone?: boolean; id?: string; aside?: ReactNode }
+
+/** Une section du détail ; `aside` : un geste discret à droite du titre ; `id` : le titre reçoit le focus d'un repli. */
+function Section({ titre, children, zone = false, id, aside }: SectionProps) {
   return (
     <>
       <hr className="oto-separator" data-orientation="horizontal" />
       <section className={`flex flex-col gap-3 ${zone ? "rounded-lg bg-desk p-4" : ""}`}>
-        <h3 className="text-base font-bold text-ink">{titre}</h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+          <h3 id={id} tabIndex={id ? -1 : undefined} className="text-base font-bold text-ink">
+            {titre}
+          </h3>
+          {aside}
+        </div>
         {children}
       </section>
     </>
@@ -45,35 +54,57 @@ function Section({ titre, children, zone = false }: { titre: string; children: R
 
 type Detail = { compte: AccountView; formulaire: ConnectorAccountForm | undefined; etat: EtatDuCompte; ici: string }
 
-/** L'état en un mot et sa précision, le geste chez le tiers quand il revient à la personne, et le test pour qui gère. */
+/**
+ * Pour qui gère un compte réel à clé : la saisie qui la pose ou la remplace ; un compte désactivé la garde, pour poser
+ * une nouvelle clé et la tester avant de le réactiver.
+ */
+const aSaCle = (compte: AccountView, formulaire: ConnectorAccountForm | undefined): formulaire is ConnectorAccountForm =>
+  compte.viewerLevel === "manage" && compte.mode === "reel" && formulaire !== undefined && connexionDe(formulaire) === "saisie" && formulaire.fields.length + formulaire.settings.length > 0
+
+/**
+ * L'état en un mot et sa précision, le geste chez le tiers quand il revient à la personne, et pour qui gère la clé
+ * (« Remplacer la clé ») et le test, côte à côte.
+ */
 function Etat({ compte, formulaire, etat, ici }: Detail) {
   const chezLeTiers = etat.geste === "connecter" || etat.geste === "reconnecter"
   const gereUnReel = compte.viewerLevel === "manage" && compte.mode === "reel" && formulaire !== undefined && etat.code !== "bloque"
   const echec = echecDuDernierTest(compte)
-  // L'outil bloqué : qui l'a bloqué et ce que ça arrête tiennent une phrase entière, sur sa ligne.
-  const surSaLigne = etat.code === "bloque"
+  // L'outil bloqué, le connecteur à remplacer : leur précision tient une phrase entière, sur sa ligne.
+  const surSaLigne = etat.code === "bloque" || etat.code === "a_remplacer"
+  const ligne = (
+    <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+      <span className="oto-etat inline-flex items-center gap-2 font-medium" data-state={etat.point}>
+        <span className="oto-dot" data-state={etat.point} aria-hidden="true" />
+        {etat.mot}
+      </span>
+      {etat.precision && !surSaLigne && <span className="oto-caption">{`· ${etat.precision.charAt(0).toLowerCase()}${etat.precision.slice(1)}`}</span>}
+    </p>
+  )
+  const gestes = (
+    <>
+      {chezLeTiers && (
+        <ConnexionParConsentement
+          ressource={connexionDe(formulaire) === "branchement" ? "hosted-link" : "connector-consent"}
+          connecteur={compte.connector}
+          acces={compte.access}
+          libelle={etat.geste === "connecter" ? "Connecter" : "Reconnecter"}
+          retour={ici}
+        />
+      )}
+      {gereUnReel && formulaire.probe.available && etat.code !== "a_terminer" && <TestDuConnecteur compte={{ id: compte.id, label: compte.label }} />}
+    </>
+  )
   return (
-    // Une bande : l'état et sa précision sur une ligne, le geste à droite. Elle reçoit le focus quand un geste emporte le sien.
+    // Une bande : l'état et sa précision sur une ligne, les gestes à droite. Elle reçoit le focus quand un geste emporte le sien.
     <div id={ANCRE_DE_L_ETAT} tabIndex={-1} role="group" aria-label="État" className="flex flex-col gap-2 rounded-lg bg-card p-3 focus-visible:ring-2 focus-visible:ring-ink">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-          <span className="oto-etat inline-flex items-center gap-2 font-medium" data-state={etat.point}>
-            <span className="oto-dot" data-state={etat.point} aria-hidden="true" />
-            {etat.mot}
-          </span>
-          {etat.precision && !surSaLigne && <span className="oto-caption">{`· ${etat.precision.charAt(0).toLowerCase()}${etat.precision.slice(1)}`}</span>}
-        </p>
-        {chezLeTiers && (
-          <ConnexionParConsentement
-            ressource={connexionDe(formulaire) === "branchement" ? "hosted-link" : "connector-consent"}
-            connecteur={compte.connector}
-            acces={compte.access}
-            libelle={etat.geste === "connecter" ? "Connecter" : "Reconnecter"}
-            retour={ici}
-          />
-        )}
-        {gereUnReel && formulaire.probe.available && etat.code !== "a_terminer" && <TestDuConnecteur compte={{ id: compte.id, label: compte.label }} />}
-      </div>
+      {aSaCle(compte, formulaire) ? (
+        <SaisieDuCompte compte={compte} formulaire={formulaire} libelle={etat.geste === "saisir" ? "Saisir la clé" : "Remplacer la clé"} ouverte={etat.geste === "saisir" || etat.geste === "remplacer"} etat={ligne} gestes={gestes} />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {ligne}
+          {gestes}
+        </div>
+      )}
       {etat.precision && surSaLigne && <p className="oto-caption">{etat.precision}</p>}
       {echec && <DetailDuTest raison={echec} />}
       {gereUnReel && !formulaire.probe.available && connexionDe(formulaire) === "saisie" && <p className="oto-caption">Pas de test automatique pour cet outil : essayez-le dans votre assistant.</p>}
@@ -117,15 +148,31 @@ function gestionnaire(owner: AccountView["owner"]): string {
   return owner.userName ?? "une personne qui n'est plus membre"
 }
 
-type AccesProps = { compte: AccountView; partages: PartagesDuCompte | undefined; moi: string; nomDeMoi: string }
+type AccesProps = { compte: AccountView; partages: PartagesDuCompte | undefined; moi: string; nomDeMoi: string; partager: ReactNode }
 
-/** Qui peut s'en servir : le propriétaire, puis les partages pour qui gère ; pour les autres, leur propre niveau. */
-function Acces({ compte, partages, moi, nomDeMoi }: AccesProps) {
+/**
+ * Qui peut s'en servir : pour qui le gère, `partager` (le champ et la liste, `PartageDuConnecteur`), sinon le
+ * propriétaire, puis les partages lus pour qui gère ; pour les autres, leur propre niveau.
+ */
+function Acces({ compte, partages, moi, nomDeMoi, partager }: AccesProps) {
   const gere = compte.viewerLevel === "manage"
   const aMoi = estAMoi(compte, moi)
   const partage = partages !== undefined && (partages.general !== null || partages.rules.length > 0)
   return (
-    <Section titre="Qui peut s'en servir">
+    <Section titre="Qui peut s'en servir" id={ANCRE_DU_PARTAGE} aside={gere && <JournalDesPartages compte={compte} />}>
+      {partager ?? <LignesDAcces compte={compte} partages={partages} moi={moi} nomDeMoi={nomDeMoi} />}
+      {!partager && gere && aMoi && partage && <p className="oto-caption">Ceux avec qui vous le partagez s&apos;en servent en le nommant ; leur assistant y agit en votre nom.</p>}
+      {!gere && <p className="oto-caption">{`Géré par ${gestionnaire(compte.owner)}.`}</p>}
+    </Section>
+  )
+}
+
+/** La liste seule : le propriétaire, les partages lus pour qui gère, ou le niveau de qui regarde. */
+function LignesDAcces({ compte, partages, moi, nomDeMoi }: Omit<AccesProps, "partager">) {
+  const gere = compte.viewerLevel === "manage"
+  const aMoi = estAMoi(compte, moi)
+  return (
+    <>
       <ul className="flex flex-col">
         <LigneDAcces nom={proprietaire(compte.owner)} vous={aMoi} fin={<span className="oto-pop-meta">Propriétaire</span>} />
         {gere && partages?.general && <LigneDAcces nom="Toute l'organisation" fin={<Niveau niveau={partages.general.level} />} />}
@@ -135,11 +182,7 @@ function Acces({ compte, partages, moi, nomDeMoi }: AccesProps) {
           ))}
         {!gere && <LigneDAcces nom={nomDeMoi} vous fin={<Niveau niveau={compte.viewerLevel} />} />}
       </ul>
-      {gere && aMoi && !partage && <p className="oto-caption">Privé : vous seul l&apos;utilisez tant que vous ne le partagez pas.</p>}
-      {gere && aMoi && partage && <p className="oto-caption">Ceux avec qui vous le partagez s&apos;en servent en le nommant ; leur assistant y agit en votre nom.</p>}
-      {!gere && <p className="oto-caption">{`Géré par ${gestionnaire(compte.owner)}.`}</p>}
-      {gere && <JournalDesPartages compte={compte} />}
-    </Section>
+    </>
   )
 }
 
@@ -179,16 +222,6 @@ function contexte(compte: AccountView, formulaire: ConnectorAccountForm | undefi
   const compteDe = estAMoi(compte, moi) ? "votre compte" : compte.owner.kind === "user" ? `compte de ${compte.owner.userName ?? "une personne qui n'est plus membre"}` : "compte relié"
   if (connexion === "branchement") return `${outil} · ${compteDe}, relié chez le service`
   return `${outil} · ${compteDe}, ${date ? `connecté le ${date}` : "pas encore connecté"}`
-}
-
-/**
- * Pour qui gère un compte réel à clé : la saisie qui la pose ou la remplace ; un compte désactivé la garde, pour poser
- * une nouvelle clé et la tester avant de le réactiver.
- */
-function Cle({ compte, formulaire, etat }: Omit<Detail, "ici">) {
-  const aCle = formulaire !== undefined && connexionDe(formulaire) === "saisie" && formulaire.fields.length + formulaire.settings.length > 0
-  if (compte.viewerLevel !== "manage" || compte.mode !== "reel" || !aCle) return null
-  return <SaisieDuCompte compte={compte} formulaire={formulaire} libelle={etat.geste === "saisir" ? "Saisir la clé" : "Remplacer la clé"} ouverte={etat.geste === "saisir" || etat.geste === "remplacer"} />
 }
 
 function Ligne({ titre, texte, children }: { titre: string; texte: string; children: ReactNode }) {
@@ -256,6 +289,8 @@ type DetailDuConnecteurProps = {
   fonctions: OrgConnector["functions"]
   /** Qui a bloqué son outil pour l'organisation (`bloquePar`) ; `null` : il ne l'est pas. */
   bloquePar: Blocage
+  /** Vrai pour un compte sans accès d'un outil qui s'ouvre maintenant de plusieurs façons (`sansAcces`) : il est à remplacer. */
+  sansSonAcces: boolean
   /** Pour un administrateur : bloquer ou débloquer l'outil. Absent pour un membre. */
   gouvernance?: GouvernanceDeLOutil
   /** Ses partages, lus par la page pour qui le gère. */
@@ -266,56 +301,61 @@ type DetailDuConnecteurProps = {
   ici: string
   /** L'adresse de la liste sans ce détail : fermer le tiroir y mène. */
   fermer: string
-  /** Le partage s'ouvre d'emblée : un partage choisi avant la connexion n'a pas pu se poser. */
+  /** Le champ du partage attend la personne : un partage choisi avant la connexion n'a pas pu se poser. */
   partagerDAbord?: boolean
 }
 
-export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions, bloquePar, gouvernance, partages, sujets, moi, ici, fermer, partagerDAbord = false }: DetailDuConnecteurProps) {
-  const etat = etatDuCompte(compte, formulaire, moi, bloquePar)
+export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions, bloquePar, sansSonAcces, gouvernance, partages, sujets, moi, ici, fermer, partagerDAbord = false }: DetailDuConnecteurProps) {
+  const etat = etatDuCompte(compte, formulaire, moi, { bloquePar, sansSonAcces })
   const gere = compte.viewerLevel === "manage"
   // Un connecteur éteint (désactivé, outil bloqué) ne sert à personne : ni mode d'emploi, ni niveau à demander.
   const eteint = etat.code === "desactive" || etat.code === "bloque"
   const recu = !gere && compte.owner.kind === "user" && !eteint
+  // À remplacer : aucun geste sur lui, sauf le désactiver (« Arrêter ») ; le partager ne servirait à personne.
+  const aRemplacer = etat.code === "a_remplacer"
   const titre = (
     <span className="flex min-w-0 items-center gap-3">
       <TuileDeLOutil nom={outil} logo={logo} />
       <span className="min-w-0">{compte.label}</span>
     </span>
   )
+  const presentation = (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      {/* Un compte à remplacer ne retient aucun accès : ni clé ni connexion ne se disent de lui. */}
+      <span className="text-sm text-ink">{etat.code === "a_remplacer" ? outil : contexte(compte, formulaire, outil, moi)}</span>
+      {compte.description && <p className="oto-caption">{compte.description}</p>}
+    </div>
+  )
   return (
     <TiroirDeConversation titre={titre} fermer={fermer} taille="lg">
-      <PorteeDuPartage ouvert={partagerDAbord && compte.viewerLevel === "manage" && partages !== undefined}>
-        <div className="flex flex-col gap-4">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-sm text-ink">{contexte(compte, formulaire, outil, moi)}</span>
-            {compte.description && <p className="oto-caption">{compte.description}</p>}
-          </div>
-          {gere && (
-            <ModificationDuConnecteur
-              compte={{ id: compte.id, label: compte.label, description: compte.description }}
-              avant={partages ? <OuvrirLePartage libelle="Partager" nomAccessible={`Partager ${compte.label}`} variante="primary" /> : undefined}
-            />
-          )}
-          <Etat compte={compte} formulaire={formulaire} etat={etat} ici={ici} />
-          <Cle compte={compte} formulaire={formulaire} etat={etat} />
-          <Acces compte={compte} partages={partages} moi={moi} nomDeMoi={nomDe(sujets, moi)} />
-          {recu && <CommentVousEnServir compte={compte} formulaire={formulaire} />}
-          <hr className="oto-separator" data-orientation="horizontal" />
-          <FonctionsDuConnecteur titre="Ce que votre assistant peut faire" fonctions={fonctions} classes={classesDuNiveau(compte.viewerLevel)} pied={!gere && !eteint && <NiveauAManquer compte={compte} />} />
-          <Arreter compte={compte} outil={outil} bloquePar={bloquePar} gouvernance={gouvernance} />
-        </div>
-        {gere && partages && (
-          <PartageDuConnecteur
-            compte={{ id: compte.id, label: compte.label, owner: compte.owner }}
-            partages={partages}
-            sujets={sujets}
-            actions={fonctions.length > 0 ? actionsParClasse(fonctions) : null}
-            moi={moi}
-            administre={gouvernance !== undefined}
-            parAutorisation={connexionDe(formulaire) !== "saisie" && compte.owner.kind === "user"}
-          />
-        )}
-      </PorteeDuPartage>
+      <div className="flex flex-col gap-4">
+        {gere && !aRemplacer ? <ModificationDuConnecteur compte={{ id: compte.id, label: compte.label, description: compte.description }} avant={presentation} /> : presentation}
+        <Etat compte={compte} formulaire={formulaire} etat={etat} ici={ici} />
+        <Acces
+          compte={compte}
+          partages={partages}
+          moi={moi}
+          nomDeMoi={nomDe(sujets, moi)}
+          partager={
+            gere && partages && !aRemplacer ? (
+              <PartageDuConnecteur
+                compte={{ id: compte.id, label: compte.label, owner: compte.owner }}
+                partages={partages}
+                sujets={sujets}
+                actions={fonctions.length > 0 ? actionsParClasse(fonctions) : null}
+                moi={moi}
+                administre={gouvernance !== undefined}
+                parAutorisation={connexionDe(formulaire) !== "saisie" && compte.owner.kind === "user"}
+                partagerDAbord={partagerDAbord}
+              />
+            ) : undefined
+          }
+        />
+        {recu && <CommentVousEnServir compte={compte} formulaire={formulaire} />}
+        <hr className="oto-separator" data-orientation="horizontal" />
+        <FonctionsDuConnecteur titre="Ce que votre assistant peut faire" fonctions={fonctions} classes={classesDuNiveau(compte.viewerLevel)} pied={!gere && !eteint && <NiveauAManquer compte={compte} />} />
+        <Arreter compte={compte} outil={outil} bloquePar={bloquePar} gouvernance={gouvernance} />
+      </div>
     </TiroirDeConversation>
   )
 }

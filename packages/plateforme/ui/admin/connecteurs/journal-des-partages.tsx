@@ -1,6 +1,7 @@
 "use client"
 
-// « Journal des partages » d'un compte (partage des comptes) : replié sous la ligne d'un compte que la personne gère,
+// « Journal des partages » d'un compte (partage des comptes) : un lien discret à droite du titre « Qui peut s'en servir »
+// du détail d'un compte que la personne gère, le journal ouvert sur toute la largeur sous ce titre,
 // lu à l'ouverture par `GET /api/platform/admin/accounts/<id>/share-journal`, qui le réserve à qui gère le compte (pour
 // un compte personnel, sa seule personne). Chaque ligne dit quand, qui, quel geste, vers qui et à quel niveau ; un
 // sujet ou un auteur sans nom (équipe supprimée, personne qui n'est plus membre) et un geste hors d'une session se
@@ -9,9 +10,10 @@ import { useState } from "react"
 import type { AccountShareEventView, AccountView } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
-import { Alert, Button } from "../../ds/react/primitives"
+import { Alert } from "../../ds/react/primitives"
 import { dateEtHeureLisibles } from "../../format/dates"
 import { NIVEAUX_DU_COMPTE as NIVEAUX, sujetDuPartage } from "./libelles-des-partages"
+import { LIEN_DISCRET } from "./niveaux-du-partage"
 
 /** « 17 octobre 2026 à 09:12 · Claire Morel a partagé à l'équipe Ventes (Lecture et écriture, avant : Lecture seule) ». */
 export function ligneDuJournal(evenement: AccountShareEventView): string {
@@ -41,17 +43,24 @@ export function JournalDesPartages({ compte }: { compte: Pick<AccountView, "id" 
     setEtat(reponse.erreur ? { lu: true, erreur: messageDErreur(reponse.erreur) } : { lu: true, evenements: reponse.data.events })
   }
 
+  // Deux enfants de la rangée du titre : le lien à sa droite, le journal ouvert passe à la ligne, sur toute la largeur.
   return (
-    <div className="flex w-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <Button type="button" variant="link" size="sm" aria-expanded={ouvert} onClick={() => void ouvrir()}>
-          Journal des partages
-          <span className="oto-sr-only">{` de ${compte.label}`}</span>
-        </Button>
-      </div>
-      {ouvert && !etat.lu && <p className="oto-caption">Lecture du journal…</p>}
-      {ouvert && etat.lu && "erreur" in etat && <Alert tone="fail" title={etat.erreur} />}
-      {ouvert && etat.lu && "evenements" in etat && (
+    <>
+      <button type="button" aria-expanded={ouvert} onClick={() => void ouvrir()} className={`${LIEN_DISCRET} text-ink underline underline-offset-2`}>
+        Journal des partages
+        <span className="oto-sr-only">{` de ${compte.label}`}</span>
+      </button>
+      {ouvert && <Journal compte={compte} etat={etat} />}
+    </>
+  )
+}
+
+function Journal({ compte, etat }: { compte: Pick<AccountView, "label">; etat: Etat }) {
+  return (
+    <div className="flex basis-full flex-col gap-1">
+      {!etat.lu && <p className="oto-caption">Lecture du journal…</p>}
+      {etat.lu && "erreur" in etat && <Alert tone="fail" title={etat.erreur} />}
+      {etat.lu && "evenements" in etat && (
         etat.evenements.length === 0 ? (
           <p className="oto-caption">Aucun partage posé ni retiré sur ce connecteur.</p>
         ) : (
