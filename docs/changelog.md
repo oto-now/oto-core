@@ -1,7 +1,11 @@
 # Changelog
 
-<!-- Ce fichier est mis à jour à chaque commit via /dev.
-     Format de chaque entrée :
+Les entrées récentes sont dans [`changelog.d/`](changelog.d/), un fichier par entrée
+(`AAAA-MM-JJ-<sujet>.md`), à lire par nom de fichier décroissant. Ce fichier garde l'historique
+antérieur, figé : aucune entrée ne s'y ajoute, pour qu'aucune pull request n'en mette une autre en
+conflit.
+
+<!-- Format de chaque entrée, dans son fichier de changelog.d/ :
 
 ## [Date] — [Scope]
 **Quoi :** Ce qui a été fait
@@ -10,10 +14,24 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
-## [2026-11-26] — `feedback` dit l'envoi à la personne
-**Quoi :** la description de `<p>_feedback` ne demande plus de cacher le signalement : après l'envoi, l'assistant le dit à la personne en une phrase, sans numéro, et le signalement ne porte aucune donnée personnelle au-delà de ce qui décrit le problème. Le résultat le rappelle (« Recorded for the platform maintainers. Tell the user in one short sentence… »), le doublon ne dit plus « nothing to tell the user », la règle servie et la ligne du guide suivent.
-**Pourquoi :** une description d'outil qui demande de cacher un envoi à la personne se lit comme un signal d'alerte, par les clients MCP comme par les outils d'analyse (signalement de sécurité accepté par le responsable du moteur).
-**Fichiers :** `packages/plateforme/mcp/tools.ts`, `packages/plateforme/server/{feedback,help}.ts`, `packages/plateforme/server/context/blocks/code.ts`, `tests/unit/{mcp-tools,feedback}.test.ts`, `tests/integration/feedback-prompts.test.ts`, `docs/conception/journal-et-retours.md`, `docs/reference/mcp-golden-queries.md`, `packages/plateforme/CHANGELOG.md`.
+## [2026-11-26] — Version 2.0.0 du paquet : une seule migration, `20261123150000_platform_api_de_l_hote.sql`
+**À appliquer :** un hôte qui monte de 1.10.x :
+- applique le seul fichier `20261123150000_platform_api_de_l_hote.sql` avec le paquet (`oto-platform migrations sync|check`) ; sans lui, le catalogue d'une organisation échoue ;
+- installe `@otomata_tech/connectors`, devenue dépendance pair du paquet, à v1.249.0 au moins (`github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts`), et l'ajoute à `transpilePackages` ;
+- passe `{ origin }` (l'origine publique de l'application) en quatrième argument de `probeAccount` ;
+- ne lit plus `compte` dans `IssueDuConsentement` ; traite `null` dans `elsewhere` de l'étape `authorize` (une organisation quittée) ;
+- relit ce qu'il fait des refus d'appel : une clé refusée rend `not_enabled` (`reason: "reconnect"`), un compte sans secret `not_enabled` (`reason: "no_account"`), `host_consent_required` devient `no_account` ou `reconnect` ; la sonde d'un compte garde `credential_rejected` ;
+- sait que tout connecteur déclaré est ouvert par défaut (seule une ligne `inactive` le bloque), qu'un connecteur payé par la clé de l'hôte attend l'adoption d'un administrateur (`not_adopted`, « Adopter » à l'écran), et que `connectors_max` ne limite plus rien : la clé reste acceptée, avec un avertissement nommé au chargement et dans `admin_cell health`, et sera refusée à la prochaine majeure ;
+- remplit `sujets.personnes` à chaque chargement de l'écran Connecteurs (`listMembers`), et suit le reste de la section 2.0.0 du `CHANGELOG.md` du paquet.
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 2.0.0 — 2026-11-26` (fonctions d'un hôte, #157, #159, #160 ; connexion menée par l'agent, #161, #163 ; connecteurs à plusieurs accès, #164 ; `resource` du consentement OAuth, #165 ; écran Connecteurs refait, #185 ; connecteurs ouverts par défaut, #187 ; correctifs #189 et #191), ses points cassants en tête de `### Hosts`, menés par `Breaking:` ; `packages/plateforme/package.json` passe à 2.0.0 ; une section `## Unreleased` vide reste au-dessus. La seule migration ajoutée depuis 1.10.0 garde son nom, comme `20261122184838` en 1.10.0, sans repli de la chaîne en ligne de base ; `migrations/README.md` la rattache à la 2.0.0. Version majeure : les points d'entrée du paquet ne font qu'ajouter des noms, mais une dépendance pair s'ajoute, la signature de `probeAccount` et deux types exportés changent, ainsi que des codes de refus (ADR-006).
+**Pourquoi :** un seul fichier de migration par version publiée (`database-patterns.md` § Règles, fiche D124) ; publication à la fusion d'une pull request de version (`distribution-du-paquet.md` § Publication).
+**Fichiers :** `packages/plateforme/{CHANGELOG.md,package.json}`, `packages/plateforme/migrations/README.md`, `docs/changelog.md`.
+
+## [2026-11-25] — Vitest 5
+**Quoi :** `vitest` ^3 (3.2) passe en ^5.1.0 (5.1.1), `devDependencies` de la racine. Vitest ne tire plus Vite : la racine déclare `vite` ^7 (7.3.1, la version du paquet, une seule dans l'arbre) et garde `@vitejs/plugin-react` ^4 (4.7.0). Vitest 5 ne lit plus `VITEST_MAX_FORKS` : `scripts/verify.mjs` pose `VITEST_MAX_WORKERS=4` (le reçu garde son champ `forks`), et `tests/unit/verify.test.ts` lit cette variable ; `CLAUDE.md` (§ Vérifier, commiter, pousser) et `.method/sprint/vagues.md` la nomment. `.vitest/` est ignoré par git : `rtk` y fait écrire le rapport JSON de Vitest, que `pnpm commit:export` aurait commité. Ni peer ni dépendance du paquet ne change ; aucun test modifié hors ce dernier, aucune règle désactivée.
+**Pourquoi :** alignement sur le template de la méthode (Vitest 5). Vite 8 et `@vitejs/plugin-react` 6, que le template a pris en même temps, ne sont pas exigés par Vitest 5 (peer `vite` : ^6.4, ^7 ou ^8) : à la racine, ils laisseraient l'hôte de référence hors des peers `vite` ^7 et `@vitejs/plugin-react` ^4 du paquet ; leur montée passe avec celle de ces peers.
+**Problèmes :** sous Vitest 5, `VITEST_MAX_FORKS` était ignoré sans erreur : `pnpm verify` serait parti sur tous les cœurs du poste partagé ; le test du plafond l'a montré (`undefined` au lieu de `4`).
+**Fichiers :** `package.json`, `pnpm-lock.yaml`, `scripts/verify.mjs`, `tests/unit/verify.test.ts`, `vitest.config.ts` (commentaire), `.gitignore`, `CLAUDE.md`, `.method/sprint/vagues.md`, `.method/conventions/tech-stack.md`.
 
 ## [2026-11-26] — Méthode : `ui-patterns.md` l'emporte sur `portage-ecrans.md`
 **Quoi :** `ui-patterns.md` l'emporte partout, écrans du paquet et pages du groupe `(dashboard)` compris, fidélité à l'original d'`oto-frontend` comprise. Une contradiction entre les deux conventions sur un cas précis ne se tranche pas : elle se pose à JB par `AskUserQuestion`, puis la décision s'écrit dans `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, qui liste déjà les écarts décidés par ADR-008 (tokens Oto, `ui/ds/`, coque unique au lieu de `PageContainer` et `NAV_ITEMS`). En revue, un écart à `ui-patterns.md` sans sa ligne dans ce § 8 est un finding. Les écrans protégés se capturent à la main : `pnpm ui:shots` ne se connecte pas, le `designer` ou le `design-critic` demande la capture au pilote ou à JB (écran, état, largeurs) ; une capture de `/login` à la place de l'écran demandé ne vaut pas preuve (`docs/design/system.md`, section Patterns de page).
