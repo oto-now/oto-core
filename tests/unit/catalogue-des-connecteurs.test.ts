@@ -159,10 +159,10 @@ describe("outilsCherches", () => {
 
 describe("nomLibre", () => {
   it("should propose the name of the tool, or the first free rank after it, whatever the case", () => {
-    expect([nomLibre("Crm Pro", []), nomLibre("Crm Pro", ["crm pro"]), nomLibre("Crm Pro", ["Crm Pro", "CRM PRO 2", "Autre"])]).toEqual(["Crm Pro", "Crm Pro 2", "Crm Pro 3"])
+    expect([nomLibre("Crm Pro", []), nomLibre("Crm Pro", ["crm pro"]), nomLibre("Crm Pro", ["Crm Pro", "CRM PRO (2)", "Autre"])]).toEqual(["Crm Pro", "Crm Pro (2)", "Crm Pro (3)"])
   })
 
   it("should number a further connector of a tool after those the person already has, even named otherwise", () => {
-    expect([nomLibre("Compta", ["Compta · Atelier", "Compta · SCI"], 3), nomLibre("Compta", ["Compta 3"], 3)]).toEqual(["Compta 3", "Compta 4"])
+    expect([nomLibre("Compta", ["Compta · Atelier", "Compta · SCI"], 3), nomLibre("Compta", ["Compta (3)"], 3)]).toEqual(["Compta (3)", "Compta (4)"])
   })
 })

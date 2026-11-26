@@ -396,3 +396,6 @@
   /* le nom, lien du détail, garde une cible de 44 px sous le doigt */
   .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td[data-primary] a { display: inline-flex; align-items: center; min-block-size: var(--touch); }
 }
+
+/* La ligne qui ouvre son détail, opt-in : un écran la demande par `data-ligne-ouvrante` sur l'enveloppe (Connecteurs), dont l'îlot suit au clic le lien de la ligne ; la main sur toute la ligne, le survol des lignes déjà là. Aucun autre tableau ne change. */
+.oto-table-wrap[data-ligne-ouvrante] .oto-table tbody tr:has(a[data-ouvre-la-ligne]) { cursor: pointer; }

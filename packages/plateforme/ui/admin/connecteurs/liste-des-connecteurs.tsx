@@ -4,8 +4,10 @@
 // system, une ligne par compte que la personne voit : la tuile de son outil, son nom et sa description, à qui il est,
 // son état en un mot de la couleur de l'état, et un geste au plus. L'îlot ne reçoit que des données : les lignes, leurs
 // textes et leurs adresses sont calculés par l'écran (`lignes-des-connecteurs.ts`), le filtre et la recherche vivent
-// dans l'adresse de l'hôte (`useHote().naviguer`), le détail s'ouvre par un lien. L'état se lit par son mot, le point et
-// la couleur ne font que l'accompagner. Sur le modèle de `journal/tableau-des-conversations.tsx`.
+// dans l'adresse de l'hôte (`useHote().naviguer`), le détail s'ouvre par un lien, et toute la ligne le suit au clic
+// (`suivreLeLienDeLaLigne`) ; le lien du nom reste la seule cible du clavier et des lecteurs d'écran. L'état se lit par
+// son mot, le point et la couleur ne font que l'accompagner. Sur le modèle de `journal/tableau-des-conversations.tsx`.
+import type { MouseEvent } from "react"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { AnimatedIcon } from "../../ds/react/icon"
 import { ListTools } from "../../ds/react/list-tools"
@@ -24,7 +26,7 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
     <span className="flex min-w-0 items-center gap-3 py-1">
       <TuileDeLOutil nom={ligne.outil} logo={ligne.logo} />
       <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-        <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
+        <Lien href={ligne.ouverture} data-ouvre-la-ligne="" className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
         {/* L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois, sauf suivi de la façon du compte, qui distingue deux connecteurs d'un même outil. */}
@@ -94,6 +96,21 @@ function colonnes(retour: string): Column<LigneDeConnecteur>[] {
   ]
 }
 
+/**
+ * Un clic sur une ligne, hors de ses contrôles, suit le lien du nom (`data-ouvre-la-ligne`) : la ligne entière ouvre le
+ * détail à la souris et au doigt, sans devenir une seconde cible du clavier (le lien l'est déjà). Un clic modifié (nouvel
+ * onglet) ou qui sélectionne du texte n'ouvre rien : le lien du nom reste là pour lui.
+ */
+function suivreLeLienDeLaLigne(evenement: MouseEvent<HTMLElement>, naviguer: (adresse: string) => void) {
+  if (!(evenement.target instanceof Element) || evenement.defaultPrevented) return
+  if (evenement.button !== 0 || evenement.metaKey || evenement.ctrlKey || evenement.shiftKey || evenement.altKey) return
+  if (evenement.target.closest("a, button, input, select, textarea, [role='button']")) return
+  if (window.getSelection()?.toString()) return
+  const lien = evenement.target.closest("tbody tr")?.querySelector("a[data-ouvre-la-ligne]")
+  const adresse = lien?.getAttribute("href")
+  if (adresse) naviguer(adresse)
+}
+
 /** L'adresse de la recherche : les paramètres de la vue, puis `q` quand il n'est pas vide. */
 function adresseDeRecherche({ chemin, parametres }: Recherche, q: string): string {
   const requete = new URLSearchParams(parametres.filter(([cle]) => cle !== "q"))
@@ -132,9 +149,13 @@ export function ListeDesConnecteurs({ lignes, filtres, filtre, q, recherche, ici
           onSearch={(valeur) => naviguer(adresseDeRecherche(recherche, valeur))}
         />
       </div>
-      {/* `data-compacte` : en-têtes en casse normale, cartes sans étiquettes sur un téléphone (variante opt-in de `table.css`). */}
+      {/* `data-compacte` : en-têtes en casse normale, cartes sans étiquettes sur un téléphone ; `data-ligne-ouvrante` : la
+          main sur toute la ligne (variantes opt-in de `table.css`). Le clic se délègue à l'enveloppe : le lien du nom reste
+          la cible du clavier, la ligne n'en est pas une. */}
       <Table<LigneDeConnecteur>
         data-compacte=""
+        data-ligne-ouvrante=""
+        onClick={(evenement) => suivreLeLienDeLaLigne(evenement, naviguer)}
         caption="Connecteurs"
         columns={colonnes(ici)}
         rows={lignes}

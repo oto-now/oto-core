@@ -1,17 +1,20 @@
 "use client"
 
 // La clé et les réglages d'un compte réel (comptes à plusieurs champs) : le formulaire tiré de la déclaration de son
-// connecteur, replié dans le détail du compte sous « Saisir la clé » ou « Remplacer la clé », envoyé à
+// connecteur, replié dans la bande d'état du détail du compte, sous « Saisir la clé » ou « Remplacer la clé » posé à côté
+// de « Tester », envoyé à
 // `POST /api/platform/admin/accounts/<id>/secret`. Le secret ne
 // revient jamais : un champ posé le dit, laissé vide il est gardé, coché « Effacer » il est effacé ; un réglage vidé
 // est effacé. La validation est celle de l'API (`accountSecretInputSchema`), le refus du service dit le champ en
 // cause. Après un succès, la saisie se vide et la page se relit. La page de connexion d'un connecteur reprend le même
 // formulaire (`FormulaireDeLaCle`) pour la clé d'un compte que le tiers a refusée ou qui n'en a jamais eu.
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
+import { Key } from "@phosphor-icons/react/dist/csr/Key"
 import { FormProvider, useForm } from "react-hook-form"
 import { accountSecretInputSchema, type AccountView, type ConnectorAccountForm } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
+import { Icon } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
 import { useRafraichir } from "../../hote/rafraichir"
 import { chargeDeLaSaisie, ChampsDuCompte, saisieDeDepart, type SaisieDesChamps } from "./champs-du-compte"
@@ -69,10 +72,17 @@ type SaisieDuCompteProps = SaisieProps & {
   libelle: string
   /** Vrai quand l'état du compte attend la clé : la saisie s'offre ouverte. */
   ouverte: boolean
+  /** L'état du compte, déjà rendu : il tient la gauche de la rangée. */
+  etat: ReactNode
+  /** Les gestes qui suivent le bouton dans la rangée (« Tester »), déjà rendus. */
+  gestes?: ReactNode
 }
 
-/** Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. */
-export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieDuCompteProps) {
+/**
+ * La rangée de la bande d'état (l'état, puis le bouton et les gestes qui le suivent, l'annonce d'un succès à côté), puis
+ * la saisie, ouverte sous la rangée.
+ */
+export function SaisieDuCompte({ compte, formulaire, libelle, ouverte, etat, gestes }: SaisieDuCompteProps) {
   const rafraichir = useRafraichir()
   const [ouvert, setOuvert] = useState(ouverte)
   const [annonce, setAnnonce] = useState("")
@@ -84,16 +94,20 @@ export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieD
     bouton.current?.focus()
   }
   return (
-    <div className="flex w-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <Button ref={bouton} type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
-          {libelle}
-          <span className="oto-sr-only">{` de ${compte.label}`}</span>
-        </Button>
-        {/* Montée d'emblée, vide : une région montée avec son message n'est pas annoncée. */}
-        <p role="status" className="oto-caption">
-          {annonce}
-        </p>
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {etat}
+        <div className="flex flex-wrap items-start gap-2">
+          {/* Montée d'emblée, vide : une région montée avec son message n'est pas annoncée. */}
+          <p role="status" className="oto-caption">
+            {annonce}
+          </p>
+          <Button ref={bouton} type="button" variant="secondary" iconStart={<Icon as={Key} size="xs" />} aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
+            {libelle}
+            <span className="oto-sr-only">{` de ${compte.label}`}</span>
+          </Button>
+          {gestes}
+        </div>
       </div>
       {ouvert && (
         <FormulaireDeLaCle
@@ -106,6 +120,6 @@ export function SaisieDuCompte({ compte, formulaire, libelle, ouverte }: SaisieD
           annule={() => fermer("")}
         />
       )}
-    </div>
+    </>
   )
 }

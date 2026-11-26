@@ -1,6 +1,6 @@
 # Stack Technique
 
-> Versions en vigueur ; l'histoire de chaque montée de version est dans `docs/changelog.md`.
+> Versions en vigueur ; l'histoire de chaque montée de version est dans le journal (`docs/changelog.d/`, et `docs/changelog.md` pour l'historique figé).
 
 | Techno | Version | Rôle | Justification |
 |--------|---------|------|---------------|

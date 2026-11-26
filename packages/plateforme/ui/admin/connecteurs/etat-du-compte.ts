@@ -81,6 +81,9 @@ export type EtatDuCompte = {
 /** Le titre de l'état dans le détail d'un compte : le focus y va quand un geste emporte le contrôle qui l'avait. */
 export const ANCRE_DE_L_ETAT = "detail-du-connecteur-etat"
 
+/** Le titre « Qui peut s'en servir » du détail d'un compte : le focus y va quand un accès retiré emporte sa ligne. */
+export const ANCRE_DU_PARTAGE = "partage-du-connecteur"
+
 /** Un compte personnel de la personne `moi`. */
 export const estAMoi = (compte: Pick<AccountView, "owner">, moi: string) => compte.owner.kind === "user" && compte.owner.userId === moi
 

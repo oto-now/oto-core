@@ -4,9 +4,10 @@ Every published version of the package, newest first. Versions follow semantic v
 the package only adds (ADR-006), so a breaking change is a major version.
 
 Format, checked by tests:
-- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published sit under
-  `## Unreleased`, which the release commit renames to the version before opening an empty
-  `## Unreleased` above it;
+- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published wait in the
+  repository, one file per change in `packages/plateforme/changelog.d/<YYYY-MM-DD>-<topic>.md` holding its
+  lists, which the release commit pours into the version (`pnpm changelog:version <x.y.z>`, with
+  any line left under `## Unreleased`), leaving `## Unreleased` empty above it;
 - under a version, at most two lists: `### Assistants` (what an assistant connected to the
   platform can do; one sentence of 200 characters at most per entry) and `### Hosts` (what an
   application that installs the package must know or do; one line per point, led by what it
@@ -17,10 +18,6 @@ Format, checked by tests:
 Version 1.0.0 describes the whole package; each later version lists what it changes.
 
 ## Unreleased
-
-### Hosts
-- UI: on the Connectors screen, a tool that opens by several accesses has one card in « Ajouter un connecteur », never one per access; its sheet says « Deux façons de se connecter » and lets the person choose the way in radio cards (oneself first), the body of the chosen way remounted on a change. A way is said by how it connects and for whom (« Avec mon compte <outil> », « Avec ma clé », « Avec une clé », « Avec une clé, pour l'organisation », « Avec une clé, pour une équipe »), never by the access's declared label, which only tells apart two ways that would read the same. In the list, an account of such a tool says its way after the tool (« · clé », « · connexion au service »). An account that retains no access of a tool that now opens by several says « À remplacer », first in the list, without a gesture. The connection page says each access of `choose_access` by the same sentence.
-- Schemas: `ConnectAccessChoice` gains `owner` (optional: the kind of the space the access's plan retains), served by `choose_access`.
 
 ## 2.0.0 — 2026-11-26
 

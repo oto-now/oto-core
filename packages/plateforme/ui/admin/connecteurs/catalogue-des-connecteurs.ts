@@ -134,13 +134,57 @@ export function outilsCherches(outils: readonly OutilAAjouter[], q: string): Out
 }
 
 /**
- * Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre (« Crm 2 ») ; à
- * partir de `depuis` quand elle a déjà des connecteurs de l'outil (le troisième : « Crm 3 »).
+ * Un nom que la personne ne porte pas encore : celui de l'outil, sinon suivi du premier rang libre entre parenthèses
+ * (« Crm (2) ») ; à partir de `depuis` quand elle a déjà des connecteurs de l'outil (le troisième : « Crm (3) »).
  */
 export function nomLibre(base: string, pris: readonly string[], depuis = 1): string {
   const portes = new Set(pris.map((nom) => nom.toLowerCase()))
   if (depuis <= 1 && !portes.has(base.toLowerCase())) return base
   let rang = Math.max(2, depuis)
-  while (portes.has(`${base} ${rang}`.toLowerCase())) rang += 1
-  return `${base} ${rang}`
+  while (portes.has(`${base} (${rang})`.toLowerCase())) rang += 1
+  return `${base} (${rang})`
+}
+
+/** Le propriétaire d'un connecteur à créer, tel que le partage le décide (`proprietaireDuPartage`). */
+export type ProprietaireDuConnecteur = { owner_kind: "user" } | { owner_kind: "org" } | { owner_kind: "team"; team_id: string; nom: string }
+
+/**
+ * Un connecteur que la personne voit, rangé par son propriétaire (`user` : les siens ; `org` ; `team:<nom de l'équipe>`,
+ * la vue d'un compte ne portant que le nom de son équipe) : le nom proposé n'en reprend aucun, et compte ceux de l'outil.
+ */
+export type CompteExistant = { connecteur: string; libelle: string; proprietaire: string }
+
+/** Ce que le nom proposé lit : les connecteurs vus, le prénom de la personne, le nom de l'organisation (absent : non lu). */
+export type Nommage = { comptes: CompteExistant[]; prenom: string | null; organisation: string | null }
+
+const cleDuProprietaire = (proprietaire: ProprietaireDuConnecteur) => (proprietaire.owner_kind === "team" ? `team:${proprietaire.nom}` : proprietaire.owner_kind)
+
+/** Qui en a déjà : « Vous en avez », « L'équipe en a », « L'organisation en a ». */
+const DEJA: Record<ProprietaireDuConnecteur["owner_kind"], string> = { user: "Vous en avez", team: "L'équipe en a", org: "L'organisation en a" }
+
+/**
+ * Le nom proposé d'un connecteur, d'après son propriétaire : « Pennylane de Nadia » (le sien), « Pennylane · Ventes »
+ * (une équipe), « Pennylane · Mortier & Co » (l'organisation) ; suivi du rang quand ce propriétaire a déjà des connecteurs
+ * de l'outil (« Pennylane · Mortier & Co (3) »), jamais un nom qu'il porte. L'aide dit à qui le nom sert, ou combien il en a
+ * déjà et comment les distinguer ; `deja` : ce nombre.
+ */
+export function nomDuConnecteur(outil: Pick<OutilAAjouter, "connecteur" | "libelle">, proprietaire: ProprietaireDuConnecteur, { comptes, prenom, organisation }: Nommage): { nom: string; aide: string; deja: number } {
+  const siens = comptes.filter((compte) => compte.proprietaire === cleDuProprietaire(proprietaire))
+  const deja = siens.filter((compte) => compte.connecteur === outil.connecteur).length
+  const { libelle } = outil
+  const base =
+    proprietaire.owner_kind === "team"
+      ? `${libelle} · ${proprietaire.nom}`
+      : proprietaire.owner_kind === "org"
+        ? organisation ? `${libelle} · ${organisation}` : `${libelle} de l'organisation`
+        : prenom ? `${libelle} de ${prenom}` : libelle
+  const nom = nomLibre(base, siens.map((compte) => compte.libelle), deja + 1)
+  const rang = nom.slice(base.length).trim()
+  const aide =
+    deja > 0
+      ? `${DEJA[proprietaire.owner_kind]} déjà ${deja}. Remplacez « ${rang} » par ce qui les distingue, par exemple « ${libelle} · Filiale ABC ».`
+      : proprietaire.owner_kind === "team"
+        ? "C'est ce nom que l'équipe dira à son assistant."
+        : "C'est ce nom que vous direz à votre assistant."
+  return { nom, aide, deja }
 }

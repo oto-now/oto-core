@@ -21,7 +21,7 @@ import type { SujetsDeRegle } from "../../equipes/types"
 import { useHote } from "../../hote/navigation"
 import { DeblocageDeLOutil } from "./blocage-de-l-outil"
 import { ANCRE_DU_CATALOGUE, CatalogueDeLAjout, type GouvernanceDesOutils } from "./catalogue-de-l-ajout"
-import { nomLibre, type FaconDeLOutil, type OutilAAjouter } from "./catalogue-des-connecteurs"
+import type { CompteExistant, FaconDeLOutil, Nommage, OutilAAjouter } from "./catalogue-des-connecteurs"
 import { ConnexionChezLeTiers } from "./connexion-chez-le-tiers"
 import { FormulaireDAjout } from "./formulaire-d-ajout"
 import { PlaceDuPied } from "./pied-de-la-fiche"
@@ -106,7 +106,7 @@ function AAdopter({ outil, gouvernance }: { outil: OutilAAjouter; gouvernance: G
 type OutilChoisiProps = {
   outil: OutilAAjouter
   equipes: { id: string; name: string }[]
-  mesNoms: string[]
+  nommage: Nommage
   ici: string
   gouvernance: GouvernanceDesOutils | undefined
   sujets: SujetsDeRegle
@@ -119,7 +119,7 @@ type OutilChoisiProps = {
  * Le second temps, la fiche : le retour au catalogue, l'en-tête de l'outil (son titre prend le focus), le choix de la
  * façon pour un outil qui se connecte de plusieurs façons, puis la connexion de la façon choisie.
  */
-function OutilChoisi({ outil: lOutil, equipes, mesNoms, ici, gouvernance, sujets, moi, retour, apresAjout }: OutilChoisiProps) {
+function OutilChoisi({ outil: lOutil, equipes, nommage, ici, gouvernance, sujets, moi, retour, apresAjout }: OutilChoisiProps) {
   const titre = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     titre.current?.focus()
@@ -162,7 +162,8 @@ function OutilChoisi({ outil: lOutil, equipes, mesNoms, ici, gouvernance, sujets
           <FormulaireDAjout
             outil={outil}
             equipes={equipes}
-            nomPropose={nomLibre(outil.libelle, mesNoms, outil.miens.length + 1)}
+            nomPropose={outil.libelle}
+            nommage={nommage}
             bloque={bloque}
             sujets={sujets}
             moi={moi}
@@ -210,8 +211,10 @@ type AjoutDUnConnecteurProps = {
   outils: OutilAAjouter[]
   /** Les équipes pour lesquelles la personne peut ajouter un connecteur. */
   equipes: { id: string; name: string }[]
-  /** Les noms des connecteurs personnels de la personne : le nom proposé n'en reprend aucun. */
-  mesNoms: string[]
+  /** Les connecteurs que la personne voit, par propriétaire : le nom proposé n'en reprend aucun, et compte ceux de l'outil. */
+  comptes: CompteExistant[]
+  /** Le nom de l'organisation, pour le nom proposé d'un connecteur d'organisation ; `null` : non lu. */
+  organisation: string | null
   /** L'adresse de l'écran : un consentement y revient. */
   ici: string
   /** L'identifiant de qui regarde : « Bloqué par vous ». */
@@ -224,8 +227,11 @@ type AjoutDUnConnecteurProps = {
   vide?: ReactNode
 }
 
-export function AjoutDUnConnecteur({ outils, equipes, mesNoms, ici, moi, gouvernance, sujets, vide }: AjoutDUnConnecteurProps) {
+export function AjoutDUnConnecteur({ outils, equipes, comptes, organisation, ici, moi, gouvernance, sujets, vide }: AjoutDUnConnecteurProps) {
   const { naviguer } = useHote()
+  // Le prénom, le premier mot du nom dans l'annuaire : « Pennylane de Nadia ».
+  const prenom = sujets.personnes.find((personne) => personne.id === moi)?.nom.split(" ")[0] ?? null
+  const nommage: Nommage = { comptes, prenom, organisation }
   const [ouvert, setOuvert] = useState(false)
   const [choisi, setChoisi] = useState<string | null>(null)
   const [revenu, setRevenu] = useState(false)
@@ -271,7 +277,7 @@ export function AjoutDUnConnecteur({ outils, equipes, mesNoms, ici, moi, gouvern
         <Dialog open onClose={fermer} title={TITRE} size="lg" footer={outil ? <PlaceDuPied /> : undefined}>
           {outil ? (
             // Une instance par outil : la saisie d'un outil ne passe jamais à un autre.
-            <OutilChoisi key={outil.connecteur} outil={outil} equipes={equipes} mesNoms={mesNoms} ici={ici} gouvernance={gouvernance} sujets={sujets} moi={moi} retour={retour} apresAjout={ouvrirLeDetail} />
+            <OutilChoisi key={outil.connecteur} outil={outil} equipes={equipes} nommage={nommage} ici={ici} gouvernance={gouvernance} sujets={sujets} moi={moi} retour={retour} apresAjout={ouvrirLeDetail} />
           ) : (
             <CatalogueDeLAjout outils={outils} choisir={setChoisi} auRetour={revenu} moi={moi} gouvernance={gouvernance} />
           )}

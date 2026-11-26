@@ -60,7 +60,7 @@ règles de composition sont dans `ui-patterns.md` ; cette rubrique ne vérifie q
 
 ## Documentation de méthode
 
-- [ ] `docs/changelog.md` mis à jour
+- [ ] Entrée du chantier dans un fichier neuf `docs/changelog.d/AAAA-MM-JJ-<sujet>.md`, rien d'écrit dans `docs/changelog.md` (figé) ; un changement visible d'un hôte ou d'un assistant a ses lignes dans un fichier neuf `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md`, rien sous `## Unreleased` (`CLAUDE.md § Documentation : où vit chaque information`)
 - [ ] `.method/conventions/component-registry.md` mis à jour si nouveau composant réutilisable
 - [ ] (mode story) Section « Post-implémentation » de la story remplie
 - [ ] Document de conception du sujet mis à jour dans `docs/conception/` si un invariant d'architecture a été touché

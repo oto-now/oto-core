@@ -24,6 +24,7 @@ import { join, resolve } from 'node:path'
 // Contrepartie assumée : la cohérence registry ↔ `src/components/` glisse d'un commit.
 export const EXCLUS = [
   /^docs\/changelog\.md$/,
+  /^docs\/changelog\.d\//,
   /^\.method\/sprint\//,
   /^docs\/produit\/stories\//,
   /^docs\/conception\//,

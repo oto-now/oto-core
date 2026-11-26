@@ -1,7 +1,7 @@
 "use client"
 
 // La fiche d'un outil connecté chez le tiers (consentement, compte rattaché), dans « Ajouter un connecteur » : ce que
-// l'assistant pourra faire, « Qui pourra s'en servir » (le connecteur est à vous ; on le partage dès maintenant), puis
+// l'assistant pourra faire, « Qui pourra s'en servir » (le connecteur reste à vous, quel que soit le partage), puis
 // le bouton qui part chez le tiers, dans le pied de la fenêtre. Un partage choisi passe par la confirmation du premier
 // partage (l'autre agira par votre compte, en votre nom), puis est gardé dans l'onglet et posé au retour
 // (`partage-au-retour.tsx`). Module à part : la fenêtre d'ajout dépassait sa taille.
@@ -75,9 +75,8 @@ export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre, annu
       <PartageALAjout
         partage={partage}
         changer={setPartage}
-        proprietaires={[{ valeur: "user", libelle: nomDe(sujets, moi) }]}
-        proprietaire="user"
-        choisirProprietaire={() => undefined}
+        proprietaire={{ owner_kind: "user" }}
+        nomDeMoi={nomDe(sujets, moi)}
         sujets={sujets}
         actions={outil.fonctions.length > 0 ? actionsParClasse(outil.fonctions) : null}
         administre={administre}

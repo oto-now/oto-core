@@ -283,6 +283,10 @@ describe("Partager, adding someone (AC-b5)", () => {
     expect(suggestions.getAllByRole("option")).toHaveLength(2)
     expect(suggestions.getByRole("option", { name: "Équipe Conseil" })).toBeInTheDocument()
     expect(suggestions.getByRole("option", { name: "Nora Écoffier" })).toBeInTheDocument()
+    // Le partage d'une page ne passe ni l'organisation ni de raison : rien de grisé, et « toute » ne trouve personne.
+    expect(suggestions.getAllByRole("option").filter((option) => option.hasAttribute("aria-disabled"))).toEqual([])
+    fireEvent.change(champ, { target: { value: "toute" } })
+    expect(panneau().queryByRole("option")).toBeNull()
     fireEvent.change(champ, { target: { value: "ecof" } })
     fireEvent.click(panneau().getByRole("option", { name: "Nora Écoffier" }))
 

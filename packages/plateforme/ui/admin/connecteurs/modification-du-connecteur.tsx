@@ -1,6 +1,8 @@
 "use client"
 
-// « Modifier le nom » dans le détail d'un connecteur, pour qui le gère : son nom et sa description, envoyés à
+// « Modifier le nom » dans le détail d'un connecteur, pour qui le gère : un crayon discret au bout de la ligne qui dit
+// l'outil sous le nom (le titre du tiroir est son nom accessible : un bouton n'y entre pas), qui ouvre dessous la saisie
+// de son nom et de sa description, envoyés à
 // `PATCH /api/platform/admin/accounts/<id>` sur le schéma de l'API (`accountChangeSchema`). Aucun alias n'est gardé :
 // l'écran le dit avant de valider. Un nom déjà porté par le même propriétaire se dit sous le champ. Après un succès,
 // la saisie se replie et la page se relit.
@@ -11,8 +13,9 @@ import { ACCOUNT_DESCRIPTION_MAX, accountChangeSchema, type AccountChange } from
 import { appelerPlateforme } from "../../api/client"
 import { Field, Input } from "../../ds/react/forms"
 import { Icon } from "../../ds/react/icon"
-import { Alert, Button } from "../../ds/react/primitives"
+import { Alert, Button, IconButton } from "../../ds/react/primitives"
 import { Textarea } from "../../ds/react/textarea"
+import { Tooltip } from "../../ds/react/tooltip"
 import { useRafraichir } from "../../hote/rafraichir"
 import { estNomPris, NOM_PRIS, refusDuConnecteur } from "./refus-des-connecteurs"
 
@@ -73,10 +76,10 @@ function Formulaire({ compte, fermer }: { compte: Compte; fermer: (annonce: stri
 }
 
 /**
- * Le bouton qui ouvre la saisie, puis la saisie ; l'annonce d'un succès reste à côté du bouton. `avant` : le geste qui
- * le précède dans la même rangée (« Partager »), déjà rendu.
+ * Le crayon qui ouvre la saisie, puis la saisie ; l'annonce d'un succès le suit. `avant` : ce qui le précède
+ * dans la même rangée (l'outil et la description du connecteur), déjà rendu.
  */
-export function ModificationDuConnecteur({ compte, avant }: { compte: Compte; avant?: ReactNode }) {
+export function ModificationDuConnecteur({ compte, avant }: { compte: Compte; avant: ReactNode }) {
   const [ouvert, setOuvert] = useState(false)
   const [annonce, setAnnonce] = useState("")
   const bouton = useRef<HTMLButtonElement>(null)
@@ -88,14 +91,15 @@ export function ModificationDuConnecteur({ compte, avant }: { compte: Compte; av
   }
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-start gap-2">
         {avant}
-        <Button ref={bouton} type="button" variant="secondary" iconStart={<Icon as={PencilSimple} size="xs" />} aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
-          Modifier le nom
-          <span className="oto-sr-only">{` de ${compte.label}`}</span>
-        </Button>
+        <Tooltip content={`Modifier le nom de ${compte.label}`}>
+          <IconButton ref={bouton} label={`Modifier le nom de ${compte.label}`} size="sm" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)} className="relative flex-none pointer-coarse:before:absolute pointer-coarse:before:-inset-2">
+            <Icon as={PencilSimple} size="xs" />
+          </IconButton>
+        </Tooltip>
         {/* Montée d'emblée, vide : une région montée avec son message n'est pas annoncée. */}
-        <p role="status" className="oto-caption">
+        <p role="status" className="oto-caption self-center">
           {annonce}
         </p>
       </div>

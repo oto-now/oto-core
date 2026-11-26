@@ -109,7 +109,7 @@ const BLOCK_MESSAGE = `BLOQUÉ: écriture git directe interdite.
 
 Passer par le skill \`commit-push\` (.claude/skills/commit-push/SKILL.md) :
   1. pnpm verify:cached   (les 4 checks, sans les rejouer s'ils viennent de passer)
-  2. mise à jour de docs/changelog.md
+  2. entrée dans un fichier neuf de docs/changelog.d/
   3. commit + push
 
 Le skill pose lui-même le marqueur d'échappement une fois \`pnpm verify\` réellement passé.`

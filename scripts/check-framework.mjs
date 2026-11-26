@@ -203,7 +203,7 @@ const SLASH_OBSOLETES = [
   'tm-dev', 'tm-plan', 'tm-review', 'tm-verify', 'tm-wrap-up',
   'tm-fix', 'tm-feature', 'tm-sprint', 'tm-status', 'tm-evolve', 'tm-gate',
 ]
-const mdFiles = walk(ROOT).filter((p) => p.endsWith('.md') && !p.includes('/docs/changelog.md'))
+const mdFiles = walk(ROOT).filter((p) => p.endsWith('.md') && !p.includes('/docs/changelog.md') && !p.includes('/docs/changelog.d/'))
 
 for (const p of mdFiles) {
   const rel = p.slice(ROOT.length + 1)
