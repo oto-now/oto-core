@@ -15,7 +15,7 @@ import { testProjectRefusal } from "./tests/helpers/test-project-guard.mjs"
 // connexion du serveur (`PLATFORM_DATABASE_URL`) et celle d'administration des suites portables
 // (`PLATFORM_ADMIN_DATABASE_URL`, `tests/helpers/sql.ts`). `SUPABASE_PROJECT_ID` et
 // `PLATFORM_TEST_PROJECT_ID` servent la garde du projet de test, plus bas. `util.parseEnv` (Node) plutôt
-// que `loadEnv` de Vite : `vite` n'est pas une dépendance directe, pnpm ne le résout pas ici.
+// que `loadEnv` de Vite : la lecture ne dépend pas de la version de Vite que la racine déclare pour Vitest.
 function loadTestEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const file of [".env", ".env.local"]) {
