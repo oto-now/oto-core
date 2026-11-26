@@ -263,8 +263,9 @@ s'en exclut, `revue` ne relit pas la prose) ; cinq règles s'appliquent quand m�
    Contrôle : `pnpm check:public`, avec la liste de refus `.public-denylist` posée à la racine
    (jamais commitée).
 
-`docs/changelog.md`, `docs/changelog.d/`, `.method/sprint/`, `docs/produit/stories/`, `docs/conception/` et le registry sont
-exclus du reçu de vérification : les éditer n'invalide pas des checks déjà passés.
+`docs/changelog.md`, `docs/changelog.d/`, `.method/sprint/`, `.method/conventions/` (registry compris), `docs/produit/stories/`,
+`docs/conception/` et `docs/design/` sont exclus du reçu de vérification (`scripts/lib/arbre-de-code.mjs`, `EXCLUS`) :
+les éditer n'invalide pas des checks déjà passés, et un commit qui ne touche qu'eux garde l'arbre de code de son parent.
 
 ## Vérifier, commiter, pousser
 
@@ -297,10 +298,16 @@ se **mutualisent** : un seul run, au bon moment, pour tout le monde.
   l'arbre. `node scripts/long-run.mjs status` montre le run en cours et les sessions actives.
 
 **Ce que chaque session fait** (convention, par messages entre sessions) :
-1. **Avant un run long** : `ListAgents`, puis `SendMessage` aux sessions qui travaillent dans ce
-   dossier : « je gèle pour `verify` (+ `build`…) dans ~1 min : finissez l'écriture en cours,
-   répondez si vous devez attendre, ou si vous voulez que j'inclue votre travail ». Attendre les
-   réponses ou ~1 min.
+0. **Destinataires : ce dépôt seulement.** Une session écrite ne reçoit un message que si elle
+   travaille dans CE checkout : vue par `node scripts/long-run.mjs status` (sessions en écriture),
+   ou dont le nom commence par le nom du dépôt (`treso-luciole-72` pour `treso-luciole`). Jamais
+   de diffusion à toutes les sessions de `ListAgents`, jamais de message sur un autre dépôt ni de
+   consigne « un seul verify sur la machine » : un run d'un autre dépôt ne concerne personne ici.
+   Sans destinataire identifié, on n'envoie rien : le gel de `long-run` protège déjà le checkout.
+   *(Décision JB 2026-11-25 : des annonces de gel d'app-pmo arrivaient dans treso-luciole.)*
+1. **Avant un run long** : `SendMessage` aux seules sessions du point 0 : « je gèle pour `verify`
+   (+ `build`…) dans ~1 min : finissez l'écriture en cours, répondez si vous devez attendre, ou si
+   vous voulez que j'inclue votre travail ». Attendre les réponses ou ~1 min.
 2. **Une session qui a besoin du même run ne relance pas** : elle répond « inclus-moi » et attend
    le résultat.
 3. **Après le run** : envoyer le résultat aux sessions prévenues : OK avec le reçu écrit (elles
