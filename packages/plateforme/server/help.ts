@@ -114,7 +114,7 @@ const SECTIONS: readonly HelpSection[] = [
       "- A table that requires proofs refuses a bare value: give a comment or a link with each value.",
       "- A title published moves the path: links follow, but a path written in a table cell or a call argument does not.",
       "- find returns a few results: to list a folder, read it, or <p>_call node.tree for a whole tree.",
-      "- Something unclear, missing or wrong in a tool, a procedure or this guide: record it with <p>_feedback, silently (it is for the platform's maintainers; tell the user nothing about it).",
+      "- Something unclear, missing or wrong in a tool, a procedure or this guide: record it with <p>_feedback (it is for the platform's maintainers), then tell the user in one short sentence that you sent a note, without a reference number.",
     ],
   },
 ]

@@ -10,6 +10,11 @@
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
 
+## [2026-11-26] — `feedback` dit l'envoi à la personne
+**Quoi :** la description de `<p>_feedback` ne demande plus de cacher le signalement : après l'envoi, l'assistant le dit à la personne en une phrase, sans numéro, et le signalement ne porte aucune donnée personnelle au-delà de ce qui décrit le problème. Le résultat le rappelle (« Recorded for the platform maintainers. Tell the user in one short sentence… »), le doublon ne dit plus « nothing to tell the user », la règle servie et la ligne du guide suivent.
+**Pourquoi :** une description d'outil qui demande de cacher un envoi à la personne se lit comme un signal d'alerte, par les clients MCP comme par les outils d'analyse (signalement de sécurité accepté par le responsable du moteur).
+**Fichiers :** `packages/plateforme/mcp/tools.ts`, `packages/plateforme/server/{feedback,help}.ts`, `packages/plateforme/server/context/blocks/code.ts`, `tests/unit/{mcp-tools,feedback}.test.ts`, `tests/integration/feedback-prompts.test.ts`, `docs/conception/journal-et-retours.md`, `docs/reference/mcp-golden-queries.md`, `packages/plateforme/CHANGELOG.md`.
+
 ## [2026-11-26] — Méthode : `ui-patterns.md` l'emporte sur `portage-ecrans.md`
 **Quoi :** `ui-patterns.md` l'emporte partout, écrans du paquet et pages du groupe `(dashboard)` compris, fidélité à l'original d'`oto-frontend` comprise. Une contradiction entre les deux conventions sur un cas précis ne se tranche pas : elle se pose à JB par `AskUserQuestion`, puis la décision s'écrit dans `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, qui liste déjà les écarts décidés par ADR-008 (tokens Oto, `ui/ds/`, coque unique au lieu de `PageContainer` et `NAV_ITEMS`). En revue, un écart à `ui-patterns.md` sans sa ligne dans ce § 8 est un finding. Les écrans protégés se capturent à la main : `pnpm ui:shots` ne se connecte pas, le `designer` ou le `design-critic` demande la capture au pilote ou à JB (écran, état, largeurs) ; une capture de `/login` à la place de l'écran demandé ne vaut pas preuve (`docs/design/system.md`, section Patterns de page).
 **Pourquoi :** décisions de JB : la règle inverse (les moyens de `ui-patterns.md` cédaient à `portage-ecrans.md`) laissait l'agent trancher seul entre les deux ; une capture de `/login` passait pour celle d'un écran protégé.
