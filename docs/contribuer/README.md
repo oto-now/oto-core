@@ -20,8 +20,8 @@ d'un agent (échelle d'un changement, conventions routées, revue, gate de commi
 
 ## Commits et intégration
 
-- Un commit passe par le skill `commit-push` : vérifications (`pnpm verify`, reçu), entrée de
-  `docs/changelog.md`, commit, push. Le hook `.claude/hooks/enforce-git-gate.mjs` bloque tout
+- Un commit passe par le skill `commit-push` : vérifications (`pnpm verify`, reçu), entrée dans
+  un fichier neuf de `docs/changelog.d/` (`docs/changelog.md` est figé), commit, push. Le hook `.claude/hooks/enforce-git-gate.mjs` bloque tout
   `git commit` ou `git push` direct (`CLAUDE.md § Vérifier, commiter, pousser`).
 - Message : un préfixe (`feat:`, `fix:`, `perf:`, `docs:`…), la phrase de ce qui change pour le
   lecteur, puis les trailers.

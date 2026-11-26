@@ -10,14 +10,15 @@
 // est celle du dernier commit de la pull request ; inchangée depuis le point où elle part, rien n'est contrôlé
 // (code 0, aucune sortie `tag`). Sinon : la version du commit publié est celle de la pull request, son tag
 // n'existe pas encore. Dans les deux cas : une seule migration ajoutée depuis le tag précédent (database-patterns.md
-// § Règles, fiche D124), une section `## <version> — ` au CHANGELOG du paquet. Sous GitHub Actions, écrit
+// § Règles, fiche D124), une section `## <version> — ` au CHANGELOG du paquet, rien sous `## Unreleased` et aucun
+// fragment dans `packages/plateforme/changelog.d/` (versés par `pnpm changelog:version`). Sous GitHub Actions, écrit
 // `tag=v<version>` dans `$GITHUB_OUTPUT`. Code 1 au premier contrôle en échec.
 import { execFileSync } from "node:child_process"
 import { appendFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { CHANGELOG, FRAGMENTS, lignesSousUnreleased } from "../changelog-version.mjs"
 
 const MANIFESTE = "packages/plateforme/package.json"
-const CHANGELOG = "packages/plateforme/CHANGELOG.md"
 const MIGRATIONS = "packages/plateforme/migrations"
 
 const git = (depot, args) => execFileSync("git", ["-C", depot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()
@@ -61,6 +62,14 @@ export function controler(depot, { ref, base, head, tag }) {
   const changelog = git(depot, ["show", `${ref}:${CHANGELOG}`])
   if (!changelog.split("\n").some((ligne) => ligne.startsWith(`## ${version} — `))) {
     return { etat: "refusee", raison: `CHANGELOG : aucune section « ## ${version} — <date> »` }
+  }
+  // Une ligne restée sous `## Unreleased` ou dans un fragment partirait annoncée par la version suivante, pas par celle-ci.
+  if (lignesSousUnreleased(changelog.split("\n")).some((ligne) => ligne.trim())) {
+    return { etat: "refusee", raison: `CHANGELOG : des lignes restent sous « ## Unreleased » : pnpm changelog:version ${version}` }
+  }
+  const fragments = git(depot, ["ls-tree", "--name-only", ref, `${FRAGMENTS}/`]).split("\n").filter((f) => f.endsWith(".md"))
+  if (fragments.length) {
+    return { etat: "refusee", raison: `${fragments.length} fragment(s) non versé(s) (${fragments.join(", ")}) : pnpm changelog:version ${version}` }
   }
   return { etat: "publiable", tag: `v${version}`, precedent, migrations }
 }

@@ -2,6 +2,7 @@
 import fs from "fs"
 import path from "path"
 import { describe, expect, it } from "vitest"
+import { defautsDesListes, defautsDuFragment } from "../../scripts/changelog-version.mjs"
 
 const root = path.resolve(__dirname, "../..")
 const packageDir = path.join(root, "packages/plateforme")
@@ -112,23 +113,25 @@ describe.skipIf(!changelogWritten)("package CHANGELOG (AC7), written by the pilo
     expect(versions[0]).toBe("## Unreleased")
     for (const heading of versions) expect(heading, heading).toMatch(VERSION)
 
+    // Listes `### Assistants` (200 caractères au plus par entrée) et `### Hosts` seules, entrées d'une ligne :
+    // `defautsDesListes`, que `pnpm changelog:version` applique aussi aux fragments avant de les verser.
+    expect(defautsDesListes(lines.slice(lines.findIndex((l) => l.startsWith("## "))))).toEqual([])
+
     let list: string | null = null
     const hostEntries: string[] = []
-    for (const line of lines.slice(lines.findIndex((l) => l.startsWith("## ")))) {
-      if (!line.trim()) continue
-      if (line.startsWith("#")) {
-        expect(line, line).toMatch(/^(?:## .+|### (?:Assistants|Hosts))$/)
-        list = line.startsWith("### ") ? line : null
-        continue
-      }
-      expect(list, `entry outside a list: ${line}`).not.toBeNull()
-      expect(line, line).toMatch(/^- \S/)
-      // Une entrée Assistants est servie au modèle dans `context` : 200 caractères au plus.
-      if (list === "### Assistants") expect(line.length - 2, line).toBeLessThanOrEqual(200)
-      if (list === "### Hosts") hostEntries.push(line)
+    for (const line of lines) {
+      if (line.startsWith("#")) list = line
+      else if (list === "### Hosts" && line.startsWith("- ")) hostEntries.push(line)
     }
     // Sous `## Unreleased` au départ, sous `## 0.1.0 — …` après la première publication.
     expect(hostEntries.some((entry) => entry.includes("oto-platform migrations sync|check"))).toBe(true)
+  })
+
+  // Une pull request écrit ses lignes dans un fragment (`changelog.d/AAAA-MM-JJ-<sujet>.md`), versé à la version : même format.
+  it("should hold well-formed fragments only in changelog.d", () => {
+    const dossier = path.join(packageDir, "changelog.d")
+    const noms = fs.existsSync(dossier) ? fs.readdirSync(dossier) : []
+    expect(noms.flatMap((nom) => defautsDuFragment(nom, read(`packages/plateforme/changelog.d/${nom}`)))).toEqual([])
   })
 })
 

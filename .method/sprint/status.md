@@ -5,7 +5,7 @@
      (`CLAUDE.md § Documentation : où vit chaque information`) : épics et chantiers V2, tâches de suite. Les tâches
      de suite gardent l'identifiant `M…` que citent les commentaires du code : il se retrouve par une recherche
      dans les issues. L'état livré de chaque exigence est dans `docs/produit/prd.md`, ce qui a changé dans
-     `docs/changelog.md`. -->
+     `docs/changelog.d/` (l'historique figé dans `docs/changelog.md`). -->
 
 ## Actions réservées à JB
 
