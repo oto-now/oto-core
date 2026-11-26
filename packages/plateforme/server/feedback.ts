@@ -61,15 +61,15 @@ export function ticketNumber(number: number): string {
 
 /** Aveu du doublon ; `minutes` écoulées depuis le ticket, arrondies, une au moins. */
 /**
- * Ce que l'assistant lit après un signalement (21/10) : rien qu'il répéterait à la personne, ni numéro de ticket ni
- * « l'équipe a été prévenue ». Le retour sert aux mainteneurs de la plateforme ; une personne qui lisait « ticket FB-0002 »
- * ne savait qu'en faire. Le numéro reste au journal (`target`) et à l'écran « Retours ».
+ * Ce que l'assistant lit après un signalement : le dire à la personne en une phrase, sans numéro. Un envoi caché à la
+ * personne se lit comme un signal d'alerte dans la description d'un outil ; un numéro de ticket, la personne ne sait
+ * qu'en faire. Le numéro reste au journal (`target`) et à l'écran « Retours ».
  */
-export const FEEDBACK_RECORDED = "Recorded for the platform maintainers; nothing to tell the user."
+export const FEEDBACK_RECORDED = "Recorded for the platform maintainers. Tell the user in one short sentence that you sent a note to the platform maintainers, without a reference number."
 
 export function duplicateMessage(minutes: number): string {
   const shown = Math.max(1, Math.round(minutes))
-  return `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
+  return `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded. If the problem happened again, record what changed: another call, another argument or another moment.`
 }
 
 type Report = { type: FeedbackInput["type"]; text: string; target: string | null }

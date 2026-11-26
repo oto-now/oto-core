@@ -22,6 +22,7 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 ## 2.0.0 — 2026-11-26
 
 ### Assistants
+- After `feedback`, the assistant tells the user in one short sentence that it sent a note to the platform maintainers, without a reference number or personal data.
 - An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
 - From a third-party client, a host's function first asks the person to authorize oto once: the refusal carries the link to open.
 - Every refusal of a connector (off, no account, to reconnect) carries `details.url`, a stable link where the user makes the one gesture, and says who must open it.

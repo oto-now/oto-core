@@ -62,9 +62,9 @@ const steps = (step: string): BlockInput[] => [
 ]
 
 // 21/10 : rien que l'assistant répéterait à la personne, ni numéro ni « l'équipe a été prévenue » ; le numéro reste au journal.
-const RECORDED = "Recorded for the platform maintainers; nothing to tell the user."
+const RECORDED = "Recorded for the platform maintainers. Tell the user in one short sentence that you sent a note to the platform maintainers, without a reference number."
 const duplicateText = (minutes: number) =>
-  `Already recorded ${minutes} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
+  `Already recorded ${minutes} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded. If the problem happened again, record what changed: another call, another argument or another moment.`
 
 /** Le numéro du dernier appel de la session, lu au journal (`target`) : l'assistant ne le reçoit plus. */
 function ticketOf(session: { journal: readonly { target?: string | null }[] }): unknown {
