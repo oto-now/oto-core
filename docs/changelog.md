@@ -1,7 +1,11 @@
 # Changelog
 
-<!-- Ce fichier est mis à jour à chaque commit via /dev.
-     Format de chaque entrée :
+Les entrées récentes sont dans [`changelog.d/`](changelog.d/), un fichier par entrée
+(`AAAA-MM-JJ-<sujet>.md`), à lire par nom de fichier décroissant. Ce fichier garde l'historique
+antérieur, figé : aucune entrée ne s'y ajoute, pour qu'aucune pull request n'en mette une autre en
+conflit.
+
+<!-- Format de chaque entrée, dans son fichier de changelog.d/ :
 
 ## [Date] — [Scope]
 **Quoi :** Ce qui a été fait
@@ -9,12 +13,6 @@
 **Problèmes :** Ce qui a bloqué et comment c'a été résolu (si applicable)
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
-
-## [2026-11-26] — Écran Connecteurs : une carte par outil, la façon de se connecter choisie dans la fiche, « À remplacer »
-**Quoi :** un outil qui s'ouvre par plusieurs accès n'a plus qu'une carte dans « Ajouter un connecteur » ; sa fiche dit « Deux façons de se connecter » et fait choisir la façon en cartes radio (« Choisissez votre façon », soi d'abord, la première cochée), le corps de la façon choisie remonté à chaque changement, une clé saisie pour un accès ne partant jamais par un autre ; un membre à qui une seule façon est ouverte la lit dans l'en-tête, sans choix. Une façon se dit par comment on s'y connecte et pour qui (`faconDeLAcces` : « Avec mon compte <outil> », « Avec ma clé », « Avec une clé », « Avec une clé, pour l'organisation », « Avec une clé, pour une équipe », nouveau), jamais par le libellé déclaré de l'accès, qui ne départage que deux façons qui se diraient pareil. La page de connexion d'un connecteur dit ses accès par la même phrase (`ConnectAccessChoice.owner`, servi par `choose_access`). Dans la liste, le compte d'un tel outil dit sa façon après l'outil (« · clé », « · connexion au service ») ; un compte sans accès d'un outil passé à plusieurs se dit « À remplacer », en tête, sans geste. Exception à `ui-patterns.md` écrite (`portage-ecrans.md § 8`) : cartes radio au lieu d'un contrôle segmenté.
-**Pourquoi :** décisions de JB sur le brief de design de la fiche à plusieurs façons (option B, cartes radio, pas de texte d'aide, page de connexion alignée dans le même lot).
-**Problèmes :** le choix de la façon se ferme pendant l'envoi : `FormulaireDAjout` et `ConnexionChezLeTiers` le signalent à la fiche (`signalerLEnvoi`, facultatif) ; les autres accès offerts à côté du geste d'un accès (`others`) ne portent pas leur espace et disent une clé « Avec une clé ». Aucune migration.
-**Fichiers :** `packages/plateforme/ui/admin/connecteurs/{catalogue-des-connecteurs,etat-du-compte,lignes-des-connecteurs}.ts`, `{ajout-d-un-connecteur,catalogue-de-l-ajout,liste-des-connecteurs,detail-du-connecteur,ecran-connecteurs,formulaire-d-ajout,connexion-chez-le-tiers}.tsx`, `ui/connexion-d-un-connecteur/ecran-connexion-d-un-connecteur.tsx`, `schemas/connectors.ts`, `server/connectors/connect-page.ts`, `docs/conception/{connecteurs-et-comptes,connexion-par-l-agent}.md`, `.method/conventions/portage-ecrans.md` (§ 8) et sa fiche, `.method/conventions/component-registry.md`, `packages/plateforme/CHANGELOG.md`, tests.
 
 ## [2026-11-26] — Version 2.0.0 du paquet : une seule migration, `20261123150000_platform_api_de_l_hote.sql`
 **À appliquer :** un hôte qui monte de 1.10.x :
