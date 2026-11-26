@@ -1,7 +1,7 @@
 # Droits d'accès
 
 - **Statut** : validé avec JB le 27/09/2026
-- **Dernière révision** : 2026-11-17
+- **Dernière révision** : 2026-11-25
 
 ## Résumé
 
@@ -76,6 +76,7 @@ Origine : un incident d'oto 1, où une personne sans compte propre a écrit dans
 
 - **Sujets** : un compte, personnel compris, se partage à une personne, à une équipe ou à l'organisation entière (`subject_org` sur une règle de compte). Une règle de personne ou d'équipe l'emporte sur celle de l'organisation ; sans elles, le compte prend le plus haut du défaut de son propriétaire et de la règle d'organisation, comme un nœud. La personne d'un compte personnel y échappe : elle le gère avant toute règle (décidé le 19/10).
 - **Servir** : pour tout connecteur, l'ordre est le compte nommé, puis son propre compte personnel, sans être nommé, puis celui de l'équipe porteuse, puis celui de l'organisation (`chooseAccount`, `resolution.ts`). Son propre compte qui sert lève l'ambiguïté entre deux équipes capables. Le compte personnel d'un autre, même partagé au bon niveau, ne sert que nommé.
+- **Contexte** : `context` cite, dans la partie de Tout le monde, sous « Personal accounts colleagues shared with you (used only when named…) », les comptes personnels d'autres personnes que l'appelant peut déjà servir en les nommant, la règle de la liste des comptes (`listUsableAccounts`) : actifs, visibles (niveau lecture au moins), d'une personne encore membre ; une ligne par connecteur, chaque compte avec son propriétaire, son mode et le niveau de l'appelant (`sharedWithCaller`, `server/connectors/lines.ts`). Jamais un compte personnel qui ne lui est pas partagé : son niveau 0 le retire avant toute ligne. Sans eux, le contexte disait « no account you can use » à qui pouvait servir le compte d'un collègue (règle posée par Alexis le 25/11/2026).
 - **Refus** : faute de compte, ou sous le niveau partout, le refus nomme les comptes personnels partagés avec l'appelant au niveau voulu, chacun avec son propriétaire, et demande de les montrer à l'utilisateur sans choisir (`details.shared_accounts`, comme `ambiguous_account`). Un connecteur à consentement demande toujours de connecter le sien, avec la même mention.
 - **À qui** : chaque réponse de `call` dit à qui est le compte servi (`account.owner` : l'organisation, l'équipe, ou la personne, son nom et `yours`) ; quand il est à une autre personne, une ligne le dit au texte et au récapitulatif d'une fonction sensible, et le journal l'écrit en clé réservée `_lent_by` (l'identifiant de la personne qui l'a partagé), l'équivalent du `lent_by` d'oto 1.
 - **Départ** : quand une personne quitte l'organisation, son compte cesse aussitôt de servir aux autres : `accountRows` (`connectors/accounts.ts`) lit à chaque appel si le propriétaire est encore membre (`owner_left`), seul point d'entrée d'une future pause. Rien n'est supprimé (compte, secret, règles sur le compte) ; nommé, il est refusé (« no longer serves: its owner has left … », sans son nom, que l'annuaire ne garde plus) ; il ne se propose ni ne se mentionne plus. La personne revenue, il sert de nouveau.
@@ -204,3 +205,4 @@ La suite d'isolation prouve qu'aucune ligne ne passe d'une organisation à l'aut
 - 2026-11-13 : `node.share` décide le droit avant de résoudre une personne et ne rend plus d'email ; l'email d'un membre ne part qu'à l'administrateur, à lui-même et à un responsable d'une de ses équipes — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).
 - 2026-11-17 : la corbeille dit qui perd l'accès, à l'assistant (`node.trash`) et à l'écran (`GET trash/impact`) — décidé par le responsable du produit (source : cadrage du 17/11/2026 sur la vue invité).
 - 2026-11-17 : les partages d'une équipe, calculés des règles, lus par ses membres et les administrateurs (`teamShares`, `team.shares`, le dialogue « Les partages de … ») — décidé par le responsable du produit (source : cadrage du 17/11/2026 sur la vue invité).
+- 2026-11-25 : `context` cite les comptes personnels que des collègues ont partagés à l'appelant, ceux qu'il peut déjà servir en les nommant (règle de la liste des comptes), jamais un compte qui ne lui est pas partagé — décidé par Alexis (source : répartition des chantiers du 25/11/2026).

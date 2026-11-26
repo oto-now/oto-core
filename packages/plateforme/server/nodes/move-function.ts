@@ -15,7 +15,7 @@ export const nodeMove = defineFunction({
   class: "write",
   origin: "paquet",
   description:
-    "Moves or renames a page, procedure, table or folder to a new path, with every page under it, as Move does on the screen: use it to reorganize the tree, put a page in a folder, rename a path or choose the path a new title gave. The old paths still lead to it (links, bookmarks). Never recreate a page and trash the old one: move it. Needs the manage level on the node and the write level under the new parent. The node is given by its path, or by its stable id (as read, find and write return it) instead. In French: déplacer, renommer, ranger dans un dossier, réorganiser.",
+    "Moves or renames a page, procedure, table or folder to a new path, with every page under it, as Move does on the screen: use it to reorganize the tree, put a page in a folder, rename a path or choose the path a new title gave. The old paths still lead to it (links, bookmarks). Never recreate a page and trash the old one: move it. Needs the manage level on the node and the write level under the new parent. The node is given by its path, or by its stable id (as read, find and write return it) instead. In French: déplacer ou renommer une page ou un dossier, ranger dans un dossier, réorganiser.",
   schema: moveNodeArgsSchema,
   examples: [
     { path: "ventes/relance_devis", new_path: "ventes/procedures/relance_devis" },

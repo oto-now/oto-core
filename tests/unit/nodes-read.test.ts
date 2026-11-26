@@ -10,6 +10,7 @@ import { formatResult } from "../../packages/plateforme/mcp/result"
 import { renderBlocks, type BlockInput, type ReadNodeInput } from "../../packages/plateforme/schemas"
 import { defineFunction } from "../../packages/plateforme/server/catalog/define"
 import { catalogFunctions, describeFunction } from "../../packages/plateforme/server/catalog/registry"
+import { functionCatalog } from "../../packages/plateforme/server/find"
 import { diffBlocks, samePublishedContent } from "../../packages/plateforme/server/nodes/diff"
 import { displayRefs, type DocBlock } from "../../packages/plateforme/server/nodes/document"
 import type { NodeRow } from "../../packages/plateforme/server/nodes/lookup"
@@ -583,6 +584,52 @@ describe.skipIf(!sqlConfigured)(portable("read on a real database"), { timeout: 
       vi.mocked(catalogFunctions).mockReturnValue([wordy])
       const line = (await read("lea", { path: "functions" })).text.split("\n")[2]
       expect([line.length, line.endsWith("…")]).toEqual(["- erp.long (read): ".length + 200, true])
+    })
+
+    // Au-delà de 45 000 caractères, la liste devient un plan par connecteur, et `section` en lit un.
+    it("should outline the functions by connector past 45,000 characters, read one connector with section, and refuse an unknown one", async () => {
+      const many = (connector: string) =>
+        Array.from({ length: 150 }, (_, rank) =>
+          defineFunction({
+            name: `${connector}.fn_${rank}`,
+            connector,
+            class: "read",
+            origin: "paquet",
+            description: `Reads thing ${rank} of ${connector}, ${"with a long explanation ".repeat(6)}.`,
+            schema: z.strictObject({}),
+            examples: [],
+            refusals: [],
+            run: async () => ({ text: "" }),
+          }),
+        )
+      vi.mocked(catalogFunctions).mockReturnValue([...many("alpha"), ...many("beta")])
+      await content(base())
+      const outline = await read("lea", { path: "functions" })
+      expect([outline.text.split("\n").slice(0, 3), outline.data]).toEqual([
+        [
+          '300 functions you can run, in 2 connectors; the whole list is too long, read one connector with acme_read {"path": "functions", "section": "<connector>"}:',
+          "- alpha: 150 functions",
+          "- beta: 150 functions",
+        ],
+        { connectors: [{ name: "alpha", functions: 150 }, { name: "beta", functions: 150 }], contracts: ["write.procedure", "write.table"] },
+      ])
+      const beta = await read("lea", { path: "functions", section: " Beta " })
+      // `data` d'un `ToolOutput` est un objet libre : la liste servie y est un tableau, seule sa longueur compte ici.
+      expect([beta.text.split("\n").slice(0, 2), (beta.data?.functions as unknown[] | undefined)?.length]).toEqual([["150 functions of beta you can run:", "beta:"], 150])
+      await expect(read("lea", { path: "functions", section: "gamma" })).rejects.toMatchObject({
+        code: "invalid_arguments",
+        message: "No active connector gamma in functions. Connectors: alpha, beta.",
+      })
+      // Les fonctions de l'hôte : une ligne du plan à leur nom, et `section` à ce nom sert leurs lignes par famille.
+      const host = { functions: many("erp_api"), lines: ["Functions of ERP open to you, by family:", "Ventes:", "- erp_api.fn_0 (read): Reads thing 0."] }
+      const outlined = functionCatalog(many("alpha"), [], "acme", { host }).text.split("\n")
+      const hostPart = functionCatalog(many("alpha"), [], "acme", { host, section: "erp_api" })
+      // Même lecture de `data.functions`, objet libre d'un `ToolOutput`.
+      expect([outlined.slice(0, 3), hostPart.text.split("\n").slice(0, 3), (hostPart.data?.functions as unknown[] | undefined)?.length]).toEqual([
+        [expect.stringMatching(/^300 functions you can run, in 2 connectors;/), "- alpha: 150 functions", "- erp_api: 150 functions — the API of the host, by family"],
+        host.lines,
+        150,
+      ])
     })
 
     it("should answer an unknown, invisible, personal or foreign node as unknown, and refuse a malformed path (AC17)", async () => {

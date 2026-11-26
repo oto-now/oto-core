@@ -17,6 +17,8 @@ import { isJsonObject } from "../../json"
 const TEAM_CONNECTORS_HEADER =
   "Connectors (this team runs a call when the procedure or the call names it, or when it is your only team with an account; if several are, ask the user which one):"
 const EVERYONE_CONNECTORS_HEADER = "Connectors (when no team of yours runs the call):"
+/** Le compte d'un collègue ne sert que nommé (`chooseAccount`) : l'en-tête le dit, avec la façon de le nommer. */
+const SHARED_ACCOUNTS_HEADER = 'Personal accounts colleagues shared with you (used only when named: pass account: "<label>" in the call; ask the user before using one):'
 
 /** La ligne de faits d'une équipe : son nom, puis ses responsables nommés ; reprise par la vue invité (`guests.ts`). */
 export function teamLine(name: string, leads: readonly string[]): string {
@@ -53,7 +55,8 @@ export async function leadsByTeam(db: PlatformDb, orgId: string, teamIds: readon
 /**
  * Les faits des équipes : une ligne par équipe, dans l'ordre d'`identity.teams` (par nom) ; les lignes des
  * connecteurs de chaque équipe (en-tête compris, vide sans compte), dans le même ordre ; celles de Tout le
- * monde (connecteurs dont aucune équipe de la personne n'a de compte).
+ * monde (connecteurs dont aucune équipe de la personne n'a de compte, puis les comptes personnels que des collègues
+ * lui ont partagés, sous leur propre en-tête).
  */
 export type TeamFacts = { teams: string[]; teamConnectors: string[][]; connectors: string[] }
 
@@ -70,6 +73,6 @@ export async function teamFacts(db: PlatformDb, identity: Identity): Promise<Tea
   return {
     teams: identity.teams.map((team) => teamLine(team.name, leads.get(team.id) ?? [])),
     teamConnectors: identity.teams.map((team) => headed(TEAM_CONNECTORS_HEADER, connectors.teams.get(team.id) ?? [])),
-    connectors: headed(EVERYONE_CONNECTORS_HEADER, connectors.everyone),
+    connectors: [...headed(EVERYONE_CONNECTORS_HEADER, connectors.everyone), ...headed(SHARED_ACCOUNTS_HEADER, connectors.shared)],
   }
 }
