@@ -50,8 +50,8 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
   const chezLeTiers = etat.geste === "connecter" || etat.geste === "reconnecter"
   const gereUnReel = compte.viewerLevel === "manage" && compte.mode === "reel" && formulaire !== undefined && etat.code !== "bloque"
   const echec = echecDuDernierTest(compte)
-  // L'outil bloqué : qui l'a bloqué et ce que ça arrête tiennent une phrase entière, sur sa ligne.
-  const surSaLigne = etat.code === "bloque"
+  // L'outil bloqué, le connecteur à remplacer : leur précision tient une phrase entière, sur sa ligne.
+  const surSaLigne = etat.code === "bloque" || etat.code === "a_remplacer"
   return (
     // Une bande : l'état et sa précision sur une ligne, le geste à droite. Elle reçoit le focus quand un geste emporte le sien.
     <div id={ANCRE_DE_L_ETAT} tabIndex={-1} role="group" aria-label="État" className="flex flex-col gap-2 rounded-lg bg-card p-3 focus-visible:ring-2 focus-visible:ring-ink">
@@ -256,6 +256,8 @@ type DetailDuConnecteurProps = {
   fonctions: OrgConnector["functions"]
   /** Qui a bloqué son outil pour l'organisation (`bloquePar`) ; `null` : il ne l'est pas. */
   bloquePar: Blocage
+  /** Vrai pour un compte sans accès d'un outil qui s'ouvre maintenant de plusieurs façons (`sansAcces`) : il est à remplacer. */
+  sansSonAcces: boolean
   /** Pour un administrateur : bloquer ou débloquer l'outil. Absent pour un membre. */
   gouvernance?: GouvernanceDeLOutil
   /** Ses partages, lus par la page pour qui le gère. */
@@ -270,12 +272,14 @@ type DetailDuConnecteurProps = {
   partagerDAbord?: boolean
 }
 
-export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions, bloquePar, gouvernance, partages, sujets, moi, ici, fermer, partagerDAbord = false }: DetailDuConnecteurProps) {
-  const etat = etatDuCompte(compte, formulaire, moi, bloquePar)
+export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions, bloquePar, sansSonAcces, gouvernance, partages, sujets, moi, ici, fermer, partagerDAbord = false }: DetailDuConnecteurProps) {
+  const etat = etatDuCompte(compte, formulaire, moi, { bloquePar, sansSonAcces })
   const gere = compte.viewerLevel === "manage"
   // Un connecteur éteint (désactivé, outil bloqué) ne sert à personne : ni mode d'emploi, ni niveau à demander.
   const eteint = etat.code === "desactive" || etat.code === "bloque"
   const recu = !gere && compte.owner.kind === "user" && !eteint
+  // À remplacer : aucun geste sur lui, sauf le désactiver (« Arrêter ») ; le partager ne servirait à personne.
+  const aRemplacer = etat.code === "a_remplacer"
   const titre = (
     <span className="flex min-w-0 items-center gap-3">
       <TuileDeLOutil nom={outil} logo={logo} />
@@ -287,10 +291,11 @@ export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions,
       <PorteeDuPartage ouvert={partagerDAbord && compte.viewerLevel === "manage" && partages !== undefined}>
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-sm text-ink">{contexte(compte, formulaire, outil, moi)}</span>
+            {/* Un compte à remplacer ne retient aucun accès : ni clé ni connexion ne se disent de lui. */}
+            <span className="text-sm text-ink">{etat.code === "a_remplacer" ? outil : contexte(compte, formulaire, outil, moi)}</span>
             {compte.description && <p className="oto-caption">{compte.description}</p>}
           </div>
-          {gere && (
+          {gere && !aRemplacer && (
             <ModificationDuConnecteur
               compte={{ id: compte.id, label: compte.label, description: compte.description }}
               avant={partages ? <OuvrirLePartage libelle="Partager" nomAccessible={`Partager ${compte.label}`} variante="primary" /> : undefined}
@@ -304,7 +309,7 @@ export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions,
           <FonctionsDuConnecteur titre="Ce que votre assistant peut faire" fonctions={fonctions} classes={classesDuNiveau(compte.viewerLevel)} pied={!gere && !eteint && <NiveauAManquer compte={compte} />} />
           <Arreter compte={compte} outil={outil} bloquePar={bloquePar} gouvernance={gouvernance} />
         </div>
-        {gere && partages && (
+        {gere && partages && !aRemplacer && (
           <PartageDuConnecteur
             compte={{ id: compte.id, label: compte.label, owner: compte.owner }}
             partages={partages}

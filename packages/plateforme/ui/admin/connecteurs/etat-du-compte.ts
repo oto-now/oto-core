@@ -1,7 +1,8 @@
 // L'état d'un compte de connecteur tel que l'écran Connecteurs le dit : un mot, une précision, et le geste qui le
 // répare pour qui peut le faire. Fonction pure, lue par la liste et par le détail : sans elle, chacun recomposait l'état
-// depuis le mode, la marque, le secret et le consentement. Module sans « use client » : l'écran, rendu par le serveur,
-// l'appelle.
+// depuis le mode, la marque, le secret et le consentement. Il porte aussi la façon d'un accès (`faconDeLAcces`), lue par
+// le catalogue de l'ajout et par la page de connexion d'un connecteur. Module sans « use client » : l'écran, rendu par
+// le serveur, l'appelle.
 import type { AccountView, ConnectorAccountForm, ProbeFailureCode } from "../../../schemas"
 import { dateLisible } from "../../format/dates"
 
@@ -18,14 +19,57 @@ export const connexionDe = (formulaire: ConnectorAccountForm | undefined): Conne
 export const formulaireDuCompte = (formulaires: readonly ConnectorAccountForm[], compte: Pick<AccountView, "connector" | "access">): ConnectorAccountForm | undefined =>
   formulaires.find((formulaire) => formulaire.connector === compte.connector && formulaire.access?.name === compte.access)
 
+/**
+ * Un accès tel que sa façon se dit : son nom, son libellé déclaré, s'il se connecte chez le tiers, et pour qui la
+ * personne peut l'ouvrir (les propriétaires que l'écran lui offre, ou l'espace que la page de connexion lui donne).
+ */
+export type AccesADire = { nom: string; libelle: string; chezLeTiers: boolean; proprietaires: readonly string[] }
+
+function phraseDeLaFacon(outil: string, { chezLeTiers, proprietaires }: AccesADire): string {
+  if (chezLeTiers) return `Avec mon compte ${outil}`
+  if (proprietaires.includes("user")) return proprietaires.some((genre) => genre !== "user") ? "Avec une clé" : "Avec ma clé"
+  if (proprietaires.includes("org")) return "Avec une clé, pour l'organisation"
+  return proprietaires.includes("team") ? "Avec une clé, pour une équipe" : "Avec une clé"
+}
+
+/**
+ * La façon d'ouvrir un accès d'un outil à plusieurs, dite à qui l'ajoute : d'après comment on s'y connecte et pour qui,
+ * jamais par le libellé de l'accès, écrit pour qui déclare le connecteur (« Service account of the organization »).
+ * Deux accès offerts qui se diraient pareil prennent ce libellé entre parenthèses. Lue par la fiche d'ajout et par la
+ * page de connexion d'un connecteur : sans elle, chacune dirait l'accès à sa manière.
+ */
+export function faconDeLAcces(outil: string, acces: AccesADire, offerts: readonly AccesADire[]): string {
+  const dite = phraseDeLaFacon(outil, acces)
+  const jumeau = offerts.some((autre) => autre.nom !== acces.nom && phraseDeLaFacon(outil, autre) === dite)
+  return jumeau ? `${dite} (${acces.libelle})` : dite
+}
+
+/**
+ * La façon d'un compte d'un outil qui s'ouvre de plusieurs façons, dite dans la liste après son outil : « clé » ou
+ * « connexion au service » ; `null` pour un outil à une seule façon, ou un compte qui n'en retient aucune.
+ */
+export function faconDuCompte(formulaire: ConnectorAccountForm | undefined): string | null {
+  if (!formulaire?.access) return null
+  return connexionDe(formulaire) === "saisie" ? "clé" : "connexion au service"
+}
+
+/**
+ * Un compte qui ne retient aucun accès alors que son outil s'ouvre maintenant par plusieurs : le moteur le refuse à
+ * chaque appel, et aucun geste ne lui donne un accès.
+ */
+export const sansAcces = (formulaires: readonly ConnectorAccountForm[], compte: Pick<AccountView, "connector" | "access">): boolean =>
+  compte.access === undefined && formulaires.some((formulaire) => formulaire.connector === compte.connector && formulaire.access !== undefined)
+
 /** Le geste qui répare un état : saisir ou remplacer la clé (dans le détail), connecter ou reconnecter chez le tiers. */
 type GesteDuCompte = "saisir" | "remplacer" | "connecter" | "reconnecter"
 
 export type EtatDuCompte = {
-  code: "non_teste" | "fonctionne" | "test_en_echec" | "a_terminer" | "a_reconnecter" | "cle_refusee" | "credits_epuises" | "desactive" | "bloque"
+  code: "non_teste" | "fonctionne" | "test_en_echec" | "a_terminer" | "a_reconnecter" | "a_remplacer" | "cle_refusee" | "credits_epuises" | "desactive" | "bloque"
   /** Le mot de l'état, toujours écrit : la couleur du point ne le dit jamais seule. */
   mot: string
   precision: string | null
+  /** Une précision plus courte pour la liste, quand la phrase entière n'y tient pas ; le détail garde `precision`. */
+  precisionCourte?: string
   /** L'état du point du design system (`.oto-dot`). */
   point: "rest" | "ok" | "review" | "failed" | "paused"
   /** Vrai pour un état qui attend quelqu'un : ces comptes viennent en tête de la liste. */
@@ -46,10 +90,20 @@ const clePosee = (compte: AccountView) => (compte.secret?.fields.length ?? 0) > 
 /** Un compte à consentement dont les jetons ne sont jamais arrivés. */
 const jamaisConnecte = (compte: AccountView) => !compte.secret?.updatedAt
 
+/** À qui demander un geste sur un compte qu'on ne gère pas. */
+const aQuiDemander = (compte: AccountView) => (compte.owner.kind === "user" ? (compte.owner.userName ?? "son propriétaire") : "qui le gère")
+
+/** Un compte sans accès (`sansAcces`) : rien ne le répare, il se remplace par un connecteur ajouté de nouveau. */
+function aRemplacer(compte: AccountView): EtatDuCompte {
+  const geste = compte.viewerLevel === "manage" ? "Ajoutez-en un nouveau, puis désactivez celui-ci." : `Demandez à ${aQuiDemander(compte)} d'en ajouter un nouveau.`
+  const precision = `Cet outil se connecte maintenant de plusieurs façons : ${geste.charAt(0).toLowerCase()}${geste.slice(1)}`
+  return { code: "a_remplacer", mot: "À remplacer", precision, precisionCourte: geste, point: "failed", demandeUnGeste: true, geste: null }
+}
+
 function aReconnecter(compte: AccountView, formulaire: ConnectorAccountForm | undefined, aMoi: boolean): EtatDuCompte {
   const connexion = connexionDe(formulaire)
   const reconnectable = connexion === "consentement" || (connexion === "branchement" && formulaire?.hosted?.ready === true)
-  const qui = compte.owner.kind === "user" ? (compte.owner.userName ?? "son propriétaire") : "qui le gère"
+  const qui = aQuiDemander(compte)
   // Un compte à clé ne se reconnecte pas chez le tiers : il se répare par une clé neuve, que pose qui le gère.
   const parCle = connexion === "saisie" && compte.mode === "reel" && formulaire !== undefined
   const gere = compte.viewerLevel === "manage"
@@ -155,15 +209,19 @@ function nonTeste(compte: AccountView): EtatDuCompte {
   return { code: "non_teste", mot: "Non testé", precision, point: "rest", demandeUnGeste: false, geste: null }
 }
 
+/** Ce que l'outil d'un compte dit de lui : bloqué par qui (`bloquePar`), et s'il s'ouvre maintenant par des accès que le compte ne retient pas (`sansAcces`). */
+export type OutilDuCompte = { bloquePar?: BloqueurDeLOutil; sansSonAcces?: boolean }
+
 /**
  * L'état d'un compte pour la personne `moi` : désactivé, bloqué avec son outil par un administrateur (`bloquePar`), à
- * reconnecter (en erreur, ou refusé par un service où il se connecte chez le tiers), marqué (clé refusée, crédits
- * épuisés), à terminer, sinon ce que dit son dernier test (« Connecté » et sa date, « Test en échec »), et « Non testé »
- * sans test, ou quand la clé a changé depuis.
+ * remplacer (`sansSonAcces`, ce que rend `sansAcces`), à reconnecter (en erreur, ou refusé par un service où il se
+ * connecte chez le tiers), marqué (clé refusée, crédits épuisés), à terminer, sinon ce que dit son dernier test
+ * (« Connecté » et sa date, « Test en échec »), et « Non testé » sans test, ou quand la clé a changé depuis.
  */
-export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string, bloquePar: BloqueurDeLOutil = null): EtatDuCompte {
+export function etatDuCompte(compte: AccountView, formulaire: ConnectorAccountForm | undefined, moi: string, { bloquePar = null, sansSonAcces = false }: OutilDuCompte = {}): EtatDuCompte {
   if (compte.status === "disabled") return { code: "desactive", mot: "Désactivé", precision: null, point: "paused", demandeUnGeste: false, geste: null }
   if (bloquePar) return bloque(bloquePar, moi)
+  if (sansSonAcces) return aRemplacer(compte)
   const gere = compte.viewerLevel === "manage"
   const aMoi = estAMoi(compte, moi)
   if (compte.status === "error") return aReconnecter(compte, formulaire, aMoi)

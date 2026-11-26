@@ -86,16 +86,33 @@ describe("etatDuCompte", () => {
   it("should say an account whose tool an administrator blocked, by whom, without a gesture, even in error; a disabled one stays disabled", () => {
     const parClaire = { userId: "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c09", name: "Claire Morel" }
     const lus = [
-      etatDuCompte(compte({ owner: A_MOI, status: "error" }), CLE, MOI, parClaire),
-      etatDuCompte(compte({ owner: A_MOI }), CLE, MOI, { userId: MOI, name: "Léa Bernard" }),
-      etatDuCompte(compte({}), CLE, MOI, { userId: null, name: null }),
-      etatDuCompte(compte({ status: "disabled" }), CLE, MOI, parClaire),
+      etatDuCompte(compte({ owner: A_MOI, status: "error" }), CLE, MOI, { bloquePar: parClaire }),
+      etatDuCompte(compte({ owner: A_MOI }), CLE, MOI, { bloquePar: { userId: MOI, name: "Léa Bernard" } }),
+      etatDuCompte(compte({}), CLE, MOI, { bloquePar: { userId: null, name: null } }),
+      etatDuCompte(compte({ status: "disabled" }), CLE, MOI, { bloquePar: parClaire }),
     ].map(({ code, mot, precision, geste }) => [code, mot, precision, geste])
     expect(lus).toEqual([
       ["bloque", "Bloqué par un administrateur", "Par Claire Morel. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
       ["bloque", "Bloqué par un administrateur", "Par vous. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
       ["bloque", "Bloqué par un administrateur", "Par un administrateur. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
       ["desactive", "Désactivé", null, null],
+    ])
+  })
+
+  it("should say an account without access of a tool that now connects in several ways is to replace, without a gesture, after disabled and blocked, before any other state", () => {
+    const lus = [
+      etatDuCompte(compte({ status: "error", mark: { reason: "credential_rejected", at: "2026-11-05T09:00:00.000Z" } }), undefined, MOI, { sansSonAcces: true }),
+      etatDuCompte(compte({ owner: A_PAUL, viewerLevel: "read" }), undefined, MOI, { sansSonAcces: true }),
+      etatDuCompte(compte({ viewerLevel: "write" }), undefined, MOI, { sansSonAcces: true }),
+      etatDuCompte(compte({}), undefined, MOI, { bloquePar: { userId: null, name: null }, sansSonAcces: true }),
+      etatDuCompte(compte({ status: "disabled" }), undefined, MOI, { sansSonAcces: true }),
+    ].map(({ code, precision, point, geste, demandeUnGeste }) => [code, precision, point, geste, demandeUnGeste])
+    expect(lus).toEqual([
+      ["a_remplacer", "Cet outil se connecte maintenant de plusieurs façons : ajoutez-en un nouveau, puis désactivez celui-ci.", "failed", null, true],
+      ["a_remplacer", "Cet outil se connecte maintenant de plusieurs façons : demandez à Paul Durand d'en ajouter un nouveau.", "failed", null, true],
+      ["a_remplacer", "Cet outil se connecte maintenant de plusieurs façons : demandez à qui le gère d'en ajouter un nouveau.", "failed", null, true],
+      ["bloque", "Par un administrateur. Plus aucun assistant ne s'en sert ; rien n'est effacé.", "paused", null, false],
+      ["desactive", null, "paused", null, false],
     ])
   })
 })
@@ -217,6 +234,22 @@ describe("formulaireDuCompte et lignes d'un connecteur à plusieurs accès", () 
       formulaireDuCompte(formulaires, { connector: "console" }),
       formulaireDuCompte(formulaires, { connector: "crm" }),
     ]).toEqual([CONNEXION, CLE_DE_SERVICE, undefined, CLE])
+  })
+
+  it("should say after the tool the way of each account, put first an account without access to replace, and say nothing more for a tool with one way", () => {
+    const comptes = [
+      compte({ label: "Console A", connector: "console", access: "service_account" }),
+      compte({ label: "Console B", connector: "console", access: "google_account", owner: A_MOI, lastProbe: { at: "2026-11-03T09:00:00.000Z", healthy: true, code: null, reason: null, balance: null } }),
+      compte({ label: "Console C", connector: "console", lastProbe: { at: "2026-11-03T09:00:00.000Z", healthy: true, code: null, reason: null, balance: null } }),
+      compte({ label: "Banque" }),
+    ]
+    const { lignes } = lignesDesConnecteurs({ comptes, connecteurs: [], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null })
+    expect(lignes.map((ligne) => [ligne.libelle, ligne.outil, ligne.facon, ligne.etat.mot, ligne.geste])).toEqual([
+      ["Console C", "Search Console", null, "À remplacer", null],
+      ["Banque", "Crm Pro", null, "Non testé", null],
+      ["Console A", "Search Console", "clé", "Non testé", null],
+      ["Console B", "Search Console", "connexion au service", "Connecté", null],
+    ])
   })
 
   it("should reconnect a person's account by the access it retains", () => {

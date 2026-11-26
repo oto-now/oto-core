@@ -15,7 +15,7 @@ import { Icon } from "../../ds/react/icon"
 import { InputAffix } from "../../ds/react/input-affix"
 import { Tooltip } from "../../ds/react/tooltip"
 import { BlocageDeLOutil, DeblocageDeLOutil } from "./blocage-de-l-outil"
-import { cleDeLOutil, outilsCherches, type OutilAAjouter } from "./catalogue-des-connecteurs"
+import { outilsCherches, type OutilAAjouter } from "./catalogue-des-connecteurs"
 import type { BloqueurDeLOutil as Blocage } from "./etat-du-compte"
 import { fonctions } from "./libelles-des-partages"
 import { TuileDeLOutil } from "./tuile-de-l-outil"
@@ -47,11 +47,10 @@ function Connecte({ nombre }: { nombre: number }) {
   )
 }
 
-/** Ce qu'une carte dit sous le nom : l'accès d'un outil à plusieurs, sinon le nombre de ses fonctions. */
+/** Ce qu'une carte dit sous le nom : le nombre de ses fonctions, même pour un outil qui se connecte de plusieurs façons. */
 function Precision({ outil }: { outil: OutilAAjouter }) {
   // Payé par la clé de l'application, pas encore adopté : la fiche dit pourquoi rien ne s'ajoute, et qui l'adopte.
   if (outil.aAdopter) return <span className="oto-caption">À adopter par un administrateur</span>
-  if (outil.acces) return <span className="oto-caption">{outil.acces.libelle}</span>
   if (outil.fonctions.length === 0) return null
   return <span className="oto-caption">{fonctions(outil.fonctions.length)}</span>
 }
@@ -61,7 +60,7 @@ type CarteProps = { outil: OutilAAjouter; choisir: (cle: string) => void; gouver
 function Carte({ outil, choisir, gouvernance }: CarteProps) {
   return (
     <li className="group relative">
-      <button type="button" className={`${CARTE} cursor-pointer text-ink hover:bg-desk focus-visible:ring-2 focus-visible:ring-ink`} onClick={() => choisir(cleDeLOutil(outil))}>
+      <button type="button" className={`${CARTE} cursor-pointer text-ink hover:bg-desk focus-visible:ring-2 focus-visible:ring-ink`} onClick={() => choisir(outil.connecteur)}>
         <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
         <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${gouvernance ? "pr-8" : ""}`}>
           <span className="flex items-center justify-between gap-2 font-semibold">
@@ -108,9 +107,9 @@ function Bloque({ outil, moi, gouvernance }: BloqueProps) {
 
 const estBloque = (outil: OutilAAjouter): outil is OutilAAjouter & { bloquePar: NonNullable<Blocage> } => outil.bloquePar !== null
 
-/** Les outils bloqués, une carte par outil, même à plusieurs accès : on bloque un outil, pas un accès. */
+/** Les outils bloqués, une carte par outil : on bloque un outil, pas une façon de s'y connecter. */
 function Bloques({ outils, moi, gouvernance }: { outils: OutilAAjouter[]; moi: string; gouvernance: GouvernanceDesOutils | undefined }) {
-  const uns = outils.filter(estBloque).filter((outil, rang, tous) => tous.findIndex((autre) => autre.connecteur === outil.connecteur) === rang)
+  const uns = outils.filter(estBloque)
   if (uns.length === 0) return null
   return (
     <section aria-labelledby="outils-bloques" className="flex flex-col gap-2">
@@ -132,7 +131,7 @@ function Ouverts({ outils, choisir, gouvernance }: { outils: OutilAAjouter[]; ch
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {ouverts.map((outil) => (
-        <Carte key={cleDeLOutil(outil)} outil={outil} choisir={choisir} gouvernance={gouvernance} />
+        <Carte key={outil.connecteur} outil={outil} choisir={choisir} gouvernance={gouvernance} />
       ))}
     </ul>
   )

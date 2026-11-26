@@ -6,6 +6,7 @@
 // partage (l'autre agira par votre compte, en votre nom), puis est gardé dans l'onglet et posé au retour
 // (`partage-au-retour.tsx`). Module à part : la fenêtre d'ajout dépassait sa taille.
 import { useState } from "react"
+import { Button } from "../../ds/react/primitives"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { nomDuCandidat } from "../../noeud/champ-d-ajout-d-acces"
 import type { OutilAAjouter } from "./catalogue-des-connecteurs"
@@ -24,15 +25,25 @@ function destinataires(partage: PartageDeLAjout): string {
   return noms.length > 1 ? `${noms[0]} et ${noms.length - 1} ${noms.length > 2 ? "autres" : "autre"}` : (noms[0] ?? "")
 }
 
-type ConnexionChezLeTiersProps = { outil: OutilAAjouter; ici: string; sujets: SujetsDeRegle; moi: string; administre: boolean }
+type ConnexionChezLeTiersProps = {
+  outil: OutilAAjouter
+  ici: string
+  sujets: SujetsDeRegle
+  moi: string
+  administre: boolean
+  /** « Annuler » : retour au catalogue, comme la fiche d'un outil à clé. */
+  annuler: () => void
+  /** Le départ chez le tiers commence, ou échoue : la fiche ferme le choix de la façon pendant ce temps. */
+  signalerLEnvoi?: (enCours: boolean) => void
+}
 
-export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre }: ConnexionChezLeTiersProps) {
+export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre, annuler, signalerLEnvoi }: ConnexionChezLeTiersProps) {
   const [partage, setPartage] = useState<PartageDeLAjout>(SANS_PARTAGE)
   const [question, setQuestion] = useState<Accord | null>(null)
   const partageChoisi = partage.general !== null || partage.regles.length > 0
 
   /** Avant de partir : l'accord du premier partage, puis le partage gardé pour le retour ; sans partage, on part. */
-  async function avantDePartir(): Promise<boolean> {
+  async function accordDuPartage(): Promise<boolean> {
     if (!partageChoisi) return true
     // Un seul niveau se nomme ; des niveaux différents se disent « aux niveaux choisis ».
     const niveaux = new Set([...partage.regles.map(({ niveau }) => niveau), ...(partage.general ? [partage.general] : [])])
@@ -49,6 +60,13 @@ export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre }: Co
     )
     // Un onglet qui ne garde rien laisse partir quand même : le retour dira de le partager.
     if (oui) garderLePartage({ connecteur: outil.connecteur, outil: outil.libelle, partage, avant: outil.mesComptes })
+    return oui
+  }
+
+  /** On part : l'envoi commence ; il finit au départ du navigateur, ou à l'échec (`apresUnEchec`). */
+  async function avantDePartir(): Promise<boolean> {
+    const oui = await accordDuPartage()
+    if (oui) signalerLEnvoi?.(true)
     return oui
   }
 
@@ -70,6 +88,9 @@ export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre }: Co
       <FonctionsDuConnecteur titre="Ce que votre assistant pourra faire" fonctions={outil.fonctions} />
       <p className="oto-caption min-w-0">{`Vous autorisez chez ${outil.libelle}, puis vous revenez ici. Le connecteur reste à vous, à votre nom.`}</p>
       <PiedDeLaFiche>
+        <Button type="button" variant="ghost" onClick={annuler}>
+          Annuler
+        </Button>
         <ConnexionParConsentement
           ressource={outil.facon === "branchement" ? "hosted-link" : "connector-consent"}
           connecteur={outil.connecteur}
@@ -77,8 +98,12 @@ export function ConnexionChezLeTiers({ outil, ici, sujets, moi, administre }: Co
           libelle={outil.facon === "branchement" ? `Relier mon compte ${outil.libelle}` : `Connecter mon compte ${outil.libelle}`}
           retour={ici}
           avantDePartir={avantDePartir}
-          apresUnEchec={oublierLePartage}
+          apresUnEchec={() => {
+            oublierLePartage()
+            signalerLEnvoi?.(false)
+          }}
           variante="primary"
+          dansLePied
         />
       </PiedDeLaFiche>
       {question && <PremierPartage libelle={outil.libelle} accord={question} />}

@@ -27,8 +27,10 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
         <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
-        {/* L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois. */}
-        {(ligne.description ?? (ligne.outil !== ligne.libelle ? ligne.outil : null)) && <span className="oto-caption">{ligne.description ?? ligne.outil}</span>}
+        {/* L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois, sauf suivi de la façon du compte, qui distingue deux connecteurs d'un même outil. */}
+        {(ligne.description ?? (ligne.outil !== ligne.libelle || ligne.facon ? ligne.outil : null)) && (
+          <span className="oto-caption">{[ligne.description ?? ligne.outil, ligne.facon].filter(Boolean).join(" · ")}</span>
+        )}
       </span>
     </span>
   )

@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes } from "react"
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
 import {
@@ -1139,5 +1139,154 @@ describe("EcranConnecteurs, the first share of a connector connected by authoris
     fireEvent.change(panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }), { target: { value: "ventes" } })
     fireEvent.click(panneau.getByRole("option", { name: "Équipe Ventes" }))
     expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+})
+
+describe("EcranConnecteurs, a tool that connects in several ways", () => {
+  const CONSOLE: OrgConnector = { ...CRM, connector: "console", label: "Console Web", functions: [CRM.functions[0], CRM.functions[1]] }
+  const PAR_CLE: ConnectorAccountForm = {
+    connector: "console",
+    label: "Console Web",
+    access: { name: "service_account", label: "Service account of the organization" },
+    ownerKinds: ["org", "team"],
+    probe: { available: false, balance: false },
+    fields: [{ name: "service_account_key", label: "Clé du compte", secret: true }],
+    settings: [],
+  }
+  const PAR_CONNEXION: ConnectorAccountForm = { connector: "console", label: "Console Web", access: { name: "google_account", label: "Sign-in of a person" }, consent: true, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
+  const FACONS = { connectors: [MAIL, CRM, CONSOLE], formulaires: [FORMULAIRE_CRM, FORMULAIRE_MS, PAR_CLE, PAR_CONNEXION] }
+  const SAIN = { at: "2026-11-03T09:00:00.000Z", healthy: true, code: null, reason: null, balance: null }
+  const PAR_LE_SERVICE: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d71", label: "Console perso", connector: "console", access: "google_account", lastProbe: SAIN }
+  const PAR_LA_CLE: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d72", label: "Console de l'équipe", connector: "console", access: "service_account", owner: { kind: "org" } }
+  const ANCIEN: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d73", label: "Console ancienne", connector: "console", owner: { kind: "org" }, lastProbe: SAIN }
+
+  const ouvrirLaFiche = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    fireEvent.click(fenetre.getByRole("button", { name: /^Console Web/ }))
+    return fenetre
+  }
+
+  it("should show one card per tool, said by its functions, ticked once, without the declared label of an access", () => {
+    rendre({ ...FACONS, ...ADMINISTRE, accounts: [PAR_LE_SERVICE] })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    const cartes = fenetre.getAllByRole("button", { name: /^Console Web/ })
+    expect(cartes).toHaveLength(1)
+    expect(cartes[0]).toHaveTextContent("2 fonctions")
+    expect(fenetre.getAllByRole("img", { name: "Connecté" })).toHaveLength(1)
+    expect(screen.getByRole("dialog", { name: "Ajouter un connecteur" }).textContent).not.toMatch(/Service account|Sign-in/)
+  })
+
+  it("should let an administrator choose the way: two radio cards, the first checked, one primary action and the key field only for the key, never themselves as its owner", () => {
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    expect(fenetre.getByRole("heading", { name: "Console Web" })).toHaveFocus()
+    expect(fenetre.getByText("Deux façons de se connecter")).toBeInTheDocument()
+    const choix = within(fenetre.getByRole("group", { name: "Choisissez votre façon" }))
+    expect(choix.getAllByRole("radio").map((option) => [option.closest("label")?.textContent, option.matches(":checked")])).toEqual([
+      ["Avec mon compte Console Web", true],
+      ["Avec une clé, pour l'organisation", false],
+    ])
+    // « accès » ne dit jamais une façon : le partage garde le sien (« Aucun accès »).
+    expect(screen.getByRole("dialog", { name: "Ajouter un connecteur" }).textContent).not.toMatch(/Service account|Sign-in/)
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" }).textContent).not.toMatch(/accès/)
+    expect(screen.getByRole("button", { name: "Connecter mon compte Console Web" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Annuler" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ajouter le connecteur" })).toBeNull()
+    expect(fenetre.queryByLabelText("Clé du compte")).toBeNull()
+
+    fireEvent.click(choix.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Console Web" }))
+    expect(formulaire.getByLabelText("Clé du compte")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ajouter le connecteur" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Connecter mon compte Console Web" })).toBeNull()
+    expect(libellesDesChoix(formulaire.getByLabelText("Propriétaire"))).toEqual(["Toute l'organisation", "Équipe Finance", "Équipe Ventes"])
+  })
+
+  it("should forget the key entered for a way when the person picks another way and comes back", () => {
+    const cle = ["cle", "de", "test"].join("-")
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    const [parLeService, parLaCle] = fenetre.getAllByRole("radio")
+    fireEvent.click(parLaCle)
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: cle } })
+    fireEvent.click(parLeService)
+    fireEvent.click(parLaCle)
+    expect(fenetre.getByLabelText("Clé du compte")).toHaveValue("")
+    expect(screen.queryByDisplayValue(cle)).toBeNull()
+  })
+
+  it("should give a member the only way open to them, said in the header, without a choice", () => {
+    rendre(FACONS)
+    const fenetre = ouvrirLaFiche()
+    expect(fenetre.queryByRole("group", { name: "Choisissez votre façon" })).toBeNull()
+    expect(fenetre.queryByRole("radio")).toBeNull()
+    expect(fenetre.getByText("Avec mon compte Console Web")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Connecter mon compte Console Web" })).toBeInTheDocument()
+  })
+
+  it("should tell apart in the list two connectors of a tool by their way, and keep the caption of a tool with one way", () => {
+    rendre({ ...FACONS, accounts: [PAR_LE_SERVICE, PAR_LA_CLE, { ...BANQUE, label: "Banque" }] })
+    expect(ligneDe("Console perso").getByText("Console Web · connexion au service")).toBeInTheDocument()
+    expect(ligneDe("Console de l'équipe").getByText("Console Web · clé")).toBeInTheDocument()
+    expect(ligneDe("Banque").getByText("Crm Pro")).toBeInTheDocument()
+  })
+
+  it("should close the choice of the way while the connector is created or the person leaves for the third party", async () => {
+    // Une réponse qui ne vient jamais : l'envoi reste en cours.
+    fetchMock.mockReturnValue(new Promise<Response>(() => {}))
+    const { unmount } = rendre({ ...FACONS, ...ADMINISTRE })
+    let fenetre = ouvrirLaFiche()
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeEnabled()
+    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Console Web" }))
+    await waitFor(() => expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled())
+    unmount()
+
+    rendre({ ...FACONS, ...ADMINISTRE })
+    fenetre = ouvrirLaFiche()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: ["cle", "de", "test"].join("-") } })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
+    await waitFor(() => expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled())
+    expect(fenetre.getByRole("radio", { name: "Avec mon compte Console Web" })).toBeDisabled()
+  })
+
+  it("should keep the choice of the way closed once the connector is created and a further step failed, so no second one is created", async () => {
+    const cree = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d74"
+    fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/secret") ? reponse(500, { error: { code: "internal" } }) : reponse(201, { data: { account: { id: cree, label: "Console Web" } } }),
+    )
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: ["cle", "de", "test"].join("-") } })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
+    await waitFor(() => expect(fenetre.queryByRole("form", { name: "Ajouter Console Web" })).toBeNull())
+    // L'envoi fini (ses promesses vidées), le choix reste fermé.
+    await act(async () => {})
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec mon compte Console Web" }))
+    expect(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" })).toBeChecked()
+    expect(envois().filter((envoi) => envoi.url === "/api/platform/admin/accounts")).toHaveLength(1)
+  })
+
+  it("should put first, to replace and without a gesture, a connector that retains no way of a tool that now connects in several, and offer in its detail neither test nor key", () => {
+    rendre({ ...FACONS, accounts: [BANQUE, ANCIEN] }, { vue: { compte: ANCIEN.id } })
+    const [premiere] = screen.getAllByRole("row").slice(1)
+    expect(within(premiere).getByRole("link", { name: "Console ancienne" })).toBeInTheDocument()
+    expect(within(premiere).getByText("À remplacer")).toBeInTheDocument()
+    expect(within(premiere).queryByRole("button")).toBeNull()
+    // La liste dit la précision courte ; le détail, la phrase entière, sur sa ligne.
+    expect(within(premiere).getByText("Ajoutez-en un nouveau, puis désactivez celui-ci.")).toBeInTheDocument()
+    const detail = detailDe(ANCIEN)
+    expect(detail.getByText("Cet outil se connecte maintenant de plusieurs façons : ajoutez-en un nouveau, puis désactivez celui-ci.")).toBeInTheDocument()
+    // Aucun geste sur lui, sauf le désactiver.
+    expect(detail.queryByRole("button", { name: /^Partager/ })).toBeNull()
+    expect(detail.queryByRole("button", { name: /^Modifier/ })).toBeNull()
+    expect(detail.getByRole("button", { name: `Désactiver ${ANCIEN.label}` })).toBeInTheDocument()
+    expect(detail.queryByRole("button", { name: /^Tester/ })).toBeNull()
+    expect(detail.queryByRole("button", { name: /la clé$/ })).toBeNull()
+    expect(detail.queryByLabelText("Clé du compte")).toBeNull()
   })
 })

@@ -262,6 +262,14 @@ exclut et ce qu'exige `ui-patterns.md`, qui l'emporte (§ 8). Source en lecture 
     (même document).
   - `§ Composition` (`PageContainer`, `NAV_ITEMS`) : la coque unique, le rail et `TwoColumns` /
     `.oto-content-max` (§ 0, § 7), ADR-008 § 7 (même document).
+  - `§ Fiches et gestes sur l'objet` (choix à 2 ou 3 options exclusives : contrôle segmenté, option
+    active sans `primary`, aide d'une ligne) : le choix de la façon de se connecter dans la fiche d'ajout
+    d'un connecteur se fait en cartes radio (`RadioGroup variant="cards"`, `ajout-d-un-connecteur.tsx`),
+    sans texte d'aide sous les options, l'option cochée marquée par le style de la variante (bordure
+    `primary`), parce que ses options sont des phrases (« Avec une clé, pour l'organisation ») qui ne
+    tiennent pas dans des segments à 375 px, que la phrase dit déjà ce qu'on choisit et que la variante
+    du design system reste telle quelle ; décidé par JB, sur le brief de design de la fiche à plusieurs
+    façons.
 - **Vérifiable :** en revue, tout écart à une règle de `ui-patterns.md` dans `packages/plateforme/ui/**`
   ou `src/app/(dashboard)/**` cite sa ligne ci-dessus ; un écart sans ligne est un finding sourcé
   `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, et une ligne ajoutée sans

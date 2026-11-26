@@ -98,9 +98,11 @@ type FormulaireDAjoutProps = {
   equipe?: string
   /** Sans « Qui pourra s'en servir » : la page de connexion d'un connecteur n'a ni annuaire ni partage à poser. */
   sansPartage?: boolean
+  /** L'envoi commence ou finit : la fiche ferme le choix de la façon pendant ce temps. */
+  signalerLEnvoi?: (enCours: boolean) => void
 }
 
-export function FormulaireDAjout({ outil, equipes, nomPropose, bloque, sujets, moi, administre, annuler, apresAjout, equipe, sansPartage = false }: FormulaireDAjoutProps) {
+export function FormulaireDAjout({ outil, equipes, nomPropose, bloque, sujets, moi, administre, annuler, apresAjout, equipe, sansPartage = false, signalerLEnvoi }: FormulaireDAjoutProps) {
   const rafraichir = useRafraichir()
   const { formulaire } = outil
   const sonde = formulaire?.probe.available === true
@@ -122,6 +124,10 @@ export function FormulaireDAjout({ outil, equipes, nomPropose, bloque, sujets, m
     defaultValues: { connector: outil.connecteur, ...proprietaireCree(proprietaire), label: nomPropose, ...(formulaire ? saisieDeDepart(formulaire) : SANS_CHAMPS) },
   })
   const { errors, isSubmitting } = form.formState
+  // Le compte créé (ses suites dites), le choix reste fermé : une autre façon remonterait le corps, et créerait un second compte.
+  useEffect(() => {
+    signalerLEnvoi?.(isSubmitting || reste !== null)
+  }, [isSubmitting, reste, signalerLEnvoi])
   // Après chaque rendu : le champ du nom, paru sur un nom déjà porté, prend le focus une fois monté.
   useEffect(() => {
     if (!nomAFocaliser.current || !nomDemande) return

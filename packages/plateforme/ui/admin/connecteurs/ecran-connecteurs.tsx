@@ -27,7 +27,7 @@ import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
 import { outilsAAjouter, type MonConnecteur } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
-import { estAMoi, etatDuCompte, fonctionne, formulaireDuCompte } from "./etat-du-compte"
+import { estAMoi, etatDuCompte, fonctionne, formulaireDuCompte, sansAcces } from "./etat-du-compte"
 import { adresseDeLaVue, bloquePar, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, logoDe, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 import { PartageAuRetour } from "./partage-au-retour"
@@ -127,7 +127,7 @@ function mesConnecteurs(donnees: DonneesDesConnecteurs, moi: string): MonConnect
       id: compte.id,
       connecteur: compte.connector,
       libelle: compte.label,
-      fonctionne: fonctionne(etatDuCompte(compte, formulaireDuCompte(formulaires, compte), moi, bloquePar(compte.connector, donnees.connectors))),
+      fonctionne: fonctionne(etatDuCompte(compte, formulaireDuCompte(formulaires, compte), moi, { bloquePar: bloquePar(compte.connector, donnees.connectors), sansSonAcces: sansAcces(formulaires, compte) })),
     }))
 }
 
@@ -243,6 +243,7 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
       logo={logoDe(compte.connector, donnees.connectors)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
       bloquePar={bloquePar(compte.connector, donnees.connectors)}
+      sansSonAcces={sansAcces(formulaires, compte)}
       gouvernance={administration ? { impact: administration.impacts[compte.connector], actif } : undefined}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}
