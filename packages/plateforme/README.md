@@ -882,23 +882,26 @@ CI exigée avant toute fusion.
 
 Numérotation sémantique : le paquet ne fait qu'ajouter, un changement cassant est donc une
 majeure. `CHANGELOG.md`, embarqué dans le paquet, a un titre par version publiée,
-`## <x.y.z> — <AAAA-MM-JJ>`, la plus récente en tête, et `## Unreleased` au-dessus pour ce qui
-n'est pas encore publié. Sous chaque titre, au plus deux listes, en anglais :
+`## <x.y.z> — <AAAA-MM-JJ>`, la plus récente en tête, et `## Unreleased`, vide, au-dessus : les
+lignes en attente vivent dans `changelog.d/` du dépôt jusqu'à la version. Sous chaque titre, au plus deux listes, en anglais :
 
 - `### Assistants` : ce qu'un assistant connecté à la plateforme sait faire de nouveau, une phrase
   de 200 caractères au plus par entrée, servie aux assistants dans les nouveautés de `context` ;
 - `### Hosts` : ce qu'une application qui installe le paquet doit savoir ou faire, lu dans les
   pull requests Renovate.
 
-Tout changement visible d'un hôte ou d'un assistant a sa ligne sous `## Unreleased`, dans le
-commit qui le livre.
+Tout changement visible d'un hôte ou d'un assistant a ses lignes dans un fichier neuf du dépôt,
+`packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` (ses listes `### Assistants` et
+`### Hosts`, au format du CHANGELOG), dans le commit qui le livre ; rien ne s'écrit sous
+`## Unreleased`, qui reste vide. Ces fichiers ne sont pas publiés.
 
 ## Publier une version
 
 Réservé aux mainteneurs du dépôt.
 
-1. Dans `CHANGELOG.md`, renommer `## Unreleased` en `## <x.y.z> — <AAAA-MM-JJ>`, et rouvrir un
-   `## Unreleased` vide au-dessus.
+1. `pnpm changelog:version <x.y.z>` : verse les fragments de `changelog.d/` (et toute ligne restée
+   sous `## Unreleased`) dans la section `## <x.y.z> — <AAAA-MM-JJ>` de `CHANGELOG.md`, puis les
+   supprime ; le tag est refusé s'il en reste un.
 2. Porter la même version dans `version` de `packages/plateforme/package.json`, et réunir les
    migrations écrites depuis la version précédente en un seul `<horodatage>_vX_Y_0.sql` au contenu
    identique (fiche D124, `migrations/README.md`).
@@ -914,7 +917,7 @@ Réservé aux mainteneurs du dépôt.
    npmjs.com avec provenance. Aucun tag ne se pousse à la main. Chaque application hôte reçoit sa
    pull request Renovate.
 6. Pour une version corrective partie de `release/x.y.z`, son auteur reporte aussitôt sa section
-   du `CHANGELOG.md` sur `main` par une pull request, en la sortant de `## Unreleased`.
+   du `CHANGELOG.md` sur `main` par une pull request, en y supprimant les fragments qu'elle a versés.
 
 Une version fautive ne se republie pas : JB la signale par
 `npm deprecate @otomata_tech/oto_platform@<x.y.z> "<raison>"`, et une version corrective la

@@ -1,7 +1,11 @@
 # Changelog
 
-<!-- Ce fichier est mis à jour à chaque commit via /dev.
-     Format de chaque entrée :
+Les entrées récentes sont dans [`changelog.d/`](changelog.d/), un fichier par entrée
+(`AAAA-MM-JJ-<sujet>.md`), à lire par nom de fichier décroissant. Ce fichier garde l'historique
+antérieur, figé : aucune entrée ne s'y ajoute, pour qu'aucune pull request n'en mette une autre en
+conflit.
+
+<!-- Format de chaque entrée, dans son fichier de changelog.d/ :
 
 ## [Date] — [Scope]
 **Quoi :** Ce qui a été fait

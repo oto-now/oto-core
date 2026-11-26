@@ -275,7 +275,8 @@ function adressesEnAnglais({ ROOT, read, walk, err }) {
     .flatMap((p) => (statSync(p).isDirectory() ? walk(p) : [p.replaceAll('\\', '/')]))
   for (const p of fichiers) {
     const rel = p.slice(ROOT.length + 1)
-    if (CITENT_LES_ANCIENS_NOMS.has(rel) || !TEXTE.test(rel)) continue
+    // Les fragments du CHANGELOG du paquet en attente de leur version citent les anciens noms comme lui.
+    if (CITENT_LES_ANCIENS_NOMS.has(rel) || rel.startsWith('packages/plateforme/changelog.d/') || !TEXTE.test(rel)) continue
     read(p)
       .split('\n')
       .forEach((ligne, i) => {

@@ -4,9 +4,10 @@ Every published version of the package, newest first. Versions follow semantic v
 the package only adds (ADR-006), so a breaking change is a major version.
 
 Format, checked by tests:
-- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published sit under
-  `## Unreleased`, which the release commit renames to the version before opening an empty
-  `## Unreleased` above it;
+- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published wait in the
+  repository, one file per change in `packages/plateforme/changelog.d/<YYYY-MM-DD>-<topic>.md` holding its
+  lists, which the release commit pours into the version (`pnpm changelog:version <x.y.z>`, with
+  any line left under `## Unreleased`), leaving `## Unreleased` empty above it;
 - under a version, at most two lists: `### Assistants` (what an assistant connected to the
   platform can do; one sentence of 200 characters at most per entry) and `### Hosts` (what an
   application that installs the package must know or do; one line per point, led by what it

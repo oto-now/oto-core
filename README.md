@@ -185,16 +185,17 @@ Détail : `.method/conventions/testing-strategy.md § Base de test locale`.
 
 Un changement se fait ici (retours produit compris), se commite sur `main`, puis sort par une version.
 
-1. Chaque changement visible d'un assistant ou d'un hôte a sa ligne sous `## Unreleased` de
-   `packages/plateforme/CHANGELOG.md` (format en tête du fichier, vérifié par les tests).
+1. Chaque changement visible d'un assistant ou d'un hôte a ses lignes dans un fichier neuf
+   `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` (format en tête de
+   `packages/plateforme/CHANGELOG.md`, vérifié par les tests), jamais sous `## Unreleased`.
 2. Choisir le numéro : correctif `x.y.Z` (aucune migration, aucun export changé), mineure `x.Y.0`
    (ajout, migration additive) ; une majeure demande un ADR (le paquet n'ajoute que, ADR-006).
 3. Commit de version : les migrations écrites depuis la version précédente réunies en un seul
    fichier `<horodatage>_vX_Y_0.sql`, au contenu identique, dans le paquet et dans
    `supabase/migrations/` (fiche D124 ; historique du projet de test réparé si l'une y était
    appliquée : `packages/plateforme/migrations/README.md`) ; `"version"` de
-   `packages/plateforme/package.json`, `## Unreleased` renommé en
-   `## <version> — <AAAA-MM-JJ>` sous un `## Unreleased` vide ; `pnpm verify`, commit, poussé sur
+   `packages/plateforme/package.json`, les fragments versés dans la section
+   `## <version> — <AAAA-MM-JJ>` par `pnpm changelog:version <version>` ; `pnpm verify`, commit, poussé sur
    une branche du dépôt, puis la pull request de version vers `main` (ou vers `release/x.y.z`, créée
    sur le tag de départ, pour un correctif quand `main` porte un lot pas encore publiable).
 4. JB ou Alexis approuve la pull request de version ; elle fusionne à CI verte. À la fusion,
@@ -207,7 +208,7 @@ Un changement se fait ici (retours produit compris), se commite sur `main`, puis
    approbation et le dit en commentaire sur la pull request, avec la raison ; `publish.yml` publie
    et l'inscrit en avertissement. Toute autre fusion sans approbation ne publie rien.
    Après une version corrective sur `release/x.y.z`, son auteur ouvre aussitôt une pull request
-   vers `main` qui y reporte la section du `CHANGELOG.md` (sortie de `## Unreleased`).
+   vers `main` qui y reporte la section du `CHANGELOG.md` et y supprime les fragments versés.
 5. Vérifier : `npm view @otomata_tech/oto_platform@<version> version`.
 6. Dans chaque application (oto-saas) : la pull request Renovate (§ Mises à jour par Renovate du
    README du paquet), ou à la main `pnpm add @otomata_tech/oto_platform@<version> -E`, puis

@@ -51,7 +51,7 @@ function monter() {
   git(depot, "init", "--quiet", "--initial-branch=main")
   const base = commiter(depot, "base", { "a.ts": "export const a = 1\n", "docs/changelog.md": "# Changelog\n" }, "vrai")
   const atteste = commiter(depot, "a vaut 2", { "a.ts": "export const a = 2\n" }, "vrai")
-  const documents = commiter(depot, "changelog", { "docs/changelog.md": "# Changelog\n\n## a vaut 2\n" })
+  const documents = commiter(depot, "changelog", { "docs/changelog.d/2026-11-26-a-vaut-2.md": "## [2026-11-26] — a vaut 2\n" })
   const absent = commiter(depot, "a vaut 3", { "a.ts": "export const a = 3\n" })
   const faux = commiter(depot, "a vaut 4", { "a.ts": "export const a = 4\n" }, arbreDeCodeDuCommit(depot, absent))
   return { depot, base, atteste, documents, absent, faux }
