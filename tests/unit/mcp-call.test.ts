@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi 
 import { MAX_RESULT_CHARS } from "../../packages/plateforme/mcp/result"
 import type { ToolInput } from "../../packages/plateforme/mcp/schemas"
 import type { CallInput } from "../../packages/plateforme/server/calls"
-import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import type { Identity } from "../../packages/plateforme/server/identity"
 import { connectDeps } from "../helpers/mcp"
 import { ACCOUNTS, ORG, PEOPLE, referenceTables, teamOf, TEAMS } from "../helpers/reference-org"
@@ -83,8 +83,8 @@ describe.skipIf(!sqlConfigured)(portable("acme_call through the MCP gate"), { ti
     await ref.write({ sim_outbox: [draftRow()] })
     const db = await ref.db("claire")
     const identity = claire()
-    const activeConnectors = () => loadActiveConnectors(db, ref.org.id)
-    const connected = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors, origin: "https://acme.test" })
+    const activeConnectors = () => loadOpenConnectors(db, ref.org.id)
+    const connected = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors, adoptedConnectors: activeConnectors, origin: "https://acme.test" })
     const run = (fields: Record<string, unknown>) => connected.call("call", { ctx: ref.id(CTX), ...fields })
     return { ...connected, run }
   }

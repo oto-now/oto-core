@@ -21,7 +21,8 @@ import pkg from "../package.json"
 import { CTX_PATTERN } from "../schemas"
 import type { CatalogFunction } from "../server/catalog/define"
 import { runCall, type CallTrace } from "../server/calls"
-import { orgAssistantFunctions } from "../server/catalog/org-catalog"
+import { visibleOrgFunctions } from "../server/catalog/org-catalog"
+import { hostUnavailableNotice } from "../server/host-api/index-view"
 import { assistantFunctions, callExamples, catalogNames, findFunction } from "../server/catalog/registry"
 import { servesCapability } from "../server/catalog/surface-source"
 import { readBrand } from "../server/brand"
@@ -67,10 +68,16 @@ export type McpDeps = {
   /** Lignes empilées pendant la requête ; la porte les écrit après la réponse (AC17). */
   journal: JournalEntry[]
   /**
-   * Connecteurs actifs de l'organisation (E04-S01, N9, N27) : lus au premier appel, puis gardés pour
-   * cette requête seule, jamais d'une requête à l'autre.
+   * Connecteurs ouverts de l'organisation (E04-S01, N9, N27) : tout connecteur déclaré qu'un administrateur n'a pas
+   * bloqué, ce que voient `find`, `read` et `call` ; lus au premier appel, puis gardés pour cette requête seule, jamais
+   * d'une requête à l'autre.
    */
   activeConnectors: () => Promise<ReadonlySet<string>>
+  /**
+   * Connecteurs adoptés (`loadActiveConnectors` : débloqués, ou qui ont un compte), seuls cités par les exemples de
+   * `tools/list` : le catalogue ouvert n'y entre pas. Lus comme `activeConnectors`.
+   */
+  adoptedConnectors: () => Promise<ReadonlySet<string>>
   /** Origine appelée (`getPublicOrigin`, celle du 401) : lien du tableau de bord d'un refus de `call` (E03-S04, AC8). */
   origin: string
   /** Jeton vérifié de la requête : une fonction ERP s'exécute sous lui (E08-S05, NH4) ; sans lui, aucune ne court. */
@@ -119,10 +126,14 @@ class JsonRpcError extends Error {
 
 // Une ligne par outil : chaque story de la vague 4 remplace la sienne (E03-S02 à E03-S05).
 const SERVICES: { [K in ToolKey]: Service<K> } = {
-  context: ({ db, identity, userAgent, gate, origin }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin }),
-  find: async ({ db, identity, activeConnectors }, input) => find(db, identity, input, { functions: await orgAssistantFunctions(db, identity), activeConnectors: await activeConnectors() }),
+  // `accessToken` : la liste des fonctions de l'hôte que la personne voit se demande sous son jeton (`host-api/visibility.ts`).
+  context: ({ db, identity, userAgent, gate, origin, accessToken }, input) => buildContext(db, identity, input, { userAgent, pseudonymized: Boolean(gate), origin, accessToken }),
+  find: async ({ db, identity, activeConnectors, accessToken, origin }, input, ctx) => {
+    const { instance, host, visibility } = await visibleOrgFunctions(db, identity, { accessToken, origin, ctx: ctx?.code ?? null, host: ctx?.host ?? null })
+    return find(db, identity, input, { functions: [...instance, ...host], activeConnectors: await activeConnectors(), notice: hostUnavailableNotice(visibility, identity.org.prefix) })
+  },
   // L'origine de la requête rend absolue l'adresse d'un fichier joint (E10-S02, AC-d1).
-  read: ({ db, identity, origin, widgets }, input) => readNode(db, identity, input, { origin, views: widgets }),
+  read: ({ db, identity, origin, widgets, accessToken }, input, ctx) => readNode(db, identity, input, { origin, views: widgets, viewer: { accessToken, ctx: ctx?.code ?? null, host: ctx?.host ?? null } }),
   call: ({ db, identity, origin, activeConnectors, trace, accessToken, gate, entry }, input, ctx) =>
     runCall({ db, identity, ctxCode: ctx?.code ?? null, ctxHost: ctx?.host ?? null, origin, activeConnectors, trace, accessToken, dictionary: entry?.dictionary, gated: Boolean(gate) }, input),
   // La provenance d'un bloc écrit par un assistant porte le code `ctx` de la conversation (AC28).
@@ -255,13 +266,13 @@ function record(deps: McpDeps, request: HandledRequest, fields: Partial<JournalE
 }
 
 /**
- * Connecteurs actifs cités par les exemples de `call` (E04-S01, AC22). Leur lecture en panne sert la
+ * Connecteurs adoptés cités par les exemples de `call` (E04-S01, AC22) : jamais tout le catalogue ouvert. Leur lecture en panne sert la
  * liste sans exemples de connecteur, comme sans connecteur actif, au lieu de refuser `tools/list`
  * (N38) : la description reste vraie, et la liste est servie à tout jeton valide.
  */
 async function exampleConnectors(deps: McpDeps): Promise<ReadonlySet<string>> {
   try {
-    return await deps.activeConnectors()
+    return await deps.adoptedConnectors()
   } catch (error) {
     console.error("[platform] mcp: tools/list served without connector examples", isPlatformError(error) ? error.code : error)
     return new Set()

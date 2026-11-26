@@ -24,7 +24,7 @@ import { argumentNames, checkArguments } from "./catalog/arguments"
 import type { CatalogFunction } from "./catalog/define"
 import { orgAssistantFunctions } from "./catalog/org-catalog"
 import { assistantFunctions, findFunction, isActive } from "./catalog/registry"
-import { loadActiveConnectors } from "./connectors/activations"
+import { loadOpenConnectors } from "./connectors/activations"
 import type { PlatformDb } from "./db"
 import { boundedList, PlatformError } from "./errors"
 import type { Identity } from "./identity"
@@ -212,7 +212,7 @@ async function callRefusals(scope: Scope, block: StoredBlock): Promise<Procedure
   const fn = findFunction(scope.functions, name)
   if (!fn) return [refused({ kind: "unknown_function", message: `unknown function « ${name} »; ${prefix}_find with type function lists the functions` })]
   if (!isActive(fn, scope.active)) {
-    const message = `${name} belongs to connector ${fn.connector}, which is not enabled for ${identity.org.name}; an administrator enables it on the dashboard`
+    const message = `${name} belongs to connector ${fn.connector}, which an administrator blocked for ${identity.org.name}; an administrator reopens it on the dashboard`
     return [refused({ kind: "function_not_active", message })]
   }
   const args = isRecord(block.data.args) ? block.data.args : {}
@@ -234,7 +234,7 @@ export async function checkProcedureBlocks(db: PlatformDb, identity: Identity, b
   const ordered = orderBlocks(blocks.filter(stored))
   const refusals: ProcedureRefusal[] = []
   const calls = ordered.some((block) => block.type === "call")
-  const active = calls ? await loadActiveConnectors(db, identity.org.id) : new Set<string>()
+  const active = calls ? await loadOpenConnectors(db, identity.org.id) : new Set<string>()
   const scope: Scope = { db, identity, blocks: ordered, functions: calls ? await orgAssistantFunctions(db, identity) : assistantFunctions(), active }
   for (const block of ordered) refusals.push(...(block.type === "call" ? await callRefusals(scope, block) : fenceRefusals(ordered, block)))
   return refusals

@@ -63,7 +63,7 @@ const untouchable = new Proxy(
 ) as unknown as PlatformDb
 
 function deps(caller: McpDeps["caller"], active: ReadonlySet<string> = new Set()): McpDeps {
-  return { db: untouchable, org: ORG, caller, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(active), origin: "https://acme.test" }
+  return { db: untouchable, org: ORG, caller, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(active), adoptedConnectors: () => Promise.resolve(active), origin: "https://acme.test" }
 }
 
 const member = () => connectDeps(deps({ kind: "member", identity: IDENTITY }))
@@ -122,7 +122,7 @@ describe("tools/list with the organisation's active connectors (E04-S01, AC22)",
 
   it("should serve the tools without connector examples, logged on the server, when the connectors cannot be read (N38)", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {})
-    const failing = { ...deps({ kind: "member", identity: IDENTITY }), activeConnectors: () => Promise.reject(new PlatformError("internal", "Internal error.")) }
+    const failing = { ...deps({ kind: "member", identity: IDENTITY }), adoptedConnectors: () => Promise.reject(new PlatformError("internal", "Internal error.")) }
     const session = await connectDeps(failing)
     const call = (tools: { name: string; description?: string }[]) => tools.find((tool) => tool.name === "acme_call")?.description
     expect(call((await session.client.listTools()).tools)).toBe(call(buildTools(ORG, callExamples(catalogFunctions(), new Set()))))

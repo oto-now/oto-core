@@ -11,7 +11,7 @@
 // (`twoAccessConnector`), le compte de service d'une organisation ou le consentement d'une personne.
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorAuth, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 
 const ID = { type: "string", pattern: "^[a-z0-9_-]{1,40}$" }
@@ -204,8 +204,8 @@ export function memoryMark(initial: AccountMark | null = null, who = "team Vente
       marker.current = reason === null ? null : { reason, at: new Date().toISOString() }
       marker.effect = reason === null ? "lifted" : "marked"
     },
-    async remedy() {
-      return `Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`
+    async refusal(error: PlatformError) {
+      return new PlatformError(error.code, `${error.message} Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`, error.details)
     },
   }
   return marker
@@ -315,6 +315,40 @@ export function twoAccessConnector(name = "crm"): ConnectorDefinition {
         modes: ["byo_org"],
       },
       { name: TWO_ACCESSES.signIn, label: "Sign-in of a person", auth: consent, credential: [], modes: ["byo_user"] },
+    ],
+  }
+}
+
+/** Les noms des deux accès du connecteur de test sans niveaux d'accès. */
+export const KEY_OR_SIGN_IN = { signIn: "oauth", key: "key" } as const
+
+/**
+ * Le connecteur de test à deux accès sans niveaux d'accès, chacun ouvrant tout le connecteur : la connexion d'une
+ * personne (`oauth2_user`, `byo_user`, PKCE) ou la clé d'une organisation (`bearer`, `platform` et `byo_org`), les
+ * mêmes fonctions et la même table d'erreurs.
+ */
+export function keyOrSignInConnector(name = "crm"): ConnectorDefinition {
+  const key = describedConnector(name)
+  const consent: ConnectorAuth = {
+    kind: "oauth2_user",
+    authorizeUrl: "https://login.crm.example.test/authorize",
+    tokenUrl: "https://login.crm.example.test/token",
+    clientAuth: "body",
+    scopes: ["offline_access", "contacts.read"],
+    pkce: "S256",
+    refresh: "refresh_token",
+    rotates: true,
+    expiresInDefault: 3600,
+    identity: { function: `${name}.get_company`, path: "email" },
+  }
+  return {
+    ...consentConnector(name),
+    auth: undefined,
+    credential: undefined,
+    modes: undefined,
+    accesses: [
+      { name: KEY_OR_SIGN_IN.signIn, label: "Sign-in of a person", auth: consent, credential: [], modes: ["byo_user"] },
+      { name: KEY_OR_SIGN_IN.key, label: "Key of the organization", auth: key.auth, credential: key.credential, modes: ["platform", "byo_org"] },
     ],
   }
 }

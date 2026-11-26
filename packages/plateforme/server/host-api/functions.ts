@@ -1,13 +1,12 @@
 // Les fonctions de l'API d'un hôte au contrat du catalogue (`fonctions-d-un-hote.md` § Exécution) : chacune entre comme
 // une fonction de l'ERP (origine `erp`, toujours active, sans compte, de la classe que le document déclare) et court par
 // le moteur des connecteurs décrits (validation, répartition des arguments, `output`). La requête part vers
-// `<adresse de l'organisation><serveur relatif><chemin>`, par le transport gardé, avec le jeton échangé pour la personne
-// (`exchange.ts`, jamais le sien) et les en-têtes `Oto-Ctx`, `Oto-Client` et `Oto-Org`. Une fonction sensible se
+// `<adresse de l'organisation><serveur relatif><chemin>`, par le transport gardé, avec le jeton de la personne pour l'API
+// au scope de la fonction (`consent.ts` : échangé, ou consenti pour un client tiers ; jamais le sien) et les en-têtes `Oto-Ctx`, `Oto-Client` et `Oto-Org`. Une fonction sensible se
 // confirme par les deux temps de l'API (`confirm: { by: host }`) : sans `confirm`, l'hôte répond
 // `202 { status: "needs_confirmation", summary }` ; avec, la requête porte `?confirm=true`.
 import type { JsonSchemaArguments } from "../catalog/arguments"
 import type { CatalogFunction, FunctionContext, FunctionSummary } from "../catalog/define"
-import { actName } from "../catalog/registry"
 import type { AccountCredential } from "../connectors/auth"
 import { functionApi } from "../connectors/catalog-function"
 import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView } from "../connectors/definition"
@@ -17,8 +16,8 @@ import { PlatformError } from "../errors"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { assistantName } from "../usage-statistics"
-import type { ImportedHost } from "./document"
-import { hostToken } from "./exchange"
+import { servedName, type ImportedHost } from "./document"
+import { hostBearer } from "./consent"
 import { hostProblems } from "./problem-json"
 
 /** Au plus, en caractères, la valeur d'un en-tête `Oto-*`. */
@@ -46,15 +45,7 @@ export function hostHeaders(context: FunctionContext): Record<string, string> {
   return Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null))
 }
 
-/** Le scope demandé à l'émetteur : les familles du document, jointes par une espace (provisoire, voir la conception). */
-// TODO(2026-12-04) : provisoire, le profil hôte de la lib refuse `x-oto-scope`. À remplacer par le scope que chaque fonction
-// porte dans `definition.functions[name].scope` dès la montée de la lib qui contient « Profil hôte : scope OAuth par
-// famille » (oto-now/connectors#281), dans la PR 2/3.
-export function hostScope(imported: ImportedHost): string {
-  return imported.families.join(" ")
-}
-
-/** Aucun jeton de compte : le jeton de l'hôte s'échange à chaque appel (`exchange.ts`), jamais rangé dans un compte. */
+/** Aucun jeton de compte pour la requête : celui de l'hôte s'obtient à chaque appel (`consent.ts`), hors du moteur. */
 const noTokens: AccountCredential["tokens"] = {
   read: async () => null,
   write: async () => {
@@ -70,28 +61,21 @@ function subjectToken(context: FunctionContext, fn: string): string {
   throw new PlatformError("internal", "Internal error.")
 }
 
-type HostFunction = { imported: ImportedHost; address: string; definition: ConnectorDefinition; fn: ConnectorFunctionDefinition; schema: JsonSchemaArguments }
+type HostFunction = { imported: ImportedHost; address: string; definition: ConnectorDefinition; fn: ConnectorFunctionDefinition; schema: JsonSchemaArguments; scope: string }
 
 /**
  * La fonction préparée pour un appel : l'adresse de l'organisation, les en-têtes `Oto-*` posés après ceux du connecteur,
- * le jeton échangé pour la personne qui appelle, et les refus `problem+json` de l'hôte. `confirmed` : le second temps
+ * le jeton de la personne qui appelle, au scope de la fonction, et les refus `problem+json` de l'hôte. `confirmed` : le second temps
  * d'une fonction sensible (`?confirm=true`).
  */
 function prepared(host: HostFunction, context: FunctionContext, confirmed: boolean): { prepared: PreparedFunction; call: DescribedCall } {
-  const { imported, address, definition, fn } = host
+  const { imported, address, definition, fn, scope } = host
   const connector: ConnectorView = { ...(definition as ConnectorView), headers: { ...definition.headers, ...hostHeaders(context) } }
   const request = confirmed ? { ...fn.request, constants: { ...fn.request.constants, query: { ...fn.request.constants?.query, confirm: "true" } } } : fn.request
   const served: ConnectorFunctionDefinition = { ...fn, request }
-  const exchange = {
-    orgId: context.identity.org.id,
-    userId: context.identity.user.id,
-    subjectToken: subjectToken(context, fn.name),
-    issuer: imported.issuer,
-    resource: imported.resource,
-    scope: hostScope(imported),
-  }
+  const subject = subjectToken(context, fn.name)
   const api = { ...functionApi(connector, served), problems: hostProblems(definition.label) }
-  const auth = { kind: "host_delegated" as const, token: () => hostToken(definition.label, exchange) }
+  const auth = { kind: "host_delegated" as const, token: () => hostBearer(context, imported, scope, subject) }
   const credential: AccountCredential = { fields: {}, settings: { address }, tokens: noTokens }
   return {
     prepared: { connector, fn: served, api, address: { template: definition.baseUrl ?? "" }, auth, cursorArgument: fn.pagination?.requestParam ?? null },
@@ -120,7 +104,7 @@ function firstStep(label: string, name: string): AnswerReader {
 /** Les refus que `read` sert d'une fonction de l'hôte : le consentement, la table standard, puis ceux que l'hôte écrit. */
 function refusalLines(definition: ConnectorDefinition): string[] {
   return [
-    `forbidden: The functions of ${definition.label} require the person's consent from this client (details.reason host_consent_required).`,
+    `not_enabled: The person has not authorized oto to act on ${definition.label} from this client: the message carries the link to open (details.reason no_account or reconnect, details.gesture oauth, details.url).`,
     ...definition.errors.map((error) => `${error.code}: ${error.message}`),
     `Any refusal ${definition.label} writes (problem+json) comes with its own message, and its code in details.refusal.`,
   ]
@@ -130,7 +114,7 @@ function refusalLines(definition: ConnectorDefinition): string[] {
 function catalogFunction(host: HostFunction): CatalogFunction {
   const { definition, fn, schema } = host
   return {
-    name: fn.act ? (actName(fn.name) ?? fn.name) : fn.name,
+    name: servedName(fn),
     connector: definition.name,
     class: fn.class,
     origin: "erp",
@@ -159,8 +143,9 @@ export function hostCatalogFunctions(imported: ImportedHost, address: string): C
   return imported.connectors.flatMap(({ definition, schemas }) =>
     definition.functions.map((fn) => {
       const schema = schemas.get(fn.name)
-      if (!schema) throw new Error(`[platform] host api: ${fn.name} without its compiled schema`)
-      return catalogFunction({ imported, address, definition, fn, schema })
+      const scope = imported.scopes.get(fn.name)
+      if (!schema || scope === undefined) throw new Error(`[platform] host api: ${fn.name} without its compiled schema or its scope`)
+      return catalogFunction({ imported, address, definition, fn, schema, scope })
     }),
   )
 }

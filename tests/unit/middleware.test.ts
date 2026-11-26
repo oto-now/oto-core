@@ -47,6 +47,13 @@ describe("middleware without a session (AC7)", () => {
     expect(response.headers.get("location")).toBe(`${ORIGIN}/login?redirect=%2Foauth%2Fconsent%3Fauthorization_id%3Dabc123`)
   })
 
+  it("should send the connection link of a connector to /login with the way back, its space kept (connexion-par-l-agent)", async () => {
+    const response = await middleware(requete("/connect/crm?space=team%3Aventes"))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/login?redirect=%2Fconnect%2Fcrm%3Fspace%3Dteam%253Aventes`)
+  })
+
   it("should keep the path alone when the page has no query", async () => {
     const response = await middleware(requete("/n/contexte"))
 
@@ -133,6 +140,13 @@ describe("middleware with a session", () => {
 
     expect(response.status).toBe(307)
     expect(response.headers.get("location")).toBe(`${ORIGIN}/oauth/consent?authorization_id=abc123`)
+  })
+
+  it("should send /login back to the connection link of a connector once signed in", async () => {
+    const response = await middleware(requete("/login?redirect=%2Fconnect%2Fcrm%3Fspace%3Dme"))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/connect/crm?space=me`)
   })
 
   it("should send /login to a way back without query, without carrying the redirect along", async () => {

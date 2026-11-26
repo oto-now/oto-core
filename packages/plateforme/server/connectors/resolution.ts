@@ -259,7 +259,7 @@ export async function resolveAccount(
     caller: identity.user.id,
     personal: isPersonalConnector(input.fn.connector),
   })
-  if (choice.kind !== "account") throw accountRefusal(choice, input.fn, await refusalWords(db, identity, choice, input.origin))
+  if (choice.kind !== "account") throw accountRefusal(choice, input.fn, await refusalWords(db, identity, choice, { origin: input.origin, connector: input.fn.connector }))
   const { owner } = choice.account
   if (owner.kind !== "user") return choice.account
   if (owner.userId === identity.user.id) return { ...choice.account, ownerName: identity.user.name }

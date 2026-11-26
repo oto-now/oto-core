@@ -324,7 +324,7 @@ déduisent d'aucun chemin de fichier.
 Hôte de référence : violet corporate, dark mode class-based (next-themes), Inter. Tokens dans
 `src/app/globals.css`. Où vit chaque partie du système (jeu Oto du paquet, hôte) : `docs/design/system.md`.
 
-- **Penser le produit avant de coder l'écran.** Dès l'échelle Standard, tout changement visible passe par le skill `design` (brief du `designer`, critique du `design-critic` sur captures, `checklists/design-review.md`). Règles : `ui-patterns.md`, tag `ui` ; sur les écrans du paquet et du groupe `(dashboard)`, ses moyens cèdent à `portage-ecrans.md`.
+- **Penser le produit avant de coder l'écran.** Dès l'échelle Standard, tout changement visible passe par le skill `design` (brief du `designer`, critique du `design-critic` sur captures, `checklists/design-review.md`). Règles : `ui-patterns.md`, tag `ui`, qui l'emporte aussi sur les écrans du paquet et du groupe `(dashboard)` : une contradiction avec `portage-ecrans.md` se pose à JB par `AskUserQuestion`, et tout écart cite sa décision dans `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`.
 
 - **Réutiliser avant de créer** : `.method/conventions/component-registry.md` puis `src/components/ui/`.
 - **Classes sémantiques uniquement** (`bg-primary`, `text-muted-foreground`, `border-border`). Aucune couleur Tailwind numérotée (`bg-emerald-500`) dans `src/` ni `packages/plateforme/ui/`.

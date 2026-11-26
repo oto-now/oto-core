@@ -177,7 +177,7 @@ const ROUTES: RouteCase[] = [
     path: "admin/connectors/mail/activation",
     body: {},
     invalid: { path: "admin/connectors/Mail!/activation", body: {} },
-    data: () => ({ connector: expect.objectContaining({ connector: "mail", state: "active" }) }),
+    data: () => ({ connector: expect.objectContaining({ connector: "mail", state: "active" }), gesture: "adopted" }),
     target: "mail",
     // Jamais activé chez acme : l'activation écrit sa ligne.
     change: (all) => {
@@ -332,6 +332,24 @@ describe.skipIf(!sqlConfigured)(portable("admin/* routes of the dashboard (AC10)
     expect(admin.readable(served.body.data)).toEqual(route.data(admin.orgs.acme.prefix))
     expect(served.writes).not.toEqual([])
     expect(served.journal).toMatchObject([{ org_id: ORGS.acme.id, user_id: PERSONS.ada.id, method: "api", tool, target: route.target, is_error: false, error: null }])
+  })
+
+  it("should journal an adoption apart from an unblocking, and an activation that changed nothing", async () => {
+    const route = ROUTES.find((candidate) => candidate.name === "POST admin/connectors/activation")
+    if (!route) throw new Error("no activation route")
+    const gestureOf = async (state: "active" | "inactive" | null) => {
+      const served = await call("ada", {
+        ...route,
+        change: (all) => {
+          all.connector_activations = state === null ? [] : [{ org_id: ORGS.acme.id, connector: "mail", state, activated_by: PERSONS.ada.id, closed_by: state === "inactive" ? PERSONS.ada.id : null }]
+        },
+      })
+      expect(served.status).toBe(200)
+      return [served.body.data.gesture, served.journal[0]?.args]
+    }
+    expect(await gestureOf(null)).toEqual(["adopted", { gesture: "adopted" }])
+    expect(await gestureOf("inactive")).toEqual(["unblocked", { gesture: "unblocked" }])
+    expect(await gestureOf("active")).toEqual(["unchanged", { gesture: "unchanged" }])
   })
 
   it("should mask the whole secret of an account in the journal line, and never answer it", async () => {

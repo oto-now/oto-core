@@ -10,7 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
 import type { CatalogFunction } from "../../packages/plateforme/server/catalog/define"
 import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
-import { loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import type { Identity } from "../../packages/plateforme/server/identity"
 import { TEST_FUNCTIONS, testSend } from "../factories/test-functions"
 import { ACCOUNTS, CONTENT_AT, nodeId, ORG, PEOPLE, referenceTables, teamOf, TEAMS, type Person, type RuleSpec } from "../helpers/reference-org"
@@ -118,7 +118,7 @@ function setup() {
     if (!person) throw new Error(`${identity.user.id} is not a seeded person`)
     const db = await spied.db(person)
     return runCall(
-      { db, identity, ctxCode: options.ctxCode ?? null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(db, ref.org.id), functions: options.functions ?? FUNCTIONS },
+      { db, identity, ctxCode: options.ctxCode ?? null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(db, ref.org.id), functions: options.functions ?? FUNCTIONS },
       input,
     )
   }
@@ -152,14 +152,35 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       expect((await call(ref.identityOf("claire"), { function: " Mail.Create_Draft ", arguments: DRAFT })).target).toBe("mail.create_draft")
     })
 
-    it("should refuse a function whose connector is off, naming the administrators, and run nothing (AC2)", async () => {
+    it("should run a function whose connector was never touched: every declared connector is open by default (AC2, decision of 2026-11-25)", async () => {
       await mailOff()
+      const { call } = setup()
+      // Aucune ligne d'activation : le connecteur est ouvert ; Claire appelle sur le compte qu'elle voit.
+      expect((await call(ref.identityOf("claire"), { function: "mail.create_draft", arguments: DRAFT })).target).toBe("mail.create_draft")
+    })
+
+    it("should refuse a function whose connector an administrator closed: the activation link to open for an administrator, to give the administrators otherwise", async () => {
+      await seed.admin`
+        insert into platform.connector_activations (org_id, connector, state, activated_by, closed_by)
+        values (${ref.org.id}, 'mail', 'inactive', ${ref.people.ada.id}, ${ref.people.ada.id})
+        on conflict (org_id, connector) do update set state = 'inactive', closed_by = excluded.closed_by`
       const { call, writes } = setup()
-      await expect(call(ref.identityOf("claire"), { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({
+      const said = "Function mail.create_draft is not enabled at Acme Test: an administrator blocked the mail connector."
+      const byAda = "https://acme.test/connect/mail?space=org&activate=1"
+      await expect(call(ref.identityOf("ada"), { function: "mail.create_draft", arguments: DRAFT })).rejects.toMatchObject({
         code: "not_enabled",
-        message: "Function mail.create_draft is not enabled at Acme Test: the mail connector is off. Ask an administrator of Acme Test (Ada Martin) to activate it.",
+        message: `${said} Ask the user to confirm the activation of mail and connect an account, then call again: open ${byAda}`,
+        details: { reason: "connector_off", gesture: "admin_activation", space: "org", url: byAda },
+      })
+      const forAdmins = "https://acme.test/connect/mail?space=team%3Aventes&activate=1"
+      const refused = call(ref.identityOf("claire"), { function: "mail.create_draft", arguments: DRAFT })
+      await expect(refused).rejects.toMatchObject({
+        code: "not_enabled",
+        message: `${said} Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open ${forAdmins}`,
+        details: { reason: "connector_off", gesture: "admin_activation", url: forAdmins, administrators: [{ name: "Ada Martin" }] },
       })
       expect(writes()).toEqual([])
+      await seed.admin`update platform.connector_activations set state = 'active', closed_by = null where org_id = ${ref.org.id} and connector = 'mail'`
     })
 
     it("should name each invalid argument by its path, the unknown key included, absent arguments being {} (AC3)", async () => {
@@ -262,7 +283,8 @@ describe.skipIf(!sqlConfigured)(portable("runCall on a real database"), { timeou
       await expect(notEnabled).rejects.toMatchObject({
         code: "not_enabled",
         message:
-          "No mail account is connected for you (your own, then the organisation). Ask an administrator of Acme Test (Ada Martin) to connect one on the dashboard: https://acme.test/admin/connectors.",
+          "No mail account is connected for you (your own, then the organisation). Only an administrator of Acme Test (Ada Martin) can do it; ask the user to pass them the link and call again once it is done: open https://acme.test/connect/mail?space=org",
+        details: { reason: "no_account", gesture: "key", space: "org", url: "https://acme.test/connect/mail?space=org" },
       })
       const refusals = await Promise.all([forbidden, notEnabled].map((refused) => refused.then(() => "", (error: unknown) => String(error))))
       for (const refused of refusals) expect(hidden.filter((label) => refused.includes(label))).toEqual([])

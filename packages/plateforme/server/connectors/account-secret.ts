@@ -8,7 +8,7 @@
 // porterait qu'un jeton posé par l'outillage. Rien du secret n'est jamais rendu, ni par un résultat, ni par un refus,
 // ni par un log.
 import { mergeCredential } from "../../cli/vault.mjs"
-import type { AccountMarkReason, AccountMode, ConnectorAccountForm } from "../../schemas"
+import type { AccountMode, ConnectorAccountForm } from "../../schemas"
 import { accountSecretSchema } from "../../schemas/connectors"
 import { describeOwner } from "../access"
 import { declaredConnector, declaredConnectors, type DeclaredAccess, type DeclaredConnector } from "../catalog/connector-source"
@@ -19,16 +19,18 @@ import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { accountAccess } from "./accesses"
 import { formOwnerKinds } from "./account-owners"
-import { managedAccount, markOf, markWords, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
-import { requiredFields, type AccountCredential, type AccountMarker, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
+import { managedAccount, refuseLinkedId, summary, type AccountOwner, type AccountSummary } from "./accounts"
+import { requiredFields, type AccountCredential, type ConsentCredential, type StoredToken, type TokenStore } from "./auth"
 import { accountMode } from "./modes"
-import { reconnectRefusal } from "./consent-accounts"
+import { accountMarker, keyRefuser, type CredentialUse, type MarkRemedy } from "./account-marker"
+import type { ConnectWhere } from "./connect-link"
+import { reconnectRefuser, reconnectSaid } from "./consent-accounts"
 import { accountFieldNames, hostFieldsOf, readHostFields } from "./host-fields"
 import { accountSettings, settingValueProblem } from "./settings"
 import { decryptCredential, decryptToken, encryptCredential, encryptToken, type OpenedCredential } from "./vault"
 
 /** Ce que l'appel lit d'un compte résolu pour l'ouvrir ; `access` : celui qu'il retient, pour un connecteur à plusieurs. */
-type CallAccount = { id: string; label: string; access?: string; mode: AccountMode; owner: AccountOwner }
+export type CallAccount = { id: string; label: string; access?: string; mode: AccountMode; owner: AccountOwner }
 
 /** Le chiffré du secret, les réglages, les champs posés, la version de la dernière saisie et la marque d'un compte. */
 type SecretRow = { secret: string | null; settings: Record<string, string>; secret_fields: string[]; secret_updated_at: string | null; mark: unknown }
@@ -40,53 +42,6 @@ function secretRow(db: PlatformDb, service: string, id: string): Promise<SecretR
       from platform.accounts a where a.id = ${id}`).then(([row]) => row)
 }
 
-/**
- * Ce qu'il faut pour dire à qui demander de lever une marque : le compte, si c'est celui de l'appelant, s'il se
- * reconnecte (un consentement, un compte rattaché) ou signe avec la seule clé de l'hôte, et qui le gère.
- */
-type MarkRemedy = { account: CallAccount; own: boolean; reconnect: boolean; hostKey: boolean; who: () => Promise<string> }
-
-/**
- * Le remède d'une marque : reconnecter un consentement ou un compte rattaché, faire vérifier la clé de l'hôte, poser
- * une clé neuve, racheter des crédits.
- */
-async function remedyOf(reason: AccountMarkReason, remedy: MarkRemedy): Promise<string> {
-  const { own, reconnect } = remedy
-  if (reason === "credential_rejected" && reconnect) return own ? "Ask the user to connect it again (Connect my account)." : "Only its owner can connect it again: ask them."
-  if (reason === "credential_rejected" && remedy.hostKey) return "The key is this application's: ask whoever runs this application to check it."
-  const who = own ? "the user" : await remedy.who()
-  return reason === "credential_rejected" ? `Ask ${who} to set a new key.` : `Ask ${who} to add credits.`
-}
-
-/**
- * La marque du compte d'un appel (`AccountMarker`) : la seule écriture de `accounts.health` est `platform.mark_account`,
- * réservée au rôle du serveur, qui pose ou lève la marque d'un compte d'une organisation de l'appelant, et rien d'autre ; elle garde la date d'une
- * marque reposée pour la même raison. Rien n'est écrit quand la marque lue ne change pas : un appel réussi sur un compte
- * sans marque ne touche pas la base.
- */
-function accountMarker(db: PlatformDb, row: SecretRow, remedy: MarkRemedy): AccountMarker {
-  const { account } = remedy
-  const marker: AccountMarker = {
-    current: markOf(row.mark),
-    effect: null,
-    async set(reason) {
-      if ((marker.current?.reason ?? null) === reason) return
-      const [written] = await inTransaction(db, "accountMarker: mark_account", (sql) => sql<{ changed: boolean; mark: unknown }[]>`
-        select changed, mark from platform.mark_account(${account.id}, ${reason})`, "server")
-      marker.current = markOf(written?.mark)
-      if (written?.changed) marker.effect = reason === null ? "lifted" : "marked"
-    },
-    async remedy() {
-      const current = marker.current
-      if (!current) {
-        console.error(`[platform] accountMarker: account ${account.id} has no mark to tell`)
-        throw new PlatformError("internal", "Internal error.")
-      }
-      return `Account « ${account.label} » is marked: ${markWords(current)}. ${await remedyOf(current.reason, remedy)}`
-    },
-  }
-  return marker
-}
 
 /** Le connecteur déclaré d'un compte réel ; un connecteur que l'hôte ne déclare plus n'a ni champs ni réglages. */
 function declaredOf(connector: string): DeclaredConnector {
@@ -243,18 +198,20 @@ export function applicationMissing(label: string): PlatformError {
  * l'a déjà remplacé ; ses jetons restent, rien ne les purge. Le compte s'ouvre avec sa marque (`remedy` : le compte,
  * s'il est celui de l'appelant, et à qui demander).
  */
-function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAccess, row: SecretRow | undefined): () => Promise<AccountCredential> {
+async function consentOpener(
+  db: PlatformDb,
+  remedy: MarkRemedy,
+  declared: Pick<DeclaredAccess, "definition" | "application">,
+  row: SecretRow | undefined,
+): Promise<() => Promise<AccountCredential>> {
   const { definition, application } = declared
   if (!application) throw applicationMissing(definition.label)
   const { account, own } = remedy
-  if (!row?.secret) {
-    const how = own ? `Ask the user to connect their ${definition.label} account` : "Only its owner can connect it: ask them"
-    throw new PlatformError("not_enabled", `Account « ${account.label} » is not connected yet. ${how} (Connect my account).`)
-  }
+  if (!row?.secret) throw await remedy.refuse(`Account « ${account.label} » is not connected yet.`)
   const ciphertext = row.secret
   const id = account.id
   let version = row.secret_updated_at
-  const mark = accountMarker(db, row, remedy)
+  const mark = accountMarker(db, row.mark, remedy)
   return async () => {
     const opened = decryptCredential(id, ciphertext)
     const fields = "fields" in opened ? opened.fields : {}
@@ -288,11 +245,29 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAcc
           update platform.accounts set status = 'error', status_reason = ${cut(reason, 500)}
            where id = ${id} and secret_updated_at is not distinct from ${version}::text::timestamptz`, "server")
         console.error(`[platform] connector ${definition.name}: the consent of account ${id} no longer holds, account to connect again`)
-        return reconnectRefusal(definition.name, account.label, reason, own)
+        return remedy.refuse(reconnectSaid(definition.name, account.label, reason, own))
       },
     }
     return { fields: {}, settings: {}, tokens: tokenStore(db, id), consent, mark }
   }
+}
+
+/**
+ * Le consentement ouvert du compte personnel `account` de l'appelant, hors de tout connecteur déclaré : celui de l'API de
+ * l'hôte de son organisation (`host-api/consent.ts`), avec le connecteur vu par le moteur et le client de consentement
+ * de l'instance. Mêmes renouvellement, rotation et passage à reconnecter qu'un compte `oauth2_user` (`consentOpener`).
+ */
+export async function ownConsentCredential(
+  where: ConnectWhere,
+  account: CallAccount,
+  access: Pick<DeclaredAccess, "definition" | "application">,
+): Promise<AccountCredential> {
+  const { db, identity } = where
+  const row = await secretRow(db, "ownConsentCredential", account.id)
+  const who = () => describeOwner(db, identity, account.owner)
+  const refuse = reconnectRefuser(where, access.definition.name, account, true)
+  const remedy: MarkRemedy = { account, own: true, reconnect: true, hostKey: false, use: "call", who, refuse, refuseKey: keyRefuser(where, access.definition.name, account) }
+  return (await consentOpener(db, remedy, access, row))()
 }
 
 /**
@@ -302,11 +277,15 @@ function consentOpener(db: PlatformDb, remedy: MarkRemedy, declared: DeclaredAcc
  * qui n'en retient pas, ou un que la déclaration ne porte plus ; un compte sans secret, ou sans un champ qu'exige l'authentification ; un réglage
  * manquant ou devenu invalide ; un compte `oauth2_user` sans consentement, ou sans l'application OAuth de l'hôte ; un
  * champ de l'hôte qu'il n'a pas fourni ; un compte d'un connecteur à `accountIdentity` sans identifiant chez le tiers
- * (`linked_id`), ou dont l'identifiant ne suit plus le motif. Les champs de l'hôte (`holder: host`) se lisent à
+ * (`linked_id`), ou dont l'identifiant ne suit plus le motif. Un compte sans secret mène à la saisie de sa clé
+ * (`accountKeyRefusal`, `reason: no_account`, geste `key`) ; un consentement ou un compte rattaché à reconnecter, à son
+ * geste (`connectRefusal`). Les champs de l'hôte (`holder: host`) se lisent à
  * l'ouverture et s'ajoutent à ceux du compte ; l'identifiant va à l'adresse de base, jamais à un argument. Un compte
- * marqué (clé refusée, crédits épuisés) n'est pas refusé ici : il s'ouvre avec sa marque, que l'appel pose ou lève.
+ * marqué (clé refusée, crédits épuisés) n'est pas refusé ici : il s'ouvre avec sa marque, que l'appel pose ou lève, et
+ * dont le refus dépend de `use` (`markRefusal`).
  */
-export async function liveCredential(db: PlatformDb, identity: Identity, account: CallAccount, connector: string): Promise<() => Promise<AccountCredential>> {
+export async function liveCredential(where: ConnectWhere, account: CallAccount, connector: string, use: CredentialUse): Promise<() => Promise<AccountCredential>> {
+  const { db, identity } = where
   const who = () => describeOwner(db, identity, account.owner)
   if (account.mode === "simule") {
     throw new PlatformError(
@@ -328,7 +307,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
   // l'hôte (`holder: host`).
   const reconnect = consent || declared.definition.accountIdentity !== undefined
   const hostKey = accountFieldNames(declared.definition).length === 0
-  const remedy: MarkRemedy = { account, own, reconnect, hostKey, who }
+  const remedy: MarkRemedy = { account, own, reconnect, hostKey, use, who, refuse: reconnectRefuser(where, connector, account, own), refuseKey: keyRefuser(where, connector, account) }
   if (consent) {
     // Un compte partagé (règle d'accès) sert aussi à d'autres que sa personne : seule elle peut le (re)connecter.
     return consentOpener(db, remedy, declared, row)
@@ -338,9 +317,9 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
     throw new PlatformError("internal", "Internal error.")
   }
   // Un compte sans champ à lui (tous fournis par l'hôte) n'a pas de secret : il n'en exige pas.
-  if (!row.secret && !hostKey) throw new PlatformError("not_enabled", `Account « ${account.label} » has no secret yet. Ask ${await who()} to set it.`)
+  if (!row.secret && !hostKey) throw await remedy.refuseKey("no_account", `Account « ${account.label} » has no secret yet.`)
   readHostFields(declared, identity.org)
-  const linkedId = declared.definition.accountIdentity ? await linkedIdOf(db, identity, account, declared) : undefined
+  const linkedId = declared.definition.accountIdentity ? await linkedIdOf(db, account, declared, remedy.refuse) : undefined
   const checked = accountSettings(declared.definition, row.settings)
   if ("problem" in checked) {
     throw new PlatformError("not_enabled", `The ${checked.problem.label} setting of account « ${account.label} » ${checked.problem.reason}. Ask ${await who()} to set it.`)
@@ -352,7 +331,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
   // Un secret v1 ne dit pas ses champs : il se contrôle une fois ouvert.
   if (row.secret_fields.length > 0) await refuseMissing(row.secret_fields)
   const ciphertext = row.secret
-  const mark = accountMarker(db, row, remedy)
+  const mark = accountMarker(db, row.mark, remedy)
   return async () => {
     const fields = ciphertext ? fieldsOf(declared, decryptCredential(account.id, ciphertext)) : {}
     await refuseMissing(Object.keys(fields))
@@ -365,7 +344,7 @@ export async function liveCredential(db: PlatformDb, identity: Identity, account
  * `platform.account_linked_id` (jamais accordé en lecture à `authenticated`) et recontrôlé contre le motif déclaré.
  * Aucun : le compte n'est pas branché (`not_enabled`, « connect your account ») ; hors motif : à reconnecter.
  */
-async function linkedIdOf(db: PlatformDb, identity: Identity, account: CallAccount, declared: DeclaredAccess): Promise<string> {
+async function linkedIdOf(db: PlatformDb, account: CallAccount, declared: DeclaredAccess, refuse: MarkRemedy["refuse"]): Promise<string> {
   const accountIdentity = declared.definition.accountIdentity
   if (!accountIdentity) {
     console.error(`[platform] liveCredential: ${declared.definition.name} has no accountIdentity`)
@@ -373,13 +352,11 @@ async function linkedIdOf(db: PlatformDb, identity: Identity, account: CallAccou
   }
   const [row] = await inTransaction(db, "liveCredential: account_linked_id", (sql) => sql<{ linked_id: string | null }[]>`
     select platform.account_linked_id(${account.id}) as linked_id`)
-  const own = account.owner.kind === "user" && account.owner.userId === identity.user.id
-  const remedy = async () => (own ? "Ask the user to connect their account (Connect my account)." : `Ask ${await describeOwner(db, identity, account.owner)} to connect it (Connect my account).`)
   const label = declared.definition.label
-  if (!row?.linked_id) throw new PlatformError("not_enabled", `Account « ${account.label} » is not connected to ${label} yet. ${await remedy()}`)
+  if (!row?.linked_id) throw await refuse(`Account « ${account.label} » is not connected to ${label} yet.`)
   if (!new RegExp(accountIdentity.pattern).test(row.linked_id)) {
     console.error(`[platform] connector ${declared.definition.name}: account ${account.id} has a linked id out of its pattern`)
-    throw new PlatformError("not_enabled", `Account « ${account.label} » must be connected again to ${label}. ${await remedy()}`)
+    throw await refuse(`Account « ${account.label} » must be connected again to ${label}.`)
   }
   return row.linked_id
 }

@@ -6,16 +6,17 @@
 // Sans lui, rien ne se lit.
 import { FILE_ADDRESS, type BlockView, type CommentThreadView, type NodeView, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, type AccessLevel } from "../access"
-import { contractNames, getContract, renderContract } from "../catalog/contracts"
-import { activeOrgFunctions, orgAssistantFunctions } from "../catalog/org-catalog"
+import { getContract, renderContract } from "../catalog/contracts"
+import { orgAssistantFunctions, readFunctionCatalog } from "../catalog/org-catalog"
 import { catalogNames, describeFunction, findFunction, isActive, looksLikeFunction } from "../catalog/registry"
+import type { HostViewer } from "../host-api/visibility"
 import { blockRefs, bodyWithComments, commentsLine, waitingCount } from "../comments/served"
 import { openThreads } from "../comments/threads"
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import type { Json } from "../database"
 import type { PlatformDb } from "../db"
 import { inTransaction, PlatformError } from "../errors"
-import { functionCatalog, FUNCTIONS_PATH } from "../find"
+import { FUNCTIONS_PATH } from "../find"
 import { helpGuide, HELP_PATH } from "../help"
 import type { Identity } from "../identity"
 import { readJournal } from "../journal-model"
@@ -47,7 +48,7 @@ async function readFunction(db: PlatformDb, identity: Identity, name: string): P
   const fn = findFunction(await orgAssistantFunctions(db, identity), name)
   const contract = fn ? null : getContract(name)
   if (contract) return { ...renderContract(contract, prefix), nextActions: [`${prefix}_write`], target: contract.name }
-  if (!fn || !isActive(fn, await loadActiveConnectors(db, identity.org.id))) {
+  if (!fn || !isActive(fn, await loadOpenConnectors(db, identity.org.id))) {
     throw new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
   }
   const { text, data } = describeFunction(fn, prefix)
@@ -153,7 +154,7 @@ function fileRouteOf(origin: string | undefined): string {
  * `file` (AC-d2) : le texte d'un fichier joint au nœud. `views` : les widgets sont allumés, une page servie
  * entière porte ses blocs et la vue `page` (`withPageView`).
  */
-export async function readNode(db: PlatformDb, identity: Identity, input: ReadNodeInput, options: { origin?: string; views?: boolean } = {}): Promise<ToolOutput> {
+export async function readNode(db: PlatformDb, identity: Identity, input: ReadNodeInput, options: { origin?: string; views?: boolean; viewer?: Omit<HostViewer, "origin"> } = {}): Promise<ToolOutput> {
   const prefix = identity.org.prefix
   // Un chemin et un identifiant ensemble sont refusés par le service aussi, quelle que soit la porte.
   const target = nodeTarget(input)
@@ -163,7 +164,7 @@ export async function readNode(db: PlatformDb, identity: Identity, input: ReadNo
     const { path } = target
     if (looksLikeFunction(path)) return readFunction(db, identity, path)
     if (path === JOURNAL_PATH) return readJournal(db, identity, input)
-    if (path === FUNCTIONS_PATH) return functionCatalog(await activeOrgFunctions(db, identity), contractNames(), prefix)
+    if (path === FUNCTIONS_PATH) return readFunctionCatalog(db, identity, { ...options.viewer, origin: options.origin })
     // Le guide de la plateforme, servi par le paquet : son plan, ou la section demandée.
     if (path === HELP_PATH) return helpGuide(input.section, prefix)
     checkNodePath(path)

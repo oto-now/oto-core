@@ -44,7 +44,7 @@ describe.skipIf(!sqlConfigured)(portable("table.import and POST tables/import on
 
   async function session(person: keyof typeof CTX) {
     const identity = acmeIdentity(ref, person)
-    const deps = { db: await ref.db(person), org: identity.org, caller: { kind: "member" as const, identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" }
+    const deps = { db: await ref.db(person), org: identity.org, caller: { kind: "member" as const, identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" }
     const connected = await connectDeps(deps)
     return { ...connected, run: (fn: string, args: Record<string, unknown>) => connected.call("call", { ctx: ref.id(CTX[person]), function: fn, arguments: args }) }
   }

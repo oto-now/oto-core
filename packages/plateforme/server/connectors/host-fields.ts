@@ -14,6 +14,15 @@ export function hostFieldsOf(definition: ConnectorView): ConnectorView["credenti
   return definition.credential.filter((field) => field.holder === "host")
 }
 
+/**
+ * Vrai quand un appel de cet accès sort sur la clé de l'hôte : l'accès déclare un champ `holder: host`, que
+ * `readHostFields` ajoute alors à chaque appel, quels que soient ses modes ou sa forme (accès unique ou l'un de plusieurs,
+ * compte rattaché ou non). La seule règle : l'adoption (`adoption.ts`) la lit, pour ne jamais diverger du moteur.
+ */
+export function takesHostKey(definition: ConnectorView): boolean {
+  return hostFieldsOf(definition).length > 0
+}
+
 /** Les noms des champs que garde un compte : tous, sauf ceux de l'hôte. */
 export function accountFieldNames(definition: ConnectorView): string[] {
   return definition.credential.filter((field) => field.holder !== "host").map((field) => field.name)
@@ -44,8 +53,8 @@ function hostFieldsClosed(definition: ConnectorView, org: IdentityOrg): Platform
  */
 export function readHostFields(declared: DeclaredAccess, org: IdentityOrg): Record<string, string> {
   const { definition, hostCredentials } = declared
+  if (!takesHostKey(definition)) return {}
   const wanted = hostFieldsOf(definition)
-  if (wanted.length === 0) return {}
   if (!hostCredentials) throw hostFieldMissing(definition, wanted[0])
   let given: Record<string, string> | null
   try {

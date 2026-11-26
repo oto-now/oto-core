@@ -18,10 +18,11 @@ import type { Tx } from "../sql"
 import { accessesProblem, accessProblem, accessViews, type AccessView } from "./accesses"
 import { modesProblem } from "./account-owners"
 import { authHeader, prepareAuth, RUN_AUTH_KINDS, type PreparedAuth } from "./auth"
+import { keylessAccessesProblem } from "./keyless"
 import { bodyArgumentProblem } from "./body-argument"
 import { bodyListProblem } from "./body-list"
 import { bodyArguments, bodyTableProblem, bodyTableShaped } from "./body-table"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, OAuthApplication } from "./definition"
+import { HOST_CONSENT_CONNECTOR, type ConnectorDefinition, type ConnectorFunctionDefinition, type ConnectorView, type OAuthApplication } from "./definition"
 import { catalogFunction, functionApi, identityAddress, refusalLines } from "./catalog-function"
 import type { PreparedFunction } from "./engine"
 import { backgroundProblem } from "./background-declaration"
@@ -89,7 +90,8 @@ function accountProblem(definition: ConnectorView): string | null {
   }
   const fields = Array.isArray(credential) ? credential : []
   const badField = fields.find((field) => typeof field?.name !== "string" || !FIELD_NAME.test(field.name) || typeof field.label !== "string" || typeof field.secret !== "boolean")
-  if (fields.length === 0 || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
+  // Sans clé (`none`), aucun champ : `prepareAuth` refuse ceux qu'il déclarerait.
+  if ((fields.length === 0 && definition.auth?.kind !== "none") || badField) return `${name}: credential must list its fields {name, label, secret}, names in lowercase ASCII letters, digits and _.`
   const settings = definition.settings ?? []
   if (!Array.isArray(settings)) return `${name}: settings must be a list.`
   const names = [...fields.map((field) => field.name), ...settings.map((setting) => setting?.name), ...(definition.accountIdentity ? [definition.accountIdentity.name] : [])]
@@ -236,8 +238,8 @@ const levelsOf = (auth: PreparedAuth): AccessLevels | null => (auth.kind === "us
 /**
  * Le problème d'un accès, sur le connecteur tel qu'il le voit, dans l'ordre : ses `modes`, une authentification que le
  * moteur n'exécute pas (refusée par son nom, avant ses champs : `oauth2_user` n'en a pas), les champs de son secret et
- * les réglages, leurs titulaires, l'identité d'un compte rattaché ; pour un connecteur à plusieurs accès, des niveaux
- * d'accès, les droits de ses fonctions étant communs. Puis son authentification préparée. Un refus nomme l'accès.
+ * les réglages, leurs titulaires, l'identité d'un compte rattaché. Puis son authentification préparée. Un refus nomme
+ * l'accès. Les niveaux d'accès d'un connecteur à plusieurs accès se jugent ensemble (`levelsProblem`).
  */
 function preparedAccess(access: AccessView): PreparedAuth {
   const { view } = access
@@ -247,11 +249,22 @@ function preparedAccess(access: AccessView): PreparedAuth {
   if (problem) throw new CatalogRegistrationError(accessProblem(access, problem) ?? problem)
   const auth = prepareAuth(view)
   if (typeof auth === "string") throw new CatalogRegistrationError(accessProblem(access, auth) ?? auth)
-  if (access.name !== null && levelsOf(auth) === null) {
-    const levels = `${view.name}: auth ${String(view.auth.kind)} needs access levels (accessLevels): the accesses of a connector share the scopes its functions declare.`
-    throw new CatalogRegistrationError(accessProblem(access, levels) ?? levels)
-  }
   return auth
+}
+
+/**
+ * Les niveaux d'accès d'un connecteur à plusieurs accès : dans tous ses accès ou dans aucun, les droits de ses fonctions
+ * étant communs. Sans niveaux, chaque accès ouvre tout le connecteur (un accès par clé, `bearer`, n'en déclare jamais) ;
+ * avec, chacun dit les droits de chaque fonction. Un mélange est refusé, l'accès sans niveaux nommé. `null` : aucun
+ * problème, ou un connecteur à un seul accès.
+ */
+function levelsProblem(definition: ConnectorDefinition, accesses: readonly PreparedAccess[]): string | null {
+  const without = accesses.filter(({ auth }) => levelsOf(auth) === null)
+  if (without.length === 0 || without.length === accesses.length) return null
+  const [first] = without
+  const leveled = accesses.filter(({ auth }) => levelsOf(auth) !== null).map(({ access }) => access.name)
+  const problem = `${definition.name}: access levels (accessLevels) go in every access or in none: ${leveled.join(", ")} declare${leveled.length > 1 ? "" : "s"} them, auth ${String(first.access.view.auth.kind)} declares none.`
+  return accessProblem(first.access, problem)
 }
 
 /** Un accès préparé : sa vue, son authentification, sa sonde et l'identité d'un consentement. */
@@ -272,6 +285,8 @@ function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>
   if (shape) throw new CatalogRegistrationError(shape)
   const views = accessViews(definition)
   const prepared: PreparedAccess[] = views.map((access) => ({ access, auth: preparedAccess(access), probe: null, identity: null }))
+  const levels = keylessAccessesProblem(definition.name, prepared.map(({ auth }) => auth.kind)) ?? levelsProblem(definition, prepared)
+  if (levels) throw new CatalogRegistrationError(levels)
   const address = baseAddress(definition)
   if (!address) throw new CatalogRegistrationError(`${definition.name}: needs baseUrl or baseUrls, not both.`)
   const addressFault = baseAddressProblem(definition, address)
@@ -372,7 +387,8 @@ export type ConnectorOptions = HostOptions & {
 export function registerConnectors(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): void {
   const current = new Set(declaredConnectors().flatMap((connector) => connector.functions))
   const others = catalogFunctions().filter((fn) => !current.has(fn))
-  const reserved = new Set([...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf))
+  // Le connecteur des consentements à l'API d'un hôte n'est jamais déclaré : son nom est pris.
+  const reserved = new Set([...[...others.map((fn) => fn.name), ...contractNames()].map(namespaceOf), HOST_CONSENT_CONNECTOR])
   const seen = new Set<string>()
   const applications = checkedApplications(definitions, options.oauthApplications)
   const runnerProblem = backgroundRunnerProblem(options.backgroundRunner)

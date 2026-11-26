@@ -147,7 +147,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       expect(seen).toMatchObject({ label: "Crm", state: "inactive", closedBy: { userId: o.people.ada.id, name: "Ada Martin" } })
 
       const refused = await refusal(personal("lea", `Perso Léa ${hex(3)}`, FRESH))
-      expect(said(refused)).toEqual({ code: "not_enabled", details: { reason: "closed", administrators: [{ userId: o.people.ada.id, name: "Ada Martin" }] } })
+      expect(said(refused)).toEqual({ code: "not_enabled", details: { reason: "closed", administrators: [{ name: "Ada Martin" }] } })
       expect(refused.message).toBe(`${FRESH} is deactivated at Acme Test: no account can be added or enabled. Ask the administrators of Acme Test (Ada Martin) to activate it.`)
       // Le compte gardé ne se réactive pas non plus tant que le connecteur reste fermé.
       await disableAccount(lea.db, lea.identity, { account_id: created.id })
@@ -155,15 +155,18 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       await forgetActivation(FRESH)
     })
 
-    it("should refuse the implicit activation beyond connectors_max, writing nothing", async () => {
+    it("should count no connector against a limit any more: connectors_max, still accepted from a host, is ignored (decision of 2026-11-25)", async () => {
       const [{ active }] = await fx.admin<{ active: number }[]>`
         select count(*)::int as active from platform.connector_activations where org_id = ${o.org.id} and state = 'active'`
       registerOrgLimits({ read: ({ id }) => (id === o.org.id ? { connectors_max: active } : null) })
-      const before = await accountCount()
-      const refused = await refusal(personal("lea", `Perso ${hex(3)}`, SPARE))
-      expect(said(refused)).toEqual({ code: "forbidden", details: { reason: "limit", limit: "connectors_max", max: active } })
-      expect(refused.message).toBe(`Acme Test is limited to ${active} active ${active > 1 ? "connectors" : "connector"}. Ask the administrators of Acme Test (Ada Martin) about it.`)
-      expect([await activationOf(SPARE), await accountCount()]).toEqual([null, before])
+      const created = await personal("lea", `Perso ${hex(3)}`, SPARE)
+      try {
+        // Le premier compte adopte le connecteur, au-delà de l'ancien plafond, sans refus.
+        expect(await activationOf(SPARE)).toEqual({ state: "active", activated_by: o.people.lea.id })
+      } finally {
+        await fx.admin`delete from platform.accounts where id = ${created.id}`
+        await forgetActivation(SPARE)
+      }
     })
 
     it("should admit only the owners the modes of the declaration name, and say them to the form", async () => {
@@ -242,12 +245,12 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
       await disableAccount(lea.db, lea.identity, { account_id: account.id })
       stubTiers(["contacts:read"])
-      const probe = await probeAccount(lea.db, lea.identity, { account_id: account.id })
+      const probe = await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })
       expect(probe).toEqual({ at: expect.any(String), healthy: true, code: null, reason: null, balance: null })
       const view = (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
       expect(view).toMatchObject({ status: "disabled", lastProbe: probe })
       stubTiers([])
-      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id })).toMatchObject({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes." })
+      expect(await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })).toMatchObject({ healthy: false, code: "unexpected_answer", reason: "Crm answered without scopes." })
     })
 
     it("should probe a key before the account exists, for any member, writing nothing, and refuse what cannot be probed", async () => {
@@ -293,7 +296,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
       const account = await personal("lea")
       await setAccountSecret(lea.db, lea.identity, { account_id: account.id, input: { secret: { api_key: `k_${hex(8)}` } } })
       stubTiers([])
-      const failed = await probeAccount(lea.db, lea.identity, { account_id: account.id })
+      const failed = await probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: "https://acme.example.test" })
       expect(failed).toMatchObject({ healthy: false, code: "unexpected_answer" })
       const seen = async () => (await listOwnAccounts(lea.db, lea.identity)).find((candidate) => candidate.id === account.id)
       expect((await seen())?.lastProbe).toEqual(failed)

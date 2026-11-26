@@ -40,7 +40,7 @@ const MIGRATIONS = [
 const STATUS: CellStatus = {
   packageVersion: pkg.version,
   migrations: MIGRATIONS,
-  health: { database: { ok: true, latencyMs: 3 }, env: envReport(WITNESSES), ok: true },
+  health: { database: { ok: true, latencyMs: 3 }, env: envReport(WITNESSES), ok: true, warnings: [] },
   checkedAt: "2026-09-26T12:00:00.000Z",
 }
 
@@ -71,6 +71,8 @@ describe("envReport (AC10)", () => {
       { name: "NEXT_PUBLIC_SITE_URL", present: true },
       { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_ID", present: false, optional: true },
       { name: "PLATFORM_OIDC_EXCHANGE_CLIENT_SECRET", present: false, optional: true },
+      { name: "PLATFORM_OIDC_CONSENT_CLIENT_ID", present: false, optional: true },
+      { name: "PLATFORM_OIDC_CONSENT_CLIENT_SECRET", present: false, optional: true },
     ])
   })
 })

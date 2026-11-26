@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { AccountView, ConnectorAccountForm } from "@otomata_tech/oto_platform/schemas"
+import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
 import { etatDuCompte, formulaireDuCompte } from "../../packages/plateforme/ui/admin/connecteurs/etat-du-compte"
 import { adresseDeLaVue, comptesAuxPartagesLus, lignesDesConnecteurs, vueDesConnecteurs, type VueDesConnecteurs } from "../../packages/plateforme/ui/admin/connecteurs/lignes-des-connecteurs"
 
@@ -36,6 +36,8 @@ describe("etatDuCompte", () => {
       ["à reconnecter, à un autre", compte({ connector: "microsoft", owner: A_PAUL, status: "error", viewerLevel: "read" }), CONSENTEMENT],
       ["à reconnecter, rattaché", compte({ connector: "reseau", owner: A_MOI, status: "error" }), RATTACHE],
       ["à reconnecter, rattaché sans port", compte({ connector: "reseau", owner: A_MOI, status: "error" }), { ...RATTACHE, hosted: { ready: false } }],
+      ["à reconnecter, à clé, géré", compte({ status: "error" }), CLE],
+      ["à reconnecter, à clé, lu", compte({ status: "error", viewerLevel: "read" }), CLE],
       ["clé refusée, géré", compte({ mark: marque }), CLE],
       ["clé refusée, lu", compte({ mark: marque, viewerLevel: "sensitive" }), CLE],
       ["refusé, à consentement", compte({ connector: "microsoft", owner: A_MOI, mark: marque }), CONSENTEMENT],
@@ -64,6 +66,8 @@ describe("etatDuCompte", () => {
       ["à reconnecter, à un autre", "À reconnecter", "Demandez à Paul Durand de le reconnecter.", null, true],
       ["à reconnecter, rattaché", "À reconnecter", "La connexion au service est à refaire.", "reconnecter", true],
       ["à reconnecter, rattaché sans port", "À reconnecter", "La connexion au service est à refaire.", null, true],
+      ["à reconnecter, à clé, géré", "À reconnecter", "La connexion au service est à refaire.", "remplacer", true],
+      ["à reconnecter, à clé, lu", "À reconnecter", "Demandez à qui le gère de le reconnecter.", null, true],
       ["clé refusée, géré", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["clé refusée, lu", "Clé refusée", "Refusée par le service le 5 novembre 2026.", null, true],
       ["refusé, à consentement", "À reconnecter", "La connexion au service est à refaire.", "reconnecter", true],
@@ -71,11 +75,27 @@ describe("etatDuCompte", () => {
       ["clé refusée puis remplacée", "Non testé", null, null, false],
       ["clé refusée à l'instant de sa saisie", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["crédits épuisés", "Crédits épuisés", "Depuis le 5 novembre 2026. La clé reste bonne.", null, true],
-      ["testé, sain, avec un solde", "Fonctionne", "Testé le 3 novembre 2026. Solde : 1\u202f200 crédits.", null, false],
+      ["testé, sain, avec un solde", "Connecté", "Testé le 3 novembre 2026. Solde : 1\u202f200 crédits.", null, false],
       ["testé, en échec", "Test en échec", "Le service est injoignable. Testé le 3 novembre 2026.", null, true],
       ["refusé, puis testé", "Clé refusée", "Refusée par le service le 5 novembre 2026.", "remplacer", true],
       ["réel sans formulaire, sans clé", "Non testé", null, null, false],
       ["désactivé", "Désactivé", null, null, false],
+    ])
+  })
+
+  it("should say an account whose tool an administrator blocked, by whom, without a gesture, even in error; a disabled one stays disabled", () => {
+    const parClaire = { userId: "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c09", name: "Claire Morel" }
+    const lus = [
+      etatDuCompte(compte({ owner: A_MOI, status: "error" }), CLE, MOI, parClaire),
+      etatDuCompte(compte({ owner: A_MOI }), CLE, MOI, { userId: MOI, name: "Léa Bernard" }),
+      etatDuCompte(compte({}), CLE, MOI, { userId: null, name: null }),
+      etatDuCompte(compte({ status: "disabled" }), CLE, MOI, parClaire),
+    ].map(({ code, mot, precision, geste }) => [code, mot, precision, geste])
+    expect(lus).toEqual([
+      ["bloque", "Bloqué par un administrateur", "Par Claire Morel. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
+      ["bloque", "Bloqué par un administrateur", "Par vous. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
+      ["bloque", "Bloqué par un administrateur", "Par un administrateur. Plus aucun assistant ne s'en sert ; rien n'est effacé.", null],
+      ["desactive", "Désactivé", null, null],
     ])
   })
 })
@@ -100,12 +120,38 @@ describe("lignesDesConnecteurs", () => {
     },
     [prive.id]: { general: null, rules: [] },
   }
-  const sources = { comptes, formulaires: [CLE], partages, moi: MOI, ici: ICI }
+  // Seul « crm » déclare le domaine de son outil : ses lignes portent l'adresse de son logo.
+  const CRM: OrgConnector = { connector: "crm", label: "Crm Pro", logoDomain: "crm.example", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
+  const MICROSOFT: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
+  const sources = { comptes, connecteurs: [CRM, MICROSOFT], formulaires: [CLE], partages, moi: MOI, ici: ICI }
   const vue = (champs: Partial<VueDesConnecteurs> = {}): VueDesConnecteurs => ({ filtre: "all", q: "", compte: null, ...champs })
   const libelles = (une: VueDesConnecteurs) => lignesDesConnecteurs(sources, une).lignes.map((ligne) => ligne.libelle)
 
-  it("should put first the accounts waiting for a gesture, then the others by label, the disabled ones last", () => {
+  it("should give the lines of a connector that declares its domain the address of its logo, and none to the others", () => {
+    const comptesDeDeuxOutils = [compte({ label: "Banque" }), compte({ label: "Agenda", connector: "microsoft" })]
+    const lignes = lignesDesConnecteurs({ ...sources, comptes: comptesDeDeuxOutils }, vue()).lignes
+    expect(lignes.map((ligne) => [ligne.libelle, ligne.logo])).toEqual([
+      ["Agenda", null],
+      ["Banque", "/api/platform/connectors/crm/logo"],
+    ])
+  })
+
+  it("should put first the accounts waiting for a gesture, then the others by label, the disabled ones and those of a blocked tool last", () => {
     expect(libelles(vue())).toEqual(["Zèbre", "Agenda de Paul", "Annuaire", "Banque", "Écritures", "Zoho Ventes", "Ancien"])
+    // L'outil de « Agenda de Paul » bloqué : la ligne part en dernier, avec les désactivées, et se grise.
+    const bloque = { ...MICROSOFT, state: "inactive" as const, closedBy: { userId: PAUL, name: "Paul Durand" } }
+    const agenda = compte({ label: "Agenda", connector: "microsoft", owner: A_MOI })
+    const lignes = lignesDesConnecteurs({ ...sources, comptes: [...comptes, agenda], connecteurs: [CRM, bloque] }, vue()).lignes
+    expect(lignes.map((ligne) => [ligne.libelle, ligne.desactive])).toEqual([
+      ["Zèbre", false],
+      ["Agenda de Paul", false],
+      ["Annuaire", false],
+      ["Banque", false],
+      ["Écritures", false],
+      ["Zoho Ventes", false],
+      ["Agenda", true],
+      ["Ancien", true],
+    ])
   })
 
   it("should keep the person's own accounts under « À moi », every other under « Partagés avec moi », and count each filter before the search", () => {
@@ -124,12 +170,12 @@ describe("lignesDesConnecteurs", () => {
   it("should say who has access: private, the first subject then the count, who shares it, the team or the whole organisation, with the person's level", () => {
     const acces = Object.fromEntries(lignesDesConnecteurs(sources, vue()).lignes.map((ligne) => [ligne.libelle, [ligne.acces, ligne.niveau]]))
     expect(acces).toEqual({
-      Écritures: ["Privé", "Vous seul"],
+      Écritures: ["Privé", "Non partagé"],
       Banque: ["Toute l'organisation +2", "Partagé par vous"],
-      Ancien: ["Privé", "Vous seul"],
-      "Agenda de Paul": ["Partagé par Paul Durand", "Lecture seule"],
-      "Zoho Ventes": ["Équipe Ventes", "Lecture et écriture"],
-      Annuaire: ["Toute l'organisation", "Toutes les actions"],
+      Ancien: ["Privé", "Non partagé"],
+      "Agenda de Paul": ["Partagé par Paul Durand", "Lire"],
+      "Zoho Ventes": ["Équipe Ventes", "Lire et modifier"],
+      Annuaire: ["Toute l'organisation", "Tout, avec accord"],
       Zèbre: ["Toute l'organisation", "Gestion"],
     })
   })
@@ -175,7 +221,7 @@ describe("formulaireDuCompte et lignes d'un connecteur à plusieurs accès", () 
 
   it("should reconnect a person's account by the access it retains", () => {
     const aReconnecter = compte({ connector: "console", access: "google_account", owner: A_MOI, status: "error" })
-    const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
+    const [ligne] = lignesDesConnecteurs({ comptes: [aReconnecter], connecteurs: [], formulaires, partages: {}, moi: MOI, ici: ICI }, { filtre: "all", q: "", compte: null }).lignes
     expect(ligne.geste).toEqual({ genre: "connexion", libelle: "Reconnecter", ressource: "connector-consent", connecteur: "console", acces: "google_account" })
   })
 })

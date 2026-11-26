@@ -4,7 +4,7 @@
 // ligne du connecteur telle que la rend `listConnectorsForOrg`. `POST admin/connectors/<nom>/probe` (écran
 // Connecteurs, lot 1) : essayer une clé avant d'ajouter un compte, par `probeConnector`, ouvert à tout membre.
 import { connectorRefSchema } from "../../schemas"
-import { activateConnector, deactivateConnector } from "../../server/connectors/activations"
+import { activateConnectorGesture, deactivateConnector } from "../../server/connectors/activations"
 import { probeConnector } from "../../server/connectors/probe"
 import type { Route } from "../handler"
 
@@ -21,8 +21,9 @@ export const activationRoute: Route = {
   fixed: ACTIVATION,
   target: connectorOrNull,
   async handle({ db, identity, params }) {
-    const connector = await activateConnector(db, identity, { connector: params[1] })
-    return { status: 200, data: { connector }, journal: { target: connector.connector } }
+    const { connector, gesture } = await activateConnectorGesture(db, identity, { connector: params[1] })
+    // Le journal distingue l'adoption d'un connecteur jamais touché du déblocage d'un connecteur bloqué.
+    return { status: 200, data: { connector, gesture }, journal: { target: connector.connector, args: { gesture } } }
   },
 }
 

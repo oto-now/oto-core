@@ -7,11 +7,13 @@ import { fromHostOpenApi, toDefinition, type SchemaCompiler, type SchemaIssue } 
 import Ajv2020, { type ValidateFunction } from "ajv/dist/2020"
 import { readBounded } from "../bounded-read"
 import { JsonSchemaArguments, PERSONAL_KEYWORD } from "../catalog/arguments"
+import type { FunctionClass } from "../catalog/define"
+import { actName } from "../catalog/registry"
 import { guardedFetch } from "../connectors/address-guard"
-import type { ConnectorDefinition } from "../connectors/definition"
+import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../connectors/definition"
 import type { Fetch } from "../connectors/http"
+import { isResource, RESOURCE_RULE } from "../connectors/oauth-user"
 import { PlatformError } from "../errors"
-import { isJsonObject } from "../json"
 import { issuerProblem } from "./exchange"
 
 /** Au plus, en octets, le document d'un hôte. */
@@ -81,15 +83,43 @@ export async function readHostDocument(address: string, etag: string | null): Pr
   return { kind: "document", document, etag: tag && tag.length <= ETAG_MAX ? tag : null }
 }
 
-/** Ce qu'oto garde d'un document accepté : sa version, l'API à l'émetteur, ses familles, ses connecteurs, compilés. */
+/**
+ * Une fonction de l'API dans l'index de l'hôte (`visibility.ts`, `index-block.ts`) : son nom dans le document
+ * (`operationId`, celui que rend `/me/functions`), son nom servi au catalogue, sa famille, sa classe, son libellé pour la
+ * personne et sa ligne d'index (`summary`).
+ */
+export type HostIndexEntry = { operationId: string; served: string; family: string; class: FunctionClass; label: string; summary: string }
+
+/** Le nom qu'une fonction de l'API porte au catalogue : une fonction qui écrit est servie sous `<espace>_act.<verbe>`. */
+export function servedName(fn: Pick<ConnectorFunctionDefinition, "name" | "act">): string {
+  return fn.act ? (actName(fn.name) ?? fn.name) : fn.name
+}
+
+/**
+ * Ce qu'oto garde d'un document accepté : son titre et sa version, l'API à l'émetteur, le scope de chaque fonction, ses
+ * connecteurs, compilés, et ce qu'il faut à l'index : le chemin de `/me/functions`, les familles, les fonctions.
+ */
 export type ImportedHost = {
+  /** `info.title`, le nom de l'API dans les messages et sur le compte d'un consentement. */
+  title: string
   version: string
   issuer: string
   resource: string
-  /** Les familles de la racine `x-oto.families`, dans l'ordre du document. */
-  families: string[]
+  /** Le scope OAuth demandé pour le jeton de chaque fonction (celui de sa famille), par nom de fonction. */
+  scopes: ReadonlyMap<string, string>
+  /**
+   * Les scopes des fonctions, sans doublon, dans l'ordre du document : ce qu'une personne consent en une fois ; une
+   * famille sans fonction n'y ajoute rien.
+   */
+  consentScopes: string[]
   /** Un connecteur par espace de noms, dans la forme que le moteur court, et le schéma compilé de chaque fonction. */
   connectors: { definition: ConnectorDefinition; schemas: ReadonlyMap<string, JsonSchemaArguments> }[]
+  /** `x-oto.functions` : le chemin, sous l'adresse, des fonctions que la personne peut appeler (`/me/functions`). */
+  functionsPath: string
+  /** Les familles de `x-oto.families`, dans leur ordre, qui est celui de l'index. */
+  families: { key: string; label: string }[]
+  /** Les fonctions, dans l'ordre du document. */
+  index: HostIndexEntry[]
 }
 
 /**
@@ -129,11 +159,16 @@ export function importHostDocument(document: unknown, reserved: Iterable<string>
     return { problems: [{ code: "host_document_unreadable", path: "", message: "the document could not be judged by the host profile" }] }
   }
   if (!result.definition) return { problems: result.problems.map(({ code, path, message }) => ({ code, path, message })) }
-  const root = (document as { "x-oto": { issuer: string; resource: string; families: Record<string, string> } })["x-oto"]
+  const root = (document as { "x-oto": { issuer: string; resource: string; functions: string } })["x-oto"]
   const issuer = issuerProblem(root.issuer)
   if (issuer) return { problems: [{ code: "host_issuer_not_instance", path: "x-oto.issuer", message: issuer }] }
-  const info = (document as { info: { version: unknown } }).info
+  // Posé tel quel à l'autorisation, à l'échange et au renouvellement du consentement (`consent-access.ts`) : le même
+  // contrôle qu'à la déclaration d'un connecteur, plus strict que l'URI absolue du profil hôte.
+  if (!isResource(root.resource)) return { problems: [{ code: "host_resource_invalid", path: "x-oto.resource", message: RESOURCE_RULE }] }
+  const info = (document as { info: { title: unknown; version: unknown } }).info
   const strict = validator(true)
+  const scoped = scopesOf(result.definition.functions as Record<string, { family: string; scope: string | null }>)
+  if ("problems" in scoped) return scoped
   const problems: HostDocumentProblem[] = []
   const connectors: ImportedHost["connectors"] = []
   for (const doc of result.definition.connectors as unknown[]) {
@@ -149,6 +184,48 @@ export function importHostDocument(document: unknown, reserved: Iterable<string>
     connectors.push({ definition, schemas })
   }
   if (problems.length > 0) return { problems }
-  const families = isJsonObject(root.families) ? Object.keys(root.families) : []
-  return { imported: { version: String(info.version), issuer: root.issuer, resource: root.resource, families, connectors } }
+  const host = result.definition.host as { families: Record<string, string | { label: string }> }
+  const families = Object.entries(host.families).map(([key, family]) => ({ key, label: typeof family === "string" ? family : family.label }))
+  const meta = result.definition.functions as Record<string, { family: string; label: string; summary: string }>
+  const byName = new Map(connectors.flatMap(({ definition }) => definition.functions.map((fn) => [fn.name, fn] as const)))
+  const index = Object.entries(meta).map(([name, { family, label, summary }]) => {
+    const fn = byName.get(name)
+    if (!fn) throw new Error(`[platform] host api: ${name} without its function in the definition`)
+    return { operationId: name, served: servedName(fn), family, class: fn.class, label, summary }
+  })
+  return {
+    imported: {
+      title: String(info.title).trim(),
+      version: String(info.version),
+      issuer: root.issuer,
+      resource: root.resource,
+      ...scoped,
+      connectors,
+      functionsPath: root.functions,
+      families,
+      index,
+    },
+  }
+}
+
+/**
+ * Le scope de chaque fonction, celui de sa famille (`x-oto.families.<clé>.scope`), et l'union de ces scopes. Le profil
+ * hôte admet une famille écrite par son seul libellé, sans scope : oto refuse à l'import chacune de ses fonctions, nommée,
+ * parce que le jeton d'une fonction se demande à son scope et qu'aucun ne se devine. À l'import et non à l'appel :
+ * l'administration lit le refus au rafraîchissement, et la version précédente reste servie.
+ */
+function scopesOf(functions: Record<string, { family: string; scope: string | null }>): Pick<ImportedHost, "scopes" | "consentScopes"> | { problems: HostDocumentProblem[] } {
+  const entries = Object.entries(functions)
+  const missing = entries.filter(([, meta]) => meta.scope === null)
+  if (missing.length > 0) {
+    return {
+      problems: missing.map(([name, meta]) => ({
+        code: "host_scope_missing",
+        path: `x-oto.families.${meta.family}`,
+        message: `${name}: its family ${meta.family} has no OAuth scope; write it as {label, scope}`,
+      })),
+    }
+  }
+  const scopes = new Map(entries.map(([name, meta]) => [name, meta.scope as string]))
+  return { scopes, consentScopes: [...new Set([...scopes.values()].flatMap((scope) => scope.split(" ")))] }
 }

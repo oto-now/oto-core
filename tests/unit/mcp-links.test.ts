@@ -61,7 +61,7 @@ describe.skipIf(!sqlConfigured)(portable("old paths and reference blocks through
       caller: { kind: "member", identity },
       userAgent: "unit-test",
       journal: [],
-      activeConnectors: () => Promise.resolve(new Set<string>()),
+      activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()),
       origin: "https://acme.test",
     }
     const session = await connectDeps(deps)
@@ -95,7 +95,7 @@ describe.skipIf(!sqlConfigured)(portable("old paths and reference blocks through
       caller: { kind: "member", identity: lea },
       userAgent: "unit-test",
       journal: [],
-      activeConnectors: () => Promise.resolve(new Set<string>()),
+      activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()),
       origin: "https://acme.test",
     })
 

@@ -15,6 +15,15 @@
  */
 export type ConnectorMode = "platform" | "byo_user" | "byo_org"
 
+/**
+ * Le connecteur des consentements à l'API de l'hôte d'une organisation (`host-api/consent-access.ts`) : le compte
+ * personnel où se range le consentement d'une personne, quand son client MCP est tiers. Jamais déclaré par l'hôte :
+ * `registerConnectors` refuse ce nom, l'import d'un document d'hôte aussi.
+ */
+export const HOST_CONSENT_CONNECTOR = "host_api"
+/** Son libellé dans la liste `platform.connectors`, commune aux organisations ; le compte porte le titre de l'API. */
+export const HOST_CONSENT_CONNECTOR_LABEL = "Host API"
+
 /** L'application OAuth d'un connecteur `oauth2_user`, fournie par l'hôte (jamais lue de l'environnement par le paquet). */
 export type OAuthApplication = { readonly clientId: string; readonly clientSecret: string }
 
@@ -157,6 +166,8 @@ export type ConnectorOAuthUser = {
   readonly clientAuth: "body" | "basic"
   readonly authorizeParams?: { readonly [param: string]: string }
   readonly pkce?: "S256"
+  /** L'indicateur de ressource (RFC 8707), posé à l'autorisation, à l'échange du code et à chaque renouvellement. */
+  readonly resource?: string
   readonly expiresInDefault?: number
   readonly identity: ConnectorConsentIdentity
   readonly fromToken?: readonly string[]

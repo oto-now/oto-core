@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Les fonctions d'un hôte sans base (`docs/conception/fonctions-d-un-hote.md`) : le document lu par le transport gardé et
-// jugé par le profil hôte, l'échange de jeton (succès, cache, `invalid_grant`), le jeton de la personne jamais transmis à
+// jugé par le profil hôte, le scope de chaque fonction et la famille sans scope refusée, l'échange de jeton (succès,
+// cache, refus qui ne désignent pas un client tiers, jeton échu), le jeton de la personne jamais transmis à
 // l'hôte, les en-têtes `Oto-*`, les deux temps tenus par l'hôte et leur rupture, les refus `problem+json`. Un faux
 // émetteur et un faux hôte en local (`tests/helpers/host-api.ts`).
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -9,9 +10,10 @@ import type { CatalogFunction, FunctionContext } from "../../packages/plateforme
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { importHostDocument, readHostDocument, type ImportedHost } from "../../packages/plateforme/server/host-api/document"
 import { forgetExchangedTokens } from "../../packages/plateforme/server/host-api/exchange"
-import { hostCatalogFunctions, hostScope } from "../../packages/plateforme/server/host-api/functions"
+import { hostCatalogFunctions } from "../../packages/plateforme/server/host-api/functions"
 import { hostProblems } from "../../packages/plateforme/server/host-api/problem-json"
-import { EXCHANGE_ENV, HOST, hostDocument, ISSUER, routeFetch, startFakeHost, type FakeHost } from "../helpers/host-api"
+import { reservedNamespaces } from "../../packages/plateforme/server/host-api/served"
+import { EXCHANGE_ENV, HOST, hostDocument, ISSUER, routeFetch, startFakeHost, unsignedJwt, type FakeHost } from "../helpers/host-api"
 
 const route = vi.hoisted(() => ({ local: "", realFetch: globalThis.fetch.bind(globalThis) }))
 
@@ -118,13 +120,39 @@ describe("host API document", () => {
     expect(await readHostDocument("http://hote.example.test", null)).toMatchObject({ kind: "refused", problems: [{ code: "host_address_refused" }] })
   })
 
-  it("should import an accepted document: its version, families, connectors and functions", () => {
+  it("should import an accepted document: its title, version, the scope of each function, the scopes to consent, its functions", () => {
     const host = imported()
-    expect({ version: host.version, families: host.families, scope: hostScope(host) }).toEqual({ version: "1.0.0", families: ["projet", "etape"], scope: "projet etape" })
+    expect({ title: host.title, version: host.version, scopes: Object.fromEntries(host.scopes), consent: host.consentScopes }).toEqual({
+      title: "Hote Test",
+      version: "1.0.0",
+      scopes: { "projet.lister": "projets", "projet.archiver": "projets" },
+      // La famille etape n'a pas de fonction : son scope ne se demande pas.
+      consent: ["projets"],
+    })
     expect(hostCatalogFunctions(host, HOST).map((item) => [item.name, item.class, item.origin])).toEqual([
       ["projet.lister", "read", "erp"],
       ["projet_act.archiver", "sensitive", "erp"],
     ])
+  })
+
+  it("should refuse a family without a scope, naming each of its functions, never guessing a scope", () => {
+    const document = hostDocument()
+    ;(document["x-oto"] as { families: Record<string, unknown> }).families.projet = "Projects"
+    const refused = importHostDocument(document, [])
+    expect(refused).toEqual({
+      problems: [
+        { code: "host_scope_missing", path: "x-oto.families.projet", message: "projet.lister: its family projet has no OAuth scope; write it as {label, scope}" },
+        { code: "host_scope_missing", path: "x-oto.families.projet", message: "projet.archiver: its family projet has no OAuth scope; write it as {label, scope}" },
+      ],
+    })
+  })
+
+  it("should reserve the connector of the consents to a host's API: no namespace of a host takes it", () => {
+    expect(reservedNamespaces().has("host_api")).toBe(true)
+    const document = hostDocument() as { paths: Record<string, Record<string, Record<string, unknown>>> }
+    document.paths["/projets"].get.operationId = "host_api.lister"
+    const refused = importHostDocument(document, reservedNamespaces())
+    expect("problems" in refused && refused.problems.map((problem) => problem.code)).toContain("host_namespace_reserved")
   })
 
   it("should refuse a document whose namespace is served by the instance, or whose issuer is not the instance's", () => {
@@ -132,6 +160,28 @@ describe("host API document", () => {
     expect("problems" in reserved && [...new Set(reserved.problems.map((problem) => problem.code))]).toEqual(["host_namespace_reserved"])
     vi.stubEnv("PLATFORM_OIDC_ISSUER", "https://autre.example.test/oidc")
     expect(importHostDocument(hostDocument(), [])).toMatchObject({ problems: [{ code: "host_issuer_not_instance", path: "x-oto.issuer" }] })
+  })
+
+  it.each([
+    ["a userinfo", "https://user@hote.example.test/api"],
+    ["a query", "https://hote.example.test/api?tenant=acme"],
+    ["a fragment", "https://hote.example.test/api#v2"],
+    ["a template", "https://{tenant}.example.test/api"],
+    ["a plain http address", "http://hote.example.test/api"],
+    ["a URN", "urn:hote:api"],
+  ])("should refuse at import a resource indicator with %s, set as is at the consent, by name", (_case, resource) => {
+    const document = hostDocument() as { "x-oto": Record<string, unknown> }
+    document["x-oto"].resource = resource
+    const refused = importHostDocument(document, [])
+    expect(refused).toEqual({
+      problems: [
+        {
+          code: "host_resource_invalid",
+          path: "x-oto.resource",
+          message: "resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash.",
+        },
+      ],
+    })
   })
 })
 
@@ -155,7 +205,7 @@ describe("host API functions", () => {
       subject_token: SUBJECT,
       subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
       resource: "https://hote.example.test/api",
-      scope: "projet etape",
+      scope: "projets",
     })
     expect(exchange.headers.authorization).toBe(`Basic ${Buffer.from("oto-m2m:m2m-secret-not-in-logs").toString("base64")}`)
   })
@@ -169,16 +219,34 @@ describe("host API functions", () => {
     expect(fake.state.exchanged).toBe(2)
   })
 
-  it("should refuse with the consent error when the issuer answers invalid_grant, and call nothing at the host", async () => {
-    fake.state.exchangeError = "invalid_grant"
+  it("should never take another refusal of the exchange for a third-party client: no consent, nothing called at the host", async () => {
     const lister = fn("projet.lister")
-    const refused = await failure(lister.run(context(), args(lister, {})))
-    expect(refused).toEqual({
-      code: "forbidden",
-      message: "The functions of Hote Test require the person's consent from this client. The issuer refused to delegate your session to Hote Test.",
-      details: { reason: "host_consent_required" },
-    })
+    for (const refusal of [
+      { error: "invalid_grant", description: "subject token is expired" },
+      { error: "unauthorized_client", description: "token exchange is not allowed for this application" },
+      { error: "invalid_target", description: "resource indicator is missing, or unknown" },
+    ]) {
+      fake.state.exchangeRefusal = refusal
+      const refused = await failure(lister.run(context(), args(lister, {})))
+      expect(refused).toMatchObject({ code: "upstream_error", message: expect.stringContaining(`The issuer refused to delegate your session to Hote Test (HTTP 400, ${refusal.error})`) })
+    }
     expect(toHost()).toEqual([])
+    expect(fake.seen.filter((request) => request.path.startsWith("/oidc/auth"))).toEqual([])
+  })
+
+  it("should refuse an expired token of the caller before any exchange, the issuer would refuse it as a third party's", async () => {
+    const lister = fn("projet.lister")
+    const expired = unsignedJwt({ sub: "sub-lea", client_id: "first-party", exp: Math.floor(Date.now() / 1000) - 5 })
+    expect(await failure(lister.run(context({ accessToken: expired }), args(lister, {})))).toMatchObject({ code: "unauthorized" })
+    expect(toIssuer()).toEqual([])
+  })
+
+  it("should ask the scope of the function called, one exchanged token serving the functions of a same scope", async () => {
+    const lister = fn("projet.lister")
+    await lister.run(context(), args(lister, {}))
+    const archiver = fn("projet_act.archiver")
+    await archiver.summarize?.(context(), args(archiver, { id: 7 }))
+    expect(toIssuer().map((request) => new URLSearchParams(request.body).get("scope"))).toEqual(["projets"])
   })
 
   it("should refuse without the M2M client, naming the variable in the log only", async () => {

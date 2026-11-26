@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import pkg from "@otomata_tech/oto_platform/package.json"
 import { cellStatus } from "../../packages/plateforme/server/cell"
+import { orgLimits, registerOrgLimits } from "../../packages/plateforme/server/limits"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import { asCaller, seedWithAdmin, spyDb, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
 
@@ -57,6 +58,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "cellStatus on a real database" 
           { name: "NEXT_PUBLIC_SITE_URL", present: true },
         ],
         ok: true,
+        warnings: [],
       },
       checkedAt: expect.any(String),
     })
@@ -64,6 +66,30 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "cellStatus on a real database" 
     expect(Number.isNaN(Date.parse(status.checkedAt))).toBe(false)
     const text = JSON.stringify(status)
     expect(Object.values(WITNESSES).filter((witness) => text.includes(witness))).toEqual([])
+  })
+
+  it("should name connectors_max, deprecated, from the host's limits read again at each health, without touching the health (decision of 2026-11-25)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const said = `connectors_max has no effect any more; the key will be refused at the next major version (set for ${ref.org.slug}).`
+      registerOrgLimits({ read: ({ slug }) => (slug === ref.org.slug ? { connectors_max: 3 } : {}) })
+      // Aucune capacité chargée dans ce processus (un redémarrage) : la santé relit la source et nomme la clé quand même.
+      const status = await cellStatus(clientOf("t"), WITNESSES)
+      expect([status.health.warnings, status.health.ok]).toEqual([[said], true])
+      // Au chargement des capacités : un seul avertissement au journal, quel que soit le nombre de chargements.
+      await orgLimits(ref.org)
+      await orgLimits(ref.org)
+      expect(warn.mock.calls).toEqual([[`[platform] limits: ${said}`]])
+      // Retirée de la source : la santé ne la dit plus, même dans le processus qui l'a vue.
+      registerOrgLimits({ read: () => ({}) })
+      expect((await cellStatus(clientOf("t"), WITNESSES)).health.warnings).toEqual([])
+      // Une source qui lève est dite, jamais tue.
+      registerOrgLimits({ read: ({ slug }) => { if (slug === ref.org.slug) throw new Error("down"); return {} } })
+      expect((await cellStatus(clientOf("t"), WITNESSES)).health.warnings).toEqual([`the host's limits could not be read for ${ref.org.slug}: connectors_max not checked there.`])
+    } finally {
+      registerOrgLimits(null)
+      warn.mockRestore()
+    }
   })
 
   it("should not be healthy when a required variable is missing", async () => {
