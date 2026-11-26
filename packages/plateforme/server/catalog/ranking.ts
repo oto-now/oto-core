@@ -54,6 +54,13 @@ const FIXABLE = /^[a-z]{6,40}$/
 /** Deux mots se valent s'ils ont ces premières lettres en commun (`wordsInCommon`), ou si l'un commence l'autre dès ce nombre. */
 const SAME_STEM = 5
 const PREFIX_MIN = 4
+/**
+ * Un mot qui en commence un autre ne le vaut que s'il n'en manque pas plus de trois lettres (« list » et « liste »,
+ * « email » et « emailing ») : au-delà, c'est un autre mot qui commence pareil (« news » de « newsletter »), et une
+ * fonction qui en parlait passait pour répondre à la demande (le score de 1,00 des fonctions d'allo pour
+ * « newsletter », venu de la même règle sans borne dans `searchFunctions`).
+ */
+const PREFIX_EXTRA_MAX = 3
 /** Une suite de mots comparée par `wordSimilarity` a au plus deux mots de plus que le texte cherché : au-delà, elle ne fait que baisser. */
 const WINDOW_SLACK = 2
 /** La phrase d'une description qui déclare ses formules françaises, séparées de virgules (`team.create`, `node.move`…). */
@@ -187,7 +194,7 @@ function sameWord(a: string, b: string): boolean {
   if (a === b) return true
   if (a.length >= SAME_STEM && b.length >= SAME_STEM && a.slice(0, SAME_STEM) === b.slice(0, SAME_STEM)) return true
   const [short, long] = a.length <= b.length ? [a, b] : [b, a]
-  return short.length >= PREFIX_MIN && long.startsWith(short)
+  return short.length >= PREFIX_MIN && long.length - short.length <= PREFIX_EXTRA_MAX && long.startsWith(short)
 }
 
 /**
@@ -273,26 +280,113 @@ function kindBonus(fn: CatalogFunction, prepared: Prepared, kind: RequestKind): 
 }
 
 /**
+ * L'écart dont une fonction d'un connecteur sans compte utilisable doit dépasser la meilleure fonction utilisable pour
+ * être proposée « à connecter » : celui qui fait servir une procédure devant la deuxième (`DEFAULT_GAP` du routage,
+ * 0,10), plus que les bonus qui départagent deux fonctions proches (genre 0,05, usage 0,03) : une fonction à connecter
+ * ne passe pas pour un bonus, seulement quand elle répond nettement mieux (décidé par JB, issue de test du 26/11/2026).
+ */
+const TO_CONNECT_GAP = 0.1
+
+/**
+ * Ce qui manque pour appeler une fonction (`usablePredicate`) : « connect », aucun compte du connecteur que la personne
+ * sert ; « access », ses comptes n'atteignent pas le niveau de la classe de la fonction ; `null`, rien.
+ */
+export type Missing = "connect" | "access" | null
+
+/** Une fonction classée ; `missing` : ce qui manque pour l'appeler (`usableFirst`). */
+export type RankedFunction = { fn: CatalogFunction; score: number; missing: Missing }
+
+type Scored = { fn: CatalogFunction; score: number }
+
+/** Une lecture passe devant une écriture : 0 pour une lecture, 1 sinon. */
+const writeRank = (fn: CatalogFunction) => (fn.class === "read" ? 0 : 1)
+
+/**
+ * Deux noms qui se doublent : même connecteur (son espace `_act` compris) et même nom une fois retiré un suffixe de
+ * version (`get_current_user`, `get_current_user_v1`) ; une seule est servie, la mieux classée.
+ */
+function nameKey(fn: CatalogFunction): string {
+  const [space = "", bare = ""] = fn.name.split(".")
+  return `${space.replace(/_act$/, "")}.${bare.replace(/_v\d+$/, "")}`
+}
+
+function distinctNames(ranked: readonly Scored[]): Scored[] {
+  const seen = new Set<string>()
+  return ranked.filter(({ fn }) => {
+    const key = nameKey(fn)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
  * Les fonctions reçues qui répondent à la demande, `limit` au plus : score mêlé des composantes (`blendScore`), plus le
  * bonus d'usage (`USAGE_BONUS` du routage : son nom parmi `used`, les cibles récentes de la personne, `usedPaths`) et
- * celui du genre de la demande, plafonné à 1 ; seules celles qui atteignent `FUNCTION_THRESHOLD`, triées par score
- * décroissant, puis par nom servi à score égal.
+ * celui du genre de la demande, plafonné à 1 ; seules celles qui atteignent `FUNCTION_THRESHOLD`, une par nom
+ * (`nameKey`). Ordre : pour une question (`requestKind` « data » ou « how »), les lectures d'abord ; puis par score
+ * décroissant ; à score égal, la lecture avant l'écriture, puis le nom, pour un ordre stable.
  */
 export function rankFunctions(
   functions: readonly CatalogFunction[],
   phrase: string,
   limit: number,
   used: ReadonlySet<string> = new Set(),
-): { fn: CatalogFunction; score: number }[] {
+): Scored[] {
   const prepared = functions.map((fn) => ({ fn, prepared: prepare(fn) }))
   const query = readQuery(phrase, prepared.map((entry) => entry.prepared), lexiconOf(prepared))
   if (query.lexemes.length === 0) return []
-  return prepared
-    .map(({ fn, prepared: one }) => {
-      const blend = applyBonuses(blendScore(components(one, query)), { team: false, usage: used.has(fn.name) })
-      return { fn, score: Math.min(1, blend + kindBonus(fn, one, query.kind)) }
-    })
-    .filter((result) => result.score >= FUNCTION_THRESHOLD)
-    .sort((a, b) => b.score - a.score || a.fn.name.localeCompare(b.fn.name))
-    .slice(0, limit)
+  const question = query.kind === "data" || query.kind === "how"
+  return distinctNames(
+    prepared
+      .map(({ fn, prepared: one }) => {
+        const blend = applyBonuses(blendScore(components(one, query)), { team: false, usage: used.has(fn.name) })
+        return { fn, score: Math.min(1, blend + kindBonus(fn, one, query.kind)) }
+      })
+      .filter((result) => result.score >= FUNCTION_THRESHOLD)
+      .sort(
+        (a, b) =>
+          (question ? writeRank(a.fn) - writeRank(b.fn) : 0) ||
+          b.score - a.score ||
+          writeRank(a.fn) - writeRank(b.fn) ||
+          a.fn.name.localeCompare(b.fn.name),
+      ),
+  ).slice(0, limit)
+}
+
+/**
+ * Les fonctions que la personne peut appeler devant (`routage-et-recherche.md` § Classement des fonctions), `limit` au
+ * plus, sur un classement entier de `rankFunctions` : `missing` dit ce qui manque pour appeler une fonction
+ * (`usablePredicate`, rien pour une fonction du paquet, de l'ERP, d'un connecteur sans clé, ou d'un compte qu'elle sert
+ * au niveau de sa classe) ; absent, rien ne manque. Une fonction à laquelle il manque un compte ou un niveau ne vient
+ * qu'après, quand elle dépasse la meilleure utilisable de `TO_CONNECT_GAP`, et prend alors la dernière place au moins ;
+ * sans aucune utilisable qui réponde, les meilleures des autres sortent, pour que le catalogue reste trouvable.
+ */
+export function usableFirst(ranked: readonly Scored[], limit: number, missing?: (fn: CatalogFunction) => Missing): RankedFunction[] {
+  const marked = ranked.map((result) => ({ ...result, missing: missing ? missing(result.fn) : null }))
+  const ready = marked.filter((result) => result.missing === null)
+  if (ready.length === 0) return marked.slice(0, limit)
+  const best = Math.max(...ready.map((result) => result.score))
+  const better = marked.filter((result) => result.missing !== null && result.score >= best + TO_CONNECT_GAP)
+  return [...ready.slice(0, better.length > 0 ? limit - 1 : limit), ...better].slice(0, limit)
+}
+
+/** La marque d'une fonction servie à laquelle il manque un compte ou un niveau, dans `find` et dans `context`. */
+export const MISSING_MARK = { connect: "to connect", access: "ask for access" } as const
+
+/**
+ * La consigne d'une marque (`MISSING_MARK`), une fois sous la liste, la même dans `find` et dans `context` : brancher le
+ * connecteur, par `connector.connect` quand il est servi, ou demander l'accès à qui gère le compte, au lieu d'appeler.
+ */
+export function toConnectLine(prefix: string, connectServed: boolean, missing: Exclude<Missing, null>): string {
+  if (missing === "access") {
+    return `Marked "${MISSING_MARK.access}": the user's accounts of this connector do not allow this function; ask whoever manages the account for access instead of calling it.`
+  }
+  const how = connectServed ? ` with ${prefix}_call {"function": "connector.connect", "arguments": {"connector": "<connector>"}}` : ""
+  return `Marked "${MISSING_MARK.connect}": no account the user can use yet; offer to connect the connector${how} instead of calling the function.`
+}
+
+/** Les consignes des marques présentes dans une liste servie, dans l'ordre connect puis access. */
+export function missingLines(prefix: string, connectServed: boolean, found: readonly Missing[]): string[] {
+  return (["connect", "access"] as const).filter((kind) => found.includes(kind)).map((kind) => toConnectLine(prefix, connectServed, kind))
 }

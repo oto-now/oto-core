@@ -163,7 +163,8 @@ Au-delà de 2 cycles sans converger → s'arrêter et remonter à l'utilisateur.
 
 | | Micro | Standard | Module |
 |---|---|---|---|
-| `docs/changelog.md` | si comportement visible | oui | oui |
+| Entrée `docs/changelog.d/AAAA-MM-JJ-<sujet>.md` (fichier neuf, `commit-push` étape 3) | si comportement visible | oui | oui |
+| Lignes `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` (fichier neuf, avant `pnpm verify`) | si visible d'un hôte ou d'un assistant | idem | idem |
 | `component-registry.md` | — | si composant réutilisable | oui |
 | Story post-implémentation | — | si story | si story |
 | Issue du chantier fermée, avec ce qui est livré | — | si issue | si issue |

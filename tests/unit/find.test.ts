@@ -377,7 +377,8 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
 
       const typed = await find(db, ada, { query: "table.rows", type: "function" }, CATALOG)
       expect(typed.text.startsWith("Top functions for « table.rows »:\n1. table.rows (read, score 1.00): ")).toBe(true)
-      expect(typed.data).toMatchObject({ matches: [], functions: [{ name: "table.rows", class: "read", connector: "table", score: 1 }, {}, {}] })
+      // Cinq fonctions au plus (décidé par JB, issue de test du 26/11/2026).
+      expect(typed.data).toMatchObject({ matches: [], functions: [{ name: "table.rows", class: "read", connector: "table", score: 1 }, {}, {}, {}, {}] })
       expect((await find(db, ada, { query: "sellsy estimates" }, CATALOG)).text).not.toContain("sellsy.list_estimates")
 
       for (const query of ["zzz qqq www", "les", "de la"]) {

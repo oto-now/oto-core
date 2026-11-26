@@ -32,11 +32,15 @@ puis fusionne. Ces règles s'ajoutent à `CLAUDE.md` ; le sémaphore des command
   `docs/conception/vue-d-ensemble.md` (« Oto : ce qui ne revient jamais »).
 - **Actions réservées à JB**, listées dans le rapport, jamais exécutées : vrais secrets, création de
   services ou de comptes externes, réglages des projets Supabase et Vercel.
-- **Fichiers partagés, écrits par le pilote seul à la fusion** : `docs/changelog.md`,
+- **Fichiers partagés, écrits par le pilote seul à la fusion** :
   `.method/sprint/status.md`, `.method/conventions/component-registry.md`, `.method/conventions/_index.md`,
-  `CLAUDE.md`, `docs/conception/`, `docs/reference/` (dont `docs/reference/mcp-golden-queries.md`)
-  et `packages/plateforme/CHANGELOG.md`.
-  L'agent met dans son rapport ce qu'il faudrait y écrire.
+  `CLAUDE.md`, `docs/conception/`, `docs/reference/` (dont `docs/reference/mcp-golden-queries.md`).
+  L'agent met dans son rapport ce qu'il faudrait y écrire. Les journaux ne sont pas partagés : chaque
+  story les écrit dans des fichiers neufs. Ses lignes pour le CHANGELOG du paquet,
+  `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md`, sont toujours dans la liste des fichiers
+  de l'agent, qui les écrit avant son `pnpm verify` : elles comptent dans l'arbre de code. Seule son
+  entrée `docs/changelog.d/AAAA-MM-JJ-<sujet>.md`, hors de l'arbre de code, peut être écrite par le
+  pilote après les checks.
 - **Rapport de fin de vague** : stories livrées, hypothèses prises, actions JB en attente.
 
 ## Parallélisme
@@ -60,7 +64,7 @@ puis fusionne. Ces règles s'ajoutent à `CLAUDE.md` ; le sémaphore des command
   avant la fusion : les `git diff --name-only` des lots, hors fichiers d'ajout, n'ont aucune ligne commune.
 - **Mémoire** : `type-check` (2 à 3 Go au pic) passe par le sémaphore du pilote, N créneaux =
   (RAM libre − 3 Go) / 3 Go, au moins 1 ; sous 3 Go libres, plus de nouvelle commande lourde. Le
-  `verify` lance Vitest avec `VITEST_MAX_FORKS=4` (`scripts/verify.mjs`).
+  `verify` lance Vitest avec `VITEST_MAX_WORKERS=4` (`scripts/verify.mjs`).
 - **Aucune commande longue avant le commit** : pendant l'implémentation, la correction et la revue,
   un agent ne lance que `type-check`, `lint` et `check:framework` ; il écrit ses tests sans les
   exécuter, et la revue les lit. Vitest, `verify`, Playwright et `build` tournent une seule fois, au

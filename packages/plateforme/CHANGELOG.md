@@ -4,18 +4,22 @@ Every published version of the package, newest first. Versions follow semantic v
 the package only adds (ADR-006), so a breaking change is a major version.
 
 Format, checked by tests:
-- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published sit under
-  `## Unreleased`, which the release commit renames to the version before opening an empty
-  `## Unreleased` above it;
+- a version is a heading `## <x.y.z> — <YYYY-MM-DD>`; changes not yet published wait in the
+  repository, one file per change in `packages/plateforme/changelog.d/<YYYY-MM-DD>-<topic>.md` holding its
+  lists, which the release commit pours into the version (`pnpm changelog:version <x.y.z>`, with
+  any line left under `## Unreleased`), leaving `## Unreleased` empty above it;
 - under a version, at most two lists: `### Assistants` (what an assistant connected to the
   platform can do; one sentence of 200 characters at most per entry) and `### Hosts` (what an
   application that installs the package must know or do; one line per point, led by what it
   concerns: `Install:`, `UI:`, `Schemas:`, `API:`, `MCP:`, `Server:`, `Migrations:`, `CLI:`;
-  shown in Renovate pull requests).
+  shown in Renovate pull requests); in a major version, the points that break a host or an
+  assistant come first, led by `Breaking:`.
 
 Version 1.0.0 describes the whole package; each later version lists what it changes.
 
 ## Unreleased
+
+## 2.0.0 — 2026-11-26
 
 ### Assistants
 - An organisation whose host describes its own API in OpenAPI serves those functions behind `call`, found by `find` and read by `read`; a sensitive one is confirmed by the host itself.
@@ -26,15 +30,17 @@ Version 1.0.0 describes the whole package; each later version lists what it chan
 - Spent credits keep their refusal (`quota_exhausted`), without a link: they are bought at the third party.
 - `context` lists the host's functions the person may call, by family, then those closest to the request (3,000 characters at most); `find` and `read functions` show only those.
 - A connector that opens by several accesses names the others in a refusal without account; its link lets the user choose, each access with its own gesture.
-- `context` proposes up to three functions for every request, also under a served procedure, ranked like procedures (full text, trigrams, typos); `find` ranks its functions the same way.
-- `find` scores a function between 0 and 1 like a node, no longer as the share of words found, and leaves out those under 0.40, as `context` does.
-- `read` of path `functions` becomes an outline by connector past 45,000 characters; `section` set to a connector name, or to the name of the host's API, reads its functions.
-- `context` names the personal accounts colleagues shared with you, with their owner and your level: used only when named in `call`, never one not shared with you.
 
 - Every connector the host declares is open by default: `find` finds it, `read` serves it, and a call without an account returns `no_account` with the link to connect one.
 - An administrator still blocks a connector: it then leaves `find`, `read` and `call` (`connector_off`) at once; an open-data connector (no key) runs without any account.
 
 ### Hosts
+- Breaking: `@otomata_tech/connectors` is a peer dependency of the package (`*`): the host installs it itself, at v1.249.0 at least (`github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts`, TypeScript sources), and transpiles it with the package (`transpilePackages`); without it the host does not build.
+- Breaking: `probeAccount(db, identity, input, { origin })` takes a fourth argument, required: the public origin of the application, used for the links of its refusals.
+- Breaking: `IssueDuConsentement` loses `compte`: `{ issue: "connected" } | { issue: "failed"; raison: string }`; the label read in the address is never shown.
+- Breaking: the `authorize` step's `elsewhere` is `(string | null)[]`: an organisation the person left is `null`, its name no longer readable.
+- Breaking: refusal codes of a call: a refused key is no longer returned as `credential_rejected` but `not_enabled`, `reason: "reconnect"`, gesture `key`; an account without secret is `not_enabled`, `reason: "no_account"`; the host API's `host_consent_required` becomes `no_account` or `reconnect`. The probe of an account keeps `credential_rejected`.
+- Breaking: behaviour of activation: every declared connector is open by default (a connector never activated now opens; only an `inactive` row blocks it); a connector paid by the host's key waits for an administrator to adopt it (`not_enabled`, `reason: "not_adopted"`); `connectors_max` no longer limits anything, accepted with a named warning, refused at the next major version.
 - Server: every declared connector is open by default; a `platform.connector_activations` row `inactive` blocks it, and only an administrator sets or lifts it (`deactivateConnector`, `activateConnector`). Existing rows keep their meaning; no data migration.
 - Server: a connector never activated now opens: visible to `find` and `read`, callable, its accounts connectable. Only an `inactive` row blocks it.
 - Server: a connector paid by the host's key (an access whose calls go out on the host's key, a `holder: host` field, whatever its modes or the form of its declaration: derived from the engine's own decision, `takesHostKey`, read by `readHostFields` and `paidByHostKey`, never a list of names) stays visible, but connecting an account or calling it waits for an administrator to adopt it (an `active` row, `activateConnector`): until then `not_enabled`, `reason: "not_adopted"` (accounts, consent, hosted link, probe) or `connector_off` with the `admin_activation` gesture (call), naming the administrators by name only. `OrgConnector` says it `inactive` with `closedBy: null`; the screen offers « Adopter ». Intended rule: a connector paid by the host's key waits for its adoption, even for a member who would bring their own key.

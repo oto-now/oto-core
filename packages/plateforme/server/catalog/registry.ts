@@ -9,6 +9,7 @@
 // `searchFunctions` ne sert plus que l'index des fonctions de l'hôte.
 import { normalizeTitle } from "../../schemas"
 import { commentAdd, commentDelete, commentEdit, commentList, commentResolve } from "../comments/functions"
+import { isKeylessConnector } from "../connectors/keyless"
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
 import { fileKeep } from "../files/keep-function"
 import { jobRead } from "../jobs/read-function"
@@ -145,6 +146,15 @@ export function looksLikeFunction(path: string): boolean {
 /** Native et ERP : toujours actives ; fonction de connecteur : seulement s'il est activé (H81). */
 export function isActive(fn: CatalogFunction, activeConnectors: ReadonlySet<string>): boolean {
   return fn.origin !== "connecteur" || activeConnectors.has(fn.connector)
+}
+
+/**
+ * Une fonction qui ne s'appelle que par un compte : celle d'un connecteur, sauf un connecteur sans clé (`auth: none`,
+ * `isKeylessConnector`) ; les fonctions du paquet et de l'ERP s'appellent sans compte. Le classement des propositions
+ * met devant celles que la personne peut appeler (`rankFunctions`, `usable`).
+ */
+export function needsAccount(fn: CatalogFunction): boolean {
+  return fn.origin === "connecteur" && !isKeylessConnector(fn.connector)
 }
 
 /** Mots de 3 lettres au moins, sans casse ni accent (`normalizeTitle`, comme les noms d'équipes et de comptes). */

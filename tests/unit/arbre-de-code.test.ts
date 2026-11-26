@@ -59,6 +59,8 @@ describe("arbre de code", { timeout: 30_000 }, () => {
     const { depot, exporte } = depotEtExport()
     const attendu = arbreDeCodeDuCommit(depot, "HEAD")
     fs.appendFileSync(path.join(exporte, "docs/changelog.md"), "## entrée\n")
+    fs.mkdirSync(path.join(exporte, "docs/changelog.d"))
+    fs.writeFileSync(path.join(exporte, "docs/changelog.d/2026-11-26-sujet.md"), "## [2026-11-26] — Sujet\n")
     fs.appendFileSync(path.join(exporte, "docs/conception/sujet.md"), "Décision.\n")
     fs.chmodSync(path.join(exporte, "cli/bin.mjs"), 0o755)
     fs.mkdirSync(path.join(exporte, "node_modules/x"), { recursive: true })
@@ -81,7 +83,7 @@ describe("arbre de code", { timeout: 30_000 }, () => {
     }
   })
 
-  it("should change when the code changes, a file is added or a file is removed", () => {
+  it("should change when the code changes, a file is added or a file is removed, a package CHANGELOG fragment included", () => {
     const { depot, exporte } = depotEtExport()
     const attendu = arbreDeCodeDuCommit(depot, "HEAD")
     const vus = new Set([attendu])
@@ -92,8 +94,12 @@ describe("arbre de code", { timeout: 30_000 }, () => {
     vus.add(arbreDeCodeDuDossier(exporte))
     fs.rmSync(path.join(exporte, "cli/bin.mjs"))
     vus.add(arbreDeCodeDuDossier(exporte))
+    // Un fragment du CHANGELOG du paquet est lu par les tests (`package-publish`) : il compte, à l'inverse de `docs/changelog.d/`.
+    fs.mkdirSync(path.join(exporte, "packages/plateforme/changelog.d"), { recursive: true })
+    fs.writeFileSync(path.join(exporte, "packages/plateforme/changelog.d/2026-11-26-sujet.md"), "### Hosts\n- API: a.\n")
+    vus.add(arbreDeCodeDuDossier(exporte))
 
-    expect(vus.size).toBe(4)
+    expect(vus.size).toBe(5)
   })
 
   it("should write nothing into the repository it reads", () => {

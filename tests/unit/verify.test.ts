@@ -53,7 +53,7 @@ function repo() {
       "  ] }",
       "  mkdirSync(dirname(sortie), { recursive: true })",
       "  writeFileSync(sortie, JSON.stringify(rapport))",
-      "  writeFileSync('forks.txt', String(process.env.VITEST_MAX_FORKS))",
+      "  writeFileSync('forks.txt', String(process.env.VITEST_MAX_WORKERS))",
       "}",
       "process.exit(process.env.VERIFY_ECHEC === process.argv[2] ? 1 : 0)",
       "",

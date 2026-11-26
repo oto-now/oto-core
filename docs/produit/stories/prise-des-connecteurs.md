@@ -127,7 +127,7 @@ Témoin Notion
 - `scripts/lib/org-transfer.mjs` (`connectors` jamais exportée)
 - Tests existants qui nomment l'origine, un connecteur arbitraire en base ou la liste des connecteurs activables
 - Docs : `docs/conception/connecteurs-et-comptes.md`, `docs/reference/schema-platform.md`,
-  `packages/plateforme/migrations/README.md`, `docs/changelog.md`, registry
+  `packages/plateforme/migrations/README.md`, une entrée dans `docs/changelog.d/`, registry
 
 ### Patterns à suivre
 - `database-patterns.md § Règles SECURITY DEFINER`, `§ Règles` (additive, rollback en commentaire)

@@ -12,8 +12,9 @@
 import { blockRef, orderBlocks, sectionOfBlock, SERVED_RELATED } from "../schemas"
 import { ACCESS_LEVELS, nodeLevels } from "./access"
 import type { CatalogFunction } from "./catalog/define"
-import { firstSentence, rankFunctions } from "./catalog/ranking"
+import { firstSentence, MISSING_MARK, missingLines, rankFunctions, usableFirst, type Missing, type RankedFunction } from "./catalog/ranking"
 import { connectorDescription, findFunction, isActive, looksLikeFunction } from "./catalog/registry"
+import { usablePredicate } from "./connectors/usable-accounts"
 import type { PlatformDb } from "./db"
 import { boundedList, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
@@ -22,8 +23,13 @@ import { FUNCTIONS_PATH } from "./reserved-paths"
 import { formatScore, rankCandidates, requestKind, roundScore, usedPaths, type Candidate } from "./routing"
 import { MAX_RESULT_CHARS, type ToolOutput } from "./tool-output"
 
-/** Nœuds servis en détail et fonctions servies au plus : la description de `find` le promet (N13). */
+/** Nœuds servis en détail au plus : la description de `find` le promet (N13). */
 const FIND_LIMIT = 3
+/**
+ * Fonctions servies au plus : cinq, pour qu'une fonction utilisable reste visible quand d'autres lui ressemblent
+ * (décidé par JB, issue de test du 26/11/2026).
+ */
+const FUNCTIONS_LIMIT = 5
 /**
  * Les nœuds suivants, servis en une ligne chacun (chemin, genre, score, titre et début du résumé) : sans eux, l'agent
  * savait qu'il en existait d'autres sans pouvoir juger s'ils étaient meilleurs (« créer une tâche » cachait la bonne
@@ -83,7 +89,7 @@ type Place = { match: string; block: string | null; block_type: string | null; c
  */
 type NodeMatch = { nodeId: string; path: string; kind: string; title: string; summary: string; score: number; places: Place[]; revision?: number; editable?: boolean; blocksTotal?: number }
 
-type FunctionMatch = { fn: CatalogFunction; score: number }
+type FunctionMatch = RankedFunction
 
 /** Un extrait sur une ligne : blancs et sauts de ligne réduits à une espace (N16). */
 function oneLine(text: string): string {
@@ -214,12 +220,14 @@ export function functionCatalog(
   )
 }
 
-function functionLines(functions: readonly FunctionMatch[], prefix: string): string[] {
+function functionLines(functions: readonly FunctionMatch[], prefix: string, connectServed: boolean): string[] {
   return [
     ...functions.map(
-      ({ fn, score }, index) => `${index + 1}. ${fn.name} (${fn.class}, score ${formatScore(score)}): ${firstSentence(fn.description)}`,
+      ({ fn, score, missing }, index) =>
+        `${index + 1}. ${fn.name} (${fn.class}, score ${formatScore(score)}${missing ? `, ${MISSING_MARK[missing]}` : ""}): ${firstSentence(fn.description)}`,
     ),
     `Read a contract with ${prefix}_read {"path": "<function>"}, then run it with ${prefix}_call.`,
+    ...missingLines(prefix, connectServed, functions.map((match) => match.missing)),
   ]
 }
 
@@ -268,11 +276,12 @@ function renderFind(result: {
   moreNodes: number
   functions: readonly FunctionMatch[]
   prefix: string
+  connectServed: boolean
 }): string {
-  const { query, nodes, functions, prefix } = result
+  const { query, nodes, functions, prefix, connectServed } = result
   if (result.type === "function") {
     if (functions.length === 0) return `No function matches « ${query} ». Ask the user what they want to do; do not guess.`
-    return [`Top functions for « ${query} »:`, ...functionLines(functions, prefix)].join("\n")
+    return [`Top functions for « ${query} »:`, ...functionLines(functions, prefix, connectServed)].join("\n")
   }
   if (nodes.length === 0 && functions.length === 0) {
     return `No match for « ${query} ». Ask the user to rephrase or to say what they are looking for; do not guess.`
@@ -285,18 +294,19 @@ function renderFind(result: {
   if (nodes.some((node) => node.places.some((place) => place.block_type === "row"))) {
     lines.push(`At most 3 rows per table are shown: for every matching row, run ${prefix}_call table.rows with a filter or q.`)
   }
-  if (functions.length > 0) lines.push("Functions:", ...functionLines(functions, prefix))
+  if (functions.length > 0) lines.push("Functions:", ...functionLines(functions, prefix, connectServed))
   return lines.join("\n")
 }
 
 /**
- * Fonctions actives par le classement des propositions de `context` (`rankFunctions`), trois au plus, un nom exact
- * toujours en tête avec le score 1 (H44).
+ * Fonctions actives par le classement des propositions de `context` (`rankFunctions`), cinq au plus, celles que la
+ * personne peut appeler devant (`usableFirst`), un nom exact toujours en tête avec le score 1 (H44), marqué à connecter
+ * s'il le faut.
  */
-function matchFunctions(active: readonly CatalogFunction[], query: string, used: ReadonlySet<string>): FunctionMatch[] {
+function matchFunctions(active: readonly CatalogFunction[], query: string, used: ReadonlySet<string>, usable?: (fn: CatalogFunction) => Missing): FunctionMatch[] {
   const exact = looksLikeFunction(query) ? findFunction(active, query) : null
-  const found = rankFunctions(active, query, FIND_LIMIT, used).filter((result) => result.fn !== exact)
-  return (exact ? [{ fn: exact, score: 1 }, ...found] : found).slice(0, FIND_LIMIT)
+  const found = usableFirst(rankFunctions(active, query, active.length, used), FUNCTIONS_LIMIT, usable).filter((result) => result.fn !== exact)
+  return (exact ? [{ fn: exact, score: 1, missing: usable ? usable(exact) : null }, ...found] : found).slice(0, FUNCTIONS_LIMIT)
 }
 
 /**
@@ -381,6 +391,10 @@ export async function find(
   // Les cibles récentes de la personne, lues une fois pour le classement des nœuds et celui des fonctions ; `type: "function"`
   // ne classe aucun nœud et ne relit pas le journal : ses fonctions vont sans bonus d'usage, sans requête de plus.
   const used = type === "function" ? Promise.resolve(new Set<string>()) : usedPaths(db, identity)
+  const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
+  const withFunctions = type === undefined || type === "function"
+  // Lue en même temps que les nœuds : les comptes que la personne sert, pour mettre devant les fonctions qu'elle appelle.
+  const usable = withFunctions ? usablePredicate(db, identity, active, "find") : Promise.resolve(undefined)
   const [readable, candidates] = await Promise.all([
     type === "function" ? null : readableRows(db, identity, query, type),
     // Le classement du routage ne fait qu'ordonner : sa panne laisse `find` à ses seules lignes.
@@ -393,11 +407,11 @@ export async function find(
   ])
   const { nodes, others, moreNodes } = readable === null ? { nodes: [], others: [], moreNodes: 0 } : rankNodes(groupMatches(readable.rows), candidates, query)
   if (readable) await withSections(db, identity, nodes, readable.levels)
-  const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
-  const functions = type === undefined || type === "function" ? matchFunctions(active, query, await used) : []
+  const functions = withFunctions ? matchFunctions(active, query, await used, await usable) : []
+  const connectServed = active.some((fn) => fn.name === "connector.connect")
   return {
     // `notice` : ce que la recherche de fonctions ne couvre pas (les fonctions de l'hôte, quand leur liste est indisponible).
-    text: [renderFind({ query, type, nodes, others, moreNodes, functions, prefix }), ...(catalog.notice && (type === undefined || type === "function") ? [catalog.notice] : [])].join("\n"),
+    text: [renderFind({ query, type, nodes, others, moreNodes, functions, prefix, connectServed }), ...(catalog.notice && withFunctions ? [catalog.notice] : [])].join("\n"),
     data: {
       matches: nodes.map(matchData),
       others: others.map((node) => ({ id: node.nodeId, path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),

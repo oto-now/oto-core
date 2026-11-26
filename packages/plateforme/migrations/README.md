@@ -498,7 +498,9 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
   `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
   relancer avant. Rollback dans le fichier.
-- `20261123150000_platform_api_de_l_hote.sql` (fonctions d'un hôte, § Source par organisation) : la table
+- `20261123150000_platform_api_de_l_hote.sql` (version 2.0.0, sa seule migration, gardée sous son nom comme
+  `20261122184838` en 1.10.0 : un seul fichier par version, fiche D124 ; fonctions d'un hôte, § Source par
+  organisation) : la table
   `platform.host_apis`, une ligne par organisation au plus : l'adresse `https` de l'API de l'hôte, le document OpenAPI
   servi (validé par le profil hôte de la lib de connecteurs), sa version, son `ETag`, les dates de service et de
   rafraîchissement, et le dernier refus (adresse, date, problèmes) ; un refus ne remplace jamais le document servi.

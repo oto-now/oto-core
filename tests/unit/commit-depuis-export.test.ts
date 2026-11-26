@@ -108,7 +108,8 @@ describe("commit-depuis-export on a throwaway repository", { timeout: 60_000 }, 
     fs.chmodSync(path.join(cas.exporte, "cli/bin.mjs"), 0o755)
     const recu = recuVert(cas.exporte)
     // Écrit après les checks : n'invalide pas le reçu, et part avec le commit.
-    fs.appendFileSync(path.join(cas.exporte, "docs/changelog.md"), "## a vaut 2\n")
+    fs.mkdirSync(path.join(cas.exporte, "docs/changelog.d"))
+    fs.writeFileSync(path.join(cas.exporte, "docs/changelog.d/2026-11-26-a-vaut-2.md"), "## [2026-11-26] — a vaut 2\n")
 
     const result = lancer(cas)
 
@@ -116,7 +117,7 @@ describe("commit-depuis-export on a throwaway repository", { timeout: 60_000 }, 
     const sha = result.sha!
     expect(git(cas.depot, "rev-parse", `${sha}^`)).toBe(cas.base)
     expect(git(cas.depot, "show", `${sha}:a.ts`)).toBe("export const a = 2")
-    expect(git(cas.depot, "show", `${sha}:docs/changelog.md`)).toContain("## a vaut 2")
+    expect(git(cas.depot, "show", `${sha}:docs/changelog.d/2026-11-26-a-vaut-2.md`)).toContain("## [2026-11-26] — a vaut 2")
     expect(git(cas.depot, "ls-tree", sha, "cli/bin.mjs")).toMatch(/^100644 /)
     const message = git(cas.depot, "log", "-1", "--format=%B", sha)
     expect(message).toContain(`Verified-tree: ${recu.tree}`)
