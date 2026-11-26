@@ -30,16 +30,24 @@ plus proche, et une direction qui s'en écarte se pose en question.
 - Mise en page : `TwoColumns`, `.oto-content-max`, mesures de `portage-ecrans.md § 7. Mesures de mise en page`.
 - États : `portage-ecrans.md § 4. Quatre états`.
 - Écran plein cadre (authentification, consentement) : `portage-ecrans.md § 3. Tokens du jeu Oto, sous CoquilleOto`.
+- Captures d'un écran protégé (groupe `(dashboard)`, tout écran derrière la connexion) :
+  `pnpm ui:shots` ne se connecte pas, il rend `/login`. Le `designer` ou le `design-critic` les
+  demande au pilote ou à JB, qui les prend à la main, en nommant l'écran (route), l'état (données,
+  vide, erreur, chargement, cas du brief) et les largeurs (375, 768, 1280, clair et sombre). Une
+  capture de `/login` à la place de l'écran demandé ne vaut pas preuve : un brief ou une critique
+  qui s'appuie dessus est un finding (`ui-patterns.md § Preuve visuelle`).
 
 ## Règles
 
-Sur les écrans du paquet et du groupe `(dashboard)`, `portage-ecrans.md` l'emporte sur
-`ui-patterns.md` quand ils diffèrent sur un moyen : noms de tokens (`text-ink`, `text-mute`, et
-non `text-muted-foreground`), composants du design system porté (`ui/ds/`, et non
-`src/components/ui/`, `PageContainer` ni `NAV_ITEMS`), import des icônes Phosphor
-(`/dist/ssr/<Nom>`, `/dist/csr/<Nom>`), anneau de focus. Les principes de `ui-patterns.md`
-(intégrer une fonctionnalité, principes UX, fiches et gestes, états, texte visible, signatures
-IA, preuve visuelle) s'appliquent partout et se citent en review.
+`ui-patterns.md` l'emporte partout, écrans du paquet et pages du groupe `(dashboard)` compris, sur
+`portage-ecrans.md` comme sur la fidélité à l'original d'`oto-frontend`. Quand les deux
+conventions se contredisent sur un cas précis, l'agent ne tranche pas : il pose la question à JB
+par `AskUserQuestion` (contexte, options avec la conséquence et le coût de chacune,
+recommandation en premier), puis la décision s'écrit dans
+`portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, qui liste aussi les écarts déjà
+décidés (tokens Oto, `ui/ds/`, coque unique). Tout écart à `ui-patterns.md` dans un écran du
+paquet ou du groupe `(dashboard)` cite sa ligne dans cette section ; sinon c'est un finding de
+revue.
 
 Aucune page `/design-system` n'existe dans ce dépôt : le design system de référence se lit dans
 `packages/plateforme/ui/ds/` et, en lecture seule, dans `src/design-system/` d'`oto-frontend`.
