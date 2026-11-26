@@ -1,6 +1,6 @@
 # Fiche — ui-patterns
 
-Texte complet : `.method/conventions/ui-patterns.md`. La fiche suffit pour écrire ; le texte complet se lit sur un doute, et toujours pour une revue. Chaque règle renvoie à sa section. Sur les écrans du paquet et du groupe `(dashboard)`, les moyens (tokens, composants, import des icônes) sont ceux de `portage-ecrans.md`, qui l'emporte en cas d'écart (`docs/design/system.md`, section Règles).
+Texte complet : `.method/conventions/ui-patterns.md`. La fiche suffit pour écrire ; le texte complet se lit sur un doute, et toujours pour une revue. Chaque règle renvoie à sa section. Sur les écrans du paquet et du groupe `(dashboard)` aussi, cette convention l'emporte sur `portage-ecrans.md` : une contradiction entre les deux se pose à JB par `AskUserQuestion`, et tout écart cite sa ligne dans `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, sinon finding (`docs/design/system.md`, section Règles).
 
 - Dès Standard, tout changement visible passe par le skill `design` (brief du `designer`, critique du `design-critic`) ; en Micro, une ligne de lecture de design dans le plan. § Lecture de design
 - Partir de l'écran réel (captures avant, inventaire), zoom arrière, verdict `ajouter` / `réorganiser l'encart` / `repenser l'écran` ; ce dernier se pose en question. § Intégrer une fonctionnalité
