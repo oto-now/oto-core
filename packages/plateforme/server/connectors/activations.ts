@@ -260,7 +260,10 @@ export async function deactivateConnector(db: PlatformDb, identity: Identity, in
  * (`connecteurs-et-comptes.md` § Écran Connecteurs) : actif, rien ; jamais touché, une ligne `active` au nom de
  * l'appelant, sans plafond ; bloqué par un administrateur (une ligne `inactive`, `closed`) ou payé par la clé de l'hôte
  * sans adoption (`not_adopted`, que seul `activateConnector` lève) : rien n'est écrit, et l'appelant refuse par
- * `closedConnector`, hors de la transaction.
+ * `closedConnector`, hors de la transaction. Deux comptes ajoutés en même temps sur un connecteur jamais touché lisent
+ * tous deux « aucune ligne » sous le verrou partagé : la seconde écriture de la ligne `active` ne fait rien
+ * (`on conflict do nothing`), et les deux comptes s'ajoutent. Seul l'ouvreur peut l'avoir posée entre-temps : un
+ * blocage prend le verrou exclusif, qui attend la fin de cette transaction.
  */
 export async function openConnectorForAccount(sql: Tx, identity: Identity, connector: string): Promise<"open" | ConnectorBarrier> {
   const barrier = await barrierIn(sql, identity.org.id, connector)
@@ -270,7 +273,8 @@ export async function openConnectorForAccount(sql: Tx, identity: Identity, conne
   await keepDeclaredConnector(sql, connector)
   await sql`
     insert into platform.connector_activations (org_id, connector, state, activated_by)
-    values (${identity.org.id}, ${connector}, 'active', ${identity.user.id})`
+    values (${identity.org.id}, ${connector}, 'active', ${identity.user.id})
+    on conflict (org_id, connector) do nothing`
   return "open"
 }
 

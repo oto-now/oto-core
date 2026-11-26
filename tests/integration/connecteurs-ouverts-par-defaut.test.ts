@@ -135,10 +135,13 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
     }
   })
 
-  describe("a block and an account write never cross (one piece, under the activation lock)", () => {
+  describe("an account write never crosses a block nor another account write (one piece, under the activation lock)", () => {
     const LOCKED = "pg_advisory_xact_lock_shared"
-    /** Le client de `who`, qui joue `pause` une fois, juste après la prise du verrou partagé, avant l'écriture du compte. */
-    function pausing(who: ReferencePerson, pause: () => Promise<void>): PlatformDb {
+    /**
+     * Le client de `who`, qui joue `pause` une fois, juste après la requête qui contient `after` (par défaut la prise du
+     * verrou partagé), avant l'écriture du compte.
+     */
+    function pausing(who: ReferencePerson, pause: () => Promise<void>, after = LOCKED): PlatformDb {
       const { db } = as(who)
       let paused = false
       const hooked = (sql: Tx): Tx =>
@@ -146,7 +149,7 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
           apply(target, thisArg, args: unknown[]) {
             const sent = Reflect.apply(target, thisArg, args) as Promise<unknown>
             const strings = args[0]
-            if (paused || !Array.isArray(strings) || !strings.join("").includes(LOCKED)) return sent
+            if (paused || !Array.isArray(strings) || !strings.join("").includes(after)) return sent
             paused = true
             return sent.then(async (rows) => {
               await pause()
@@ -187,6 +190,26 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
         const rows = await fx.admin<{ state: string }[]>`select state from platform.connector_activations where org_id = ${o.org.id} and connector = ${LIVE}`
         expect(rows.map((row) => row.state)).toEqual(["inactive"])
         expect(await fx.admin`select 1 from platform.accounts where org_id = ${o.org.id} and connector = ${LIVE}`).toHaveLength(1)
+      } finally {
+        await reset()
+      }
+    })
+
+    it("should add both accounts when two members add one at the same time on a connector never touched, never a false label_taken", async () => {
+      await reset()
+      try {
+        const lea = as("lea")
+        const paul = as("paul")
+        const stop = gate()
+        // Léa a lu « aucune ligne d'activation » et s'arrête juste avant de l'écrire ; Paul ajoute le sien et l'adopte.
+        const first = createAccount(pausing("lea", stop.pause, "declare_connector"), lea.identity, { connector: LIVE, owner_kind: "user", label: `Crm ${hex(3)}`, mode: "reel" })
+        await stop.arrived
+        await createAccount(paul.db, paul.identity, { connector: LIVE, owner_kind: "user", label: `Crm ${hex(3)}`, mode: "reel" })
+        stop.release()
+        await first
+        const rows = await fx.admin<{ state: string; activated_by: string }[]>`select state, activated_by from platform.connector_activations where org_id = ${o.org.id} and connector = ${LIVE}`
+        expect(rows).toEqual([{ state: "active", activated_by: o.people.paul.id }])
+        expect(await fx.admin`select 1 from platform.accounts where org_id = ${o.org.id} and connector = ${LIVE}`).toHaveLength(2)
       } finally {
         await reset()
       }
