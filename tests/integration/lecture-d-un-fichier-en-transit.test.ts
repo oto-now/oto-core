@@ -69,7 +69,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   async function session(person: Person) {
     const { db, identity } = as(person)
     const journal: Parameters<typeof connectDeps>[0]["journal"] = []
-    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `transit-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `transit-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const { code } = await mcp.openContext("Lis la pièce")
     return { call: (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args }), journal }
   }
@@ -142,7 +142,8 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
         true,
         expect.stringMatching(new RegExp(`^File ${id} was deleted on \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC \\(sent to a third party\\): run the function that produced it again, or upload it again\\.$`)),
       ])
-      expect([nothing.isError, nothing.text]).toEqual([true, "Give path, or file alone to read a file by its id."])
+      // Ni chemin, ni identifiant, ni fichier : le schéma de `read` le refuse, avec la phrase du service.
+      expect([nothing.isError, nothing.text]).toEqual([true, expect.stringMatching(/^Invalid arguments for [a-z0-9]+_read: path: Give path or id, or file alone to read a file by its id\.$/)])
     })
 
     it("should cut a long transit file with a cursor bound to the file, its continuation without path", async () => {

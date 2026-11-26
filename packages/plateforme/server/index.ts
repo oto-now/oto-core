@@ -67,7 +67,7 @@ export { addTeamMember, createTeam, deleteTeam, listTeams, removeTeamMember, tea
 export { listNodeRules, listRuledNodes, removeRule, setNodeRule } from "./rules"
 export { connectAddress, lastConnections } from "./connect"
 export type { ConnectAddress, LastConnection } from "./connect"
-export { closestExisting, findNode, parentPath, ROOT_PATH } from "./nodes/lookup"
+export { closestExisting, findNode, findNodeById, parentPath, ROOT_PATH } from "./nodes/lookup"
 export type { NodeRow } from "./nodes/lookup"
 export { loadBlocks } from "./nodes/store"
 export { loadNode, readNode } from "./nodes/read"
@@ -102,6 +102,9 @@ export { createOrg, getOrg, listOrgOverviews, listOrgs, updateOrg } from "./admi
 export { addAdmin } from "./admin/first-admin"
 export type { AdminNamed, AdminSeat, FirstAdminPlan } from "./admin/first-admin"
 export type { AdminOrg, FirstAdminOutcome, OrgChange, OrgDraft, OrgOverview, OrgSheet } from "./admin/orgs"
+// La supervision de la plateforme (N9) : toutes les organisations, à l'équipe plateforme seule, sans accès daté ;
+// leurs types (`SupervisedOrg`…) sortent par `schemas`, que lit aussi l'écran.
+export { listPlatformOrgs, readPlatformOrg } from "./admin/supervision"
 export type { OrgCreationHook } from "./admin/org-creation"
 // E12-S01 (ADR-023) : l'inscription libre, que l'hôte active par l'option `signup` de `handlePlateforme`.
 export { signUp } from "./admin/signup"
@@ -128,7 +131,8 @@ export { listFeedback } from "./feedback"
 export { handlesFeedback } from "./feedback"
 // Tableau de bord (E08-S03) : services de connecteurs d'E04-S01, qui lui laissait ces exports, impact
 // d'une désactivation et comptes de l'organisation ; les comptes personnels de qui regarde, pour l'écran ouvert aux membres.
-export { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "./connectors/activations"
+export type { ActivationGesture } from "./connectors/activations"
+export { activateConnector, activateConnectorGesture, deactivateConnector, deactivationImpact, deactivationImpacts, listConnectorsForOrg } from "./connectors/activations"
 export { disableAccount, enableAccount, updateAccount } from "./connectors/account-changes"
 export { createAccount, listOrgAccounts, listOwnAccounts } from "./connectors/accounts"
 export { accountOwnerChoices } from "./connectors/creation-right"
@@ -157,6 +161,7 @@ export type {
 // Le consentement d'une personne à un connecteur `oauth2_user` : son départ pour la personne connectée (l'adresse
 // d'autorisation où l'envoyer), et l'adresse de retour à déclarer chez le tiers, servie par la porte du paquet.
 export { CONNECTOR_CONSENT_CALLBACK_PATH, connectorConsentRedirectUri, startConnectorConsent } from "./connectors/consent"
+export { connectionStep } from "./connectors/connect-page"
 // Le branchement hébergé d'un compte à un connecteur à `accountIdentity` : son départ pour la personne connectée
 // (l'adresse où l'envoyer), et l'adresse de retour que le paquet donne au tiers par le port `hostedLinks`.
 export { HOSTED_LINK_CALLBACK_PATH, hostedLinkReturnUrl, startHostedLink } from "./connectors/hosted-link"

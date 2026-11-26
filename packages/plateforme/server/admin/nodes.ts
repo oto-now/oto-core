@@ -12,7 +12,7 @@
 //
 // Face SQL (E01-S10, lot d2) : les héritiers en une lecture récursive, l'écriture gardée par l'`updated_at`
 // lu en texte (`findNode`) ; les héritiers relus dans la transaction de l'écriture, qui refuse s'ils ont changé.
-// Depuis que l'espace est écrit sur chaque nœud (migration 20261119090000) : les héritiers sont les descendants qui
+// Depuis que l'espace est écrit sur chaque nœud (migration 20261126172651) : les héritiers sont les descendants qui
 // portent le même propriétaire que le nœud, sans interruption, et le transfert l'écrit sur eux aussi ; `inherit` écrit
 // celui du parent. Un transfert est le geste explicite qui change un espace ; un déplacement ne le change pas.
 import { ownerRefSchema } from "../../schemas"

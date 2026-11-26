@@ -5,10 +5,12 @@
 // l'écran le dit avant de valider. Un nom déjà porté par le même propriétaire se dit sous le champ. Après un succès,
 // la saisie se replie et la page se relit.
 import { useRef, useState, type ReactNode } from "react"
+import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple"
 import { useForm } from "react-hook-form"
 import { ACCOUNT_DESCRIPTION_MAX, accountChangeSchema, type AccountChange } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { Field, Input } from "../../ds/react/forms"
+import { Icon } from "../../ds/react/icon"
 import { Alert, Button } from "../../ds/react/primitives"
 import { Textarea } from "../../ds/react/textarea"
 import { useRafraichir } from "../../hote/rafraichir"
@@ -88,7 +90,7 @@ export function ModificationDuConnecteur({ compte, avant }: { compte: Compte; av
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {avant}
-        <Button ref={bouton} type="button" variant="secondary" aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
+        <Button ref={bouton} type="button" variant="secondary" iconStart={<Icon as={PencilSimple} size="xs" />} aria-expanded={ouvert} onClick={() => setOuvert(!ouvert)}>
           Modifier le nom
           <span className="oto-sr-only">{` de ${compte.label}`}</span>
         </Button>

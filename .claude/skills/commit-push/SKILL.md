@@ -12,9 +12,18 @@ Un `git commit` ou `git push` lancé hors de ce skill est **bloqué par le hook*
 
 ## Étape 1 — Checks
 
+Avant de lancer : un changement visible d'un hôte ou d'un assistant a déjà ses lignes dans un
+fichier neuf `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` (étape 3) ; écrit après, il
+invaliderait le reçu.
+
 ```
 pnpm verify:cached
 ```
+
+**D'autres sessions dans ce dossier ?** Si `verify:cached` doit rejouer les checks, il gèle le
+checkout : appliquer d'abord `CLAUDE.md § Plusieurs sessions sur le même checkout` (prévenir,
+proposer d'inclure leur travail, envoyer le résultat). Si une autre session vient de faire passer
+les checks sur l'arbre courant, `verify:cached` le constate et ne rejoue rien.
 
 **Une seule commande, et surtout : ne pas rejouer ce qui vient de passer.** `verify:cached`
 compare l'état exact du code au reçu laissé par le dernier `pnpm verify`. Identique → il
@@ -47,7 +56,10 @@ Vérifier qu'aucun fichier sensible n'est présent (`.env`, credentials, clés, 
 
 ## Étape 3 — Changelog
 
-Ajouter une entrée en haut de `docs/changelog.md` (après le commentaire HTML) :
+Créer un fichier neuf `docs/changelog.d/YYYY-MM-DD-<sujet>.md` (sujet en minuscules, chiffres et
+tirets), qui ne contient que l'entrée ; jamais d'écriture dans `docs/changelog.md`, figé, ni dans
+un fichier d'entrée existant : un fichier partagé met toutes les pull requests ouvertes en conflit
+à chaque fusion.
 
 ```markdown
 ## [YYYY-MM-DD] — [Scope court]
@@ -56,12 +68,19 @@ Ajouter une entrée en haut de `docs/changelog.md` (après le commentaire HTML) 
 **Fichiers :** Chemins relatifs des fichiers créés/modifiés
 ```
 
-Une entrée par chantier, pas par fichier. Un commit de typo ne mérite pas d'entrée — dans ce
-cas, le dire plutôt que d'écrire une entrée vide de sens.
+La date du nom est celle du titre (`tests/unit/changelog-entrees.test.ts`). Une entrée par
+chantier, pas par fichier. Un commit de typo ne mérite pas d'entrée — dans ce cas, le dire plutôt
+que d'écrire une entrée vide de sens.
+
+Un changement visible d'un hôte ou d'un assistant a aussi ses lignes pour le CHANGELOG du paquet,
+dans un fichier neuf `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` : listes `### Assistants` et
+`### Hosts` au format en tête de `packages/plateforme/CHANGELOG.md`, jamais sous `## Unreleased`.
+La pull request de version les y verse (`pnpm changelog:version <x.y.z>`). Ce fichier est du code
+pour le reçu (ses tests le lisent) : il s'écrit avant `pnpm verify`.
 
 ## Étape 4 — Commit
 
-- `git add <fichiers explicites>` — **jamais `git add -A`**, inclure `docs/changelog.md`
+- `git add <fichiers explicites>` — **jamais `git add -A`**, inclure le fichier d'entrée de `docs/changelog.d/`
 - Message : préfixe `fix:` / `feat:` / `refactor:` / `docs:` / `chore:` / `perf:`, 1-2 lignes,
   centré sur le **pourquoi**
 - Le marqueur `# checks-ok` atteste que les 4 checks de l'étape 1 sont réellement passés.

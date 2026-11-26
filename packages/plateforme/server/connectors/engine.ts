@@ -18,7 +18,7 @@ import { guardedFetch } from "./address-guard"
 import { renewsOnUnauthorized, sign, type AccountCredential, type AccountMarker, type PreparedAuth, type Signature, type Signer } from "./auth"
 import { bodyArgument, bodyTable } from "./body-argument"
 import { bodyEntries, tableBody } from "./body-table"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
+import type { ConnectorView, ConnectorFunctionDefinition, ConnectorPagination } from "./definition"
 import { runFileOutput } from "./file-output"
 import { requestJson, type ApiRequest, type ConnectorApi, type Fetch } from "./http"
 import { declaredLevels, refuseUnserved } from "./levels"
@@ -29,7 +29,7 @@ import { resolveAddress, type AddressSpec } from "./settings"
 
 /** Une fonction décrite prête à courir, préparée une fois à la déclaration (`declaration.ts`). */
 export type PreparedFunction = {
-  connector: ConnectorDefinition
+  connector: ConnectorView
   fn: ConnectorFunctionDefinition
   /** Le tiers, avec la table d'erreurs de la fonction : ses refus à statut HTTP, puis ceux du connecteur ; l'adresse se résout à l'appel. */
   api: Omit<ConnectorApi, "baseUrl">
@@ -355,7 +355,7 @@ const isMarkReason = (code: PlatformErrorCode): code is AccountMarkReason => cod
 
 /**
  * Un refus du tiers qui marque le compte (`marksAccount` : `credential_rejected`, `quota_exhausted`) pose la marque,
- * puis se dit avec elle, sa date et à qui demander ; tout autre refus passe tel quel. Sans marque ouverte (l'identité
+ * puis devient le refus que la marque dit (`AccountMarker.refusal`) ; tout autre refus passe tel quel. Sans marque ouverte (l'identité
  * lue au consentement, avant le compte), le refus passe tel quel. Une pose qui échoue rend le refus du tiers tel quel,
  * sans la phrase de la marque, qui n'est pas posée.
  */
@@ -367,7 +367,7 @@ async function markedRefusal(mark: AccountMarker | undefined, error: unknown, wh
     markWriteFailed(mark, "mark_failed", where, failure)
     return error
   }
-  return new PlatformError(error.code, `${error.message} ${await mark.remedy()}`, error.details)
+  return mark.refusal(error)
 }
 
 /**

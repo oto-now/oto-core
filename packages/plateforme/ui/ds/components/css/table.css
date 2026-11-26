@@ -373,3 +373,26 @@
   .oto-table[data-responsive="cards"] tbody td[data-primary]::before { content: none; }
   .oto-table[data-responsive="cards"] .oto-table-select { inline-size: auto; }
 }
+
+/* Le tableau compact, opt-in : un écran le demande par `data-compacte` sur l'enveloppe (Connecteurs). En-têtes de colonnes en casse normale, `--fs-xs` ; en cartes, ni étiquette par cellule ni filet, des lignes resserrées. Aucun autre tableau ne change. */
+.oto-table-wrap[data-compacte] .oto-table thead th {
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--mute);
+}
+@media (max-width: 767px) {
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody tr { padding: var(--space-3); }
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td { min-block-size: 0; padding: var(--space-1) 0; border-block-end: 0; }
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td::before { content: none; }
+  /* le nom, lien du détail, garde une cible de 44 px sous le doigt */
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td[data-primary] a { display: inline-flex; align-items: center; min-block-size: var(--touch); }
+}
+@container (max-width: 560px) {
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody tr { padding: var(--space-3); }
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td { min-block-size: 0; padding: var(--space-1) 0; border-block-end: 0; }
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td::before { content: none; }
+  /* le nom, lien du détail, garde une cible de 44 px sous le doigt */
+  .oto-table-wrap[data-compacte] .oto-table[data-responsive="cards"] tbody td[data-primary] a { display: inline-flex; align-items: center; min-block-size: var(--touch); }
+}

@@ -1,12 +1,6 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 import importPlugin from "eslint-plugin-import";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({ baseDirectory: __dirname });
 
 // Règle JB (2026-09-23) : Phosphor pour l'app, lucide réservé aux internes Shadcn. Une icône par
 // import : le baril charge les 1 500 icônes, 40 s par fichier de test mesurées en E05-S01.
@@ -53,7 +47,8 @@ const eslintConfig = [
       "packages/plateforme/server/files/readers/worker/generated.ts",
     ],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextVitals,
+  ...nextTs,
   {
     // Ces règles remplacent des sections de prose supprimées de coding-standards.md.
     // Une règle appliquée par l'outillage n'a pas à être relue par un humain ou une IA à

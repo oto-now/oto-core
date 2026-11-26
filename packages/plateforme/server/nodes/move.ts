@@ -143,7 +143,7 @@ async function decide(db: PlatformDb, identity: Identity, request: MoveNodeInput
   if (request.new_path.startsWith(`${node.path}/`)) throw underItself(node, request.new_path)
   const parent = await destinationParent(db, identity, node, request.new_path)
   // La gestion sur le nœud et l'écriture sur la destination suffisent : un déplacement ne change pas l'espace écrit sur
-  // le nœud (migration 20261119090000), seul un partage ou un transfert le fait.
+  // le nœud (migration 20261126172651), seul un partage ou un transfert le fait.
   return { node, parent, newPath: await freeDestination(db, identity, node, { parent, newPath: request.new_path }) }
 }
 

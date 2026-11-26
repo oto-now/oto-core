@@ -90,11 +90,18 @@ function strip(field: Json, added: string): void {
 describe("read and write input schemas, extended by additions only (AC1)", () => {
   const served = inputSchemas("acme")
 
-  it("should serve the E03-S01 JSON Schema of read plus the optional refs, then the optional file, last", () => {
+  it("should serve the E03-S01 JSON Schema of read plus the optional refs, then the optional file, then the optional id, last", () => {
     const read = structuredClone(toInputSchema(served.read))
     const properties = at(read, "properties")
-    // Les ajouts, dans leur ordre : `refs` (E03-S03), puis `file` (E10-S02 AC-d2, fiche D119).
-    expect(Object.keys(properties).slice(-2)).toEqual(["refs", "file"])
+    // Les ajouts, dans leur ordre : `refs` (E03-S03), puis `file` (E10-S02 AC-d2, fiche D119), puis `id` (l'identifiant stable).
+    expect(Object.keys(properties).slice(-3)).toEqual(["refs", "file", "id"])
+    expect(properties.id).toEqual({
+      description:
+        "Stable id of a page, procedure or table, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90, instead of path: it does not change when the node moves (default: none, read by path).",
+      type: "string",
+      format: "uuid",
+      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+    })
     expect(properties.refs).toEqual({
       description: "true: each block comes with its reference, e.g. <!-- ref: 3f9a2c1b -->, for the block operations of write (default false).",
       type: "boolean",
@@ -116,12 +123,27 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     read.required = ["ctx", "path"]
     delete properties.refs
     delete properties.file
+    delete properties.id
     expect(read).toEqual(E03_S01.read)
   })
 
-  it("should serve the E03-S01 JSON Schema of write plus the block operations, section no longer required, no API field nor service bound", () => {
+  it("should serve the E03-S01 JSON Schema of write plus the block operations and the optional id, section and path no longer required, no API field nor service bound", () => {
     const write = structuredClone(toInputSchema(served.write))
     const properties = at(write, "properties")
+    // L'identifiant stable, ajouté en dernier : `path` n'est plus requis, l'un ou l'autre l'est (`refinePathOrId`).
+    expect(Object.keys(properties).at(-1)).toBe("id")
+    expect(properties.id).toEqual({
+      description:
+        "Stable id of an existing page, procedure or table to edit, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90, instead of path; creating needs path (default: none).",
+      type: "string",
+      format: "uuid",
+      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+    })
+    delete properties.id
+    strip(at(properties, "path"), "; required unless id is given.")
+    at(properties, "path").description = `${String(at(properties, "path").description)}.`
+    expect(write.required).toEqual(["ctx"])
+    write.required = ["ctx", "path"]
     const ops = at(properties, "ops")
     const items = at(ops, "items")
     const fields = at(items, "properties")
@@ -154,7 +176,7 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     delete fields.count
     expect(items.required).toEqual(["op"])
     items.required = ["op", "section"]
-    // 20261119090000 : `space` place un nœud créé, par addition.
+    // 20261126172651 : `space` place un nœud créé, par addition.
     expect(at(properties, "space").enum).toEqual(["everyone", "private"])
     delete properties.space
     expect(write).toEqual(E03_S01.write)

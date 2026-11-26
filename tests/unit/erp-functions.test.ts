@@ -161,8 +161,9 @@ describe.skipIf(!sqlConfigured)(portable("ERP functions on a real database (E08-
       expect(functions.map((fn) => fn.name)).toContain("erp.lookup_customer")
       expect(functions.length).toBeLessThanOrEqual(3)
       // La description de `call` ne cite pas les fonctions de l'ERP (NH6) : la surface servie ne change pas (ADR-002).
+      // `mail`, qui a des comptes dans O, est adopté : son exemple est cité.
       const descriptions = (await client.listTools()).tools.map((tool) => tool.description)
-      expect(descriptions).toEqual(buildTools(ref.identityOf("claire").org, ["table.rows"]).map((tool) => tool.description))
+      expect(descriptions).toEqual(buildTools(ref.identityOf("claire").org, ["mail.create_draft", "table.rows"]).map((tool) => tool.description))
     })
 
     it("should serve the contract of an ERP function, naming its origin and class, strict schema, examples and refusals (AC5)", async () => {

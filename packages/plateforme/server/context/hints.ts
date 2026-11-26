@@ -5,7 +5,7 @@
 // seulement le chemin pour la lire.
 import type { CatalogFunction } from "../catalog/define"
 import { assistantFunctions, isActive, searchFunctions } from "../catalog/registry"
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import type { PlatformDb } from "../db"
 import { firstSentence } from "../find"
 import { closestHelpSection } from "../help"
@@ -22,12 +22,13 @@ const FUNCTION_WORDS_MIN = 2
 export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string; text?: string } | null }
 
 /**
- * Les fonctions actives de l'organisation qui répondent à la demande, et la section du guide la plus proche ; une panne de
- * lecture des connecteurs ne prive que des fonctions.
+ * Les fonctions ouvertes de l'organisation (tout connecteur déclaré non bloqué) qui répondent à la demande, trois au plus,
+ * et la section du guide la plus proche ; une panne de lecture des connecteurs ne prive que des fonctions. Le catalogue
+ * ouvert n'entre jamais entier dans `context` : seules ces pistes bornées, choisies par la demande.
  */
 export async function routingHints(db: PlatformDb, identity: Identity, phrase: string): Promise<RoutingHints> {
-  const active = await loadActiveConnectors(db, identity.org.id).catch((error: unknown) => {
-    console.error("[platform] context: active connectors read failed", error)
+  const active = await loadOpenConnectors(db, identity.org.id).catch((error: unknown) => {
+    console.error("[platform] context: open connectors read failed", error)
     return null
   })
   const functions = active === null ? [] : proposedFunctions(assistantFunctions().filter((fn) => isActive(fn, active)), phrase)

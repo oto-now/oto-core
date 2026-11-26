@@ -442,7 +442,7 @@ describe.skipIf(!sqlConfigured)(portable("E11-S02: discard a draft, trash and de
         caller: { kind: "member", identity },
         userAgent: "unit-test",
         journal: [],
-        activeConnectors: () => Promise.resolve(new Set<string>()),
+        activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()),
         origin: "https://acme.test",
       })
       const ctx = ref.id(CTX[person])

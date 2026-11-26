@@ -34,7 +34,8 @@ afterAll(() => {
 function repo() {
   const at = fs.mkdtempSync(path.join(dir, "repo-"))
   fs.mkdirSync(path.join(at, "scripts/lib"), { recursive: true })
-  for (const script of ["verify.mjs", "verify-receipt.mjs", "lib/arbre-de-code.mjs", "lib/base-de-verify.mjs", "lib/empreinte-des-migrations.mjs"]) {
+  // `long-run.mjs` : `verify` passe par la file des commandes longues (CLAUDE.md § Plusieurs sessions sur le même checkout).
+  for (const script of ["long-run.mjs", "verify.mjs", "verify-receipt.mjs","lib/arbre-de-code.mjs", "lib/base-de-verify.mjs", "lib/empreinte-des-migrations.mjs"]) {
     fs.copyFileSync(path.join(root, "scripts", script), path.join(at, "scripts", script))
   }
   fs.writeFileSync(path.join(at, ".gitignore"), ".claude/*\n")
@@ -52,7 +53,7 @@ function repo() {
       "  ] }",
       "  mkdirSync(dirname(sortie), { recursive: true })",
       "  writeFileSync(sortie, JSON.stringify(rapport))",
-      "  writeFileSync('forks.txt', String(process.env.VITEST_MAX_FORKS))",
+      "  writeFileSync('forks.txt', String(process.env.VITEST_MAX_WORKERS))",
       "}",
       "process.exit(process.env.VERIFY_ECHEC === process.argv[2] ? 1 : 0)",
       "",

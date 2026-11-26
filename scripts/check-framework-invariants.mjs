@@ -20,6 +20,39 @@ export function verifierInvariants({ ROOT, read, walk, err, warn }) {
   invariantsDeCode({ ROOT, read, walk, err })
   adressesEnAnglais({ ROOT, read, walk, err })
   chaineDApplication({ ROOT, read, err, warn })
+  sousAgents({ ROOT, read, err })
+}
+
+// Sous-agents : un skill qui lance `subagent_type: "x"` sans `.claude/agents/x.md` retombe sur
+// l'agent généraliste, sans erreur : l'implémenteur ou le relecteur disparaîtrait en silence. Et un
+// agent qu'aucun skill ne lance n'est plus maintenu par personne : il dérive comme une checklist
+// orpheline.
+function sousAgents({ ROOT, read, err }) {
+  const SKILLS = join(ROOT, '.claude/skills')
+  const AGENTS = join(ROOT, '.claude/agents')
+  const agentsCites = new Set()
+  const skillDirs = existsSync(SKILLS) ? readdirSync(SKILLS).filter((d) => statSync(join(SKILLS, d)).isDirectory()) : []
+  for (const dir of skillDirs) {
+    const file = join(SKILLS, dir, 'SKILL.md')
+    if (!existsSync(file)) continue
+    for (const m of read(file).matchAll(/subagent_type:\s*"([\w-]+)"/g)) {
+      agentsCites.add(m[1])
+      const agentFile = join(AGENTS, `${m[1]}.md`)
+      if (!existsSync(agentFile)) {
+        err(`Skill ${dir} : sous-agent \`${m[1]}\` sans .claude/agents/${m[1]}.md.`)
+        continue
+      }
+      const fm = /^---\n([\s\S]*?)\n---\n/.exec(read(agentFile))
+      const name = fm && /^name:\s*(.+)$/m.exec(fm[1])?.[1].trim()
+      if (name !== m[1]) err(`.claude/agents/${m[1]}.md : \`name\` absent ou différent du fichier — le sous-agent ne sera pas trouvé.`)
+    }
+  }
+  for (const f of existsSync(AGENTS) ? readdirSync(AGENTS) : []) {
+    const agent = f.replace(/\.md$/, '')
+    if (f.endsWith('.md') && !agentsCites.has(agent)) {
+      err(`Agent orphelin : .claude/agents/${f} n'est lancé par aucun skill (\`subagent_type: "${agent}"\`).`)
+    }
+  }
 }
 
 /** Tables créées par une migration sans que la même migration active la RLS. */
@@ -133,6 +166,8 @@ const SEGMENTS_ADMIS = [
   'profile',
   'reset-password',
   'share-image',
+  // La supervision de la plateforme (administration et cellule, N9), `/platform/supervision`.
+  'supervision',
   'teams',
   'trash',
   'upload',
@@ -240,7 +275,8 @@ function adressesEnAnglais({ ROOT, read, walk, err }) {
     .flatMap((p) => (statSync(p).isDirectory() ? walk(p) : [p.replaceAll('\\', '/')]))
   for (const p of fichiers) {
     const rel = p.slice(ROOT.length + 1)
-    if (CITENT_LES_ANCIENS_NOMS.has(rel) || !TEXTE.test(rel)) continue
+    // Les fragments du CHANGELOG du paquet en attente de leur version citent les anciens noms comme lui.
+    if (CITENT_LES_ANCIENS_NOMS.has(rel) || rel.startsWith('packages/plateforme/changelog.d/') || !TEXTE.test(rel)) continue
     read(p)
       .split('\n')
       .forEach((ligne, i) => {
@@ -298,7 +334,7 @@ function chaineDApplication({ ROOT, read, err, warn }) {
 
   // Un hook déclaré mais vidé de sa substance est pire qu'un hook absent : il donne l'illusion
   // d'une garantie. On ne valide pas le contenu ligne à ligne, seulement qu'il refuse quelque chose.
-  for (const f of ['enforce-git-gate.mjs', 'enforce-bash-rules.mjs']) {
+  for (const f of ['enforce-git-gate.mjs', 'enforce-bash-rules.mjs', 'coordinate-sessions.mjs']) {
     const p = join(ROOT, '.claude/hooks', f)
     if (!existsSync(p)) {
       err(`.claude/hooks/${f} absent — la garantie qu'il porte n'existe plus.`)
@@ -306,6 +342,23 @@ function chaineDApplication({ ROOT, read, err, warn }) {
     }
     if (!/process\.exit\(2\)/.test(read(p))) {
       err(`.claude/hooks/${f} ne contient aucun \`process.exit(2)\` — il ne bloque plus rien.`)
+    }
+  }
+
+  // Les hooks de commande doivent voir les deux outils shell : un `git commit` lancé par l'outil
+  // PowerShell passait sans gate, et un verify lancé de PowerShell gelait sa propre session.
+  const settingsPath = join(ROOT, '.claude/settings.json')
+  if (existsSync(settingsPath)) {
+    const entrees = JSON.parse(read(settingsPath)).hooks?.PreToolUse ?? []
+    for (const f of ['enforce-git-gate.mjs', 'enforce-bash-rules.mjs', 'coordinate-sessions.mjs']) {
+      const matchers = entrees
+        .filter((e) => (e.hooks ?? []).some((h) => String(h.command ?? '').includes(f)))
+        .map((e) => String(e.matcher ?? ''))
+      if (!matchers.length) continue
+      const voit = (outil) => matchers.some((m) => new RegExp(`(?:^|\\|)${outil}(?:$|\\|)`).test(m))
+      if (!voit('Bash') || !voit('PowerShell')) {
+        err(`.claude/settings.json : ${f} ne surveille pas Bash et PowerShell (matcher « ${matchers.join(' / ')} »).`)
+      }
     }
   }
 

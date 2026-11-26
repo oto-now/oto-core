@@ -14,7 +14,8 @@ export type InvitationEnAttente = {
   role: InvitationRole
   teamId: string | null
   invitedBy: string | null
-  expiresAt: string
+  /** `null` : une inscription sans email, qui n'expire pas. */
+  expiresAt: string | null
 }
 
 /** Ce que `invitationOptions` (E02-S01) rend ; `null` : l'appelant n'invite pas (simple membre). */

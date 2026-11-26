@@ -62,6 +62,7 @@ function repo(files: Record<string, string> = {}) {
   // Hooks que le check exige branchés (scripts/check-framework-invariants.mjs).
   write(".claude/hooks/enforce-git-gate.mjs", "process.exit(2)\n")
   write(".claude/hooks/enforce-bash-rules.mjs", "process.exit(2)\n")
+  write(".claude/hooks/coordinate-sessions.mjs", "process.exit(2)\n")
   write(".githooks/pre-commit", "node scripts/verify-receipt.mjs check\n")
   for (const [name, content] of Object.entries(files)) write(name, content)
   return at
@@ -137,6 +138,57 @@ describe("check-framework on a throwaway repository", { timeout: 30_000 }, () =>
     const result = checkFramework(repo(files))
     expect(result.status).toBe(1)
     expect(result.stdout).toContain(`✖  ${erreur}`)
+  })
+
+  // Un skill qui lance `subagent_type: "x"` sans `.claude/agents/x.md` retombe sur l'agent généraliste,
+  // sans erreur ; un agent qu'aucun skill ne lance n'est plus maintenu par personne.
+  const skillQuiLance = (agent: string) =>
+    `---\nname: dev\ndescription: "Skill dev du dépôt jetable, décrit assez longuement pour le contrôle."\n---\n\nLancer \`subagent_type: "${agent}"\`.\n`
+  const agent = (name: string) => `---\nname: ${name}\ndescription: Agent du dépôt jetable.\n---\n`
+  it.each<[string, Record<string, string>, string]>([
+    ["a subagent launched by a skill without its file", { ".claude/skills/dev/SKILL.md": skillQuiLance("implementer") }, "Skill dev : sous-agent `implementer` sans .claude/agents/implementer.md."],
+    [
+      "an agent whose name differs from its file",
+      { ".claude/skills/dev/SKILL.md": skillQuiLance("implementer"), ".claude/agents/implementer.md": agent("autre") },
+      ".claude/agents/implementer.md : `name` absent ou différent du fichier",
+    ],
+    ["an agent launched by no skill", { ".claude/agents/orphelin.md": agent("orphelin") }, "Agent orphelin : .claude/agents/orphelin.md"],
+  ])("should report %s", (_cas, files, erreur) => {
+    const result = checkFramework(repo(files))
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain(`✖  ${erreur}`)
+  })
+
+  it("should let a subagent launched by a skill, with its file, through", () => {
+    const result = checkFramework(
+      repo({ ".claude/skills/dev/SKILL.md": skillQuiLance("implementer"), ".claude/agents/implementer.md": agent("implementer") }),
+    )
+    expect(result.status, result.output).toBe(0)
+  })
+
+  it("should report a shell hook not run on both the Bash and PowerShell tools", () => {
+    // Un `git commit` lancé par l'outil PowerShell passait sans gate quand le matcher ne nommait que Bash.
+    const commande = (f: string) => ({ type: "command", command: `node .claude/hooks/${f}` })
+    const settings = {
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash", hooks: [commande("enforce-git-gate.mjs")] },
+          { matcher: "Bash|PowerShell", hooks: [commande("enforce-bash-rules.mjs"), commande("coordinate-sessions.mjs")] },
+        ],
+      },
+    }
+    const result = checkFramework(repo({ ".claude/settings.json": JSON.stringify(settings) }))
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain("✖  .claude/settings.json : enforce-git-gate.mjs ne surveille pas Bash et PowerShell")
+    expect(result.stdout).not.toContain("enforce-bash-rules.mjs ne surveille pas")
+  })
+
+  it("should report a missing coordinate-sessions hook", () => {
+    const at = repo()
+    fs.rmSync(path.join(at, ".claude/hooks/coordinate-sessions.mjs"))
+    const result = checkFramework(at)
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain("✖  .claude/hooks/coordinate-sessions.mjs absent")
   })
 
   it("should report a convention without a fiche", () => {

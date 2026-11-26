@@ -29,15 +29,15 @@ import { applyOps } from "./ops"
 import { publishNode, type PublishResult } from "./publish"
 import { renamedLine } from "./rename"
 import { freePath, lastSegment, UNTITLED_SEGMENT } from "./segments"
-import { closestExisting, findNode, lookupAlias, lookupNode, movedNotice, notAvailable, parentPath, refuseUnderRoot, ROOT_PATH, type NodeRow } from "./lookup"
+import { closestExisting, findNode, findNodeById, lookupAlias, lookupNode, movedNotice, notAvailable, parentPath, refuseUnderRoot, ROOT_PATH, type NodeRow } from "./lookup"
 import { loadBlocks, loadDraft, openDraft, publishedMeanwhile, saveDraft, type DraftRow } from "./store"
 import { staleState } from "./read-format"
 import { ownerOf, teamOf } from "./view"
 import { withCurrentLinks } from "./current-links"
-import { insertNode, provenanceOf, savedResult, type Saved, type WriteOrigin } from "./write-result"
+import { insertNode, provenanceOf, savedResult, type Saved, type WriteAtPath, type WriteOrigin } from "./write-result"
 import { attachFiles, refuseFilesOnCreate } from "./write-files"
 import { keepAuthorCtx, writeAtomically, writesAtomically } from "./write-atomic"
-import { ownerAtCreation, rowOwner, spaceLine } from "./write-space"
+import { checkSpace, ownerAtCreation, spaceLine } from "./write-space"
 
 export type { WriteOrigin } from "./write-result"
 
@@ -55,7 +55,7 @@ function parseBody(input: unknown): WriteNodeBody {
  * Le mode tolérant de l'analyse (E10-S01, AC-a2) : demandé par le corps de l'API seulement ; le MCP ne le porte jamais.
  * Un `.md` déposé par lien (E10-S02, AC-f7) se lit toujours ainsi, sous la provenance de l'assistant (`origin.file`).
  */
-function tolerantFor(body: WriteNodeBody, origin: WriteOrigin): boolean {
+function tolerantFor(body: WriteAtPath, origin: WriteOrigin): boolean {
   return origin.kind === "human" ? body.tolerant === true : origin.file !== undefined
 }
 
@@ -102,28 +102,13 @@ export function checkPath(identity: Identity, path: string): void {
  * Un titre sans `base_revision` sur son propre espace (`private/<handle>`) : l'assistant voulait y créer une page,
  * pas renommer l'espace ; le refus `stale_revision` le lui dit.
  */
-function pageInOwnSpace(identity: Identity, node: NodeRow, body: WriteNodeBody): string {
+function pageInOwnSpace(identity: Identity, node: NodeRow, body: WriteAtPath): string {
   const handle = identity.member.profile.handle
   const meant = handle !== undefined && node.path === `private/${handle}` && body.title !== undefined && body.base_revision === undefined
   return meant ? ` ${node.path} is your personal space itself: to create a page in it, write at ${node.path}/<page>.` : ""
 }
 
-/**
- * `space` ne range qu'une création : sur un nœud existant d'un autre espace, il serait ignoré sans le dire. Un
- * déplacement ne change pas l'espace ; un partage, si (décidé avec JB le 03/11).
- */
-function checkSpace(identity: Identity, node: NodeRow, body: WriteNodeBody): void {
-  if (body.space === undefined) return
-  const owner = rowOwner(node)
-  const same = body.space === "everyone" ? owner?.kind === "org" : owner?.kind === "user" && owner.userId === identity.user.id
-  if (same) return
-  throw new PlatformError(
-    "invalid_arguments",
-    `${node.path} already exists, in another space: space only places a new content. To change who sees it, ${identity.org.prefix}_call node.share.`,
-  )
-}
-
-function checkOneLine(body: WriteNodeBody): void {
+function checkOneLine(body: WriteAtPath): void {
   if (/[\r\n]/.test(body.title ?? "") || /[\r\n]/.test(body.summary ?? "")) {
     throw new PlatformError("invalid_arguments", "title and summary hold on one line (no line break).")
   }
@@ -137,7 +122,7 @@ function tableHasNoSections(path: string, prefix: string): PlatformError {
 }
 
 /** Genre d'un nœud existant (AC27, N26, N27, P37) ; l'en-tête d'un tableau est lu par `readHeaderPatch` (E07-S04). */
-function checkKinds(body: WriteNodeBody, node: NodeRow, prefix: string): void {
+function checkKinds(body: WriteAtPath, node: NodeRow, prefix: string): void {
   if (node.kind === "table") {
     if (body.kind !== undefined && body.kind !== "table") throw new PlatformError("invalid_arguments", `${node.path} is a table: its kind cannot change.`)
     if ((body.ops?.length ?? 0) > 0) throw tableHasNoSections(node.path, prefix)
@@ -174,7 +159,7 @@ type Edit = {
   node: NodeRow
   level: AccessLevel
   created: boolean
-  body: WriteNodeBody
+  body: WriteAtPath
   origin: WriteOrigin
   patch?: TableHeaderPatch | null
   createdHeader?: TableHeader
@@ -258,7 +243,7 @@ async function saveEdits(db: PlatformDb, identity: Identity, edit: Edit): Promis
 }
 
 /** L'en-tête en attente (`node_drafts`) : titre, résumé, genre (page ↔ procédure, N26). */
-function pendingHeader(body: WriteNodeBody, node: NodeRow): { title?: string; summary?: string; kind?: string } | null {
+function pendingHeader(body: WriteAtPath, node: NodeRow): { title?: string; summary?: string; kind?: string } | null {
   const kind = node.kind === "table" ? undefined : body.kind
   const header = {
     ...(body.title === undefined ? {} : { title: body.title }),
@@ -311,14 +296,14 @@ async function finish(db: PlatformDb, identity: Identity, edit: Edit, created?: 
  * Le `header` d'un tableau créé (E07-S04, AC2) : exigé, sans `ops`, lu puis fusionné sur un en-tête vide
  * et validé, avant toute lecture et toute écriture.
  */
-function createdTable(body: WriteNodeBody, prefix: string): { patch: TableHeaderPatch; createdHeader: TableHeader } {
+function createdTable(body: WriteAtPath, prefix: string): { patch: TableHeaderPatch; createdHeader: TableHeader } {
   const patch = readHeaderPatch(body, prefix, true)
   if (!patch) throw missingHeader(prefix)
   if ((body.ops?.length ?? 0) > 0) throw tableHasNoSections(body.path, prefix)
   return { patch, createdHeader: targetHeader({ base: null, patch, path: body.path, prefix }) }
 }
 
-async function create(db: PlatformDb, identity: Identity, body: WriteNodeBody, origin: WriteOrigin): Promise<ToolOutput> {
+async function create(db: PlatformDb, identity: Identity, body: WriteAtPath, origin: WriteOrigin): Promise<ToolOutput> {
   const { path } = body
   const kind = body.kind ?? "page"
   if (kind !== "table" && body.header !== undefined) throw new PlatformError("invalid_arguments", `header applies only to tables; ${path} is a ${KIND_LABELS[kind]}.`)
@@ -370,7 +355,7 @@ async function create(db: PlatformDb, identity: Identity, body: WriteNodeBody, o
 const UNTITLED_PATTERN = new RegExp(`^${UNTITLED_SEGMENT}(_[1-9][0-9]*)?$`)
 
 /** Une création « Sans titre » (titre et résumé donnés, aucune révision de base), à un chemin de ce segment. */
-function untitledCreation(body: WriteNodeBody): boolean {
+function untitledCreation(body: WriteAtPath): boolean {
   return body.base_revision === undefined && body.title !== undefined && body.summary !== undefined && UNTITLED_PATTERN.test(lastSegment(body.path))
 }
 
@@ -379,7 +364,7 @@ function untitledCreation(body: WriteNodeBody): boolean {
  * nœud (le rail ne voit pas les alias : `sans_titre` d'un nœud renommé par son titre), ou celle d'un nœud qui ne
  * peut pas prendre le genre demandé (`checkKinds`) ; elle va au premier chemin libre, comme sous un nœud invisible.
  */
-function createsElsewhere(body: WriteNodeBody, found: { node: NodeRow; movedFrom?: string }): boolean {
+function createsElsewhere(body: WriteAtPath, found: { node: NodeRow; movedFrom?: string }): boolean {
   const table = (body.kind ?? "page") === "table"
   return found.movedFrom !== undefined || found.node.kind === "context" || (found.node.kind === "table") !== table
 }
@@ -389,16 +374,35 @@ function createsElsewhere(body: WriteNodeBody, found: { node: NodeRow; movedFrom
  * droits décidés avant toute écriture, la provenance posée selon la porte (`origin`, AC28).
  */
 export async function writeNode(db: PlatformDb, identity: Identity, input: unknown, origin: WriteOrigin): Promise<ToolOutput> {
-  const body = parseBody(input)
+  const target = await atPath(db, identity, parseBody(input))
+  const { body } = target
   // Un assistant qui publie écrit tout ou rien (E11-S18, AC-1) ; l'écran et `publish: false` gardent leur brouillon.
-  if (!writesAtomically(body, origin)) return writeParsed(db, identity, body, origin)
-  const output = await writeAtomically(db, identity, body, () => writeParsed(db, identity, body, origin))
+  if (!writesAtomically(body, origin)) return writeParsed(db, identity, target, origin)
+  const output = await writeAtomically(db, identity, body, () => writeParsed(db, identity, target, origin))
   return keepAuthorCtx(db, identity, origin, output)
 }
 
-/** `writeNode` après la lecture du corps, dans la transaction d'une écriture atomique ou non. */
-async function writeParsed(db: PlatformDb, identity: Identity, body: WriteNodeBody, origin: WriteOrigin): Promise<ToolOutput> {
+/**
+ * La cible d'une écriture en chemin : par `id`, le chemin courant du nœud, lu par `findNodeById` (le même niveau que par
+ * chemin ; inconnu ou invisible, refusé comme tel, H68 ; à la corbeille, refusé en le disant), et l'identifiant gardé pour
+ * `writeParsed`. Le schéma exige l'un ou l'autre (`refinePathOrId`).
+ */
+async function atPath(db: PlatformDb, identity: Identity, request: WriteNodeBody): Promise<{ body: WriteAtPath; id?: string }> {
+  const { id, path, ...rest } = request
+  // `path` en tête, comme le schéma l'ordonne : l'appel à refaire qu'un refus cite (`confirm_remove`) le garde ainsi.
+  if (id !== undefined) return { body: { path: (await findNodeById(db, identity, id)).node.path, ...rest }, id }
+  if (path === undefined) throw new PlatformError("invalid_arguments", "Give path or id.")
+  return { body: { path, ...rest } }
+}
+
+/**
+ * `writeNode` après la lecture du corps, dans la transaction d'une écriture atomique ou non. Par identifiant (`id`) : la
+ * modification du nœud, relu dans cette transaction, jamais une création ni une création « Sans titre » ailleurs.
+ */
+async function writeParsed(db: PlatformDb, identity: Identity, target: { body: WriteAtPath; id?: string }, origin: WriteOrigin): Promise<ToolOutput> {
+  const { body, id } = target
   checkPath(identity, body.path)
+  if (id !== undefined) return edit(db, identity, { ...(await findNodeById(db, identity, id)), body, origin })
   // Un ancien chemin se cherche aussi avant une création (E03-S07 AC15) : celui d'un nœud invisible
   // est refusé comme un chemin pris (N31), sans insertion ; celui d'un nœud visible le modifie (AC7).
   const current = await lookupNode(db, identity, body.path)
@@ -425,7 +429,7 @@ async function writeParsed(db: PlatformDb, identity: Identity, body: WriteNodeBo
 async function edit(
   db: PlatformDb,
   identity: Identity,
-  found: { node: NodeRow; level: AccessLevel; body: WriteNodeBody; origin: WriteOrigin },
+  found: { node: NodeRow; level: AccessLevel; body: WriteAtPath; origin: WriteOrigin },
 ): Promise<ToolOutput> {
   const { node, level, body, origin } = found
   const kind = node.kind === "table" && body.kind === "table" ? undefined : body.kind
@@ -438,7 +442,7 @@ async function edit(
   if (!writes && edits.publish === false) throw new PlatformError("invalid_arguments", "Nothing to write: give ops, title, summary or header.")
   checkKinds(edits, node, identity.org.prefix)
   checkOneLine(edits)
-  checkSpace(identity, node, edits)
+  checkSpace(identity, node, edits.space)
   if (level < ACCESS_LEVELS.write) await requireNodeLevel(db, identity, { id: node.id, path: node.path }, writes ? "write" : "publish")
   if (edits.base_revision !== node.revision) throw await staleRevision(db, node, edits.base_revision, pageInOwnSpace(identity, node, edits))
   return finish(db, identity, { node, level, created: false, body: edits, origin, patch })

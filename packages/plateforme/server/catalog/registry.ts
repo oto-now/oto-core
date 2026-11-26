@@ -10,6 +10,8 @@ import { commentAdd, commentDelete, commentEdit, commentList, commentResolve } f
 import { mailCreateDraft, mailSendDraft } from "../connectors/simulated/mail"
 import { fileKeep } from "../files/keep-function"
 import { jobRead } from "../jobs/read-function"
+import { memberFunctions } from "../member-functions"
+import { nodeDescribe } from "../nodes/describe"
 import { nodeDiscardDraft } from "../nodes/discard"
 import { nodeMove } from "../nodes/move-function"
 import { nodePublicLink } from "../nodes/public-link-function"
@@ -28,10 +30,11 @@ import { teamSharesFunction } from "../team-shares"
 import { nodeExportTree, nodeImportTree } from "../transfer/functions"
 import { nodeCheck, nodeTree } from "../transfer/inspect"
 import { argumentsJsonSchema } from "./arguments"
-import { declaredConnectors } from "./connector-source"
+import { declaredConnector, declaredConnectors } from "./connector-source"
 import type { CatalogFunction } from "./define"
 import { erpFunctions } from "./erp-source"
 import { hostSurface } from "./surface-source"
+import { connectorConnect } from "./connector-connect"
 import { uploadLink } from "./upload-link"
 
 /** Le connecteur natif du paquet (H80) : toujours actif et sans compte, même avant ses fonctions (E07-S01). */
@@ -41,7 +44,7 @@ export const NATIVE_CONNECTOR = "table"
  * Catalogue de la V1 (H80) : `mail` simulé (E04-S01), lecture des tableaux (E07-S01), écriture et file
  * de travail (E07-S02), import d'un CSV (E10-S01), suppression de lignes, abandon d'un brouillon et
  * corbeille (E11-S02, connecteur natif `node`) ; ERP (E08-S05) s'y ajoute ; le dépôt par lien (E10-S02 lot f, connecteur
- * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les commentaires d'une page (connecteur `comment`) ; les fonctions des connecteurs
+ * `upload`, ADR-018) ; déplacement et écriture par lot (E11-S18, connecteur `node`) ; l'état d'un lot de nœuds par identifiant (`node.describe`, connecteur `node`) ; export et import d'une arborescence d'un MCP Oto à un autre (connecteur `node`) ; partage d'un nœud et lien public (1.4.13, connecteur `node`) ; garder un fichier sur une page (étape 3 du chantier « fichier », connecteur `file`) ; relever un travail en tâche de fond (fonctions longues, connecteur `job`) ; les commentaires d'une page (connecteur `comment`) ; les membres et les équipes (connecteurs `member` et `team`) ; l'adresse de la connexion d'un connecteur (`connector.connect`) ; les fonctions des connecteurs
  * décrits que l'hôte déclare (`registerConnectors`).
  */
 export function catalogFunctions(): CatalogFunction[] {
@@ -69,6 +72,7 @@ export function packageFunctions(): CatalogFunction[] {
     nodeDiscardDraft,
     nodeTrash,
     nodeMove,
+    nodeDescribe,
     nodeWriteMany,
     nodeExportTree,
     nodeImportTree,
@@ -78,6 +82,7 @@ export function packageFunctions(): CatalogFunction[] {
     nodeShareFunction,
     nodePublicLink,
     uploadLink,
+    connectorConnect,
     fileKeep,
     jobRead,
     commentList,
@@ -86,6 +91,8 @@ export function packageFunctions(): CatalogFunction[] {
     commentDelete,
     commentResolve,
     teamSharesFunction,
+    // Les membres et les équipes d'une organisation, sous le jeton de la personne qui agit.
+    ...memberFunctions,
   ]
 }
 
@@ -172,7 +179,18 @@ export function searchFunctions(
     .slice(0, limit)
 }
 
-/** Contrat servi par `read` (path = nom de la fonction) : ce qu'il faut pour appeler juste. */
+/**
+ * La description d'un connecteur déclaré (`ConnectorDefinition.description`), ce que l'outil est et quand s'en servir ;
+ * `null` pour une fonction d'une autre origine ou d'un connecteur qui n'en déclare pas.
+ */
+export function connectorDescription(fn: CatalogFunction): string | null {
+  return fn.origin === "connecteur" ? (declaredConnector(fn.connector)?.definition.description ?? null) : null
+}
+
+/**
+ * Contrat servi par `read` (path = nom de la fonction) : ce qu'il faut pour appeler juste, et, pour une fonction d'un
+ * connecteur qui la déclare, la description du connecteur, après celle de la fonction.
+ */
 export function describeFunction(fn: CatalogFunction, prefix: string): { text: string; data: Record<string, unknown> } {
   // Rendu des entrées des outils (`mcp/schemas.ts`), sans la clé `$schema`, mais côté entrée : ce que le
   // modèle écrit et que `call` valide, un champ à défaut facultatif (E08-S05, NH8 ; identique pour le paquet) ; le
@@ -181,6 +199,7 @@ export function describeFunction(fn: CatalogFunction, prefix: string): { text: s
   const text = [
     `Function ${fn.name} (connector ${fn.connector}, origin ${fn.origin}, class ${fn.class}${fn.class === "sensitive" ? ": two-step confirmation" : ""})`,
     fn.description,
+    ...about(fn),
     "Arguments (JSON Schema):",
     JSON.stringify(schema),
     "Examples:",
@@ -197,6 +216,12 @@ export function describeFunction(fn: CatalogFunction, prefix: string): { text: s
     examples: fn.examples,
   }
   return { text, data }
+}
+
+/** La ligne de la description du connecteur d'une fonction, dans son contrat ; rien sans elle. */
+function about(fn: CatalogFunction): string[] {
+  const description = connectorDescription(fn)
+  return description === null ? [] : [`About the connector ${fn.connector}: ${description}`]
 }
 
 /** Au plus deux connecteurs cités, puis `table.rows` : trois noms au plus (N15). */

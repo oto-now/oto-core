@@ -16,23 +16,34 @@ type ConnexionProps = {
   ressource: "connector-consent" | "hosted-link"
   /** Le nom du connecteur. */
   connecteur: string
+  /** L'accès à consentement d'un connecteur à plusieurs accès ; absent pour un connecteur à un seul. */
+  acces?: string
   /** Le libellé du bouton : « Connecter mon compte Microsoft 365 », « Reconnecter ». */
   libelle: string
   /** Le nom accessible du bouton, quand le libellé ne nomme pas le compte. */
   nomAccessible?: string
   /** L'écran où revenir après le parcours (chemin de l'adresse) ; l'écran Connecteurs par défaut. */
   retour?: string
+  /** Avant de partir chez le tiers : l'accord du premier partage, et le partage gardé pour le retour ; `false` : on reste. */
+  avantDePartir?: () => Promise<boolean>
+  /** Le départ a échoué : ce que `avantDePartir` a gardé s'oublie. */
+  apresUnEchec?: () => void
+  /** Le bouton principal d'une fiche d'ajout ; secondaire ailleurs (une ligne, le détail). */
+  variante?: "primary" | "secondary"
 }
 
-export function ConnexionParConsentement({ ressource, connecteur, libelle, nomAccessible, retour }: ConnexionProps) {
+export function ConnexionParConsentement({ ressource, connecteur, acces, libelle, nomAccessible, retour, avantDePartir, apresUnEchec, variante = "secondary" }: ConnexionProps) {
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState("")
 
   async function connecter() {
+    if (avantDePartir && !(await avantDePartir())) return
     setErreur("")
     setEnCours(true)
-    const reponse = await appelerPlateforme<{ url: string }>({ methode: "POST", ressource, corps: { connector: connecteur, ...(retour ? { return_to: retour } : {}) } })
+    const corps = { connector: connecteur, ...(acces !== undefined ? { access: acces } : {}), ...(retour ? { return_to: retour } : {}) }
+    const reponse = await appelerPlateforme<{ url: string }>({ methode: "POST", ressource, corps })
     if (reponse.erreur) {
+      apresUnEchec?.()
       setErreur(messageDErreur(reponse.erreur))
       setEnCours(false)
       return
@@ -42,7 +53,7 @@ export function ConnexionParConsentement({ ressource, connecteur, libelle, nomAc
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant="secondary" disabled={enCours} aria-busy={enCours} aria-label={nomAccessible} onClick={() => void connecter()}>
+      <Button type="button" variant={variante} disabled={enCours} aria-busy={enCours} aria-label={nomAccessible} onClick={() => void connecter()}>
         {enCours ? "Redirection…" : libelle}
       </Button>
       {erreur && <Alert tone="fail" title={erreur} />}

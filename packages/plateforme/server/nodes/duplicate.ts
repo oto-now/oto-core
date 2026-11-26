@@ -1,7 +1,7 @@
 // « Dupliquer » (E05-S10, AC-b10 ; HN-E05S10e-6) : un nœud et son sous-arbre copiés sous le même parent,
 // juste après l'original, sous « <titre> (copie) » et un chemin neuf tiré de ce titre ; blocs publiés et
 // lignes d'un tableau compris ; aucune règle d'accès, et chaque copie garde l'espace de sa source (son propriétaire,
-// écrit sur elle, migration 20261119090000) ; les descendants que la personne ne lit pas restent (et ce qui est sous eux). Décidé par le
+// écrit sur elle, migration 20261126172651) ; les descendants que la personne ne lit pas restent (et ce qui est sous eux). Décidé par le
 // service seul (ADR-012 § 3) : lire le nœud et chaque descendant copié, écrire sous son parent ; puis
 // `duplicate_subtree`, une transaction, qui ne calcule aucun niveau et borne sous le verrou de l'arbre
 // l'organisation et la forme de la copie (HN-E05S10e-18). Sans lui, un contenu ne se copie pas.

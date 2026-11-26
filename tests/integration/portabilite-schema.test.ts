@@ -380,13 +380,14 @@ describe.skipIf(!sqlConfigured)(
       expect(kept).toEqual({ moved: 2, ceded: 1, refused: 2 })
     })
 
-    it("should move updated_at on the six dated tables through set_updated_at, moddatetime found nowhere (AC7)", async () => {
+    it("should move updated_at on the seven dated tables through set_updated_at, moddatetime found nowhere (AC7)", async () => {
       const org = await fx.createOrg()
       const tree = await fx.createTree(org.id)
       const account = await fx.createAccount(org.id, { ownerKind: "org", label: `compte-${hex(3)}` })
       const node = await fx.createNode(org.id, { parentId: tree.root, path: `page_${hex(3)}` })
       const [block] = await fx.draftBlocks(node, [{ type: "paragraph", text: "Avant." }])
       await fx.addActivation(org.id)
+      await sql`insert into platform.host_apis (org_id, refused_address, refused_at, problems) values (${org.id}, 'https://hote.example.test', now(), '[]'::jsonb)`
       const stamps = async () => {
         const [row] = await sql`select
             (select updated_at from platform.orgs where id = ${org.id}) as orgs,
@@ -394,7 +395,8 @@ describe.skipIf(!sqlConfigured)(
             (select updated_at from platform.nodes where id = ${node}) as nodes,
             (select updated_at from platform.node_drafts where node_id = ${node}) as node_drafts,
             (select updated_at from platform.blocks where id = ${block} and state = 'draft') as blocks,
-            (select updated_at from platform.connector_activations where org_id = ${org.id}) as connector_activations`
+            (select updated_at from platform.connector_activations where org_id = ${org.id}) as connector_activations,
+            (select updated_at from platform.host_apis where org_id = ${org.id}) as host_apis`
         return row
       }
       const before = await stamps()
@@ -406,6 +408,7 @@ describe.skipIf(!sqlConfigured)(
         sql`update platform.node_drafts set title = 'Après' where node_id = ${node}`,
         sql`update platform.blocks set text = 'Après.' where id = ${block} and state = 'draft'`,
         sql`update platform.connector_activations set state = 'inactive' where org_id = ${org.id}`,
+        sql`update platform.host_apis set refreshed_at = now() where org_id = ${org.id}`,
       ])
 
       const after = await stamps()

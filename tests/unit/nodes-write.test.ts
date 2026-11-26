@@ -167,6 +167,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       expect(await blockRows("ventes/cr_test", "published")).toEqual([])
       const [first, second] = drafted
       expect(lea.result?.data).toEqual({
+        id: node?.id,
         path: "ventes/cr_test",
         revision: 0,
         space: "team",
@@ -193,7 +194,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       await content(base())
       const lea = await write("lea", input, { asIs: true })
       expect(lea.result?.text).toBe(
-        // Une ligne, sans brouillon (E11-S18, AC-4), puis l'espace où le nœud est créé (20261119090000).
+        // Une ligne, sans brouillon (E11-S18, AC-4), puis l'espace où le nœud est créé (20261126172651).
         "Published ventes/cr_test revision 1 (1 section, 2 blocks): added « Décisions » (34 characters). Next write: base_revision 1.\nSpace: team Ventes (lead: Claire Morel): its members see it.",
       )
       expect(lea.result?.data).toMatchObject({ path: "ventes/cr_test", revision: 1, status: "published", has_draft: false, draft_stamp: null })

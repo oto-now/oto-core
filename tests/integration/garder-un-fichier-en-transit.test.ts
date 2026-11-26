@@ -74,7 +74,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   async function session(person: Person) {
     const { db, identity } = as(person)
     const journal: Parameters<typeof connectDeps>[0]["journal"] = []
-    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `garder-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), origin })
+    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `garder-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin })
     const { code } = await mcp.openContext("Range la pièce")
     const call = (tool: string, args: Record<string, unknown>) => mcp.call(tool, { ctx: code, ...args })
     return { call, keep: (args: Record<string, unknown>) => call("call", { function: "file.keep", arguments: args }), journal }
@@ -90,7 +90,7 @@ describe.skipIf(!sqlConfigured || pending)(privateFolderSuite(sqlConfigured ? SU
   }
 
   /** Une page publiée par `author`, en révision 1, à trois sections : son identifiant. */
-  /** `space` : l'espace d'une page créée hors d'un dossier d'équipe, le Privé de l'auteur sans lui (20261119090000). */
+  /** `space` : l'espace d'une page créée hors d'un dossier d'équipe, le Privé de l'auteur sans lui (20261126172651). */
   async function page(path: string, author: Person = "claire", space?: "everyone"): Promise<string> {
     const writer = await session(author)
     const ops = ["Lundi", "Mardi", "Mercredi"].map((section) => ({ op: "add_section", section, text: `Appel du ${section.toLowerCase()}.` }))

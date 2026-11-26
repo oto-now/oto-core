@@ -150,7 +150,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
     it("should delete the team once its folder passed to the organisation, its rules with it, keeping the former Contexte", async () => {
       const logistique = await teamWithPage("logistique")
-      // Le dossier et ses nœuds du même propriétaire passent ensemble, comme `admin_node transfer_owner` (20261119090000).
+      // Le dossier et ses nœuds du même propriétaire passent ensemble, comme `admin_node transfer_owner` (20261126172651).
       await as("ada").tx(
         (sql) => sql`update platform.nodes set owner_kind = 'org', owner_team_id = null
                       where org_id = ${o.org.id} and owner_team_id = ${logistique.team} and (id = ${logistique.folder} or starts_with(path, 'logistique/')) returning id`,

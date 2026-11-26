@@ -3,9 +3,10 @@
 // exécute. Le paquet ne dépend d'aucun dépôt de connecteurs : ce type est le sien, de même forme que la sortie de la
 // fabrique du dépôt `connectors` (`ts/src/types.ts`), qu'un hôte lui passe telle quelle ; un connecteur propre à
 // l'hôte s'écrit à la main dans cette même forme. Ce qui n'y figure pas (version, quota, exposition) est ignoré ;
-// `modes` y figure : il dit qui peut posséder un compte du connecteur. Aucun secret ici : `auth` nomme des champs de
-// `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement (`oauth2_user`) viennent de la
-// personne qui a consenti et de l'application OAuth de l'hôte.
+// `modes` y figure : il dit qui peut posséder un compte du connecteur. Un connecteur s'ouvre par un seul accès (`auth`,
+// `credential`, `modes`) ou par plusieurs (`accesses`, à leur place) : chaque compte retient le sien. Aucun secret ici :
+// `auth` nomme des champs de `credential`, les valeurs viennent du compte à l'appel ; celles d'un consentement
+// (`oauth2_user`) viennent de la personne qui a consenti et de l'application OAuth de l'hôte.
 
 /**
  * Qui sert un compte du connecteur, comme la fabrique l'écrit : `byo_user`, la clé d'une personne (un compte personnel) ;
@@ -13,6 +14,15 @@
  * l'hôte (`holder: host`), qu'un compte d'organisation ou d'équipe ouvre sans rien saisir.
  */
 export type ConnectorMode = "platform" | "byo_user" | "byo_org"
+
+/**
+ * Le connecteur des consentements à l'API de l'hôte d'une organisation (`host-api/consent-access.ts`) : le compte
+ * personnel où se range le consentement d'une personne, quand son client MCP est tiers. Jamais déclaré par l'hôte :
+ * `registerConnectors` refuse ce nom, l'import d'un document d'hôte aussi.
+ */
+export const HOST_CONSENT_CONNECTOR = "host_api"
+/** Son libellé dans la liste `platform.connectors`, commune aux organisations ; le compte porte le titre de l'API. */
+export const HOST_CONSENT_CONNECTOR_LABEL = "Host API"
 
 /** L'application OAuth d'un connecteur `oauth2_user`, fournie par l'hôte (jamais lue de l'environnement par le paquet). */
 export type OAuthApplication = { readonly clientId: string; readonly clientSecret: string }
@@ -156,6 +166,8 @@ export type ConnectorOAuthUser = {
   readonly clientAuth: "body" | "basic"
   readonly authorizeParams?: { readonly [param: string]: string }
   readonly pkce?: "S256"
+  /** L'indicateur de ressource (RFC 8707), posé à l'autorisation, à l'échange du code et à chaque renouvellement. */
+  readonly resource?: string
   readonly expiresInDefault?: number
   readonly identity: ConnectorConsentIdentity
   readonly fromToken?: readonly string[]
@@ -170,7 +182,9 @@ export type ConnectorOAuthUser = {
  * nomme un champ de `credential`. `basic` : `Authorization: Basic base64(username + ":" + password)`, en UTF-8 ; sans
  * `username`, l'identifiant est vide (une clé seule passée en mot de passe). `oauth2_jwt_bearer` : `key` nomme le seul
  * champ, secret, qui porte le fichier JSON de la clé ; l'assertion RS256 s'échange à `tokenUrl`, fixe (`service-account.ts`),
- * contre les droits de `scopes` ou du niveau du compte.
+ * contre les droits de `scopes` ou du niveau du compte. `host_delegated` (profil hôte de la lib) : le jeton de la personne
+ * obtenu de `issuer` pour l'audience `resource`, réservé aux fonctions de l'API d'un hôte (`host-api/`), refusé par
+ * `registerConnectors`.
  */
 export type ConnectorAuth =
   | { readonly kind: "api_key"; readonly in: "header"; readonly name: string; readonly prefix?: string; readonly key: string }
@@ -188,6 +202,7 @@ export type ConnectorAuth =
     } & ConnectorTokenEndpoint)
   | ConnectorOAuthUser
   | ({ readonly kind: "oauth2_jwt_bearer"; readonly tokenUrl: string; readonly key: string } & ConnectorServiceAccountScopes)
+  | { readonly kind: "host_delegated"; readonly issuer: string; readonly resource: string }
   | { readonly kind: string }
 
 /**
@@ -416,8 +431,12 @@ export type ConnectorFunctionDefinition = {
   readonly background?: true
   /** Ce que coûte un appel ; contrôlé à la déclaration, lu par `costOf` et `settledQuantity`, ni réservé ni réglé par le moteur. */
   readonly cost?: ConnectorFunctionCost
-  /** Gabarit du récapitulatif d'une fonction sensible, avec des `{argument}`. */
-  readonly confirm?: { readonly summary: string }
+  /**
+   * La confirmation d'une fonction sensible : le gabarit du récapitulatif, avec des `{argument}` ; ou `by: "host"`, les
+   * deux temps de l'API elle-même (profil hôte de la lib, règle 26 de la fabrique), réservés aux fonctions de l'API d'un
+   * hôte (`host-api/`) et refusés par `registerConnectors`.
+   */
+  readonly confirm?: { readonly summary: string; readonly by?: never } | { readonly by: "host"; readonly summary?: never }
 }
 
 /**
@@ -428,9 +447,37 @@ export type ConnectorFunctionDefinition = {
  */
 export type ConnectorProbeBalance = { readonly path: string; readonly min: number; readonly unit: string }
 
-export type ConnectorDefinition = {
+/** Comment un compte s'ouvre : son authentification, les champs de son credential, qui peut le posséder. */
+export type ConnectorAccessFields = {
+  readonly auth: ConnectorAuth
+  /** Vide pour `oauth2_user` : les jetons d'un consentement ne sont pas des champs. */
+  readonly credential: readonly ConnectorCredentialField[]
+  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
+  readonly modes: readonly ConnectorMode[]
+}
+
+/**
+ * Un accès d'un connecteur qui s'ouvre par plusieurs (le compte de service d'une organisation, le consentement d'une
+ * personne) : `name`, que le compte ouvert par lui retient (`accounts.access`), `label`, montré à qui connecte, et ses
+ * `auth` (à niveaux d'accès), `credential` et `modes`. Les fonctions, l'adresse et la table d'erreurs sont communes.
+ */
+export type ConnectorAccess = { readonly name: string; readonly label: string } & ConnectorAccessFields
+
+/** Ce qu'un connecteur déclare hors de ses accès. */
+type ConnectorShared = {
   readonly name: string
   readonly label: string
+  /**
+   * Ce qu'est l'outil et quand s'en servir, écrit pour l'assistant (`connector.description` du format) : 1 à 2 000
+   * caractères. Servi en entier avec le contrat de chaque fonction (`read <fonction>`), sa première phrase en tête du
+   * connecteur dans `read functions`, et rendu à l'écran Connecteurs (`OrgConnector.description`).
+   */
+  readonly description?: string
+  /**
+   * Le domaine de l'outil (`connector.logo_domain` du format : `attio.com`), en minuscules, sans schéma, port ni chemin,
+   * d'où l'écran tire son logo ; rendu tel quel à l'écran Connecteurs (`OrgConnector.logoDomain`).
+   */
+  readonly logoDomain?: string
   /**
    * Racine `https://` des chemins, sans `/` final ; gabarit possible sur les réglages (`https://{domain}.example.net`) et
    * sur l'identité du compte, après l'hôte (`https://api.example.com/v2/{account_id}`).
@@ -438,14 +485,9 @@ export type ConnectorDefinition = {
   readonly baseUrl?: string
   /** Racine des chemins par valeur d'un réglage `choice` (une région), à la place de `baseUrl`. */
   readonly baseUrls?: ConnectorUrlsBySetting
-  readonly auth: ConnectorAuth
-  /** Vide pour `oauth2_user` : les jetons d'un consentement ne sont pas des champs. */
-  readonly credential: readonly ConnectorCredentialField[]
   /** Présente pour un compte rattaché chez un tiers qui héberge les comptes de ses utilisateurs. */
   readonly accountIdentity?: ConnectorAccountIdentity
   readonly settings?: readonly ConnectorSetting[]
-  /** Qui peut posséder un compte du connecteur ; au moins un, chacun une fois. */
-  readonly modes: readonly ConnectorMode[]
   readonly timeoutMs: number
   readonly queryArrays?: "repeat" | "brackets" | "comma"
   /** En-têtes constants de toute requête ; jamais l'en-tête d'authentification. */
@@ -460,3 +502,23 @@ export type ConnectorDefinition = {
   readonly probe?: { readonly function: string; readonly nonEmpty: readonly string[]; readonly balance?: ConnectorProbeBalance }
   readonly functions: readonly ConnectorFunctionDefinition[]
 }
+
+/**
+ * Le connecteur tel qu'un seul accès l'ouvre : un connecteur à un seul accès, ou un connecteur à plusieurs vu par l'un
+ * d'eux (`auth`, `credential` et `modes` de l'accès à la place de `accesses`, comme la fabrique le juge). Ce que lisent
+ * l'authentification, les propriétaires, le formulaire et le moteur.
+ */
+export type ConnectorView = ConnectorShared & ConnectorAccessFields & { readonly accesses?: undefined }
+
+/**
+ * Un connecteur décrit : un seul accès (`auth`, `credential`, `modes`), ou plusieurs (`accesses`, au moins deux, à
+ * leur place, jamais à côté).
+ */
+export type ConnectorDefinition =
+  | ConnectorView
+  | (ConnectorShared & {
+      readonly accesses: readonly ConnectorAccess[]
+      readonly auth?: undefined
+      readonly credential?: undefined
+      readonly modes?: undefined
+    })

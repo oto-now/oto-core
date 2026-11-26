@@ -20,6 +20,44 @@ export const nodePathSchema = z
   .regex(NODE_PATH_PATTERN, "Path: lowercase letters, digits and _ separated by /, e.g. ventes/relance_devis")
 
 /**
+ * L'identifiant stable d'un nœud (`nodes.id`, un uuid), que `read`, `find` et `write` servent : il ne change ni au
+ * déplacement ni au renommage. Un hôte qui garde les pages qui l'intéressent dans sa propre base les désigne par lui.
+ */
+export const nodeIdSchema = z.guid("Id: the uuid of a node, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90")
+
+/** Un exemple d'identifiant, dans les descriptions et les exemples servis. */
+export const NODE_ID_EXAMPLE = "0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90"
+
+/**
+ * Un nœud désigné par son chemin ou par son identifiant, jamais les deux (`write`, `node.move`) : le refus du schéma,
+ * posé sur la clé `id`. `optional` : `read` admet aussi ni l'un ni l'autre, avec `file` (`readTargetIssue`).
+ */
+export function pathOrIdIssue(input: { path?: unknown; id?: unknown }, optional = false): string | null {
+  if (input.path !== undefined && input.id !== undefined) return "Give path or id, not both."
+  if (!optional && input.path === undefined && input.id === undefined) return "Give path or id."
+  return null
+}
+
+/** `superRefine` d'un schéma dont `pathOrIdIssue` juge la cible. */
+export function refinePathOrId(optional = false) {
+  return (input: { path?: unknown; id?: unknown }, context: z.RefinementCtx) => {
+    const issue = pathOrIdIssue(input, optional)
+    if (issue !== null) context.addIssue({ code: "custom", message: issue, path: ["id"] })
+  }
+}
+
+/** Le refus d'une lecture sans cible, du schéma comme du service (`readFileAlone`). */
+export const READ_TARGET_MISSING = "Give path or id, or file alone to read a file by its id."
+
+/** La cible de `read` : un chemin, un identifiant, ou un fichier seul ; jamais un chemin et un identifiant ensemble. */
+export function refineReadTarget(input: { path?: unknown; id?: unknown; file?: unknown }, context: z.RefinementCtx): void {
+  refinePathOrId(true)(input, context)
+  if (input.path === undefined && input.id === undefined && input.file === undefined) {
+    context.addIssue({ code: "custom", message: READ_TARGET_MISSING, path: ["path"] })
+  }
+}
+
+/**
  * Un texte en segment de chemin (le slug d'une équipe, HN-E05S03-8) : sans accents, en minuscules, tout ce qui
  * n'est pas `[a-z0-9]` devient `_`, `max` caractères au plus, sans `_` en tête ni en fin ; `""` pour un
  * texte sans lettre ni chiffre. Parcours linéaire (`security-patterns.md § Validation des inputs`). Ici depuis
@@ -200,6 +238,10 @@ export const readNodeSchema = z.object({
     .describe(
       `Id of a file (html, md, txt, csv, json, or a format the host reads), from its link ${FILE_ADDRESS}/<id>, to read its text alone: attached to the page of path, or, without path, any file you can open, your transit files included; a long file comes as an outline of its parts, read one with section (default: the whole page).`,
     ),
+  // Un nœud désigné par son identifiant stable, à la place de `path` (ajout facultatif, ADR-002), en dernier comme tout ajout : `refineReadTarget`.
+  id: nodeIdSchema
+    .optional()
+    .describe(`Stable id of a page, procedure or table, as read, find and write return it, e.g. ${NODE_ID_EXAMPLE}, instead of path: it does not change when the node moves (default: none, read by path).`),
 })
 
 export type ReadNodeInput = z.infer<typeof readNodeSchema>
@@ -208,8 +250,13 @@ export type ReadNodeInput = z.infer<typeof readNodeSchema>
  * L'entrée de `write`, sans `ctx` : les champs d'E03-S01 à l'identique, sauf les éléments de `ops`
  * (`writeOpSchema`) et `header`, décrit sans préfixe (`mcp/schemas.ts` pose la description préfixée).
  */
+/** Le chemin d'une écriture, tel que `node.write_many` l'exige pour chaque page. */
+const writePathSchema = nodePathSchema.describe("Path of the page, procedure or table to create or edit, e.g. conseil/cr_client_2026_09.")
+
 export const writeNodeSchema = z.object({
-  path: nodePathSchema.describe("Path of the page, procedure or table to create or edit, e.g. conseil/cr_client_2026_09."),
+  path: writePathSchema
+    .optional()
+    .describe("Path of the page, procedure or table to create or edit, e.g. conseil/cr_client_2026_09; required unless id is given."),
   base_revision: z
     .number()
     .int()
@@ -248,6 +295,10 @@ export const writeNodeSchema = z.object({
     .boolean()
     .optional()
     .describe("No longer used: every write is published at once, and false is ignored (default true)."),
+  // Une modification par l'identifiant stable du nœud, à la place de `path` (ajout facultatif, ADR-002), en dernier comme tout ajout : `refinePathOrId`.
+  id: nodeIdSchema
+    .optional()
+    .describe(`Stable id of an existing page, procedure or table to edit, as read, find and write return it, e.g. ${NODE_ID_EXAMPLE}, instead of path; creating needs path (default: none).`),
 })
 
 export type WriteNodeInput = z.infer<typeof writeNodeSchema>
@@ -271,7 +322,8 @@ export const WRITE_MANY_MAX = 50
  */
 export const writeManyArgsSchema = z.strictObject({
   pages: z
-    .array(z.strictObject({ ...writeNodeSchema.shape, ops: strictWriteOpsSchema }))
+    // Chaque page par son chemin, comme avant `id` : le lot crée autant qu'il modifie.
+    .array(writeNodeSchema.omit({ id: true }).extend({ path: writePathSchema, ops: strictWriteOpsSchema }).strict())
     .min(1)
     .max(WRITE_MANY_MAX)
     .describe(
@@ -293,6 +345,21 @@ export const moveNodeSchema = z.strictObject({
 })
 
 export type MoveNodeInput = z.infer<typeof moveNodeSchema>
+
+/**
+ * Les arguments de `node.move` : ceux de `moveNodeSchema`, le nœud désigné par son chemin ou par son identifiant stable
+ * (`refinePathOrId`). La route et le formulaire « Déplacer… » gardent `moveNodeSchema`, par chemin.
+ */
+export const moveNodeArgsSchema = moveNodeSchema
+  .extend({
+    path: nodePathSchema
+      .optional()
+      .describe("Current path of the page, procedure, table or folder to move, e.g. ventes/relance_devis; required unless id is given."),
+    id: nodeIdSchema
+      .optional()
+      .describe(`Stable id of the node to move, as read, find and write return it, e.g. ${NODE_ID_EXAMPLE}, instead of path (default: none).`),
+  })
+  .superRefine(refinePathOrId())
 
 /** Un bloc tel que l'écran le lit (AC35) : id complet, référence servie, contenu, révision. */
 export type BlockView = {

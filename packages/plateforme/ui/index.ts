@@ -46,6 +46,9 @@ export { comptesAuxPartagesLus, vueDesConnecteurs } from "./admin/connecteurs/li
 export type { PartagesDuCompte } from "./admin/connecteurs/lignes-des-connecteurs"
 export { EcranDrapeaux, EcranDrapeauxChargement } from "./admin/drapeaux/ecran-drapeaux"
 export type { EcranDrapeauxProps } from "./admin/drapeaux/ecran-drapeaux"
+// La supervision de la plateforme (N9) : tous les espaces, pour l'équipe plateforme.
+export { EcranSupervision, EcranSupervisionChargement } from "./supervision/ecran-supervision"
+export type { EcranSupervisionProps } from "./supervision/ecran-supervision"
 export { AccesPlateformeChargement } from "./admin/ilot"
 // E07-S03 : la grille, la file et la revue d'un tableau ; les blocs `reference` rendus en place.
 export { EcranDeTableauChargement, TableauDuNoeud } from "./tableau/tableau-du-noeud"
@@ -132,4 +135,6 @@ export { cheminDuContexte } from "./contexte/parties-du-contexte"
 export { MESSAGES_DE_LA_VISIONNEUSE } from "./noeud/libelles-des-fichiers"
 // E10-S02 (lot f, AC-f15) : le formulaire de dépôt d'un lien à usage unique, et ses phrases pour `resultatDe` de la page de l'hôte.
 export { EcranDeDepot } from "./depot/ecran-de-depot"
+export { EcranConnexionDUnConnecteur } from "./connexion-d-un-connecteur/ecran-connexion-d-un-connecteur"
+export type { EcranConnexionDUnConnecteurProps, EtapeAffichee } from "./connexion-d-un-connecteur/ecran-connexion-d-un-connecteur"
 export { REFUS_DU_DEPOT } from "./depot/libelles"

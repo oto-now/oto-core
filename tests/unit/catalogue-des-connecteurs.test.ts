@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AccountOwnerChoices, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
-import { nomLibre, outilsAAjouter, outilsCherches } from "../../packages/plateforme/ui/admin/connecteurs/catalogue-des-connecteurs"
+import { cleDeLOutil, nomLibre, outilsAAjouter, outilsCherches } from "../../packages/plateforme/ui/admin/connecteurs/catalogue-des-connecteurs"
 
 // Le catalogue de la fenêtre « Ajouter un connecteur » : fonctions pures, sur des connecteurs en mémoire.
 
@@ -38,7 +38,7 @@ const ADMINISTRATEUR: AccountOwnerChoices = { user: true, org: true, teams: [EQU
 
 describe("outilsAAjouter", () => {
   it("should give a member the tools that admit a personal account, by name, a team lead the teams' too, and an administrator the organisation's", () => {
-    const lus = (choix: AccountOwnerChoices) => outilsAAjouter(CONNECTEURS, FORMULAIRES, choix).map((outil) => [outil.libelle, outil.facon, outil.proprietaires, outil.ferme])
+    const lus = (choix: AccountOwnerChoices) => outilsAAjouter(CONNECTEURS, FORMULAIRES, choix).map((outil) => [outil.libelle, outil.facon, outil.proprietaires, outil.bloquePar !== null])
     expect({ membre: lus(MEMBRE), responsable: lus(RESPONSABLE), administrateur: lus(ADMINISTRATEUR) }).toEqual({
       // Ni « mail » (sans formulaire) ni « Paie » (organisation et équipes seulement) ; « Réseau » n'a pas son port.
       membre: [
@@ -56,7 +56,7 @@ describe("outilsAAjouter", () => {
         ["Microsoft 365", "consentement", ["user"], false],
         ["Paie", "saisie", ["team"], true],
       ],
-      // Un outil connecté chez le tiers ne se connecte que pour soi ; un outil fermé le dit.
+      // Un outil connecté chez le tiers ne se connecte que pour soi ; un outil bloqué le dit.
       administrateur: [
         ["Crm Pro", "saisie", ["user", "org", "team"], false],
         ["Écritures", "saisie", ["user"], false],
@@ -68,10 +68,50 @@ describe("outilsAAjouter", () => {
     })
   })
 
+  it("should count the person's own connectors of each tool, those that work apart, and say who blocked a closed tool", () => {
+    const mes = [
+      { id: "c1", connecteur: "crm", libelle: "Crm Pro", fonctionne: true },
+      { id: "c2", connecteur: "crm", libelle: "Crm Pro 2", fonctionne: false },
+      { id: "e1", connecteur: "ecritures", libelle: "Écritures", fonctionne: true },
+    ]
+    const lus = outilsAAjouter(CONNECTEURS, FORMULAIRES, ADMINISTRATEUR, mes).map((outil) => [outil.connecteur, outil.miens, outil.connectes, outil.bloquePar])
+    expect(lus.filter(([connecteur]) => ["crm", "ecritures", "mail", "paie"].includes(String(connecteur)))).toEqual([
+      ["crm", ["Crm Pro", "Crm Pro 2"], 1, null],
+      ["ecritures", ["Écritures"], 1, null],
+      ["mail", [], 0, null],
+      ["paie", [], 0, { userId: "u", name: null }],
+    ])
+  })
+
   it("should create the account in the mode the connector admits", () => {
     const modes = outilsAAjouter(CONNECTEURS, FORMULAIRES, ADMINISTRATEUR).map((outil) => [outil.connecteur, outil.mode])
     expect(modes).toContainEqual(["mail", "simule"])
     expect(modes).toContainEqual(["crm", "reel"])
+  })
+})
+
+describe("outilsAAjouter, connecteur à plusieurs accès", () => {
+  const console = connecteur("console", "Search Console")
+  const FORMULAIRES_DE_LA_CONSOLE = [
+    formulaire("console", { access: { name: "service_account", label: "Compte de service" }, consent: false, ownerKinds: ["org", "team"], fields: [{ name: "service_account_key", label: "Clé", secret: true }] }),
+    formulaire("console", { access: { name: "google_account", label: "Compte Google" }, consent: true, ownerKinds: ["user"] }),
+  ]
+
+  it("should give one tool per access, by the label of its access: the key of the service account to enter, and Connect my account for the sign-in", () => {
+    const outils = outilsAAjouter([console], FORMULAIRES_DE_LA_CONSOLE, ADMINISTRATEUR)
+    expect(outils.map((outil) => [cleDeLOutil(outil), outil.acces, outil.facon, outil.proprietaires])).toEqual([
+      ["console:service_account", { nom: "service_account", libelle: "Compte de service" }, "saisie", ["org", "team"]],
+      ["console:google_account", { nom: "google_account", libelle: "Compte Google" }, "consentement", ["user"]],
+    ])
+  })
+
+  it("should give a member only the access that admits a personal account", () => {
+    expect(outilsAAjouter([console], FORMULAIRES_DE_LA_CONSOLE, MEMBRE).map(cleDeLOutil)).toEqual(["console:google_account"])
+  })
+
+  it("should keep the tool of a connector with a single access without access, keyed by its connector", () => {
+    const [crm] = outilsAAjouter([connecteur("crm", "Crm Pro")], [formulaire("crm", {})], ADMINISTRATEUR)
+    expect([cleDeLOutil(crm), "acces" in crm]).toEqual(["crm", false])
   })
 })
 
@@ -86,5 +126,9 @@ describe("outilsCherches", () => {
 describe("nomLibre", () => {
   it("should propose the name of the tool, or the first free rank after it, whatever the case", () => {
     expect([nomLibre("Crm Pro", []), nomLibre("Crm Pro", ["crm pro"]), nomLibre("Crm Pro", ["Crm Pro", "CRM PRO 2", "Autre"])]).toEqual(["Crm Pro", "Crm Pro 2", "Crm Pro 3"])
+  })
+
+  it("should number a further connector of a tool after those the person already has, even named otherwise", () => {
+    expect([nomLibre("Compta", ["Compta · Atelier", "Compta · SCI"], 3), nomLibre("Compta", ["Compta 3"], 3)]).toEqual(["Compta 3", "Compta 4"])
   })
 })

@@ -69,6 +69,9 @@ const CALLABLE: Record<string, string> = {
   "platform.route_candidates(uuid,text,text,integer)": "read",
   "platform.search_content(uuid,text,text[],integer)": "read",
   "platform.staff_directory()": "read",
+  "platform.staff_org_accounts(uuid)": "read (platform team): accounts counted by connector and owner, never a key nor a label",
+  "platform.staff_org_members(uuid)": "read (platform team)",
+  "platform.staff_org_overview(timestamp with time zone)": "read (platform team): counts only",
   "platform.sweep_node_views(uuid)": "a member sweeps the views older than 90 days (recordNodeView), delay fixed in the base; nothing affirmed",
   "platform.update_my_profile(uuid,jsonb)": "the person's own profile",
   "platform.usage_authorship(uuid,timestamp with time zone,uuid[],integer)": "read (administrator)",
@@ -100,6 +103,8 @@ const UPDATED_BY_AUTHENTICATED: Record<string, string[]> = {
   comments: ["text", "mentions", "edited_at", "to_assistant"],
   connector_activations: ["org_id", "connector", "state", "activated_by", "closed_by", "created_at", "updated_at"],
   ctx: ["contexts"],
+  // L'API de l'hôte (`20261123150000`) : réglée et rafraîchie par l'équipe plateforme (`refreshHostApi`), sa ligne entière.
+  host_apis: ["org_id", "address", "document", "version", "etag", "served_at", "refreshed_at", "refused_address", "refused_at", "problems", "created_at", "updated_at"],
   feedback: ["state", "resolution", "handled_by", "handled_at"],
   invitations: ["revoked_at"],
   members: ["org_id", "user_id", "role", "profile", "created_at"],

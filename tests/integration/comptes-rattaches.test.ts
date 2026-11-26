@@ -9,8 +9,11 @@
 import { randomBytes } from "crypto"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
-import { callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
+import { activateConnector, callFunction, createAccount, setAccountRule, setAccountSecret } from "@otomata_tech/oto_platform/server"
 import { readNode } from "../../packages/plateforme/server/nodes/read"
+import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
+import { probeAccount } from "../../packages/plateforme/server/connectors/probe"
+import { startHostedLink } from "../../packages/plateforme/server/connectors/hosted-link"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -75,12 +78,17 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     })
 
   async function gate(caller: Caller, org: SqlReferenceOrg, path: string, body?: unknown): Promise<Response> {
+    return gateFrom(origin(org), caller, org, { path, body })
+  }
+
+  /** La porte appelée depuis `from` : l'origine de l'écran, ou celle d'un autre site pour un envoi forgé. */
+  async function gateFrom(from: string, caller: Caller, org: SqlReferenceOrg, { path, body }: { path: string; body?: unknown }): Promise<Response> {
     const method = body === undefined ? "GET" : "POST"
     const tasks: Task[] = []
     const request = new Request(`${origin(org)}/api/platform/${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { origin: origin(org), "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
+      headers: { origin: from, "x-forwarded-proto": "https", "content-type": "application/json", "user-agent": "comptes-rattaches-test" },
     })
     const response = await handlePlateforme(request, { accessToken: tokens.get(caller) ?? null, host: org.host, verifyToken: fx.verifyToken, defer: (task) => tasks.push(task) })
     for (const task of tasks) await task()
@@ -179,6 +187,113 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     vi.restoreAllMocks()
   })
 
+  it("should refuse to start a link for a connector an administrator blocked, naming the administrators, keeping nothing (closed)", async () => {
+    await admin`update platform.connector_activations set state = 'inactive' where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    try {
+      const { status, url, error } = await start("lea", o, { connector: CONNECTOR })
+      expect([status, url, error?.code]).toEqual([403, "", "not_enabled"])
+      const { db, identity } = people.get(`lea@${o.org.id}`)!
+      const refused = await refusal(startHostedLink(db, identity, { connector: CONNECTOR }, { origin: origin(o) }))
+      expect([refused.code, refused.details?.reason]).toEqual(["not_enabled", "closed"])
+      expect(refused.details?.administrators).toEqual([{ name: expect.any(String) }])
+      // Ni demande datée, ni lien demandé au tiers.
+      expect(await admin`select 1 from platform.hosted_link_requests where connector = ${CONNECTOR}`).toHaveLength(0)
+      expect(fake.calls).toEqual([])
+      // Bloqué ici seulement : la même personne branche le connecteur dans sa seconde organisation.
+      expect((await start("lea", o2, { connector: CONNECTOR })).status).toBe(200)
+    } finally {
+      await admin`update platform.connector_activations set state = 'active' where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    }
+  })
+
+  it("should refuse the return of a link started before an administrator blocked the connector, linking nothing (closed)", async () => {
+    const block = (state: "active" | "inactive") => admin`update platform.connector_activations set state = ${state} where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    try {
+      // Bloqué entre le départ et le retour : refusé avant tout appel au tiers.
+      await start("lea", o, { connector: CONNECTOR, return_to: "/mes-comptes" })
+      const request = await lastRequest("lea")
+      fake.state.accounts = [{ id: accountId("lea"), createdAt: near(request, 1), probe: "alive", who: who("lea") }]
+      await block("inactive")
+      const location = await back("lea", { request: request.id })
+      expect([location.pathname, location.searchParams.get("hosted"), location.searchParams.get("reason")]).toEqual(["/mes-comptes", "failed", "not_enabled"])
+      expect(fake.calls.map((call) => call.method)).toEqual(["createLink"])
+
+      // Bloqué pendant la sonde : l'écriture relit le blocage, rien n'est lié.
+      await block("active")
+      const probe = fake.port.probe.bind(fake.port)
+      vi.spyOn(fake.port, "probe").mockImplementation(async (id) => {
+        await block("inactive")
+        return probe(id)
+      })
+      const late = await back("lea", { request: request.id })
+      expect([late.searchParams.get("hosted"), late.searchParams.get("reason")]).toEqual(["failed", "not_enabled"])
+      expect(fake.calls.map((call) => call.method)).toContain("probe")
+      expect(await accountsOf("lea")).toEqual([])
+      expect((await lastRequest("lea")).consumed_at).toBeNull()
+    } finally {
+      await block("active")
+    }
+  })
+
+  it("should keep a connector paid by the host's key visible, but refuse its link and its call until an administrator adopts it", async () => {
+    await admin`delete from platform.connector_activations where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    try {
+      const lea = person("lea", o)
+      const ada = person("ada", o)
+      // Visible : lu comme toute fonction d'un connecteur ouvert.
+      expect((await readNode(lea.db, lea.identity, { path: `${CONNECTOR}.list_contacts` })).text).toContain(`connector ${CONNECTOR}`)
+      // Ni branchement, ni appel : le refus nomme les administrateurs, par leur nom seulement.
+      const { status, error } = await start("lea", o, { connector: CONNECTOR })
+      expect([status, error?.code]).toEqual([403, "not_enabled"])
+      const unlinked = await refusal(startHostedLink(lea.db, lea.identity, { connector: CONNECTOR }, { origin: origin(o) }))
+      expect(unlinked.details).toMatchObject({ reason: "not_adopted", administrators: [{ name: expect.any(String) }] })
+      expect(JSON.stringify(unlinked.details)).not.toContain(o.people.ada.id)
+      const uncalled = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
+      expect([uncalled.code, uncalled.details?.reason, uncalled.details?.gesture]).toEqual(["not_enabled", "connector_off", "admin_activation"])
+      expect(uncalled.details?.administrators).toEqual([{ name: expect.any(String) }])
+      expect(fake.calls).toEqual([])
+      expect(sent).toEqual([])
+
+      // Adopté par un administrateur : la personne branche son compte et l'appelle.
+      await activateConnector(ada.db, ada.identity, { connector: CONNECTOR })
+      await start("lea", o, { connector: CONNECTOR })
+      const request = await lastRequest("lea")
+      const id = accountId("lea")
+      fake.state.accounts = [{ id, createdAt: near(request, 1), probe: "alive", who: who("lea") }]
+      expect((await back("lea", { request: request.id })).searchParams.get("hosted")).toBe("connected")
+      const result = await callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) })
+      expect([result.status, result.account?.label]).toEqual(["done", label("lea")])
+    } finally {
+      await admin`insert into platform.connector_activations (org_id, connector, state) values (${o.org.id}, ${CONNECTOR}, 'active')
+        on conflict (org_id, connector) do update set state = 'active'`
+    }
+  })
+
+  it("should not reach the third party on the host's key when testing an account of a blocked, or not adopted, connector", async () => {
+    const lea = person("lea", o)
+    await start("lea", o, { connector: CONNECTOR })
+    const request = await lastRequest("lea")
+    fake.state.accounts = [{ id: accountId("lea"), createdAt: near(request, 1), probe: "alive", who: who("lea") }]
+    expect((await back("lea", { request: request.id })).searchParams.get("hosted")).toBe("connected")
+    const [account] = await accountsOf("lea")
+    const reached = () => [fake.calls.length, sent.length]
+    try {
+      for (const [row, reason] of [
+        [() => admin`update platform.connector_activations set state = 'inactive' where org_id = ${o.org.id} and connector = ${CONNECTOR}`, "closed"],
+        [() => admin`delete from platform.connector_activations where org_id = ${o.org.id} and connector = ${CONNECTOR}`, "not_adopted"],
+      ] as const) {
+        await row()
+        const before = reached()
+        const refused = await refusal(probeAccount(lea.db, lea.identity, { account_id: account.id }, { origin: origin(o) }))
+        expect([refused.code, refused.details?.reason]).toEqual(["not_enabled", reason])
+        expect(reached()).toEqual(before)
+      }
+    } finally {
+      await admin`insert into platform.connector_activations (org_id, connector, state) values (${o.org.id}, ${CONNECTOR}, 'active')
+        on conflict (org_id, connector) do update set state = 'active'`
+    }
+  })
+
   it("should start a link for the signed-in person: a dated request, the package's return address, a create link, nothing from the client", async () => {
     const { status, url } = await start("lea", o, { connector: CONNECTOR, return_to: "/dossiers/42?tab=pieces" })
     const request = await lastRequest("lea")
@@ -219,8 +334,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const lea = person("lea", o)
     const claire = person("claire", o)
     const none = await refusal(callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) }))
-    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}. Ask the user to connect theirs in the application (Connect my account).`
-    expect([none.code, none.message]).toEqual(["not_enabled", yours])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    const yours = `No ${CONNECTOR} account of yours is connected: each person connects their own to ${CONNECTOR}.`
+    const action = ` Ask the user to link their ${LABEL} account, then call again: open ${link}`
+    expect([none.code, none.message]).toEqual(["not_enabled", yours + action])
+    expect(none.details).toEqual({ reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link })
     const id = accountId("lea")
     await connect("lea", id)
     const own = await callFunction(lea.db, lea.identity, { function: `${CONNECTOR}.list_contacts` }, { origin: origin(o) })
@@ -234,8 +352,8 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const shared = ` Personal accounts shared with you, used only when named: « ${label("lea")} » (owner Léa Roux, live). Show them to the user and ask which one to use; do not pick one yourself. Then call again with account: "<label>".`
     expect([unnamed.code, unnamed.message, unnamed.details]).toEqual([
       "not_enabled",
-      yours + shared,
-      { shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
+      yours + shared + action,
+      { reason: "no_account", gesture: "hosted_link", connector: CONNECTOR, space: "me", url: link, shared_accounts: [{ id: account.id, label: label("lea"), owner: "Léa Roux", description: null }] },
     ])
     const named = await callFunction(claire.db, claire.identity, { function: `${CONNECTOR}.list_contacts`, account: label("lea") }, { origin: origin(o) })
     expect([named.status, named.account?.label, sent.at(-1)?.url]).toEqual(["done", label("lea"), `${API}/${id}/contacts?view=full`])
@@ -307,12 +425,46 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const id = accountId("lea")
     await connect("lea", id)
     fake.calls.length = 0
+    // La page de connexion ouverte dans la seconde organisation (un GET) dit le compte déjà relié ailleurs, sans rien
+    // relier, poser ni demander au tiers : un lien forgé n'y relie rien.
+    const lea2 = person("lea", o2)
+    const requestsIn = async (org: SqlReferenceOrg) => (await admin`select 1 from platform.hosted_link_requests where org_id = ${org.org.id} and user_id = ${o.people.lea.id}`).length
+    const before = await requestsIn(o2)
+    expect(await connectionStep(lea2.db, lea2.identity, { connector: CONNECTOR, space: "me" }, { origin: origin(o2) })).toEqual({
+      kind: "authorize",
+      gesture: "hosted_link",
+      connector: CONNECTOR,
+      label: LABEL,
+      space: "me",
+      elsewhere: [o.org.name],
+    })
+    expect([await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([before, 0, 1])
+    // Le relier ne se fait que par le POST du bouton, de la même origine : d'une autre, refusé sans rien relier.
+    const forged = await gateFrom("https://evil.example.test", "lea", o2, { path: "hosted-link", body: { connector: CONNECTOR, return_to: "/mes-comptes" } })
+    expect([forged.status, await requestsIn(o2), fake.calls.length, (await linkedRows(id)).length]).toEqual([403, before, 0, 1])
     const { url } = await start("lea", o2, { connector: CONNECTOR, return_to: "/mes-comptes" })
     const location = new URL(url)
     expect([location.origin, location.pathname, Object.fromEntries(location.searchParams)]).toEqual([origin(o2), "/mes-comptes", { hosted: "connected", account: label("lea") }])
     expect(fake.calls.map((call) => call.method)).toEqual(["probe"])
     expect((await linkedRows(id)).map((row) => row.org_id).sort()).toEqual([o.org.id, o2.org.id].sort())
     expect((await lastRequest("lea", o2)).consumed_at).not.toBeNull()
+  })
+
+  it("should say an account still linked in an organisation the person left, unnamed, before the click that links it here", async () => {
+    // Léa relie son compte dans une troisième organisation, puis la quitte : le compte y reste relié, mais elle n'en lit
+    // plus le nom (RLS de `orgs`). La page de la seconde le dit quand même, sans le nom.
+    const left = await fx.buildReferenceOrg(o.people)
+    await fx.addActivation(left.org.id, CONNECTOR)
+    const id = accountId("lea")
+    await connect("lea", id, left)
+    expect((await linkedRows(id)).map((row) => row.org_id)).toEqual([left.org.id])
+    await admin`delete from platform.team_members where user_id = ${o.people.lea.id} and team_id in (select id from platform.teams where org_id = ${left.org.id})`
+    await admin`delete from platform.members where org_id = ${left.org.id} and user_id = ${o.people.lea.id}`
+    const lea2 = person("lea", o2)
+    const step = await connectionStep(lea2.db, lea2.identity, { connector: CONNECTOR, space: "me" }, { origin: origin(o2) })
+    expect(step).toMatchObject({ kind: "authorize", gesture: "hosted_link" })
+    expect(step.kind === "authorize" ? step.elsewhere?.filter((name) => name === null) : null).toEqual([null])
+    expect(step.kind === "authorize" ? step.elsewhere?.filter((name) => name !== null) : null).not.toContain(left.org.name)
   })
 
   it("should refuse a dead session, and say unavailable for a session it cannot read, a port that throws, or an invalid link", async () => {
@@ -465,7 +617,9 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const hostField = await refusal(setAccountSecret(ada.db, ada.identity, { account_id: manual.id, input: { secret: { api_key: "mine" } } }))
     expect([idInput.code, hostField.code, hostField.message]).toEqual(["invalid_arguments", "invalid_arguments", `Field api_key of ${CONNECTOR} is provided by this application, never set on an account.`])
     const notLinked = await refusal(callFunction(ada.db, ada.identity, { function: `${CONNECTOR}.list_contacts`, account: manual.label }, { origin: origin(o) }))
-    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", expect.stringMatching(new RegExp(`^Account « ${manual.label} » is not connected to ${LABEL} yet\\. Ask .+ to connect it \\(Connect my account\\)\\.$`))])
+    const link = `${origin(o)}/connect/${CONNECTOR}?space=me`
+    expect([notLinked.code, notLinked.message]).toEqual(["not_enabled", `Account « ${manual.label} » is not connected to ${LABEL} yet. Ask the user to link their ${LABEL} account, then call again: open ${link}`])
+    expect(notLinked.details).toMatchObject({ reason: "reconnect", gesture: "hosted_link", url: link })
     expect(sent).toEqual([])
   })
 

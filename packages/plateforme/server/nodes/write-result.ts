@@ -2,6 +2,7 @@
 // création d'un nœud, la provenance d'un bloc écrit selon la porte, le texte et les données de la
 // réponse (références des blocs neufs connues après leur écriture). Fichier à part de `write.ts` pour la
 // borne de 300 lignes (`coding-standards.md § Complexité`).
+import type { WriteNodeBody } from "../../schemas"
 import type { AccessLevel, Owner } from "../access"
 import type { PlatformDb } from "../db"
 import { boundedList, fromDatabaseError, isUniqueViolation, PlatformError } from "../errors"
@@ -18,6 +19,12 @@ import type { PublishResult } from "./publish"
  * déposé par lien (E10-S02 lot f, AC-f7, AC-f8), écrit sous la provenance de l'assistant et le `ctx` de son ticket ; posé
  * par le seul service du dépôt (`server/uploads-write.ts`), jamais par une porte.
  */
+/**
+ * Le corps d'une écriture une fois sa cible résolue en chemin : un nœud désigné par son identifiant (`id`) s'écrit à son
+ * chemin courant (`writeNode`) ; la suite de l'écriture ne connaît que le chemin.
+ */
+export type WriteAtPath = Omit<WriteNodeBody, "id" | "path"> & { path: string }
+
 /** `places` : la porte d'un assistant quand l'hôte déclare des personnes, pour `find` de `replace_text` (`OpState`). */
 export type WriteOrigin = { kind: "agent"; ctx: string | null; file?: { replace: boolean }; places?: OpState["places"] } | { kind: "human" }
 
@@ -52,7 +59,7 @@ const NODE_SQL_COLUMNS = NODE_COLUMNS.split(", ")
 
 /**
  * Le nœud neuf (AC19) : brouillon à la révision 0, son espace écrit (`owner`, le Privé de son auteur ; `null` : la base
- * recopie celui du parent, migration 20261119090000), `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
+ * recopie celui du parent, migration 20261126172651), `sections` et `draft` jamais écrits. Violation d'unicité (course, nœud que la RLS de niveau cache
  * encore, ou ancien chemin d'un autre nœud depuis M02) → le refus « not available » (N31) ; `23503` →
  * le parent a disparu. La ligne rendue est celle que rendait PostgREST (`to_json` : dates en texte, à la
  * microseconde), les colonnes de `NODE_COLUMNS`.
@@ -179,8 +186,10 @@ export function savedResult(input: ResultInput): ToolOutput {
       })
       .slice(0, TOUCHED_BLOCKS_MAX),
   }))
+  // L'identifiant stable du nœud écrit (`id`), créé ou modifié : `read`, `write` et `node.move` le prennent à la place du chemin.
   const data = published
     ? {
+        id: node.id,
         path: node.path,
         revision: published.revision,
         status: "published",
@@ -192,7 +201,7 @@ export function savedResult(input: ResultInput): ToolOutput {
         // Les avertissements d'un en-tête de tableau publié, en champs (E07-S04, AC6).
         ...(published.table ? { warnings: published.table.warnings } : {}),
       }
-    : { path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
+    : { id: node.id, path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
   // Le compte du mode tolérant (E10-S01, AC-a2), pour l'écran seul : en mode strict, les champs de `write` ne changent pas.
   const kept = saved?.keptAsText ? { kept_as_text: saved.keptAsText } : {}
   // L'espace d'une création, dit en dernière ligne et en champ (décidé avec JB le 02/11).

@@ -27,7 +27,8 @@ function confirm(ops: string) {
 /** Les opérations déclarées de chaque outil, dans l'ordre du contrat ; `help` d'abord. */
 export const ADMIN_OPS = {
   admin_context: ["ctx", "orgs", "help"],
-  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access", "add_admin"],
+  // `overview` et `members` (supervision, N9) : ajoutées en dernier, le contrat n'évoluant que par ajout.
+  admin_org: ["help", "list", "get", "create", "update", "add_host", "remove_host", "grant_access", "revoke_access", "add_admin", "overview", "members"],
   admin_team: ["help", "list", "create", "rename", "set_lead", "add_lead", "remove_lead", "add_member", "remove_member", "delete"],
   admin_node: ["help", "move", "publish", "transfer_owner", "rules", "add_rule", "remove_rule"],
   admin_connector: [
@@ -41,6 +42,8 @@ export const ADMIN_OPS = {
     "account_rules",
     "add_account_rule",
     "remove_account_rule",
+    "host_api",
+    "refresh_host_api",
   ],
   admin_journal: ["help", "conversations", "conversation", "admin_log"],
   admin_feedback: ["help", "list", "set_state"],
@@ -133,7 +136,8 @@ export const ADMIN_INPUTS = {
       .describe("Account mode; V1 has simulated accounts only (create_account, default simule)"),
     subject: z.string().optional().describe("Who a rule applies to: team:<slug> or user:<email> (add_account_rule, remove_account_rule)"),
     level: setAccountRuleSchema.shape.level.optional().describe("Rule level (add_account_rule); sensitive opens the sensitive functions, write does not"),
-    confirm: confirm("deactivate, disable_account"),
+    address: z.string().optional().describe("Address of the host API, https without trailing slash, e.g. https://erp.example.test (refresh_host_api; omitted: the served one)"),
+    confirm: confirm("deactivate, disable_account, refresh_host_api"),
   }),
   admin_journal: z.object({
     ctx,

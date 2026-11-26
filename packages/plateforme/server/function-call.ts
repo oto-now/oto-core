@@ -9,7 +9,7 @@
 // en jeu. Sans ce module, l'hôte n'atteindrait une fonction que par le MCP, sous le jeton d'un assistant.
 import { catalogFunctions } from "./catalog/registry"
 import { runCall, type CallAccount, type CallInput, type CallOutput, type CallTeam, type CallTrace } from "./calls"
-import { loadActiveConnectors } from "./connectors/activations"
+import { loadOpenConnectors } from "./connectors/activations"
 import type { PlatformDb } from "./db"
 import { isPlatformError } from "./errors"
 import type { Identity } from "./identity"
@@ -90,7 +90,7 @@ export async function callFunction(db: PlatformDb, identity: Identity, input: Fu
         ctxCode: null,
         origin: options.origin,
         accessToken: options.accessToken,
-        activeConnectors: () => loadActiveConnectors(db, identity.org.id),
+        activeConnectors: () => loadOpenConnectors(db, identity.org.id),
         // Tout le catalogue : une fonction réservée au serveur (`serverOnly`) ne court que par ici.
         functions: catalogFunctions(),
         trace,

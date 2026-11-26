@@ -9,8 +9,10 @@ import type { FunctionContext } from "../../packages/plateforme/server/catalog/d
 import { CatalogRegistrationError } from "../../packages/plateforme/server/catalog/erp"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import { catalogFunctions, findFunction } from "../../packages/plateforme/server/catalog/registry"
+import { admittedOwnerKinds, formOwnerKinds } from "../../packages/plateforme/server/connectors/account-owners"
+import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
 import { registerConnectors, type ConnectorOptions } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import { readHostFields } from "../../packages/plateforme/server/connectors/host-fields"
 import { chooseHostedCandidate, hostedCandidates, hostedCreatedAt, hostedRefusal } from "../../packages/plateforme/server/connectors/hosted-link"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
@@ -27,7 +29,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function refusalOf(definitions: readonly ConnectorDefinition[], options: ConnectorOptions = {}): string {
+function refusalOf(definitions: readonly ConnectorView[], options: ConnectorOptions = {}): string {
   try {
     registerConnectors(definitions, options)
   } catch (error) {
@@ -38,7 +40,7 @@ function refusalOf(definitions: readonly ConnectorDefinition[], options: Connect
 }
 
 /** Le connecteur rattaché de test, une fonction (par son nom court) remplacée par `change`. */
-function hostedWith(short: string, change: (fn: ConnectorDefinition["functions"][number]) => object): ConnectorDefinition {
+function hostedWith(short: string, change: (fn: ConnectorView["functions"][number]) => object): ConnectorView {
   const base = hostedConnector()
   return { ...base, functions: base.functions.map((fn) => (fn.name === `crm.${short}` ? (change(fn) as typeof fn) : fn)) }
 }
@@ -48,12 +50,12 @@ describe("declaring host fields, account identity and act", () => {
     const reader = () => ({ api_key: key() })
     const { port } = fakeHostedLinks()
     registerConnectors([hostedConnector()], { hostCredentials: { crm: reader }, hostedLinks: { crm: port } })
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     expect([declared?.hostCredentials, declared?.hostedLinks, catalogFunctions().filter((fn) => fn.connector === "crm")]).toEqual([reader, port, expect.any(Array)])
     expect(catalogFunctions().filter((fn) => fn.connector === "crm")).toHaveLength(6)
   })
 
-  const REFUSALS: [string, () => ConnectorDefinition[], string][] = [
+  const REFUSALS: [string, () => ConnectorView[], string][] = [
     ["an unknown holder", () => [{ ...describedConnector(), credential: [{ name: "api_key", label: "API key", secret: true, holder: "tenant" as "host" }] }], 'crm: credential field api_key has holder "tenant": account or host.'],
     ["an account identity on a consent connector", () => [{ ...consentConnector(), accountIdentity: { name: "account_id", label: "Account", pattern: "^[a-z]+$" } }], "crm: accountIdentity does not go with oauth2_user: a consent's account is the person's own."],
     // Les niveaux d'accès n'existent que sous `oauth2_user`, que l'identité d'un compte rattaché refuse : refus explicite.
@@ -97,6 +99,26 @@ describe("declaring host fields, account identity and act", () => {
   })
 })
 
+describe("the account form of a connector where each person connects their own", () => {
+  // `platform` seul sert la clé de l'hôte, mais sur un compte rattaché ou un consentement chacun connecte le sien :
+  // l'écran lui offre « Connecter mon compte », que la 1.8.0 avait retiré avec le formulaire des connecteurs `platform`.
+  it("should give a platform-only hosted connector a personal form, ready when the host gives its port", () => {
+    const { port } = fakeHostedLinks()
+    registerConnectors([hostedConnector()], { hostCredentials: { crm: () => ({ api_key: key() }) }, hostedLinks: { crm: port } })
+    const form = connectorAccountForms().find((candidate) => candidate.connector === "crm")
+    expect(form).toMatchObject({ consent: false, hosted: { ready: true }, ownerKinds: ["user"], fields: [] })
+  })
+
+  it("should offer the person on a platform-only consent connector, and nobody on a host key alone", () => {
+    expect(formOwnerKinds({ ...consentConnector(), modes: ["platform"] })).toEqual(["user"])
+    expect(formOwnerKinds({ ...hostedConnector(), accountIdentity: undefined })).toEqual([])
+  })
+
+  it("should not admit a personal account created by hand on a platform-only hosted connector: it is born of its link", () => {
+    expect(admittedOwnerKinds(hostedConnector())).toEqual(["org", "team"])
+  })
+})
+
 describe("assembling a call on a hosted account", () => {
   function context(fields: Record<string, string>, linkedId?: string): FunctionContext {
     const credential = { fields, settings: {}, tokens: memoryTokens(), ...(linkedId !== undefined ? { linkedId } : {}) }
@@ -133,7 +155,7 @@ describe("assembling a call on a hosted account", () => {
 describe("reading the host's fields", () => {
   const declaredWith = (options: ConnectorOptions) => {
     registerConnectors([hostedConnector()], options)
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (!declared) throw new Error("crm is not declared")
     return declared
   }

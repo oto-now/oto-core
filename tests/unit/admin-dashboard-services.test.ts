@@ -8,7 +8,10 @@
 import { randomUUID } from "crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { BlockInput } from "@otomata_tech/oto_platform/schemas"
-import { createAccount, deactivationImpact, listOrgAccounts } from "@otomata_tech/oto_platform/server"
+import { createAccount, deactivationImpact, deactivationImpacts, listOrgAccounts } from "@otomata_tech/oto_platform/server"
+import { catalogFunctions } from "../../packages/plateforme/server/catalog/registry"
+import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
+import { describedConnector } from "../factories/described-connector"
 import { addBlocks, contentTables, openDraftRow, ORG, OTHER_ORG } from "../helpers/reference-org"
 import { seedReferenceTables, type ReferenceOrgSql } from "../helpers/reference-org-sql"
 import type { Row, Tables } from "../helpers/simulated-db"
@@ -84,6 +87,32 @@ describe("deactivationImpact (AC11, H123)", () => {
         procedures: ["ventes/relance"],
         accounts: 2,
       })
+    })
+
+    it("should read the impacts of every connector named in one read: as many requests for two connectors as for one", async () => {
+      registerConnectors([describedConnector("crm")])
+      try {
+        const ada = ref.identityOf("ada")
+        const one = recordDb(await ref.db("ada"))
+        const single = await deactivationImpacts(one.db, ada, ["mail"])
+        const many = recordDb(await ref.db("ada"))
+        const both = await deactivationImpacts(many.db, ada, ["mail", "crm"])
+        expect(both).toEqual({
+          mail: single.mail,
+          crm: { functions: catalogFunctions().filter((fn) => fn.connector === "crm").map((fn) => fn.name).sort(), procedures: [], accounts: 0 },
+        })
+        // Le nombre de connecteurs ne change pas le nombre d'allers à la base : les mêmes instructions, comptes compris
+        // (lus pour tous les connecteurs ensemble, puis leurs niveaux en un lot).
+        const accountReads = (requests: typeof one.requests) => requests.filter((sent) => sent.kind === "statement" && namesOf(sent).includes("accounts")).length
+        expect(many.requests).toHaveLength(one.requests.length)
+        expect(accountReads(many.requests)).toBe(accountReads(one.requests))
+        // Aucun connecteur nommé : rien n'est lu.
+        const none = recordDb(await ref.db("ada"))
+        expect(await deactivationImpacts(none.db, ada, [])).toEqual({})
+        expect(none.requests).toEqual([])
+      } finally {
+        registerConnectors([])
+      }
     })
   })
 

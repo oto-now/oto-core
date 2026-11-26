@@ -48,15 +48,25 @@ export {
   ACCOUNT_DESCRIPTION_MAX,
   accountChangeSchema,
   accountSecretInputSchema,
+  connectorConnectSchema,
   connectorProbeInputSchema,
   connectorRefSchema,
   createAccountSchema,
   disableAccountSchema,
 } from "./connectors"
-export type { AccountChange, AccountMode, AccountSecretInput, ConnectorProbeInput } from "./connectors"
+export type { AccountChange, AccountMode, AccountSecretInput, ConnectAccessChoice, ConnectionStepView, ConnectorConnectArgs, ConnectorProbeInput } from "./connectors"
 export { createTeamSchema, equipesSearchSchema, teamMemberSchema, updateMemberSchema, updateTeamSchema } from "./teams"
 export { teamRoleSchema } from "./teams"
 export { BROKEN_LINKS_MAX, teamSharesArgsSchema } from "./team-shares"
+export {
+  MEMBER_LIST_PAGE,
+  memberAddArgsSchema,
+  memberListArgsSchema,
+  memberRemoveArgsSchema,
+  memberSetTeamsArgsSchema,
+  teamCreateArgsSchema,
+} from "./member-functions"
+export type { MemberAddArgs, MemberListArgs, MemberRemoveArgs, MemberSetTeamsArgs, TeamCreateArgs } from "./member-functions"
 export type { ShareLevel, ShareSubject, TeamShares, TeamSharesArgs } from "./team-shares"
 export type {
   CreateTeam,
@@ -75,6 +85,7 @@ export type {
 export { ACCESS_LEVEL_NAMES, setNodeRuleSchema } from "./rules"
 export type { AccessLevelName, NodeRulesView, RuledNodeView, RuleSubject } from "./rules"
 export { BLOCK_OPS, NODE_KINDS, nodeKindSchema, readNodeSchema, SECTION_OPS, strictWriteOpsSchema, writeNodeSchema, writeOpSchema } from "./nodes"
+export { NODE_ID_EXAMPLE, nodeIdSchema, pathOrIdIssue, READ_TARGET_MISSING, refinePathOrId, refineReadTarget } from "./nodes"
 export type { BlockView, NodeKind, NodeView, ReadNodeInput, TreeNode, WriteNodeInput, WriteOp } from "./nodes"
 export { writeNodeBodySchema } from "./node-body"
 export type { WriteNodeBody, WriteOpBody } from "./node-body"
@@ -125,7 +136,7 @@ export {
   OPEN_ENTRY_DOMAINS_MAX,
 } from "./admin"
 export type { OpenEntry, OrgSettings, PersonOrganisation, SignupInput } from "./admin"
-export { moveNodeSchema } from "./nodes"
+export { moveNodeArgsSchema, moveNodeSchema } from "./nodes"
 export type { MoveNodeInput } from "./nodes"
 // Tableaux (E07-S01) : en-tête, grammaire de filtre et arguments des trois fonctions de lecture, que
 // lisent `server/tables/` (forms-patterns.md § Principe). `tableFilterSchema` et `tableRowReadSchema`
@@ -165,7 +176,7 @@ export { nodeVersionParamSchema } from "./nodes"
 // Tableau de bord (E08-S03) : réglages de l'organisation, impact d'une désactivation, comptes.
 export { orgSettingsFormSchema } from "./admin"
 export type { OrgSettingsForm, OrgView } from "./admin"
-export { PROBE_FAILURE_CODES } from "./connectors"
+export { connectorLogoAddress, PROBE_FAILURE_CODES } from "./connectors"
 export type {
   AccountHealth,
   AccountMark,
@@ -215,6 +226,9 @@ export { accountOwnerRefSchema, ownerRefSchema, subjectRefSchema } from "./admin
 export type { OwnerRef } from "./admin"
 export { ACCOUNT_LEVEL_NAMES, setAccountRuleSchema } from "./rules"
 export type { AccountLevelName, AccountRuleSubject, AccountShareEventView } from "./rules"
+// La supervision de la plateforme (N9) : la liste des organisations que l'équipe plateforme lit sans accès daté.
+export { SUPERVISION_DAYS } from "./supervision"
+export type { SupervisedAccounts, SupervisedMember, SupervisedOrg } from "./supervision"
 // L'écran « Équipes et droits » (E05-S09, partie d1) : la recherche, le filtre et le tri de ses tableaux,
 // lus dans l'adresse par la page de l'hôte.
 export { equipesListesSchema } from "./team-screen"

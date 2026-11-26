@@ -264,7 +264,7 @@ describe.skipIf(!ready || privatePending)(privateFolderSuite(ready ? SUITE : `${
   })
 
   describe("impact of a move (AC-b7)", () => {
-    // Depuis 20261119090000, l'espace est écrit sur le nœud : le ranger sous un autre dossier ne change ni son
+    // Depuis 20261126172651, l'espace est écrit sur le nœud : le ranger sous un autre dossier ne change ni son
     // propriétaire ni qui y accède ; seul un partage ou un transfert le fait (`droits-d-acces.md`).
     it("should say that moving a node under another team's folder changes neither its space nor who reads it", async () => {
       await page("ventes/partant")

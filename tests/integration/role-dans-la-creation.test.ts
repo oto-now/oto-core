@@ -29,7 +29,7 @@ const SESSIONS = [undefined, "server"] as const
 
 /**
  * Les colonnes de `nodes` qu'une session insère : celles qu'écrit `insertNode` (`server/nodes/write-result.ts`), seul
- * ajout dans `nodes` sous une session ; le propriétaire, celui du parent ou le Privé de l'auteur (`20261119090000`), le reste
+ * ajout dans `nodes` sous une session ; le propriétaire, celui du parent ou le Privé de l'auteur (`20261126172651`), le reste
  * prend sa valeur par défaut.
  */
 const INSERTED = ["org_id", "parent_id", "path", "kind", "title", "summary", "created_by", "updated_by", "owner_kind", "owner_team_id", "owner_user_id"]
@@ -161,7 +161,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, () => {
     ])
   })
 
-  // 20261119090000 : l'espace est écrit à la création, celui du parent ou le Privé de l'auteur ; jamais un autre espace.
+  // 20261126172651 : l'espace est écrit à la création, celui du parent ou le Privé de l'auteur ; jamais un autre espace.
   it.each(SESSIONS)("should let a writer create a page in her own private space, never in a space other than its parent's (session %s)", async (session) => {
     const folder = await node(root, led)
     expect(await attempt(marc, create(marc, folder, { owner_kind: "org" }), session)).toBe(GUARD)

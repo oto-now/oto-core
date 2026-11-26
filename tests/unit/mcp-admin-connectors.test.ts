@@ -191,24 +191,26 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       const crm = catalogFunctions()
         .filter((fn) => fn.connector === "crm")
         .sort((a, b) => a.name.localeCompare(b.name))
-      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.write_many (write)", "node.export_tree (read)", "node.import_tree (write)", "node.tree (read)", "node.check (read)", "node.access (read)", "node.share (write)", "node.public_link (sensitive)"])
+      expect(nodes.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["node.discard_draft (sensitive)", "node.trash (sensitive)", "node.move (write)", "node.describe (read)", "node.write_many (write)", "node.export_tree (read)", "node.import_tree (write)", "node.tree (read)", "node.check (read)", "node.access (read)", "node.share (write)", "node.public_link (sensitive)"])
       expect(uploads.map((fn) => `${fn.name} (${fn.class})`)).toEqual(["upload.link (write)"])
       expect(listed.text).toBe(
         [
-          `- crm (live): inactive — ${crm.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
+          `- crm (live): open by default — ${crm.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           "- mail (simulated): active since 2026-09-24 by Ada Martin — mail.create_draft (write), mail.send_draft (sensitive)",
           `- table (built in): always active — ${native.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           `- node (built in): always active — ${nodes.map((fn) => `${fn.name} (${fn.class})`).join(", ")}`,
           "- upload (built in): always active — upload.link (write)",
+          "- connector (built in): always active — connector.connect (read)",
           "- file (built in): always active — file.keep (write)",
           "- job (built in): always active — job.read (read)",
           "- comment (built in): always active — comment.list (read), comment.add (write), comment.edit (write), comment.delete (sensitive), comment.resolve (write)",
-          "- team (built in): always active — team.shares (read)",
+          "- team (built in): always active — team.shares (read), team.create (write)",
+          "- member (built in): always active — member.list (read), member.add (write), member.set_teams (write), member.remove (sensitive)",
           "- application functions: always active — erp.lookup_customer (read)",
         ].join("\n"),
       )
       expect(isoInstants(listed.structured?.connectors)).toEqual([
-        { name: "crm", kind: "live", activable: true, state: "inactive", since: null, functions: crm.map((fn) => ({ name: fn.name, class: fn.class })) },
+        { name: "crm", kind: "live", activable: true, state: "active", since: null, functions: crm.map((fn) => ({ name: fn.name, class: fn.class })) },
         {
           name: "mail",
           kind: "simulated",
@@ -223,6 +225,7 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
         { name: "table", kind: "built_in", activable: false, state: "always_active", since: null, functions: native.map((fn) => ({ name: fn.name, class: fn.class })) },
         { name: "node", kind: "built_in", activable: false, state: "always_active", since: null, functions: nodes.map((fn) => ({ name: fn.name, class: fn.class })) },
         { name: "upload", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "upload.link", class: "write" }] },
+        { name: "connector", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "connector.connect", class: "read" }] },
         { name: "file", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "file.keep", class: "write" }] },
         { name: "job", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "job.read", class: "read" }] },
         {
@@ -239,13 +242,36 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
             { name: "comment.resolve", class: "write" },
           ],
         },
-        { name: "team", kind: "built_in", activable: false, state: "always_active", since: null, functions: [{ name: "team.shares", class: "read" }] },
+        {
+          name: "team",
+          kind: "built_in",
+          activable: false,
+          state: "always_active",
+          since: null,
+          functions: [
+            { name: "team.shares", class: "read" },
+            { name: "team.create", class: "write" },
+          ],
+        },
+        {
+          name: "member",
+          kind: "built_in",
+          activable: false,
+          state: "always_active",
+          since: null,
+          functions: [
+            { name: "member.list", class: "read" },
+            { name: "member.add", class: "write" },
+            { name: "member.set_teams", class: "write" },
+            { name: "member.remove", class: "sensitive" },
+          ],
+        },
         { name: "application", kind: "application", activable: false, state: "always_active", since: null, functions: [{ name: "erp.lookup_customer", class: "read" }] },
       ])
-      // Sans activation, le connecteur activable est dit inactif (HN-E08S06-9).
+      // Sans ligne d'activation, le connecteur activable est ouvert par défaut (HN-E08S06-9, décision du 2026-11-25).
       await withoutActivation()
-      const inactive = await session()
-      expect((await inactive.connector({ op: "catalogue" })).text.split("\n")[1]).toBe("- mail (simulated): inactive — mail.create_draft (write), mail.send_draft (sensitive)")
+      const untouched = await session()
+      expect((await untouched.connector({ op: "catalogue" })).text.split("\n")[1]).toBe("- mail (simulated): open by default — mail.create_draft (write), mail.send_draft (sensitive)")
     })
   })
 

@@ -9,7 +9,7 @@
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler"
 import { ensureZodMessages } from "../schemas/zod-messages"
 import { servesCapability } from "../server/catalog/surface-source"
-import { loadActiveConnectors } from "../server/connectors/activations"
+import { loadActiveConnectors, loadOpenConnectors } from "../server/connectors/activations"
 import { createPlatformDb } from "../server/db"
 import { isPlatformError } from "../server/errors"
 import { requestHost, resolveIdentity, resolveOrg, servedHost, type IdentityOrg, type ServedHost } from "../server/identity"
@@ -68,10 +68,12 @@ export async function resolveMcpRequest(facts: McpRequestFacts): Promise<Resolve
     // Lus au premier usage, gardés pour cette requête seule (N9, N27) : une activation vaut dès la
     // requête suivante, et une requête qui ne les lit pas (`initialize`, `prompts/*`, un appel
     // d'outil qui n'en a pas besoin) ne les paie pas.
-    let active: Promise<ReadonlySet<string>> | undefined
-    const activeConnectors = () => (active ??= loadActiveConnectors(db, identity.org.id))
+    let open: Promise<ReadonlySet<string>> | undefined
+    let adopted: Promise<ReadonlySet<string>> | undefined
+    const activeConnectors = () => (open ??= loadOpenConnectors(db, identity.org.id))
+    const adoptedConnectors = () => (adopted ??= loadActiveConnectors(db, identity.org.id))
     // `accessToken` : le jeton vérifié de la requête, sous lequel s'exécutent les fonctions ERP (E08-S05, NH4).
-    const deps: McpDeps = { db, org: identity.org, caller: { kind: "member", identity }, userAgent: facts.userAgent, journal, activeConnectors, origin: facts.origin, accessToken: facts.accessToken }
+    const deps: McpDeps = { db, org: identity.org, caller: { kind: "member", identity }, userAgent: facts.userAgent, journal, activeConnectors, adoptedConnectors, origin: facts.origin, accessToken: facts.accessToken }
     return { kind: "member", org: identity.org, deps }
   } catch (error) {
     if (!isPlatformError(error)) throw error
@@ -82,7 +84,7 @@ export async function resolveMcpRequest(facts: McpRequestFacts): Promise<Resolve
     const org = await resolveOrg(db, facts.host)
     // Un non-membre ne lit pas les activations (RLS) : sa liste d'outils n'a pas d'exemples de connecteur.
     const none = () => Promise.resolve(new Set<string>())
-    const deps: McpDeps = { db, org, caller: { kind: "not_member", refusal: error.message }, userAgent: facts.userAgent, journal, activeConnectors: none, origin: facts.origin }
+    const deps: McpDeps = { db, org, caller: { kind: "not_member", refusal: error.message }, userAgent: facts.userAgent, journal, activeConnectors: none, adoptedConnectors: none, origin: facts.origin }
     return { kind: "not_member", org, deps }
   }
 }

@@ -98,7 +98,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   /** Une conversation MCP de `session`, sur l'adresse de l'organisation, son `ctx` et son journal empilé. */
   async function conversation({ db, identity }: Session) {
     const journal: JournalEntry[] = []
-    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `uploads-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
+    const mcp = await connectDeps({ db, org: identity.org, caller: { kind: "member", identity }, userAgent: `uploads-${hex(4)}`, journal, activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${o.host}` })
     const { code } = await mcp.openContext("Range le rapport")
     return {
       code,

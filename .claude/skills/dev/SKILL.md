@@ -113,8 +113,9 @@ live. Quatre items, tous observables (`CLAUDE.md § Avant de coder`) :
 4. **Refacto** — proposé ou écarté. Proposé ⇒ `AskUserQuestion` avec coût et conséquence de ne
    pas le faire. Le refacto reste non fait sans accord ; il n'est jamais tu.
 
-Micro en est exempt (1-2 fichiers, aucune surface nouvelle). Un sous-agent produit ce rayon dans
-son rapport et **remonte** l'item 4 sans le trancher.
+Micro en est exempt (1-2 fichiers, aucune surface nouvelle). Un lot délégué l'est toujours à
+l'agent `implementer` (`subagent_type: "implementer"`, `CLAUDE.md § Les sous-agents de la
+méthode`) : il produit ce rayon dans son rapport et **remonte** l'item 4 sans le trancher.
 
 ### 3. Implémenter
 
@@ -162,7 +163,8 @@ Au-delà de 2 cycles sans converger → s'arrêter et remonter à l'utilisateur.
 
 | | Micro | Standard | Module |
 |---|---|---|---|
-| `docs/changelog.md` | si comportement visible | oui | oui |
+| Entrée `docs/changelog.d/AAAA-MM-JJ-<sujet>.md` (fichier neuf, `commit-push` étape 3) | si comportement visible | oui | oui |
+| Lignes `packages/plateforme/changelog.d/AAAA-MM-JJ-<sujet>.md` (fichier neuf, avant `pnpm verify`) | si visible d'un hôte ou d'un assistant | idem | idem |
 | `component-registry.md` | — | si composant réutilisable | oui |
 | Story post-implémentation | — | si story | si story |
 | Issue du chantier fermée, avec ce qui est livré | — | si issue | si issue |

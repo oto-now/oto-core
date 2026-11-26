@@ -37,7 +37,7 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table through MCP"), {
   /** Une session MCP de Claire (responsable de Ventes) sur la fixture, avec son code `ctx` semé. */
   async function session() {
     const identity = acmeIdentity(ref, "claire")
-    const connected = await connectDeps({ db: await ref.db("claire"), org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
+    const connected = await connectDeps({ db: await ref.db("claire"), org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
     return { ...connected, write: (args: Record<string, unknown>) => connected.call("write", { ctx: ref.id(CTX), ...args }) }
   }
 

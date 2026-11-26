@@ -400,7 +400,7 @@ describe.skipIf(!sqlConfigured)(portable("find on the real database, Acme on O")
       })
       const ada = ref.identityOf("ada")
       const { prefix } = ref.org
-      const session = await connectDeps({ db, org: ada.org, caller: { kind: "member", identity: ada }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
+      const session = await connectDeps({ db, org: ada.org, caller: { kind: "member", identity: ada }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
       const { code } = await session.openContext()
 
       const missing = await session.call("find", { query: "grille" })

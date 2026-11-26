@@ -72,8 +72,8 @@ export const accountProbeRoute: Route = {
   params: 3,
   fixed: { 0: "accounts", 2: "probe" },
   target: ({ params }) => idOrNull(params[1]),
-  async handle({ db, identity, params }) {
-    const probe = await probeAccount(db, identity, { account_id: params[1] })
+  async handle({ db, identity, params, origin }) {
+    const probe = await probeAccount(db, identity, { account_id: params[1] }, { origin })
     return { status: 200, data: { probe }, journal: { target: params[1] } }
   },
 }

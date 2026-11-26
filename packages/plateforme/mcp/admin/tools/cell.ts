@@ -30,8 +30,9 @@ async function migrations(call: OpCall): Promise<AdminOutput> {
 
 async function health(call: OpCall): Promise<AdminOutput> {
   const cell = await cellStatus(call.deps.db)
-  const settings = cell.health.env.map((variable) => `${variable.name} ${variable.present ? "present" : "missing"}`).join(", ")
-  const text = [`Database: reachable (${cell.health.database.latencyMs} ms).`, `Settings: ${settings}.`, `Checked at ${cell.checkedAt}.`].join("\n")
+  const settings = cell.health.env.map((variable) => `${variable.name} ${variable.present ? "present" : "missing"}${variable.optional ? " (optional)" : ""}`).join(", ")
+  const warnings = cell.health.warnings.map((warning) => `Warning: ${warning}`)
+  const text = [`Database: reachable (${cell.health.database.latencyMs} ms).`, `Settings: ${settings}.`, ...warnings, `Checked at ${cell.checkedAt}.`].join("\n")
   return { text, data: { cell: { health: cell.health, checked_at: cell.checkedAt } }, target: "cell", nextActions: ["admin_cell version"] }
 }
 

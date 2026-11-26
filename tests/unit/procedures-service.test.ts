@@ -97,11 +97,15 @@ describe.skipIf(!sqlConfigured)(portable("procedures on the real database, O"), 
   let added: string[] = []
   let active: string[] = []
 
-  /** Les connecteurs actifs de O, exactement ceux-ci. */
+  /** Les connecteurs actifs de O, exactement ceux-ci : `mail` absent de la liste est bloqué (ouvert par défaut sinon). */
   async function activate(connectors: string[]): Promise<void> {
     if (connectors.join() === active.join()) return
     await seed.admin`delete from platform.connector_activations where org_id = ${ref.org.id}`
-    if (connectors.length > 0) await ref.write({ connector_activations: connectors.map((connector) => ({ org_id: ORG.id, connector, state: "active" })) })
+    const rows = [
+      ...connectors.map((connector) => ({ org_id: ORG.id, connector, state: "active" })),
+      ...(connectors.includes("mail") ? [] : [{ org_id: ORG.id, connector: "mail", state: "inactive" }]),
+    ]
+    await ref.write({ connector_activations: rows })
     active = connectors
   }
 
@@ -236,7 +240,7 @@ describe.skipIf(!sqlConfigured)(portable("procedures on the real database, O"), 
       expect(edited.error).toMatchObject({
         code: "invalid_arguments",
         message: expect.stringContaining(
-          "\n- section « Étapes », call block 1 (step 1): mail.create_draft belongs to connector mail, which is not enabled for Acme Test; an administrator enables it on the dashboard\n",
+          "\n- section « Étapes », call block 1 (step 1): mail.create_draft belongs to connector mail, which an administrator blocked for Acme Test; an administrator reopens it on the dashboard\n",
         ),
       })
       expect(publishCalls(edited.calls)).toEqual([])

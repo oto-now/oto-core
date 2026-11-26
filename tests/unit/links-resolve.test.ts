@@ -162,7 +162,7 @@ describe.skipIf(!sqlConfigured)(portable("links on a real database"), { timeout:
       expect(target.data).toMatchObject({ links_in: [{ path: "ventes/a", title: "A" }, { path: "ventes/d", title: "D" }], links_in_total: 2 })
 
       const source = await read("lea", "ventes/a")
-      expect(source.text.split("\n").slice(7, 9)).toEqual([
+      expect(source.text.split("\n").slice(8, 10)).toEqual([
         "links in: none",
         "links out (4): ventes/b — B · ventes/b#etapes — B · ventes/b#zzz — B (no block « zzz ») · ventes/grille (no target)",
       ])
