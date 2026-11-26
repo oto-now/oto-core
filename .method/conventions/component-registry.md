@@ -126,7 +126,6 @@ FR-INST-03) : vérifier ce tableau avant de créer un composant dans `ui/`, et l
 
 | Hook | Path | Retourne | Notes |
 |------|------|----------|-------|
-<!-- Ajouter ici chaque hook custom cree -->
 
 ## Server Actions
 

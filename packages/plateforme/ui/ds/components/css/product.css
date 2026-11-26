@@ -698,8 +698,9 @@
 .oto-rail-item[data-rang] { position: relative; }
 .oto-rail-item[data-rang]::before,
 .oto-rail-item[data-rang]::after { content: ""; position: absolute; pointer-events: none; background: var(--rail-on-bg); box-shadow: 0 0 0 1px var(--rail-bg); }
-.oto-rail-item[data-rang]::before { inset-inline: var(--space-2) 0; block-size: 2px; border-radius: 1px; }
-.oto-rail-item[data-rang]::after { inset-inline-start: calc(var(--space-2) - 3px); inline-size: 8px; block-size: 8px; border-radius: 50%; }
+/* Le trait part du glyphe de la ligne visée (`--rail-glyphe-x`, `islands.css`), à son niveau : il dit « au même niveau, juste avant ou après », pas « dedans ». */
+.oto-rail-item[data-rang]::before { inset-inline: var(--rail-glyphe-x, var(--space-2)) 0; block-size: 2px; border-radius: 1px; }
+.oto-rail-item[data-rang]::after { inset-inline-start: calc(var(--rail-glyphe-x, var(--space-2)) - 3px); inline-size: 8px; block-size: 8px; border-radius: 50%; }
 .oto-rail-item[data-rang="avant"]::before { inset-block-start: -1px; }
 .oto-rail-item[data-rang="avant"]::after { inset-block-start: -4px; }
 .oto-rail-item[data-rang="apres"]::before { inset-block-end: -1px; }
