@@ -58,6 +58,7 @@ Versions exactes et règles de montée : `.method/conventions/tech-stack.md`.
 │   ├── migrations/                             # Ligne de base du schéma platform et migrations additives suivantes
 │   ├── cli/                                    # `oto-platform` : `db prepare`, `migrations sync`, `migrations check`
 │   ├── widgets/                                # Widget routeur dans la conversation (Vite single-file) ; construit dans mcp/widgets/generated.ts, non publié
+│   ├── changelog.d/                            # Lignes du CHANGELOG en attente, une par changement (AAAA-MM-JJ-<sujet>.md), versées à la version, non publiées
 │   └── CHANGELOG.md                            # Notes de version (format testé)
 ├── supabase/                                   # Projet Supabase de l'hôte : configuration, copies des migrations du paquet
 ├── renovate/preset.json                        # Preset Renovate des applications hôtes

@@ -1,7 +1,11 @@
 # Changelog
 
-<!-- Ce fichier est mis à jour à chaque commit via /dev.
-     Format de chaque entrée :
+Les entrées récentes sont dans [`changelog.d/`](changelog.d/), un fichier par entrée
+(`AAAA-MM-JJ-<sujet>.md`), à lire par nom de fichier décroissant. Ce fichier garde l'historique
+antérieur, figé : aucune entrée ne s'y ajoute, pour qu'aucune pull request n'en mette une autre en
+conflit.
+
+<!-- Format de chaque entrée, dans son fichier de changelog.d/ :
 
 ## [Date] — [Scope]
 **Quoi :** Ce qui a été fait
@@ -9,6 +13,25 @@
 **Problèmes :** Ce qui a bloqué et comment c'a été résolu (si applicable)
 **Fichiers :** Liste des fichiers créés/modifiés
 -->
+
+## [2026-11-26] — Version 2.0.0 du paquet : une seule migration, `20261123150000_platform_api_de_l_hote.sql`
+**À appliquer :** un hôte qui monte de 1.10.x :
+- applique le seul fichier `20261123150000_platform_api_de_l_hote.sql` avec le paquet (`oto-platform migrations sync|check`) ; sans lui, le catalogue d'une organisation échoue ;
+- installe `@otomata_tech/connectors`, devenue dépendance pair du paquet, à v1.249.0 au moins (`github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts`), et l'ajoute à `transpilePackages` ;
+- passe `{ origin }` (l'origine publique de l'application) en quatrième argument de `probeAccount` ;
+- ne lit plus `compte` dans `IssueDuConsentement` ; traite `null` dans `elsewhere` de l'étape `authorize` (une organisation quittée) ;
+- relit ce qu'il fait des refus d'appel : une clé refusée rend `not_enabled` (`reason: "reconnect"`), un compte sans secret `not_enabled` (`reason: "no_account"`), `host_consent_required` devient `no_account` ou `reconnect` ; la sonde d'un compte garde `credential_rejected` ;
+- sait que tout connecteur déclaré est ouvert par défaut (seule une ligne `inactive` le bloque), qu'un connecteur payé par la clé de l'hôte attend l'adoption d'un administrateur (`not_adopted`, « Adopter » à l'écran), et que `connectors_max` ne limite plus rien : la clé reste acceptée, avec un avertissement nommé au chargement et dans `admin_cell health`, et sera refusée à la prochaine majeure ;
+- remplit `sujets.personnes` à chaque chargement de l'écran Connecteurs (`listMembers`), et suit le reste de la section 2.0.0 du `CHANGELOG.md` du paquet.
+**Quoi :** la section `## Unreleased` du `CHANGELOG.md` du paquet devient `## 2.0.0 — 2026-11-26` (fonctions d'un hôte, #157, #159, #160 ; connexion menée par l'agent, #161, #163 ; connecteurs à plusieurs accès, #164 ; `resource` du consentement OAuth, #165 ; écran Connecteurs refait, #185 ; connecteurs ouverts par défaut, #187 ; correctifs #189 et #191), ses points cassants en tête de `### Hosts`, menés par `Breaking:` ; `packages/plateforme/package.json` passe à 2.0.0 ; une section `## Unreleased` vide reste au-dessus. La seule migration ajoutée depuis 1.10.0 garde son nom, comme `20261122184838` en 1.10.0, sans repli de la chaîne en ligne de base ; `migrations/README.md` la rattache à la 2.0.0. Version majeure : les points d'entrée du paquet ne font qu'ajouter des noms, mais une dépendance pair s'ajoute, la signature de `probeAccount` et deux types exportés changent, ainsi que des codes de refus (ADR-006).
+**Pourquoi :** un seul fichier de migration par version publiée (`database-patterns.md` § Règles, fiche D124) ; publication à la fusion d'une pull request de version (`distribution-du-paquet.md` § Publication).
+**Fichiers :** `packages/plateforme/{CHANGELOG.md,package.json}`, `packages/plateforme/migrations/README.md`, `docs/changelog.md`.
+
+## [2026-11-25] — Vitest 5
+**Quoi :** `vitest` ^3 (3.2) passe en ^5.1.0 (5.1.1), `devDependencies` de la racine. Vitest ne tire plus Vite : la racine déclare `vite` ^7 (7.3.1, la version du paquet, une seule dans l'arbre) et garde `@vitejs/plugin-react` ^4 (4.7.0). Vitest 5 ne lit plus `VITEST_MAX_FORKS` : `scripts/verify.mjs` pose `VITEST_MAX_WORKERS=4` (le reçu garde son champ `forks`), et `tests/unit/verify.test.ts` lit cette variable ; `CLAUDE.md` (§ Vérifier, commiter, pousser) et `.method/sprint/vagues.md` la nomment. `.vitest/` est ignoré par git : `rtk` y fait écrire le rapport JSON de Vitest, que `pnpm commit:export` aurait commité. Ni peer ni dépendance du paquet ne change ; aucun test modifié hors ce dernier, aucune règle désactivée.
+**Pourquoi :** alignement sur le template de la méthode (Vitest 5). Vite 8 et `@vitejs/plugin-react` 6, que le template a pris en même temps, ne sont pas exigés par Vitest 5 (peer `vite` : ^6.4, ^7 ou ^8) : à la racine, ils laisseraient l'hôte de référence hors des peers `vite` ^7 et `@vitejs/plugin-react` ^4 du paquet ; leur montée passe avec celle de ces peers.
+**Problèmes :** sous Vitest 5, `VITEST_MAX_FORKS` était ignoré sans erreur : `pnpm verify` serait parti sur tous les cœurs du poste partagé ; le test du plafond l'a montré (`undefined` au lieu de `4`).
+**Fichiers :** `package.json`, `pnpm-lock.yaml`, `scripts/verify.mjs`, `tests/unit/verify.test.ts`, `vitest.config.ts` (commentaire), `.gitignore`, `CLAUDE.md`, `.method/sprint/vagues.md`, `.method/conventions/tech-stack.md`.
 
 ## [2026-11-26] — Méthode : `ui-patterns.md` l'emporte sur `portage-ecrans.md`
 **Quoi :** `ui-patterns.md` l'emporte partout, écrans du paquet et pages du groupe `(dashboard)` compris, fidélité à l'original d'`oto-frontend` comprise. Une contradiction entre les deux conventions sur un cas précis ne se tranche pas : elle se pose à JB par `AskUserQuestion`, puis la décision s'écrit dans `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, qui liste déjà les écarts décidés par ADR-008 (tokens Oto, `ui/ds/`, coque unique au lieu de `PageContainer` et `NAV_ITEMS`). En revue, un écart à `ui-patterns.md` sans sa ligne dans ce § 8 est un finding. Les écrans protégés se capturent à la main : `pnpm ui:shots` ne se connecte pas, le `designer` ou le `design-critic` demande la capture au pilote ou à JB (écran, état, largeurs) ; une capture de `/login` à la place de l'écran demandé ne vaut pas preuve (`docs/design/system.md`, section Patterns de page).
@@ -116,12 +139,6 @@
 **Quoi :** `scripts/ci/recu.mjs` donne deux verdicts de plus aux commits de fusion sans reçu propre. `fusion` : le second parent (la branche fusionnée) porte un `Verified-tree:` valide pour son arbre, ou laisse inchangé celui de son premier parent, et la fusion garde l'arbre de code de ce second parent ; accepté. `ecart` : même second parent couvert, mais l'arbre de la fusion diffère du sien (`main` a bougé entre-temps, le mélange n'a été vérifié par personne) ; signalé comme un commit sans reçu. Le job reste en `--avertir`.
 **Pourquoi :** sur `main` du 25/10 au 22/11, 17 des 38 avertissements « Reçu du commit » étaient des fusions de pull request, que le script comparait à leur premier parent ; 10 d'entre elles fusionnent une branche attestée au même arbre, et ne sont plus signalées. Les 7 autres fusionnent une branche sans reçu et le restent. Étape préalable avant de rendre le job bloquant (#84, #85).
 **Fichiers :** `scripts/ci/recu.mjs`, `tests/unit/recu-ci.test.ts`, `CLAUDE.md`.
-
-## [2026-11-20] — Profil : une personne garde son nom en arrivant dans un nouvel espace
-**Quoi :** migration `20261125160000_platform_profil_d_arrivee.sql` : à toute arrivée dans `members`, un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la personne dans l'espace qu'elle a rejoint le plus récemment ; un profil nommé n'est pas touché, aucune ligne existante reprise. Sans profil nommé, l'identité (`identityInOrg`) prend le nom du compte avant le début de l'email, comme l'annuaire. Décrit dans `identite-et-connexion.md`.
-**Pourquoi :** retour RET-010 : dans un espace qu'elle venait de créer, une personne apparaissait sous le début de son email au lieu du nom de son profil ailleurs.
-**Problèmes :** écrite le 19/11 sous l'horodatage `20261119170000`, antérieur au fichier de la 1.9.0 (`20261119210949`) publiée entre-temps : un hôte déjà en 1.9.0 aurait reçu une migration à insérer avant sa dernière. Reprise sur `main` sous `20261125160000`.
-**Fichiers :** `packages/plateforme/migrations/20261125160000_platform_profil_d_arrivee.sql` (et sa copie dans `supabase/migrations/`), `packages/plateforme/migrations/README.md`, `packages/plateforme/server/identity.ts`, `tests/integration/profil-d-arrivee.test.ts`, `docs/conception/identite-et-connexion.md`, `packages/plateforme/CHANGELOG.md`, `.method/conventions/component-registry.md` ; garde écrite dans `.method/conventions/database-patterns.md` § Règles (une migration de développement fusionne avec un horodatage postérieur au dernier fichier de version).
 
 ## [2026-11-20] — Écran Connecteurs : le logo d'un outil, favicon de son domaine relayé par la plateforme
 **Quoi :** `GET connectors/<nom>/logo` (`api/connector-logo.ts`, branche de la porte avant le dispatch, à session) sert le favicon du domaine déclaré (`logoDomain`), lu par le serveur par `fetchSource` (`https://<domaine>/favicon.ico`, image raster, 64 Ko, 3 s), gardé un jour en mémoire (une absence une heure), en `nosniff` sous une CSP `default-src 'none'`. La tuile de l'outil (`TuileDeLOutil`, devenue client) le montre dans la liste, le détail et la fenêtre d'ajout, sinon l'initiale, après un échec compris (`connectorLogoAddress`, `logoDe`, `OutilAAjouter.logo`).

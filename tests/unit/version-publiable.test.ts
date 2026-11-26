@@ -80,6 +80,21 @@ describe("version-publiable (content checks of a version, before its tag)", () =
     expect(controler(depot, { ref: prise, base, head: prise })).toMatchObject({ etat: "refusee", raison: expect.stringContaining("v1.1.0 existe déjà") })
   })
 
+  // Les fragments (`pnpm changelog:version`, `scripts/changelog-version.mjs`) et les lignes de `## Unreleased` se versent
+  // dans la section de la version : restés, la version suivante les annoncerait.
+  // Une vingtaine de lancements de git (deux commits, deux contrôles) : plus que les 5 s par défaut sur la machine partagée chargée.
+  it("should refuse a version where a fragment of the package CHANGELOG, or a line under ## Unreleased, remains", { timeout: 30_000 }, () => {
+    const { depot, base } = monter()
+    const fragment = { "packages/plateforme/changelog.d/2026-11-26-sujet.md": "### Hosts\n- API: a.\n" }
+    const avecFragment = commiter(depot, "1.1.0", { ...manifeste("1.1.0"), ...changelog("1.1.0", "1.0.0"), ...fragment })
+    expect(controler(depot, { ref: avecFragment, base, head: avecFragment })).toMatchObject({ etat: "refusee", raison: expect.stringContaining("2026-11-26-sujet.md") })
+
+    fs.rmSync(path.join(depot, "packages/plateforme/changelog.d/2026-11-26-sujet.md"))
+    const restee = changelog("1.1.0", "1.0.0")["packages/plateforme/CHANGELOG.md"].replace("## Unreleased", "## Unreleased\n\n### Hosts\n- API: a.")
+    const avecLigne = commiter(depot, "ligne restée", { "packages/plateforme/CHANGELOG.md": restee })
+    expect(controler(depot, { ref: avecLigne, base, head: avecLigne })).toMatchObject({ etat: "refusee", raison: expect.stringContaining("## Unreleased") })
+  })
+
   it("should check the tag against the version on the tagged commit, and write the tag for GitHub Actions", () => {
     const { depot, base } = monter()
     const head = commiter(depot, "1.0.1", { ...manifeste("1.0.1"), ...changelog("1.0.1", "1.0.0") })

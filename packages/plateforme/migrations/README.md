@@ -498,7 +498,9 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
   `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
   relancer avant. Rollback dans le fichier.
-- `20261123150000_platform_api_de_l_hote.sql` (fonctions d'un hôte, § Source par organisation) : la table
+- `20261123150000_platform_api_de_l_hote.sql` (version 2.0.0, sa seule migration, gardée sous son nom comme
+  `20261122184838` en 1.10.0 : un seul fichier par version, fiche D124 ; fonctions d'un hôte, § Source par
+  organisation) : la table
   `platform.host_apis`, une ligne par organisation au plus : l'adresse `https` de l'API de l'hôte, le document OpenAPI
   servi (validé par le profil hôte de la lib de connecteurs), sa version, son `ETag`, les dates de service et de
   rafraîchissement, et le dernier refus (adresse, date, problèmes) ; un refus ne remplace jamais le document servi.
@@ -506,9 +508,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
   échoue sur le catalogue d'une organisation. Rien à relancer avant.
 - `20261125160000_platform_profil_d_arrivee.sql` (le nom d'une personne qui arrive dans un espace, décidé par JB le
-  19/11 ; identité et connexion) : la fonction `members_profile_on_arrival` et son déclencheur `before insert` sur
-  `members` : un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la même personne dans un
-  autre espace. Aucune ligne existante reprise ; aucune table, colonne ni policy. Le paquet
+  19/11, borné le 26/11 ; identité et connexion) : la fonction `members_profile_on_arrival` et son déclencheur
+  `before insert` sur `members` : dans un espace que la personne crée (l'organisation née dans la transaction de son
+  arrivée, sans membre avant elle), un profil sans nom reprend le nom, le prénom et le nom de famille du profil de la
+  même personne dans un autre espace, chacun coupé à 80 caractères ; rejoindre l'espace d'un autre laisse le profil
+  vierge. Aucune ligne existante reprise ; aucune table, colonne ni policy. Le paquet
   ne dépend pas d'elle ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la version avant
   le tag.
 
