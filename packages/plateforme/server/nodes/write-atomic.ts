@@ -3,7 +3,6 @@
 // un refus l'annule, et son texte ne parle plus d'un brouillon gardé. L'écran garde son brouillon (il sauve la frappe
 // d'une personne), comme `publish: false`. Fichier à part de `write.ts`, déjà au-delà de la borne de 300 lignes
 // (`coding-standards.md § Complexité`).
-import type { WriteNodeBody } from "../../schemas"
 import { acceptOwnContextWrite } from "../ctx"
 import type { PlatformDb } from "../db"
 import { inTransaction, isPlatformError, PlatformError } from "../errors"
@@ -12,14 +11,14 @@ import { CONFIRM_REMOVE_LEAD, DISCARD_LEAD, DRAFT_KEPT } from "../tables/evoluti
 import type { ToolOutput } from "../tool-output"
 import { findNode } from "./lookup"
 import { loadDraft } from "./store"
-import { contextChangedLine, type WriteOrigin } from "./write-result"
+import { contextChangedLine, type WriteAtPath, type WriteOrigin } from "./write-result"
 
 /** Ce qu'une écriture atomique dit à la place d'un brouillon gardé ; et quand un brouillon d'avant l'appel reste. */
 const NOTHING_WRITTEN = "Nothing was written."
 const DRAFT_BEFORE_STAYS = "Nothing was written; the draft saved before this call stays."
 
 /** Une écriture d'assistant qui publie (HN-E11S18-1) : `write` du MCP, `upload.link`, `table.import`, `node.write_many`. */
-export function writesAtomically(body: Pick<WriteNodeBody, "publish">, origin: WriteOrigin): boolean {
+export function writesAtomically(body: Pick<WriteAtPath, "publish">, origin: WriteOrigin): boolean {
   return origin.kind === "agent" && body.publish !== false
 }
 
@@ -43,7 +42,7 @@ function withoutKeptDraft(message: string, draftStays: boolean): string {
  * Un refus d'une écriture atomique (HN-E11S18-3) : rien n'est écrit, le texte le dit ; un retrait de colonne à
  * confirmer donne l'appel entier à refaire, son `header` augmenté de `confirm_remove`.
  */
-function unwrittenRefusal(error: unknown, body: WriteNodeBody, context: { prefix: string; draftStays: boolean }): unknown {
+function unwrittenRefusal(error: unknown, body: WriteAtPath, context: { prefix: string; draftStays: boolean }): unknown {
   if (!isPlatformError(error)) return error
   const { prefix } = context
   let message = withoutKeptDraft(error.message, context.draftStays)
@@ -61,7 +60,7 @@ function unwrittenRefusal(error: unknown, body: WriteNodeBody, context: { prefix
  * la base (une course) interrompt la transaction, et le refus qui relirait la base après elle y devient une panne ;
  * l'écriture, annulée entière, se rejoue alors une fois, et dit l'état d'après la course.
  */
-export async function writeAtomically<T>(db: PlatformDb, identity: Identity, body: WriteNodeBody, run: () => Promise<T>): Promise<T> {
+export async function writeAtomically<T>(db: PlatformDb, identity: Identity, body: WriteAtPath, run: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await inTransaction(db, "nodes: write and publish", () => run())

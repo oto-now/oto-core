@@ -78,6 +78,12 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "minLength": 1,
           "type": "string",
         },
+        "id": {
+          "description": "Stable id of a page, procedure or table, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90, instead of path: it does not change when the node moves (default: none, read by path).",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+          "type": "string",
+        },
         "outline": {
           "description": "true: only the section titles with their sizes (default false).",
           "type": "boolean",
@@ -181,6 +187,12 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           },
           "type": "object",
         },
+        "id": {
+          "description": "Stable id of an existing page, procedure or table to edit, as read, find and write return it, e.g. 0b7f3c2e-5d4a-4e8b-9c1f-2a6d8e4b7c90, instead of path; creating needs path (default: none).",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+          "type": "string",
+        },
         "kind": {
           "description": "Kind of a new node: page, procedure or table (default page).",
           "enum": [
@@ -259,7 +271,7 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
           "type": "array",
         },
         "path": {
-          "description": "Path of the page, procedure or table to create or edit, e.g. conseil/cr_client_2026_09.",
+          "description": "Path of the page, procedure or table to create or edit, e.g. conseil/cr_client_2026_09; required unless id is given.",
           "maxLength": 200,
           "minLength": 1,
           "pattern": "^[a-z0-9_]+(\\/[a-z0-9_]+)*$",
@@ -284,7 +296,6 @@ exports[`input schemas (AC8) > should keep the JSON Schemas frozen (ADR-002: add
       },
       "required": [
         "ctx",
-        "path",
       ],
       "type": "object",
     },

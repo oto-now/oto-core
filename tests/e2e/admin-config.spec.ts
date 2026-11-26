@@ -10,8 +10,8 @@ import { EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 // rail (E05-S11, AC-32), en clair puis en sombre ; « Organisation » porte le fil des réglages, dont le maillon
 // courant ouvre ses frères (Organisation, Équipes & accès, Journal : E05-S11, AC-33 ; E05-S13, AC-10) ; il change
 // le nom de l'organisation, seul champ de « L'entreprise », sans « Domaines de travail » ni « Nom affiché »
-// (E05-S13, AC-1, AC-3), relit la page, puis remet l'ancien nom ; il ouvre la question de la désactivation de
-// `mail` et garde le connecteur. « Organisation » porte la marque et le Contexte de Tout le monde, sans seuils ni
+// (E05-S13, AC-1, AC-3), relit la page, puis remet l'ancien nom ; dans « Ajouter un connecteur », il ouvre la
+// confirmation du blocage de `mail` et l'annule. « Organisation » porte la marque et le Contexte de Tout le monde, sans seuils ni
 // annexes (E05-S11, AC-22 à AC-24) ; les adresses des écrans retirés répondent 404 depuis E11-S07
 // (`e11s07-adresses.spec.ts`). Le nom d'avant est remis par la connexion d'administration si
 // le parcours échoue en route. Une capture par page et par mode dans `test-results/`, « Organisation » à 375 et
@@ -84,15 +84,21 @@ async function connecteurs({ page, capturer }: Parcours) {
   // sous une campagne complète (constaté).
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connecteurs", { timeout: 20_000 })
   await expect(ligne).toHaveAttribute("aria-current", "page")
-  await expect(page.getByText(/^Ouvert depuis le /)).toBeVisible()
+  // Un seul objet, le connecteur : plus d'îlot des outils de l'organisation.
+  await expect(page.getByRole("region", { name: "Outils de l'organisation" })).toHaveCount(0)
   // La liste : le compte de l'équipe, sur sa ligne, dit à qui il est.
   await expect(page.getByRole("row").filter({ has: page.getByRole("link", { name: `Mail ${EQUIPE.nom}`, exact: true }) }).getByText(`Équipe ${EQUIPE.nom}`)).toBeVisible()
-  await page.getByRole("button", { name: "Fermer mail" }).click()
-  await expect(page.getByText(/^Fermer « mail » \? Ses fonctions cesseront aussitôt de répondre/)).toBeVisible()
   await capturer("connecteurs")
-  await page.getByRole("button", { name: "Garder" }).click()
-  await expect(page.getByRole("button", { name: "Fermer mail" })).toBeFocused()
-  await expect(page.getByText(/^Ouvert depuis le /)).toBeVisible()
+  // Bloquer un outil : un geste sur sa carte du catalogue, confirmé ; annulé ici, rien n'est écrit.
+  await page.getByRole("button", { name: "Ajouter un connecteur" }).first().click()
+  const fenetre = page.getByRole("dialog", { name: "Ajouter un connecteur" })
+  await fenetre.getByRole("button", { name: "Bloquer mail pour l'organisation" }).click()
+  const question = page.getByRole("alertdialog", { name: "Bloquer mail pour toute l'organisation ?" })
+  await expect(question.getByText("Plus personne ne pourra ajouter de connecteur mail.")).toBeVisible()
+  await capturer("connecteurs-bloquer")
+  await question.getByRole("button", { name: "Annuler" }).click()
+  await expect(question).toHaveCount(0)
+  await expect(fenetre.getByRole("button", { name: "Bloquer mail pour l'organisation" })).toBeAttached()
 }
 
 /** Le fil des réglages ; les écrans retirés (E05-S11, AC-25) n'ont plus d'adresse, 404 (E11-S07, `e11s07-adresses.spec.ts`). */

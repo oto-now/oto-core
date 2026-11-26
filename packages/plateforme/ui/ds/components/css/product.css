@@ -705,3 +705,16 @@
 .oto-rail-item[data-rang="avant"]::after { inset-block-start: -4px; }
 .oto-rail-item[data-rang="apres"]::before { inset-block-end: -1px; }
 .oto-rail-item[data-rang="apres"]::after { inset-block-end: -4px; }
+
+/* L'en-tête empilé, opt-in : un écran le demande en posant `data-entete-empile` sur le contenu de sa méta (Connecteurs). La phrase toujours sous le titre, les actions à droite sur les deux rangs ; sous 640 px, tout s'empile : le titre, la phrase, puis les actions. Aucun autre écran ne change ; avec un fil d'Ariane, l'en-tête garde sa forme. */
+.oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-page-title { grid-area: 1 / 1; }
+.oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-meta { grid-area: 2 / 1; justify-self: start; }
+.oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-side { grid-area: 1 / 2 / 3 / 3; justify-self: end; }
+@media (max-width: 639px) {
+  .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) { grid-template-columns: minmax(0, 1fr); }
+  .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-side { grid-area: 3 / 1; justify-self: start; margin-block-start: var(--space-2); }
+}

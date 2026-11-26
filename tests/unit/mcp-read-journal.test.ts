@@ -67,7 +67,7 @@ function journalRows(): Row[] {
 async function session() {
   const claire = ref.identityOf("claire")
   const spy = spyRequests(await ref.db("claire"))
-  const mcp = await connectDeps({ db: spy.db, org: claire.org, caller: { kind: "member", identity: claire }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${ref.org.host}` })
+  const mcp = await connectDeps({ db: spy.db, org: claire.org, caller: { kind: "member", identity: claire }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: `https://${ref.org.host}` })
   return { ...mcp, requests: spy.requests }
 }
 

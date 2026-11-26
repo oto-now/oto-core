@@ -7,9 +7,24 @@ import { afterAll, describe, expect, it } from "vitest"
 import { assertRouteBudgets, assertSharedJsBudget, routeFirstLoadJs, sharedFirstLoadJs } from "../../scripts/ci/shared-first-load-js.mjs"
 
 // Le budget du JS chargé par toutes les pages (`performance-patterns.md § Bundle Size`), lu par le job
-// `packed-host-build` : un test de fumée sur un `.next` réduit à son manifeste.
+// `packed-host-build` : un test de fumée sur un `.next` réduit à ses manifestes (Next 16 : `build-manifest.json` et un
+// `page_client-reference-manifest.js` par route, dont les `entryJSFiles` donnent les fichiers de chaque entrée d'app).
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-js-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+/** Écrit les manifestes de Next 16 : `routes` donne, par route, les fichiers de chaque entrée (`/layout`…). */
+function manifestes(nextDir: string, routes: Record<string, Record<string, string[]>>, rootMainFiles: string[] = []) {
+  fs.writeFileSync(path.join(nextDir, "build-manifest.json"), JSON.stringify({ rootMainFiles }))
+  for (const [page, entrees] of Object.entries(routes)) {
+    const entryJSFiles = Object.fromEntries(
+      Object.entries(entrees).map(([entree, fichiers]) => [entree.startsWith("[") ? entree : `[project]/src/app${entree}`, fichiers]),
+    )
+    const dossier = path.join(nextDir, "server/app", path.dirname(page))
+    fs.mkdirSync(dossier, { recursive: true })
+    const script = `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};globalThis.__RSC_MANIFEST[${JSON.stringify(page)}] = ${JSON.stringify({ entryJSFiles })};`
+    fs.writeFileSync(path.join(dossier, "page_client-reference-manifest.js"), script)
+  }
+}
 
 describe("shared-first-load-js", () => {
   it("should sum the gzipped files present in every app entry and throw above the budget", () => {
@@ -17,8 +32,13 @@ describe("shared-first-load-js", () => {
     fs.mkdirSync(path.join(dir, "static"))
     fs.writeFileSync(path.join(dir, "static/commun.js"), commun)
     fs.writeFileSync(path.join(dir, "static/seul.js"), "y".repeat(50_000))
-    const pages = { "/layout": ["static/commun.js", "static/seul.js"], "/admin/page": ["static/commun.js"] }
-    fs.writeFileSync(path.join(dir, "app-build-manifest.json"), JSON.stringify({ pages }))
+    // `/_global-error/page` ne rend pas le layout racine : elle n'entre pas dans le calcul ; une entrée de
+    // `node_modules` (l'erreur globale de Next) n'est pas une entrée de l'application.
+    manifestes(dir, {
+      "/admin/page": { "/layout": ["static/commun.js"], "/admin/page": ["static/seul.js"] },
+      "/page": { "/layout": ["static/commun.js"] },
+      "/_global-error/page": { "[project]/node_modules/next/dist/client/components/builtin/global-error": ["static/seul.js"] },
+    })
 
     const octets = gzipSync(commun, { level: 9 }).length
     expect(sharedFirstLoadJs(dir)).toEqual({ files: ["static/commun.js"], bytes: octets })
@@ -37,15 +57,21 @@ describe("shared-first-load-js", () => {
       poids[nom] = gzipSync(contenu, { level: 9 }).length
     }
     fs.writeFileSync(path.join(route, "static/style.css"), "a{}")
-    const pages = {
-      "/layout": ["static/commun.js", "static/racine.js", "static/style.css"],
-      "/(auth)/layout": ["static/commun.js", "static/groupe.js"],
-      "/(auth)/login/loading": ["static/commun.js", "static/chargement.js"],
-      "/(auth)/login/page": ["static/commun.js", "static/page.js"],
-      "/(dashboard)/layout": ["static/commun.js", "static/voisin.js"],
-      "/not-found": ["static/commun.js", "static/feuille.js"],
-    }
-    fs.writeFileSync(path.join(route, "app-build-manifest.json"), JSON.stringify({ pages }))
+    const racine = { "/layout": ["static/racine.js", "static/style.css"] }
+    manifestes(
+      route,
+      {
+        "/(auth)/login/page": {
+          ...racine,
+          "/(auth)/layout": ["static/groupe.js"],
+          "/(auth)/login/loading": ["static/chargement.js"],
+          "/(auth)/login/page": ["static/page.js"],
+          "/not-found": ["static/feuille.js"],
+        },
+        "/(dashboard)/x/page": { ...racine, "/(dashboard)/layout": ["static/voisin.js"] },
+      },
+      ["static/commun.js"],
+    )
 
     const attendu = poids.commun + poids.racine + poids.groupe + poids.chargement + poids.page
     const lu = routeFirstLoadJs(route, "/(auth)/login/page")

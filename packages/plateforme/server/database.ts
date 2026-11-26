@@ -646,7 +646,7 @@ export type Database = {
           created_at: string
           declined_at: string | null
           email: string
-          expires_at: string
+          expires_at: string | null
           id: string
           invited_by: string | null
           org_id: string
@@ -660,7 +660,7 @@ export type Database = {
           created_at?: string
           declined_at?: string | null
           email: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           invited_by?: string | null
           org_id: string
@@ -674,7 +674,7 @@ export type Database = {
           created_at?: string
           declined_at?: string | null
           email?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           invited_by?: string | null
           org_id?: string

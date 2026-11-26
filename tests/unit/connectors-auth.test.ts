@@ -16,7 +16,7 @@ import { CatalogRegistrationError } from "../../packages/plateforme/server/catal
 import type { AccountCredential, AccountMarker } from "../../packages/plateforme/server/connectors/auth"
 import { guardedFetch, isPublicAddress } from "../../packages/plateforme/server/connectors/address-guard"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { describedConnector, memoryTokens } from "../factories/described-connector"
@@ -27,7 +27,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const ACCOUNT = "account-1"
 
 /** Le connecteur de test sous une autre authentification, d'autres champs ou réglages. */
-function variant(change: Partial<ConnectorDefinition>): ConnectorDefinition {
+function variant(change: Partial<ConnectorView>): ConnectorView {
   return { ...describedConnector(), ...change }
 }
 
@@ -119,10 +119,10 @@ describe("account fields and settings in the engine", () => {
 })
 
 describe("oauth2_client_credentials", () => {
-  const exchanging = (change: Partial<Extract<ConnectorDefinition["auth"], { kind: "oauth2_client_credentials" }>> = {}) =>
+  const exchanging = (change: Partial<Extract<ConnectorView["auth"], { kind: "oauth2_client_credentials" }>> = {}) =>
     variant({
       credential: TWO_FIELDS,
-      auth: { kind: "oauth2_client_credentials", tokenUrl: "https://login.crm.example.test/token", tokenRequest: "form", clientAuth: "body", clientId: "client_id", clientSecret: "client_secret", ...change } as ConnectorDefinition["auth"],
+      auth: { kind: "oauth2_client_credentials", tokenUrl: "https://login.crm.example.test/token", tokenRequest: "form", clientAuth: "body", clientId: "client_id", clientSecret: "client_secret", ...change } as ConnectorView["auth"],
     })
 
   it("should exchange the client credentials, keep the token on the account with its expiry, and reuse it", async () => {
@@ -177,7 +177,7 @@ describe("oauth2_client_credentials", () => {
 describe("oauth2_jwt_bearer", () => {
   const [signed] = jwtBearerCases
   const serviceAccount = (auth: Record<string, unknown> = {}, credential = signed.credential) =>
-    variant({ auth: { ...signed.auth, ...auth } as ConnectorDefinition["auth"], credential })
+    variant({ auth: { ...signed.auth, ...auth } as ConnectorView["auth"], credential })
   const keyOf = () => ({ [signed.credential[0].name]: credentialValue(signed) })
   const form = (body: unknown) => Object.fromEntries(new URLSearchParams(String(body)))
 
@@ -205,14 +205,14 @@ describe("oauth2_jwt_bearer", () => {
     registerConnectors([serviceAccount()])
     vi.spyOn(console, "error").mockImplementation(() => {})
     const set = vi.fn<AccountMarker["set"]>(async () => {})
-    const mark: AccountMarker = { current: null, effect: null, set, remedy: async () => "Ask the manager." }
+    const mark: AccountMarker = { current: null, effect: null, set, refusal: async (error) => error }
     stub(json({ error: "invalid_grant", error_description: "Invalid JWT Signature." }, 400))
     const error = await refusal(getCompany({ fields: keyOf(), settings: {}, tokens: memoryTokens(), mark }))
     expect([error.code, set.mock.calls]).toEqual(["credential_rejected", [["credential_rejected"]]])
   })
 
   it("should refuse at declaration a token address that is not fixed https, empty scopes, or a key that is not the one secret field", () => {
-    const declared = (definition: ConnectorDefinition) => {
+    const declared = (definition: ConnectorView) => {
       try {
         registerConnectors([definition])
         return "declared"
@@ -241,9 +241,9 @@ describe("oauth2_jwt_bearer with access levels", () => {
   if (!leveled) throw new Error("the common case assertion_at_default_level is missing")
   const [READ, WRITE] = ["https://api.example.test/auth/read", "https://api.example.test/auth/write"]
   /** Le connecteur de test en compte de service à niveaux (`read` par défaut, `full`) : lire exige READ, écrire WRITE. */
-  const serviceAccount = (auth: Record<string, unknown> = {}, scopesOf = (fn: ConnectorDefinition["functions"][number]): string[] | undefined => [fn.class === "read" ? READ : WRITE]) => {
+  const serviceAccount = (auth: Record<string, unknown> = {}, scopesOf = (fn: ConnectorView["functions"][number]): string[] | undefined => [fn.class === "read" ? READ : WRITE]) => {
     const base = describedConnector()
-    return { ...base, auth: { ...leveled.auth, ...auth } as ConnectorDefinition["auth"], credential: leveled.credential, functions: base.functions.map((fn) => ({ ...fn, scopes: scopesOf(fn) })) }
+    return { ...base, auth: { ...leveled.auth, ...auth } as ConnectorView["auth"], credential: leveled.credential, functions: base.functions.map((fn) => ({ ...fn, scopes: scopesOf(fn) })) }
   }
   const keyOf = () => ({ [leveled.credential[0].name]: credentialValue(leveled) })
   const scopeOf = (body: unknown) => {
@@ -255,7 +255,7 @@ describe("oauth2_jwt_bearer with access levels", () => {
     if (!prepared) throw new Error(`${name} is not declared`)
     return prepared.run({ credential, account: { id: ACCOUNT } } as never, args as never)
   }
-  const declared = (definition: ConnectorDefinition) => {
+  const declared = (definition: ConnectorView) => {
     try {
       registerConnectors([definition])
       return "declared"
@@ -312,7 +312,7 @@ describe("oauth2_jwt_bearer with access levels", () => {
     const verdicts = [
       serviceAccount({ scopes: [READ] }),
       serviceAccount({ defaultLevel: "support" }),
-      variant({ auth: { ...jwtBearerCases[0].auth, defaultLevel: "read" } as ConnectorDefinition["auth"], credential: jwtBearerCases[0].credential }),
+      variant({ auth: { ...jwtBearerCases[0].auth, defaultLevel: "read" } as ConnectorView["auth"], credential: jwtBearerCases[0].credential }),
       serviceAccount({}, (fn) => (fn.name === "crm.get_company" ? ["https://api.example.test/auth/admin"] : [READ])),
       serviceAccount({}, (fn) => (fn.name === "crm.get_company" ? undefined : [READ])),
       serviceAccount(),

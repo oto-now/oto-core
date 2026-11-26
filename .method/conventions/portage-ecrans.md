@@ -5,8 +5,8 @@
 
 Un écran d'`oto-frontend` se **copie puis s'adapte**, fidèle à 90 ou 95 % de l'original (ADR-008). Son design
 system (CSS et composants) est porté tel quel dans `ui/`, et chaque écran se recopie sur lui. Ne
-changent que le routeur (§ 1), la donnée (l'API du paquet, § 4), les icônes (§ 3) et ce que le § 5
-exclut. Source en lecture seule : `src/components/` et `src/design-system/` du dépôt `oto-frontend`.
+changent que le routeur (§ 1), la donnée (l'API du paquet, § 4), les icônes (§ 3), ce que le § 5
+exclut et ce qu'exige `ui-patterns.md`, qui l'emporte (§ 8). Source en lecture seule : `src/components/` et `src/design-system/` du dépôt `oto-frontend`.
 
 ## 0. Une seule coque, le rail d'oto-frontend
 
@@ -210,7 +210,7 @@ exclut. Source en lecture seule : `src/components/` et `src/design-system/` du d
 - **Vérifiable :** chaque écran porté se compare côte à côte à son original : une capture
   d'oto-frontend (prise sur son application, ou fournie par JB) et celle du portage,
   prise au contrôle visuel. Chaque écart visible est listé dans la section « Écarts avec la référence
-  UI » de la story, avec sa raison parmi celles de ce paragraphe et des §§ 1, 3 et 4 ; un écart non
+  UI » de la story, avec sa raison parmi celles de ce paragraphe et des §§ 1, 3, 4 et 8 ; un écart non
   listé est un défaut de revue.
 
 ## 6. Une règle du service, une seule source
@@ -243,3 +243,26 @@ exclut. Source en lecture seule : `src/components/` et `src/design-system/` du d
   frappe ; le cas « une seule passe » de `tests/integration/components/editeur-leger.test.tsx` échoue sur
   une mesure faite au montage. Écart connu, à corriger : `TableCell` (`ui/ds/react/table.tsx`, effet de
   mise en page qui lit `getComputedStyle`, `scrollWidth` et `clientWidth` par cellule), M101.
+
+## 8. Écarts à ui-patterns.md, décidés par JB
+
+- **`ui-patterns.md` l'emporte sur cette convention**, sur les écrans du paquet comme sur les pages du
+  groupe `(dashboard)`. La fidélité à l'original (ADR-008 § 6) n'autorise pas seule un écart : une
+  copie qui contredirait une règle de `ui-patterns.md` est une contradiction.
+- **Une contradiction ne se tranche pas** : l'agent qui la rencontre s'arrête et la pose à JB par
+  `AskUserQuestion` (la règle de chaque convention, le cas précis, par option sa conséquence et son
+  coût, la recommandation en premier) ; un sous-agent la remonte au pilote. La décision s'écrit
+  ensuite ci-dessous, une ligne par écart : la règle de `ui-patterns.md` écartée (§), ce qui la
+  remplace, la décision et sa source.
+- Écarts décidés :
+  - `§ Design system verrouillé`, `§ Composition` (tokens de l'hôte, `text-muted-foreground`) : jeu
+    de tokens d'`oto-frontend` (`text-ink`, `text-mute`…, § 3), ADR-008 § 3
+    (`docs/conception/ecrans-et-coque.md`, validé avec JB le 23/09/2026).
+  - `§ Composition` (réutiliser `src/components/ui/`) : design system porté, `ui/ds/`, ADR-008 § 1
+    (même document).
+  - `§ Composition` (`PageContainer`, `NAV_ITEMS`) : la coque unique, le rail et `TwoColumns` /
+    `.oto-content-max` (§ 0, § 7), ADR-008 § 7 (même document).
+- **Vérifiable :** en revue, tout écart à une règle de `ui-patterns.md` dans `packages/plateforme/ui/**`
+  ou `src/app/(dashboard)/**` cite sa ligne ci-dessus ; un écart sans ligne est un finding sourcé
+  `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, et une ligne ajoutée sans
+  décision de JB citée aussi.

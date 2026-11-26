@@ -1,7 +1,7 @@
 # Outils MCP
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-17 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
+- **Dernière révision** : 2026-11-22 (ADR-009 § 3 révisé au statut proposé le 2026-10-02, en attente de la mesure du banc)
 
 ## Résumé
 
@@ -31,6 +31,7 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - H22 : les schémas d'entrée des six outils sont figés et ne changent que par ajout (ADR-002) ; chaque champ porte `.describe()` avec un exemple ; `team` et `account` de `call` sont facultatifs.
 - Pas d'outil par famille d'objets (ADR-002 § 6) : tableaux, journal et contrats passent par `call` et `read`.
 - Les commentaires d'un contenu ne changent rien à la surface : cinq fonctions de `call` (`comment.list`, `comment.add`, `comment.edit`, `comment.delete`, `comment.resolve`), les fils ouverts servis par `read` après le corps d'une page, et une marque de `context` ([commentaires](commentaires.md)).
+- Les membres et les équipes d'une organisation non plus : `member.list`, `member.add`, `member.set_teams`, `member.remove` et `team.create`, derrière `call`, pour un hôte qui sert de client MCP sous le jeton de la personne qui agit. Les droits sont ceux de l'écran Équipes ; une personne se désigne par son email ; une personne en attente est une invitation sans email ([identité et connexion](identite-et-connexion.md)). Les droits d'un dossier par équipe passent par `node.share`, sans fonction de plus.
 - Le connecteur admin (`/api/mcp-admin`) n'est pas soumis au gel ([administration et cellule](administration-et-cellule.md)).
 
 ### Lire et engager : la paire `<connecteur>` / `<connecteur>_act`
@@ -47,7 +48,7 @@ Le banc a aussi mesuré qu'aucune affinité réseau n'est possible (claude.ai et
 - H25 : descriptions en anglais, sous 1 000 caractères, ouvertes par « Requires the ctx code from <p>_context; call it first. » ; celle de `context` nomme les domaines et borne son usage ; celle de `call` cite deux ou trois fonctions actives.
 - E03-S01 N6 : `settings.domains` est une chaîne libre en anglais ; un tableau de chaînes est joint par « , » ; absent ou vide, la description de `context` n'a pas de domaines.
 - E03-S01 N14 : dans les descriptions, le nom affiché est coupé à 60 caractères et les domaines à 100, pour tenir sous 1 000 caractères.
-- E03-S01 N15 : exemples de `call` : la première fonction non sensible, par nom, de deux connecteurs actifs au plus, puis `table.rows` s'il est actif ; trois noms au plus, jamais une fonction de l'ERP.
+- E03-S01 N15 : exemples de `call` : la première fonction non sensible, par nom, de deux connecteurs adoptés au plus (une ligne `active` ou un compte ; jamais tout le catalogue ouvert), puis `table.rows` s'il est actif ; trois noms au plus, jamais une fonction de l'ERP.
 - E03-S01 N7 : les instructions du serveur MCP tiennent en une phrase qui renvoie à `context` et porte la borne (« for any request about {org}'s work ») : claude.ai ne montre jamais les instructions.
 - H23 : annotations `readOnlyHint: true` sur `context`, `find` et `read` ; `destructiveHint: false` sur `feedback` seul ; `openWorldHint: true` sur `call` seul ; `call` et `write` gardent les autres défauts (ADR-002 § 7).
 
@@ -175,3 +176,4 @@ Le détail des opérations vit dans [lecture et écriture des pages](lecture-et-
 - 2026-11-17 : `publish: false` n'a plus d'effet aux portes d'un assistant, exception au gel prise avec des clients, sans appel refusé — décidé par le responsable du produit, validé par le mainteneur du moteur (source : échange du 17/11/2026).
 - 2026-11-17 : la description de `find` gagne une phrase, la relance en cours de tâche (« Also use it in the middle of a task… ») — décidé par le responsable du produit (source : cadrage du 17/11/2026 sur la vue invité).
 - 2026-11-17 : la fonction `team.shares` derrière `call` (connecteur natif `team`, classe `read`) : les partages d'une équipe, sans rien changer aux six outils — décidé par le responsable du produit (source : cadrage du 17/11/2026 sur la vue invité).
+- 2026-11-22 : les fonctions `member.list`, `member.add`, `member.set_teams`, `member.remove` (connecteur natif `member`) et `team.create` (connecteur natif `team`) derrière `call` : un hôte qui sert de client MCP gère les membres et les équipes d'une organisation sous le jeton de la personne qui agit, sans rien changer aux six outils — demandé par le responsable d'Oto (source : besoin d'un hôte en marque blanche, 22/11/2026).

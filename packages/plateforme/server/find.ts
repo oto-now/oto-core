@@ -76,7 +76,8 @@ type Place = { match: string; block: string | null; block_type: string | null; c
 
 /**
  * Un nœud trouvé ; `revision` (E11-S19, AC-e5) : sa révision publiée, lue pour un nœud dont des blocs de page sont
- * montrés ; `editable` : la personne l'écrit. `nodeId` et `editable` ne sont jamais servis en données. `blocksTotal` :
+ * montrés ; `editable` : la personne l'écrit, jamais servi en données. `nodeId` : l'identifiant stable du nœud, servi en
+ * données (`id`), pour qui garde ses pages par lui ; le texte garde le chemin. `blocksTotal` :
  * les blocs que la recherche trouve dans le nœud, montrés ou non (`block_total`), absent d'un nœud trouvé sans bloc.
  */
 type NodeMatch = { nodeId: string; path: string; kind: string; title: string; summary: string; score: number; places: Place[]; revision?: number; editable?: boolean; blocksTotal?: number }
@@ -154,9 +155,15 @@ const FUNCTION_LINE_MAX = 200
  * `read {"path": "functions"}` (E11-S19, AC-e3) : toutes les fonctions actives, groupées par connecteur (ordre
  * alphabétique des connecteurs, puis des noms ; en tête d'un connecteur décrit, la première phrase de sa description),
  * chacune avec sa classe et la première phrase de sa description, puis les contrats à lire avant d'écrire. Sans elle,
- * `find` en rend trois au plus : une absence ne s'affirmait pas.
+ * `find` en rend trois au plus : une absence ne s'affirmait pas. `host` : les fonctions de l'hôte que la personne voit et
+ * leurs lignes, par famille (`host-api/index-view.ts`), après celles de l'instance.
  */
-export function functionCatalog(active: readonly CatalogFunction[], contracts: readonly string[], prefix: string): ToolOutput {
+export function functionCatalog(
+  active: readonly CatalogFunction[],
+  contracts: readonly string[],
+  prefix: string,
+  host: { functions: readonly CatalogFunction[]; lines: readonly string[] } = { functions: [], lines: [] },
+): ToolOutput {
   const sorted = [...active].sort((a, b) => a.connector.localeCompare(b.connector) || a.name.localeCompare(b.name))
   const connectors = [...new Set(sorted.map((fn) => fn.connector))]
   const heading = (connector: string): string => {
@@ -165,17 +172,18 @@ export function functionCatalog(active: readonly CatalogFunction[], contracts: r
     return description === null ? `${connector}:` : `${connector}: ${cut(firstSentence(description), FUNCTION_LINE_MAX)}`
   }
   const lines = [
-    `${sorted.length} functions you can run, by connector:`,
+    `${sorted.length + host.functions.length} functions you can run, by connector:`,
     ...connectors.flatMap((connector) => [
       heading(connector),
       ...sorted.filter((fn) => fn.connector === connector).map((fn) => `- ${fn.name} (${fn.class}): ${cut(firstSentence(fn.description), FUNCTION_LINE_MAX)}`),
     ]),
+    ...host.lines,
     ...(contracts.length > 0 ? [`Contracts to read before writing: ${contracts.join(", ")}.`] : []),
     `Read a contract with ${prefix}_read {"path": "<function>"}, then run it with ${prefix}_call.`,
   ]
   return {
     text: lines.join("\n"),
-    data: { functions: sorted.map((fn) => ({ name: fn.name, connector: fn.connector, class: fn.class })), contracts: [...contracts] },
+    data: { functions: [...sorted, ...host.functions].map((fn) => ({ name: fn.name, connector: fn.connector, class: fn.class })), contracts: [...contracts] },
     nextActions: [`${prefix}_read`],
     target: FUNCTIONS_PATH,
   }
@@ -314,7 +322,7 @@ async function withSections(db: PlatformDb, identity: Identity, nodes: NodeMatch
   }
 }
 
-/** Un nœud en données (AC16) : ses champs servis, sans l'identifiant du nœud ni ceux des blocs. */
+/** Un nœud en données (AC16) : ses champs servis, l'identifiant stable du nœud compris, jamais ceux des blocs. */
 function matchData(node: NodeMatch) {
   const places = node.places.map((place) => ({
     match: place.match,
@@ -326,7 +334,7 @@ function matchData(node: NodeMatch) {
   }))
   const revision = node.revision === undefined ? {} : { revision: node.revision }
   const blocksTotal = node.blocksTotal === undefined ? {} : { blocks_total: node.blocksTotal }
-  return { path: node.path, kind: node.kind, title: node.title, summary: node.summary, score: roundScore(node.score), places, ...revision, ...blocksTotal }
+  return { id: node.nodeId, path: node.path, kind: node.kind, title: node.title, summary: node.summary, score: roundScore(node.score), places, ...revision, ...blocksTotal }
 }
 
 /**
@@ -338,7 +346,7 @@ export async function find(
   db: PlatformDb,
   identity: Identity,
   input: { query: string; type?: FindType },
-  catalog: { functions: readonly CatalogFunction[]; activeConnectors: ReadonlySet<string> },
+  catalog: { functions: readonly CatalogFunction[]; activeConnectors: ReadonlySet<string>; notice?: string | null },
 ): Promise<ToolOutput> {
   const { query, type } = input
   const prefix = identity.org.prefix
@@ -357,10 +365,11 @@ export async function find(
   const active = catalog.functions.filter((fn) => isActive(fn, catalog.activeConnectors))
   const functions = type === undefined || type === "function" ? matchFunctions(active, query) : []
   return {
-    text: renderFind({ query, type, nodes, others, moreNodes, functions, prefix }),
+    // `notice` : ce que la recherche de fonctions ne couvre pas (les fonctions de l'hôte, quand leur liste est indisponible).
+    text: [renderFind({ query, type, nodes, others, moreNodes, functions, prefix }), ...(catalog.notice && (type === undefined || type === "function") ? [catalog.notice] : [])].join("\n"),
     data: {
       matches: nodes.map(matchData),
-      others: others.map((node) => ({ path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),
+      others: others.map((node) => ({ id: node.nodeId, path: node.path, kind: node.kind, title: node.title, score: roundScore(node.score) })),
       more_nodes: moreNodes,
       functions: functions.map(({ fn, score }) => ({ name: fn.name, class: fn.class, connector: fn.connector, score: roundScore(score) })),
     },

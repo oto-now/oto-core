@@ -469,15 +469,42 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
      `code`), celle à quatre restant, plus appelée par le paquet ; `platform.forget_account_probe`, qui retire le dernier
      test d'un compte quand sa saisie change. Les deux fonctions neuves sont `security definer`, réservées au rôle du
      serveur. Une colonne, trois fonctions ; rien à relancer avant.
-- `20261119083000_platform_supervision.sql` (supervision de la plateforme, décidée par Alexis le 30/10 et JB le 02/11 ;
-  administration et cellule, N9) : trois fonctions `security definer`, réservées à l'équipe plateforme (`is_staff()`,
-  sinon 42501), exécutables par `authenticated` : `staff_org_overview(since)` (identité et chiffres de chaque
-  organisation : membres, équipes, appels `tools/call` depuis `since`, connecteurs actifs, comptes ; `since` nul refusé,
-  22004), `staff_org_members(org)` (membres, email, nom, rôle, date d'entrée) et `staff_org_accounts(org)` (comptes
-  regroupés par connecteur, titulaire, état et mode) ; `org` nul : toutes les organisations. Ni clé, ni colonne
-  `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
-  table, colonne, policy ni index ; rien à relancer avant. Fichier de développement, à réunir avec les autres de la
-  version avant le tag.
+- `20261119210949_v1_9_0.sql` (version 1.9.0 ; un seul fichier de migration par version publiée, fiche D124) : les
+  deux migrations ajoutées depuis 1.8.0 (la 1.8.1 n'en ajoute aucune), écrites une par lot pendant le développement
+  puis réunies avant le tag, au contenu identique, dans l'ordre de leurs horodatages ; une bannière nomme le fichier
+  d'origine de chaque partie, et chaque partie garde son bloc `-- ROLLBACK:` à sa fin (aucune ligne changée) : pour
+  défaire, les parties dans l'ordre inverse. Aucune version publiée ne portait les deux fichiers d'origine
+  (§ « Hôtes qui avaient appliqué une migration de la 1.9.0 »).
+  1. `20261119083000_platform_supervision.sql` (supervision de la plateforme ; administration et cellule, N9) : trois
+     fonctions `security definer`, réservées à l'équipe plateforme (`is_staff()`, sinon 42501), exécutables par
+     `authenticated` : `staff_org_overview(since)` (identité et chiffres de chaque organisation : membres, équipes,
+     appels `tools/call` depuis `since`, connecteurs actifs, comptes ; `since` nul refusé, 22004),
+     `staff_org_members(org)` (membres, email, nom, rôle, date d'entrée) et `staff_org_accounts(org)` (comptes
+     regroupés par connecteur, titulaire, état et mode) ; `org` nul : toutes les organisations. Ni clé, ni colonne
+     `secret_*`, ni libellé ou identifiant de compte, ni contenu. Le paquet sans elle échoue sur la supervision ; aucune
+     table, colonne, policy ni index ; rien à relancer avant.
+  2. `20261119104631_platform_acces_du_compte.sql` (connecteur à plusieurs accès ; connecteurs et comptes,
+     § Plusieurs accès) : la colonne `accounts.access` (le nom de l'accès qui a ouvert le compte, nul pour un connecteur
+     à un seul accès ; lue et écrite à la création par `authenticated`, jamais modifiée) et la colonne
+     `connector_consents.access` (l'accès d'une demande de consentement), chacune avec sa contrainte de forme. Additif :
+     aucune ligne réécrite ; le paquet sans elle échoue sur la lecture des comptes. Rien à relancer avant. Un connecteur
+     qui passe d'un accès à plusieurs arrête ses comptes existants (`access` nul) : leur reprise est dans connecteurs et
+     comptes, § Plusieurs accès.
+- `20261122184838_platform_attente_sans_echeance.sql` (version 1.10.0, sa seule migration, gardée sous
+  son nom comme `20261028090000` en 1.6.2 : un seul fichier par version, fiche D124 ; identité et connexion, § Personne en attente, sans email) : `invitations.expires_at` facultatif, sa valeur
+  par défaut (sept jours) gardée pour l'invitation envoyée par email ; nul, l'inscription sans email de `member.add`
+  (`registerInvitation`), qui n'expire pas. `authenticated` reçoit `insert(expires_at)`. Six fonctions recréées,
+  privilèges redits à l'identique, où une échéance nulle compte comme ouverte : `invitations_guard`
+  (`already_invited`), `accept_invitations`, `identity_for_caller`, `hook_before_user_created`, `org_usage` et
+  `join_org` (plafond des membres). Aucune ligne réécrite ; le paquet sans elle échoue sur `member.add`. Rien à
+  relancer avant. Rollback dans le fichier.
+- `20261123150000_platform_api_de_l_hote.sql` (fonctions d'un hôte, § Source par organisation) : la table
+  `platform.host_apis`, une ligne par organisation au plus : l'adresse `https` de l'API de l'hôte, le document OpenAPI
+  servi (validé par le profil hôte de la lib de connecteurs), sa version, son `ETag`, les dates de service et de
+  rafraîchissement, et le dernier refus (adresse, date, problèmes) ; un refus ne remplace jamais le document servi.
+  Lue par les membres de l'organisation (`member_orgs()`), écrite par l'équipe plateforme (`member_orgs()` et
+  `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
+  échoue sur le catalogue d'une organisation. Rien à relancer avant.
 
 ## Installer sur un hôte neuf
 
@@ -713,6 +740,29 @@ appliquer. Comme pour la 1.7.0 (§ précédent), par qui exploite la base, jamai
   ```bash
   npx supabase migration repair --db-url "$DB_URL" --status reverted 20261114120000 20261116161500
   npx supabase migration repair --db-url "$DB_URL" --status applied 20261117220000
+  npx supabase migration list --db-url "$DB_URL"
+  npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
+  ```
+
+- **La première seulement** : appliquer d'abord, à la main, la partie 2 du fichier de version (sa bannière nomme son
+  fichier d'origine), puis le cas précédent.
+
+Les copies des deux dans `supabase/migrations/` de l'hôte se suppriment : `migrations sync` ajoute, il ne retire rien.
+
+## Hôtes qui avaient appliqué une migration de la 1.9.0
+
+Les deux fichiers d'origine de `20261119210949_v1_9_0.sql` (`20261119083000`, `20261119104631`) n'ont été publiés par
+aucune version : seule une base de développement, une base d'essai d'un hôte, ou le projet de test de ce dépôt, a pu en
+appliquer. Comme pour la 1.8.0 (§ précédent), par qui exploite la base, jamais par la CI, à la racine d'un dépôt dont
+`supabase/migrations/` porte `20261119210949_v1_9_0.sql` et plus aucun des deux fichiers, `DB_URL` posée comme au
+§ « marquer la ligne de base V1 appliquée » :
+
+- **Base locale de test** : `pnpm db:local --reset` la recrée, rien d'autre.
+- **Les deux appliquées** (`supabase migration list` les montre côté base) : seul l'historique change.
+
+  ```bash
+  npx supabase migration repair --db-url "$DB_URL" --status reverted 20261119083000 20261119104631
+  npx supabase migration repair --db-url "$DB_URL" --status applied 20261119210949
   npx supabase migration list --db-url "$DB_URL"
   npx supabase db push --db-url "$DB_URL" --dry-run   # « Remote database is up to date »
   ```

@@ -53,8 +53,13 @@ peut encore changer. « Validé avec JB » : repris d'au moins un ADR accepté p
 | [Procédures](procedures.md) | Qu'est-ce qu'une procédure, comment s'écrit-elle, se contrôle-t-elle et se sert-elle ? | proposé |
 | [Connecteurs et comptes](connecteurs-et-comptes.md) | Comment un appel de fonction atteint-il un service tiers, sous quel compte et avec quel secret ? | validé avec JB le 30/09/2026 |
 | [Fonctions longues](fonctions-longues.md) | Comment une fonction de connecteur qui répond en minutes s'exécute-t-elle sans faire attendre l'assistant ? | validé avec Alexis le 22/10/2026 |
+| [Connexion menée par l'agent](connexion-par-l-agent.md) | Comment un assistant mène-t-il une personne au seul geste qui connecte un connecteur (consentir, coller une clé, activer) ? | proposé |
+| [Fonctions d'un hôte](fonctions-d-un-hote.md) | Comment les fonctions de l'API REST d'un hôte, décrite en OpenAPI, sont-elles servies derrière `call` ? | validé avec Alexis le 22/11/2026 |
+| [Fonctions d'un hôte : jeton et consentement](fonctions-d-un-hote-jeton.md) | Sous quel jeton de la personne une fonction d'un hôte court-elle, et comment un client tiers obtient-il le consentement ? | validé avec Alexis le 22/11/2026 |
+| [Fonctions d'un hôte : visibilité et index](fonctions-d-un-hote-index.md) | Quelles fonctions d'un hôte la personne voit-elle, et comment l'index tient-il dans `context` ? | validé avec Alexis le 22/11/2026 |
 | [Exposition des fonctions](exposition-des-fonctions.md) | Comment une fonction, de connecteur ou métier, est-elle servie à l'assistant : par `call` seulement, par un outil par connecteur ou par un outil par fonction ? | validé avec Alexis le 23/10/2026 |
 | [Pseudonymisation](pseudonymisation.md) | Comment les personnes que l'hôte déclare sont-elles remplacées par des jetons dans ce que lit un assistant, et qui peut les rendre en clair ? | validé avec Alexis le 19/10/2026 |
+| [Ce que reçoit l'assistant](ce-que-recoit-l-assistant.md) | Par quelles couches limite-t-on ce qu'un assistant reçoit des données d'une organisation, laquelle tient sur quoi, et dans quel ordre un hôte les pose-t-il ? | proposé |
 
 ### Le contenu
 
@@ -105,7 +110,7 @@ chaque document garde ces repères à côté de la décision qu'ils portent.
 | ADR-007 | Connecteurs par un service sans état, dans un autre dépôt (§ 1, § 2, § 4 remplacés) | [Connecteurs et comptes](connecteurs-et-comptes.md) |
 | ADR-008 | Écrans copiés d'`oto-frontend`, sans routeur imposé, sous une seule coque | [Écrans et coque](ecrans-et-coque.md) |
 | ADR-009 | Transport MCP sans état ; texte seul dans la conversation | [Outils MCP](outils-mcp.md) |
-| ADR-010 | Distribution du paquet : npm public, dépôt open source | [Distribution du paquet](distribution-du-paquet.md) |
+| ADR-010 | Distribution du paquet : npm public, dépôt open source (révisée le 2026-11-19 : publication à la fusion d'une pull request de version approuvée par JB ou Alexis) | [Distribution du paquet](distribution-du-paquet.md) |
 | ADR-011 | Le contenu en nœuds typés et en blocs ; une ligne de tableau est un bloc | [Nœuds et arbre](noeuds-et-arbre.md), [Pages et blocs](pages-et-blocs.md), [Lecture et écriture des pages](lecture-et-ecriture-des-pages.md) (§ 1, § 3, § 6 : nœuds ; § 2 : blocs ; § 4, § 5, § 7 : lecture et écriture) |
 | ADR-012 | Ports d'identité et de base ; droits décidés dans le service ; Supabase hôte par défaut | [Base et portabilité](base-et-portabilite.md) |
 | ADR-013 | Partage public d'un contenu par lien | [Partage public](partage-public.md) |

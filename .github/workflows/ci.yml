@@ -9,10 +9,10 @@ name: CI — Build
 on:
   push:
     # `release/**` : une version corrective partie d'un tag (`release/1.4.1` depuis `v1.4.0`), quand main porte un lot pas encore
-    # publiable ; son tag ne part que d'un commit où ces jobs sont verts, comme sur main.
+    # publiable ; sa pull request de version y fusionne quand ces jobs sont verts, comme vers main (publish.yml).
     branches: [main, "release/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
 
 jobs:
   build:
@@ -40,6 +40,29 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # Une pull request de version (`version` de `packages/plateforme/package.json` changée) : les contrôles de contenu
+  # que `publish.yml` rejoue avant de poser le tag, vus ici avant la fusion (une seule migration depuis le tag
+  # précédent, accord de la version et du CHANGELOG, tag encore libre). Sans changement de version, rien.
+  version:
+    name: Version pull request (content checks before the tag)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Migrations and CHANGELOG of the version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/version-publiable.mjs --ref "$GITHUB_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"
 
   # Le build ci-dessus lit le paquet par le lien du workspace ; un hôte l'installe depuis son archive, où
   # son bundler applique `"sideEffects": false` et peut ouvrir une face par n'importe quel module. Ce job

@@ -6,19 +6,18 @@ import type { LimitState } from "../../schemas"
 import { Button } from "../ds/react/primitives"
 
 /** Les limites comptées que disent les écrans (`orgLimitsSchema`). */
-export type NomDeLimite = "members_max" | "teams_max" | "connectors_max"
+export type NomDeLimite = "members_max" | "teams_max"
 
 const MOTS: Record<NomDeLimite, [string, string]> = {
   members_max: ["membre", "membres"],
   teams_max: ["équipe", "équipes"],
-  connectors_max: ["connecteur actif", "connecteurs actifs"],
 }
 
 const mot = (nom: NomDeLimite, nombre: number) => MOTS[nom][nombre > 1 ? 1 : 0]
 
 /** Le refus du service dit en français, de sa limite et de son plafond ; `null` si le refus ne les porte pas. */
 export function phraseDeLimite(nom: unknown, max: unknown): string | null {
-  if ((nom !== "members_max" && nom !== "teams_max" && nom !== "connectors_max") || typeof max !== "number") return null
+  if ((nom !== "members_max" && nom !== "teams_max") || typeof max !== "number") return null
   if (nom === "teams_max" && max === 0) return "La création d'équipes n'est pas ouverte pour cette organisation."
   const suite = nom === "members_max" ? ", invitations en attente comprises" : ""
   return `L'organisation est limitée à ${max} ${mot(nom, max)}${suite}.`

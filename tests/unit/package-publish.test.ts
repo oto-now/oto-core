@@ -62,7 +62,8 @@ describe("package manifest (AC1)", () => {
 
     expect(pkg.peerDependencies).toMatchObject({
       "@supabase/supabase-js": "^2",
-      next: "^15",
+      // Next 16 accepté : le paquet n'importe de Next que le type `Metadata`.
+      next: "^15 || ^16",
       react: "^19",
       "react-dom": "^19",
       "@phosphor-icons/react": "^2",
@@ -77,6 +78,10 @@ describe("package manifest (AC1)", () => {
     // fflate : les ZIP du transfert d'une arborescence (`server/transfer/formats.ts`).
     expect(pkg.dependencies).toEqual({ "@modelcontextprotocol/sdk": "1.32.1", ajv: "8.20.0", aws4fetch: "1.0.20", fflate: "0.8.3", jose: "6.2.12", "mcp-handler": "1.1.0", mermaid: "11.17.2", nodemailer: "10.0.10", postgres: "3.4.9" })
     expect(pkg.peerDependencies.zod).toBe("^3.25")
+    // Fonctions d'un hôte : la lib de connecteurs (profil hôte, `server/host-api/document.ts`), installée par l'hôte depuis
+    // git, faute d'être publiée sur npm : pnpm refuse une dépendance git dans les sous-dépendances, et une version venue de
+    // git ne satisfait aucun intervalle semver.
+    expect(pkg.peerDependencies["@otomata_tech/connectors"]).toBe("*")
   })
 })
 
@@ -129,17 +134,70 @@ describe.skipIf(!changelogWritten)("package CHANGELOG (AC7), written by the pilo
 
 describe("publish workflow (AC9)", () => {
   const workflow = () => read(".github/workflows/publish.yml")
+  const flat = (text: string) => text.replace(/#.*$/gm, "").replace(/\s+/g, " ").trim()
+  const job = (name: "tag" | "publish") => {
+    const jobs = workflow().split("\njobs:")[1]
+    return name === "tag" ? jobs.split("\n  publish:")[0] : jobs.split("\n  publish:")[1]
+  }
 
-  it("should run on pushed v* tags only, read the contents, write the provenance token, and check everything before publishing from the package", () => {
+  // ADR-010 révisée le 2026-11-19 : une version se publie à la fusion de sa pull request de version, approuvée par
+  // JB ou Alexis ; aucun `push: tags`, sans quoi un tag poussé à la main publierait sans approbation.
+  it("should run on merged pull requests to main or release/** that touch the package manifest, or by hand on an existing tag, never on a pushed tag", () => {
     const trigger = workflow().split("\npermissions:")[0].split("\non:")[1]
-    expect(trigger.replace(/\s+/g, " ").trim()).toBe('push: tags: ["v*"]')
+    expect(flat(trigger)).toBe(
+      'pull_request: types: [closed] branches: [main, "release/**"] paths: ["packages/plateforme/package.json"] ' +
+        'workflow_dispatch: inputs: tag: description: "Tag v<version> déjà posé, à publier" required: true type: string',
+    )
+    expect(trigger).not.toMatch(/push:/)
 
-    const permissions = workflow().split("\npermissions:")[1].split("\njobs:")[0]
-    expect(permissions.replace(/#.*$/gm, "").replace(/\s+/g, " ").trim()).toBe("contents: read id-token: write")
+    const permissions = workflow().split("\npermissions:")[1].split(/\n[a-z]/)[0]
+    expect(flat(permissions)).toBe("contents: read")
+    expect(workflow()).toContain('APPROVERS: "jean-baptiste-tiple AlexisLaporte"')
+    // Seul Alexis passe outre : JB, même administrateur, attend son approbation.
+    expect(workflow()).toContain('BYPASSERS: "AlexisLaporte"')
+  })
 
-    const text = workflow()
+  // Alexis seul (`BYPASSERS`), passant outre la règle de branche (exception des administrateurs), publie, en avertissement tracé.
+  it("should tag the merge commit of a version pull request only after its content checks and an approver's approval of its last commit, or a bypasser's traced merge", () => {
+    const tag = job("tag")
+    expect(tag).toContain("if: github.event_name == 'pull_request' && github.event.pull_request.merged == true")
+    expect(flat(tag.split("permissions:")[1].split("outputs:")[0])).toBe("contents: write pull-requests: read")
+
     const steps = [
+      "ref: ${{ github.event.pull_request.merge_commit_sha }}",
+      'node scripts/ci/version-publiable.mjs --ref "$MERGE_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"',
+      '"repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"',
+      '$2 != "COMMENTED"',
+      'if [ "$last" = "APPROVED $HEAD_SHA" ]',
+      'if [ -n "$approved" ]; then echo "approved by $approved"; exit 0; fi',
+      "for login in $BYPASSERS; do",
+      'if [ "$MERGED_BY" = "$login" ]; then',
+      'echo "::warning title=Version without approval::$message"',
+      'echo "$message" >> "$GITHUB_STEP_SUMMARY"',
+      'and merged by $MERGED_BY, not one of: $BYPASSERS"; exit 1',
+      'git tag -a "$TAG" -m "@otomata_tech/oto_platform ${TAG#v}" "$MERGE_SHA"',
+      'git push origin "refs/tags/$TAG"',
+    ]
+    const positions = steps.map((step) => tag.indexOf(step))
+    steps.forEach((step, k) => expect(positions[k], step).toBeGreaterThan(k === 0 ? -1 : positions[k - 1]))
+    // Un tag poussé avec le GITHUB_TOKEN ne déclenche aucun workflow : la publication suit dans le même workflow.
+    expect(job("publish")).toContain("needs: tag")
+  })
+
+  it("should publish from the tag, after every check, with provenance; by hand only for an approver", () => {
+    const publish = job("publish")
+    // Le job `tag` peut avoir sorti un tag puis échoué (approbation absente) : son résultat compte, pas sa sortie seule.
+    expect(publish).toContain(
+      "if: ${{ !cancelled() && ((github.event_name == 'pull_request' && needs.tag.result == 'success' && needs.tag.outputs.tag != '') || github.event_name == 'workflow_dispatch') }}",
+    )
+    expect(flat(publish.split("permissions:")[1].split("env:")[0])).toBe("contents: read id-token: write")
+    expect(publish).toContain("TAG: ${{ needs.tag.outputs.tag || inputs.tag }}")
+
+    const steps = [
+      "- name: Manual pass by an approver only",
+      'for login in $APPROVERS; do test "$GITHUB_ACTOR" = "$login" && exit 0; done',
       "uses: actions/checkout@v4",
+      "ref: refs/tags/${{ env.TAG }}",
       "fetch-depth: 0",
       "uses: pnpm/action-setup@v4",
       "uses: actions/setup-node@v4",
@@ -148,19 +206,28 @@ describe("publish workflow (AC9)", () => {
       "run: pnpm install --frozen-lockfile",
       "run: node scripts/check-public.mjs --secrets-only",
       "run: pnpm check:migrations",
-      'test "$GITHUB_REF_NAME" = "v$version"',
-      'grep -q "^## $version — " packages/plateforme/CHANGELOG.md',
+      'run: node scripts/ci/version-publiable.mjs --ref "$TAG" --tag "$TAG"',
       "run: npm pack --dry-run",
       "run: npm publish --provenance --access public",
       "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
     ]
-    const positions = steps.map((step) => text.indexOf(step))
+    const positions = steps.map((step) => publish.indexOf(step))
     steps.forEach((step, k) => expect(positions[k], step).toBeGreaterThan(k === 0 ? -1 : positions[k - 1]))
 
-    const publish = text.split("- name: Publish")[1]
-    expect(publish).toContain("working-directory: packages/plateforme")
-    expect(publish).toContain("run: npm publish --provenance --access public")
-    expect(publish).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}")
+    const last = publish.split("- name: Publish\n")[1]
+    expect(last).toContain("working-directory: packages/plateforme")
+    expect(last).toContain("run: npm publish --provenance --access public")
+    expect(last).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}")
+  })
+
+  it("should run CI on pull requests to release/** too, with the version's content checks before the merge", () => {
+    const ci = read(".github/workflows/ci.yml")
+    const trigger = ci.split("\njobs:")[0]
+    expect(flat(trigger.split("pull_request:")[1])).toBe('branches: [main, "release/**"]')
+    const version = ci.split("\n  version:")[1].split("\n  packed-host-build:")[0]
+    expect(version).toContain("if: github.event_name == 'pull_request'")
+    expect(version).toContain("fetch-depth: 0")
+    expect(version).toContain('run: node scripts/ci/version-publiable.mjs --ref "$GITHUB_SHA" --base "$BASE_SHA" --head "$HEAD_SHA"')
   })
 })
 

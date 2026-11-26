@@ -75,7 +75,6 @@ describe("messageDErreur, organisation limits (E12-S02)", () => {
       [{ limit: "members_max", max: 5 }, "L'organisation est limitée à 5 membres, invitations en attente comprises."],
       [{ limit: "teams_max", max: 1 }, "L'organisation est limitée à 1 équipe."],
       [{ limit: "teams_max", max: 0 }, "La création d'équipes n'est pas ouverte pour cette organisation."],
-      [{ limit: "connectors_max", max: 2 }, "L'organisation est limitée à 2 connecteurs actifs."],
     ]
     const nom = ({ limit, max }: { limit: string; max: number }) => `${limit} ${max}`
     expect(Object.fromEntries(limites.map(([details]) => [nom(details), messageDErreur(refus("forbidden", "limit", details))]))).toEqual(

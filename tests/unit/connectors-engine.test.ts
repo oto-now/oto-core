@@ -247,7 +247,7 @@ describe("described connector engine, account state (oto-core#69)", () => {
 
   it("should leave the mark to a caller that settles it after a success (the balance probe), and still mark on a refusal", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
-    const prepared = declaredConnector("crm")?.probe
+    const prepared = declaredConnector("crm")?.accesses[0]?.probe
     if (!prepared) throw new Error("crm declares no probe")
     stub(json({ name: "Contoso", scopes: ["read"] }), json({}, 401))
     const mark = memoryMark({ reason: "quota_exhausted", at: "2026-10-16T08:00:00.000Z" })
@@ -310,7 +310,7 @@ describe("described connector engine, a function's own timeout (oto-core#70)", (
 
   it("should give the probe its function's own timeout", async () => {
     registerConnectors([timedConnector(2_000)])
-    const prepared = declaredConnector("crm")?.probe
+    const prepared = declaredConnector("crm")?.accesses[0]?.probe
     if (!prepared) throw new Error("crm declares no probe")
     const sent = timeouts()
     stub(json({ name: "Contoso", scopes: ["read"] }))

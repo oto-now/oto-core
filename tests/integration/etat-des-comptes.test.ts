@@ -1,7 +1,9 @@
 // @vitest-environment node
 // L'état d'un compte sur une vraie base (oto-now/oto-core#69) : un refus que la description du connecteur dit marquant
 // (`marksAccount` : une clé refusée sur un 401, une autorisation expirée sous un 400, des crédits épuisés sous un 200)
-// marque le compte, que l'appel suivant refuse nommément avec sa raison, sa date et à qui demander ; un 403 seul ne
+// marque le compte, que l'appel refuse nommément avec sa raison et sa date : une clé refusée mène à la saisie d'une clé
+// neuve de ce compte (`not_enabled`, `reason: reconnect`, l'adresse finale), des crédits épuisés disent à qui demander
+// d'en racheter, sans adresse (`quota_exhausted`), et la sonde garde le refus du tiers ; un 403 seul ne
 // marque rien ; le premier appel réussi lève la marque, sans écriture quand il n'y en a pas. Le journal dit chaque
 // marque posée ou levée ; l'écran Connecteurs et le contexte la disent. Une écriture de la marque qui échoue laisse à
 // l'appel l'issue rendue par le tiers (un succès reste un succès), au log serveur et au journal. La marque s'écrit par `platform.mark_account`
@@ -16,6 +18,7 @@ import { forgetRecentProbes, probeAccount } from "../../packages/plateforme/serv
 import { listOrgAccounts } from "../../packages/plateforme/server/connectors/accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { teamConnectorLines } from "../../packages/plateforme/server/connectors/lines"
+import { setAccountRule } from "../../packages/plateforme/server/rules"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { callFunction } from "../../packages/plateforme/server/function-call"
@@ -121,16 +124,19 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     vi.restoreAllMocks()
   })
 
-  it("should mark on a refused key, refuse the next failure by name with the reason, its date and whom to ask, and journal the mark once", async () => {
+  it("should mark on a refused key, refuse it with the link to a new key of the account for whoever manages it, and journal the mark once", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const crm = await account()
     const first = await refusal(call(crm.label, json({}, 401)))
     const { mark } = (await row(crm.id)).health as { mark: { reason: string; at: string } }
     expect(mark.reason).toBe("credential_rejected")
     const since = `${new Date(mark.at).toISOString().slice(0, 10)} ${new Date(mark.at).toISOString().slice(11, 16)} UTC`
-    expect(first.code).toBe("credential_rejected")
-    expect(first.message.startsWith(`Crm refused the key. (key_rejected) Account « ${crm.label} » is marked: key refused since ${since}. Ask the administrators of ${o.org.name}`)).toBe(true)
-    expect(first.message.endsWith(" to set a new key.")).toBe(true)
+    const url = `${ORIGIN}/connect/${CONNECTOR}?space=org&account_id=${crm.id}`
+    expect({ code: first.code, message: first.message, details: first.details }).toEqual({
+      code: "not_enabled",
+      message: `Crm refused the key. (key_rejected) Account « ${crm.label} » is marked: key refused since ${since}. Only the administrators of ${o.org.name} (Ada Martin) can set the key of account « ${crm.label} »; ask the user to pass them the link and call again once it is done: open ${url}`,
+      details: { reason: "reconnect", gesture: "key", connector: CONNECTOR, space: "org", url, administrators: [{ name: "Ada Martin" }] },
+    })
     expect(await lastLine()).toMatchObject({ is_error: true, args: { _outcome: { account_marked: 1 } } })
 
     const again = await refusal(call(crm.label, json({}, 401)))
@@ -139,13 +145,44 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     expect((await lastLine()).args._outcome).toBeUndefined()
   })
 
-  it("should tell the person whose own account is marked to ask the user, for spent credits as for a refused key", async () => {
+  it("should tell the person whose own account is marked to add credits, without a link, and to paste a new key at the link of the account", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const label = `Crm ${hex(3)}`
     const id = await fx.createAccount(o.org.id, { connector: CONNECTOR, ownerKind: "user", ownerUserId: o.people.claire.id, label, mode: "reel" })
     await setAccountSecret(claire.db, claire.identity, { account_id: id, input: { secret: { api_key: `k_${randomBytes(12).toString("hex")}` } } })
-    expect((await refusal(call(label, json({ error: { code: "NO_CREDITS" } })))).message).toMatch(/is marked: credits spent since .+ UTC\. Ask the user to add credits\.$/)
-    expect((await refusal(call(label, json({}, 401)))).message).toMatch(/is marked: key refused since .+ UTC\. Ask the user to set a new key\.$/)
+    // Des crédits épuisés se rachètent chez le tiers : aucun geste dans l'application, aucune adresse.
+    const spent = await refusal(call(label, json({ error: { code: "NO_CREDITS" } })))
+    expect(spent.code).toBe("quota_exhausted")
+    expect(spent.message).toMatch(/is marked: credits spent since .+ UTC\. Ask the user to add credits\.$/)
+    expect(spent.details?.url).toBeUndefined()
+    const refused = await refusal(call(label, json({}, 401)))
+    const url = `${ORIGIN}/connect/${CONNECTOR}?space=me&account_id=${id}`
+    expect(refused.code).toBe("not_enabled")
+    expect(refused.message).toMatch(new RegExp(`is marked: key refused since .+ UTC\\. Ask the user to paste the Crm key of account « ${label} », then call again: open ${url.replace(/[.?]/g, "\\$&")}$`))
+    expect(refused.details).toEqual({ reason: "reconnect", gesture: "key", connector: CONNECTOR, space: "me", url })
+  })
+
+  it("should give the link of a refused key to the owner of a personal account shared with the caller, named", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(o.org.id, { connector: CONNECTOR, ownerKind: "user", ownerUserId: o.people.ada.id, label, mode: "reel" })
+    await setAccountSecret(ada.db, ada.identity, { account_id: id, input: { secret: { api_key: `k_${randomBytes(12).toString("hex")}` } } })
+    await setAccountRule(ada.db, ada.identity, { accountId: id, subject: { kind: "user", id: o.people.claire.id }, level: "read" })
+    const refused = await refusal(call(label, json({}, 401)))
+    const url = `${ORIGIN}/connect/${CONNECTOR}?space=me&account_id=${id}`
+    expect(refused.code).toBe("not_enabled")
+    expect(refused.message.endsWith(`Only Ada Martin can set the key of account « ${label} »; ask the user to pass them the link and call again once it is done: open ${url}`)).toBe(true)
+    expect(refused.details).toEqual({ reason: "reconnect", gesture: "key", connector: CONNECTOR, space: "me", url })
+  })
+
+  it("should keep the refusal of the third party for the probe of a refused key, the screen classing it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const crm = await account()
+    vi.stubGlobal("fetch", vi.fn(async () => json({}, 401)))
+    const probe = await probeAccount(ada.db, ada.identity, { account_id: crm.id }, { origin: ORIGIN })
+    expect(probe).toMatchObject({ healthy: false, code: "credential_rejected" })
+    expect(probe.reason).toMatch(/is marked: key refused since .+ UTC\. Ask the administrators of .+ \(Ada Martin\) to set a new key\.$/)
+    expect(probe.reason).not.toContain("open ")
   })
 
   it("should tell the person whose linked account is marked for a refused key to connect it again, not to set a key", async () => {
@@ -155,14 +192,16 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     await fx.admin`update platform.accounts set linked_id = ${`acc_${hex(4)}`}, linked_at = now() where id = ${id}`
     vi.stubGlobal("fetch", vi.fn(async () => json({}, 401)))
     const error = await refusal(callFunction(claire.db, claire.identity, { function: `${HOSTED}.get_company`, arguments: {}, account: label }, { origin: ORIGIN }))
-    expect(error.code).toBe("credential_rejected")
-    expect(error.message).toMatch(/is marked: key refused since .+ UTC\. Ask the user to connect it again \(Connect my account\)\.$/)
+    const url = `${ORIGIN}/connect/${HOSTED}?space=me`
+    expect(error.code).toBe("not_enabled")
+    expect(error.message.endsWith(` UTC. Ask the user to link their Hosted Crm account, then call again: open ${url}`)).toBe(true)
+    expect(error.details).toEqual({ reason: "reconnect", gesture: "hosted_link", connector: HOSTED, space: "me", url })
   })
 
   it("should mark on a body condition under a 400 and under a 200, the newer reason with its own date, and not on a 403 alone", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const crm = await account()
-    expect((await refusal(call(crm.label, json({ error: { code: 190 } }, 400)))).code).toBe("credential_rejected")
+    expect((await refusal(call(crm.label, json({ error: { code: 190 } }, 400)))).details).toMatchObject({ reason: "reconnect", gesture: "key" })
     const expired = (await row(crm.id)).health.mark as { reason: string; at: string }
     expect(expired.reason).toBe("credential_rejected")
     expect((await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))).code).toBe("quota_exhausted")
@@ -289,7 +328,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const outcome = (probe: AccountProbe) => ({ healthy: probe.healthy, code: probe.code, reason: probe.reason, balance: probe.balance })
     const probe = async (id: string, answer: Response) => {
       vi.stubGlobal("fetch", vi.fn(async () => answer))
-      return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }))
+      return outcome(await probeAccount(ada.db, ada.identity, { account_id: id }, { origin: "https://acme.example.test" }))
     }
     /** Ce que `health` porte hors du dernier test, gardé sous `last_probe` (écran Connecteurs, lot 1). */
     const healthOf = async (id: string) => Object.fromEntries(Object.entries((await row(id)).health as Record<string, unknown>).filter(([key]) => key !== "last_probe"))
@@ -342,7 +381,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       const spent = await markOf(paid.id)
       expect(spent?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => (remaining === undefined ? json({ name: "Contoso", credits: {} }) : credits(remaining))))
-      expect((await probeAccount(ada.db, ada.identity, { account_id: paid.id })).healthy).toBe(false)
+      expect((await probeAccount(ada.db, ada.identity, { account_id: paid.id }, { origin: "https://acme.example.test" })).healthy).toBe(false)
       expect(await markOf(paid.id)).toEqual(spent)
     })
 
@@ -370,7 +409,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       await refusal(call(crm.label, json({ error: { code: "NO_CREDITS" } })))
       expect((await markOf(crm.id))?.reason).toBe("quota_exhausted")
       vi.stubGlobal("fetch", vi.fn(async () => json({ name: "Contoso", scopes: ["read"] })))
-      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
+      expect(outcome(await probeAccount(ada.db, ada.identity, { account_id: crm.id }, { origin: "https://acme.example.test" }))).toEqual({ healthy: true, code: null, reason: null, balance: null })
       expect(await healthOf(crm.id)).toEqual({})
     })
   })

@@ -8,7 +8,7 @@
 // des deux modules lirait l'autre avant qu'il soit initialisé.
 import * as z from "zod/v4"
 import { blockInputSchema } from "./blocks"
-import { writeNodeSchema, writeOpSchema } from "./nodes"
+import { refinePathOrId, writeNodeSchema, writeOpSchema } from "./nodes"
 
 const writeOpBodySchema = writeOpSchema.extend({
   revision: z.number().int().min(1).optional(),
@@ -17,6 +17,7 @@ const writeOpBodySchema = writeOpSchema.extend({
 
 export type WriteOpBody = z.infer<typeof writeOpBodySchema>
 
+// Le nœud par son chemin ou par son identifiant, jamais les deux (`refinePathOrId`) : posé ici, la seule entrée que le service lit.
 export const writeNodeBodySchema = writeNodeSchema.extend({
   ops: z.array(writeOpBodySchema).optional(),
   // PostgREST rend `timestamptz` avec son décalage (« +00:00 ») : sans `offset`, le tampon qu'il a
@@ -25,6 +26,6 @@ export const writeNodeBodySchema = writeNodeSchema.extend({
   // E10-S01 (AC-a2) : le mode tolérant de l'analyse, pour un collage ou un fichier importé par l'écran ; absent de
   // `writeNodeSchema`, dont `parseInput` refuse les clés inconnues : `write` reste strict.
   tolerant: z.literal(true).optional(),
-})
+}).superRefine(refinePathOrId())
 
 export type WriteNodeBody = z.infer<typeof writeNodeBodySchema>

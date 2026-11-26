@@ -16,6 +16,7 @@ import { isSimulatedConnector, modeLabel } from "../../../server/connectors/mode
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../../server/rules"
 import { day, firstOf, listLines, nothingWas, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { noRuleFor, readSubject, ruleOf, rulesOutput, ruleSetText } from "../rule-texts"
+import { HOST_API_OPS } from "./host-api"
 
 /** Chemins de procédures nommés au plus par le récapitulatif d'une désactivation (AC9). */
 const PROCEDURES_NAMED = 10
@@ -36,11 +37,15 @@ function activableData(connector: OrgConnector): ConnectorData {
 /** Un connecteur activable est simulé (`mail`) ou réel (H85). */
 const kindOf = (connector: string) => (isSimulatedConnector(connector) ? "simulated" : "live")
 
-/** « - mail (simulated): active since <date> by <nom> — mail.create_draft (write), … » (AC7) ; un connecteur réel dit `live` (H85). */
+/**
+ * « - mail (simulated): active since <date> by <nom> — mail.create_draft (write), … » (AC7) ; un connecteur réel dit
+ * `live` (H85). Jamais touché : `open by default` ; bloqué par un administrateur : `inactive`.
+ */
 function activableLine(connector: OrgConnector): string {
   const functions = fnText(connector.functions)
   const kind = kindOf(connector.connector)
-  if (connector.state !== "active" || !connector.activatedAt) return `- ${connector.connector} (${kind}): inactive — ${functions}`
+  if (connector.state !== "active") return `- ${connector.connector} (${kind}): inactive — ${functions}`
+  if (!connector.activatedAt) return `- ${connector.connector} (${kind}): open by default — ${functions}`
   const by = connector.activatedBy?.name ? ` by ${connector.activatedBy.name}` : ""
   return `- ${connector.connector} (${kind}): active since ${day(connector.activatedAt)}${by} — ${functions}`
 }
@@ -77,7 +82,8 @@ async function activate(call: OpCall): Promise<AdminOutput> {
   const org = identity.org.slug
   const next = ["admin_connector create_account", "admin_connector catalogue"]
   const current = await stateOf(call, connector)
-  if (current?.state === "active") return { text: `${connector} is already active in ${org}; nothing changed.`, data: { connectors: [activableData(current)] }, target: connector, nextActions: next }
+  // Ouvert par défaut sans adoption : l'activation l'adopte (une ligne active) ; adopté, rien ne change.
+  if (current?.state === "active" && current.activatedAt !== null) return { text: `${connector} is already active in ${org}; nothing changed.`, data: { connectors: [activableData(current)] }, target: connector, nextActions: next }
   const activated = await activateConnector(call.deps.db, identity, { connector })
   return { text: `${connector} is now active in ${org}: its functions are callable at once.`, data: { connectors: [activableData(activated)] }, target: connector, nextActions: next }
 }
@@ -316,4 +322,6 @@ export const CONNECTOR_OPS: OpTable = {
     refusals: [unknownAccount, homonyms, "not_found: No rule for <subject> on account <label>."],
     run: removeAccountRuleOp,
   },
+  // L'API de l'hôte de l'organisation (fonctions d'un hôte), ajoutée en dernier : le contrat n'évolue que par ajout.
+  ...HOST_API_OPS,
 }

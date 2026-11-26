@@ -6,11 +6,12 @@
 // consentement d'une personne, à compte rattaché (`hostedConnector`), avec un faux port du branchement hébergé, et à
 // table d'erreurs qui marque le compte (`markingConnector`), avec une marque gardée en mémoire ; à fonctions qui ont
 // leur délai propre (`timedConnector`) ; enfin à lot payant soumis puis relevé (`billedConnector`), coût à l'élément,
-// quantité relue et travail asynchrone ; à dépôt d'un fichier en transit en corps multipart (`uploadConnector`) ; et à
-// fonctions qui rendent un fichier (`fileConnector`), par adresse, par corps et en base64.
+// quantité relue et travail asynchrone ; à dépôt d'un fichier en transit en corps multipart (`uploadConnector`) ; à
+// fonctions qui rendent un fichier (`fileConnector`), par adresse, par corps et en base64 ; et à deux accès
+// (`twoAccessConnector`), le compte de service d'une organisation ou le consentement d'une personne.
 import type { AccountMark, AccountMarkReason } from "../../packages/plateforme/schemas"
 import type { AccountMarker, ConsentCredential, StoredToken, TokenStore } from "../../packages/plateforme/server/connectors/auth"
-import type { ConnectorDefinition, ConnectorFunctionDefinition, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorAuth, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorView, HostedLinkProvider } from "../../packages/plateforme/server/connectors/definition"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 
 const ID = { type: "string", pattern: "^[a-z0-9_-]{1,40}$" }
@@ -137,7 +138,7 @@ function functions(name: string): ConnectorFunctionDefinition[] {
 }
 
 /** Le connecteur décrit de test, sous le nom `name` (un nom propre au passage pour une suite sur base réelle). */
-export function describedConnector(name = "crm"): ConnectorDefinition {
+export function describedConnector(name = "crm"): ConnectorView {
   return {
     name,
     label: "Crm",
@@ -164,7 +165,7 @@ export function describedConnector(name = "crm"): ConnectorDefinition {
  * Le connecteur de test dont la sonde (`get_company`) et la liste paginée (`list_contacts`) ont leur délai propre,
  * `timeoutMs`, à la place de celui du connecteur (5 s) ; les autres fonctions gardent celui du connecteur.
  */
-export function timedConnector(timeoutMs: number, name = "crm"): ConnectorDefinition {
+export function timedConnector(timeoutMs: number, name = "crm"): ConnectorView {
   const base = describedConnector(name)
   const timed = [`${name}.get_company`, `${name}.list_contacts`]
   return { ...base, functions: base.functions.map((fn) => (timed.includes(fn.name) ? { ...fn, timeoutMs } : fn)) }
@@ -175,7 +176,7 @@ export function timedConnector(timeoutMs: number, name = "crm"): ConnectorDefini
  * corps), l'autorisation expirée sous un 400 (un code dans le corps, avant le 400 ordinaire), la clé refusée sur un 401 ;
  * un 403 (un droit manque) ne marque rien.
  */
-export function markingConnector(name = "crm"): ConnectorDefinition {
+export function markingConnector(name = "crm"): ConnectorView {
   const base = describedConnector(name)
   return {
     ...base,
@@ -203,8 +204,8 @@ export function memoryMark(initial: AccountMark | null = null, who = "team Vente
       marker.current = reason === null ? null : { reason, at: new Date().toISOString() }
       marker.effect = reason === null ? "lifted" : "marked"
     },
-    async remedy() {
-      return `Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`
+    async refusal(error: PlatformError) {
+      return new PlatformError(error.code, `${error.message} Account « Crm Ventes » is marked since ${marker.current?.at}. Ask ${who}.`, error.details)
     },
   }
   return marker
@@ -217,7 +218,7 @@ export const TEST_APPLICATION = { clientId: "client-test", clientSecret: "secret
  * Le connecteur décrit de test sous le consentement d'une personne (`oauth2_user`), de la forme que rend la fabrique :
  * sans champ, l'identité lue par `get_company` (son `email`), rotation du jeton de rafraîchissement.
  */
-export function consentConnector(name = "crm"): ConnectorDefinition {
+export function consentConnector(name = "crm"): ConnectorView {
   return {
     ...describedConnector(name),
     credential: [],
@@ -252,7 +253,7 @@ const FUNCTION_SCOPES: Record<string, string[]> = {
  * un droit qui en couvre un autre (`scopeImplies`), les droits exigés de chaque fonction, et l'identité lue à une
  * adresse complète (le service d'identité commun d'un fournisseur), avec ses droits.
  */
-export function leveledConsentConnector(name = "crm"): ConnectorDefinition {
+export function leveledConsentConnector(name = "crm"): ConnectorView {
   const base = consentConnector(name)
   return {
     ...base,
@@ -273,6 +274,82 @@ export function leveledConsentConnector(name = "crm"): ConnectorDefinition {
       identity: { url: "https://id.crm.example.test/v1/userinfo", path: "email", scopes: ["openid", "email"] },
     },
     functions: base.functions.map((fn) => ({ ...fn, scopes: FUNCTION_SCOPES[fn.name.slice(name.length + 1)] })),
+  }
+}
+
+/**
+ * L'adresse de jeton du compte de service de test : celle que porte la clé des cas communs (`jwt-bearer-cases`,
+ * `token_uri`), qu'un test colle dans le compte.
+ */
+export const SERVICE_ACCOUNT_TOKEN_URL = "https://oauth2.example.test/token"
+
+/** Les noms des deux accès du connecteur de test à deux accès. */
+export const TWO_ACCESSES = { serviceAccount: "service_account", signIn: "sign_in" } as const
+
+/**
+ * Le connecteur de test à deux accès (`accesses`), de la forme que rend la fabrique pour `google_search_console` 2.0.0 :
+ * le compte de service d'une organisation (`oauth2_jwt_bearer`, `byo_org`, une clé JSON, niveau `read` par défaut) ou
+ * le consentement d'une personne (`oauth2_user`, `byo_user`, l'identité lue à une adresse), aux mêmes niveaux d'accès,
+ * les mêmes fonctions et la même table d'erreurs.
+ */
+export function twoAccessConnector(name = "crm"): ConnectorDefinition {
+  const { auth: consent, ...single } = leveledConsentConnector(name)
+  if (consent.kind !== "oauth2_user" || !("accessLevels" in consent) || consent.accessLevels === undefined) throw new Error("the leveled consent connector has no levels")
+  return {
+    ...single,
+    credential: undefined,
+    modes: undefined,
+    accesses: [
+      {
+        name: TWO_ACCESSES.serviceAccount,
+        label: "Service account of the organization",
+        auth: {
+          kind: "oauth2_jwt_bearer",
+          tokenUrl: SERVICE_ACCOUNT_TOKEN_URL,
+          key: "service_account_key",
+          accessLevels: consent.accessLevels,
+          scopeImplies: consent.scopeImplies,
+          defaultLevel: "read",
+        },
+        credential: [{ name: "service_account_key", label: "Service account key (JSON)", secret: true, holder: "account" }],
+        modes: ["byo_org"],
+      },
+      { name: TWO_ACCESSES.signIn, label: "Sign-in of a person", auth: consent, credential: [], modes: ["byo_user"] },
+    ],
+  }
+}
+
+/** Les noms des deux accès du connecteur de test sans niveaux d'accès. */
+export const KEY_OR_SIGN_IN = { signIn: "oauth", key: "key" } as const
+
+/**
+ * Le connecteur de test à deux accès sans niveaux d'accès, chacun ouvrant tout le connecteur : la connexion d'une
+ * personne (`oauth2_user`, `byo_user`, PKCE) ou la clé d'une organisation (`bearer`, `platform` et `byo_org`), les
+ * mêmes fonctions et la même table d'erreurs.
+ */
+export function keyOrSignInConnector(name = "crm"): ConnectorDefinition {
+  const key = describedConnector(name)
+  const consent: ConnectorAuth = {
+    kind: "oauth2_user",
+    authorizeUrl: "https://login.crm.example.test/authorize",
+    tokenUrl: "https://login.crm.example.test/token",
+    clientAuth: "body",
+    scopes: ["offline_access", "contacts.read"],
+    pkce: "S256",
+    refresh: "refresh_token",
+    rotates: true,
+    expiresInDefault: 3600,
+    identity: { function: `${name}.get_company`, path: "email" },
+  }
+  return {
+    ...consentConnector(name),
+    auth: undefined,
+    credential: undefined,
+    modes: undefined,
+    accesses: [
+      { name: KEY_OR_SIGN_IN.signIn, label: "Sign-in of a person", auth: consent, credential: [], modes: ["byo_user"] },
+      { name: KEY_OR_SIGN_IN.key, label: "Key of the organization", auth: key.auth, credential: key.credential, modes: ["platform", "byo_org"] },
+    ],
   }
 }
 
@@ -318,7 +395,7 @@ export const HOSTED_ID_PATTERN = "^[A-Za-z0-9_-]{1,64}$"
  * Le connecteur décrit de test à compte rattaché (`accountIdentity`), de la forme que rend la fabrique : la clé
  * `api_key` fournie par l'hôte (`holder: host`), l'identifiant du compte chez le tiers cité par l'adresse de base.
  */
-export function hostedConnector(name = "crm"): ConnectorDefinition {
+export function hostedConnector(name = "crm"): ConnectorView {
   const described = describedConnector(name)
   return {
     ...described,
@@ -373,7 +450,7 @@ export function fakeHostedLinks(accounts: FakeHostedAccount[] = []) {
  * soumet un travail relevé par `get_enrichment` (identifiant `job.id` → `enrichment_id`, dix minutes), qui en dit la
  * quantité trouvée (`summary.found`).
  */
-export function billedConnector(name = "crm"): ConnectorDefinition {
+export function billedConnector(name = "crm"): ConnectorView {
   const base = describedConnector(name)
   const list = (items: object) => ({ type: "array", minItems: 1, items })
   const submit: ConnectorFunctionDefinition = {
@@ -413,7 +490,7 @@ export function billedConnector(name = "crm"): ConnectorDefinition {
  * que nomme `file` (partie `document`), `folder_id` et `title` en parties texte, `source: "oto"` en constante ; un 422
  * est son refus nommé `document_rejected` ; le lien de la réponse est retiré.
  */
-export function uploadConnector(name = "crm"): ConnectorDefinition {
+export function uploadConnector(name = "crm"): ConnectorView {
   const base = describedConnector(name)
   const upload: ConnectorFunctionDefinition = {
     name: `${name}.upload_document`,
@@ -469,7 +546,7 @@ function fileFunction(name: string, at: { short: string; argument: string; path:
  * `get_attachment`, une pièce en base64url bornée à 64 octets ; `get_archive`, une adresse téléchargée avec
  * l'authentification du compte, à l'origine de l'API seulement ; `get_slow_recording`, le corps sous un délai d'une seconde.
  */
-export function fileConnector(name = "crm"): ConnectorDefinition {
+export function fileConnector(name = "crm"): ConnectorView {
   const base = describedConnector(name)
   return {
     ...base,

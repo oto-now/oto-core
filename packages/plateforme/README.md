@@ -902,17 +902,19 @@ Réservé aux mainteneurs du dépôt.
 2. Porter la même version dans `version` de `packages/plateforme/package.json`, et réunir les
    migrations écrites depuis la version précédente en un seul `<horodatage>_vX_Y_0.sql` au contenu
    identique (fiche D124, `migrations/README.md`).
-3. `pnpm verify`, puis le commit par le skill `commit-push`.
-4. JB pousse le tag de la version :
-
-   ```bash
-   git tag v<x.y.z>
-   git push origin v<x.y.z>
-   ```
-
-5. Le workflow `.github/workflows/publish.yml` contrôle les secrets de l'arbre et de l'historique
-   et les migrations, vérifie que le tag, la version et le CHANGELOG concordent, puis publie sur
-   npmjs.com avec provenance. Chaque application hôte reçoit sa pull request Renovate.
+3. `pnpm verify`, puis le commit, poussé sur une branche du dépôt, et la pull request de version
+   vers `main` (ou vers `release/x.y.z`, créée sur le tag de départ, pour une version corrective).
+4. JB ou Alexis approuve la pull request ; elle fusionne quand la CI est verte. En cas de blocage
+   seulement (relecteur absent, correctif urgent), Alexis fusionne sans approbation et le dit en
+   commentaire sur la pull request, avec la raison ; le contournement reste tracé. Toute autre
+   fusion sans approbation ne publie rien.
+5. À la fusion, le workflow `.github/workflows/publish.yml` vérifie cette approbation, pose le tag
+   `v<x.y.z>` sur le commit de fusion, contrôle les secrets de l'arbre et de l'historique et les
+   migrations, vérifie que le tag, la version et le CHANGELOG concordent, puis publie sur
+   npmjs.com avec provenance. Aucun tag ne se pousse à la main. Chaque application hôte reçoit sa
+   pull request Renovate.
+6. Pour une version corrective partie de `release/x.y.z`, son auteur reporte aussitôt sa section
+   du `CHANGELOG.md` sur `main` par une pull request, en la sortant de `## Unreleased`.
 
 Une version fautive ne se republie pas : JB la signale par
 `npm deprecate @otomata_tech/oto_platform@<x.y.z> "<raison>"`, et une version corrective la

@@ -42,6 +42,8 @@ export const ADMIN_OPS = {
     "account_rules",
     "add_account_rule",
     "remove_account_rule",
+    "host_api",
+    "refresh_host_api",
   ],
   admin_journal: ["help", "conversations", "conversation", "admin_log"],
   admin_feedback: ["help", "list", "set_state"],
@@ -134,7 +136,8 @@ export const ADMIN_INPUTS = {
       .describe("Account mode; V1 has simulated accounts only (create_account, default simule)"),
     subject: z.string().optional().describe("Who a rule applies to: team:<slug> or user:<email> (add_account_rule, remove_account_rule)"),
     level: setAccountRuleSchema.shape.level.optional().describe("Rule level (add_account_rule); sensitive opens the sensitive functions, write does not"),
-    confirm: confirm("deactivate, disable_account"),
+    address: z.string().optional().describe("Address of the host API, https without trailing slash, e.g. https://erp.example.test (refresh_host_api; omitted: the served one)"),
+    confirm: confirm("deactivate, disable_account, refresh_host_api"),
   }),
   admin_journal: z.object({
     ctx,

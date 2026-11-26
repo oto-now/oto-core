@@ -4,7 +4,7 @@
 // (`createAccount`). Sans ce module, un compte personnel se créerait sur un connecteur que l'éditeur ne vend qu'aux
 // organisations, et l'écran proposerait un ajout que le service refuse.
 import { PlatformError } from "../errors"
-import type { ConnectorDefinition, ConnectorMode } from "./definition"
+import type { ConnectorView, ConnectorMode } from "./definition"
 import { accountFieldNames } from "./host-fields"
 
 /** Un propriétaire de compte (`accounts.owner_kind`). */
@@ -16,7 +16,7 @@ const MODES: readonly ConnectorMode[] = ["platform", "byo_user", "byo_org"]
 const OWNER_ORDER: readonly OwnerKind[] = ["org", "team", "user"]
 
 /** Le problème des `modes` d'une définition : une liste non vide de valeurs connues, chacune une fois ; `null` : aucun. */
-export function modesProblem(definition: ConnectorDefinition): string | null {
+export function modesProblem(definition: ConnectorView): string | null {
   const modes: unknown = definition.modes
   if (!Array.isArray(modes) || modes.length === 0) return `${definition.name}: modes must list who serves an account (${MODES.join(", ")}).`
   const unknown = modes.find((mode) => !MODES.includes(mode))
@@ -28,7 +28,7 @@ export function modesProblem(definition: ConnectorDefinition): string | null {
 const ordered = (kinds: ReadonlySet<OwnerKind>): OwnerKind[] => OWNER_ORDER.filter((kind) => kinds.has(kind))
 
 /** Les propriétaires des modes où le compte apporte sa clé : `byo_user` → `user`, `byo_org` → `org` et `team`. */
-function ownKeyOwnerKinds(definition: ConnectorDefinition): Set<OwnerKind> {
+function ownKeyOwnerKinds(definition: ConnectorView): Set<OwnerKind> {
   const kinds = new Set<OwnerKind>()
   if (definition.modes.includes("byo_user")) kinds.add("user")
   if (definition.modes.includes("byo_org")) ["org", "team"].forEach((kind) => kinds.add(kind as OwnerKind))
@@ -41,7 +41,9 @@ function ownKeyOwnerKinds(definition: ConnectorDefinition): Set<OwnerKind> {
  * `accountIdentity`), la personne : elle y connecte son compte (« Connecter mon compte ») avec l'application ou le port
  * de l'hôte. Vide : le connecteur n'a pas de formulaire (`platform` seul, servi par la clé de l'hôte).
  */
-export function formOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
+export function formOwnerKinds(definition: ConnectorView): OwnerKind[] {
+  // Sans clé (`auth: none`) : aucun compte, le connecteur s'appelle sans.
+  if (definition.auth.kind === "none") return []
   const kinds = ownKeyOwnerKinds(definition)
   const personal = definition.auth.kind === "oauth2_user" || definition.accountIdentity !== undefined
   if (definition.modes.includes("platform") && personal) kinds.add("user")
@@ -54,7 +56,8 @@ export function formOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
  * compte d'organisation ou d'équipe, qui ouvre la clé de l'hôte sans rien saisir. Le compte d'une personne sur un
  * connecteur `platform` où chacun connecte le sien ne naît que de son consentement ou de son branchement, jamais ici.
  */
-export function admittedOwnerKinds(definition: ConnectorDefinition): OwnerKind[] {
+export function admittedOwnerKinds(definition: ConnectorView): OwnerKind[] {
+  if (definition.auth.kind === "none") return []
   const kinds = ownKeyOwnerKinds(definition)
   const hostKeyOnly = definition.auth.kind !== "oauth2_user" && accountFieldNames(definition).length === 0
   if (definition.modes.includes("platform") && hostKeyOnly) ["org", "team"].forEach((kind) => kinds.add(kind as OwnerKind))
@@ -62,7 +65,7 @@ export function admittedOwnerKinds(definition: ConnectorDefinition): OwnerKind[]
 }
 
 /** Refuse un propriétaire que les `modes` du connecteur n'admettent pas (`invalid_arguments`, `owner_kind`). */
-export function requireAdmittedOwner(definition: ConnectorDefinition, ownerKind: OwnerKind): void {
+export function requireAdmittedOwner(definition: ConnectorView, ownerKind: OwnerKind): void {
   const admitted = admittedOwnerKinds(definition)
   if (admitted.includes(ownerKind)) return
   const words: Record<OwnerKind, string> = { org: "organisation", team: "team", user: "personal" }

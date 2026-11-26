@@ -14,17 +14,19 @@
 // stable, le même sur toutes les faces (H04) ; retiré : `retryable`, `hint` et l'enveloppe `data.oto`,
 // comme le `confirm=<N>` et l'envoi d'essai d'`oto_mcp\capabilities\outreach.py` (H86).
 import { ERP_VIEW_PREFIX } from "../schemas/views"
-import { administratorNames } from "./access"
 import { checkArguments } from "./catalog/arguments"
 import type { CatalogFunction, FunctionContext } from "./catalog/define"
 import { personalValues } from "./catalog/personal"
-import { actName, assistantFunctions, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
+import { orgAssistantFunctions } from "./catalog/org-catalog"
+import { actName, findFunction, isActive, NATIVE_CONNECTOR } from "./catalog/registry"
 import { liveCredential } from "./connectors/account-secret"
+import { connectRefusal } from "./connectors/connect-link"
 import type { AccountCredential } from "./connectors/auth"
+import { isKeylessConnector } from "./connectors/keyless"
+import { connectorBarrier, paidByHostKey } from "./connectors/adoption"
 import { isSimulatedConnector, modeLabel } from "./connectors/modes"
 import { resolveAccount, runningTeam, type ResolvedAccount, type RunningTeam } from "./connectors/resolution"
 import type { PlatformDb } from "./db"
-import { memberDirectory } from "./directory"
 import { issuesText, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import type { Dictionary } from "./pseudonym/dictionary"
@@ -97,7 +99,7 @@ export type CallDeps = {
   /** Connecteurs actifs de l'organisation, lus une fois pour la requête (`McpDeps`, E04-S01 N27). */
   activeConnectors: () => Promise<ReadonlySet<string>>
   /**
-   * Le catalogue (défaut : `assistantFunctions()`, ce que l'assistant voit ; `callFunction` passe `catalogFunctions()`,
+   * Le catalogue (défaut : `orgAssistantFunctions()`, ce que l'assistant voit dans l'organisation, API de son hôte comprise ; `callFunction` passe `catalogFunctions()`,
    * fonctions réservées au serveur comprises). Les tests passent leurs fonctions : sans elles, la matrice des classes ne
    * se teste pas, faute de fonction de lecture ou native en V1 avant E07.
    */
@@ -120,15 +122,23 @@ export type CallDeps = {
 
 const NOTHING_SENT = "Nothing was sent. Show this to the user and ask for explicit approval, then call again with confirm: true."
 
-/** Refus d'une fonction dont le connecteur est inactif (AC2), qui nomme les administrateurs qui l'activent. */
-async function notEnabled(db: PlatformDb, identity: Identity, fn: CatalogFunction): Promise<PlatformError> {
-  const org = identity.org.name
-  const names = administratorNames(await memberDirectory(db, identity.org.id))
-  const who = names ? ` (${names})` : ""
-  return new PlatformError(
-    "not_enabled",
-    `Function ${fn.name} is not enabled at ${org}: the ${fn.connector} connector is off. Ask an administrator of ${org}${who} to activate it.`,
-  )
+/**
+ * Refus d'une fonction dont le connecteur est bloqué par un administrateur (AC2 ; ouvert par défaut, un connecteur
+ * déclaré n'est jamais refusé ici) : l'adresse de la connexion (`connectRefusal`, `connector_off`), qui le rouvre puis
+ * connecte, à ouvrir par l'appelant s'il administre l'organisation, sinon à transmettre aux administrateurs nommés.
+ */
+async function notEnabled(deps: Pick<CallDeps, "db" | "identity" | "origin">, fn: CatalogFunction): Promise<PlatformError> {
+  const said = `Function ${fn.name} is not enabled at ${deps.identity.org.name}: an administrator blocked the ${fn.connector} connector.`
+  return connectRefusal(deps, { reason: "connector_off", connector: fn.connector, said })
+}
+
+/**
+ * Refus d'une fonction d'un connecteur payé par la clé de l'hôte que nul administrateur n'a encore adopté : l'adresse de
+ * la connexion (`connectRefusal`, `connector_off`), qui l'adopte, à transmettre aux administrateurs nommés.
+ */
+async function notAdopted(deps: Pick<CallDeps, "db" | "identity" | "origin">, fn: CatalogFunction): Promise<PlatformError> {
+  const said = `Function ${fn.name} is not enabled at ${deps.identity.org.name}: the ${fn.connector} connector runs on this application's key and an administrator adopts it first.`
+  return connectRefusal(deps, { reason: "connector_off", connector: fn.connector, said })
 }
 
 /**
@@ -235,7 +245,7 @@ async function confirmationRequest(
 function unknownFunction(functions: readonly CatalogFunction[], name: string, prefix: string): PlatformError {
   const served = actName(name.trim().toLowerCase())
   const engaging = served === null ? null : findFunction(functions, served)
-  if (engaging?.origin === "connecteur") {
+  if (engaging) {
     return new PlatformError("not_found", `Unknown function ${name}: it engages or destroys, so it is served as ${engaging.name}. Call ${engaging.name}.`)
   }
   return new PlatformError("not_found", `Unknown function ${name}. Use ${prefix}_find with type function.`)
@@ -260,7 +270,7 @@ const pseudonymizerOf = (dictionary: Dictionary) => (text: string): string => ps
 export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOutput> {
   const { db, identity } = deps
   const prefix = identity.org.prefix
-  const functions = deps.functions ?? assistantFunctions()
+  const functions = deps.functions ?? (await orgAssistantFunctions(db, identity))
   const fn = findFunction(functions, input.function.trim().toLowerCase())
   if (!fn) throw unknownFunction(functions, input.function, prefix)
   const trace: CallTrace = deps.trace ?? {}
@@ -268,15 +278,18 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   const personal = personalValues(fn, input.arguments ?? {})
   if (personal.length > 0) trace.personal = personal
   const active = await deps.activeConnectors()
-  if (!isActive(fn, active)) throw await notEnabled(db, identity, fn)
+  if (!isActive(fn, active)) throw await notEnabled(deps, fn)
+  // Payé par la clé de l'hôte : visible, mais appelable seulement une fois adopté par un administrateur.
+  if (fn.origin === "connecteur" && paidByHostKey(fn.connector) && (await connectorBarrier(db, identity, fn.connector))) throw await notAdopted(deps, fn)
   // Les jetons de l'assistant (pseudonymisation) : résolus avant le contrôle du schéma, qui attend un identifiant.
   const received = deps.dictionary ? await resolvedCallArguments({ db, identity, dictionary: deps.dictionary }, fn, input.arguments ?? {}) : (input.arguments ?? {})
   const args = checkedArguments(fn, received, prefix)
   const tablePath = fn.connector === NATIVE_CONNECTOR && typeof args.table === "string" ? args.table : undefined
   const team = await runningTeam(db, identity, { fn, team: input.team, tablePath, ctxCode: deps.ctxCode })
   trace.teamId = journalTeam(identity, team?.id)
+  // Un connecteur sans clé (`auth: none`, open data) s'appelle sans compte : aucun n'est résolu.
   const account =
-    fn.origin === "connecteur"
+    fn.origin === "connecteur" && !isKeylessConnector(fn.connector)
       ? await resolveAccount(db, identity, { fn, team, account: input.account, origin: deps.origin })
       : undefined
   trace.accountId = account?.id ?? null
@@ -284,7 +297,7 @@ export async function runCall(deps: CallDeps, input: CallInput): Promise<CallOut
   trace.lentBy = data.account ? (lender(data.account.owner)?.userId ?? null) : null
   // Un connecteur réel ne court que sur un compte réel qui a son secret, ses champs et ses réglages (H85), refusé avant
   // la fonction ; un connecteur simulé (`mail`) garde lui-même ses comptes simulés.
-  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential(db, identity, account, fn.connector) : undefined
+  const openCredential = account && !isSimulatedConnector(fn.connector) ? await liveCredential({ db, identity, origin: deps.origin }, account, fn.connector, "call") : undefined
   const context: FunctionContext = {
     db,
     identity,

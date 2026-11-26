@@ -173,17 +173,10 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "organisation limits (E12-S02)" 
     expect(await count("invitations")).toBe(invitations)
   })
 
-  it("should refuse a connector beyond connectors_max, never the one already active (AC-5)", async () => {
+  it("should no longer limit connectors: connectors_max is accepted from the host and ignored, the view says no limit (AC-5, decision of 2026-11-25)", async () => {
     limit({ connectors_max: 0 })
-    expect(await refusal(activateConnector(as("ada").db, as("ada").identity, { connector: "mail" }))).toMatchObject({
-      code: "forbidden",
-      details: { reason: "limit", limit: "connectors_max", max: 0 },
-    })
-    registerOrgLimits(null)
-    await activateConnector(as("ada").db, as("ada").identity, { connector: "mail" })
-    limit({ connectors_max: 1 })
     expect(await refusal(activateConnector(as("ada").db, as("ada").identity, { connector: "mail" }))).toBeNull()
-    expect((await orgLimitsView(as("ada").db, as("ada").identity)).connectors).toEqual({ max: 1, used: 1 })
+    expect((await orgLimitsView(as("ada").db, as("ada").identity)).connectors).toBeNull()
   })
 
   it("should refuse a file beyond storage_bytes with the quota in bytes (AC-6)", async () => {

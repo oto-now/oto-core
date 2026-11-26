@@ -9,7 +9,7 @@ import { CatalogRegistrationError, defineErpFunction, registerFunctions } from "
 import { catalogFunctions, describeFunction, findFunction } from "../../packages/plateforme/server/catalog/registry"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import { functionCatalog } from "../../packages/plateforme/server/find"
-import type { ConnectorApiError, ConnectorDefinition, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorApiError, ConnectorView, ConnectorFunctionDefinition, ConnectorProbeBalance } from "../../packages/plateforme/server/connectors/definition"
 import { errorTable } from "../../packages/plateforme/server/connectors/error-table"
 import { describedConnector, markingConnector, timedConnector } from "../factories/described-connector"
 
@@ -21,24 +21,24 @@ afterEach(() => {
 const declaredNames = () => catalogFunctions().filter((fn) => fn.connector === "crm").map((fn) => fn.name)
 
 /** Le connecteur de test, une fonction (par son nom court) remplacée par `change`. */
-function withFunction(short: string, change: (fn: ConnectorFunctionDefinition) => ConnectorFunctionDefinition): ConnectorDefinition {
+function withFunction(short: string, change: (fn: ConnectorFunctionDefinition) => ConnectorFunctionDefinition): ConnectorView {
   const base = describedConnector()
   return { ...base, functions: base.functions.map((fn) => (fn.name === `crm.${short}` ? change(fn) : fn)) }
 }
 
 /** Le connecteur de test, une ligne ajoutée au bout de sa table d'erreurs. */
-function withError(error: ConnectorApiError): ConnectorDefinition {
+function withError(error: ConnectorApiError): ConnectorView {
   const base = describedConnector()
   return { ...base, errors: [...base.errors, error] }
 }
 
 /** Le connecteur de test, sa sonde (`get_company`) lisant un solde ; `cost` : le coût déclaré de sa fonction. */
-function withBalance(balance: ConnectorProbeBalance, cost?: ConnectorFunctionDefinition["cost"]): ConnectorDefinition {
+function withBalance(balance: ConnectorProbeBalance, cost?: ConnectorFunctionDefinition["cost"]): ConnectorView {
   const base = cost ? withFunction("get_company", (fn) => ({ ...fn, cost })) : describedConnector()
   return { ...base, probe: { function: "crm.get_company", nonEmpty: [], balance } }
 }
 
-function refusalOf(definitions: readonly ConnectorDefinition[]): string {
+function refusalOf(definitions: readonly ConnectorView[]): string {
   try {
     registerConnectors(definitions)
   } catch (error) {
@@ -112,16 +112,16 @@ describe("registerConnectors", () => {
     expect(declaredNames()).toEqual([])
   })
 
-  const REFUSALS: [string, () => ConnectorDefinition[], string][] = [
+  const REFUSALS: [string, () => ConnectorView[], string][] = [
     ["an invalid name", () => [{ ...describedConnector(), name: "Crm" }], 'Invalid connector name "Crm": lowercase ASCII letters, digits and _, starting with a letter, 40 characters at most.'],
     ["a namespace of the package", () => [describedConnector("mail")], "Connector mail: the namespace is already served by another source."],
     ["a duplicate", () => [describedConnector(), describedConnector()], "Duplicate connector crm in registerConnectors."],
     // `connector.description` et `connector.logo_domain` du format (oto-now/connectors#244).
     ["an empty description", () => [{ ...describedConnector(), description: "  " }], "crm: description must be 1 to 2000 characters."],
     ["a description too long", () => [{ ...describedConnector(), description: "a".repeat(2001) }], "crm: description must be 1 to 2000 characters."],
-    ["a description that is not text", () => [{ ...describedConnector(), description: 42 } as unknown as ConnectorDefinition], "crm: description must be 1 to 2000 characters."],
+    ["a description that is not text", () => [{ ...describedConnector(), description: 42 } as unknown as ConnectorView], "crm: description must be 1 to 2000 characters."],
     ...(["https://crm.example.test", "crm.example.test/app", "Crm.Example.test", "crm.example.test:443", "crm", "crm.example.test.", "-crm.example.test", ""] as const).map(
-      (logoDomain): [string, () => ConnectorDefinition[], string] => [
+      (logoDomain): [string, () => ConnectorView[], string] => [
         `a logo domain ${JSON.stringify(logoDomain)}`,
         () => [{ ...describedConnector(), logoDomain }],
         "crm: logoDomain must be a lowercase domain name, without scheme, port or path (example.com).",
@@ -130,13 +130,13 @@ describe("registerConnectors", () => {
     // Les `modes` portés depuis la bibliothèque, sans défaut (écran Connecteurs, oto-core#103).
     [
       "no modes",
-      () => [{ ...describedConnector(), modes: undefined } as unknown as ConnectorDefinition],
+      () => [{ ...describedConnector(), modes: undefined } as unknown as ConnectorView],
       "crm: modes must list who serves an account (platform, byo_user, byo_org).",
     ],
     ["empty modes", () => [{ ...describedConnector(), modes: [] }], "crm: modes must list who serves an account (platform, byo_user, byo_org)."],
     [
       "an unknown mode",
-      () => [{ ...describedConnector(), modes: ["byo_user", "byo_team"] } as unknown as ConnectorDefinition],
+      () => [{ ...describedConnector(), modes: ["byo_user", "byo_team"] } as unknown as ConnectorView],
       'crm: mode "byo_team" is unknown: platform, byo_user, byo_org.',
     ],
     ["a mode twice", () => [{ ...describedConnector(), modes: ["byo_org", "byo_org"] }], "crm: modes lists a mode twice."],
@@ -148,12 +148,12 @@ describe("registerConnectors", () => {
     ],
     [
       "basic authentication without password",
-      () => [{ ...describedConnector(), auth: { kind: "basic", username: "api_key" } as unknown as ConnectorDefinition["auth"] }],
+      () => [{ ...describedConnector(), auth: { kind: "basic", username: "api_key" } as unknown as ConnectorView["auth"] }],
       "crm: auth basic must name credential fields: password, and username when it declares one.",
     ],
     [
       "a key in the query with a prefix",
-      () => [{ ...describedConnector(), auth: { kind: "api_key", in: "query", name: "key", prefix: "Key ", key: "api_key" } as unknown as ConnectorDefinition["auth"] }],
+      () => [{ ...describedConnector(), auth: { kind: "api_key", in: "query", name: "key", prefix: "Key ", key: "api_key" } as unknown as ConnectorView["auth"] }],
       "crm: auth api_key: a key in the query takes no prefix.",
     ],
     [
@@ -333,7 +333,7 @@ describe("registerConnectors", () => {
         ["a function timeout under one second", 999],
         ["a function timeout above the connector's bound", 300_001],
       ] as const
-    ).map(([what, timeoutMs]): [string, () => ConnectorDefinition[], string] => [
+    ).map(([what, timeoutMs]): [string, () => ConnectorView[], string] => [
       what,
       () => [timedConnector(timeoutMs as number)],
       "crm.get_company: timeoutMs must be an integer from 1000 to 300000.",
@@ -351,7 +351,7 @@ describe("registerConnectors", () => {
         ["a balance with an empty unit", { path: "credits", min: 1, unit: "" }],
         ["a balance with an unknown key", { path: "credits", min: 1, unit: "credits", covers: "quota" }],
       ] as const
-    ).map(([what, balance]): [string, () => ConnectorDefinition[], string] => [
+    ).map(([what, balance]): [string, () => ConnectorView[], string] => [
       what,
       () => [withBalance(balance as unknown as ConnectorProbeBalance)],
       "crm: probe balance must give a dotted path, a min of zero or more and a unit, and nothing else.",

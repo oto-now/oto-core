@@ -167,6 +167,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       expect(await blockRows("ventes/cr_test", "published")).toEqual([])
       const [first, second] = drafted
       expect(lea.result?.data).toEqual({
+        id: node?.id,
         path: "ventes/cr_test",
         revision: 0,
         status: "draft",

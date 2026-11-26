@@ -22,12 +22,13 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
   const { Lien } = useHote()
   return (
     <span className="flex min-w-0 items-center gap-3 py-1">
-      <TuileDeLOutil nom={ligne.outil} />
-      <span className="flex min-w-0 flex-col">
+      <TuileDeLOutil nom={ligne.outil} logo={ligne.logo} />
+      <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
         <Lien href={ligne.ouverture} className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
           {ligne.libelle}
         </Lien>
-        <span className="oto-caption">{ligne.description ?? ligne.outil}</span>
+        {/* L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois. */}
+        {(ligne.description ?? (ligne.outil !== ligne.libelle ? ligne.outil : null)) && <span className="oto-caption">{ligne.description ?? ligne.outil}</span>}
       </span>
     </span>
   )
@@ -35,8 +36,10 @@ function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
 
 function Acces({ ligne }: { ligne: LigneDeConnecteur }) {
   return (
-    <span className="flex min-w-0 flex-col">
+    // Sur un téléphone, une ligne : « Privé · Non partagé ».
+    <span className="flex min-w-0 flex-col max-md:flex-row max-md:flex-wrap max-md:items-baseline max-md:gap-x-1.5">
       <span className={`font-medium ${ligne.desactive ? "text-mute" : ""}`}>{ligne.acces}</span>
+      <span aria-hidden="true" className="oto-caption hidden max-md:inline">·</span>
       <span className="oto-caption">{ligne.niveau}</span>
     </span>
   )
@@ -59,7 +62,16 @@ function Geste({ ligne, retour }: { ligne: LigneDeConnecteur; retour: string }) 
   const { Lien } = useHote()
   if (!ligne.geste) return null
   if (ligne.geste.genre === "connexion") {
-    return <ConnexionParConsentement ressource={ligne.geste.ressource} connecteur={ligne.geste.connecteur} libelle={ligne.geste.libelle} nomAccessible={`${ligne.geste.libelle} ${ligne.libelle}`} retour={retour} />
+    return (
+      <ConnexionParConsentement
+        ressource={ligne.geste.ressource}
+        connecteur={ligne.geste.connecteur}
+        acces={ligne.geste.acces}
+        libelle={ligne.geste.libelle}
+        nomAccessible={`${ligne.geste.libelle} ${ligne.libelle}`}
+        retour={retour}
+      />
+    )
   }
   return (
     <Lien href={ligne.ouverture} className="oto-btn anim-host" data-variant="secondary">
@@ -118,12 +130,30 @@ export function ListeDesConnecteurs({ lignes, filtres, filtre, q, recherche, ici
           onSearch={(valeur) => naviguer(adresseDeRecherche(recherche, valeur))}
         />
       </div>
+      {/* `data-compacte` : en-têtes en casse normale, cartes sans étiquettes sur un téléphone (variante opt-in de `table.css`). */}
       <Table<LigneDeConnecteur>
+        data-compacte=""
         caption="Connecteurs"
         columns={colonnes(ici)}
         rows={lignes}
-        empty={q ? `Aucun connecteur ne correspond à « ${q} ».` : "Aucun connecteur dans cette vue."}
+        empty={q ? <RechercheSansReponse q={q} effacer={adresseDeRecherche(recherche, "")} /> : "Aucun connecteur dans cette vue."}
       />
     </div>
+  )
+}
+
+/** Une recherche sans réponse : la phrase, où chercher, et le geste qui rend la liste. */
+function RechercheSansReponse({ q, effacer }: { q: string; effacer: string }) {
+  const { Lien } = useHote()
+  return (
+    <span className="flex flex-col items-center gap-1 py-4 text-center">
+      <span className="font-semibold text-ink">{`Aucun connecteur ne correspond à « ${q} ».`}</span>
+      <span className="oto-caption">
+        Cherchez par nom, outil ou description.{" "}
+        <Lien href={effacer} className="text-ink underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink">
+          Effacer la recherche
+        </Lien>
+      </span>
+    </span>
   )
 }

@@ -11,16 +11,18 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { declaredConnector } from "../../packages/plateforme/server/catalog/connector-source"
 import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
-import type { ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
+import type { ConnectorView } from "../../packages/plateforme/server/connectors/definition"
 import { executeDescribed } from "../../packages/plateforme/server/connectors/engine"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
-import { authorizationAddress } from "../../packages/plateforme/server/connectors/oauth-user"
+import { authorizationAddress, exchangeCode } from "../../packages/plateforme/server/connectors/oauth-user"
 import { CatalogRegistrationError } from "../../packages/plateforme/server/catalog/erp"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { consentConnector, leveledConsentConnector, memoryConsent, memoryTokens, TEST_APPLICATION } from "../factories/described-connector"
 import { loggedText } from "../helpers/logs"
 
 const token = () => `t_${randomBytes(12).toString("hex")}`
+/** L'indicateur de ressource du connecteur de test qui en déclare un. */
+const RESOURCE = "https://api.crm.example.test/v2"
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
 function stub(...answers: Response[]) {
@@ -33,27 +35,27 @@ function stub(...answers: Response[]) {
 
 /** L'adresse d'autorisation du connecteur déclaré `crm`, et ses paramètres. */
 function authorizationOf(): { address: string; query: Record<string, string> } {
-  const declared = declaredConnector("crm")
+  const declared = declaredConnector("crm")?.accesses[0]
   if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
   const url = new URL(authorizationAddress(declared.auth, { clientId: "client-test", redirectUri: "https://acme.test/api/platform/connector-consent/callback", state: "s", codeChallenge: "c" }))
   return { address: url.origin + url.pathname, query: Object.fromEntries(url.searchParams) }
 }
 
 /** Le connecteur de test à niveaux d'accès sous une autre authentification, ou une fonction changée. */
-function leveledVariant(auth: Record<string, unknown> = {}, change: (fn: ConnectorDefinition["functions"][number]) => ConnectorDefinition["functions"][number] = (fn) => fn): ConnectorDefinition {
+function leveledVariant(auth: Record<string, unknown> = {}, change: (fn: ConnectorView["functions"][number]) => ConnectorView["functions"][number] = (fn) => fn): ConnectorView {
   const base = leveledConsentConnector()
-  return { ...base, auth: { ...base.auth, ...auth } as ConnectorDefinition["auth"], functions: base.functions.map(change) }
+  return { ...base, auth: { ...base.auth, ...auth } as ConnectorView["auth"], functions: base.functions.map(change) }
 }
 
 /** Le connecteur à consentement de test sous une autre authentification ou d'autres champs. */
-function consentVariant(auth: Record<string, unknown> = {}, change: Partial<ConnectorDefinition> = {}): ConnectorDefinition {
+function consentVariant(auth: Record<string, unknown> = {}, change: Partial<ConnectorView> = {}): ConnectorView {
   const base = consentConnector()
-  return { ...base, ...change, auth: { ...base.auth, ...auth } as ConnectorDefinition["auth"] }
+  return { ...base, ...change, auth: { ...base.auth, ...auth } as ConnectorView["auth"] }
 }
 
-const register = (definition: ConnectorDefinition = consentConnector()) => registerConnectors([definition], { oauthApplications: { [definition.name]: TEST_APPLICATION } })
+const register = (definition: ConnectorView = consentConnector()) => registerConnectors([definition], { oauthApplications: { [definition.name]: TEST_APPLICATION } })
 
-function registrationProblem(definition: ConnectorDefinition, applications?: Record<string, { clientId: string; clientSecret: string }>): string {
+function registrationProblem(definition: ConnectorView, applications?: Record<string, { clientId: string; clientSecret: string }>): string {
   try {
     registerConnectors([definition], { oauthApplications: applications })
   } catch (error) {
@@ -87,13 +89,13 @@ afterEach(() => {
 describe("oauth2_user declaration", () => {
   it("should accept the form the factory renders, with the host's OAuth application, and keep the identity function", () => {
     register()
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     expect([declared?.auth.kind, declared?.identity?.fn.name, declared?.application]).toEqual(["user_consent", "crm.get_company", TEST_APPLICATION])
   })
 
   it("should accept the connector without an OAuth application, which the consent and the call then refuse", () => {
     registerConnectors([consentConnector()])
-    expect(declaredConnector("crm")?.application).toBeNull()
+    expect(declaredConnector("crm")?.accesses[0]?.application).toBeNull()
   })
 
   it.each([
@@ -106,6 +108,24 @@ describe("oauth2_user declaration", () => {
     ["an identity that is not a read", consentVariant({ identity: { function: "crm.update_contact", path: "email" } }), "crm: identity must name a read function of the connector without required arguments."],
     ["an identity without path", consentVariant({ identity: { function: "crm.get_company" } }), "crm: auth oauth2_user needs identity {function, path} or {url, path, scopes}: what names who consented."],
     ["a plain http address", consentVariant({ authorizeUrl: "http://login.crm.example.test/authorize" }), "crm: authorizeUrl must start with https:// or with a url setting."],
+    [
+      "resource among the constants",
+      consentVariant({ authorizeParams: { resource: RESOURCE } }),
+      "crm: auth oauth2_user: authorizeParams must not set resource: declare it as resource, which the package sets at the authorization, the code exchange and each renewal.",
+    ],
+    ["a resource in http", consentVariant({ resource: "http://api.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a fragment", consentVariant({ resource: `${RESOURCE}#v2` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource as a template", consentVariant({ resource: "https://{tenant}.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with userinfo", consentVariant({ resource: "https://user@api.crm.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a user and password", consentVariant({ resource: ["https://user", "pass@api.crm.example.test/v2"].join(":") }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a query", consentVariant({ resource: `${RESOURCE}?tenant=acme` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with an empty query", consentVariant({ resource: `${RESOURCE}?` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a query and no path", consentVariant({ resource: "https://api.crm.example.test?x=1" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a space", consentVariant({ resource: `${RESOURCE}/a b` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource with a backslash", consentVariant({ resource: "https://api.crm.example.test\\@evil.example.test" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource as a path template", consentVariant({ resource: `${RESOURCE}/{tenant}` }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource without host", consentVariant({ resource: "https:///v2" }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
+    ["a resource that is not a text", consentVariant({ resource: 42 as unknown as string }), "crm: auth oauth2_user: resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash."],
   ])("should refuse %s by name", (_case, definition, message) => {
     expect(registrationProblem(definition, { crm: TEST_APPLICATION })).toBe(message)
   })
@@ -134,23 +154,63 @@ describe("oauth2_user declaration", () => {
   })
 })
 
+describe("oauth2_user with a resource indicator (RFC 8707)", () => {
+  /** Échange un code pour le connecteur déclaré `crm` ; rend le corps envoyé au point de jeton. */
+  async function exchangedBody(): Promise<string | undefined> {
+    const declared = declaredConnector("crm")?.accesses[0]
+    if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
+    const { send, sent } = stub(json({ access_token: token(), refresh_token: token(), expires_in: 3600 }))
+    await exchangeCode({ definition: declared.definition, auth: declared.auth, application: TEST_APPLICATION, pacingKey: "token:test", fetcher: send }, { code: "code-1", redirectUri: "https://acme.test/cb", verifier: "v" })
+    return sent()[0].body
+  }
+
+  /** Renouvelle à l'échéance le jeton d'un compte du connecteur déclaré ; rend le corps envoyé au point de jeton. */
+  async function renewalBody(refresh: string): Promise<string | undefined> {
+    const { sent } = stub(json({ access_token: "a1", refresh_token: refresh, expires_in: 3600 }), json({ scopes: ["a"] }))
+    await getCompany({ fields: {}, settings: {}, tokens: memoryTokens({ token: "expiring", expiresAt: new Date(Date.now() + 30_000) }), consent: memoryConsent(refresh) })
+    return sent()[0].body
+  }
+
+  it("should set resource in the authorization address, the code exchange and each renewal", async () => {
+    register(consentVariant({ resource: RESOURCE }))
+    expect(authorizationOf().query.resource).toBe(RESOURCE)
+    expect(await exchangedBody()).toBe(`grant_type=authorization_code&code=code-1&redirect_uri=${encodeURIComponent("https://acme.test/cb")}&code_verifier=v&resource=${encodeURIComponent(RESOURCE)}&client_id=client-test&client_secret=secret-test`)
+    const refresh = token()
+    expect(await renewalBody(refresh)).toBe(`grant_type=refresh_token&refresh_token=${refresh}&resource=${encodeURIComponent(RESOURCE)}&client_id=client-test&client_secret=secret-test`)
+  })
+
+  it("should set resource in the exchange of the current token too", async () => {
+    register(consentVariant({ resource: RESOURCE, refresh: "exchange", rotates: undefined, exchange: { grantType: "fb_exchange_token", tokenParam: "fb_exchange_token" } }))
+    const { sent } = stub(json({ access_token: "a1", expires_in: 3600 }), json({ scopes: ["a"] }))
+    await getCompany({ fields: {}, settings: {}, tokens: memoryTokens({ token: "current", expiresAt: new Date(Date.now() + 10_000) }), consent: memoryConsent(null) })
+    expect(sent()[0].body).toBe(`grant_type=fb_exchange_token&fb_exchange_token=current&resource=${encodeURIComponent(RESOURCE)}&client_id=client-test&client_secret=secret-test`)
+  })
+
+  it("should send no resource anywhere for a connector that declares none", async () => {
+    register()
+    expect(authorizationOf().query).not.toHaveProperty("resource")
+    expect(new URLSearchParams(await exchangedBody()).has("resource")).toBe(false)
+    expect(new URLSearchParams(await renewalBody(token())).has("resource")).toBe(false)
+  })
+})
+
 describe("oauth2_user with access levels and an identity address", () => {
   it("should accept the levels the factory renders, keep them unapplied, and ask the scopes of full plus those of the identity address", () => {
     register(leveledConsentConnector())
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
     expect([declared.auth.accessLevels, declared.auth.scopeImplies]).toEqual([
       { read: ["offline_access", "contacts.read"], full: ["offline_access", "contacts.write", "entries.write"] },
       { "contacts.write": ["contacts.read"] },
     ])
     // Aucun filtrage : toutes les fonctions sont servies, comme au niveau `full`.
-    expect(declared.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm_act.post_entry"])
+    expect(declaredConnector("crm")?.functions.map((fn) => fn.name)).toEqual(["crm.get_company", "crm.list_contacts", "crm.get_contact", "crm.rename_contact", "crm.untag_contact", "crm_act.post_entry"])
     expect(authorizationOf().query.scope).toBe("offline_access contacts.write entries.write openid email")
   })
 
   it("should keep a connector without levels as it was: its scopes, its identity function", () => {
     register()
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (declared?.auth.kind !== "user_consent") throw new Error("not a consent")
     expect([declared.auth.scopes, declared.auth.accessLevels, declared.auth.scopeImplies, declared.auth.identity, declared.identity?.fn.name]).toEqual([
       ["offline_access", "contacts.read"],
@@ -201,7 +261,7 @@ describe("oauth2_user with access levels and an identity address", () => {
 
   it("should read the identity address with a GET, the access token as a bearer, no redirect followed, outside the catalog", async () => {
     register(leveledConsentConnector())
-    const declared = declaredConnector("crm")
+    const declared = declaredConnector("crm")?.accesses[0]
     if (!declared?.identity) throw new Error("no identity")
     const access = token()
     const { sent } = stub(json({ email: "ada@contoso.test", sub: "1" }))
@@ -211,7 +271,7 @@ describe("oauth2_user with access levels and an identity address", () => {
       [{ email: "ada@contoso.test", sub: "1" }],
       [["GET", "https://id.crm.example.test/v1/userinfo", "error", `Bearer ${access}`]],
     ])
-    expect(declared.functions.map((fn) => fn.name)).not.toContain(declared.identity.fn.name)
+    expect(declaredConnector("crm")?.functions.map((fn) => fn.name)).not.toContain(declared.identity.fn.name)
   })
 })
 
