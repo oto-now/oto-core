@@ -236,7 +236,9 @@ process.stdin.on('end', async () => {
     process.platform === 'win32' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b)
   if (vise !== undefined && !meme(vise, racineSession) && existsSync(join(vise, 'scripts/verify-receipt.mjs'))) {
     try {
-      execFileSync('node', [join(vise, 'scripts/verify-receipt.mjs'), 'check'], { cwd: vise, stdio: 'pipe' })
+      // `--commit` (synchro du template du 2026-11-26) : un reçu doc d'un autre dépôt n'y vaut que sur
+      // un commit de doc seule. Un script antérieur, comme celui de ce dépôt, ignore l'argument.
+      execFileSync('node', [join(vise, 'scripts/verify-receipt.mjs'), 'check', '--commit'], { cwd: vise, stdio: 'pipe' })
       process.exit(0)
     } catch (e) {
       deny(

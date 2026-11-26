@@ -4,7 +4,7 @@
 // `equipes/lignes-des-personnes.ts`). Sans lui, la liste, ses filtres et son tri se décideraient dans un îlot client, hors
 // de l'adresse.
 import { connectorLogoAddress, normalizeTitle, type AccountLevelName, type AccountView, type ConnectorAccountForm, type OrgConnector } from "../../../schemas"
-import { connexionDe, estAMoi, etatDuCompte, formulaireDuCompte, type BloqueurDeLOutil, type EtatDuCompte } from "./etat-du-compte"
+import { connexionDe, estAMoi, etatDuCompte, faconDuCompte, formulaireDuCompte, sansAcces, type BloqueurDeLOutil, type EtatDuCompte } from "./etat-du-compte"
 import { NIVEAUX_DU_COMPTE } from "./libelles-des-partages"
 
 /**
@@ -75,6 +75,8 @@ export type LigneDeConnecteur = {
   logo: string | null
   /** La description écrite par qui le gère : elle remplace le nom de l'outil sous le libellé. */
   description: string | null
+  /** Pour un outil qui s'ouvre de plusieurs façons, celle de ce compte (`faconDuCompte`), dite après l'outil ; `null` sinon. */
+  facon: string | null
   acces: string
   /** Sous l'accès : le niveau de la personne, ou « Vous seul ». */
   niveau: string
@@ -134,15 +136,16 @@ export function lignesDesConnecteurs({ comptes, connecteurs, formulaires, partag
   const lignes = retenus
     .map((compte) => {
       const formulaire = formulaireDuCompte(formulaires, compte)
-      const etat = etatDuCompte(compte, formulaire, moi, bloquePar(compte.connector, connecteurs))
+      const etat = etatDuCompte(compte, formulaire, moi, { bloquePar: bloquePar(compte.connector, connecteurs), sansSonAcces: sansAcces(formulaires, compte) })
       const ligne: LigneDeConnecteur = {
         id: compte.id,
         libelle: compte.label,
         outil: libelleDuConnecteur(compte.connector, formulaires),
         logo: logoDe(compte.connector, connecteurs),
         description: compte.description,
+        facon: faconDuCompte(formulaire),
         ...accesDe(compte, moi, partages[compte.id]),
-        etat: { mot: etat.mot, precision: etat.precision, point: etat.point },
+        etat: { mot: etat.mot, precision: etat.precisionCourte ?? etat.precision, point: etat.point },
         desactive: eteint(etat),
         geste: gesteDe(etat, compte, formulaire),
         ouverture: adresseDeLaVue(ici, { filtre: vue.filtre, q: vue.q, compte: compte.id }),

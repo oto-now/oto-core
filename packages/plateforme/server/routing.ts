@@ -316,9 +316,10 @@ async function routeRows(db: PlatformDb, identity: Identity, query: string, kind
  * Les chemins ciblés par la personne dans l'organisation depuis 30 jours (N5), filtrés dans la
  * requête, sur ses `READ_PAGE_ROWS` lignes les plus récentes : une lecture bornée, pour un bonus qui ne
  * fait que départager (N32). En panne, aucun : sa lecture ne refuse pas `context` ; la panne n'est dite
- * qu'au log (`fromDatabaseError`), ce qui ne vient pas de la base remonte (HN-E01S10-15).
+ * qu'au log (`fromDatabaseError`), ce qui ne vient pas de la base remonte (HN-E01S10-15). Les cibles d'un appel sont
+ * des noms de fonction : le bonus d'usage des fonctions (`rankFunctions`) lit la même lecture, faite une fois par requête.
  */
-async function usedPaths(db: PlatformDb, identity: Identity): Promise<Set<string>> {
+export async function usedPaths(db: PlatformDb, identity: Identity): Promise<Set<string>> {
   const since = new Date(Date.now() - ROUTING_USAGE_DAYS * DAY_MS)
   return db
     .tx((sql) => sql<{ target: string }[]>`
@@ -340,15 +341,16 @@ async function usedPaths(db: PlatformDb, identity: Identity): Promise<Set<string
  * de `context`), que la personne lit, triées par score décroissant puis par chemin, de score ≥ 0,30, `limit` au plus. Le niveau des nœuds rendus est calculé en un lot et un
  * nœud de niveau 0 est retiré avant tout mélange, bonus ou coupe (H123, N22) : `route_candidates` ne
  * rend déjà que les procédures publiées que la demande présélectionne et que la personne lit (E01-S13,
- * AC-a2), et le service garde sa propre décision (`security-patterns.md § Droits dans le service`).
+ * AC-a2), et le service garde sa propre décision (`security-patterns.md § Droits dans le service`). `used` : les cibles
+ * récentes déjà lues par l'appelant (`usedPaths`), pour ne pas relire le journal ; absentes, elles se lisent ici.
  */
 export async function rankCandidates(
   db: PlatformDb,
   identity: Identity,
-  request: { query: string; limit: number; kinds?: readonly string[] },
+  request: { query: string; limit: number; kinds?: readonly string[]; used?: Promise<ReadonlySet<string>> },
 ): Promise<Candidate[]> {
   const kinds = request.kinds ?? [ROUTED_KIND]
-  const [all, used] = await Promise.all([routeRows(db, identity, request.query, kinds.length === 1 ? kinds[0] : null), usedPaths(db, identity)])
+  const [all, used] = await Promise.all([routeRows(db, identity, request.query, kinds.length === 1 ? kinds[0] : null), request.used ?? usedPaths(db, identity)])
   const rows = all.filter((row) => kinds.includes(row.kind))
   const levels = await nodeLevels(db, identity, rows.map((row) => row.node_id))
   const teams = new Set(identity.teams.map((team) => team.id))

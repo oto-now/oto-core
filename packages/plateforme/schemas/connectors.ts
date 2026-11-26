@@ -363,8 +363,10 @@ export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
 /**
  * Un accès offert au choix par la page de connexion d'un connecteur à plusieurs accès : son nom, son libellé, son geste,
  * et l'espace que l'adresse de la page nomme, que le lien de l'accès garde (absent : l'adresse n'en nomme aucun).
+ * `owner` : le genre de l'espace où l'accès connecterait le compte pour la personne, celui que son étape retiendrait
+ * (servi par `choose_access`) ; l'écran en dit la façon (« Avec une clé, pour l'organisation »).
  */
-export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link"; space?: string }
+export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link"; space?: string; owner?: "org" | "team" | "user" }
 
 /**
  * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,

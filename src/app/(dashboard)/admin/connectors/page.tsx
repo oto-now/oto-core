@@ -82,6 +82,8 @@ async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): 
     sujets: { equipes: teams.map(({ id, name }) => ({ id, nom: name })), personnes: members.map(({ userId, name }) => ({ id: userId, nom: name })) },
     proprietaires,
     administration: reserve,
+    // Le nom proposé d'un connecteur d'organisation (« Pennylane · <organisation> »).
+    organisation: identity.org.name,
   }
 }
 

@@ -23,7 +23,7 @@ import { asCaller, seedWithAdmin, spyDb, SQL_SKIP_REASON, sqlConfigured, type Se
 
 vi.mock("../../packages/plateforme/server/connectors/lines", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/connectors/lines")>()
-  return { ...original, teamConnectorLines: vi.fn(async () => ({ everyone: [], teams: new Map() })) }
+  return { ...original, teamConnectorLines: vi.fn(async () => ({ everyone: [], teams: new Map(), shared: [] })) }
 })
 
 const SETUP_TIMEOUT = 120_000

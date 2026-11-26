@@ -18,7 +18,7 @@ import { runImport } from "../../packages/plateforme/server/transfer/import"
 import { writeUpload, type UploadTicket } from "../../packages/plateforme/server/uploads-write"
 import type { Person } from "../helpers/reference-org"
 import { seedReferenceOrg, type ReferenceOrgSql } from "../helpers/reference-org-sql"
-import { asCaller, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
+import { asCaller, failureOf, seedWithAdmin, SQL_SKIP_REASON, sqlConfigured, type SeededData } from "../helpers/sql"
 
 const SETUP_TIMEOUT = 180_000
 const NETWORK_TIMEOUT = 60_000
@@ -209,5 +209,49 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
       [0, 0],
       [0, 0],
     ])
+  })
+
+  /** Une règle posée par la connexion d'administration : `level` pour `person` sur le nœud de `path`. */
+  async function rule(path: string, person: Person, level: "none" | "read" | "write" | "manage") {
+    const { id } = (await ownerAt(path))!
+    await seed.admin`insert into platform.access_rules (org_id, node_id, subject_user_id, level) values (${ref.org.id}, ${id}, ${ref.people[person].id}, ${level})`
+  }
+
+  it("should copy a page of another person into the private space of the one who copies it, who owns the copy (decided on 26/11)", async () => {
+    // Ada écrit un plan dans son Privé, rangé sous `annonces`, et le partage à Claire, sauf une annexe qu'elle lui masque.
+    await write("ada", page("annonces/plan_ada"))
+    await write("ada", page("annonces/plan_ada/annexe"))
+    await write("ada", page("annonces/plan_ada/secret"))
+    await rule("annonces/plan_ada", "claire", "read")
+    await rule("annonces/plan_ada/secret", "claire", "none")
+    const copy = await duplicateNode(dbOf("claire"), ref.identityOf("claire"), { path: "annonces/plan_ada" })
+    // La copie va dans le Privé de Claire, pas à côté de l'original ; elle et sa sous-page sont à Claire, Ada ne les voit pas.
+    expect(copy.data).toMatchObject({ from: "annonces/plan_ada", count: 2 })
+    expect(copy.data.path).toMatch(/^private\/claire\/[a-z0-9_]+$/)
+    for (const path of [copy.data.path, `${copy.data.path}/annexe`]) {
+      const node = await ownerAt(path)
+      expect(node).toMatchObject({ owner_kind: "user", owner_team_id: null, owner_user_id: ref.people.claire.id })
+      expect([await levels("claire", node!.id), await levels("ada", node!.id)]).toEqual([
+        [3, 3],
+        [0, 0],
+      ])
+    }
+    // Le masquage de l'original reste : l'annexe masquée ne se copie pas, et Claire ne la lit toujours pas.
+    expect(await ownerAt(`${copy.data.path}/secret`)).toBeUndefined()
+    expect(await levels("claire", (await ownerAt("annonces/plan_ada/secret"))!.id)).toEqual([0, 0])
+    expect(await ownerAt("annonces/plan_ada")).toMatchObject({ owner_kind: "user", owner_user_id: ref.people.ada.id })
+  })
+
+  it("should refuse a member who writes a content, without managing it, to change its space by a direct write (42501)", async () => {
+    // Léa écrit dans les dossiers de Ventes (niveau 2) sans les gérer : ni son Privé, ni Tout le monde par la base.
+    const { id } = (await ownerAt("ventes/devis"))!
+    const lea = ref.people.lea.id
+    const refusals = [
+      await failureOf(dbOf("lea").tx((sql) => sql`update platform.nodes set owner_kind = 'user', owner_team_id = null, owner_user_id = ${lea} where id = ${id}`)),
+      await failureOf(dbOf("lea").tx((sql) => sql`update platform.nodes set owner_kind = 'org', owner_team_id = null, owner_user_id = null where id = ${id}`)),
+    ]
+    expect(refusals.map((refusal) => refusal?.code)).toEqual(["42501", "42501"])
+    expect(await levels("lea", id)).toEqual([2, 2])
+    expect(await ownerAt("ventes/devis")).toMatchObject({ owner_kind: "team", owner_team_id: ref.id("team-ventes") })
   })
 })

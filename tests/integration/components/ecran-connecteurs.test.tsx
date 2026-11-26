@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes } from "react"
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountView, ConnectorAccountForm, OrgConnector } from "@otomata_tech/oto_platform/schemas"
 import {
@@ -235,6 +235,10 @@ describe("EcranConnecteurs, the list", () => {
     fireEvent.click(ligneDe("Mon agenda").getByRole("button", { name: "Reconnecter Mon agenda" }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://login.example.test/authorize?state=s"))
     expect(envois()).toEqual([{ url: "/api/platform/connector-consent", methode: "POST", corps: { connector: "microsoft", return_to: ICI } }])
+    // Le geste de la ligne garde sa propre action ; un clic ailleurs sur la ligne, la cellule de l'état, ouvre le détail.
+    expect(naviguer).not.toHaveBeenCalled()
+    fireEvent.click(agenda.getByText("À reconnecter"))
+    expect(naviguer).toHaveBeenCalledWith(`${ICI}?connector=${AGENDA.id}`)
   })
 
   it("should teach the empty page in three steps, offer to add a connector once, and open the sheet of a tool from its logo, the same for an administrator", () => {
@@ -276,11 +280,17 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     const detail = detailDe(BANQUE)
     expect(detail.getByText("Crm Pro · clé posée le 2 novembre 2026")).toBeInTheDocument()
     expect(detail.getByText("Non testé")).toBeInTheDocument()
-    expect(within(detail.getByRole("heading", { name: "Qui peut s'en servir" }).closest("section") ?? document.body).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
-      expect.stringMatching(/Léa Bernard.*vous.*Propriétaire$/),
-      expect.stringMatching(/Équipe Finance.*Lire$/),
-      expect.stringMatching(/Paul Durand.*Lire et modifier$/),
-    ])
+    const acces = within(detail.getByRole("heading", { name: "Qui peut s'en servir" }).closest("section") ?? document.body)
+    // Le champ et la liste, comme à l'ajout : ni bouton « Partager », ni phrase « Privé », le journal en lien à droite du titre.
+    expect(acces.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeInTheDocument()
+    expect(acces.getByText("Propriétaire").closest(".oto-pop-row")).toHaveTextContent(/Léa Bernardvous.*Propriétaire$/)
+    expect(acces.getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([expect.stringContaining("Équipe Finance"), expect.stringContaining("Paul Durand")])
+    expect(acces.getByRole("button", { name: "Journal des partages de Banque" })).toBeInTheDocument()
+    expect(detail.queryByRole("button", { name: /^Partager/ })).toBeNull()
+    expect(detail.queryByText(/^Privé/)).toBeNull()
+    // « Remplacer la clé » à côté de « Tester », dans la bande d'état.
+    const etat = within(detail.getByRole("group", { name: "État" }))
+    expect([etat.getByRole("button", { name: "Remplacer la clé de Banque" }), etat.getByRole("button", { name: "Tester Banque" })]).toHaveLength(2)
     // Trois groupes repliés, leur nombre de fonctions ; seules les sensibles demandent l'accord.
     expect(groupesDe(BANQUE)).toEqual([
       "Lire. 2 fonctions, afficher la liste",
@@ -466,12 +476,10 @@ describe("EcranConnecteurs, the detail of a connector", () => {
 })
 
 describe("EcranConnecteurs, sharing a connector", () => {
-  const ouvrir = (libelle: RegExp = /^Partager Banque$/) => {
-    fireEvent.click(detailDe(BANQUE).getByRole("button", { name: libelle }))
-    return within(screen.getByRole("dialog", { name: "Partager « Banque »" }))
-  }
+  /** « Qui peut s'en servir » du détail de `compte` : le champ et la liste, sans dialogue. */
+  const ouvrir = (compte: AccountView = BANQUE) => within(detailDe(compte).getByRole("heading", { name: "Qui peut s'en servir" }).closest("section") ?? document.body)
 
-  it("should open the panel from « Partager », with the shares read and what the engine does of a personal account", () => {
+  it("should show the field and the shares read in the detail, with what the engine does of a personal account", () => {
     rendre({}, { vue: { compte: BANQUE.id } })
     const panneau = ouvrir()
     expect(within(panneau.getByRole("list", { name: "Personnes et équipes ajoutées" })).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
@@ -479,17 +487,14 @@ describe("EcranConnecteurs, sharing a connector", () => {
       expect.stringContaining("Paul Durand"),
     ])
     expect(libellesDesChoix(panneau.getByLabelText("Accès de Paul Durand"))).toEqual(["Lire", "Lire et modifier", "Tout, avec accord", "Retirer l'accès"])
-    expect(panneau.getByText(/L'assistant de la personne s'en servira quand elle le lui demandera en le nommant\. La clé reste cachée : personne ne peut la lire ni la copier\./)).toBeInTheDocument()
-    fireEvent.click(panneau.getByRole("button", { name: "Fermer" }))
-    expect(screen.queryByRole("dialog", { name: "Partager « Banque »" })).toBeNull()
-    expect(ouvrir().getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeInTheDocument()
+    expect(panneau.getByText("Les personnes ajoutées s'en serviront en le nommant ; la clé reste cachée.")).toBeInTheDocument()
+    expect(panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeInTheDocument()
   })
 
   it("should say that the assistant of the members uses a team account without naming it", () => {
     const dEquipe: AccountView = { ...MAIL_VENTES, viewerLevel: "manage" }
     rendre({ accounts: [dEquipe], partages: { [dEquipe.id]: { general: null, rules: [] } } }, { vue: { compte: dEquipe.id } })
-    fireEvent.click(detailDe(dEquipe).getByRole("button", { name: "Partager Mail Ventes" }))
-    expect(screen.getByText(/L'assistant des membres s'en sert sans avoir à le nommer\./)).toBeInTheDocument()
+    expect(ouvrir(dEquipe).getByText("Les membres de Ventes s'en servent sans le nommer ; la clé reste cachée.")).toBeInTheDocument()
   })
 
   it("should propose the teams and the people that answer a name, never the owner of a personal account nor a subject already added, and add the chosen one in read only", async () => {
@@ -524,20 +529,23 @@ describe("EcranConnecteurs, sharing a connector", () => {
       { url: "/api/platform/admin/account-rules", methode: "POST", corps: { accountId: BANQUE.id, subject: { kind: "team", id: FINANCE }, level: "sensitive" } },
       { url: `/api/platform/admin/account-rules/${PARTAGES_DE_BANQUE.rules[1].id}`, methode: "DELETE", corps: undefined },
     ])
-    await waitFor(() => expect(screen.getByRole("heading", { name: /Personnes et équipes ajoutées/ })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Qui peut s'en servir" })).toHaveFocus())
   })
 
-  it("should set the rule of the whole organisation, and remove it on « Aucun accès »", async () => {
+  it("should open the connector to the whole organisation from its link, then remove its access from its line", async () => {
     fetchMock.mockImplementation(async () => reponse(200, { data: {} }))
     const { rerender } = rendre({}, { vue: { compte: BANQUE.id } })
     const panneau = ouvrir()
-    expect(libellesDesChoix(panneau.getByLabelText("Accès de toute l'organisation"))).toEqual(["Lire", "Lire et modifier", "Tout, avec accord", "Aucun accès"])
-    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Lire")
+    // Sans accès de toute l'organisation, pas de ligne « Aucun accès » : le lien qui l'ouvre.
+    expect(panneau.queryByLabelText("Accès de toute l'organisation")).toBeNull()
+    fireEvent.click(panneau.getByRole("button", { name: "Ouvrir à toute l'organisation" }))
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
 
     const general = { id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c09", level: "read" as const }
     rerender(ecran({ partages: { [BANQUE.id]: { ...PARTAGES_DE_BANQUE, general } } }, { vue: { compte: BANQUE.id } }))
-    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Aucun accès")
+    expect(panneau.queryByRole("button", { name: "Ouvrir à toute l'organisation" })).toBeNull()
+    expect(libellesDesChoix(panneau.getByLabelText("Accès de toute l'organisation"))).toEqual(["Lire", "Lire et modifier", "Tout, avec accord", "Retirer l'accès"])
+    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Retirer l'accès")
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
     expect(envois()).toEqual([
       { url: "/api/platform/admin/account-rules", methode: "POST", corps: { accountId: BANQUE.id, subject: { kind: "org" }, level: "read" } },
@@ -555,9 +563,9 @@ describe("EcranConnecteurs, sharing a connector", () => {
     choisirDansLaListe(panneau.getByLabelText("Accès de Léa Bernard"), "Lire")
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
 
-    // La relecture : elle ne gère plus le compte, ni panneau ni « Partager ».
+    // La relecture : elle ne gère plus le compte, ni champ ni niveaux à changer.
     rerender(ecran({ accounts: [{ ...dePaul, viewerLevel: "read" }], partages: {} }, { vue: { compte: BANQUE.id } }))
-    expect(screen.queryByRole("dialog", { name: "Partager « Banque »" })).toBeNull()
+    expect(detailDe(BANQUE).queryByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeNull()
     await waitFor(() => expect(detailDe(BANQUE).getByRole("group", { name: "État" })).toHaveFocus())
   })
 
@@ -659,9 +667,10 @@ describe("EcranConnecteurs, adding a connector", () => {
     const fenetre = ouvrirLaFenetre()
     fireEvent.click(carte(fenetre, "Crm Pro"))
     const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
-    // Un membre n'a pas le choix du propriétaire : le connecteur est à lui ; son premier de l'outil prend son nom, sans le demander.
+    // Plus de choix du propriétaire : sans partage, le connecteur est à lui, et le nom proposé le dit.
     expect(formulaire.queryByLabelText("Propriétaire")).toBeNull()
-    expect(formulaire.queryByLabelText(/^Nom/)).toBeNull()
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Crm Pro de Léa")
+    expect(formulaire.getByText("C'est ce nom que vous direz à votre assistant.")).toBeInTheDocument()
     expect(formulaire.getByRole("heading", { name: "Ce que votre assistant pourra faire" })).toBeInTheDocument()
     const cle = formulaire.getByLabelText("Clé d'API")
     // Sans clé, la sortie d'un champ ne teste rien.
@@ -676,7 +685,7 @@ describe("EcranConnecteurs, adding a connector", () => {
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
     expect(envois()).toEqual([
       { url: "/api/platform/admin/connectors/crm/probe", methode: "POST", corps: { fields: { api_key: CLE }, settings: { region: "us" } } },
-      { url: "/api/platform/admin/accounts", methode: "POST", corps: { connector: "crm", owner_kind: "user", label: "Crm Pro", mode: "reel" } },
+      { url: "/api/platform/admin/accounts", methode: "POST", corps: { connector: "crm", owner_kind: "user", label: "Crm Pro de Léa", mode: "reel" } },
       { url: `/api/platform/admin/accounts/${CREE}/secret`, methode: "POST", corps: { secret: { api_key: CLE }, settings: { region: "us" } } },
       { url: `/api/platform/admin/accounts/${CREE}/probe`, methode: "POST", corps: {} },
     ])
@@ -710,7 +719,7 @@ describe("EcranConnecteurs, adding a connector", () => {
     expect(creation).not.toHaveBeenCalled()
     fireEvent.click(within(formulaire.getByRole("group", { name: "Ajouter quand même ?" })).getByRole("button", { name: "Ajouter quand même" }))
     expect(await formulaire.findByText("Un connecteur du même propriétaire porte déjà ce nom.")).toBeInTheDocument()
-    await waitFor(() => expect(formulaire.getByLabelText("Nom (facultatif)")).toHaveFocus())
+    await waitFor(() => expect(formulaire.getByLabelText("Nom")).toHaveFocus())
     expect([sonde.mock.calls.length, creation.mock.calls.length]).toEqual([2, 1])
     expect(formulaire.getByLabelText("Clé d'API")).toHaveValue(`${CLE}-2`)
     expect(naviguer).not.toHaveBeenCalled()
@@ -755,38 +764,99 @@ describe("EcranConnecteurs, adding a connector", () => {
     expect(envois().map((envoi) => envoi.url)).toEqual(["/api/platform/admin/accounts", `/api/platform/admin/accounts/${CREE}/secret`])
   })
 
-  it("should let an administrator give the connector of a tool without a form to a team, from the owner line, and never propose themselves for it", async () => {
-    // « mail » n'a pas de formulaire : son compte se crée au mode que le connecteur admet, simulé, en un seul appel.
-    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail" } } }) })
+  it("should let an administrator give the connector of a tool without a form to a team by sharing it to that team alone, never to themselves", async () => {
+    // « mail » n'a pas de formulaire : son compte se crée au mode que le connecteur admet, simulé, pour l'organisation ou une équipe.
+    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail · Finance" } } }), "POST admin/account-rules": () => reponse(201, { data: { rule: {} } }) })
     rendre({ connectors: [MAIL, CRM, MS], ...ADMINISTRE })
     const fenetre = ouvrirLaFenetre()
     expect(cartes(fenetre)).toEqual(["Crm Pro", "mail", "Microsoft 365"])
     fireEvent.click(carte(fenetre, "mail"))
     const formulaire = within(fenetre.getByRole("form", { name: "Ajouter mail" }))
-    expect(libellesDesChoix(formulaire.getByLabelText("Propriétaire"))).toEqual(["Toute l'organisation", "Équipe Finance", "Équipe Ventes"])
-    choisirDansLaListe(formulaire.getByLabelText("Propriétaire"), "Équipe Finance")
+    // Il ne se porte pas par une personne : il part ouvert à toute l'organisation, sans ligne « Propriétaire ».
+    expect(formulaire.queryByText("Propriétaire")).toBeNull()
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("mail de l'organisation")
+    choisirDansLaListe(formulaire.getByLabelText("Accès de toute l'organisation"), "Retirer l'accès")
+    fireEvent.change(formulaire.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }), { target: { value: "finance" } })
+    fireEvent.click(formulaire.getByRole("option", { name: "Équipe Finance" }))
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("mail · Finance")
     fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
-    expect(envois().map((envoi) => envoi.corps)).toEqual([{ connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" }])
+    expect(envois().map((envoi) => envoi.corps)).toEqual([
+      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail · Finance", mode: "simule" },
+      { accountId: CREE, subject: { kind: "team", id: FINANCE }, level: "read" },
+    ])
   })
 
-  it("should let a team lead add a connector for themselves or for the team they lead, never for the organisation nor another team", async () => {
-    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail" } } }) })
+  it("should let a team lead give a connector to the team they lead, its line carrying the level, never the organisation", async () => {
+    parRoute({ "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "mail · Finance" } } }), "POST admin/account-rules": () => reponse(201, { data: { rule: {} } }) })
     rendre({ connectors: [MAIL, CRM], proprietaires: { user: true, org: false, teams: [{ id: FINANCE, name: "Finance" }] } })
     const fenetre = ouvrirLaFenetre()
     expect(cartes(fenetre)).toEqual(["Crm Pro", "mail"])
-    fireEvent.click(carte(fenetre, "Crm Pro"))
-    expect(libellesDesChoix(within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" })).getByLabelText("Propriétaire"))).toEqual(["Léa Bernard", "Équipe Finance"])
-    fireEvent.click(fenetre.getByRole("button", { name: "Tous les outils" }))
 
-    // « mail » ne se porte que par une équipe ou l'organisation : l'équipe qu'il dirige, seule, s'écrit sans choix.
+    // « mail » ne se porte que par une équipe ou l'organisation : l'équipe qu'il dirige, d'emblée, avec son niveau.
     fireEvent.click(carte(fenetre, "mail"))
     const pourLEquipe = within(fenetre.getByRole("form", { name: "Ajouter mail" }))
-    expect(pourLEquipe.queryByLabelText("Propriétaire")).toBeNull()
-    expect(pourLEquipe.getByText("Propriétaire").closest(".oto-pop-row")).toHaveTextContent("Équipe Finance")
+    expect(pourLEquipe.queryByText("Propriétaire")).toBeNull()
+    expect(pourLEquipe.getByLabelText("Accès de Équipe Finance")).toHaveTextContent("Lire")
+    expect(pourLEquipe.getByText("C'est ce nom que l'équipe dira à son assistant.")).toBeInTheDocument()
+    expect(pourLEquipe.getByText("Les membres de Finance s'en serviront sans le nommer ; il reste si vous partez.")).toBeInTheDocument()
+    expect(pourLEquipe.getByRole("button", { name: "Ouvrir à toute l'organisation" })).toHaveAttribute("aria-disabled", "true")
     fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
-    expect(envois().map((envoi) => envoi.corps)).toEqual([{ connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail", mode: "simule" }])
+    expect(envois().map((envoi) => envoi.corps)).toEqual([
+      { connector: "mail", owner_kind: "team", team_id: FINANCE, label: "mail · Finance", mode: "simule" },
+      { accountId: CREE, subject: { kind: "team", id: FINANCE }, level: "read" },
+    ])
+  })
+
+  it("should decide the owner by the share: the organisation opened by an administrator, the one team they endow, and theirs for two teams; the proposed name follows until the person types one", async () => {
+    parRoute({
+      "POST admin/accounts": () => reponse(201, { data: { account: { id: CREE, label: "Ma compta" } } }),
+      [`POST admin/accounts/${CREE}/secret`]: () => reponse(200, { data: { account: { id: CREE } } }),
+      "POST admin/account-rules": () => reponse(201, { data: { rule: {} } }),
+    })
+    // L'organisation porte déjà deux connecteurs Crm Pro : le suivant prend le rang 3.
+    const DE_L_ORGANISATION = [
+      { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d81", label: "Crm Pro · Mortier & Co", owner: { kind: "org" as const } },
+      { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d82", label: "Crm Pro · Filiale", owner: { kind: "org" as const } },
+    ]
+    rendre({ ...ADMINISTRE, accounts: [AGENDA, ...DE_L_ORGANISATION], organisation: "Mortier & Co", formulaires: [{ ...FORMULAIRE_CRM, fields: [], probe: { available: false, balance: false } }] })
+    const fenetre = ouvrirLaFenetre()
+    fireEvent.click(carte(fenetre, "Crm Pro"))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
+    const panneau = within(formulaire.getByRole("region", { name: "Qui pourra s'en servir" }))
+    const nom = formulaire.getByLabelText("Nom")
+    const ajouter = (cherche: string, option: string) => {
+      fireEvent.change(panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }), { target: { value: cherche } })
+      fireEvent.click(panneau.getByRole("option", { name: option }))
+    }
+    expect(panneau.getByText("Propriétaire").closest(".oto-pop-row")).toHaveTextContent(/Léa Bernardvous.*Propriétaire$/)
+
+    ajouter("toute", "Toute l'organisation")
+    expect(panneau.queryByText("Propriétaire")).toBeNull()
+    expect(nom).toHaveValue("Crm Pro · Mortier & Co (3)")
+    expect(formulaire.getByText("L'organisation en a déjà 2. Remplacez « (3) » par ce qui les distingue, par exemple « Crm Pro · Filiale ABC ».")).toBeInTheDocument()
+    expect(panneau.getByText("Les membres de l'organisation s'en serviront sans le nommer ; il reste si vous partez.")).toBeInTheDocument()
+
+    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Retirer l'accès")
+    ajouter("ventes", "Équipe Ventes")
+    expect(nom).toHaveValue("Crm Pro · Ventes")
+    expect(panneau.getByText("Les membres de Ventes s'en serviront sans le nommer ; il reste si vous partez.")).toBeInTheDocument()
+
+    // Deux équipes : le moteur n'admet qu'une équipe propriétaire ; le connecteur reste le sien, partagé aux deux.
+    ajouter("finance", "Équipe Finance")
+    expect(nom).toHaveValue("Crm Pro de Léa")
+    expect(panneau.getByText("Les membres de Ventes et les membres de Finance s'en serviront en le nommant.")).toBeInTheDocument()
+
+    fireEvent.change(nom, { target: { value: "Ma compta" } })
+    choisirDansLaListe(panneau.getByLabelText("Accès de Équipe Finance"), "Retirer l'accès")
+    expect(nom).toHaveValue("Ma compta")
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
+    await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
+    expect(envois().filter(({ url }) => !String(url).endsWith("/secret")).map(({ corps }) => corps)).toEqual([
+      { connector: "crm", owner_kind: "team", team_id: VENTES, label: "Ma compta", mode: "reel" },
+      { accountId: CREE, subject: { kind: "team", id: VENTES }, level: "read" },
+    ])
   })
 
   it("should share a key connector from its sheet: the subjects added with their level and the whole organisation, posed after its creation", async () => {
@@ -800,19 +870,43 @@ describe("EcranConnecteurs, adding a connector", () => {
     fireEvent.click(carte(fenetre, "Crm Pro"))
     const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
     const panneau = within(formulaire.getByRole("region", { name: "Qui pourra s'en servir" }))
-    // Le propriétaire en tête : la personne, jamais proposée à elle-même.
-    expect(panneau.getByText("Propriétaire")).toBeInTheDocument()
+    // Le propriétaire en tête : la personne, jamais proposée à elle-même ; « vous » sur la ligne de son nom.
+    expect(panneau.getByText("Propriétaire").closest(".oto-pop-row")).toHaveTextContent(/Léa Bernardvous.*Propriétaire$/)
+    expect(panneau.getByText("Vous pourrez le partager plus tard.")).toBeInTheDocument()
+    // Un membre ne donne pas le connecteur à toute l'organisation : le lien reste grisé, et l'infobulle dit pourquoi.
+    const lien = panneau.getByRole("button", { name: "Ouvrir à toute l'organisation" })
+    expect(lien).toHaveAttribute("aria-disabled", "true")
+    fireEvent.focus(lien)
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Seul un administrateur peut le donner à toute l'organisation")
+    fireEvent.click(lien)
+    expect(panneau.queryByLabelText("Accès de toute l'organisation")).toBeNull()
+    // Le champ propose aussi l'organisation et les équipes ; ce qu'il ne peut pas donner, grisé, sa raison lue et dite au clavier.
     const champ = panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })
+    fireEvent.change(champ, { target: { value: "toute" } })
+    const organisation = panneau.getByRole("option", { name: "Toute l'organisation" })
+    expect(organisation).toHaveAttribute("aria-disabled", "true")
+    expect(organisation).toHaveAccessibleDescription("Seul un administrateur peut le donner à toute l'organisation")
     fireEvent.change(champ, { target: { value: "ventes" } })
-    fireEvent.click(panneau.getByRole("option", { name: "Équipe Ventes" }))
-    choisirDansLaListe(panneau.getByLabelText("Accès de Équipe Ventes"), "Lire et modifier")
-    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Lire")
+    const ventes = panneau.getByRole("option", { name: "Équipe Ventes" })
+    expect(ventes).toHaveAccessibleDescription("Seul le responsable de l'équipe ou un administrateur peut le donner à l'équipe")
+    fireEvent.keyDown(champ, { key: "ArrowDown" })
+    expect(within(ventes).getByText("Seul le responsable de l'équipe ou un administrateur peut le donner à l'équipe")).not.toHaveClass("oto-sr-only")
+    fireEvent.keyDown(champ, { key: "Enter" })
+    fireEvent.click(ventes)
+    expect(panneau.queryByLabelText("Accès de Équipe Ventes")).toBeNull()
+    fireEvent.change(champ, { target: { value: "nadia" } })
+    fireEvent.click(panneau.getByRole("option", { name: "Nadia Finet" }))
+    choisirDansLaListe(panneau.getByLabelText("Accès de Nadia Finet"), "Lire et modifier")
+    // Partagé à une personne : le connecteur reste le sien, nommé.
+    expect(panneau.getByText("Propriétaire")).toBeInTheDocument()
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Crm Pro de Léa")
+    expect(panneau.getByText("Nadia s'en servira en le nommant.")).toBeInTheDocument()
     expect(envois()).toEqual([])
     fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
+    expect(envois().filter(({ url }) => String(url).endsWith("admin/accounts")).map(({ corps }) => corps.owner_kind)).toEqual(["user"])
     expect(envois().filter(({ url }) => String(url).endsWith("account-rules")).map(({ corps }) => corps)).toEqual([
-      { accountId: CREE, subject: { kind: "org" }, level: "read" },
-      { accountId: CREE, subject: { kind: "team", id: VENTES }, level: "write" },
+      { accountId: CREE, subject: { kind: "user", id: "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c03" }, level: "write" },
     ])
   })
 
@@ -847,14 +941,14 @@ describe("EcranConnecteurs, several connectors of one tool", () => {
     expect(within(crm).getByRole("img", { name: "Connecté : 2 connecteurs à vous" })).toBeInTheDocument()
     fireEvent.click(crm)
     const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Crm Pro" }))
-    expect(formulaire.getByLabelText("Nom (facultatif)")).toHaveValue("Crm Pro 4")
-    expect(formulaire.getByText("Vous en avez déjà 3 : « Banque », « Banque 2 », « Banque 3 ». C'est ce nom que vous direz à votre assistant.")).toBeInTheDocument()
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Crm Pro de Léa (4)")
+    expect(formulaire.getByText("Vous en avez déjà 3. Remplacez « (4) » par ce qui les distingue, par exemple « Crm Pro · Filiale ABC ».")).toBeInTheDocument()
     fireEvent.change(formulaire.getByLabelText("Clé d'API"), { target: { value: ["cle", "de", "test"].join("-") } })
     fireEvent.change(formulaire.getByLabelText("Description (facultatif)"), { target: { value: "Les comptes de la SCI" } })
     fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
     await waitFor(() => expect(naviguer).toHaveBeenLastCalledWith(`${ICI}?connector=${CREE}`))
     expect(envois().map(({ url, methode, corps }) => [methode, url, methode === "POST" && String(url).endsWith("/secret") ? "…" : corps])).toEqual([
-      ["POST", "/api/platform/admin/accounts", { connector: "crm", owner_kind: "user", label: "Crm Pro 4", mode: "reel" }],
+      ["POST", "/api/platform/admin/accounts", { connector: "crm", owner_kind: "user", label: "Crm Pro de Léa (4)", mode: "reel" }],
       ["POST", `/api/platform/admin/accounts/${CREE}/secret`, "…"],
       ["PATCH", `/api/platform/admin/accounts/${CREE}`, { description: "Les comptes de la SCI" }],
     ])
@@ -1088,9 +1182,9 @@ describe("EcranConnecteurs, sharing a connector connected at the third party, fr
     expect(screen.getByRole("link", { name: "Vos connecteurs" })).toHaveAttribute("href", `${ICI}?filter=mine`)
     expect(envois()).toEqual([])
     cleanup()
-    // Le détail ouvert sur son partage (`?share=1`).
+    // Le détail ouvert sur son partage (`?share=1`) : le tiroir posera le focus dans le champ.
     rendre({ accounts: [NOUVEAU], connectors: [MAIL, CRM, MS], partages: { [NOUVEAU.id]: { general: null, rules: [] } } }, { vue: { compte: NOUVEAU.id, partager: true } })
-    expect(screen.getByRole("dialog", { name: "Partager « lea@contoso.test »" })).toBeInTheDocument()
+    expect(detailDe(NOUVEAU).getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toHaveAttribute("autofocus")
   })
 
   it("should forget the kept share on a failed return, so that a later return poses nothing", async () => {
@@ -1111,8 +1205,7 @@ describe("EcranConnecteurs, the first share of a connector connected by authoris
   it("should ask once what sharing an account connected by its owner commits to, send nothing on cancel, and share on agreement", async () => {
     fetchMock.mockImplementation(async () => reponse(200, { data: { rule: {} } }))
     rendre({ accounts: [MON_AGENDA], connectors: [MAIL, CRM, MS], partages: { [MON_AGENDA.id]: { general: null, rules: [] } } }, { vue: { compte: MON_AGENDA.id } })
-    fireEvent.click(detailDe(MON_AGENDA).getByRole("button", { name: "Partager Mon agenda" }))
-    const panneau = within(screen.getByRole("dialog", { name: "Partager « Mon agenda »" }))
+    const panneau = within(detailDe(MON_AGENDA).getByRole("heading", { name: "Qui peut s'en servir" }).closest("section") ?? document.body)
     const ajouter = () => {
       const champ = panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })
       fireEvent.change(champ, { target: { value: "ventes" } })
@@ -1134,10 +1227,159 @@ describe("EcranConnecteurs, the first share of a connector connected by authoris
   it("should not ask again once the connector is shared, nor for a connector with a key", () => {
     fetchMock.mockImplementation(async () => reponse(200, { data: { rule: {} } }))
     rendre({ connectors: [MAIL, CRM] }, { vue: { compte: BANQUE.id } })
-    fireEvent.click(detailDe(BANQUE).getByRole("button", { name: "Partager Banque" }))
-    const panneau = within(screen.getByRole("dialog", { name: "Partager « Banque »" }))
+    const panneau = within(detailDe(BANQUE).getByRole("heading", { name: "Qui peut s'en servir" }).closest("section") ?? document.body)
     fireEvent.change(panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }), { target: { value: "ventes" } })
     fireEvent.click(panneau.getByRole("option", { name: "Équipe Ventes" }))
     expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+})
+
+describe("EcranConnecteurs, a tool that connects in several ways", () => {
+  const CONSOLE: OrgConnector = { ...CRM, connector: "console", label: "Console Web", functions: [CRM.functions[0], CRM.functions[1]] }
+  const PAR_CLE: ConnectorAccountForm = {
+    connector: "console",
+    label: "Console Web",
+    access: { name: "service_account", label: "Service account of the organization" },
+    ownerKinds: ["org", "team"],
+    probe: { available: false, balance: false },
+    fields: [{ name: "service_account_key", label: "Clé du compte", secret: true }],
+    settings: [],
+  }
+  const PAR_CONNEXION: ConnectorAccountForm = { connector: "console", label: "Console Web", access: { name: "google_account", label: "Sign-in of a person" }, consent: true, ownerKinds: ["user"], probe: { available: false, balance: false }, fields: [], settings: [] }
+  const FACONS = { connectors: [MAIL, CRM, CONSOLE], formulaires: [FORMULAIRE_CRM, FORMULAIRE_MS, PAR_CLE, PAR_CONNEXION] }
+  const SAIN = { at: "2026-11-03T09:00:00.000Z", healthy: true, code: null, reason: null, balance: null }
+  const PAR_LE_SERVICE: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d71", label: "Console perso", connector: "console", access: "google_account", lastProbe: SAIN }
+  const PAR_LA_CLE: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d72", label: "Console de l'équipe", connector: "console", access: "service_account", owner: { kind: "org" } }
+  const ANCIEN: AccountView = { ...BANQUE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d73", label: "Console ancienne", connector: "console", owner: { kind: "org" }, lastProbe: SAIN }
+
+  const ouvrirLaFiche = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    fireEvent.click(fenetre.getByRole("button", { name: /^Console Web/ }))
+    return fenetre
+  }
+
+  it("should show one card per tool, said by its functions, ticked once, without the declared label of an access", () => {
+    rendre({ ...FACONS, ...ADMINISTRE, accounts: [PAR_LE_SERVICE] })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    const cartes = fenetre.getAllByRole("button", { name: /^Console Web/ })
+    expect(cartes).toHaveLength(1)
+    expect(cartes[0]).toHaveTextContent("2 fonctions")
+    expect(fenetre.getAllByRole("img", { name: "Connecté" })).toHaveLength(1)
+    expect(screen.getByRole("dialog", { name: "Ajouter un connecteur" }).textContent).not.toMatch(/Service account|Sign-in/)
+  })
+
+  it("should let an administrator choose the way: two radio cards, the first checked, one primary action and the key field only for the key, never themselves as its owner", () => {
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    expect(fenetre.getByRole("heading", { name: "Console Web" })).toHaveFocus()
+    expect(fenetre.getByText("Deux façons de se connecter")).toBeInTheDocument()
+    const choix = within(fenetre.getByRole("group", { name: "Choisissez votre façon" }))
+    expect(choix.getAllByRole("radio").map((option) => [option.closest("label")?.textContent, option.matches(":checked")])).toEqual([
+      ["Avec mon compte Console Web", true],
+      ["Avec une clé, pour l'organisation", false],
+    ])
+    // « accès » ne dit jamais une façon : le partage garde le sien (« Aucun accès »).
+    expect(screen.getByRole("dialog", { name: "Ajouter un connecteur" }).textContent).not.toMatch(/Service account|Sign-in/)
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" }).textContent).not.toMatch(/accès/)
+    expect(screen.getByRole("button", { name: "Connecter mon compte Console Web" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Annuler" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ajouter le connecteur" })).toBeNull()
+    expect(fenetre.queryByLabelText("Clé du compte")).toBeNull()
+
+    fireEvent.click(choix.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Console Web" }))
+    expect(formulaire.getByLabelText("Clé du compte")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ajouter le connecteur" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Connecter mon compte Console Web" })).toBeNull()
+    expect(formulaire.queryByText("Propriétaire")).toBeNull()
+    expect(formulaire.getByLabelText("Accès de toute l'organisation")).toHaveTextContent("Lire")
+  })
+
+  it("should forget the key entered for a way when the person picks another way and comes back", () => {
+    const cle = ["cle", "de", "test"].join("-")
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    const [parLeService, parLaCle] = fenetre.getAllByRole("radio")
+    fireEvent.click(parLaCle)
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: cle } })
+    fireEvent.click(parLeService)
+    fireEvent.click(parLaCle)
+    expect(fenetre.getByLabelText("Clé du compte")).toHaveValue("")
+    expect(screen.queryByDisplayValue(cle)).toBeNull()
+  })
+
+  it("should give a member the only way open to them, said in the header, without a choice", () => {
+    rendre(FACONS)
+    const fenetre = ouvrirLaFiche()
+    expect(fenetre.queryByRole("group", { name: "Choisissez votre façon" })).toBeNull()
+    expect(fenetre.queryByRole("radio")).toBeNull()
+    expect(fenetre.getByText("Avec mon compte Console Web")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Connecter mon compte Console Web" })).toBeInTheDocument()
+  })
+
+  it("should tell apart in the list two connectors of a tool by their way, and keep the caption of a tool with one way", () => {
+    rendre({ ...FACONS, accounts: [PAR_LE_SERVICE, PAR_LA_CLE, { ...BANQUE, label: "Banque" }] })
+    expect(ligneDe("Console perso").getByText("Console Web · connexion au service")).toBeInTheDocument()
+    expect(ligneDe("Console de l'équipe").getByText("Console Web · clé")).toBeInTheDocument()
+    expect(ligneDe("Banque").getByText("Crm Pro")).toBeInTheDocument()
+  })
+
+  it("should close the choice of the way while the connector is created or the person leaves for the third party", async () => {
+    // Une réponse qui ne vient jamais : l'envoi reste en cours.
+    fetchMock.mockReturnValue(new Promise<Response>(() => {}))
+    const { unmount } = rendre({ ...FACONS, ...ADMINISTRE })
+    let fenetre = ouvrirLaFiche()
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeEnabled()
+    fireEvent.click(screen.getByRole("button", { name: "Connecter mon compte Console Web" }))
+    await waitFor(() => expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled())
+    unmount()
+
+    rendre({ ...FACONS, ...ADMINISTRE })
+    fenetre = ouvrirLaFiche()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: ["cle", "de", "test"].join("-") } })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
+    await waitFor(() => expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled())
+    expect(fenetre.getByRole("radio", { name: "Avec mon compte Console Web" })).toBeDisabled()
+  })
+
+  it("should keep the choice of the way closed once the connector is created and a further step failed, so no second one is created", async () => {
+    const cree = "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d74"
+    fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/secret") ? reponse(500, { error: { code: "internal" } }) : reponse(201, { data: { account: { id: cree, label: "Console Web" } } }),
+    )
+    rendre({ ...FACONS, ...ADMINISTRE })
+    const fenetre = ouvrirLaFiche()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" }))
+    fireEvent.change(fenetre.getByLabelText("Clé du compte"), { target: { value: ["cle", "de", "test"].join("-") } })
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le connecteur" }))
+    await waitFor(() => expect(fenetre.queryByRole("form", { name: "Ajouter Console Web" })).toBeNull())
+    // L'envoi fini (ses promesses vidées), le choix reste fermé.
+    await act(async () => {})
+    expect(fenetre.getByRole("group", { name: "Choisissez votre façon" })).toBeDisabled()
+    fireEvent.click(fenetre.getByRole("radio", { name: "Avec mon compte Console Web" }))
+    expect(fenetre.getByRole("radio", { name: "Avec une clé, pour l'organisation" })).toBeChecked()
+    expect(envois().filter((envoi) => envoi.url === "/api/platform/admin/accounts")).toHaveLength(1)
+  })
+
+  it("should put first, to replace and without a gesture, a connector that retains no way of a tool that now connects in several, and offer in its detail neither test nor key", () => {
+    rendre({ ...FACONS, accounts: [BANQUE, ANCIEN] }, { vue: { compte: ANCIEN.id } })
+    const [premiere] = screen.getAllByRole("row").slice(1)
+    expect(within(premiere).getByRole("link", { name: "Console ancienne" })).toBeInTheDocument()
+    expect(within(premiere).getByText("À remplacer")).toBeInTheDocument()
+    expect(within(premiere).queryByRole("button")).toBeNull()
+    // La liste dit la précision courte ; le détail, la phrase entière, sur sa ligne.
+    expect(within(premiere).getByText("Ajoutez-en un nouveau, puis désactivez celui-ci.")).toBeInTheDocument()
+    const detail = detailDe(ANCIEN)
+    expect(detail.getByText("Cet outil se connecte maintenant de plusieurs façons : ajoutez-en un nouveau, puis désactivez celui-ci.")).toBeInTheDocument()
+    // Aucun geste sur lui, sauf le désactiver.
+    expect(detail.queryByRole("button", { name: /^Partager/ })).toBeNull()
+    expect(detail.queryByRole("button", { name: /^Modifier/ })).toBeNull()
+    expect(detail.getByRole("button", { name: `Désactiver ${ANCIEN.label}` })).toBeInTheDocument()
+    expect(detail.queryByRole("button", { name: /^Tester/ })).toBeNull()
+    expect(detail.queryByRole("button", { name: /la clé$/ })).toBeNull()
+    expect(detail.queryByLabelText("Clé du compte")).toBeNull()
   })
 })

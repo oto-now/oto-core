@@ -73,18 +73,19 @@ describe("EcranConnexionDUnConnecteur, the key of an existing account", () => {
 })
 
 describe("EcranConnexionDUnConnecteur, a connector with several accesses", () => {
+  // Servis dans l'ordre de la déclaration, la clé d'abord : l'écran les range soi d'abord.
   const ACCES = [
-    { name: "oauth", label: "Sign-in of a person", gesture: "oauth" as const },
-    { name: "key", label: "Key of the organization", gesture: "key" as const },
+    { name: "key", label: "Key of the organization", gesture: "key" as const, owner: "org" as const },
+    { name: "oauth", label: "Sign-in of a person", gesture: "oauth" as const, owner: "user" as const },
   ]
 
-  it("should make the person choose the access when the link names none, each a link to the same page with its gesture", () => {
+  it("should make the person choose the way to connect when the link names none, each said and ranged as on the Connectors screen, never by its declared label, a link to the same page", () => {
     render(<EcranConnexionDUnConnecteur outil="fod" resultat={{ data: { kind: "choose_access", connector: "fod", label: "Fod", accesses: ACCES } }} reessayer="/connect/fod" />)
     expect(screen.getByText("Fod se connecte de plusieurs façons. Choisissez la vôtre :")).toBeInTheDocument()
     const liste = within(screen.getByRole("list", { name: "Les façons de se connecter" }))
     expect(liste.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Sign-in of a person : autoriser l'accès chez l'éditeur",
-      "Key of the organization : coller une clé",
+      "Avec mon compte Fod",
+      "Avec une clé, pour l'organisation",
     ])
     expect(liste.getAllByRole("link").map((lien) => lien.getAttribute("href"))).toEqual(["/connect/fod?access=oauth", "/connect/fod?access=key"])
     expect(fetchMock).not.toHaveBeenCalled()
@@ -94,12 +95,12 @@ describe("EcranConnexionDUnConnecteur, a connector with several accesses", () =>
     render(
       <EcranConnexionDUnConnecteur
         outil="fod"
-        resultat={{ data: { kind: "ask_admin", connector: "fod", label: "Fod", space: "org", url: "https://acme.example.test/connect/fod?space=org&access=key", administrators: [{ name: "Ada Martin" }], others: [ACCES[0]] } }}
+        resultat={{ data: { kind: "ask_admin", connector: "fod", label: "Fod", space: "org", url: "https://acme.example.test/connect/fod?space=org&access=key", administrators: [{ name: "Ada Martin" }], others: [ACCES[1]] } }}
         reessayer="/connect/fod?access=key"
       />,
     )
     expect(screen.getByText("Ou connectez-vous autrement :")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Sign-in of a person" })).toHaveAttribute("href", "/connect/fod?access=oauth")
+    expect(screen.getByRole("link", { name: "Avec mon compte Fod" })).toHaveAttribute("href", "/connect/fod?access=oauth")
   })
 
   it("should keep in each access link the space the link names", () => {

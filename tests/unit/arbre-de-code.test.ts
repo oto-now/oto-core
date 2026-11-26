@@ -62,6 +62,12 @@ describe("arbre de code", { timeout: 30_000 }, () => {
     fs.mkdirSync(path.join(exporte, "docs/changelog.d"))
     fs.writeFileSync(path.join(exporte, "docs/changelog.d/2026-11-26-sujet.md"), "## [2026-11-26] — Sujet\n")
     fs.appendFileSync(path.join(exporte, "docs/conception/sujet.md"), "Décision.\n")
+    // Conventions et système de design : de la documentation, que seul `check:framework` lit (décision JB,
+    // 2026-11-26 : le reçu doc du template y sert).
+    fs.mkdirSync(path.join(exporte, ".method/conventions"), { recursive: true })
+    fs.writeFileSync(path.join(exporte, ".method/conventions/ui-patterns.md"), "Règle.\n")
+    fs.mkdirSync(path.join(exporte, "docs/design"), { recursive: true })
+    fs.writeFileSync(path.join(exporte, "docs/design/system.md"), "Direction.\n")
     fs.chmodSync(path.join(exporte, "cli/bin.mjs"), 0o755)
     fs.mkdirSync(path.join(exporte, "node_modules/x"), { recursive: true })
     fs.writeFileSync(path.join(exporte, "node_modules/x/index.js"), "x\n")

@@ -204,7 +204,8 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     expect(vi.mocked(listAccountRules).mock.calls.map((appel) => appel[2])).toEqual([MON_COMPTE.id, COMPTE_COMMUN.id])
     expect(listMembers).toHaveBeenCalledWith(SESSION.db, identite("admin"))
     const detail = within(screen.getByRole("dialog", { name: "Mail commun" }))
-    expect(detail.getByRole("button", { name: "Partager Mail commun" })).toBeInTheDocument()
+    // Le partage, pour qui gère : le champ d'ajout directement dans « Qui peut s'en servir ».
+    expect(detail.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeInTheDocument()
     // La gouvernance de l'administrateur est un geste sur l'outil, dans le détail : plus d'îlot des outils.
     expect(detail.getByRole("button", { name: "Bloquer… mail pour l'organisation" })).toBeInTheDocument()
     expect(screen.queryByRole("region", { name: "Outils de l'organisation" })).toBeNull()
@@ -250,6 +251,12 @@ describe("/admin/* pages of the dashboard (AC1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un connecteur" }))
     fireEvent.click(screen.getByRole("button", { name: "Bloquer mail pour l'organisation" }))
     expect(screen.getByRole("alertdialog", { name: "Bloquer mail pour toute l'organisation ?" })).toHaveTextContent("1 procédure publiée s'arrêtera à l'étape qui appelle mail.")
+
+    // L'hôte sert le nom de l'organisation : « mail », ouvert à toute l'organisation, se propose « mail · Démo ».
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Annuler" }))
+    const fenetre = within(screen.getByRole("dialog", { name: "Ajouter un connecteur" }))
+    fireEvent.click(fenetre.getByRole("button", { name: /^mail/ }))
+    expect(fenetre.getByLabelText("Nom")).toHaveValue("mail · Démo")
   })
 
   it.each(PAGES)("should send a visitor without a session from $nom to /login, and say a failed identity", async ({ rendre }) => {

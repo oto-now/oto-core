@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { accountLevel } from "../../packages/plateforme/server/access"
 import { listOrgAccounts, listOwnAccounts, listUsableAccounts } from "../../packages/plateforme/server/connectors/accounts"
+import { teamConnectorLines } from "../../packages/plateforme/server/connectors/lines"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import { callFunction } from "../../packages/plateforme/server/function-call"
@@ -21,7 +22,7 @@ import { listAccountShareJournal } from "../../packages/plateforme/server/accoun
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../packages/plateforme/server/rules"
 import { pendingMigrations, pendingReason } from "../helpers/pending-migrations"
 import { hex } from "../helpers/plateforme"
-import { codeOf, createSqlFixtures, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser } from "../helpers/sql"
+import { codeOf, createSqlFixtures, spyDb, SQL_SKIP_REASON, sqlConfigured, type SqlFixtures, type SqlReferenceOrg, type SqlUser } from "../helpers/sql"
 
 const VERSION = "20261018090000"
 const pending = (await pendingMigrations()).includes(VERSION)
@@ -303,6 +304,48 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
   // Décidé le 19/10 (#68), l'exemple de la décision : Léa partage son compte personnel en lecture à Ventes, dont
   // elle est membre ; la règle sert les autres membres de Ventes, et Léa garde la gestion : elle partage encore, lit le
   // journal et retire le partage. Avant, la règle de son équipe comptait pour elle et lui retirait la gestion.
+  // `context` cite les comptes que des collègues ont partagés à l'appelant : ceux qu'il peut déjà servir en les nommant
+  // (la liste des comptes, `listUsableAccounts`), jamais un compte personnel qui ne lui est pas partagé.
+  it("should cite in the context the personal accounts colleagues shared with the caller, never one not shared nor one whose owner left", async () => {
+    const newcomer = async (fullName: string) => {
+      const user: SqlUser = await fx.createUser({ fullName })
+      await fx.addMember(o.org.id, user.id, { profile: { name: fullName } })
+      return { user, as: await person(o, user) }
+    }
+    // « Alix » range son compte avant les autres comptes partagés de la suite : la ligne d'un connecteur est coupée à 200.
+    const alix = await newcomer("Alix Brun")
+    const yvette = await newcomer("Yvette Morin")
+    const shared = await personalAccount(alix.user, "Alix")
+    const unshared = await personalAccount(o.people.lea, "Léa privé")
+    await setAccountRule(alix.as.db, alix.as.identity, { accountId: shared.id, subject: { kind: "user", id: yvette.user.id }, level: "write" })
+    const sharedLines = async (who: Person) => (await teamConnectorLines(who.db, who.identity)).shared.join("\n")
+
+    // Un second compte d'Alix, partagé puis désactivé : absent, comme de la liste des comptes.
+    const disabled = await personalAccount(alix.user, "Alix éteint")
+    await setAccountRule(alix.as.db, alix.as.identity, { accountId: disabled.id, subject: { kind: "user", id: yvette.user.id }, level: "write" })
+    await fx.admin`update platform.accounts set status = 'disabled' where id = ${disabled.id}`
+    // La marque d'un compte partagé se dit dans sa ligne, comme celle d'un compte que prend l'appel.
+    await fx.admin`update platform.accounts set health = jsonb_build_object('mark', jsonb_build_object('reason', 'quota_exhausted', 'at', '2026-11-20T09:12:00Z')) where id = ${shared.id}`
+
+    const seen = await sharedLines(yvette.as)
+    expect([
+      seen.includes(`mail: « ${shared.label} » (owner Alix Brun, simulated, write, marked: credits spent since 2026-11-20 09:12 UTC)`),
+      seen.includes(unshared.label),
+      seen.includes(disabled.label),
+    ]).toEqual([true, false, false])
+    expect(await sharedLines(alix.as)).not.toContain(shared.label)
+    await removeMember(ada.db, ada.identity, alix.user.id)
+    expect(await sharedLines(yvette.as)).not.toContain(shared.label)
+  })
+
+  // Sans compte partagé, ni en-tête ni lecture de l'annuaire : l'autre organisation, `mail` actif, aucun partage.
+  it("should read no directory for the context lines when no account is shared with the caller", async () => {
+    await fx.addActivation(outside.org.id, "mail")
+    const watched = spyDb(stranger.db)
+    const lines = await teamConnectorLines(watched.db, stranger.identity)
+    expect([lines.shared, lines.everyone.length > 0, watched.sent.some((query) => query.target === "member_directory")]).toEqual([[], true, false])
+  })
+
   it("should let the owner share her personal account in read to her own team and keep managing it", async () => {
     const mail = await personalAccount(o.people.lea, "Léa à Ventes")
     const shared = await setAccountRule(lea.db, lea.identity, { accountId: mail.id, subject: { kind: "team", id: o.teams.ventes }, level: "read" })

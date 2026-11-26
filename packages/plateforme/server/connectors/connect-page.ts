@@ -74,20 +74,21 @@ function keepSpace(choices: ConnectAccessChoice[], space: string | undefined): C
  * Le choix de l'accès (`choose_access`), servi après les contrôles de chaque accès, ceux de son étape (`planConnection`) :
  * un connecteur inconnu ou natif est refusé comme sans choix ; un espace nommé que la personne ne peut prendre pour aucun
  * accès est refusé nommément (`forbidden`, celui du premier accès), et un accès qu'il ne permet pas n'est pas offert.
- * Chaque lien garde l'espace nommé.
+ * Chaque lien garde l'espace nommé ; chaque accès dit le genre de l'espace que son plan retient (`owner`), d'où l'écran
+ * tire sa façon.
  */
 async function chooseAccessStep(where: ConnectWhere, connector: string, choices: ConnectAccessChoice[], space: string | undefined): Promise<ConnectionStepView> {
   const planned = await Promise.allSettled(
     choices.map((choice) => planConnection(where, { connector, access: choice.name, ...(space ? { space: parseSpace(space) } : {}) })),
   )
   const refusals: PlatformError[] = []
-  const allowed = choices.filter((_, index) => {
+  const allowed = choices.flatMap((choice, index): ConnectAccessChoice[] => {
     const outcome = planned[index]
-    if (outcome.status === "fulfilled") return true
+    if (outcome.status === "fulfilled") return [{ ...choice, owner: outcome.value.space.kind }]
     // Seul le refus de l'espace écarte un accès ; tout autre refus (connecteur, équipe, adresse) vaut pour la page.
     if (!isPlatformError(outcome.reason) || outcome.reason.code !== "forbidden" || outcome.reason.details?.reason !== "space") throw outcome.reason
     refusals.push(outcome.reason)
-    return false
+    return []
   })
   if (allowed.length === 0) throw refusals[0]
   return { kind: "choose_access", connector, label: connectorLabel(connector), accesses: keepSpace(allowed, space) }

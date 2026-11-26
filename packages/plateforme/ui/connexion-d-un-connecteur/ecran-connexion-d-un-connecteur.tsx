@@ -9,7 +9,9 @@
 import { Plug } from "@phosphor-icons/react/dist/ssr/Plug"
 import type { ConnectAccessChoice, ConnectionStepView } from "../../schemas"
 import { ConnexionParConsentement } from "../admin/connecteurs/connexion-par-consentement"
+import { ORDRE } from "../admin/connecteurs/catalogue-des-connecteurs"
 import { echecDuConsentement, type IssueDuConsentement } from "../admin/connecteurs/ecran-connecteurs"
+import { faconDeLAcces } from "../admin/connecteurs/etat-du-compte"
 import type { Resultat } from "../api/resultat"
 import { ActionPlateforme } from "../components/action-plateforme"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
@@ -26,18 +28,22 @@ export type EtapeAffichee = ConnectionStepView
 
 /**
  * Les accès d'un connecteur à plusieurs accès, chacun un lien vers la même page qui le nomme, l'espace de l'adresse
- * gardé (sans lui, le service le choisit selon l'accès), et le geste qu'il demande. Le lien ne fait rien de plus qu'une
- * ouverture.
+ * gardé (sans lui, le service le choisit selon l'accès). Le lien dit la façon de l'accès comme la fiche d'ajout de
+ * l'écran Connecteurs (`faconDeLAcces`), d'après l'espace que le service lui retient, jamais son libellé déclaré seul,
+ * et les façons se rangent comme dans la fiche, soi d'abord (`ORDRE`). Le lien ne fait rien de plus qu'une ouverture.
  */
-function Acces({ connecteur, acces }: { connecteur: string; acces: ConnectAccessChoice[] }) {
+function Acces({ connecteur, outil, acces }: { connecteur: string; outil: string; acces: ConnectAccessChoice[] }) {
+  const aDire = acces.map((choix) => ({ nom: choix.name, libelle: choix.label, chezLeTiers: choix.gesture !== "key", proprietaires: choix.owner ? [choix.owner] : [] }))
+  // Chez le tiers, c'est pour soi ; une clé sans espace dit (`others`) vient après celles qui le disent.
+  const rang = (choix: ConnectAccessChoice) => (choix.gesture !== "key" ? 0 : choix.owner ? ORDRE.indexOf(choix.owner) : ORDRE.length)
+  const ranges = acces.map((choix, indice) => ({ choix, dit: aDire[indice] })).sort((a, b) => rang(a.choix) - rang(b.choix))
   return (
     <ul className="flex flex-col gap-1 text-sm text-ink" aria-label={MOTS.listeDesAcces}>
-      {acces.map((choix) => (
+      {ranges.map(({ choix, dit }) => (
         <li key={choix.name}>
           <a className="underline" href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name, ...(choix.space ? { space: choix.space } : {}) }).toString()}`}>
-            {choix.label}
-          </a>{" "}
-          : {MOTS.geste[choix.gesture]}
+            {faconDeLAcces(outil, dit, aDire)}
+          </a>
         </li>
       ))}
     </ul>
@@ -45,12 +51,12 @@ function Acces({ connecteur, acces }: { connecteur: string; acces: ConnectAccess
 }
 
 /** Les autres accès offerts à côté du geste d'un accès : rien pour un connecteur à un seul accès. */
-function AutresAcces({ etape }: { etape: { connector: string; others?: ConnectAccessChoice[] } }) {
+function AutresAcces({ etape }: { etape: { connector: string; label: string; others?: ConnectAccessChoice[] } }) {
   if (!etape.others || etape.others.length === 0) return null
   return (
     <div className="flex flex-col gap-1">
       <p className="text-sm text-ink">{MOTS.autres}</p>
-      <Acces connecteur={etape.connector} acces={etape.others} />
+      <Acces connecteur={etape.connector} outil={etape.label} acces={etape.others} />
     </div>
   )
 }
@@ -84,7 +90,7 @@ function Etape({ etape, retour }: { etape: EtapeAffichee; retour: string }) {
       return (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-ink">{MOTS.choisir(etape.label)}</p>
-          <Acces connecteur={etape.connector} acces={etape.accesses} />
+          <Acces connecteur={etape.connector} outil={etape.label} acces={etape.accesses} />
         </div>
       )
     case "authorize":

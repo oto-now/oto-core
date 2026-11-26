@@ -162,11 +162,12 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
       connectionStep(who.db, who.identity, { connector: CONNECTOR, ...query }, { origin: origin() })
     const service = { name: SERVICE, label: "Service account of the organization", gesture: "key" }
     const signIn = { name: SIGN_IN, label: "Sign-in of a person", gesture: "oauth" }
-    expect(await step(lea, {})).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [service, signIn] })
+    // Chaque accès dit le genre de l'espace que son plan retient (`owner`) : l'écran en tire sa façon.
+    expect(await step(lea, {})).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...service, owner: "org" }, { ...signIn, owner: "user" }] })
     // Un espace nommé : contrôlé pour chaque accès avant toute liste ; un accès qu'il ne permet pas n'est pas offert, et
     // chaque lien garde l'espace.
-    expect(await step(ada, { space: "org" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...service, space: "org" }] })
-    expect(await step(lea, { space: "me" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...signIn, space: "me" }] })
+    expect(await step(ada, { space: "org" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...service, space: "org", owner: "org" }] })
+    expect(await step(lea, { space: "me" })).toEqual({ kind: "choose_access", connector: CONNECTOR, label: "Crm", accesses: [{ ...signIn, space: "me", owner: "user" }] })
     // Un espace refusé pour tous les accès : refusé nommément, aucun accès listé.
     const forbidden = await refusal(step(lea, { space: "org" }))
     expect([forbidden.code, forbidden.details]).toEqual(["forbidden", { reason: "space", space: "org" }])

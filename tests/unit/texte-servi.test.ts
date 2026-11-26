@@ -237,11 +237,11 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
   // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus ; l'espace
   // d'une création, ce qu'un membre lit et écrit par défaut et la question avant d'écrire là où d'autres lisent (texte
   // resserré par JB à la relecture, une ligne de moins), 220 de plus.
-  it("should hold 19 lines and 4,100 characters at most with a 10-character prefix, the same for everyone", () => {
+  it("should hold 19 lines and 4,150 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
     expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(19)
-    expect(rules.length).toBeLessThanOrEqual(4_100)
+    expect(rules.length).toBeLessThanOrEqual(4_150)
     expect(rules.split("\n")[3]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
     expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
     expect(rules).toContain("A procedure is a page of numbered steps")

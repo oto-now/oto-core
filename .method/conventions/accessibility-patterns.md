@@ -57,6 +57,11 @@ maison divergera de celui des 34 composants existants.
 - aucun `outline-none` / `focus:outline-none` sans `focus-visible:ring-*` sur le même élément
 - aucune règle globale `*:focus { outline: none }` dans `globals.css`
 - tout élément rendu interactif par un `onClick` sur un `div`/`span` est un défaut : utiliser `<button>`.
+  **Exception bornée, ligne de liste qui ouvre son détail** : une liste peut déléguer à son enveloppe le clic de ses
+  lignes si chaque ligne contient un lien focalisable de même adresse, marqué `data-ouvre-la-ligne`, que le clic suit :
+  la ligne n'est pas une cible du clavier (pas d'`onRowClick`, qui ajouterait une tabulation par ligne), le lien l'est,
+  et les contrôles de la ligne gardent leur action. Contrôle : `rg -n "data-ouvre-la-ligne" packages/plateforme/ui` ne
+  trouve que `admin/connecteurs/liste-des-connecteurs.tsx` et la variante `data-ligne-ouvrante` de `table.css`.
   **Exception bornée, champ d'un bloc de l'éditeur** : le `textarea` d'un
   bloc (`ui/noeud/editeur/champ-de-bloc.tsx`) n'a ni fond, ni bordure, ni anneau au focus ; il porte
   `focus-visible:outline-hidden`, qui garde un contour en contrastes forcés ; le curseur reste visible, et

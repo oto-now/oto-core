@@ -1,8 +1,9 @@
 "use client"
 
-// Les pièces du partage d'un connecteur communes au panneau « Partager » du détail et au panneau « Qui pourra s'en
-// servir » de la fiche d'ajout : le niveau d'une ligne en pastille de sa couleur, la liste des niveaux avec leur glyphe
-// et ce qu'ils ouvrent, et la ligne du propriétaire. Sans ce module, les deux panneaux recopieraient chacun leurs niveaux.
+// Les pièces du partage d'un connecteur communes à « Qui peut s'en servir » du détail et à « Qui pourra s'en servir » de
+// la fiche d'ajout : le niveau d'une ligne en pastille de sa couleur, la liste des niveaux avec leur glyphe et ce qu'ils
+// ouvrent, la ligne du propriétaire, celle de toute l'organisation et le lien qui l'ouvre. Sans ce module, les deux
+// panneaux recopieraient chacun leurs niveaux et leurs lignes.
 import type { ReactNode } from "react"
 import { Eye } from "@phosphor-icons/react/dist/csr/Eye"
 import { Key } from "@phosphor-icons/react/dist/csr/Key"
@@ -11,9 +12,10 @@ import { Prohibit } from "@phosphor-icons/react/dist/csr/Prohibit"
 import { ShieldCheck } from "@phosphor-icons/react/dist/csr/ShieldCheck"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
 import { ACCOUNT_LEVEL_NAMES, type AccountLevelName } from "../../../schemas"
-import { AnimatedIcon } from "../../ds/react/icon"
+import { AnimatedIcon, Icon } from "../../ds/react/icon"
 import { Avatar } from "../../ds/react/primitives"
 import { Select, type SelectOption } from "../../ds/react/select"
+import { Tooltip } from "../../ds/react/tooltip"
 import type { SujetsDeRegle } from "../../equipes/types"
 import type { Candidat } from "../../noeud/champ-d-ajout-d-acces"
 import { EtiquetteDeLigne } from "../../noeud/partage-visuel"
@@ -24,8 +26,8 @@ export const GLYPHES_DES_NIVEAUX: Record<AccountLevelName, ReactNode> = { none: 
 
 export const niveauLu = (valeur: string) => ACCOUNT_LEVEL_NAMES.find((candidat) => candidat === valeur)
 
-/** « Aucun accès » de la ligne de toute l'organisation : personne ne s'en sert par ce partage. */
-export const AUCUN_ACCES: SelectOption = { value: "none", label: NIVEAUX_DU_COMPTE.none, description: "Personne ne s'en sert par ce partage.", icon: GLYPHES_DES_NIVEAUX.none }
+/** « Retirer l'accès » au bas du menu d'une ligne : sa valeur, `none`, ne nomme aucun niveau qu'on partage. */
+export const RETIRER_L_ACCES: SelectOption = { value: "none", label: "Retirer l'accès", icon: GLYPHES_DES_NIVEAUX.none }
 
 /**
  * Les niveaux qu'une ligne propose : ceux qu'on partage, la gestion pour un administrateur, et toujours celui de la ligne
@@ -49,13 +51,22 @@ export function PastilleDeNiveau({ valeur, servi, options, nom, disabled, onChan
   )
 }
 
-/** La ligne du propriétaire, en tête du panneau : son nom, « vous », et ce qu'il est, ou le choix du propriétaire. */
-export function LigneDuProprietaire({ nom, vous, choix }: { nom: string; vous: boolean; choix?: ReactNode }) {
+/**
+ * La ligne du propriétaire, en tête du panneau : son nom, « vous » sur la même ligne, et ce qu'il est ; `groupe` : une
+ * équipe ou l'organisation, sous l'icône des groupes plutôt que des initiales.
+ */
+export function LigneDuProprietaire({ nom, vous, groupe = false }: { nom: string; vous: boolean; groupe?: boolean }) {
   return (
     <div className="oto-pop-row">
-      <Avatar name={nom} size="sm" aria-hidden="true" />
+      {groupe ? (
+        <span className="oto-avatar" data-size="sm" aria-hidden="true">
+          <AnimatedIcon as={UsersThree} size="xs" />
+        </span>
+      ) : (
+        <Avatar name={nom} size="sm" aria-hidden="true" />
+      )}
       <span className="oto-share-name">
-        {choix ?? nom}
+        {nom}
         {vous && <EtiquetteDeLigne accent>vous</EtiquetteDeLigne>}
       </span>
       <span className="oto-pop-meta">Propriétaire</span>
@@ -75,7 +86,10 @@ export function candidatsDe(sujets: SujetsDeRegle, dejaAjoutes: readonly { kind:
 
 type LigneDeToutLOrganisationProps = { valeur: string; servi: AccountLevelName; actions: ActionsParClasse | null; administre: boolean; disabled: boolean; onChange: (valeur: string) => void }
 
-/** « Toute l'organisation » et son niveau, « Aucun accès » compris : commune au partage du détail et à celui de l'ajout. */
+/**
+ * « Toute l'organisation » et son niveau, montée seulement quand elle est ouverte ; « Retirer l'accès » la ferme. Commune
+ * au partage du détail et à celui de l'ajout.
+ */
 export function LigneDeToutLOrganisation({ valeur, servi, actions, administre, disabled, onChange }: LigneDeToutLOrganisationProps) {
   return (
     <div className="oto-pop-row">
@@ -83,7 +97,30 @@ export function LigneDeToutLOrganisation({ valeur, servi, actions, administre, d
         <AnimatedIcon as={UsersThree} size="xs" />
       </span>
       <span className="oto-share-name">Toute l&apos;organisation</span>
-      <PastilleDeNiveau valeur={valeur} servi={servi} nom="Accès de toute l'organisation" options={[...optionsDeNiveau(servi, actions, administre), AUCUN_ACCES]} disabled={disabled} onChange={onChange} />
+      <PastilleDeNiveau valeur={valeur} servi={servi} nom="Accès de toute l'organisation" options={[...optionsDeNiveau(servi, actions, administre), RETIRER_L_ACCES]} disabled={disabled} onChange={onChange} />
     </div>
   )
+}
+
+/** Le style des liens discrets du partage : « Ouvrir à toute l'organisation », « Journal des partages ». */
+export const LIEN_DISCRET = "inline-flex items-center gap-1.5 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-ink"
+
+/**
+ * « Ouvrir à toute l'organisation », sous les lignes tant qu'elle n'a pas d'accès : un lien qui l'ajoute en « Lire ».
+ * `refus` : la raison pour qui ne peut pas le faire ; le lien reste lisible, grisé, et l'infobulle la dit au survol et au
+ * focus (un bouton `disabled` ne recevrait ni l'un ni l'autre).
+ */
+export function OuvrirAToutLOrganisation({ ouvrir, refus, disabled = false }: { ouvrir: () => void; refus?: string; disabled?: boolean }) {
+  const lien = (
+    <button
+      type="button"
+      aria-disabled={refus !== undefined || disabled || undefined}
+      onClick={refus === undefined && !disabled ? ouvrir : undefined}
+      className={`${LIEN_DISCRET} self-start ${refus === undefined ? "text-ink underline underline-offset-2" : "cursor-default text-mute"}`}
+    >
+      <Icon as={UsersThree} size="xs" />
+      Ouvrir à toute l&apos;organisation
+    </button>
+  )
+  return refus === undefined ? lien : <Tooltip content={refus}>{lien}</Tooltip>
 }

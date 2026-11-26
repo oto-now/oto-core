@@ -12,7 +12,7 @@ const ACME = { prefix: "acme", name: "Acme Énergies", domains: "sales, customer
 
 // 21/10 : rien que l'assistant répéterait à la personne, ni numéro ni « l'équipe a été prévenue ».
 const duplicate = (shown: number) =>
-  `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded and nothing to tell the user. If the problem happened again, record what changed: another call, another argument or another moment.`
+  `Already recorded ${shown} minute(s) ago with the same text, for the platform maintainers; nothing new was recorded. If the problem happened again, record what changed: another call, another argument or another moment.`
 
 describe("ticketNumber (AC2)", () => {
   it("should pad the organisation's number to four digits, and keep every digit beyond four", () => {

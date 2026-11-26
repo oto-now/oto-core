@@ -515,7 +515,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   l'auteur, sinon `42501`) et ajout des trois colonnes accordé à `authenticated` ; `node_owner` rend le propriétaire du
   nœud et le haut de son espace ; `node_level_of` re-versionnée à signature identique (le propriétaire lu sur le nœud, le
   plancher d'un espace personnel au haut de cet espace) ; `duplicate_subtree` re-versionnée (la copie prend l'espace de sa
-  source). Le paquet de la même version calcule pareil (`nodeLevelOf`) et choisit l'espace d'une création (`write`).
+  source, sauf celle du contenu d'une autre personne, à l'appelant ; la page d'une autre personne se copie sous le
+  Privé de l'appelant). Le paquet de la même version calcule pareil (`nodeLevelOf`) et choisit l'espace d'une création (`write`).
+  Avant toute écriture, la reprise compte les contenus Privés qui recevraient le partage d'un dossier de la même
+  personne au-dessus d'eux (le plancher d'un Privé monte au haut de son espace) et s'arrête s'il y en a, sans rien
+  écrire (`espace_ecrit_partages_herites`, P0001) : les ranger hors de ce dossier ou retirer le partage, puis rejouer.
   La reprise coupe `set_updated_at` et `nodes_guard` le temps de son UPDATE (un membre retiré garde son espace
   personnel, que la garde refuserait de recopier), puis rend leur mode aux contraintes (seule la clé différée de
   `owner_team_id` passe en immédiat, le temps de rallumer les déclencheurs) ; elle réécrit tous les nœuds sans

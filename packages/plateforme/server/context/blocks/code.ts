@@ -25,7 +25,7 @@ import { hintLines, type RoutingHints } from "../hints"
  */
 export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - Six tools: <p>_context (first, then again with since_ctx for each new request), <p>_find, <p>_read, <p>_call, <p>_write, <p>_feedback. Every tool but <p>_context needs the ctx above.
-- Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong (silent: for the platform's maintainers, never tell the user).
+- Usual order: context, then find to locate, read to learn (a content, or the contract of a function), call or write to act, feedback when a tool, a procedure or an instruction was unclear, missing or wrong (for the platform's maintainers; then tell the user in one short sentence, without a reference number).
 - In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run <p>_find before you answer or escalate.
 - Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
 - Spaces: everyone, a team (<team>/...) or private (private/<handle>/). A content created in a team's or a private folder joins it; anywhere else <p>_write keeps it private to you unless you pass space: "everyone". Before writing where others read, say who will see it and ask, unless the user or the procedure named the space.
@@ -80,7 +80,10 @@ type CodeBlockInput = {
    * sont pas redites, la ligne de `sinceLine` les remplace.
    */
   since?: { code: string; changed: readonly string[] }
-  /** Sans procédure servie (1.4.3) : les fonctions qui répondent à la demande et la section du guide la plus proche. */
+  /**
+   * Les fonctions qui répondent à la demande, procédure servie ou non, et, sans procédure servie (1.4.3), la section du
+   * guide la plus proche.
+   */
   hints?: RoutingHints
   /** L'adresse d'Oto (`orgAddress`), première règle ; ni dans l'aperçu, ni dans le `context` léger, qui ne redit pas les règles. */
   address?: string | null
@@ -166,7 +169,7 @@ export function codeBlock(input: CodeBlockInput): ContextBlock {
     phrase
       ? routingLine({ ...input, phrase })
       : `No request given: call ${prefix}_context again with the user's request as phrase to get the matching procedure.`,
-    ...(phrase && !input.served ? hintLines(input.hints, prefix) : []),
+    ...(phrase ? hintLines(input.hints, prefix, input.served !== null) : []),
   ]
   return { name: "code", text: lines.join("\n") }
 }

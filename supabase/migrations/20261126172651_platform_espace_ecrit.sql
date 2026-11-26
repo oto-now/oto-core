@@ -21,13 +21,58 @@
 --    déplacement. Le calcul du service (`nodeLevelOf`, `server/access-levels.ts`) change avec lui ; le test de parité
 --    (`tests/integration/access-parity.test.ts`) les tient égaux.
 -- 6. `duplicate_subtree`, sur le corps de 20261023120000 : chaque copie prend l'espace de sa source (une copie d'une page
---    Privée rangée dans un dossier de Tout le monde reste Privée).
+--    Privée rangée dans un dossier de Tout le monde reste Privée), sauf la copie d'un contenu d'une autre personne, qui
+--    appartient à qui la copie ; une page d'une autre personne se copie dans le Privé de qui la copie
+--    (`private/<handle>`), pas à côté de l'original (décidé par Alexis le 26/11).
 -- Privilèges redits à l'identique. Un seul bloc ROLLBACK en fin de fichier.
 
 -- 1. L'espace calculé, figé. `nodes_guard` est coupé avec `set_updated_at` : il exige d'un propriétaire changé qu'il soit
 --    membre de l'organisation, alors qu'un membre retiré garde son espace personnel (`private/<handle>`) et que ses nœuds
 --    sans propriétaire en reçoivent la copie. L'UPDATE n'écrit que les trois colonnes du propriétaire, recopiées d'un
 --    ancêtre que la garde a déjà admis ; chemin, parent et structure ne bougent pas.
+--    Avant toute écriture, les contenus Privés que la reprise ouvrirait sont comptés, et la reprise s'arrête s'il y en a
+--    (`espace_ecrit_partages_herites`). Le plancher d'un contenu Privé était le nœud qui porte son propriétaire ; il
+--    devient le haut de la suite d'ancêtres de la même personne. Un contenu qui porte son propriétaire, rangé sous un
+--    dossier de la même personne qui porte un partage (une règle qui nomme une personne ou une équipe ; celles de
+--    l'organisation ne comptent pas dans un Privé), recevrait ce partage : il s'ouvrirait à qui ne le lisait pas.
+DO $reprise$
+declare
+  v_cases int;
+begin
+  with effective as (
+    select h.id, h.org_id, h.lpath, h.owner_kind is not null as written, a.owner_kind, a.owner_team_id, a.owner_user_id
+      from platform.nodes h
+      cross join lateral (select b.owner_kind, b.owner_team_id, b.owner_user_id
+                            from platform.nodes b
+                           where b.org_id = h.org_id and b.lpath operator(extensions.@>) h.lpath
+                             and b.owner_kind is not null
+                           order by extensions.nlevel(b.lpath) desc
+                           limit 1) a
+  )
+  select count(*) into v_cases
+    from effective e
+   where e.written and e.owner_kind = 'user'
+     and exists (
+       select 1
+         from platform.nodes a join platform.access_rules r on r.node_id = a.id
+        where a.org_id = e.org_id and a.lpath operator(extensions.@>) e.lpath
+          and extensions.nlevel(a.lpath) < extensions.nlevel(e.lpath)
+          and (r.subject_user_id is not null or r.subject_team_id is not null)
+          and extensions.nlevel(a.lpath) >= coalesce(
+                (select max(extensions.nlevel(b.lpath)) + 1
+                   from effective b
+                  where b.org_id = e.org_id and b.lpath operator(extensions.@>) e.lpath
+                    and extensions.nlevel(b.lpath) < extensions.nlevel(e.lpath)
+                    and (b.owner_kind, b.owner_team_id, b.owner_user_id)
+                        is distinct from (e.owner_kind, e.owner_team_id, e.owner_user_id)), 0));
+  if v_cases > 0 then
+    raise exception 'espace_ecrit_partages_herites: % private contents would take the shares of a folder of their owner above them', v_cases
+      using errcode = 'P0001',
+            hint = 'Nothing was written. Move each of them out of that folder, or remove the share, then apply the migration again.';
+  end if;
+end;
+$reprise$;
+
 ALTER TABLE platform.nodes DISABLE TRIGGER set_updated_at;
 ALTER TABLE platform.nodes DISABLE TRIGGER nodes_guard;
 
@@ -226,7 +271,7 @@ $$;
 
 REVOKE ALL ON FUNCTION platform.node_level_of(p_user uuid, p_org uuid, p_lpath extensions.ltree, p_owner_kind text, p_owner_team uuid, p_owner_user uuid) FROM PUBLIC;
 
--- 6. La copie d'un nœud dans l'espace de sa source.
+-- 6. La copie d'un nœud dans l'espace de sa source, ou dans le Privé de qui copie le contenu d'une autre personne.
 CREATE OR REPLACE FUNCTION platform.duplicate_subtree(p_source uuid, p_nodes uuid[], p_segment text, p_title text, p_position double precision) RETURNS TABLE(source_id uuid, copy_id uuid, copy_path text, copied_files jsonb)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
@@ -254,7 +299,17 @@ begin
     raise exception 'node not found' using errcode = 'P0002';
   end if;
   perform pg_catalog.pg_advisory_xact_lock(7301, pg_catalog.hashtext(v_source.org_id::text));
-  select * into v_parent from platform.nodes n where n.id = v_source.parent_id;
+  -- `duplicateNode` : la page d'une autre personne se copie dans le Privé de qui la copie (`private/<handle>`).
+  if v_source.owner_kind = 'user' and v_source.owner_user_id is distinct from v_uid then
+    select n.* into v_parent
+      from platform.nodes n join platform.members m on m.org_id = n.org_id and m.user_id = v_uid
+     where n.org_id = v_source.org_id and n.deleted_at is null and n.path = 'private/' || (m.profile ->> 'handle');
+    if v_parent.id is null then
+      raise exception 'duplicating % needs a private space of the caller, where the copy goes', v_source.path using errcode = '42501';
+    end if;
+  else
+    select * into v_parent from platform.nodes n where n.id = v_source.parent_id;
+  end if;
   -- `duplicateNode` : l'écriture sous le parent, où la copie se pose et dont elle hérite (20261021100000).
   if platform.node_level_for(v_parent.org_id, v_parent.lpath, v_parent.owner_kind, v_parent.owner_team_id, v_parent.owner_user_id) < 2 then
     raise exception 'duplicating % needs the level 2 on its parent', v_source.path using errcode = '42501';
@@ -303,12 +358,14 @@ begin
     insert into platform.nodes (id, org_id, parent_id, path, kind, title, summary, status, revision, meta,
                                 position, owner_kind, owner_team_id, owner_user_id, created_by, updated_by)
     values (v_new, r.org_id,
-            case when r.id = p_source then r.parent_id else (v_map ->> r.parent_id::text)::uuid end,
+            case when r.id = p_source then v_parent.id else (v_map ->> r.parent_id::text)::uuid end,
             copy_path, r.kind, case when r.id = p_source then btrim(p_title) else r.title end, r.summary,
             case when r.revision > 0 then 'published' else 'draft' end,
             case when r.revision > 0 then 1 else 0 end,
             r.meta, case when r.id = p_source then p_position else r.position end,
-            r.owner_kind, r.owner_team_id, r.owner_user_id, v_uid, v_uid);
+            -- la copie du contenu d'une autre personne appartient à qui la copie
+            r.owner_kind, r.owner_team_id,
+            case when r.owner_kind = 'user' then v_uid else r.owner_user_id end, v_uid, v_uid);
     v_map := v_map || jsonb_build_object(r.id::text, v_new);
     return next;
   end loop;
@@ -365,7 +422,7 @@ GRANT ALL ON FUNCTION platform.duplicate_subtree(p_source uuid, p_nodes uuid[], 
 
 -- ROLLBACK: (jamais exécuté depuis le paquet)
 --   create or replace function platform.duplicate_subtree(…) … : le corps de 20261023120000 (sans les colonnes du
---     propriétaire : la copie hérite de son parent) ;
+--     propriétaire : la copie hérite de son parent ; sous le parent de la source, toujours) ;
 --   create or replace function platform.node_level_of(…) … : le corps de 20261028090000 (propriétaire lu sur l'ancêtre
 --     le plus proche qui en porte un) ;
 --   create or replace function platform.node_owner(…) … : le corps de la ligne de base 20260928100000 ;

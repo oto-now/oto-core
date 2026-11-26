@@ -25,9 +25,9 @@ import type { SujetsDeRegle } from "../../equipes/types"
 import { EnTeteDAdministration } from "../en-tete"
 import type { FilDeLEcran, LienDeLAdministration } from "../types"
 import { AjoutDUnConnecteur } from "./ajout-d-un-connecteur"
-import { outilsAAjouter, type MonConnecteur } from "./catalogue-des-connecteurs"
+import { outilsAAjouter, type CompteExistant, type MonConnecteur } from "./catalogue-des-connecteurs"
 import { DetailDuConnecteur } from "./detail-du-connecteur"
-import { estAMoi, etatDuCompte, fonctionne, formulaireDuCompte } from "./etat-du-compte"
+import { estAMoi, etatDuCompte, fonctionne, formulaireDuCompte, sansAcces } from "./etat-du-compte"
 import { adresseDeLaVue, bloquePar, fonctionsDe, libelleDuConnecteur, lignesDesConnecteurs, logoDe, type PartagesDuCompte, type VueDesConnecteurs } from "./lignes-des-connecteurs"
 import { ListeDesConnecteurs } from "./liste-des-connecteurs"
 import { PartageAuRetour } from "./partage-au-retour"
@@ -52,6 +52,8 @@ export type DonneesDesConnecteurs = {
    * n'est plus limité (`connectors_max` déprécié), rien n'est grisé ; gardé pour les hôtes.
    */
   administration?: { impacts: Partial<Record<string, DeactivationImpact>>; limites?: OrgLimitsView }
+  /** Le nom de l'organisation : le nom proposé d'un connecteur d'organisation (« Pennylane · Mortier & Co ») ; absent, « de l'organisation ». */
+  organisation?: string
 }
 
 /**
@@ -69,7 +71,11 @@ export type EcranConnecteursProps = {
   Lien: LienDeLAdministration
   /** L'adresse de l'écran dans l'hôte : « Réessayer » d'une lecture en échec y ramène, un consentement y revient. */
   ici: string
-  /** Le fil de l'en-tête : les adresses que l'hôte donne au rail et le droit de la personne ; sans lui, pas de fil. */
+  /**
+   * Le fil de l'en-tête, que l'hôte passe à chaque écran d'administration. Connecteurs n'est rangé sous aucun groupe du
+   * menu de l'entreprise (au pied du rail) : son fil est toujours vide, et l'écran ne le pose pas, sans quoi le rang vide
+   * du fil empêcherait l'en-tête empilé.
+   */
   fil?: FilDeLEcran
   /** L'issue du consentement dont la personne revient ; absente hors d'un retour. */
   consentement?: IssueDuConsentement
@@ -127,8 +133,16 @@ function mesConnecteurs(donnees: DonneesDesConnecteurs, moi: string): MonConnect
       id: compte.id,
       connecteur: compte.connector,
       libelle: compte.label,
-      fonctionne: fonctionne(etatDuCompte(compte, formulaireDuCompte(formulaires, compte), moi, bloquePar(compte.connector, donnees.connectors))),
+      fonctionne: fonctionne(etatDuCompte(compte, formulaireDuCompte(formulaires, compte), moi, { bloquePar: bloquePar(compte.connector, donnees.connectors), sansSonAcces: sansAcces(formulaires, compte) })),
     }))
+}
+
+/** Les connecteurs que la personne voit, par propriétaire : les siens, ceux de l'organisation, ceux de chaque équipe. */
+function comptesExistants(donnees: DonneesDesConnecteurs, moi: string): CompteExistant[] {
+  return donnees.accounts.flatMap(({ connector, label, owner }) => {
+    if (owner.kind === "user") return owner.userId === moi ? [{ connecteur: connector, libelle: label, proprietaire: "user" }] : []
+    return [{ connecteur: connector, libelle: label, proprietaire: owner.kind === "org" ? "org" : `team:${owner.teamName ?? ""}` }]
+  })
 }
 
 type AjoutProps = { donnees: DonneesDesConnecteurs; moi: string; ici: string; vide?: ReactNode }
@@ -140,7 +154,8 @@ function Ajout({ donnees, moi, ici, vide }: AjoutProps) {
     <AjoutDUnConnecteur
       outils={outilsAAjouter(donnees.connectors, donnees.formulaires ?? [], donnees.proprietaires, mes)}
       equipes={donnees.proprietaires.teams}
-      mesNoms={mes.map((un) => un.libelle)}
+      comptes={comptesExistants(donnees, moi)}
+      organisation={donnees.organisation ?? null}
       ici={ici}
       moi={moi}
       gouvernance={donnees.administration}
@@ -213,7 +228,8 @@ function Liste({ donnees, moi, vue, ici }: VueProps) {
   return (
     <>
       <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={recherche(vue, ici)} ici={ici} />
-      <p className="flex items-start gap-3 rounded-lg bg-card p-3 text-sm text-ink">
+      {/* `text-ink` sur `bg-primary/10` posé sur le fond de la page : 10,7:1 au plus bas des huit teintes, jour et nuit. */}
+      <p className="flex items-start gap-3 rounded-lg bg-primary/10 p-3 text-sm text-ink">
         <span aria-hidden="true" className="mt-0.5 flex-none">
           <Icon as={Info} size="sm" />
         </span>
@@ -243,6 +259,7 @@ function Detail({ donnees, moi, vue, ici }: VueProps) {
       logo={logoDe(compte.connector, donnees.connectors)}
       fonctions={fonctionsDe(compte.connector, donnees.connectors)}
       bloquePar={bloquePar(compte.connector, donnees.connectors)}
+      sansSonAcces={sansAcces(formulaires, compte)}
       gouvernance={administration ? { impact: administration.impacts[compte.connector], actif } : undefined}
       partages={donnees.partages[compte.id]}
       sujets={donnees.sujets}
@@ -267,14 +284,14 @@ function Retour({ donnees, moi, ici, issue }: { donnees: DonneesDesConnecteurs; 
 
 const SOUS_TITRE = "Les outils que votre assistant peut utiliser pour vous."
 
-export function EcranConnecteurs({ resultat, moi, vue, Lien, ici, fil, consentement }: EcranConnecteursProps) {
+export function EcranConnecteurs({ resultat, moi, vue, Lien, ici, consentement }: EcranConnecteursProps) {
   // Une lecture nourrit tout l'écran : son échec se dit une fois, sans « Ajouter », qui a besoin d'elle.
   const lu = resultat.error === undefined ? resultat.data : null
   // « Ajouter un connecteur » : dans l'en-tête quand la liste a des lignes, dans l'état vide sinon, jamais deux fois.
   const ajout = lu && lu.accounts.length > 0 ? <Ajout donnees={lu} moi={moi} ici={ici} /> : undefined
   return (
     <>
-      <EnTeteDAdministration courant="connecteurs" fil={fil} titre="Connecteurs" glyphe={Plug} meta={<span data-entete-empile="">{SOUS_TITRE}</span>} actions={ajout} />
+      <EnTeteDAdministration courant="connecteurs" titre="Connecteurs" glyphe={Plug} meta={<span data-entete-empile="">{SOUS_TITRE}</span>} actions={ajout} />
       {consentement && <AnnonceDuConsentement consentement={consentement} />}
       {consentement && lu && <Retour donnees={lu} moi={moi} ici={ici} issue={consentement.issue} />}
       {lu ? (
