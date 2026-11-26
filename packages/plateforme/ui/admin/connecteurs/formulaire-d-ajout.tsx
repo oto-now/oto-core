@@ -9,7 +9,7 @@
 // « Ajouter quand même », distinct, crée le compte, et seulement pour la clé qui a échoué. Une suite qui échoue après la
 // création se dit dans la fenêtre, avec sa raison, avant d'ouvrir le détail. La clé ne part qu'à la sonde et à la route
 // du secret, et ne se réaffiche jamais : la fenêtre se ferme avec le formulaire.
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { FormProvider, useForm } from "react-hook-form"
 import type * as z from "zod/v4"
@@ -54,7 +54,9 @@ function cleAEssayer(saisie: SaisieDesChamps, formulaire: ConnectorAccountForm):
 /** Le compte est créé, mais une suite a échoué : ce qui reste à terminer, avec sa raison, puis le détail. */
 function SuitesDeLAjout({ nom, suites, ouvrir }: { nom: string; suites: string[]; ouvrir: () => void }) {
   const titre = useRef<HTMLParagraphElement>(null)
-  useEffect(() => {
+  // Dans le rendu même qui pose le message : un effet passif le focalisait plus tard, et le titre de la fiche
+  // gardait le focus entre les deux.
+  useLayoutEffect(() => {
     titre.current?.focus()
   }, [])
   return (
