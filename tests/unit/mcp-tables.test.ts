@@ -47,7 +47,7 @@ describe.skipIf(!sqlConfigured)(portable("the table functions through acme_call"
   /** Une session MCP de la personne sur la fixture, avec son code `ctx` semé. */
   async function session(person: keyof typeof CTX, overrides: Partial<Identity> = {}) {
     const identity = acmeIdentity(ref, person, overrides)
-    const connected = await connectDeps({ db: await ref.db(person), org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
+    const connected = await connectDeps({ db: await ref.db(person), org: identity.org, caller: { kind: "member", identity }, userAgent: "unit-test", journal: [], activeConnectors: () => Promise.resolve(new Set<string>()), adoptedConnectors: () => Promise.resolve(new Set<string>()), origin: "https://acme.test" })
     return { ...connected, run: (fn: string, args: Record<string, unknown>) => connected.call("call", { ctx: ref.id(CTX[person]), function: fn, arguments: args }) }
   }
 

@@ -4,6 +4,7 @@
 // que les écrans d'E08-S03 reprendront (forms-patterns.md § Principe, H02). `zod/v4`, comme tout
 // schemas/ (P1). Les arguments des fonctions `mail.*` restent dans `server/connectors/simulated/`.
 import * as z from "zod/v4"
+import { PLATFORM_API_PREFIX } from "./api"
 import type { AccountLevelName } from "./rules"
 
 /** La contrainte de `connector_activations.connector` (E01-S06). */
@@ -163,6 +164,9 @@ export const connectorProbeSchema = z.object({ connector: connectorNameSchema, i
  * (E04-S01) et que le voient l'écran « Connecteurs » (E08-S03) et le MCP admin (E08-S06). Ici, et non
  * dans `server/` : l'écran, qui n'importe pas `server/`, le reçoit tel quel (H02, H03).
  */
+/** L'adresse du logo d'un connecteur, que la porte sert (`GET connectors/<nom>/logo`) et que la tuile de l'écran affiche. */
+export const connectorLogoAddress = (connector: string): string => `${PLATFORM_API_PREFIX}connectors/${encodeURIComponent(connector)}/logo`
+
 export type OrgConnector = {
   connector: string
   /** Le nom que la déclaration lui donne (« Pennylane ») ; le nom technique pour un connecteur non déclaré (`mail`). */
@@ -171,7 +175,7 @@ export type OrgConnector = {
   description?: string
   /**
    * Le domaine de l'outil (`attio.com`), en minuscules, sans schéma ni chemin, tel que sa déclaration le donne
-   * (`ConnectorDefinition.logoDomain`), d'où l'écran tirera son logo ; absent sans lui.
+   * (`ConnectorDefinition.logoDomain`), d'où l'écran tire son logo (`connectorLogoAddress`) ; absent sans lui.
    */
   logoDomain?: string
   state: "active" | "inactive"
@@ -185,7 +189,8 @@ export type OrgConnector = {
    * `inactive` posé par un administrateur (une ligne d'activation fermée) : qui l'a fermé, nommé par `member_directory` ;
    * le connecteur reste fermé, l'ajout d'un compte est refusé. Fermé par une personne qui n'est plus membre, ou avant
    * que la fermeture ne garde son auteur : `{ userId: null, name: null }` (l'un nul, l'autre aussi). `null` : jamais
-   * fermé, et rien d'autre.
+   * fermé ; avec `state: "inactive"`, un connecteur payé par la clé de l'hôte qu'aucun administrateur n'a encore adopté
+   * (visible, mais ni compte ni appel avant son adoption).
    */
   closedBy: { userId: string | null; name: string | null } | null
   /**
@@ -355,8 +360,11 @@ export const connectorConnectSchema = z
   .strict()
 export type ConnectorConnectArgs = z.infer<typeof connectorConnectSchema>
 
-/** Un accès offert au choix par la page de connexion d'un connecteur à plusieurs accès : son nom, son libellé, son geste. */
-export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link" }
+/**
+ * Un accès offert au choix par la page de connexion d'un connecteur à plusieurs accès : son nom, son libellé, son geste,
+ * et l'espace que l'adresse de la page nomme, que le lien de l'accès garde (absent : l'adresse n'en nomme aucun).
+ */
+export type ConnectAccessChoice = { name: string; label: string; gesture: "oauth" | "key" | "hosted_link"; space?: string }
 
 /**
  * Ce que montre la page de connexion d'un connecteur (`connectionStep`) : le bouton qui part chez le tiers (`authorize`,

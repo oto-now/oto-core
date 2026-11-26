@@ -68,10 +68,16 @@ export type McpDeps = {
   /** Lignes empilées pendant la requête ; la porte les écrit après la réponse (AC17). */
   journal: JournalEntry[]
   /**
-   * Connecteurs actifs de l'organisation (E04-S01, N9, N27) : lus au premier appel, puis gardés pour
-   * cette requête seule, jamais d'une requête à l'autre.
+   * Connecteurs ouverts de l'organisation (E04-S01, N9, N27) : tout connecteur déclaré qu'un administrateur n'a pas
+   * bloqué, ce que voient `find`, `read` et `call` ; lus au premier appel, puis gardés pour cette requête seule, jamais
+   * d'une requête à l'autre.
    */
   activeConnectors: () => Promise<ReadonlySet<string>>
+  /**
+   * Connecteurs adoptés (`loadActiveConnectors` : débloqués, ou qui ont un compte), seuls cités par les exemples de
+   * `tools/list` : le catalogue ouvert n'y entre pas. Lus comme `activeConnectors`.
+   */
+  adoptedConnectors: () => Promise<ReadonlySet<string>>
   /** Origine appelée (`getPublicOrigin`, celle du 401) : lien du tableau de bord d'un refus de `call` (E03-S04, AC8). */
   origin: string
   /** Jeton vérifié de la requête : une fonction ERP s'exécute sous lui (E08-S05, NH4) ; sans lui, aucune ne court. */
@@ -260,13 +266,13 @@ function record(deps: McpDeps, request: HandledRequest, fields: Partial<JournalE
 }
 
 /**
- * Connecteurs actifs cités par les exemples de `call` (E04-S01, AC22). Leur lecture en panne sert la
+ * Connecteurs adoptés cités par les exemples de `call` (E04-S01, AC22) : jamais tout le catalogue ouvert. Leur lecture en panne sert la
  * liste sans exemples de connecteur, comme sans connecteur actif, au lieu de refuser `tools/list`
  * (N38) : la description reste vraie, et la liste est servie à tout jeton valide.
  */
 async function exampleConnectors(deps: McpDeps): Promise<ReadonlySet<string>> {
   try {
-    return await deps.activeConnectors()
+    return await deps.adoptedConnectors()
   } catch (error) {
     console.error("[platform] mcp: tools/list served without connector examples", isPlatformError(error) ? error.code : error)
     return new Set()

@@ -256,9 +256,10 @@ describe.skipIf(!sqlConfigured)(portable("teamFacts without team (N17, bench E04
     ])
   })
 
-  it("should give no line at all, reading only the activations, when no connector is active", async () => {
+  it("should give no line at all, reading only the adopted connectors (activations and accounts), when none is adopted", async () => {
     const { db, requests } = await given(false, [])
     expect(await teamFacts(db, ref.identityOf("ada"))).toEqual({ teams: [], teamConnectors: [], connectors: [] })
-    expect(requests.flatMap(namesOf)).toEqual(["connector_activations"])
+    // Le catalogue ouvert n'entre pas dans `context` : une seule lecture, celle des connecteurs adoptés.
+    expect(requests.flatMap(namesOf)).toEqual(["connector_activations", "accounts"])
   })
 })

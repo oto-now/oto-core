@@ -7,17 +7,17 @@
 // l'adresse est revérifié contre les droits de la personne (`planConnection`) : jamais cru. Sans ce module, l'adresse
 // d'un refus ne mènerait à aucun geste. L'adresse d'un compte existant (`account_id=<id>`, clé refusée par le tiers ou
 // jamais posée) montre la saisie de sa clé, à qui le gère seul.
-import { connectionPageSchema, type ConnectionPageInput, type ConnectionStepView } from "../../schemas/connectors"
+import { connectionPageSchema, type ConnectAccessChoice, type ConnectionPageInput, type ConnectionStepView } from "../../schemas/connectors"
 import { ACCOUNT_LEVELS } from "../access"
 import { declaredConnector } from "../catalog/connector-source"
 import type { PlatformDb } from "../db"
 import { ownerNames } from "../directory"
-import { invalidInput, PlatformError } from "../errors"
+import { invalidInput, isPlatformError, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { accountAccess } from "./accesses"
 import { connectorAccountForms } from "./account-secret"
 import { accountOwner, accountView, managedAccount } from "./accounts"
-import { accessChoices, accountSpace, connectorLabel, parseSpace, planConnection, spaceParam } from "./connect-link"
+import { accessChoices, accountSpace, connectorLabel, parseSpace, planConnection, spaceParam, type ConnectWhere } from "./connect-link"
 import { accountFieldNames } from "./host-fields"
 import { hostedLinkedElsewhere } from "./hosted-link"
 import { creatableModes } from "./modes"
@@ -28,21 +28,23 @@ import { creatableModes } from "./modes"
  * `activate` (un administrateur confirme l'activation), `ask_admin` (l'adresse à transmettre, les administrateurs
  * nommés). Lecture seule. Refus : saisie invalide (`invalid_arguments`), connecteur inconnu ou natif, espace non permis
  * (`forbidden`, nommé), équipe inconnue (`not_found`). Avec `account_id` : l'étape `account_key` (`accountKeyStep`).
- * Un connecteur à plusieurs accès sans accès nommé : `choose_access`, chaque accès et son geste, avant tout plan ; un
- * accès nommé : son étape, et les autres accès offerts (`others`), sauf à l'activation, commune à tous.
+ * Un connecteur à plusieurs accès sans accès nommé : `choose_access`, chaque accès et son geste, après les contrôles du
+ * plan (`chooseAccessStep`) ; un accès nommé : son étape, et les autres accès offerts (`others`), sauf à l'activation,
+ * commune à tous. Un lien d'accès garde l'espace que l'adresse nomme.
  */
 export async function connectionStep(db: PlatformDb, identity: Identity, input: unknown, options: { origin: string }): Promise<ConnectionStepView> {
   const parsed = connectionPageSchema.safeParse(input)
   if (!parsed.success) throw invalidInput(parsed.error)
   if (parsed.data.account_id) return accountKeyStep(db, identity, { ...parsed.data, account_id: parsed.data.account_id })
   const { connector, access, space, activate } = parsed.data
+  const where = { db, identity, origin: options.origin }
   // Un connecteur à plusieurs accès, sans accès nommé : la personne choisit, jamais un accès pris à sa place.
   const choices = access || activate ? [] : accessChoices(connector)
-  if (choices.length > 0) return { kind: "choose_access", connector, label: connectorLabel(connector), accesses: choices }
-  const plan = await planConnection({ db, identity, origin: options.origin }, { connector, access, ...(space ? { space: parseSpace(space) } : {}) })
+  if (choices.length > 0) return chooseAccessStep(where, connector, choices, space)
+  const plan = await planConnection(where, { connector, access, ...(space ? { space: parseSpace(space) } : {}) })
   const base = { connector: plan.connector, label: plan.label, space: spaceParam(plan.space) }
   const accessName = plan.access?.name ?? null
-  const others = plan.gesture === "admin_activation" ? [] : accessChoices(plan.connector, accessName)
+  const others = plan.gesture === "admin_activation" ? [] : keepSpace(accessChoices(plan.connector, accessName), space)
   const offered = others.length > 0 ? { others } : {}
   if (!plan.byCaller) return { kind: "ask_admin", ...base, url: plan.url, administrators: plan.administrators, ...offered }
   if (plan.gesture === "admin_activation") return { kind: "activate", ...base }
@@ -61,6 +63,34 @@ export async function connectionStep(db: PlatformDb, identity: Identity, input: 
     mode: creatableModes(plan.connector)[0] ?? "reel",
     form,
   }
+}
+
+/** Les accès offerts, chacun avec l'espace que l'adresse nomme, que son lien garde ; sans espace nommé, chaque accès prend le sien. */
+function keepSpace(choices: ConnectAccessChoice[], space: string | undefined): ConnectAccessChoice[] {
+  return space ? choices.map((choice) => ({ ...choice, space })) : choices
+}
+
+/**
+ * Le choix de l'accès (`choose_access`), servi après les contrôles de chaque accès, ceux de son étape (`planConnection`) :
+ * un connecteur inconnu ou natif est refusé comme sans choix ; un espace nommé que la personne ne peut prendre pour aucun
+ * accès est refusé nommément (`forbidden`, celui du premier accès), et un accès qu'il ne permet pas n'est pas offert.
+ * Chaque lien garde l'espace nommé.
+ */
+async function chooseAccessStep(where: ConnectWhere, connector: string, choices: ConnectAccessChoice[], space: string | undefined): Promise<ConnectionStepView> {
+  const planned = await Promise.allSettled(
+    choices.map((choice) => planConnection(where, { connector, access: choice.name, ...(space ? { space: parseSpace(space) } : {}) })),
+  )
+  const refusals: PlatformError[] = []
+  const allowed = choices.filter((_, index) => {
+    const outcome = planned[index]
+    if (outcome.status === "fulfilled") return true
+    // Seul le refus de l'espace écarte un accès ; tout autre refus (connecteur, équipe, adresse) vaut pour la page.
+    if (!isPlatformError(outcome.reason) || outcome.reason.code !== "forbidden" || outcome.reason.details?.reason !== "space") throw outcome.reason
+    refusals.push(outcome.reason)
+    return false
+  })
+  if (allowed.length === 0) throw refusals[0]
+  return { kind: "choose_access", connector, label: connectorLabel(connector), accesses: keepSpace(allowed, space) }
 }
 
 /**

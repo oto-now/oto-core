@@ -6,8 +6,10 @@
 // le moteur écrit en anglais pour l'assistant, se montre telle quelle, repliée. Un test refusé par la route (trop de
 // tests, outil fermé) se dit par sa raison (`refusDuConnecteur`).
 import { useRef, useState } from "react"
+import { Lightning } from "@phosphor-icons/react/dist/csr/Lightning"
 import type { AccountHealth, AccountProbe, ConnectorProbeInput } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
+import { Icon } from "../../ds/react/icon"
 import { Button } from "../../ds/react/primitives"
 import { useRafraichir } from "../../hote/rafraichir"
 import { raisonDuTest } from "./etat-du-compte"
@@ -109,7 +111,7 @@ export function TestDuConnecteur({ compte }: { compte: { id: string; label: stri
   return (
     <div className="flex flex-col items-end gap-1">
       <div>
-        <Button type="button" variant="secondary" disabled={enCours} aria-busy={enCours} onClick={() => void tester()}>
+        <Button type="button" variant="secondary" iconStart={<Icon as={Lightning} size="xs" />} disabled={enCours} aria-busy={enCours} onClick={() => void tester()}>
           Tester
           <span className="oto-sr-only">{` ${compte.label}`}</span>
         </Button>

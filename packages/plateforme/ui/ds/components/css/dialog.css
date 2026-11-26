@@ -167,3 +167,9 @@
   .oto-drawer[data-side="right"],
   .oto-drawer[data-side="left"] { inline-size: calc(100vw - var(--space-4)); }
 }
+
+/* la variante large, `data-size="lg"` : un détail à sections (connecteur, historique), 560 px ; sous 640 px, rien ne change. */
+@media (min-width: 640px) {
+  .oto-drawer[data-side="right"][data-size="lg"],
+  .oto-drawer[data-side="left"][data-size="lg"] { inline-size: min(560px, calc(100vw - var(--space-8))); }
+}

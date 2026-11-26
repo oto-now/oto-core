@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { handlePlateforme } from "@otomata_tech/oto_platform/api"
 import { callFunction, createAccount, setAccountSecret, setAccountRule } from "@otomata_tech/oto_platform/server"
 import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
+import { startConnectorConsent } from "../../packages/plateforme/server/connectors/consent"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
 import { decryptCredential, decryptToken } from "../../packages/plateforme/server/connectors/vault"
@@ -234,6 +235,65 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     vi.restoreAllMocks()
   })
 
+  it("should refuse to start a consent for a connector an administrator blocked, naming the administrators, keeping nothing (closed)", async () => {
+    await admin`update platform.connector_activations set state = 'inactive' where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    try {
+      const before = await admin`select 1 from platform.connector_consents where org_id = ${o.org.id}`
+      const { status, url, error } = await start("lea", { connector: CONNECTOR })
+      expect([status, url, error?.code]).toEqual([403, "", "not_enabled"])
+      const { db, identity } = people.get("lea")!
+      const refused = await refusal(startConnectorConsent(db, identity, { connector: CONNECTOR }, { origin: origin() }))
+      expect([refused.code, refused.details?.reason]).toEqual(["not_enabled", "closed"])
+      expect(refused.details?.administrators).toEqual([{ name: expect.any(String) }])
+      // Ni état de consentement gardé, ni appel au tiers.
+      expect(await admin`select 1 from platform.connector_consents where org_id = ${o.org.id}`).toHaveLength(before.length)
+      expect(provider.issued()).toEqual([])
+    } finally {
+      await admin`update platform.connector_activations set state = 'active' where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    }
+    // Débloqué, le même consentement repart.
+    expect((await start("lea", { connector: CONNECTOR })).status).toBe(200)
+  })
+
+  it("should refuse the return of a consent started before an administrator blocked the connector, writing neither account nor token (closed)", async () => {
+    const block = (state: "active" | "inactive") => admin`update platform.connector_activations set state = ${state} where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    const accounts = () => admin`select id from platform.accounts where org_id = ${o.org.id} and connector = ${CONNECTOR}`
+    const before = (await accounts()).length
+    try {
+      // Bloqué entre le départ et le retour : refusé avant d'échanger le code, rien n'est demandé au tiers.
+      const { url } = await start("lea", { connector: CONNECTOR, return_to: "/mes-comptes" })
+      const granted = provider.authorize(url, who("lea"))
+      const sent = provider.sent.length
+      await block("inactive")
+      const location = await back("lea", granted)
+      expect([location.pathname, Object.fromEntries(location.searchParams)]).toEqual(["/mes-comptes", { consent: "failed", reason: "not_enabled" }])
+      expect(provider.sent.slice(sent)).toEqual([])
+      expect(provider.issued()).toEqual([])
+
+      // Bloqué pendant l'échange du code : le jeton reçu n'est pas rangé, l'écriture relit le blocage.
+      await block("active")
+      const { url: second } = await start("lea", { connector: CONNECTOR })
+      const granting = provider.authorize(second, who("lea"))
+      let blocked = false
+      vi.stubGlobal("fetch", (async (address, init) => {
+        if (!blocked) {
+          blocked = true
+          await block("inactive")
+        }
+        return provider.fetcher(address, init)
+      }) satisfies Fetch)
+      const late = await back("lea", granting)
+      expect([blocked, late.searchParams.get("consent"), late.searchParams.get("reason")]).toEqual([true, "failed", "not_enabled"])
+      expect(provider.issued()).not.toEqual([])
+      expect(await accounts()).toHaveLength(before)
+      const all = JSON.stringify(await admin`select to_jsonb(a) as row from platform.accounts a where org_id = ${o.org.id}`)
+      for (const value of provider.issued()) expect(all).not.toContain(value)
+      expect((await journal("GET connector-consent/callback")).slice(-2).map((line) => line.is_error)).toEqual([true, true])
+    } finally {
+      await block("active")
+    }
+  })
+
   it("should start a consent for the signed-in person: the host's client, the return address, the scopes, a state and PKCE, only the state's hash kept", async () => {
     const { status, url } = await start("lea", { connector: CONNECTOR, return_to: "/dossiers/42?tab=pieces" })
     const address = new URL(url)
@@ -277,6 +337,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
 
   it("should refuse a replayed, unknown, expired state, or one another person started, saving nothing", async () => {
     const before = provider.sent.length
+    const errorsBefore = (await journal("GET connector-consent/callback")).filter((line) => line.is_error).length
     const unknown = await back("lea", { state: base64url(randomBytes(32)), code: "x" })
     const { url } = await start("ada")
     const granted = provider.authorize(url, who("ada"))
@@ -293,7 +354,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     // Une seule requête au tiers : l'échange du code d'ada, puis la lecture de son identité.
     expect(provider.sent.slice(before).map((request) => request.url)).toEqual([TOKEN_URL, `${API}/me`])
     expect(await accountOf("claire")).toBeUndefined()
-    expect((await journal("GET connector-consent/callback")).filter((line) => line.is_error)).toHaveLength(4)
+    expect((await journal("GET connector-consent/callback")).filter((line) => line.is_error)).toHaveLength(errorsBefore + 4)
   })
 
   it("should say on return that the person refused, with the screen they left", async () => {

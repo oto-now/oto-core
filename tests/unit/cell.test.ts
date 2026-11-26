@@ -40,7 +40,7 @@ const MIGRATIONS = [
 const STATUS: CellStatus = {
   packageVersion: pkg.version,
   migrations: MIGRATIONS,
-  health: { database: { ok: true, latencyMs: 3 }, env: envReport(WITNESSES), ok: true },
+  health: { database: { ok: true, latencyMs: 3 }, env: envReport(WITNESSES), ok: true, warnings: [] },
   checkedAt: "2026-09-26T12:00:00.000Z",
 }
 

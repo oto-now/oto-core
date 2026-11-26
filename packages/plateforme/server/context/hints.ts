@@ -7,7 +7,7 @@
 import type { CatalogFunction } from "../catalog/define"
 import { firstSentence, rankFunctions } from "../catalog/ranking"
 import { assistantFunctions, isActive } from "../catalog/registry"
-import { loadActiveConnectors } from "../connectors/activations"
+import { loadOpenConnectors } from "../connectors/activations"
 import type { PlatformDb } from "../db"
 import { closestHelpSection } from "../help"
 import type { Identity } from "../identity"
@@ -18,8 +18,10 @@ const PROPOSED_MAX = 3
 export type RoutingHints = { functions: { name: string; sentence: string }[]; help: { id: string; title: string; text?: string } | null }
 
 /**
- * Les fonctions actives de l'organisation qui répondent à la demande et, sans procédure servie (`served` faux), la
- * section du guide la plus proche ; une panne de lecture des connecteurs, ou du classement, ne prive que des fonctions.
+ * Les fonctions ouvertes de l'organisation (tout connecteur déclaré non bloqué) qui répondent à la demande, trois au plus,
+ * et, sans procédure servie (`served` faux), la section du guide la plus proche ; une panne de lecture des connecteurs, ou
+ * du classement, ne prive que des fonctions. Le catalogue ouvert n'entre jamais entier dans `context` : seules ces pistes
+ * bornées, choisies par la demande.
  * `used` : les cibles récentes de la personne que le routage a déjà lues (`usedPaths`), le bonus d'usage des fonctions.
  */
 export async function routingHints(
@@ -29,8 +31,8 @@ export async function routingHints(
   request: { served: boolean; used: Promise<ReadonlySet<string>> },
 ): Promise<RoutingHints> {
   const [active, used] = await Promise.all([
-    loadActiveConnectors(db, identity.org.id).catch((error: unknown) => {
-      console.error("[platform] context: active connectors read failed", error)
+    loadOpenConnectors(db, identity.org.id).catch((error: unknown) => {
+      console.error("[platform] context: open connectors read failed", error)
       return null
     }),
     request.used,

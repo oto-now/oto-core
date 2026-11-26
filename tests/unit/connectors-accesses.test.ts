@@ -13,12 +13,12 @@ import { accountAccess, requestedAccess } from "../../packages/plateforme/server
 import { admittedOwnerKinds, formOwnerKinds } from "../../packages/plateforme/server/connectors/account-owners"
 import { connectorAccountForms } from "../../packages/plateforme/server/connectors/account-secret"
 import { accessChoices, connectAccess, refusalFromPlan, type ConnectionPlan } from "../../packages/plateforme/server/connectors/connect-link"
-import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import type { AccountCredential } from "../../packages/plateforme/server/connectors/auth"
 import { isPersonalConnector } from "../../packages/plateforme/server/connectors/consent-accounts"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { ConnectorAccess, ConnectorDefinition } from "../../packages/plateforme/server/connectors/definition"
 import type { Fetch } from "../../packages/plateforme/server/connectors/http"
+import { authorizationAddress } from "../../packages/plateforme/server/connectors/oauth-user"
 import { PlatformError } from "../../packages/plateforme/server/errors"
 import {
   describedConnector,
@@ -134,6 +134,7 @@ describe("a connector with several accesses: declaration", () => {
       withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "oauth2_jwt_bearer", tokenUrl: SERVICE_ACCOUNT_TOKEN_URL, key: "service_account_key", scopes: ["contacts.read"] } })),
       withAccess(SERVICE, (access) => ({ ...access, auth: { ...access.auth, accessLevels: { read: { scopes: ["contacts.read"] } } } })),
       withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "none" } })),
+      withAccess(SERVICE, (access) => ({ ...access, auth: { kind: "none" }, credential: [] })),
     ].map((definition) => verdict(definition))
     expect(verdicts).toEqual([
       'Access service_account of crm: crm: mode "byo_team" is unknown: platform, byo_user, byo_org.',
@@ -141,7 +142,9 @@ describe("a connector with several accesses: declaration", () => {
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: key must name the one credential field, secret (the JSON key file).",
       "Access service_account of crm: crm: access levels (accessLevels) go in every access or in none: sign_in declares them, auth oauth2_jwt_bearer declares none.",
       "Access service_account of crm: crm: auth oauth2_jwt_bearer: accessLevels needs the level full.",
-      "Access service_account of crm: crm: auth none is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user and oauth2_jwt_bearer.",
+      // Sans clé, un accès s'appelle sans compte : ni champ du secret, ni place parmi plusieurs accès.
+      "Access service_account of crm: crm: auth none takes no credential: it is called without an account.",
+      "crm: auth none is called without an account: it cannot be one of several accesses.",
     ])
   })
 
@@ -253,6 +256,20 @@ describe("a connector with several accesses: the engine", () => {
     expect(sent().map((request) => [request.url, request.authorization])).toEqual([["https://crm.example.test/v2/me", `Bearer ${access}`]])
   })
 
+  it("should set the resource of the sign-in access, declared in its auth, at its authorization and its renewal", async () => {
+    const resource = "https://api.crm.example.test"
+    verdict(withAccess(SIGN_IN, (access) => ({ ...access, auth: { ...access.auth, resource } })))
+    const signIn = declaredConnector("crm")?.accesses.find((access) => access.name === SIGN_IN)
+    if (signIn?.auth.kind !== "user_consent") throw new Error("not a consent")
+    const address = new URL(authorizationAddress(signIn.auth, { clientId: "client-test", redirectUri: "https://acme.test/cb", state: "s", codeChallenge: "c" }))
+    expect(address.searchParams.get("resource")).toBe(resource)
+    const refresh = token()
+    const sent = stub(json({ access_token: "a1", refresh_token: refresh, expires_in: 3600 }), json({ scopes: ["contacts.read"] }))
+    const credential = { fields: {}, settings: {}, tokens: memoryTokens({ token: "expiring", expiresAt: new Date(Date.now() + 30_000) }), consent: memoryConsent(refresh) }
+    await getCompany(credential, SIGN_IN)
+    expect(new URLSearchParams(String(sent()[0].body)).get("resource")).toBe(resource)
+  })
+
   it("should refuse before anything is sent a call on an account without access, or with an undeclared one", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     verdict(twoAccessConnector())
@@ -319,16 +336,6 @@ describe("a connector with several accesses: the choice of access", () => {
     expect(accessChoices("crm", KEY_OR_SIGN_IN.signIn).map((access) => access.name)).toEqual([KEY_OR_SIGN_IN.key])
     registerConnectors([describedConnector()])
     expect(accessChoices("crm")).toEqual([])
-  })
-
-  it("should make the page choose the access when its link names none, before any plan", async () => {
-    verdict(keyOrSignInConnector())
-    expect(await connectionStep({} as never, {} as never, { connector: "crm", space: "org" }, { origin: "https://acme.example.test" })).toEqual({
-      kind: "choose_access",
-      connector: "crm",
-      label: "Crm",
-      accesses: accessChoices("crm"),
-    })
   })
 
   it("should name the other accesses in a refusal without account, never in one that keeps its account's access", () => {

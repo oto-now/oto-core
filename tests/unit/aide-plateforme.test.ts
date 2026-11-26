@@ -11,7 +11,7 @@ import { closestHelpSection, helpGuide, HELP_PATH } from "../../packages/platefo
 import { loggedText } from "../helpers/logs"
 
 // La lecture des connecteurs actifs et le catalogue de l'assistant, simulés pour le seul test de la panne du classement (AC4).
-vi.mock("../../packages/plateforme/server/connectors/activations", () => ({ loadActiveConnectors: vi.fn(async () => new Set<string>()) }))
+vi.mock("../../packages/plateforme/server/connectors/activations", () => ({ loadOpenConnectors: vi.fn(async () => new Set<string>()) }))
 vi.mock("../../packages/plateforme/server/catalog/registry", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../packages/plateforme/server/catalog/registry")>()
   return { ...original, assistantFunctions: vi.fn(original.assistantFunctions) }

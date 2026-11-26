@@ -12,6 +12,7 @@ import { actName } from "../catalog/registry"
 import { guardedFetch } from "../connectors/address-guard"
 import type { ConnectorDefinition, ConnectorFunctionDefinition } from "../connectors/definition"
 import type { Fetch } from "../connectors/http"
+import { isResource, RESOURCE_RULE } from "../connectors/oauth-user"
 import { PlatformError } from "../errors"
 import { issuerProblem } from "./exchange"
 
@@ -161,6 +162,9 @@ export function importHostDocument(document: unknown, reserved: Iterable<string>
   const root = (document as { "x-oto": { issuer: string; resource: string; functions: string } })["x-oto"]
   const issuer = issuerProblem(root.issuer)
   if (issuer) return { problems: [{ code: "host_issuer_not_instance", path: "x-oto.issuer", message: issuer }] }
+  // Posé tel quel à l'autorisation, à l'échange et au renouvellement du consentement (`consent-access.ts`) : le même
+  // contrôle qu'à la déclaration d'un connecteur, plus strict que l'URI absolue du profil hôte.
+  if (!isResource(root.resource)) return { problems: [{ code: "host_resource_invalid", path: "x-oto.resource", message: RESOURCE_RULE }] }
   const info = (document as { info: { title: unknown; version: unknown } }).info
   const strict = validator(true)
   const scoped = scopesOf(result.definition.functions as Record<string, { family: string; scope: string | null }>)

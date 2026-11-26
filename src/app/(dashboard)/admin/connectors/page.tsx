@@ -5,14 +5,13 @@ import type { AccountView } from "@otomata_tech/oto_platform/schemas"
 import {
   accountOwnerChoices,
   connectorAccountForms,
-  deactivationImpact,
+  deactivationImpacts,
   isOrgAdmin,
   listAccountRules,
   listConnectorsForOrg,
   listMembers,
   listOrgAccounts,
   listTeams,
-  orgLimitsView,
   type Identity,
   type PlatformDb,
 } from "@otomata_tech/oto_platform/server"
@@ -52,29 +51,27 @@ async function partagesDe(db: PlatformDb, identity: Identity, accounts: AccountV
   return Object.fromEntries(lus)
 }
 
-/** Ce que seul un administrateur lit : l'impact de chaque désactivation possible, et les capacités (E12-S02), dont la panne ne grise rien. */
+/**
+ * Ce que seul un administrateur lit : l'impact du blocage de chaque outil ouvert (ouvert par défaut compris), en une
+ * lecture. Plus de capacités : le nombre d'outils n'est plus limité.
+ */
 async function administration(db: PlatformDb, identity: Identity, connectors: DonneesDesConnecteurs["connectors"]): Promise<DonneesDesConnecteurs["administration"]> {
-  const actifs = connectors.filter((connecteur) => connecteur.state === "active")
-  const [impacts, limites] = await Promise.all([
-    Promise.all(actifs.map(async ({ connector }) => [connector, await deactivationImpact(db, identity, connector)] as const)),
-    orgLimitsView(db, identity).catch(() => undefined),
-  ])
-  return { impacts: Object.fromEntries(impacts), limites }
+  const ouverts = connectors.filter((connecteur) => connecteur.state === "active").map(({ connector }) => connector)
+  return { impacts: await deactivationImpacts(db, identity, ouverts) }
 }
 
 async function lire(db: PlatformDb, identity: Identity, ouvert: string | null): Promise<DonneesDesConnecteurs> {
-  // Quatre lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`).
-  const [accounts, connectors, teams, proprietaires] = await Promise.all([
+  // Cinq lectures indépendantes, en parallèle (`performance-patterns.md § Data Fetching Performance`). L'annuaire sert au
+  // partage, dans le détail comme dans la fiche d'ajout (« Qui pourra s'en servir »).
+  const [accounts, connectors, teams, proprietaires, members] = await Promise.all([
     listOrgAccounts(db, identity),
     listConnectorsForOrg(db, identity),
     listTeams(db, identity),
     accountOwnerChoices(db, identity),
+    listMembers(db, identity),
   ])
-  // L'annuaire ne sert qu'au partage du compte ouvert, pour qui le gère : hors de là, il ne se lit pas.
-  const partageOuvert = accounts.some((compte) => compte.id === ouvert && compte.viewerLevel === "manage")
-  const [partages, members, reserve] = await Promise.all([
+  const [partages, reserve] = await Promise.all([
     partagesDe(db, identity, accounts, ouvert),
-    partageOuvert ? listMembers(db, identity) : [],
     isOrgAdmin(identity) ? administration(db, identity, connectors) : undefined,
   ])
   return {

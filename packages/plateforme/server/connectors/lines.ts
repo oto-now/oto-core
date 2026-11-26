@@ -15,6 +15,7 @@ import type { Identity } from "../identity"
 import { cut } from "../journal"
 import { connectorAccounts, levelName, markWords, type ConnectorAccount, type LevelName } from "./accounts"
 import { activableConnectors, loadActiveConnectors } from "./activations"
+import { isKeylessConnector } from "./keyless"
 import { modeLabel } from "./modes"
 import { isPersonalConnector } from "./consent-accounts"
 import { chooseAccount, type TeamRef } from "./resolution"
@@ -179,7 +180,7 @@ function sharedLines(shared: readonly { connector: string; accounts: readonly Co
 }
 
 /**
- * Lignes connecteurs de la personne : connecteurs activables et actifs, relus à chaque appel (N9),
+ * Lignes connecteurs de la personne : connecteurs activables et adoptés (`loadActiveConnectors`), relus à chaque appel (N9),
  * leurs comptes visibles et niveaux lus en parallèle. Une équipe de la personne « a un compte » d'un
  * connecteur quand elle possède un compte actif qu'elle voit (quel que soit son niveau : un compte en
  * lecture seule se dit aussi) ; ses lignes vont dans sa partie, par nom d'équipe comme `identity.teams`. Les comptes
@@ -194,7 +195,9 @@ export async function teamConnectorLines(db: PlatformDb, identity: Identity): Pr
   const active = await loadActiveConnectors(db, identity.org.id)
   const connectors = await Promise.all(
     [...activable.entries()]
-      .filter(([connector]) => active.has(connector))
+      // Adoptés seulement (débloqués, ou qui ont un compte) : jamais tout le catalogue ouvert ; un connecteur sans clé
+      // n'a pas de compte à dire.
+      .filter(([connector]) => active.has(connector) && !isKeylessConnector(connector))
       .map(async ([connector, functions]) => ({ connector, functions, accounts: await connectorAccounts(db, identity, connector) })),
   )
   for (const { connector, functions, accounts } of connectors) {

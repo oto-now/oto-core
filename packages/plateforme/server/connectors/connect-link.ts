@@ -24,6 +24,7 @@ import { requireActivable } from "./activations"
 import { mayCreateAccountFor } from "./creation-right"
 import { HOST_CONSENT_CONNECTOR } from "./definition"
 import { accountFieldNames } from "./host-fields"
+import { paidByHostKey } from "./adoption"
 
 /** Le chemin de la page de connexion d'un connecteur, sous l'adresse de l'organisation. */
 export const CONNECT_PATH = "/connect"
@@ -204,9 +205,9 @@ async function defaultSpace(identity: Identity, kinds: readonly OwnerKind[], tea
 
 /**
  * La connexion à mener : le connecteur, son accès, l'espace, le geste, et l'adresse stable. `byCaller` : la personne fait
- * le geste elle-même ; sinon l'adresse va à un administrateur (`administrators`, nommés). Un connecteur éteint demande
- * l'activation par un administrateur (`admin_activation`, adresse `activate=1`), sauf un connecteur jamais activé dont un
- * compte se saisit : sa création l'ouvre (`openConnectorForAccount`). `team` : l'équipe de l'espace, lue par son slug.
+ * le geste elle-même ; sinon l'adresse va à un administrateur (`administrators`, nommés). Un connecteur bloqué par un
+ * administrateur demande sa réouverture (`admin_activation`, adresse `activate=1`) ; tout autre est ouvert par défaut, et
+ * le geste est celui de son accès. `team` : l'équipe de l'espace, lue par son slug.
  */
 export type ConnectionPlan = {
   connector: string
@@ -252,7 +253,8 @@ export async function planConnection(where: ConnectWhere, input: { connector: st
   const team = space.kind === "team" ? ((await teams()).find((candidate) => candidate.slug === space.slug) ?? null) : null
   const state = await connectorState(db, identity, connector)
   const base = gestureOf(connector, access)
-  const off = state === "closed" || (state === "never" && base !== "key")
+  // Ouvert par défaut : seul un connecteur bloqué, ou payé par la clé de l'hôte et jamais adopté, demande un administrateur.
+  const off = state === "closed" || (state === "never" && paidByHostKey(connector))
   const gesture: ConnectGesture = off ? "admin_activation" : base
   const byCaller = off ? isOrgAdmin(identity) : problem === null
   const { administrators, names } = byCaller ? { administrators: [], names: "" } : await administratorsOf(db, identity)

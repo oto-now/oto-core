@@ -4,7 +4,7 @@
 import type { ErreurPlateforme } from "../../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../../api/messages"
 
-const FERME = "Cet outil a été fermé par un administrateur"
+const FERME = "Cet outil a été bloqué pour l'organisation par un administrateur"
 
 /** Les administrateurs qu'un refus `closed` nomme (`details.administrators`), trois au plus : chacun peut rouvrir l'outil. */
 function administrateurs(details: ErreurPlateforme["details"]): string {
@@ -28,16 +28,45 @@ const PROPRES: MessagesDuGeste = {
 }
 
 /** Ce que la réactivation dit de ses refus, par raison (`ActionPlateforme`). */
-export const REFUS_DE_LA_REACTIVATION: MessagesDuGeste = { ...PROPRES, closed: `${FERME}. Un administrateur peut le rouvrir.` }
+export const REFUS_DE_LA_REACTIVATION: MessagesDuGeste = { ...PROPRES, closed: `${FERME}. Un administrateur peut le débloquer.` }
 
 /** Un nom déjà porté par un connecteur du même propriétaire. */
 export const NOM_PRIS = "Un connecteur du même propriétaire porte déjà ce nom."
 
 export const estNomPris = (erreur: ErreurPlateforme) => erreur.code === "conflict" && erreur.raison === "label_taken"
 
-/** La phrase d'un refus de l'ajout, du renommage ou d'un test. */
-export function refusDuConnecteur(erreur: ErreurPlateforme): string {
-  if (erreur.code === "not_enabled" && erreur.raison === "closed") return `${FERME}. Un administrateur peut le rouvrir${administrateurs(erreur.details)}.`
+/**
+ * Le plafond d'outils de l'offre atteint, pour un outil que l'organisation n'utilise pas encore : dit avant la saisie à
+ * qui lit les capacités (un administrateur), au refus de l'ajout pour les autres. La même phrase aux deux endroits.
+ */
+export function plafondDesOutils(max: number, outil: string, administre = false): string {
+  const sortie = administre ? "relevez la limite" : "demandez à un administrateur de relever la limite"
+  return `Votre organisation utilise déjà ${max} ${max > 1 ? "outils" : "outil"}, le maximum de son offre. ${outil} n'en fait pas partie. Ajoutez un connecteur à un outil déjà utilisé, ou ${sortie}.`
+}
+
+/** Le plafond de connecteurs d'un outil pour une même personne, désactivés exclus (`accounts_per_owner_max`), et sa sortie. */
+function plafondDeLOutil(max: number, outil: string): string {
+  return `Vous avez déjà ${max} ${max > 1 ? `connecteurs ${outil} actifs` : `connecteur ${outil} actif`}, le maximum. Désactivez-en un pour en ajouter un autre, ou demandez à un administrateur.`
+}
+
+/** Ce que l'ajout sait du refus : l'outil, et un connecteur pour soi (le plafond par propriétaire se dit alors à « vous »). */
+export type ContexteDuRefus = { outil: string; pourMoi: boolean }
+
+/** Un plafond que l'ajout dit avec l'outil : le nombre d'outils de l'offre, ou les connecteurs de l'outil à soi. */
+function plafondDeLAjout(erreur: ErreurPlateforme, contexte: ContexteDuRefus | undefined): string | null {
+  const limit = erreur.details?.limit
+  const max = erreur.details?.max
+  if (!contexte || erreur.code !== "forbidden" || erreur.raison !== "limit" || typeof max !== "number") return null
+  if (limit === "connectors_max") return plafondDesOutils(max, contexte.outil)
+  if (limit === "accounts_per_owner_max" && contexte.pourMoi) return plafondDeLOutil(max, contexte.outil)
+  return null
+}
+
+/** La phrase d'un refus de l'ajout (avec son contexte), du renommage ou d'un test. */
+export function refusDuConnecteur(erreur: ErreurPlateforme, contexte?: ContexteDuRefus): string {
+  const dansLAjout = plafondDeLAjout(erreur, contexte)
+  if (dansLAjout) return dansLAjout
+  if (erreur.code === "not_enabled" && erreur.raison === "closed") return `${FERME}. Un administrateur peut le débloquer${administrateurs(erreur.details)}.`
   if (erreur.code === "rate_limited") {
     const attente = erreur.details?.retry_after_s
     const secondes = typeof attente === "number" ? Math.ceil(attente) : null

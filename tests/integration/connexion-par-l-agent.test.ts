@@ -9,7 +9,7 @@
 // la clé refusée par le tiers, avec la marque (`etat-des-comptes.test.ts`).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { runCall, type CallInput } from "../../packages/plateforme/server/calls"
-import { activateConnector, deactivateConnector, loadActiveConnectors } from "../../packages/plateforme/server/connectors/activations"
+import { activateConnector, deactivateConnector, loadActiveConnectors, loadOpenConnectors } from "../../packages/plateforme/server/connectors/activations"
 import { connectionStep } from "../../packages/plateforme/server/connectors/connect-page"
 import { registerConnectors } from "../../packages/plateforme/server/connectors/declaration"
 import type { PlatformDb } from "../../packages/plateforme/server/db"
@@ -49,7 +49,7 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
 
   const call = (who: ReferencePerson, input: CallInput) => {
     const { db, identity } = as(who)
-    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadActiveConnectors(db, o.org.id) }, input)
+    return runCall({ db, identity, ctxCode: null, origin: ORIGIN, activeConnectors: () => loadOpenConnectors(db, o.org.id) }, input)
   }
   const connect = (who: ReferencePerson, args: Record<string, unknown>) => call(who, { function: "connector.connect", arguments: { connector: LIVE, ...args } })
   const step = (who: ReferencePerson, query: Record<string, string>) => connectionStep(as(who).db, as(who).identity, { connector: LIVE, ...query }, { origin: ORIGIN })
@@ -163,6 +163,28 @@ describe.skipIf(!sqlConfigured)(suite, { timeout: 120_000 }, () => {
       // Léa ne gère pas le compte : la page le lui refuse, en disant qui le gère.
       const byLea = await refusal(step("lea", { account_id: id }))
       expect([byLea.code, byLea.message]).toEqual(["forbidden", `Setting the key of « ${label} » is reserved to those who manage it: team Ventes (lead: Claire Morel).`])
+    } finally {
+      await fx.admin`delete from platform.accounts where id = ${id}`
+    }
+  })
+
+  it("should answer not_found on the page and its account_key step for an account of another organisation or one that does not exist, even to an administrator", async () => {
+    const elsewhere = await fx.createOrg()
+    const label = `Crm ${hex(3)}`
+    const id = await fx.createAccount(elsewhere.id, { connector: LIVE, ownerKind: "org", label, mode: "reel" })
+    try {
+      const cases = (["ada", "claire", "lea"] as const).flatMap((who) =>
+        [id, "00000000-0000-4000-8000-000000000000"].flatMap((account) =>
+          ([{}, { space: "org" }, { space: "me" }] as Record<string, string>[]).map((space): [ReferencePerson, Record<string, string>] => [who, { ...space, account_id: account }]),
+        ),
+      )
+      for (const [who, query] of cases) {
+        const error = await refusal(step(who, query))
+        expect([who, error.code], JSON.stringify(query)).toEqual([who, "not_found"])
+        // Le refus ne dit rien du compte d'une autre organisation : ni son libellé, ni son organisation.
+        expect(error.message).not.toContain(label)
+        expect(error.message).not.toContain(elsewhere.name)
+      }
     } finally {
       await fx.admin`delete from platform.accounts where id = ${id}`
     }

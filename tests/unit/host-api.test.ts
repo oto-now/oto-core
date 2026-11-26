@@ -161,6 +161,28 @@ describe("host API document", () => {
     vi.stubEnv("PLATFORM_OIDC_ISSUER", "https://autre.example.test/oidc")
     expect(importHostDocument(hostDocument(), [])).toMatchObject({ problems: [{ code: "host_issuer_not_instance", path: "x-oto.issuer" }] })
   })
+
+  it.each([
+    ["a userinfo", "https://user@hote.example.test/api"],
+    ["a query", "https://hote.example.test/api?tenant=acme"],
+    ["a fragment", "https://hote.example.test/api#v2"],
+    ["a template", "https://{tenant}.example.test/api"],
+    ["a plain http address", "http://hote.example.test/api"],
+    ["a URN", "urn:hote:api"],
+  ])("should refuse at import a resource indicator with %s, set as is at the consent, by name", (_case, resource) => {
+    const document = hostDocument() as { "x-oto": Record<string, unknown> }
+    document["x-oto"].resource = resource
+    const refused = importHostDocument(document, [])
+    expect(refused).toEqual({
+      problems: [
+        {
+          code: "host_resource_invalid",
+          path: "x-oto.resource",
+          message: "resource must be a fixed https:// address, a host and a path only: no userinfo, query, fragment, template, space or backslash.",
+        },
+      ],
+    })
+  })
 })
 
 describe("host API functions", () => {

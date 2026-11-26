@@ -5,7 +5,8 @@
 // échéance, et une fois de plus après un 401 ; `oauth2_user` : le jeton d'accès du consentement d'une personne, rangé
 // de même, renouvelé par `oauth-user.ts` ; `oauth2_jwt_bearer` : le jeton d'un compte de service, rangé et renouvelé
 // comme celui d'un échange, par `service-account.ts` ; `host_delegated` : le jeton de la personne pour l'API d'un hôte,
-// obtenu à l'appel (`host-api/exchange.ts`), sans compte. Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
+// obtenu à l'appel (`host-api/exchange.ts`), sans compte ; `none` : une API ouverte (open data), rien à poser, ni compte
+// ni secret (`keyless.ts`). Sans ce module, un compte ne porterait qu'un jeton posé à la main. Aucun
 // secret ne sort d'ici ailleurs que dans la requête au tiers : ni texte, ni erreur, ni log.
 import type { AccountMark, AccountMarkReason } from "../../schemas"
 import { PlatformError } from "../errors"
@@ -21,7 +22,7 @@ const HEADER_NAME = /^[A-Za-z0-9-]+$/
 const QUERY_NAME = /^[A-Za-z0-9_.-]+$/
 
 /** Les sortes d'authentification que le moteur exécute. */
-export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials", "oauth2_user", "oauth2_jwt_bearer"]
+export const RUN_AUTH_KINDS: readonly string[] = ["api_key", "bearer", "basic", "oauth2_client_credentials", "oauth2_user", "oauth2_jwt_bearer", "none"]
 
 /** L'authentification déclarée, prête pour l'appel : les noms des champs du compte qu'elle lit. */
 export type PreparedAuth =
@@ -41,6 +42,8 @@ export type PreparedAuth =
   | UserConsentAuth
   | ServiceAccountAuth
   | HostDelegatedAuth
+  /** Une API ouverte : aucune authentification, aucun compte (`keyless.ts`). */
+  | { kind: "none" }
 
 /**
  * Le jeton de la personne pour l'API d'un hôte (`host_delegated`, `host-api/`) : jamais celui d'un compte. `token` le rend
@@ -134,9 +137,22 @@ function clientCredentials(definition: ConnectorView, auth: Record<string, unkno
 }
 
 /**
+ * Le problème d'un connecteur sans clé (`none`) : il s'appelle sans compte, donc sans rien qu'un compte porterait,
+ * ni champ du secret, ni réglage, ni identité de compte rattaché. `null` : aucun problème.
+ */
+function keylessProblem(definition: ConnectorView): string | null {
+  const head = `${definition.name}: auth none`
+  if (!Array.isArray(definition.credential) || definition.credential.length > 0) return `${head} takes no credential: it is called without an account.`
+  if ((definition.settings ?? []).length > 0) return `${head} takes no settings: it is called without an account to hold them.`
+  if (definition.accountIdentity !== undefined) return `${head} takes no accountIdentity: it is called without an account.`
+  return null
+}
+
+/**
  * L'authentification déclarée prête pour l'appel, ou le problème qui la refuse : chaque valeur qui désigne un secret
  * nomme un champ de `credential` ; `basic` sans `username` signe d'un identifiant vide ; `oauth2_user` (consentement
- * d'une personne) n'en nomme aucun ; `oauth2_jwt_bearer` nomme le seul, secret. Toute autre sorte (`none`) est refusée.
+ * d'une personne) n'en nomme aucun ; `oauth2_jwt_bearer` nomme le seul, secret ; `none` (open data) ne pose rien et n'a
+ * ni champ, ni réglage, ni identité de compte : il s'appelle sans compte. Toute autre sorte est refusée.
  */
 export function prepareAuth(definition: ConnectorView): PreparedAuth | string {
   const auth: Record<string, unknown> = { ...definition.auth }
@@ -160,7 +176,8 @@ export function prepareAuth(definition: ConnectorView): PreparedAuth | string {
   if (auth.kind === "oauth2_client_credentials") return clientCredentials(definition, auth)
   if (auth.kind === "oauth2_user") return prepareUserConsent(definition, auth)
   if (auth.kind === "oauth2_jwt_bearer") return prepareServiceAccount(definition, auth)
-  return `${head} is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user and oauth2_jwt_bearer.`
+  if (auth.kind === "none") return keylessProblem(definition) ?? { kind: "none" }
+  return `${head} is not supported; the package runs api_key, bearer, basic, oauth2_client_credentials, oauth2_user, oauth2_jwt_bearer and none.`
 }
 
 /** Les champs du compte que l'authentification lit : chacun est exigé à l'appel. */
@@ -169,13 +186,13 @@ export function requiredFields(auth: PreparedAuth): string[] {
   if (auth.kind === "client_credentials") return [auth.clientId, auth.clientSecret]
   if (auth.kind === "user_consent") return []
   if (auth.kind === "service_account") return [auth.key]
-  if (auth.kind === "host_delegated") return []
+  if (auth.kind === "host_delegated" || auth.kind === "none") return []
   return [auth.field]
 }
 
 /** L'en-tête qu'occupe l'authentification, qu'aucun autre en-tête ne remplace ; `null` : elle va en query. */
 export function authHeader(auth: PreparedAuth): string | null {
-  if (auth.kind === "query") return null
+  if (auth.kind === "query" || auth.kind === "none") return null
   return auth.kind === "header" ? auth.header : "authorization"
 }
 
@@ -225,6 +242,7 @@ export async function sign(signer: Signer, fresh = false): Promise<Signature> {
   if (auth.kind === "user_consent") return { headers: { authorization: `Bearer ${await consentAccessToken({ ...signer, auth }, fresh)}` }, query: [] }
   if (auth.kind === "service_account") return { headers: { authorization: `Bearer ${await serviceAccountToken({ ...signer, auth }, fresh)}` }, query: [] }
   if (auth.kind === "host_delegated") return { headers: { authorization: `Bearer ${await auth.token()}` }, query: [] }
+  if (auth.kind === "none") return { headers: {}, query: [] }
   const kept = fresh ? null : await credential.tokens.read()
   const usable = kept !== null && (kept.expiresAt === null || kept.expiresAt.getTime() - EXPIRY_MARGIN_MS > Date.now())
   const exchange = { auth, label: signer.definition.label, timeoutMs: signer.definition.timeoutMs, accountId: signer.accountId, fetcherFor: signer.fetcherFor }

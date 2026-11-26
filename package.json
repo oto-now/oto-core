@@ -71,7 +71,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
-    "@otomata_tech/connectors": "github:oto-now/connectors#7e3bc776ad17cff88538ca1a1ee91119af38de7f&path:/ts",
+    "@otomata_tech/connectors": "github:oto-now/connectors#92aa6bb39d032e72533482125332dba67a38ff41&path:/ts",
     "@playwright/test": "^1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6",

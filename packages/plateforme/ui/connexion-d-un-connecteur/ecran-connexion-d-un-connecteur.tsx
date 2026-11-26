@@ -25,15 +25,16 @@ import { SaisieDeLaCleDuCompte, SaisieDuCompteAConnecter } from "./saisie-du-com
 export type EtapeAffichee = ConnectionStepView
 
 /**
- * Les accès d'un connecteur à plusieurs accès, chacun un lien vers la même page qui le nomme (l'espace choisi ensuite
- * par le service, selon l'accès), et le geste qu'il demande. Le lien ne fait rien de plus qu'une ouverture.
+ * Les accès d'un connecteur à plusieurs accès, chacun un lien vers la même page qui le nomme, l'espace de l'adresse
+ * gardé (sans lui, le service le choisit selon l'accès), et le geste qu'il demande. Le lien ne fait rien de plus qu'une
+ * ouverture.
  */
 function Acces({ connecteur, acces }: { connecteur: string; acces: ConnectAccessChoice[] }) {
   return (
     <ul className="flex flex-col gap-1 text-sm text-ink" aria-label={MOTS.listeDesAcces}>
       {acces.map((choix) => (
         <li key={choix.name}>
-          <a className="underline" href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name }).toString()}`}>
+          <a className="underline" href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name, ...(choix.space ? { space: choix.space } : {}) }).toString()}`}>
             {choix.label}
           </a>{" "}
           : {MOTS.geste[choix.gesture]}
