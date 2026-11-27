@@ -134,10 +134,10 @@ describe("ImportDeFichier — a CSV (AC-b1 to AC-b4)", () => {
     expect(envoyes).toEqual([])
   })
 
-  it("should create the table with the first lot of 500 lines, send the next lot, and send only JSON", async () => {
+  it("should create the table with the first lot of 500 lines, each header that differs from its name kept as the column label, send the next lot, and send only JSON", async () => {
     const envoyes = simulerLesEnvois({ 1: { statut: 409, code: "conflict" } })
     ouvrir(SOUS)
-    await choisirLeFichier(csv(["Nom;Montant", ...Array.from({ length: 501 }, (_, rang) => `P${rang};${rang}`)]), "Prospects 2026.csv")
+    await choisirLeFichier(csv(["Nom; Montant estimé ;ville", ...Array.from({ length: 501 }, (_, rang) => `P${rang};${rang};Lyon`)]), "Prospects 2026.csv")
     await act(async () => {
       fireEvent.click(bouton(IMPORT.importer))
     })
@@ -150,9 +150,15 @@ describe("ImportDeFichier — a CSV (AC-b1 to AC-b4)", () => {
     ])
     expect(envoyes[1].corps).toMatchObject({
       file_name: "Prospects 2026.csv",
-      columns: ["nom", "montant"],
-      create: { title: "Prospects 2026", summary: `Importé de Prospects 2026.csv (${nombreLisible(501)} lignes)`, header: { key: "nom", columns: [{ name: "nom", type: "text" }, { name: "montant", type: "number" }] } },
+      columns: ["nom", "montant_estime", "ville"],
+      create: { title: "Prospects 2026", summary: `Importé de Prospects 2026.csv (${nombreLisible(501)} lignes)`, header: { key: "nom" } },
     })
+    // Le libellé (#228) : l'en-tête rogné quand il diffère du nom tiré ; « ville », identique, n'en prend pas.
+    expect((envoyes[1].corps?.create as { header: { columns: unknown } }).header.columns).toEqual([
+      { name: "nom", label: "Nom", type: "text" },
+      { name: "montant_estime", label: "Montant estimé", type: "number" },
+      { name: "ville", type: "text" },
+    ])
   })
 
   it("should stop on a refused lot, say how many lines were written, and resume at that lot", async () => {

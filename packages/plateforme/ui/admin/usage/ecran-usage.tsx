@@ -11,6 +11,7 @@
 // l'hôte (Usage, Journal, Retours), reliés par le fil, au lieu d'onglets d'une seule carte. Retiré : onglets,
 // durées, adoption par personne, TanStack Query. 1.4.13 : l'écran s'appelle « Statistiques » et gagne trois îlots, adoption,
 // contenu, partage et connecteurs (`statistiques.tsx`).
+import type { ReactNode } from "react"
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar"
 import { JOURNAL_PERIODS, USAGE_MAX_LINES, type UsagePeriod, type UsageQuery, type UsageSummary } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
@@ -239,10 +240,13 @@ export function ReglagesDeLUsage({ donnees, filtres, hrefDeFenetre, actionDuFilt
   )
 }
 
-/** « Sur les 30 derniers jours · équipe Ventes » : la méta de l'en-tête ; rien sans données. */
-export function metaDeLUsage(resultat: EcranUsageProps["resultat"]): string | undefined {
+/**
+ * « Sur les 30 derniers jours · équipe Ventes » : la méta de l'en-tête ; rien sans données. `data-entete-empile` : la phrase
+ * passe sous le titre, et sous 640 px les réglages passent dessous, à la ligne, au lieu de déborder à 375 px.
+ */
+export function metaDeLUsage(resultat: EcranUsageProps["resultat"]): ReactNode {
   const usage = resultat.data?.usage
-  return usage && `Sur les ${usage.periode} derniers jours${usage.team ? ` · équipe ${usage.team.name}` : ""}`
+  return usage && <span data-entete-empile="">{`Sur les ${usage.periode} derniers jours${usage.team ? ` · équipe ${usage.team.name}` : ""}`}</span>
 }
 
 /**

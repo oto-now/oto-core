@@ -4,7 +4,9 @@
 // `<dialog>` natif (piège de focus, Échap, couche du dessus, inertie du fond viennent du navigateur) ;
 // latéral sur grand écran, en bas sur un téléphone, où un panneau venu du côté n'a nulle part où aller ;
 // la ref d'un consommateur fusionnée avec la sienne. Tel quel, en TypeScript. Changé : `useNativeDialog`
-// de la partie a, qui rend le focus quand le panneau est démonté ouvert.
+// de la partie a, qui rend le focus quand le panneau est démonté ouvert. Ajouté : `modal={false}`, le panneau non modal
+// posé à droite, le fond restant actif (l'historique des versions, lu à côté de la page) ; sur un téléphone, où il
+// passe en bas et couvrirait la page, il redevient modal.
 import { useId, useRef, type ComponentProps, type ReactNode } from "react"
 import { GLYPHE_FERMER, useNativeDialog } from "./dialog"
 import { useBreakpoint } from "./hooks"
@@ -19,13 +21,16 @@ type DrawerProps = Omit<ComponentProps<"dialog">, "title" | "open"> & {
   footer?: ReactNode
   handle?: boolean
   closeLabel?: string
+  /** `false` : non modal (ni fond voilé ni fond inerte), sauf en bas sur un téléphone ; modal par défaut. */
+  modal?: boolean
 }
 
-export function Drawer({ open, onClose, side = "right", snap, title, footer, handle, closeLabel = "Fermer", className, children, ref: leurRef, ...rest }: DrawerProps) {
+export function Drawer({ open, onClose, side = "right", snap, title, footer, handle, closeLabel = "Fermer", modal = true, className, children, ref: leurRef, ...rest }: DrawerProps) {
   const ref = useRef<HTMLDialogElement>(null)
-  const closing = useNativeDialog(ref, open, onClose)
   const narrow = useBreakpoint("sm")
   const effectiveSide = narrow && side !== "bottom" ? "bottom" : side
+  const effectiveModal = modal || effectiveSide === "bottom"
+  const closing = useNativeDialog(ref, open, onClose, effectiveModal)
   const titleId = useId()
 
   return (
@@ -36,6 +41,7 @@ export function Drawer({ open, onClose, side = "right", snap, title, footer, han
       data-side={effectiveSide}
       data-snap={snap}
       data-closing={closing ? "" : undefined}
+      data-modal={effectiveModal ? undefined : "false"}
       aria-labelledby={title ? titleId : rest["aria-labelledby"]}
       onClick={(evenement) => {
         rest.onClick?.(evenement)

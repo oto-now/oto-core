@@ -288,9 +288,11 @@ Une seule coque est visible, quel que soit le niveau choisi :
    ```
 
 2. **Les morceaux du rail dans la barre latérale de l'ERP**, sans second rail : `EntrepriseDuRail`
-   (l'organisation et son menu), `RechercheDuRail` (« Rechercher », ⌘K et la palette),
+   (le logo et le nom de l'organisation, qui mènent à l'accueil, et « Changer d'espace » à partir de
+   deux organisations), `RechercheDuRail` (« Rechercher », ⌘K et la palette),
    `SectionsDuRail` (Tout le monde, les équipes, Privé : le Contexte en tête, l'arbre, ses menus
-   « ⋯ » et « + »), `PiedDuRail` (Connecteurs, le compte et son menu), sous une `CoquilleOto` et le même
+   « ⋯ » et « + »), `PiedDuRail` (la ligne du compte et son menu : la personne, « Vous » avec
+   Connecteurs, l'organisation avec ses écrans, « Apparence », la déconnexion), sous une `CoquilleOto` et le même
    fournisseur ; les primitives qui les composent sont exportées aussi (`Desk`, `Content`, `Rail`,
    `RailSection`, `RailTree`, `RailItem`, `DropdownMenu`), à employer dans un composant client : elles
    reçoivent des fonctions. Leurs gestes passent par l'API du paquet (`/api/platform/*`, même

@@ -171,7 +171,8 @@ export function EditeurDeBlocs(props: EditeurDeBlocsProps) {
       {/* `blocs` : le corps d'écriture garde sa pleine largeur (`blocks.css`), hors de la colonne centrée du lecteur (`content.css`). */}
       <Reader ref={editeur.racine} data-reading="blocs">
         <IndicationDEnregistrement />
-        <div className="mb-3.5 flex flex-col gap-2">
+        {/* Toujours montées (la publication tient ses commandes), ces lignes ne prennent de place que si l'une parle (`editeur.css`). */}
+        <div className="oto-editor-status">
           <Publication genre={genre} blocs={editeur.blocs} />
           <AlerteDEdition alerte={envois.alerte} />
         </div>

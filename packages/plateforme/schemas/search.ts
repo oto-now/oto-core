@@ -26,3 +26,6 @@ export type NodeHead = {
   revision: number
   draft: { title: string | null; stamp: string } | null
 }
+
+/** `GET /api/platform/nodes/revision?path=` : la révision publiée d'un nœud, seule (retour RET-008). */
+export type NodeRevision = { path: string; revision: number }

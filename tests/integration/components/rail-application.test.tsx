@@ -201,13 +201,14 @@ afterEach(() => {
 })
 
 describe("RailApplication zones (AC-a3)", () => {
-  it("should lay out the company, Accueil, Rechercher, one section per space opened by its Contexte, then Connecteurs and the account, without Agents, Procédures, the colour nor the bin at the foot (AC-32, AC-6, AC-e22)", () => {
-    const rail = monter()
+  // #221 (D5, D6) : le bloc de l'organisation mène à l'accueil, qui n'a plus de ligne ; « Rechercher » le suit ; le pied ne
+  // porte que la personne, « Connecteurs » est au menu du compte.
+  it("should lay out the organisation leading home, Rechercher, one section per space opened by its Contexte, then the account alone at the foot, without Accueil, Connecteurs, Agents, Procédures, the colour nor the bin as lines", () => {
+    const rail = monter({}, "/")
 
+    const accueil = within(rail).getByRole("link", { name: "Démo" })
     const ordre = [
-      // Sans liste d'organisations, le nom accessible ne promet pas de bascule (HN-E05S09a-2).
-      within(rail).getByRole("button", { name: "Entreprise : Démo. Réglages de l'entreprise" }),
-      within(rail).getByRole("link", { name: "Accueil" }),
+      accueil,
       within(rail).getByRole("searchbox", { name: "Rechercher" }),
       // Le titre d'une section est dans son bouton de pli (E05-S13, AC-12).
       within(rail).getByRole("button", { name: "Replier Tout le monde" }),
@@ -216,27 +217,24 @@ describe("RailApplication zones (AC-a3)", () => {
       within(rail).getByRole("link", { name: "Contexte · Ventes" }),
       within(rail).getByRole("button", { name: "Replier Privé" }),
       within(rail).getByRole("link", { name: "Mes instructions" }),
-      within(rail).getByRole("link", { name: "Connecteurs" }),
       within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }),
     ]
     for (const [rang, element] of ordre.slice(0, -1).entries()) {
       expect(element.compareDocumentPosition(ordre[rang + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
+    expect(accueil).toHaveAttribute("href", "/")
+    expect(accueil).toHaveAttribute("aria-current", "page")
+    // L'infobulle dit où mène le bloc, au survol comme au clavier.
+    fireEvent.focus(accueil)
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Accueil")
+    expect(accueil).toHaveAttribute("aria-describedby", screen.getByRole("tooltip").id)
     // Chaque liste de l'arbre porte le nom de sa section, comme le navigateur d'arbre remplacé.
     expect(within(rail).getByRole("list", { name: "Ventes" })).toContainElement(within(rail).getByRole("link", { name: "Qualifier un prospect" }))
-    // Le pied d'oto-frontend portait « Couleur », « Procédures », « Agents » : aucun n'est une ligne du rail ; la Corbeille est au menu du compte.
-    expect(within(rail).getByRole("link", { name: "Connecteurs" })).toHaveAttribute("href", "/admin/connectors")
-    expect(within(rail).queryByRole("link", { name: /^(Agents|Procédures|Corbeille)$/ })).toBeNull()
-    expect(within(rail).queryByRole("button", { name: /^(Agents|Couleur du thème)$/ })).toBeNull()
-  })
-
-  it("should give Connecteurs to a person who does not administer too, where they see their own accounts, and mark it current on its screens (AC-32)", () => {
-    const membre = monter({ administre: false })
-    expect(within(membre).getByRole("link", { name: "Connecteurs" })).toHaveAttribute("href", "/admin/connectors")
+    expect(within(rail).queryByRole("link", { name: /^(Accueil|Connecteurs|Agents|Procédures|Corbeille)$/ })).toBeNull()
+    expect(within(rail).queryByRole("button", { name: /^(Agents|Couleur du thème|Entreprise : .*)$/ })).toBeNull()
     cleanup()
 
-    const admin = monter({}, "/admin/connectors")
-    expect(within(admin).getByRole("link", { name: "Connecteurs" })).toHaveAttribute("aria-current", "page")
+    expect(within(monter()).getByRole("link", { name: "Démo" })).not.toHaveAttribute("aria-current")
   })
 
   it("should keep a section folded by this browser", async () => {
@@ -275,62 +273,55 @@ describe("RailApplication zones (AC-a3)", () => {
 })
 
 describe("RailApplication menus (AC-a4)", () => {
-  // E05-S11 (AC-31, AC-32, AC-33) : « Réglages de l'entreprise » d'abord, « Équipes & accès » dedans ; ni Marque,
-  // ni Drapeaux, ni Accès plateforme, ni Connecteurs (au pied du rail), même quand l'hôte en sert l'adresse.
-  // E05-S13 (AC-10) : « Journal » dans les réglages ; un seul groupe montré n'a pas de sous-titre. 1.4.13 : « Suivi de
-  // l'entreprise » revient après les réglages avec Retours, pour qui administre quand l'hôte en sert l'adresse ;
-  // « Activité » (Statistiques et Journal) prend la place du Journal dans les réglages ; ni « Journal » ni
-  // « Statistiques » à part, même servis.
+  /** Le menu du compte ouvert : ses titres de groupe (entre crochets, sans l'initiale du logo qui les précède) et ses lignes, dans l'ordre. */
+  function lignesDuCompte(rail: HTMLElement) {
+    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
+    return [...screen.getByRole("menu").querySelectorAll(".oto-menu-group-label, [role^='menuitem']")].map((ligne) => (ligne.matches(".oto-menu-group-label") ? `[${ligne.lastChild?.textContent}]` : ligne.textContent))
+  }
+
+  // #221 (D5) : le menu de l'entreprise est descendu au menu du compte, sous le nom de l'organisation ; « Connecteurs » est
+  // dans « Vous », pour chacun, qui y voit ses comptes personnels ; la vue « Contexte » n'y est plus, même servie (la palette
+  // la garde). Ni Marque, ni Drapeaux, ni Accès plateforme, même quand l'hôte en sert l'adresse ; Retours pour qui administre
+  // quand l'hôte en sert l'adresse ; ni « Journal » ni « Statistiques » à part, même servis.
   it.each([
-    [true, ["Organisation", "Équipes & accès", "Activité", "Retours"], true],
-    [false, ["Équipes & accès", "Activité"], false],
-  ])("should offer the company menu by administration right (%s), the follow-up screens to an administrator, each entry navigating", (administre, attendues, groupes) => {
-    const rail = monter({ administre, adresses: { ...ADRESSES, marque: "/admin/brand", drapeaux: "/admin/flags", acces: "/admin/access" } })
-    fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
+    [true, ["Organisation", "Équipes & accès", "Activité", "Retours"]],
+    [false, ["Équipes & accès", "Activité"]],
+  ])("should open the account menu on the person, then Vous, the organisation by administration right (%s) and Déconnexion, each entry navigating", (administre, organisation) => {
+    const rail = monter({ administre, email: "claire@demo.test", adresses: { ...ADRESSES, contexte: "/context", marque: "/admin/brand", drapeaux: "/admin/flags", acces: "/admin/access" } })
 
-    expect(itemsDuMenu()).toEqual(attendues)
-    const texte = screen.getByRole("menu").textContent ?? ""
-    // Deux groupes montrés ont leurs sous-titres ; un seul n'en a pas.
-    if (groupes) expect(texte).toMatch(/Réglages de l’entreprise.*Suivi de l’entreprise/)
-    else expect(texte).not.toMatch(/Réglages de l’entreprise|Suivi de l’entreprise/)
-    expect(texte).not.toContain("Membres & équipes")
-    fireEvent.click(menu().getByRole("menuitem", { name: "Équipes & accès" }))
-    expect(hote.naviguer).toHaveBeenCalledWith("/teams")
-  })
+    expect(lignesDuCompte(rail)).toEqual([
+      "[Vous]",
+      "Mes instructions",
+      "Profil",
+      "Connecteurs",
+      "Brancher mon Claude, ChatGPT ou Mistral",
+      "Corbeille",
+      "[Démo]",
+      ...organisation,
+      "Déconnexion",
+    ])
+    const tete = screen.getByRole("menu").querySelector(".oto-menu-head")
+    expect(tete).toHaveTextContent("Claire Morel")
+    expect(tete).toHaveTextContent("claire@demo.test")
 
-  // E05-S11 (AC-6, AC-e22) : « Profil » ouvre la page Profil, la Corbeille s'ouvre d'ici ; ni « Apparence » ni « Couleur ».
-  // E11-S10 (AC-e1) : « Contexte » en tête, quand l'hôte en donne l'adresse.
-  it.each([false, true])("should offer Mes instructions, Contexte, Profil, Brancher mon Claude, ChatGPT ou Mistral, Corbeille, then Déconnexion in the account menu, the same whatever the administration right (%s)", (administre) => {
-    const rail = monter({ administre, adresses: { ...ADRESSES, contexte: "/context" } })
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    expect(itemsDuMenu()).toEqual(["Mes instructions", "Contexte", "Profil", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille", "Déconnexion"])
-    fireEvent.click(menu().getByRole("menuitem", { name: "Mes instructions" }))
-    expect(hote.naviguer).toHaveBeenCalledWith(`${ADRESSES.pages}private/claire/contexte`)
-
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    fireEvent.click(menu().getByRole("menuitem", { name: "Contexte" }))
-    expect(hote.naviguer).toHaveBeenLastCalledWith("/context")
-
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    fireEvent.click(menu().getByRole("menuitem", { name: "Profil" }))
-    expect(hote.naviguer).toHaveBeenLastCalledWith("/profile")
-
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    fireEvent.click(menu().getByRole("menuitem", { name: "Corbeille" }))
-    expect(hote.naviguer).toHaveBeenLastCalledWith("/trash")
-
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    fireEvent.click(menu().getByRole("menuitem", { name: "Déconnexion" }))
+    const choisir = (nom: string) => {
+      if (!screen.queryByRole("menu")) fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
+      fireEvent.click(menu().getByRole("menuitem", { name: nom }))
+    }
+    choisir("Mes instructions")
+    expect(hote.naviguer).toHaveBeenLastCalledWith(`${ADRESSES.pages}private/claire/contexte`)
+    for (const [nom, adresse] of [["Profil", "/profile"], ["Connecteurs", "/admin/connectors"], ["Corbeille", "/trash"], ["Équipes & accès", "/teams"], ["Activité", "/journal"]] as const) {
+      choisir(nom)
+      expect(hote.naviguer).toHaveBeenLastCalledWith(adresse)
+    }
+    choisir("Déconnexion")
     expect(hote.deconnecter).toHaveBeenCalledTimes(1)
   })
 
-  // E11-S10 (AC-e1, HN-E11S10-18) : sans l'adresse de la vue, ni entrée au menu du compte ni commande de la palette ;
-  // avec elle, la palette la propose sous « Aller à ».
+  // E11-S10 (AC-e1, HN-E11S10-18) : sans l'adresse de la vue, aucune commande de la palette ; avec elle, la palette la
+  // propose sous « Aller à ».
   it("should offer « Contexte » in the palette under « Aller à » only when the host gives its address", () => {
     let rail = monter()
-    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    expect(itemsDuMenu()).not.toContain("Contexte")
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
     fireEvent.click(within(rail).getByRole("searchbox", { name: "Rechercher" }))
     expect(within(within(screen.getByRole("dialog", { name: "Palette de commandes" })).getByRole("group", { name: "Aller à" })).queryByRole("option", { name: "Contexte" })).toBeNull()
     cleanup()
@@ -401,7 +392,9 @@ describe("RailApplication menus (AC-a4)", () => {
     fireEvent.click(menu().getByRole("menuitem", { name: "Droits de Tout le monde…" }))
     const droits = within(await screen.findByRole("dialog", { name: "Droits de Tout le monde" }))
     expect(await droits.findByText("Toute l'organisation Démo")).toBeInTheDocument()
-    expect(droits.queryByText("Sur le web")).toBeNull()
+    // La racine ne se publie pas : ni l'intitulé ni l'interrupteur de « Partager » d'un contenu (#219).
+    expect(droits.queryByText("Publier sur le web")).toBeNull()
+    expect(droits.queryByRole("switch")).toBeNull()
     choisirDansLaListe(droits.getByRole("combobox", { name: "Niveau de toute l'organisation" }), "Peut modifier")
     await waitFor(() => expect(hote.rafraichir).toHaveBeenCalledTimes(1))
     expect(appels.slice(0, 2).map((appel) => appel.url)).toEqual(["/api/platform/rules?path=guide&subjects", "/api/platform/rules?path=guide"])
@@ -1454,18 +1447,19 @@ describe("the coque (E05-S11, lot e ; E11-S05)", () => {
     })
   })
 
-  describe("the organisation switcher of the company menu (several organisations per person)", () => {
+  describe("« Changer d'espace », right of the organisation (several organisations per person)", () => {
     const ORGANISATIONS = [
       { id: "org-a", name: "Atelier", host: "atelier.oto.test", current: false },
       { id: "org-d", name: "Démo", host: "demo.oto.test", current: true },
       { id: "org-s", name: "Sans adresse", host: null, current: false },
     ]
+    const lignes = () => [...screen.getByRole("menu").querySelectorAll("[role^='menuitem']")].map((item) => item.textContent)
 
     it("should list the reachable organisations of the person, the current one checked, and leave for the address of the chosen one", () => {
       const assign = vi.fn()
       vi.stubGlobal("location", { ...window.location, protocol: "https:", assign })
       const rail = monterLeRail({ organisations: ORGANISATIONS })
-      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo\. Réglages et changement d'entreprise/ }))
+      fireEvent.click(within(rail).getByRole("button", { name: "Changer d'espace" }))
       const choix = within(screen.getByRole("menu")).getAllByRole("menuitemradio")
       expect(choix.map((item) => [item.textContent, item.getAttribute("aria-checked")])).toEqual([
         ["Atelier", "false"],
@@ -1475,22 +1469,28 @@ describe("the coque (E05-S11, lot e ; E11-S05)", () => {
       expect(assign).toHaveBeenCalledWith("https://atelier.oto.test/")
     })
 
-    it("should offer to create an organisation under the switcher when the host gives its signup address, and not otherwise", () => {
-      const rail = monterLeRail({ organisations: ORGANISATIONS, adresses: { ...PROPS_DE_LA_COQUE.adresses, inscription: "/signup" } })
-      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
-      const items = [...screen.getByRole("menu").querySelectorAll("[role^='menuitem']")].map((item) => item.textContent)
-      expect(items.slice(-3)).toEqual(["Atelier", "Démo", "Créer une organisation"])
-      cleanup()
-
-      const sans = monterLeRail({ organisations: ORGANISATIONS })
-      fireEvent.click(within(sans).getByRole("button", { name: /^Entreprise : Démo/ }))
-      expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "Créer une organisation" })).toBeNull()
+    it("should offer to create an organisation in its menu when the host gives its signup address, with a single organisation too, and not otherwise", () => {
+      const avec = { ...PROPS_DE_LA_COQUE.adresses, inscription: "/signup" }
+      const verdicts = [
+        { organisations: ORGANISATIONS, adresses: avec },
+        { organisations: [ORGANISATIONS[1]], adresses: avec },
+        { organisations: ORGANISATIONS, adresses: PROPS_DE_LA_COQUE.adresses },
+      ].map((props) => {
+        const rail = monterLeRail(props)
+        fireEvent.click(within(rail).getByRole("button", { name: "Changer d'espace" }))
+        const vues = lignes()
+        cleanup()
+        return vues
+      })
+      expect(verdicts).toEqual([["Atelier", "Démo", "Créer une organisation"], ["Créer une organisation"], ["Atelier", "Démo"]])
     })
 
-    it("should show no switcher with a single organisation", () => {
-      const rail = monterLeRail({ organisations: [ORGANISATIONS[1]] })
-      fireEvent.click(within(rail).getByRole("button", { name: /^Entreprise : Démo/ }))
-      expect(within(screen.getByRole("menu")).queryAllByRole("menuitemradio")).toEqual([])
+    it("should show no « Changer d'espace » with a single organisation, nor with a second one that has no address", () => {
+      for (const organisations of [[ORGANISATIONS[1]], [ORGANISATIONS[1], ORGANISATIONS[2]]]) {
+        const rail = monterLeRail({ organisations })
+        expect(within(rail).queryByRole("button", { name: "Changer d'espace" })).toBeNull()
+        cleanup()
+      }
     })
   })
 })

@@ -144,16 +144,14 @@
   gap: var(--space-0-5);
   margin-inline: calc(var(--space-2-5) * -1);
   padding-inline: var(--space-2-5);
-  /* Le blanc sous la pastille d'entreprise : sans lui « Accueil » se colle au nom de l'entreprise, deux natures différentes ; posé sur le conteneur de défilement, pas sur la première ligne, que chaque consommateur devrait réécrire. */
-  padding-block-start: var(--space-3);
+  /* Le blanc sous la recherche, posé sur le conteneur de défilement, pas sur la première section, que chaque consommateur devrait réécrire. */
+  padding-block-start: var(--space-1);
 }
 
+/* Un intertitre du rail (D4, `portage-ecrans.md § 8`) : petit, gris, en casse de phrase, sans capitales, chasse ni mono. `--rail-mute` sur `--rail-bg` : 6,08:1 de jour, 5,11:1 de nuit, au plus bas des huit teintes. */
 .oto-rail-group {
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tr-mono);
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
   color: var(--rail-mute);
   padding: var(--space-4) var(--space-2) var(--space-1);
 }
@@ -237,15 +235,16 @@
   position: relative;
 }
 
-/* ── la ligne de compte, le bouton du menu personnel dans le pied : un rembourrage pour l'avatar, un survol plus léger que `--rail-hover` (elle n'est pas un nœud actif), un libellé d'un cran plus petit. */
+/* ── la ligne de compte, le bouton du menu personnel dans le pied : un rembourrage pour l'avatar, un survol plus léger que `--rail-hover` (elle n'est pas un nœud actif) ; le nom au corps du bloc de l'organisation, les deux bouts du rail se répondent. */
 .oto-rail-item[data-variant="account"] {
   padding: var(--space-2);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-btn);
   padding-inline-end: var(--space-3);
 }
 .oto-rail-item[data-variant="account"] > .oto-rail-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-base);
 }
+.oto-rail-item[data-variant="account"][aria-expanded="true"] { background: var(--rail-hover); }
 .oto-rail-item[data-variant="account"]:hover {
   background: color-mix(in oklab, var(--rail-fg) 8%, transparent);
 }
@@ -281,7 +280,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: color-mix(in oklab, var(--rail-mute) 72%, transparent);
 }
 
 /* ── le titre qui ouvre la section (`RailSection` avec `to`) : le rendu ne change pas, seulement ce qu'un lien doit à sa cible (curseur, éclaircissement, anneau) ; l'éclaircissement lit `--rail-fg`, jamais `--ink` ; `:focus-visible` porte le même éclaircissement que le survol. */
@@ -499,15 +497,45 @@
   color: var(--rail-row-pill-fg, var(--rail-on-fg));
 }
 
+/* ── le bloc de l'organisation, en tête du rail (#221, D5, D6) : logo et nom fusionnés, le chemin de l'accueil ; à sa droite, « Changer d'espace » à partir de deux organisations. Il se lit comme un lien : survol à `--rail-hover`, et sur l'accueil un fond neutre cerclé du filet du rail, jamais la pastille safran d'une page, qui le prendrait pour une ligne de l'arbre. */
+.oto-rail-org {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+.oto-rail-item[data-variant="org"] {
+  flex: 1;
+  min-inline-size: 0;
+  gap: var(--space-2-5);
+  padding: var(--space-1-5) var(--space-2);
+  color: var(--rail-brand);
+}
+.oto-rail-item[data-variant="org"] > .oto-rail-label {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+}
+.oto-rail-item[data-variant="org"][aria-current] {
+  background: var(--rail-hover);
+  color: var(--rail-brand);
+  box-shadow: inset 0 0 0 1px var(--rail-bd);
+}
+.oto-rail-item[data-variant="org"][aria-current]:hover { background: var(--rail-hover); }
+.oto-rail-org > .oto-icon-btn { flex: none; color: var(--rail-mute); }
+.oto-rail-org > .oto-icon-btn:hover,
+.oto-rail-org > .oto-icon-btn[aria-expanded="true"] { background: var(--rail-hover); color: var(--rail-fg); }
+
 /* La recherche du rail : l'anneau est reporté sur la pilule entière (`:focus-within`), l'objet qu'on voit, la seule forme de `outline: none` admise ; sans lui le champ disparaissait de la navigation au clavier. */
 
 .oto-rail-search {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-block: var(--space-2) var(--space-3);
-  padding: var(--space-1-5) var(--space-3);
-  border-radius: var(--r-pill);
+  margin-block: var(--space-2) var(--space-1);
+  padding: var(--space-1-5) var(--space-2-5);
+  border-radius: var(--r-btn);
   background: color-mix(in oklab, var(--rail-fg) 7%, transparent);
   color: var(--rail-mute);
   cursor: text;
@@ -729,8 +757,9 @@
 .oto-two-columns[data-main="document"] > .oto-two-columns-aside { grid-column: 3; }
 
 /* L'en-tête suit la colonne du document, pas le cadre, sinon il s'alignerait sur le bord des annexes ; le `:has()` porte sur le contenu : c'est la présence d'un document qui décide. */
-.oto-content:has(> .oto-two-columns[data-main="document"]) > .oto-screen-header,
-.oto-content:has(> .oto-content-max[data-width="document"]) > .oto-screen-header {
+/* Sauf l'en-tête d'un contenu (`.oto-node-header`, refonte #216) : il prend la largeur du contenu quel que soit le genre, son titre et sa méta alignés sur le document (`product.css`). */
+.oto-content:has(> .oto-two-columns[data-main="document"]) > .oto-screen-header:not(.oto-node-header),
+.oto-content:has(> .oto-content-max[data-width="document"]) > .oto-screen-header:not(.oto-node-header) {
   max-inline-size: var(--content-max-doc);
 }
 
@@ -752,7 +781,7 @@
   }
   .oto-two-columns[data-main="document"] > .oto-two-columns-main { grid-column: 1; }
   .oto-two-columns[data-main="document"] > .oto-two-columns-aside { grid-column: 2; }
-  .oto-content:has(> .oto-two-columns[data-main="document"]) > .oto-screen-header {
+  .oto-content:has(> .oto-two-columns[data-main="document"]) > .oto-screen-header:not(.oto-node-header) {
     max-inline-size: min(var(--content-max-doc), calc(100% - var(--annexes-w) - var(--space-2-5)));
     margin-inline: max(0px, calc((100% - var(--content-max-doc) - var(--annexes-w) - var(--space-2-5)) / 2)) auto;
   }

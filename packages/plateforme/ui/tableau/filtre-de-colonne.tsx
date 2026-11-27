@@ -37,7 +37,7 @@ import {
   type OperationSaisie,
   type Reglages,
 } from "./adresse"
-import { GRILLE, OPERATIONS_LUES, TEXTES_DE_CELLULE } from "./libelles"
+import { GRILLE, libelleDeColonne, OPERATIONS_LUES, TEXTES_DE_CELLULE } from "./libelles"
 
 export type FiltreDeColonneProps = {
   colonne: TableColumn
@@ -118,7 +118,7 @@ export function FiltreDeColonne({ colonne, entete, reglages, adresse }: FiltreDe
   const declencheur = useRef<HTMLButtonElement>(null)
   const panneau = useRef<HTMLFormElement>(null)
   const posees = reglages.clauses.filter((clause) => clause.colonne === colonne.name)
-  const titre = GRILLE.filtrerSur(colonne.name)
+  const titre = GRILLE.filtrerSur(libelleDeColonne(colonne))
 
   // Monté dans la racine `.oto`, le panneau est loin du bouton dans l'ordre de tabulation : le focus y entre, sur son premier champ.
   useEffect(() => {
@@ -175,7 +175,7 @@ export function FiltreDeColonne({ colonne, entete, reglages, adresse }: FiltreDe
             {posees.length > 0 && (
               <Button variant="ghost" size="sm" onClick={() => aller(adresseDuTableau(adresse, sansFiltres(reglages, colonne.name)))}>
                 {GRILLE.retirer}
-                <span className="oto-sr-only">{GRILLE.leFiltreDe(colonne.name)}</span>
+                <span className="oto-sr-only">{GRILLE.leFiltreDe(libelleDeColonne(colonne))}</span>
               </Button>
             )}
           </div>

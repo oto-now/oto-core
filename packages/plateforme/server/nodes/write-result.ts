@@ -142,6 +142,19 @@ function publishedLines(input: ResultInput, published: PublishResult, done: read
   ]
 }
 
+/** Les avertissements servis en champs, bornés comme le texte (`boundedList`, 20) : au-delà, leur nombre en plus. */
+const WARNINGS_MAX = 20
+
+/**
+ * Les avertissements d'une publication en champs : rien sans eux ; les 20 premiers, et `warnings_total` au-delà, pour
+ * qu'une page qui cite des centaines de pages absentes ne fasse pas omettre toutes les données de `write`.
+ */
+function servedWarnings(warnings: readonly string[]): { warnings?: string[]; warnings_total?: number } {
+  if (warnings.length === 0) return {}
+  const warningsTotal = warnings.length > WARNINGS_MAX ? { warnings_total: warnings.length } : {}
+  return { warnings: warnings.slice(0, WARNINGS_MAX), ...warningsTotal }
+}
+
 /**
  * La réponse de `write` (AC19, AC25, AC27, AC29) : ce que le brouillon a reçu, puis la publication ou
  * comment publier (dès le niveau écriture, E11-S02) ; en champs, les blocs écrits de chaque opération (`id`, référence, révision ; 20 au plus)
@@ -194,8 +207,9 @@ export function savedResult(input: ResultInput): ToolOutput {
         blocks_total: published.blocks,
         draft_stamp: null,
         rules_changed: published.rulesChanged,
-        // Les avertissements d'un en-tête de tableau publié, en champs (E07-S04, AC6).
-        ...(published.table ? { warnings: published.table.warnings } : {}),
+        // Les avertissements d'un en-tête de tableau publié, en champs (E07-S04, AC6) ; ailleurs, ceux de la publication
+        // (liens, conseils d'une procédure), quand il y en a : l'écran les montre après un passage en procédure.
+        ...(published.table ? { warnings: published.table.warnings } : servedWarnings(published.warnings)),
       }
     : { id: node.id, path: node.path, revision: node.revision, status: node.status, has_draft: true, touched, blocks_total: saved?.blocks.length ?? 0, draft_stamp: saved?.stamp ?? null }
   // Le compte du mode tolérant (E10-S01, AC-a2), pour l'écran seul : en mode strict, les champs de `write` ne changent pas.

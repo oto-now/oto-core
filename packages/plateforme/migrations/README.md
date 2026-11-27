@@ -507,6 +507,23 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   Lue par les membres de l'organisation (`member_orgs()`), écrite par l'équipe plateforme (`member_orgs()` et
   `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
   échoue sur le catalogue d'une organisation. Rien à relancer avant.
+- `20261127150000_platform_equipes_d_une_invitation.sql` (non publiée ; identité et connexion, § Personne en attente,
+  sans email) : la table `platform.invitation_teams` (`invitation_id`, `team_id`, clé composée ; index sur `team_id`),
+  les équipes où une personne invitée ou inscrite sans email entre à sa première connexion. Lue par l'administrateur et
+  le responsable de l'équipe de la ligne, ajoutée et retirée par eux sur une invitation ouverte, une équipe de la même
+  organisation (`is_org_admin`, `leads_team`) ; aucune colonne de personne. `invitations.team_id` reste, écrit comme
+  avant avec la première équipe ; le déclencheur `invitation_teams_from_team_id` (`security invoker`, exécutable par
+  aucun rôle client) la recopie dans la table, et les invitations déjà écrites y entrent à l'application (aucune ligne
+  d'`invitations` réécrite). `accept_invitations` recréée, privilèges redits, ne lit plus que `invitation_teams`, et
+  prend d'abord le verrou de classe 7101 de chaque invitation ouverte (organisation, adresse), celui que prend
+  `changeInvitationTeams` avant d'écrire les équipes. Second changement, l'espace d'un contenu (droits d'accès, règle
+  de JB du 27/11, qui remplace D18 B) : `nodes_gesture_guard` recréée (`create or replace`, corps de `20261021120000`),
+  un propriétaire de nœud changé sous une session exigeant en plus l'écriture (2) de l'appelant dans l'espace qui le
+  reçoit, lue sur la ligne écrite : l'appelant seul pour une personne, la racine pour l'organisation, le dossier de
+  l'équipe, le parent pour un propriétaire hérité ; refus `42501`. `transferOwner` décide la même règle avant d'écrire.
+  Additif ; le paquet sans elle échoue sur l'invitation et la liste des invitations ; un paquet plus ancien avec elle
+  garde son comportement (une équipe), et son `transfer_owner` vers un espace où l'appelant n'écrit pas est refusé par
+  la base (`42501`, traduit en `forbidden`). Rien à relancer avant. Rollback dans le fichier.
 
 ## Installer sur un hôte neuf
 

@@ -1,6 +1,6 @@
 "use client"
 
-// « Inviter quelqu'un » (AC28) : adresse, rôle et équipe, envoyés à `POST /api/platform/invitations`
+// « Inviter quelqu'un » (AC28) : adresse, rôle et équipes, envoyés à `POST /api/platform/invitations`
 // sur le schéma partagé avec l'API (`schemas/invitations.ts`).
 //
 // Porté d'oto-frontend (`components/settings/invite-someone.tsx`). Repris : messages constants par
@@ -8,13 +8,15 @@
 // pendant l'envoi, « un email vient de partir » (jamais la promesse de réception) ; depuis E05-S09
 // (partie d1), les champs, l'aide et le bouton du design system (`Field`, `Input`, `Select`, `Button`),
 // et le dialogue de l'en-tête qui l'ouvre (`BoutonDInvitation`). Retiré : TanStack Query, lien copiable
-// (`emailed: false`), `useZodForm` local, lucide. Ajouté : rôle et équipe (H72).
+// (`emailed: false`), `useZodForm` local, lucide. Ajouté : rôle et équipes (H72) ; les équipes en cases du design
+// system (`CheckboxGroup`), jamais le menu à cases, qui tombe sous la couche du dialogue modal.
 import { useId, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { FormProvider, useForm, useFormContext } from "react-hook-form"
+import { FormProvider, useController, useForm, useFormContext } from "react-hook-form"
 import { inviteSchema, type Invite, type InviteInput, type InvitationRole } from "../../schemas"
 import { appelerPlateforme, type ErreurPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
+import { Checkbox, CheckboxGroup } from "../ds/react/checkbox"
 import { Field, Input } from "../ds/react/forms"
 import { Button } from "../ds/react/primitives"
 import { Select } from "../ds/react/select"
@@ -26,7 +28,7 @@ type InviterQuelquUnProps = {
   /** Les équipes que l'appelant peut proposer : toutes pour l'admin, les siennes pour un responsable. */
   equipes: Choix[]
   rolesPermis: InvitationRole[]
-  /** Un responsable invite toujours dans une de ses équipes : « Aucune équipe » n'est pas proposé. */
+  /** Un responsable invite toujours dans une de ses équipes au moins : une case cochée est exigée. */
   equipeObligatoire: boolean
 }
 
@@ -37,6 +39,8 @@ const ROLES: readonly { id: InvitationRole; nom: string }[] = [
   { id: "admin", nom: "Administrateur" },
 ]
 const EMAIL_INVALIDE = "Saisissez une adresse email valide."
+const AIDE_DES_EQUIPES = "Elle rejoint les équipes cochées à sa première connexion."
+const EQUIPE_EXIGEE = "Cochez au moins une de vos équipes."
 
 /** Un refus qui se corrige en changeant l'adresse se rend sous elle ; le reste est global. */
 function surLeChampEmail(erreur: ErreurPlateforme): boolean {
@@ -44,26 +48,48 @@ function surLeChampEmail(erreur: ErreurPlateforme): boolean {
   return erreur.code === "conflict" && (erreur.raison === "already_member" || erreur.raison === "already_invited")
 }
 
-type ChampChoixProps = {
-  libelle: string
-  nom: "role" | "teamId"
-  choix: readonly Choix[]
-  /** Libellé d'une première option vide (valeur `""`) ; sans lui, aucune. */
-  optionVide?: string
+/**
+ * Le rôle, dans une liste. Il lit le formulaire par son contexte : ses props restent des données
+ * (`portage-ecrans.md § 2`).
+ */
+function ChampDuRole({ choix }: { choix: readonly Choix[] }) {
+  const { register } = useFormContext<InviteInput, unknown, Invite>()
+  return (
+    <Field label="Rôle">
+      <Select options={choix.map((option) => ({ value: option.id, label: option.nom }))} {...register("role")} />
+    </Field>
+  )
 }
 
 /**
- * Un choix dans une liste (rôle, équipe). Il lit le formulaire par son contexte : ses props restent
- * des données (`portage-ecrans.md § 2`).
+ * « Équipes » : une case par équipe proposable, aucune cochée valant « aucune équipe ». La liste des identifiants
+ * cochés se tient par `useController` : des cases enregistrées une à une rendraient un booléen pour une seule équipe.
  */
-function ChampChoix({ libelle, nom, choix, optionVide }: ChampChoixProps) {
-  const { register } = useFormContext<InviteInput, unknown, Invite>()
-  const options = [...(optionVide === undefined ? [] : [{ value: "", label: optionVide }]), ...choix.map((option) => ({ value: option.id, label: option.nom }))]
+function ChampDesEquipes({ equipes }: { equipes: readonly Choix[] }) {
+  const { field, fieldState } = useController<InviteInput, "teamIds">({ name: "teamIds" })
+  const cochees = field.value ?? []
+  const basculer = (id: string, coche: boolean) => field.onChange(coche ? [...cochees, id] : cochees.filter((cochee) => cochee !== id))
   return (
-    <Field label={libelle}>
-      <Select options={options} {...register(nom)} />
-    </Field>
+    <CheckboxGroup legend="Équipes" hint={AIDE_DES_EQUIPES} error={fieldState.error?.message}>
+      {equipes.map((equipe, rang) => (
+        <Checkbox
+          key={equipe.id}
+          ref={rang === 0 ? field.ref : undefined}
+          name={field.name}
+          value={equipe.id}
+          label={equipe.nom}
+          checked={cochees.includes(equipe.id)}
+          onChange={(evenement) => basculer(equipe.id, evenement.target.checked)}
+          onBlur={field.onBlur}
+        />
+      ))}
+    </CheckboxGroup>
   )
+}
+
+/** Un responsable d'une seule équipe n'a rien à choisir : elle est cochée ; sinon, aucune case. */
+function cochesDeDepart(equipes: readonly Choix[], obligatoire: boolean): string[] {
+  return obligatoire && equipes.length === 1 ? equipes.map((equipe) => equipe.id) : []
 }
 
 export function InviterQuelquUn({ equipes, rolesPermis, equipeObligatoire }: InviterQuelquUnProps) {
@@ -74,7 +100,7 @@ export function InviterQuelquUn({ equipes, rolesPermis, equipeObligatoire }: Inv
   const form = useForm<InviteInput, unknown, Invite>({
     resolver: zodResolver(inviteSchema),
     mode: "onBlur",
-    defaultValues: { email: "", role: "member", teamId: equipeObligatoire ? (equipes[0]?.id ?? "") : "" },
+    defaultValues: { email: "", role: "member", teamIds: cochesDeDepart(equipes, equipeObligatoire) },
   })
   const { errors, isSubmitting } = form.formState
   // Le message de Zod (anglais) ne s'affiche pas : une erreur de saisie a sa phrase, un refus du
@@ -83,6 +109,11 @@ export function InviterQuelquUn({ equipes, rolesPermis, equipeObligatoire }: Inv
 
   async function envoyer(invitation: Invite) {
     setAnnonce("")
+    // Un responsable invite dans une de ses équipes au moins : refusé ici, sans appel, comme le service le refuserait.
+    if (equipeObligatoire && invitation.teamIds.length === 0) {
+      form.setError("teamIds", { type: "required", message: EQUIPE_EXIGEE }, { shouldFocus: true })
+      return
+    }
     const reponse = await appelerPlateforme<InvitationCreee>({ methode: "POST", ressource: "invitations", corps: invitation })
     if (reponse.erreur) {
       const message = messageDErreur(reponse.erreur)
@@ -107,8 +138,8 @@ export function InviterQuelquUn({ equipes, rolesPermis, equipeObligatoire }: Inv
           <Input type="email" autoComplete="email" {...form.register("email")} />
         </Field>
 
-        {rolesPermis.length > 1 && <ChampChoix libelle="Rôle" nom="role" choix={ROLES.filter((role) => rolesPermis.includes(role.id))} />}
-        <ChampChoix libelle="Équipe" nom="teamId" choix={equipes} optionVide={equipeObligatoire ? undefined : "Aucune équipe"} />
+        {rolesPermis.length > 1 && <ChampDuRole choix={ROLES.filter((role) => rolesPermis.includes(role.id))} />}
+        <ChampDesEquipes equipes={equipes} />
 
         {errors.root?.message && <p role="alert">{errors.root.message}</p>}
 

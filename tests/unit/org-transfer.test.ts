@@ -240,6 +240,7 @@ function accessTables(ids: Ids): Record<string, Row[]> {
     id: randomUUID(), org_id: ids.org, email, role: "member", team_id: ids.ventes, invited_by: ids.alice,
     created_at: AT, expires_at: FUTURE, accepted_at: null, accepted_by: null, declined_at: null, revoked_at: null, ...extra,
   })
+  const pending = invitation("new@example.test")
   const grant = (user: string) => ({ id: randomUUID(), org_id: ids.org, user_id: user, granted_by: ids.alice, granted_at: AT, revoked_at: null, revoked_by: null, reason: "support" })
   return {
     access_rules: [
@@ -250,13 +251,15 @@ function accessTables(ids: Ids): Record<string, Row[]> {
     ],
     connector_activations: [{ org_id: ids.org, connector: "mail", state: "active", activated_by: ids.alice, closed_by: null, created_at: AT, updated_at: AT }],
     invitations: [
-      invitation("new@example.test"),
+      pending,
       invitation("accepted@example.test", { accepted_at: LATER, accepted_by: ids.carol }),
       invitation("declined@example.test", { declined_at: LATER }),
       invitation("revoked@example.test", { revoked_at: LATER }),
       invitation("expired@example.test", { expires_at: PAST }),
       invitation("alice@example.test"),
     ],
+    // Ventes, posée aussi par le déclencheur de l'invitation à l'import ; Support, une seconde équipe.
+    invitation_teams: [ids.ventes, ids.support].map((team_id) => ({ invitation_id: pending.id, team_id, created_at: AT })),
     platform_grants: [grant(ids.alice), grant(ids.bob)],
   }
 }
@@ -480,6 +483,18 @@ describe("planImport, every person present", () => {
     expect(plan.closedInvitations).toBe(5)
   })
 
+  it("should carry the teams of an imported invitation under its new id, and leave those of a closed one with it", () => {
+    const withClosed = exportDoc(ids)
+    const revoked = withClosed.tables.invitations.find((row) => row.email === "revoked@example.test")
+    withClosed.tables.invitation_teams = [...withClosed.tables.invitation_teams, { invitation_id: revoked?.id ?? null, team_id: ids.ventes, created_at: AT }]
+    const imported = planImport(withClosed, { people: samePeople(withClosed), org: TARGET, now: NOW })
+    // Ventes puis Support, dans l'ordre du fichier.
+    const [ventes, support] = imported.rows.teams.map((row) => row.id)
+    expect(imported.rows.invitation_teams).toEqual([ventes, support].map((team_id) => ({ invitation_id: imported.rows.invitations[0].id, team_id, created_at: AT })))
+    expect(ventes).not.toBe(ids.ventes)
+    expect(imported.skipped.invitation_teams).toBe(1)
+  })
+
   // La clé unique des liens vaut pour toute la base : un lien parti du bloc d'une autre organisation
   // ferait échouer sa publication (23505).
   it("should skip a link whose source block is not a published block of its node (HN-E09S04-23)", () => {
@@ -521,7 +536,7 @@ describe("planImport, one person absent from the target (AC9, AC10)", () => {
     expect(plan.skipped).toEqual({
       orgs: 0, teams: 0, members: 1, team_members: 2, accounts: 1, nodes: 3, node_drafts: 1, blocks: 2, node_versions: 1,
       // Le fil posé sur les notes de Bob part avec leur nœud, et son commentaire avec lui.
-      node_aliases: 1, links: 1, comment_threads: 1, comments: 1, access_rules: 3, connector_activations: 0, invitations: 0, platform_grants: 1, ctx: 1,
+      node_aliases: 1, links: 1, comment_threads: 1, comments: 1, access_rules: 3, connector_activations: 0, invitations: 0, invitation_teams: 0, platform_grants: 1, ctx: 1,
       journal: 0, admin_journal: 0, feedback: 1, sim_outbox: 1,
     })
     expect(plan.rows.nodes.map((row) => row.path).filter((nodePath) => String(nodePath).startsWith("private/bob"))).toEqual([])

@@ -23,8 +23,8 @@ export type LigneDInvitation = {
   id: string
   email: string
   role: InvitationRole
-  /** Le nom de l'équipe où la personne entrera ; `null` : aucune. */
-  equipe: string | null
+  /** Les équipes où la personne entrera à sa première connexion, celles que qui regarde voit. */
+  equipes: { id: string; nom: string }[]
   /** Le nom de qui l'a envoyée, ou `null` : hors de l'organisation. */
   invitePar: string | null
   /** `null` : une inscription sans email, qui n'expire pas. */
@@ -62,7 +62,11 @@ function versLignesDInvitation(lues: InvitationsLues, noms: ReadonlyMap<string, 
     id: invitation.id,
     email: invitation.email,
     role: invitation.role,
-    equipe: invitation.teamId ? (lues.nomsDesEquipes.get(invitation.teamId) ?? null) : null,
+    // Une équipe supprimée depuis la lecture n'a plus de nom : elle ne se montre pas.
+    equipes: invitation.teamIds.flatMap((id) => {
+      const nom = lues.nomsDesEquipes.get(id)
+      return nom === undefined ? [] : [{ id, nom }]
+    }),
     invitePar: (invitation.invitedBy && noms.get(invitation.invitedBy)) || null,
     expiration: invitation.expiresAt,
     annulable: moi.estAdmin || invitation.invitedBy === moi.userId,

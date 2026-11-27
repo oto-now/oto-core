@@ -23,31 +23,41 @@ afterEach(() => {
 
 function pied(apparence?: Hote["apparence"]) {
   const hote: Hote = { Lien: "a", chemin: "/", naviguer: vi.fn(), deconnecter: vi.fn(), apparence }
-  render(
+  const rendu = (vue: Hote) => (
     <CoquilleOto pleinePage>
-      <ContexteDeLHote.Provider value={hote}>
+      <ContexteDeLHote.Provider value={vue}>
         <PiedDuRail compte="Claire Morel" handle={null} adresses={{ pages: "/n/", profil: "/profile" }} administre={false} />
       </ContexteDeLHote.Provider>
-    </CoquilleOto>,
+    </CoquilleOto>
   )
+  const { rerender } = render(rendu(hote))
   fireEvent.click(screen.getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-  return within(screen.getByRole("menu"))
-    .getAllByRole("menuitem")
-    .map((item) => item.textContent)
+  return { rerender: (vue: Partial<Hote>) => rerender(rendu({ ...hote, ...vue })) }
 }
 
+const lignes = () => [...screen.getByRole("menu").querySelectorAll("[role^='menuitem']")].map((item) => [item.textContent, item.getAttribute("role"), item.getAttribute("aria-checked")])
+
+// #221 : le mode sombre est un interrupteur du groupe « Apparence », coché quand l'hôte l'a mis ; le menu reste ouvert.
 describe("day or night in the account menu", () => {
-  it("should offer the other mode above the sign-out when the host gives it, and call the host", () => {
+  it("should offer « Mode sombre » as a switch above the sign-out when the host gives the mode, checked in dark mode, and call the host", () => {
     const basculer = vi.fn()
-    expect(pied({ mode: "light", basculer })).toEqual(["Profil", "Mode sombre", "Déconnexion"])
-    fireEvent.click(screen.getByRole("menuitem", { name: "Mode sombre" }))
+    const { rerender } = pied({ mode: "light", basculer })
+    expect(lignes()).toEqual([
+      ["Profil", "menuitem", null],
+      ["Mode sombre", "menuitemcheckbox", "false"],
+      ["Déconnexion", "menuitem", null],
+    ])
+    expect(within(screen.getByRole("menu")).getByText("Apparence")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Mode sombre" }))
     expect(basculer).toHaveBeenCalledTimes(1)
-    cleanup()
-    expect(pied({ mode: "dark", basculer })).toEqual(["Profil", "Mode clair", "Déconnexion"])
+    rerender({ apparence: { mode: "dark", basculer } })
+    expect(screen.getByRole("menuitemcheckbox", { name: "Mode sombre" })).toHaveAttribute("aria-checked", "true")
   })
 
   it("should offer nothing without the host's mode", () => {
-    expect(pied()).toEqual(["Profil", "Déconnexion"])
+    pied()
+    expect(lignes().map(([texte]) => texte)).toEqual(["Profil", "Déconnexion"])
+    expect(within(screen.getByRole("menu")).queryByText("Apparence")).toBeNull()
   })
 })
 

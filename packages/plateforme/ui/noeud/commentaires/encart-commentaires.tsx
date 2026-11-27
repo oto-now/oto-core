@@ -1,18 +1,17 @@
 "use client"
 
-// L'encart « Commentaires » d'un nœud (parcours 5.4, AC12, AC13, AC20) : la même pastille que « Cité dans » et
-// « Sous-pages » (glyphe, compte des fils ouverts, chevron), toujours présente, ouverte à l'arrivée tant qu'un fil est
-// ouvert. Ouvert : les onglets « Ouverts » et « Résolus » avec leur compte, « Commenter la page », le nouveau fil en
+// Le panneau « Commentaires » d'un nœud (parcours 5.4, AC13, AC20 ; refonte #218, D8) : ouvert par le bouton de
+// l'en-tête, ou à l'arrivée quand un fil est non lu pour la personne ; à droite du texte dès 1 024 px, en tiroir dessous
+// (`colonnes-du-noeud.tsx`). Son contenu est celui de l'ancien encart : les onglets « Ouverts » et « Résolus » avec leur compte, « Commenter la page », le nouveau fil en
 // cours, puis les cartes. Quatre états : lecture en cours, échec avec « Réessayer » (la lecture est celle de l'îlot :
 // elle se relance ici, sans relire la page), aucun fil, les fils. Il lit l'état que tient `FournisseurDeCommentaires`.
 // Sans lui, les fils d'une page ne se lisent nulle part à l'écran.
-import { useState } from "react"
-import { ChatText } from "@phosphor-icons/react/dist/csr/ChatText"
+import { useId, useState } from "react"
+import { X } from "@phosphor-icons/react/dist/csr/X"
 import type { CommentThreadStatus, CommentThreadView } from "../../../schemas/comments"
 import { messageDErreur } from "../../api/messages"
-import { AnimatedIcon } from "../../ds/react/icon"
-import { LinkedContent } from "../../ds/react/linked-content"
-import { Alert, Badge, Button } from "../../ds/react/primitives"
+import { Icon } from "../../ds/react/icon"
+import { Alert, Badge, Button, IconButton } from "../../ds/react/primitives"
 import { Tabs } from "../../ds/react/tabs"
 import { Tooltip } from "../../ds/react/tooltip"
 import { envoyerUnCommentaire } from "./api"
@@ -148,25 +147,36 @@ function CorpsDeLEncart({ commentaires }: { commentaires: Commentaires }) {
   return <FilsLus fils={lecture.vue.threads} commentaires={commentaires} />
 }
 
-export function EncartCommentaires() {
+/** Le contenu du panneau : la lecture en cours, son échec, ou les fils (le contenu de l'ancien encart, sans changement). */
+export function CorpsDesCommentaires() {
   const commentaires = useCommentaires()
   if (!commentaires) return null
-  const { lecture, encartOuvert } = commentaires
-  const ouverts = lecture.phase === "lue" ? lecture.vue.threads.filter((fil) => fil.status === "open").length : undefined
   return (
-    <LinkedContent
-      className="oto-commentaires"
-      icon={<AnimatedIcon as={ChatText} size="xs" />}
-      title={COMMENTAIRES.titre}
-      // Aucune pastille à zéro : un « 0 » se lirait comme un compteur en panne, pas comme le calme.
-      count={ouverts !== undefined && ouverts > 0 ? ouverts : undefined}
-      // Fermé, l'encart dit quand même qu'il n'a pas pu se lire.
-      summary={lecture.phase === "erreur" ? COMMENTAIRES.echec : undefined}
-      open={encartOuvert}
-      // Le navigateur a ouvert ou fermé le repli (clic, clavier) : l'état le suit, sans s'écrire deux fois.
-      onToggle={(evenement) => evenement.currentTarget.open !== encartOuvert && commentaires.ouvrirLEncart(evenement.currentTarget.open)}
-    >
+    <div className="oto-commentaires">
       <CorpsDeLEncart commentaires={commentaires} />
-    </LinkedContent>
+    </div>
+  )
+}
+
+/**
+ * Le panneau non modal, à droite du texte dès 1 024 px (D8, #218) : son titre, « Fermer », puis les fils ; le texte reste
+ * cliquable à côté, pour qu'une bulle de bloc ouvre son fil pendant qu'il est ouvert. Fermé, il n'est pas rendu.
+ */
+export function PanneauDesCommentaires() {
+  const commentaires = useCommentaires()
+  const titre = useId()
+  if (!commentaires?.encartOuvert) return null
+  return (
+    <section className="oto-commentaires oto-comments-panel" aria-labelledby={titre}>
+      <header className="oto-comments-panel-head">
+        <h2 id={titre} className="oto-section-title">
+          {COMMENTAIRES.titre}
+        </h2>
+        <IconButton label={COMMENTAIRES.fermer} size="sm" onClick={() => commentaires.ouvrirLEncart(false)}>
+          <Icon as={X} size="xs" />
+        </IconButton>
+      </header>
+      <CorpsDeLEncart commentaires={commentaires} />
+    </section>
   )
 }

@@ -1,10 +1,10 @@
 "use client"
 
-// Les pièces visuelles du panneau « Partager » (1.4.13) : l'intertitre d'une section, en étiquette avec son icône et son
-// compte, le niveau d'une ligne en pastille de couleur (Aucun accès gris, Peut lire bleu, Peut modifier vert, Accès
-// complet violet), choisi dans la liste du design system ou lu seulement, et les étiquettes d'une ligne (« vous »,
-// « responsable »). Sans elles, le panneau était un texte gris uniforme où l'on ne voyait pas d'un coup d'œil qui lit et
-// qui modifie. Le mot du niveau reste écrit : la couleur ne dit jamais seule le niveau.
+// Les pièces visuelles du panneau « Partager » (1.4.13, #219) : l'intertitre d'un groupe, petit, gris, en casse de phrase
+// (`.oto-group-title`, D4), le niveau d'une ligne en petite pastille de couleur (Aucun accès gris, Peut lire bleu, Peut
+// modifier vert, Accès complet violet, D7), choisi dans la liste du design system ou lu seulement, et les étiquettes d'une
+// ligne (« vous », « responsable »). Sans elles, on ne voyait pas d'un coup d'œil qui lit et qui modifie. Le mot du niveau
+// reste écrit : la couleur ne dit jamais seule le niveau.
 import { forwardRef, type ReactNode } from "react"
 import { Eye } from "@phosphor-icons/react/dist/csr/Eye"
 import { Key } from "@phosphor-icons/react/dist/csr/Key"
@@ -12,23 +12,29 @@ import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple"
 import { Prohibit } from "@phosphor-icons/react/dist/csr/Prohibit"
 import { ACCESS_LEVEL_NAMES, type AccessLevelName } from "../../schemas"
 import { Select, type SelectEvent, type SelectOption } from "../ds/react/select"
+import { GlypheDePortee, type PorteeDEspace } from "./glyphes"
 import { DETAIL_DES_NIVEAUX, NIVEAUX_D_ACCES } from "./libelles"
 
-type SectionProps = { id: string; icone: ReactNode; titre: string; compte?: number; children: ReactNode }
+type SectionProps = { id: string; titre: string; children: ReactNode }
 
-/** Une section du panneau : son intertitre en étiquette (l'ancre du focus quand il porte l'`id` du panneau), puis sa liste. */
-export function SectionDuPartage({ id, icone, titre, compte, children }: SectionProps) {
+/** Un groupe du panneau : son intertitre (l'ancre du focus quand il porte l'`id` du panneau), puis ses lignes. */
+export function SectionDuPartage({ id, titre, children }: SectionProps) {
   return (
     <section aria-labelledby={id} className="oto-share-section">
-      <h3 id={id} tabIndex={-1} className="oto-share-heading">
-        <span aria-hidden="true" className="oto-share-heading-icon">
-          {icone}
-        </span>
+      <h3 id={id} tabIndex={-1} className="oto-group-title">
         {titre}
-        {compte !== undefined && <span className="oto-share-count">{`· ${compte}`}</span>}
       </h3>
       {children}
     </section>
+  )
+}
+
+/** La marque d'une ligne qui n'est pas une personne (une équipe, l'organisation, Privé) : un carré arrondi et son glyphe, une personne ayant son avatar rond. */
+export function MarqueDuSujet({ portee }: { portee: PorteeDEspace }) {
+  return (
+    <span className="oto-share-mark" aria-hidden="true">
+      <GlypheDePortee portee={portee} />
+    </span>
   )
 }
 

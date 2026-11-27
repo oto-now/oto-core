@@ -26,7 +26,6 @@ export const PARTAGE = {
   ajouter: "Ajouter une personne ou une équipe",
   suggestions: "Personnes et équipes",
   rienTrouve: "Aucune personne ni équipe de ce nom.",
-  personneAjoutee: "Personne n'a été ajouté à ce contenu.",
   equipe: (nom: string) => `Équipe ${nom}`,
   vous: "vous",
   accesDe: (nom: string) => `Accès de ${nom}`,
@@ -40,10 +39,13 @@ export const PARTAGE = {
   /** Les membres de l'équipe propriétaire, leur niveau hérité et le menu qui le surcharge (1.4.12). */
   membresDe: (equipe: string) => `Membres de l'équipe ${equipe}`,
   responsable: "responsable",
-  /** Les intertitres du panneau en étiquettes (1.4.13). */
+  /** Les deux intertitres du panneau, petits, gris, en casse de phrase (D4). */
   parDefaut: "Accès par défaut",
+  partagerAvec: "Partager avec",
+  /** Le bouton qui déplie, sous le nom de l'équipe propriétaire, ses membres sans accès propre. */
+  membres: (nombre: number) => (nombre === 1 ? "1 membre" : `${nombre} membres`),
+  /** Le nom de la liste des ajoutés, dans le panneau d'un connecteur. */
   ajoutes: "Personnes et équipes ajoutées",
-  surLeWeb: "Sur le web",
   /** Un membre dont le niveau diffère de celui de l'équipe : une règle qui le nomme, posée plus haut, l'a réglé. */
   exception: "exception",
   niveauxIllisibles: (message: string) => `Les niveaux d'accès n'ont pas pu être lus : ${message}`,
@@ -81,8 +83,8 @@ export const REFUS_DE_L_ACCES_GENERAL = {
 
 /** « Partager sur le web » (E05-S10, partie d ; ADR-013) : le lien public d'un contenu, pour qui en a l'accès complet. */
 export const PARTAGE_WEB = {
-  titre: "Partager sur le web",
-  explication: "Toute personne qui a le lien lit la dernière version publiée, sans compte ; jamais indexé par un moteur de recherche.",
+  titre: "Publier sur le web",
+  explication: "Toute personne qui a le lien peut lire la page, sans compte.",
   /** Ce que copie le bouton : « Copier le lien ». */
   cible: "le lien",
   sousContenus: "Inclure les sous-contenus",

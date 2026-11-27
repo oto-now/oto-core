@@ -1,8 +1,8 @@
 "use client"
 
 // Porté d'oto-frontend (src/components/coque/rail-application.tsx) : LE RAIL, la seule coque (ADR-008
-// point 7). Ses zones, dans l'ordre : l'entreprise et son menu, Accueil, Rechercher (⌘K), une section
-// par espace (le Contexte en tête, puis l'arbre), puis le pied (Connecteurs, le compte). Toute ligne
+// point 7). Ses zones, dans l'ordre : l'organisation (le chemin de l'accueil), Rechercher (⌘K), une section
+// par espace (le Contexte en tête, puis l'arbre), puis le pied (la personne et son menu). Toute ligne
 // navigue par le lien de l'hôte (`ContexteDeLHote`), jamais par une ancre qui rechargerait le document ;
 // la ligne courante se calcule ici, sur l'adresse que l'hôte donne. Changé : les données viennent de la
 // page de l'hôte (`DonneesDuRail`), lues sous le jeton de la session, au lieu de TanStack Query ; un
@@ -10,16 +10,16 @@
 // l'écran reste ouvert. Retiré : Agents, compteurs, premier jour, squelette (les données
 // arrivent avec la page). Ajouté (fiche D90 B) : sous 768 px, le bouton « Menu » ouvre le rail en tiroir,
 // qu'oto-frontend laissait sans déclencheur ; son bouton est le `.oto-rail-toggle` du design system.
-// E11-S20 : l'arbre servi est l'état de départ, remplacé par les relectures du rail (`useArbreDuRail`).
+// E11-S20 : l'arbre servi est l'état de départ, remplacé par les relectures du rail (`useArbreDuRail`). #221 : la ligne
+// « Accueil » part, le bloc de l'organisation y mène ; « Rechercher » suit ce bloc, hors de la zone qui défile ; le pied
+// ne porte plus que la personne et son menu, où sont descendus les écrans de l'organisation et « Connecteurs ».
 import { useCallback, useId, useRef, useState } from "react"
 import { List } from "@phosphor-icons/react/dist/csr/List"
-import { SquaresFour } from "@phosphor-icons/react/dist/csr/SquaresFour"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { AnimatedIcon } from "../ds/react/icon"
-import { Rail, RailItem, RailScroll } from "../ds/react/layout"
+import { Rail, RailScroll } from "../ds/react/layout"
 import { IconButton } from "../ds/react/primitives"
 import { useHote } from "../hote/navigation"
-import { LigneDuRail } from "./arbre-du-rail"
 import { EntrepriseDuRail } from "./entreprise-du-rail"
 import { RAIL } from "./libelles"
 import { PiedDuRail } from "./pied-du-rail"
@@ -80,7 +80,7 @@ function useTiroirDuRail(chemin: string) {
 
 export type RailApplicationProps = DonneesDuRail & { adresses: AdressesDuRail }
 
-export function RailApplication({ entreprise, arbre: servi, equipes, handle, compte, administre, adresses, organisations, equipesDeLaPersonne }: RailApplicationProps) {
+export function RailApplication({ entreprise, arbre: servi, equipes, handle, compte, email, administre, adresses, organisations, equipesDeLaPersonne }: RailApplicationProps) {
   const { chemin } = useHote()
   const tiroir = useTiroirDuRail(chemin)
   const { arbre, enPanne } = useArbreDuRail(servi, chemin)
@@ -95,15 +95,12 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
         <AnimatedIcon as={List} size="sm" />
       </IconButton>
       <Rail id={idDuRail} open={tiroir.ouvert} onClose={tiroir.fermer}>
-        <EntrepriseDuRail entreprise={entreprise} adresses={adresses} administre={administre} organisations={organisations} />
+        <EntrepriseDuRail entreprise={entreprise} adresses={adresses} organisations={organisations} />
+        <RechercheDuRail arbre={lu} handle={handle} adresses={adresses} administre={administre} />
         <RailScroll>
-          {adresses.accueil !== undefined && (
-            <RailItem as={LigneDuRail} href={adresses.accueil} label={RAIL.accueil} icon={<AnimatedIcon as={SquaresFour} size="xs" />} active={chemin === adresses.accueil} />
-          )}
-          <RechercheDuRail arbre={lu} handle={handle} adresses={adresses} administre={administre} />
           <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} administre={administre} equipesDeLaPersonne={equipesDeLaPersonne} />
         </RailScroll>
-        <PiedDuRail compte={compte} handle={handle} adresses={adresses} administre={administre} />
+        <PiedDuRail compte={compte} email={email} handle={handle} entreprise={entreprise} adresses={adresses} administre={administre} />
         <PoigneeDuRail />
       </Rail>
     </>

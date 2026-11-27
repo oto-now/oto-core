@@ -31,7 +31,7 @@ describe("parseTableHeader (AC1, AC2)", () => {
   it("should name each problem with its path (AC2)", () => {
     const columns = PROSPECTS_HEADER.columns
     const cases: [Record<string, unknown>, string][] = [
-      [variant({ columns: [...columns.slice(0, 2), { name: "email", type: "email", read_only: true }, ...columns.slice(3)] }), "columns[2].read_only: unknown attribute. Allowed: name, type, options, required, allow_verified_empty, max_length."],
+      [variant({ columns: [...columns.slice(0, 2), { name: "email", type: "email", read_only: true }, ...columns.slice(3)] }), "columns[2].read_only: unknown attribute. Allowed: name, label, type, options, required, allow_verified_empty, max_length."],
       [variant({ columns: [...columns.slice(0, 4), { name: "montant_estime", type: "money" }, ...columns.slice(5)] }), "columns[4].type: unknown type money. Types: text, number, date, datetime, bool, enum, email, url."],
       [variant({ stricte: true }), "stricte: unknown attribute. Allowed: columns, key, lifecycle, closed, proof."],
       [variant({ lifecycle: { ...LIFECYCLE, stricte: true } }), "lifecycle.stricte: unknown attribute. Allowed: column, states, working, review."],
@@ -72,7 +72,7 @@ describe("parseTableHeader (AC1, AC2)", () => {
     const parsed = parseTableHeader(header)
     expect("problems" in parsed && [...parsed.problems].sort()).toEqual(
       [
-        "columns[2].read_only: unknown attribute. Allowed: name, type, options, required, allow_verified_empty, max_length.",
+        "columns[2].read_only: unknown attribute. Allowed: name, label, type, options, required, allow_verified_empty, max_length.",
         "columns[4].type: unknown type money. Types: text, number, date, datetime, bool, enum, email, url.",
         "couleur: unknown attribute. Allowed: columns, key, lifecycle, closed, proof.",
         "columns[1].options: options apply to enum columns only; notes is text.",

@@ -19,6 +19,7 @@
 
 @import "./css/table.css";
 @import "./css/lists.css";
+@import "./css/history.css";
 
 @import "./css/feedback.css";
 
@@ -38,3 +39,5 @@
 
 @import "./css/blocks.css";
 @import "./css/editeur.css";
+
+@import "./css/node-page.css";

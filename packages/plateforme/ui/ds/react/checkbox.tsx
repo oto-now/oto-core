@@ -4,7 +4,12 @@
 // visuellement masqué mais dans le flux et focalisable ; la boîte dessinée est son frère immédiat, et
 // `:checked + .oto-checkbox-box` fait le travail sans JS ; `indeterminate` n'existe qu'en propriété du DOM,
 // posée à la main. Tel quel, en TypeScript.
-import { forwardRef, useEffect, useRef, type ComponentProps, type ReactNode } from "react"
+// `CheckboxGroup` : plusieurs cases d'un même choix, un `<fieldset>` et sa `<legend>` (sans quoi un lecteur d'écran
+// annonce des cases isolées), dans une liste encadrée qui défile au-delà de six, avec l'aide et l'erreur de `Field`.
+// Sans lui, une liste de cases dans un formulaire (les équipes d'une invitation) se dessinait à la main ; le menu à
+// cases, monté en portail, tombe sous la couche d'un dialogue modal.
+import { forwardRef, useEffect, useId, useRef, type ComponentProps, type ReactNode } from "react"
+import { FieldError } from "./forms"
 import { cx, mergeRefs } from "./outils"
 
 type CheckboxProps = Omit<ComponentProps<"input">, "type"> & {
@@ -40,3 +45,31 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     </label>
   )
 })
+
+type CheckboxGroupProps = Omit<ComponentProps<"fieldset">, "children"> & {
+  legend: ReactNode
+  hint?: ReactNode
+  error?: ReactNode
+  /** Les `Checkbox` du choix. */
+  children: ReactNode
+}
+
+/** L'aide et l'erreur se lisent comme celles de `Field` : l'erreur avant l'aide, qu'elle remplace, liées au groupe. */
+export function CheckboxGroup({ legend, hint, error, id, className, children, ...rest }: CheckboxGroupProps) {
+  const auto = useId()
+  const groupId = id || auto
+  const hintId = hint ? `${groupId}-hint` : undefined
+  const errId = error ? `${groupId}-err` : undefined
+  return (
+    <fieldset id={groupId} className={cx("oto-checkbox-group", className)} aria-describedby={[errId, hint && !error ? hintId : undefined].filter(Boolean).join(" ") || undefined} {...rest}>
+      <legend className="oto-field-label">{legend}</legend>
+      <div className="oto-checkbox-list">{children}</div>
+      {error && <FieldError id={errId}>{error}</FieldError>}
+      {hint && !error && (
+        <p className="oto-field-hint" id={hintId}>
+          {hint}
+        </p>
+      )}
+    </fieldset>
+  )
+}

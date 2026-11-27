@@ -125,7 +125,7 @@ describe.skipIf(!sqlConfigured)(
         expect(response.status).toBe(201)
         expect(answer).toEqual({
           data: {
-            invitation: { id: expect.any(String), email: address, role: "member", teamId: ventes, expiresAt: expect.any(String) },
+            invitation: { id: expect.any(String), email: address, role: "member", teamId: ventes, teamIds: [ventes], expiresAt: expect.any(String) },
             emailed: true,
           },
         })

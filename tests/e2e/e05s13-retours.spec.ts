@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { avecLaBase, clientAuth } from "./fixtures/base"
 import { AUTRE_EQUIPE, CHEMINS, EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
-import { attendre, capturer, ouvrirAQuoiSert, ouvrirLeRail, seConnecterSurLEspace } from "./fixtures/noeud"
+import { attendre, capturer, ouvrirLeRail, seConnecterSurLEspace } from "./fixtures/noeud"
 
 // Les retours du soir de JB (E05-S13, AC-29), en contrôle visuel connecté sur l'organisation de la campagne
 // (`espace.ts`), en clair puis en sombre, à 375 et 1 280 px : le menu de l'entreprise range Journal dans les
@@ -22,10 +22,10 @@ const LARGEURS = [375, 1_280] as const
 /** Ce que l'écran ne dit plus (E05-S13, AC-13, AC-14) : l'anglais servi et les chiffres. */
 const RETIRES = ["Procedures you can run", "What's new", "Recent content", "Nothing new", "caractères sur", "reflète les versions"]
 
-/** Le menu de l'entreprise, ouvert par sa pastille en tête du rail. */
+/** Le menu du compte, où sont les écrans de l'organisation, sous son nom (#221). */
 async function menuDeLEntreprise(page: Page, largeur: number) {
   const rail = await ouvrirLeRail(page, largeur)
-  await rail.getByRole("button", { name: /^Entreprise : / }).click()
+  await rail.getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }).click()
   return page.getByRole("menu")
 }
 
@@ -59,15 +59,13 @@ test.describe("E05-S13 : les retours du soir", () => {
         const main = page.getByRole("main")
         await seConnecterSurLEspace(page, { email, password })
 
-        // AC-10 : dans les réglages, « Activité » (Statistiques et Journal, 1.4.13) à la place du Journal ; « Suivi de
-        // l'entreprise » revient avec Retours, toujours montré à qui administre (1.4.13, décision de JB : la page dit
-        // l'option « Retours visibles » éteinte) ; deux groupes, chacun son sous-titre.
+        // AC-10 : « Activité » (Statistiques et Journal, 1.4.13) à la place du Journal ; Retours, toujours montré à qui
+        // administre (1.4.13, décision de JB : la page dit l'option « Retours visibles » éteinte) ; depuis #221, sous le nom
+        // de l'organisation, au menu du compte.
         const menu = await menuDeLEntreprise(page, largeur)
-        await expect(menu.getByRole("menuitem")).toHaveText(["Organisation", "Équipes & accès", "Activité", "Retours"])
+        for (const entree of ["Organisation", "Équipes & accès", "Activité", "Retours"]) await expect(menu.getByRole("menuitem", { name: entree, exact: true })).toHaveCount(1)
         await expect(menu.getByRole("menuitem", { name: "Journal" })).toHaveCount(0)
         await expect(menu.getByRole("menuitem", { name: "Statistiques" })).toHaveCount(0)
-        await expect(menu.getByText("Réglages de l’entreprise", { exact: true })).toHaveCount(1)
-        await expect(menu.getByText("Suivi de l’entreprise", { exact: true })).toHaveCount(1)
         await capturer(page, testInfo, `menu-entreprise-${nom}`)
         await page.keyboard.press("Escape")
         if (largeur < 768) await page.keyboard.press("Escape")
@@ -118,12 +116,13 @@ test.describe("E05-S13 : les retours du soir", () => {
 
         // AC-13, AC-17, AC-20 : le Contexte de l'équipe, ses deux encarts, et aucun « Déplacer » en tête.
         await page.goto(`${ESPACE.adresse}/n/${CHEMINS.contexteDeLEquipe}`)
-        const aQuoiSert = await ouvrirAQuoiSert(page)
+        // Refonte #217 : la phrase de portée sous la méta, toujours visible, sans repli ni seconde phrase.
+        const aQuoiSert = page.locator(".oto-node-lead")
         await attendre(aQuoiSert.getByText(`Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe ${EQUIPE.nom}, lit à chaque conversation.`)).toBeVisible()
-        await expect(aQuoiSert.getByText("Vous l'écrivez comme n'importe quelle page.")).toBeVisible()
+        await expect(aQuoiSert.getByText("Vous l'écrivez comme n'importe quelle page.")).toHaveCount(0)
         await expect(aQuoiSert.getByText("Reçu par")).toHaveCount(0)
         await expect(aQuoiSert.getByRole("definition")).toHaveCount(0)
-        const lecture = page.getByRole("note", { name: "Voici ce que votre agent va lire" })
+        const lecture = page.getByRole("region", { name: "Ce que reçoit votre assistant" })
         await expect(lecture.getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
         await expect(lecture.getByText("Ordre de lecture", { exact: true })).toHaveCount(0)
         await expect(lecture.getByText(/\(ce contexte\)/)).toBeVisible()
@@ -133,12 +132,12 @@ test.describe("E05-S13 : les retours du soir", () => {
 
         // AC-17 : la phrase de Tout le monde et celle de Privé.
         await page.goto(`${ESPACE.adresse}/n/contexte`)
-        await attendre((await ouvrirAQuoiSert(page)).getByText(/^Ce que votre Claude\/ChatGPT\/Mistral, comme celui de chaque membre de .+, lit à chaque conversation\.$/)).toBeVisible()
+        await attendre(page.locator(".oto-node-lead").getByText(/^Ce que votre Claude\/ChatGPT\/Mistral, comme celui de chaque membre de .+, lit à chaque conversation\.$/)).toBeVisible()
         rail = await ouvrirLeRail(page, largeur)
         const prive = await rail.locator('a[href^="/n/private/"][href$="/contexte"]').first().getAttribute("href")
         if (largeur < 768) await page.keyboard.press("Escape")
         await page.goto(`${ESPACE.adresse}${prive ?? ""}`)
-        await attendre((await ouvrirAQuoiSert(page)).getByText("Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez.", { exact: true })).toBeVisible()
+        await attendre(page.locator(".oto-node-lead").getByText("Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez.", { exact: true })).toBeVisible()
 
         // AC-20 : ni une page, ni une procédure, ni un tableau n'ont « Déplacer » en tête.
         for (const chemin of [CHEMINS.grilleTarifaire, CHEMINS.procedure, CHEMINS.tableau]) {

@@ -132,10 +132,20 @@ const cellule = (ligne: string, colonne: string) => {
 const derniereAdresse = () => new URL(String(naviguer.mock.lastCall?.[0]), "http://hote.test")
 
 describe("TableauDuNoeud, columns and cells (AC2, AC18)", () => {
-  it("should show the declared columns once, the key first as the primary cell, each value in the format of its type, never null", () => {
+  it("should show the declared columns once, by their label in sentence case, the key first as the primary cell, each value in the format of its type, never null", () => {
     rendre()
     expect(table()).toHaveAccessibleName("Suivi des prospects — 3 lignes")
-    expect(within(table()).getAllByRole("columnheader").map((entete) => entete.querySelector(".oto-th-sort")?.firstChild?.textContent)).toEqual(ENTETE.columns.map((colonne) => colonne.name))
+    expect(within(table()).getAllByRole("columnheader").map((entete) => entete.querySelector(".oto-th-sort")?.firstChild?.textContent)).toEqual([
+      "Ref",
+      "Entreprise",
+      "Email",
+      "Site",
+      "Montant estime",
+      "Dernier contact",
+      "Relance le",
+      "Actif",
+      "Statut",
+    ])
     expect(within(table()).getAllByRole("row").slice(1).map((rangee) => rangee.querySelector("td[data-primary]")?.textContent?.slice(0, 5))).toEqual(["P-001", "P-002", "P-003"])
     expect(cellule("P-001", "montant_estime")).toHaveTextContent("12 000")
     expect(cellule("P-001", "montant_estime")).toHaveAttribute("data-numeric")
@@ -167,10 +177,10 @@ describe("TableauDuNoeud, provenance (AC3)", () => {
     rendre()
     const montant = cellule("P-001", "montant_estime")
     expect(montant).toHaveTextContent(/^12 000$/)
-    const bouton = within(montant).getByRole("button", { name: "Provenance de « montant_estime »" })
+    const bouton = within(montant).getByRole("button", { name: "Provenance de « Montant estime »" })
     expect(bouton).toHaveAttribute("aria-expanded", "false")
     fireEvent.click(bouton)
-    const panneau = screen.getByRole("dialog", { name: "Provenance de « montant_estime »" })
+    const panneau = screen.getByRole("dialog", { name: "Provenance de « Montant estime »" })
     expect(table()).not.toContainElement(panneau)
     const detail = within(panneau)
     expect(detail.getByText("Décidé par Claire Morel")).toBeInTheDocument()
@@ -178,8 +188,8 @@ describe("TableauDuNoeud, provenance (AC3)", () => {
     expect(detail.getByText("Commentaire : Devis signé")).toBeInTheDocument()
     expect(detail.getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveAttribute("rel", "noopener noreferrer")
     expect(detail.getByText("Valeur importée à l'origine : 9 000 (le 1 août 2026)")).toBeInTheDocument()
-    fireEvent.click(within(cellule("P-001", "email")).getByRole("button", { name: "Provenance de « email »" }))
-    const email = within(screen.getByRole("dialog", { name: "Provenance de « email »" }))
+    fireEvent.click(within(cellule("P-001", "email")).getByRole("button", { name: "Provenance de « Email »" }))
+    const email = within(screen.getByRole("dialog", { name: "Provenance de « Email »" }))
     expect(email.getByText("Rempli par l'assistant de un ancien membre")).toBeInTheDocument()
     // Une preuve hors http(s) se lit en texte, jamais en lien.
     expect(email.getByText(/annuaire interne/)).toBeInTheDocument()
@@ -191,8 +201,8 @@ describe("TableauDuNoeud, provenance (AC3)", () => {
     rendre()
     const montant = cellule("P-001", "montant_estime")
     expect(montant.querySelector(".oto-cell-info > .text-ink")).toHaveTextContent(/^12 000$/)
-    fireEvent.click(within(montant).getByRole("button", { name: "Provenance de « montant_estime »" }))
-    const panneau = within(screen.getByRole("dialog", { name: "Provenance de « montant_estime »" }))
+    fireEvent.click(within(montant).getByRole("button", { name: "Provenance de « Montant estime »" }))
+    const panneau = within(screen.getByRole("dialog", { name: "Provenance de « Montant estime »" }))
     // Le gris est celui de la légende du design system (`oto-caption`), que le lien de texte (`oto-link`, souligné) reprend.
     expect(panneau.getByText("Décidé par Claire Morel").parentElement).toHaveClass("oto-caption")
     const lien = panneau.getByRole("link", { name: "https://valbrune.test/deliberation-12" })
@@ -244,17 +254,17 @@ describe("TableauDuNoeud, rows in review (E11-S05, AC-a4)", () => {
 describe("TableauDuNoeud, sort (AC4)", () => {
   it("should sort a column by its header button through the host, the sorted one the other way, and say an ignored setting", () => {
     rendre({ parametres: { sort: "montant_estime", f: "couleur:contains:bleu" } })
-    const montant = screen.getByRole("columnheader", { name: /montant_estime/ })
+    const montant = screen.getByRole("columnheader", { name: /Montant estime/ })
     expect(montant).toHaveAttribute("aria-sort", "ascending")
-    expect(screen.getByRole("columnheader", { name: /entreprise/ })).toHaveAttribute("aria-sort", "none")
-    fireEvent.click(screen.getByRole("button", { name: "Trier sur montant_estime" }))
+    expect(screen.getByRole("columnheader", { name: /Entreprise/ })).toHaveAttribute("aria-sort", "none")
+    fireEvent.click(screen.getByRole("button", { name: "Trier sur Montant estime" }))
     expect(naviguer).toHaveBeenLastCalledWith(`${ADRESSE}?sort=-montant_estime`)
-    fireEvent.click(screen.getByRole("button", { name: "Trier sur entreprise" }))
+    fireEvent.click(screen.getByRole("button", { name: "Trier sur Entreprise" }))
     expect(naviguer).toHaveBeenLastCalledWith(`${ADRESSE}?sort=entreprise`)
     expect(screen.getByText("Un réglage de l'adresse n'a pas été compris : il est ignoré.")).toBeInTheDocument()
     cleanup()
     rendre({ parametres: { sort: "-montant_estime" } })
-    expect(screen.getByRole("columnheader", { name: /montant_estime/ })).toHaveAttribute("aria-sort", "descending")
+    expect(screen.getByRole("columnheader", { name: /Montant estime/ })).toHaveAttribute("aria-sort", "descending")
     expect(screen.queryByText(/n'a pas été compris/)).toBeNull()
   })
 })
@@ -286,21 +296,21 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
 
   it("should offer the operations of each type in the panel of each header, marked when a filter is set", () => {
     rendre({ parametres: { q: "tilleuls", sort: "ref", f: ["montant_estime:gte:10000", "statut:eq:à traiter"] } })
-    expect(screen.getByRole("button", { name: "Filtrer sur montant_estime" })).toHaveAttribute("aria-pressed", "true")
-    expect(screen.getByRole("button", { name: "Filtrer sur entreprise" })).toHaveAttribute("aria-pressed", "false")
-    ouvrir("entreprise")
-    expect(panneau("entreprise").getByLabelText("Contient")).toHaveAttribute("name", "contains")
-    ouvrir("statut")
-    expect(libellesDesChoix(panneau("statut").getByLabelText("Égal à"))).toEqual(["Peu importe", ...STATES])
-    ouvrir("actif")
-    expect(libellesDesChoix(panneau("actif").getByLabelText("Égal à"))).toEqual(["Peu importe", "Oui", "Non"])
-    for (const [colonne, type] of [["montant_estime", "number"], ["dernier_contact", "date"], ["relance_le", "datetime-local"]]) {
+    expect(screen.getByRole("button", { name: "Filtrer sur Montant estime" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: "Filtrer sur Entreprise" })).toHaveAttribute("aria-pressed", "false")
+    ouvrir("Entreprise")
+    expect(panneau("Entreprise").getByLabelText("Contient")).toHaveAttribute("name", "contains")
+    ouvrir("Statut")
+    expect(libellesDesChoix(panneau("Statut").getByLabelText("Égal à"))).toEqual(["Peu importe", ...STATES])
+    ouvrir("Actif")
+    expect(libellesDesChoix(panneau("Actif").getByLabelText("Égal à"))).toEqual(["Peu importe", "Oui", "Non"])
+    for (const [colonne, type] of [["Montant estime", "number"], ["Dernier contact", "date"], ["Relance le", "datetime-local"]]) {
       ouvrir(colonne)
       expect([panneau(colonne).getByLabelText("Au moins").getAttribute("type"), panneau(colonne).getByLabelText("Au plus").getAttribute("type")]).toEqual([type, type])
     }
-    expect(panneau("montant_estime").getByLabelText("Au moins")).toHaveValue(10000)
-    ouvrir("email")
-    expect(panneau("email").getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["", "empty", "not_empty"])
+    expect(panneau("Montant estime").getByLabelText("Au moins")).toHaveValue(10000)
+    ouvrir("Email")
+    expect(panneau("Email").getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["", "empty", "not_empty"])
     expect(screen.getByRole("link", { name: "Retirer les filtres" })).toHaveAttribute("href", `${ADRESSE}?q=tilleuls&sort=ref`)
   })
 
@@ -308,13 +318,13 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
   // booléen, ici.
   it("should apply a filter through the host keeping the other settings, remove it, and move the focus in and out of the panel", () => {
     rendre({ parametres: { q: "tilleuls", sort: "ref", f: ["montant_estime:gte:10000", "statut:eq:à traiter"] } })
-    const bouton = screen.getByRole("button", { name: "Filtrer sur montant_estime" })
+    const bouton = screen.getByRole("button", { name: "Filtrer sur Montant estime" })
     fireEvent.click(bouton)
-    const auMoins = panneau("montant_estime").getByLabelText("Au moins")
+    const auMoins = panneau("Montant estime").getByLabelText("Au moins")
     expect(document.activeElement).toBe(auMoins)
     fireEvent.change(auMoins, { target: { value: "15000" } })
-    fireEvent.click(panneau("montant_estime").getByRole("radio", { name: "Rempli" }))
-    fireEvent.click(panneau("montant_estime").getByRole("button", { name: "Filtrer" }))
+    fireEvent.click(panneau("Montant estime").getByRole("radio", { name: "Rempli" }))
+    fireEvent.click(panneau("Montant estime").getByRole("button", { name: "Filtrer" }))
     expect([...derniereAdresse().searchParams]).toEqual([
       ["q", "tilleuls"],
       ["sort", "ref"],
@@ -322,11 +332,11 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
       ["f", "montant_estime:gte:15000"],
       ["f", "montant_estime:not_empty:"],
     ])
-    expect(screen.queryByRole("form", { name: "Filtrer sur montant_estime" })).toBeNull()
+    expect(screen.queryByRole("form", { name: "Filtrer sur Montant estime" })).toBeNull()
     expect(document.activeElement).toBe(bouton)
 
     fireEvent.click(bouton)
-    fireEvent.click(panneau("montant_estime").getByRole("button", { name: "Retirer le filtre de montant_estime" }))
+    fireEvent.click(panneau("Montant estime").getByRole("button", { name: "Retirer le filtre de Montant estime" }))
     expect([...derniereAdresse().searchParams]).toEqual([
       ["q", "tilleuls"],
       ["sort", "ref"],
@@ -334,15 +344,15 @@ describe("TableauDuNoeud, column filters (AC6)", () => {
     ])
 
     fireEvent.click(bouton)
-    fireEvent.keyDown(panneau("montant_estime").getByLabelText("Au moins"), { key: "Escape" })
-    expect(screen.queryByRole("form", { name: "Filtrer sur montant_estime" })).toBeNull()
+    fireEvent.keyDown(panneau("Montant estime").getByLabelText("Au moins"), { key: "Escape" })
+    expect(screen.queryByRole("form", { name: "Filtrer sur Montant estime" })).toBeNull()
     expect(document.activeElement).toBe(bouton)
     expect(naviguer).toHaveBeenCalledTimes(2)
 
     // Un booléen s'écrit true ou false dans l'adresse.
-    ouvrir("actif")
-    choisirDansLaListe(panneau("actif").getByLabelText("Égal à"), "Oui")
-    fireEvent.click(panneau("actif").getByRole("button", { name: "Filtrer" }))
+    ouvrir("Actif")
+    choisirDansLaListe(panneau("Actif").getByLabelText("Égal à"), "Oui")
+    fireEvent.click(panneau("Actif").getByRole("button", { name: "Filtrer" }))
     expect(derniereAdresse().searchParams.getAll("f")).toEqual(["montant_estime:gte:10000", "statut:eq:à traiter", "actif:eq:true"])
   })
 })
@@ -361,10 +371,10 @@ describe("TableauDuNoeud, focus after a gesture (AC-x3)", () => {
     vue.rerender(ecran({ q: "tilleuls" }, lignes([P001], 1, 3)))
     expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: "Chercher dans 3 lignes" }))
 
-    const bouton = screen.getByRole("button", { name: "Filtrer sur statut" })
+    const bouton = screen.getByRole("button", { name: "Filtrer sur Statut" })
     fireEvent.click(bouton)
-    choisirDansLaListe(within(screen.getByRole("form", { name: "Filtrer sur statut" })).getByLabelText("Égal à"), "écarté")
-    fireEvent.click(within(screen.getByRole("form", { name: "Filtrer sur statut" })).getByRole("button", { name: "Filtrer" }))
+    choisirDansLaListe(within(screen.getByRole("form", { name: "Filtrer sur Statut" })).getByLabelText("Égal à"), "écarté")
+    fireEvent.click(within(screen.getByRole("form", { name: "Filtrer sur Statut" })).getByRole("button", { name: "Filtrer" }))
     expect(document.activeElement).toBe(bouton)
     // Le filtre ne garde aucune ligne : la table et son bouton partent, le focus va à l'îlot du tableau.
     vue.rerender(ecran({ q: "tilleuls", f: "statut:eq:écarté" }, lignes([], 0, 3)))
@@ -379,9 +389,9 @@ describe("TableauDuNoeud, focus after a gesture (AC-x3)", () => {
       </ContexteDeLHote.Provider>
     )
     const vue = render(ecran())
-    const bouton = screen.getByRole("button", { name: "Filtrer sur statut" })
+    const bouton = screen.getByRole("button", { name: "Filtrer sur Statut" })
     fireEvent.click(bouton)
-    fireEvent.keyDown(within(screen.getByRole("form", { name: "Filtrer sur statut" })).getByLabelText("Égal à"), { key: "Escape" })
+    fireEvent.keyDown(within(screen.getByRole("form", { name: "Filtrer sur Statut" })).getByLabelText("Égal à"), { key: "Escape" })
     bouton.blur()
     // Une relecture venue d'ailleurs (une décision de revue) : aucun geste de la grille ne l'a demandée.
     vue.rerender(ecran())
@@ -413,11 +423,11 @@ describe("TableauDuNoeud, load more (AC7)", () => {
 })
 
 describe("TableauDuNoeud, summary (AC8)", () => {
-  it("should count each declared state and sum each number column, and say a failed summary without breaking the grid", () => {
+  it("should count each declared state and sum each number column named by its label, and say a failed summary without breaking the grid", () => {
     rendre()
     const parEtat = RESUME.data.states?.map((etat) => `${etat.state} ${etat.count}`).join(" · ")
-    expect(screen.getByText(`Par statut : ${parEtat}`)).toHaveTextContent("Par statut : à traiter 7 · en cours 0 · à revoir 3 · qualifié 0 · écarté 0")
-    expect(screen.getByText(/^montant_estime : total/)).toHaveTextContent("montant_estime : total 21 000")
+    expect(screen.getByText(`Par Statut : ${parEtat}`)).toHaveTextContent("Par Statut : à traiter 7 · en cours 0 · à revoir 3 · qualifié 0 · écarté 0")
+    expect(screen.getByText(/^Montant estime : total/)).toHaveTextContent("Montant estime : total 21 000")
     cleanup()
     rendre({ resume: { error: "Une erreur est survenue. Réessayez." }, parametres: { sort: "ref" } })
     // Le seul échec de lecture du paquet (M49, HN-M37b-3) : la phrase du résumé en titre, le message dessous.
@@ -425,6 +435,30 @@ describe("TableauDuNoeud, summary (AC8)", () => {
     expect(screen.getByRole("alert")).toHaveClass("oto-alert")
     expect(within(screen.getByRole("alert")).getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", `${ADRESSE}?sort=ref`)
     expect(table()).toBeInTheDocument()
+  })
+})
+
+describe("TableauDuNoeud, column labels (#225)", () => {
+  it("should show the declared label of a column wherever the column appears, and its name in sentence case without one", () => {
+    const libelles: Record<string, string> = { montant_estime: "Montant estimé", statut: "État" }
+    const entete: TableHeader = { ...ENTETE, columns: ENTETE.columns.map((colonne) => (libelles[colonne.name] ? { ...colonne, label: libelles[colonne.name] } : colonne)) }
+    rendre({ entete, reglages: reglagesDepuisLAdresse({}, entete) })
+    expect(within(table()).getAllByRole("columnheader").map((th) => th.querySelector(".oto-th-sort")?.firstChild?.textContent)).toEqual([
+      "Ref",
+      "Entreprise",
+      "Email",
+      "Site",
+      "Montant estimé",
+      "Dernier contact",
+      "Relance le",
+      "Actif",
+      "État",
+    ])
+    expect(screen.getByRole("button", { name: "Filtrer sur Montant estimé" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Filtrer sur Entreprise" })).toBeInTheDocument()
+    expect(within(cellule("P-001", "montant_estime")).getByRole("button", { name: "Provenance de « Montant estimé »" })).toBeInTheDocument()
+    expect(screen.getByText(/^Montant estimé : total/)).toHaveTextContent("Montant estimé : total 21 000")
+    expect(screen.getByText(/^Par État :/)).toBeInTheDocument()
   })
 })
 

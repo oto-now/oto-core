@@ -19,7 +19,7 @@ import { seConnecterSurLEspace } from "./fixtures/noeud"
 //
 // E11-S05 : l'icône de provenance d'une cellule (le chevron d'un repli jusqu'à la 1.4.11), invisible au repos, paraît au
 // survol de la cellule, et reste montrée sous le profil mobile (AC-a1) ; une ligne à revoir est marquée, et l'îlot « À revoir » dit le cycle (AC-a4, AC-a5) ;
-// « Télécharger en .csv », à gauche de « Partager », rend le fichier du tableau (AC-c1, AC-c2) ; la carte d'une page
+// « Télécharger en .csv », dans le menu « ⋯ » de l'en-tête (refonte #218), rend le fichier du tableau (AC-c1, AC-c2) ; la carte d'une page
 // citée ne montre pas son résumé (AC-f2).
 
 const email = process.env.E2E_USER_EMAIL ?? ""
@@ -83,7 +83,7 @@ function attendus({ entete, lignes }: Demo, ville?: (valeur: string) => boolean)
     retenues: retenues.length,
     pied: `${compte(affichees, "ligne affichée", "lignes affichées")} sur ${NOMBRE.format(retenues.length)}`,
     parEtat: `Par ${colonne} : ${cycle.states.map((etat) => `${etat} ${NOMBRE.format(retenues.filter((ligne) => ligne.data[colonne] === etat).length)}`).join(" · ")}`,
-    somme: `montant_estime : total ${NOMBRE.format(montants.reduce((total, ligne) => total + ligne.montant, 0))}`,
+    somme: `Montant estime : total ${NOMBRE.format(montants.reduce((total, ligne) => total + ligne.montant, 0))}`,
     /** Par montant croissant, égalité départagée par la clé (`sortRows`, E07-S01). */
     parMontant: [...montants].sort((a, b) => a.montant - b.montant || PAR_CLE.compare(a.key, b.key)).map((ligne) => ligne.key),
     aRevoir: lignes.filter((ligne) => ligne.data[colonne] === cycle.review?.state).map((ligne) => ligne.key).sort(PAR_CLE.compare),
@@ -166,10 +166,9 @@ test.describe("tableau, vue et revue", () => {
       await expect(grille.locator('tbody tr[data-state="review"]')).toHaveCount(aRevoirAffichees.length)
       await expect(grille.locator("tbody tr[data-state]:not([data-state='review'])")).toHaveCount(0)
       await expect(file.getByText(`Une ligne entre à « ${attendu.cycle.states[0]} »`, { exact: false })).toBeVisible()
-      // E11-S05 (AC-c1, AC-c2) : « Télécharger en .csv » à gauche de « Partager » rend le fichier de tout le tableau.
-      const telecharger = page.getByRole("button", { name: "Télécharger en .csv" })
-      const partager = page.getByRole("button", { name: /^Partager · / })
-      expect((await telecharger.boundingBox())?.x ?? 0).toBeLessThan((await partager.boundingBox())?.x ?? 0)
+      // E11-S05 (AC-c1, AC-c2 ; refonte #218) : « Télécharger en .csv » du menu « ⋯ » de l'en-tête rend le fichier de tout le tableau.
+      await page.getByRole("button", { name: "Plus d'actions" }).click()
+      const telecharger = page.getByRole("menuitem", { name: "Télécharger en .csv" })
       const [fichier] = await Promise.all([page.waitForEvent("download"), telecharger.click()])
       expect(fichier.suggestedFilename()).toBe(`${TABLEAU.split("/").at(-1)}.csv`)
       // E11-S05 (AC-a1) : l'icône de provenance, invisible au repos, paraît au survol de sa cellule.
@@ -207,11 +206,11 @@ test.describe("tableau, vue et revue", () => {
       })
 
       // Le tri par montant_estime (AC4) : le bouton de l'en-tête, l'adresse, `aria-sort` et l'ordre des lignes, qui n'est pas celui des clés.
-      await grille.getByRole("button", { name: "Trier sur montant_estime" }).click()
+      await grille.getByRole("button", { name: "Trier sur Montant estime" }).click()
       await attendre(page).toHaveURL(/[?&]sort=montant_estime(&|$)/)
       const triee = page.getByRole("table", { name: `${lue.titre} — ${attendu.toutes}`, exact: true })
-      // L'en-tête se nomme par ses deux boutons (« Trier sur montant_estime Filtrer sur montant_estime ») : la table du design system.
-      await attendre(triee.getByRole("columnheader", { name: /^Trier sur montant_estime / })).toHaveAttribute("aria-sort", "ascending")
+      // L'en-tête se nomme par ses deux boutons (« Trier sur Montant estime Filtrer sur Montant estime ») : la table du design system.
+      await attendre(triee.getByRole("columnheader", { name: /^Trier sur Montant estime / })).toHaveAttribute("aria-sort", "ascending")
       // Des montants rangés comme les clés ne prouveraient pas le tri (`testing-strategy.md § Anti-patterns`).
       const premieres = attendu.parMontant.slice(0, PREMIERE_PAGE)
       expect(premieres, "the seeded amounts follow the key order: the sort would prove nothing").not.toEqual([...premieres].sort(PAR_CLE.compare))
@@ -219,8 +218,8 @@ test.describe("tableau, vue et revue", () => {
       await capturer(page, testInfo, `tri-${mode}`)
 
       // Le filtre ville « contient Valbrune » (AC6), par le panneau de l'en-tête : l'adresse, les lignes, le résumé.
-      await triee.getByRole("button", { name: "Filtrer sur ville" }).click()
-      const panneau = page.getByRole("form", { name: "Filtrer sur ville" })
+      await triee.getByRole("button", { name: "Filtrer sur Ville" }).click()
+      const panneau = page.getByRole("form", { name: "Filtrer sur Ville" })
       await expect(panneau.getByLabel("Contient")).toBeFocused()
       await panneau.getByLabel("Contient").fill(VILLE)
       await auRepos(page.getByRole("dialog"))
@@ -234,7 +233,7 @@ test.describe("tableau, vue et revue", () => {
       const filtree = page.getByRole("table", { name: `${lue.titre} — ${attendu.toutes} · ${compte(filtre.retenues, "ligne correspond", "lignes correspondent")}`, exact: true })
       await attendre(filtree).toBeVisible()
       await expect(filtree.locator("tbody tr")).toHaveCount(Math.min(filtre.retenues, PREMIERE_PAGE))
-      await expect(filtree.getByRole("button", { name: "Filtrer sur ville" })).toHaveAttribute("aria-pressed", "true")
+      await expect(filtree.getByRole("button", { name: "Filtrer sur Ville" })).toHaveAttribute("aria-pressed", "true")
       // Le tri est prouvé à l'étape précédente ; à Valbrune, les montants du pilote sont égaux (6 500 : P-003,
       // P-009, E06-S01) et se départagent par la clé : l'ordre se vérifie, sans en attendre une preuve du tri.
       await attendreLOrdre(filtree, filtre.parMontant)
@@ -283,15 +282,17 @@ test.describe("tableau, vue et revue", () => {
   // E11-S01, lot g (AC-g3, AC-g7) : « Preuve exigée » décochée puis recochée depuis « Réglages », au clavier ; l'état
   // tient après un rechargement ; le panneau capturé dans chaque thème. Le tableau de la Démo exige la preuve (AC-f8).
   for (const mode of MODES) {
-    test(`should turn « Preuve exigée » off then on from « Réglages », by keyboard, the state holding after a reload (${mode})`, async ({ browser }, testInfo) => {
+    test(`should turn « Preuve exigée » off then on from « Réglages du tableau… », by keyboard, the state holding after a reload (${mode})`, async ({ browser }, testInfo) => {
       test.setTimeout(600_000)
       test.skip(!(await lireLaDemo()).entete.proof, `${TABLEAU} does not require proof: see scripts/demo/50-tableau.mjs`)
       const page = await browser.newPage({ colorScheme: mode, viewport: { width: 1280, height: 900 } })
       await seConnecterSurLEspace(page, { email, password })
       await page.goto(`${ESPACE.adresse}/n/${TABLEAU}`)
-      const reglages = page.getByRole("button", { name: "Réglages", exact: true })
-      await attendre(reglages).toBeVisible()
-      await reglages.click()
+      // Refonte #218 : « Réglages du tableau… » du menu « ⋯ » de l'en-tête ouvre le dialogue.
+      const plus = page.getByRole("button", { name: "Plus d'actions" })
+      await attendre(plus).toBeVisible()
+      await plus.click()
+      await page.getByRole("menuitem", { name: "Réglages du tableau…" }).click()
       const panneau = page.getByRole("dialog", { name: "Réglages du tableau" })
       const preuve = panneau.getByRole("switch", { name: "Preuve exigée" })
       await expect(preuve).toBeChecked()
@@ -311,14 +312,15 @@ test.describe("tableau, vue et revue", () => {
       await page.keyboard.press("Space")
       await attendre(panneau.getByRole("status")).toHaveText("Preuve exigée : activée.")
 
-      // Rechargée, la page relit l'en-tête publié ; `Échap` ferme le panneau et rend le focus à « Réglages ».
+      // Rechargée, la page relit l'en-tête publié ; `Échap` ferme le dialogue et rend le focus au menu « ⋯ ».
       await page.reload()
-      await attendre(reglages).toBeVisible()
-      await reglages.click()
+      await attendre(plus).toBeVisible()
+      await plus.click()
+      await page.getByRole("menuitem", { name: "Réglages du tableau…" }).click()
       await expect(preuve).toBeChecked()
       await page.keyboard.press("Escape")
       await expect(panneau).toBeHidden()
-      await expect(reglages).toBeFocused()
+      await expect(plus).toBeFocused()
       expect((await lireLaDemo()).entete.proof).toBe(true)
       await page.close()
     })

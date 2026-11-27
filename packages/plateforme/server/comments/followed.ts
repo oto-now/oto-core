@@ -41,6 +41,18 @@ export function concerns(person: string, thread: RuledThread): boolean {
   )
 }
 
+/** Un fil tel que la règle le lit, chaque commentaire marqué `unseen` quand il suit la dernière visite de la page par la personne. */
+export type SeenThread = Omit<RuledThread, "comments"> & { comments: readonly (RuledComment & { unseen: boolean })[] }
+
+/**
+ * Le fil ouvert est-il non lu pour `person` ? Il lui est destiné (`concerns`) et un commentaire d'un autre suit sa
+ * dernière visite de la page : la règle de l'accueil (`homeCommentsOf`), que l'écran d'une page lit aussi
+ * (`listComments`, `threads.ts`).
+ */
+export function unreadBy(person: string, thread: SeenThread): boolean {
+  return concerns(person, thread) && thread.comments.some((comment) => comment.author !== person && comment.unseen)
+}
+
 /**
  * Un commentaire d'un autre dans un fil destiné à la personne : `unseen`, il suit sa dernière visite de la page à
  * l'écran (ou elle ne l'a jamais visitée) ; `fresh`, il suit la borne demandée.

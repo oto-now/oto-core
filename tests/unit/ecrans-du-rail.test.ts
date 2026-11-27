@@ -17,13 +17,13 @@ describe("ecransPermis, abonnement (E12-S02)", () => {
   })
 })
 
-// L'écran Connecteurs ouvert aux membres (`connecteurs-et-comptes.md` § Écran Connecteurs) : au pied du rail pour chacun,
-// qui y voit ses comptes personnels ; l'hôte qui n'en sert pas l'adresse ne l'a pas.
+// L'écran Connecteurs ouvert aux membres (`connecteurs-et-comptes.md` § Écran Connecteurs) : au menu du compte pour chacun
+// (#221), qui y voit ses comptes personnels ; l'hôte qui n'en sert pas l'adresse ne l'a pas.
 describe("ecransPermis, Connecteurs", () => {
-  it("should give Connecteurs at the foot of the rail to a member as to an administrator", () => {
+  it("should give Connecteurs in the account menu to a member as to an administrator", () => {
     const adresses = { pages: "/n/", connecteurs: "/admin/connectors" }
     for (const administre of [true, false]) {
-      expect(ecransPermis(adresses, administre).find((ecran) => ecran.adresse === "/admin/connectors")).toMatchObject({ libelle: "Connecteurs", rangement: "pied" })
+      expect(ecransPermis(adresses, administre).find((ecran) => ecran.adresse === "/admin/connectors")).toMatchObject({ libelle: "Connecteurs", rangement: "compte" })
     }
   })
 })

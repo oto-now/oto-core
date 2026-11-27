@@ -18,6 +18,12 @@ export const PAGE_VIDE = "Cette page n'a pas encore de contenu."
 export const ARBRE_TRONQUE = "L'arbre n'affiche que les 5 000 premiers nœuds."
 
 /** Les mots de l'écran porté d'oto-frontend (E05-S09, partie c1) : en-tête, états, accès, sous-pages. */
+/** La veille d'une page ouverte (retour RET-008) : modifiée ailleurs pendant qu'on y écrit. */
+export const VEILLE = {
+  modifiee: "Cette page a été modifiée ailleurs, par un assistant ou une autre personne.",
+  recharger: "Recharger la page",
+} as const
+
 export const ECRAN = {
   /** Le titre d'un écran qui n'a pas de nœud à nommer (lecture en échec). */
   page: "Page",
@@ -25,9 +31,10 @@ export const ECRAN = {
   echec: "Ce contenu n'a pas pu être chargé",
   chargement: "Chargement de la page…",
   allerATouLeMonde: "Aller à Tout le monde",
-  /** Le périmètre et le verbe qui dit qu'on peut le changer, en un seul bouton (oto-frontend). */
-  partager: (espace: string) => `Partager · ${espace}`,
-  panneauDePartage: (espace: string) => `Partager — ${espace}`,
+  /** Le bouton de l'en-tête depuis la refonte (#218) : le verbe seul, l'espace est dans la méta. */
+  partagerSeul: "Partager",
+  /** Le nom du panneau « Partager » : le titre du contenu entre guillemets, sans tiret (ui-patterns.md § Texte visible). */
+  panneauDePartage: (titre: string) => `Partager « ${titre} »`,
   versionPubliee: (revision: number) => `Version publiée (révision ${revision}).`,
   revenirAuxModifications: "Revenir aux modifications en attente",
   rangeAilleurs: "rangé ailleurs",
@@ -161,6 +168,26 @@ export const EN_TETE = {
   aRenvoyer: "Le brouillon a changé pendant l'enregistrement : enregistrez de nouveau.",
 } as const
 
+/**
+ * Le geste « Page ⇄ Procédure » de l'en-tête : son nom (le genre et l'action), son infobulle (ce que le genre change
+ * pour l'assistant), ce qui le bloque, et son issue.
+ */
+export const GENRE = {
+  nom: { page: "Page : passer en procédure", procedure: "Procédure : repasser en page" },
+  aide: {
+    page: "Page : l'assistant ne la lit que si on la cite ou qu'il la cherche. En procédure, il la proposera quand une demande lui correspond.",
+    procedure: "Procédure : l'assistant la propose quand une demande lui correspond. Repassée en page, il ne la lira que si on la cite ou qu'il la cherche.",
+  },
+  sousUneProcedure: "Rangée sous une procédure : ses sous-étapes restent des pages.",
+  enAttente: "Un brouillon attend sur cette page. Demandez à l'assistant de le publier ou de l'abandonner, puis rechargez la page.",
+  /** Les avertissements servis après un passage en procédure : des phrases du service, en anglais, repliées sous ce titre. */
+  conseils: (nombre: number) => `${nombre > 1 ? `${nombre} avertissements` : "1 avertissement"} de la publication (texte du service, en anglais)`,
+  devenue: {
+    procedure: (titre: string) => `« ${titre} » est maintenant une procédure : l'assistant peut la proposer.`,
+    page: (titre: string) => `« ${titre} » est maintenant une page : l'assistant ne la propose plus.`,
+  },
+} as const
+
 /** Le genre que l'écran montre et écrit (E05-S04) : celui du brouillon s'il en change, sinon celui du nœud. */
 export function genreDuNoeud(vue: Pick<NodeView, "kind" | "draft">): NodeKind {
   return vue.draft?.kind ?? vue.kind
@@ -192,16 +219,59 @@ export const DEPLACEMENT = {
 const AU_MASCULIN: ReadonlySet<NodeKind> = new Set(["context", "table"])
 
 /**
- * La ligne sous le titre (E05-S10, AC-a7) : « modifiée <quand>, par <qui> », une moitié inconnue se tait ;
+ * La ligne sous le titre (E05-S10, AC-a7 ; refonte #217) : « Modifiée <quand> par <qui> », une moitié inconnue se tait ;
  * `null` sans l'une ni l'autre. Le type, l'état, la révision et le propriétaire passent dans son infobulle.
  */
 export function modifieeDuNoeud(noeud: Pick<NodeView, "kind">, modifiee: { quand?: string; qui?: string | null }): string | null {
   if (!modifiee.quand && !modifiee.qui) return null
-  const accord = AU_MASCULIN.has(noeud.kind) ? "modifié" : "modifiée"
+  const accord = AU_MASCULIN.has(noeud.kind) ? "Modifié" : "Modifiée"
   const quand = modifiee.quand ? ` ${modifiee.quand}` : ""
-  const qui = modifiee.qui ? `${quand ? "," : ""} par ${modifiee.qui}` : ""
+  const qui = modifiee.qui ? ` par ${modifiee.qui}` : ""
   return `${accord}${quand}${qui}`
 }
+
+/**
+ * La méta entière (refonte #217, brief § 5.6) : la nature en tête sauf pour une page (seule l'exception se marque), la
+ * ligne « Modifiée … », puis l'espace : « Procédure · Modifiée il y a 3 jours par Claire · Ventes ». Sans date ni auteur,
+ * la nature seule, puis l'espace.
+ */
+export function metaDuNoeud(noeud: Pick<NodeView, "kind">, modifiee: string | null, espace: string | null): string {
+  const nature = noeud.kind === "page" && modifiee !== null ? [] : [NATURES[noeud.kind]]
+  return [...nature, ...(modifiee === null ? [] : [modifiee]), ...(espace === null ? [] : [espace])].join(" · ")
+}
+
+/** Les contrôles de l'en-tête d'un contenu (refonte #218) : leurs noms, infobulles et les entrées du menu « ⋯ ». */
+export const ACTIONS = {
+  commentaires: "Commentaires",
+  /** Le nom du bouton : le nombre de fils ouverts, et ceux qui attendent la personne ; aucun « 0 ». */
+  nomDesCommentaires: (ouverts: number, nonLus: number) => {
+    if (ouverts === 0) return "Commentaires"
+    const fils = ouverts > 1 ? `${ouverts} fils ouverts` : "1 fil ouvert"
+    return `Commentaires, ${fils}${nonLus > 0 ? ` dont ${nonLus} non ${nonLus > 1 ? "lus" : "lu"}` : ""}`
+  },
+  liens: "Liens",
+  nomDesLiens: (total: number) => `Liens, ${contenus(total)}`,
+  panneauDesLiens: "Liens de la page",
+  historique: "Historique des versions",
+  plusDActions: "Plus d'actions",
+  transformerEnProcedure: "Transformer en procédure",
+  transformerEnPage: "Transformer en page",
+  reglagesDuTableau: "Réglages du tableau…",
+  commenterCeBloc: "Commenter ce bloc",
+  historiqueDuBloc: "Historique du bloc",
+  gestesDuBloc: "Actions du bloc",
+} as const
+
+/** « 1 contenu », « 3 contenus » : le compte des liens, le même pour tous les genres (décision de JB du 27/11). */
+const contenus = (nombre: number) => (nombre > 1 ? `${nombre} contenus` : `${nombre} contenu`)
+
+/** Le pied d'un contenu (refonte #217) : ses trois colonnes, leur liste coupée à `PIED.montres` lignes. */
+export const PIED = {
+  montres: 5,
+  citeDansN: (nombre: number) => `Cité dans ${contenus(nombre)}`,
+  citeN: (nombre: number) => `Cite ${contenus(nombre)}`,
+  voirLesAutres: (nombre: number) => (nombre > 1 ? `Voir les ${nombre} autres` : "Voir l'autre"),
+} as const
 
 /** Les intitulés de l'infobulle de la ligne sous le titre (AC-a7). */
 export const INFOBULLE = { type: "Type", etat: "État", revision: "Révision", lignes: "Lignes", proprietaire: "Propriétaire" } as const

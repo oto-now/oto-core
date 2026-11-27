@@ -1,14 +1,18 @@
 "use client"
 
 // La bulle de commentaire d'un bloc (parcours 5.4, AC14), à droite du bloc, en lecture comme en édition (l'emplacement
-// `menu` de `BlockRow`) : au survol ou au focus du bloc, elle ouvre un nouveau fil sur lui ; quand le bloc a des fils
-// ouverts, elle reste, avec leur nombre, et ouvre le premier, dont le passage est surligné. Rien sur un bloc jamais
+// `menu` de `BlockRow`) : quand le bloc a des fils ouverts, la pastille reste, avec leur nombre, et ouvre le premier, dont
+// le passage est surligné. Refonte #217 : au survol ou au focus du bloc, un petit groupe flottant de deux icônes,
+// « Commenter ce bloc » (un nouveau fil sur lui) et « Historique du bloc » (le tiroir de l'historique sur ce bloc). Rien sur un bloc jamais
 // publié (le service ne commente que la version publiée), ni hors du fournisseur des commentaires (page publique,
 // widget). Sans elle, un fil ne se poserait que sur la page entière.
 import { ChatText } from "@phosphor-icons/react/dist/csr/ChatText"
+import { ClockCounterClockwise } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise"
 import { Icon } from "../../ds/react/icon"
 import { IconButton } from "../../ds/react/primitives"
 import { Tooltip } from "../../ds/react/tooltip"
+import { useHistorique } from "../historique-du-noeud"
+import { ACTIONS } from "../libelles"
 import { FOCUS, useCommentaires, useFocusDemande } from "./contexte"
 import { BULLE } from "./libelles"
 
@@ -19,6 +23,19 @@ type BulleDeBlocProps = {
   mots: string
 }
 
+/** « Historique du bloc », qui ouvre le tiroir de l'en-tête sur ce bloc ; rien hors de l'écran d'un contenu. */
+function HistoriqueDuBloc({ bloc, mots }: { bloc: string; mots: string }) {
+  const historique = useHistorique()
+  if (!historique) return null
+  return (
+    <Tooltip content={ACTIONS.historiqueDuBloc} side="bottom">
+      <IconButton size="sm" label={BULLE.historique(mots)} className="oto-bulle" onClick={() => historique.ouvrir({ block: bloc })}>
+        <Icon as={ClockCounterClockwise} size="xs" />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
 export function BulleDeBloc({ bloc, mots }: BulleDeBlocProps) {
   const commentaires = useCommentaires()
   const bouton = useFocusDemande<HTMLButtonElement>(FOCUS.bulle(bloc ?? ""))
@@ -26,21 +43,25 @@ export function BulleDeBloc({ bloc, mots }: BulleDeBlocProps) {
   const fils = commentaires.lecture.phase === "lue" ? commentaires.lecture.vue.threads : []
   const ouverts = fils.filter((fil) => fil.block === bloc && fil.status === "open")
   const actif = commentaires.blocActif === bloc ? "" : undefined
-  if (ouverts.length > 0) {
-    return (
-      <Tooltip content={BULLE.filsAide(ouverts.length)} side="left">
-        <button ref={bouton} type="button" className="oto-bulle-compte" data-actif={actif} aria-label={BULLE.fils(ouverts.length, mots)} onClick={() => commentaires.ouvrirLeFil(ouverts[0].id, true)}>
-          <Icon as={ChatText} size="xs" />
-          <span aria-hidden="true">{ouverts.length}</span>
-        </button>
-      </Tooltip>
-    )
-  }
   return (
-    <Tooltip content={BULLE.commenterAide} side="left">
-      <IconButton ref={bouton} size="sm" label={BULLE.nom(mots)} className="oto-bulle" data-actif={actif} onClick={() => commentaires.commenter(bloc, null)}>
-        <Icon as={ChatText} size="xs" />
-      </IconButton>
-    </Tooltip>
+    <>
+      {ouverts.length > 0 && (
+        <Tooltip content={BULLE.filsAide(ouverts.length)} side="left">
+          <button ref={bouton} type="button" className="oto-bulle-compte" data-actif={actif} aria-label={BULLE.fils(ouverts.length, mots)} onClick={() => commentaires.ouvrirLeFil(ouverts[0].id, true)}>
+            <Icon as={ChatText} size="xs" />
+            <span aria-hidden="true">{ouverts.length}</span>
+          </button>
+        </Tooltip>
+      )}
+      {/* Les gestes du bloc, révélés au survol et au focus du bloc (refonte #217) : commenter, puis son historique. */}
+      <span role="group" aria-label={ACTIONS.gestesDuBloc} className="oto-block-tools">
+        <Tooltip content={BULLE.commenterAide} side="bottom">
+          <IconButton ref={ouverts.length > 0 ? undefined : bouton} size="sm" label={BULLE.nom(mots)} className="oto-bulle" data-actif={ouverts.length > 0 ? undefined : actif} onClick={() => commentaires.commenter(bloc, null)}>
+            <Icon as={ChatText} size="xs" />
+          </IconButton>
+        </Tooltip>
+        <HistoriqueDuBloc bloc={bloc} mots={mots} />
+      </span>
+    </>
   )
 }

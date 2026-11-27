@@ -34,8 +34,6 @@ export function porteeDe(chemin: string, equipes: EquipesNommees): Portee {
  */
 export const ANNEXES = {
   titre: "À quoi sert cette page",
-  /** La seconde phrase (HN-E05S13-16) : la fin de l'introduction d'oto-frontend, seule gardée. */
-  ecriture: "Vous l'écrivez comme n'importe quelle page.",
 } as const
 
 /**
@@ -55,8 +53,10 @@ export function aQuoiSert(portee: Portee): string {
  * La reprise sur « Mes instructions » : la phrase que la personne copie dans son assistant, qui range dans la page les
  * préférences qu'il garde dans sa mémoire ; sans elle, ces préférences restent dans un seul assistant.
  */
+/** La section du pied d'un Contexte (refonte #217) : la jauge, puis l'ordre de lecture. */
+export const PIED_DU_CONTEXTE = { titre: "Ce que reçoit votre assistant" } as const
+
 export const REPRISE_DES_PREFERENCES = {
-  titre: "Reprendre vos préférences",
   explication: "Votre assistant garde déjà des préférences ? Copiez-lui cette phrase : il les range ici.",
   phrase: "Range mes préférences actuelles dans mes instructions Oto, sans doublon",
   cible: "la phrase de reprise",
@@ -93,7 +93,6 @@ export function nomDuBloc(bloc: { name: string }, equipes: EquipesNommees): stri
  * sans taille, état, note des versions ni total ; « Ordre de lecture » ne reste que le nom accessible de la liste.
  */
 export const APERCU_DU_CONTEXTE = {
-  titre: "Voici ce que votre agent va lire",
   legende: "Ordre de lecture",
   ceContexte: "(ce contexte)",
   echec: "L'aperçu n'a pas pu être calculé.",

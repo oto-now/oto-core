@@ -23,7 +23,7 @@ import { boundedList, inTransaction, PlatformError } from "./errors"
 import type { Identity } from "./identity"
 import { listInvitations, registerInvitation, revokeInvitation } from "./invitations"
 import { listMembers, removeMember, requireAdmin, updateMember } from "./members"
-import { oneTeamWhilePending, openInvitation, setPending, type OpenInvitation } from "./pending-members"
+import { openInvitation, setPending, type OpenInvitation } from "./pending-members"
 import { addTeamMember, createTeam, removeTeamMember } from "./teams"
 
 /** Une personne telle que `member.list` la rend : membre, ou en attente de sa première connexion. */
@@ -113,7 +113,7 @@ async function list(context: FunctionContext, offset: number): Promise<FunctionO
       email: invitation.email,
       role: invitation.role,
       status: "pending",
-      teams: invitation.teamId ? slugsOf(roster.teams, [invitation.teamId]) : [],
+      teams: slugsOf(roster.teams, invitation.teamIds),
     }))
     .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""))
   const people = [...active, ...pending]
@@ -170,13 +170,13 @@ async function addToMember(context: FunctionContext, person: DirectoryEntry, { d
   return personOutput(text, { member_id: person.userId, email: args.email, status: "active", role: promote ? "admin" : person.role, teams, changed: changes.length > 0 })
 }
 
-/** Une personne déjà en attente : l'équipe et le rôle demandés s'ajoutent aux siens (jamais rétrogradée). */
+/** Une personne déjà en attente : les équipes et le rôle demandés s'ajoutent aux siens (jamais rétrogradée). */
 async function addToPending(context: FunctionContext, invitation: OpenInvitation, { directory, args, wanted }: Request): Promise<FunctionOutput> {
-  const teamIds = [...new Set([...(invitation.teamId ? [invitation.teamId] : []), ...wanted.map((team) => team.id)])]
+  const teamIds = [...new Set([...invitation.teamIds, ...wanted.map((team) => team.id)])]
   const role: InvitationRole = invitation.role === "admin" || args.role === "admin" ? "admin" : "member"
   const { id, changed } = await setPending(context.db, context.identity, invitation, { role, teamIds })
   const teams = slugsOf(directory.teams, teamIds)
-  const text = changed ? `${args.email} is pending, now ${role}${teams.length > 0 ? ` in ${teams.join(", ")}` : ""}; they join at their first sign-in.` : `${args.email} is already pending, with this team and role: nothing to change.`
+  const text = changed ? `${args.email} is pending, now ${role}${teams.length > 0 ? ` in ${teams.join(", ")}` : ""}; they join at their first sign-in.` : `${args.email} is already pending, with these teams and role: nothing to change.`
   return personOutput(text, { member_id: id, email: args.email, status: "pending", role, teams, changed })
 }
 
@@ -188,8 +188,7 @@ async function add(context: FunctionContext, args: MemberAddArgs): Promise<Funct
   const found = await findPerson(context, directory, args.email)
   if (found.kind === "active") return addToMember(context, found.person, request)
   if (found.kind === "pending") return addToPending(context, found.invitation, request)
-  oneTeamWhilePending(args.email, request.wanted.length)
-  const created = await registerInvitation(db, identity, { email: args.email, role: args.role, teamId: request.wanted[0]?.id })
+  const created = await registerInvitation(db, identity, { email: args.email, role: args.role, teamIds: request.wanted.map((team) => team.id) })
   const teams = request.wanted.map((team) => team.slug)
   return personOutput(`${args.email} is added as ${created.role}${teams.length > 0 ? ` in ${teams.join(", ")}` : ""}, pending: no email is sent; they join at their first sign-in.`, {
     member_id: created.id, email: created.email, status: "pending", role: created.role, teams, changed: true,
@@ -202,13 +201,12 @@ export const memberAdd = defineFunction({
   class: "write",
   origin: "paquet",
   description:
-    "Adds a person to the organisation by email, pending until their first sign-in, without sending any email, and puts them in their teams. Idempotent: a member or a pending person of the same email gets the missing teams, never a duplicate; a role is raised to admin, never lowered. Administrators add anyone; a team lead adds members to the teams they lead only. A pending person joins one team at most until their first sign-in. In French: ajouter membre, inscrire, rattacher équipe.",
+    "Adds a person to the organisation by email, pending until their first sign-in, without sending any email, and puts them in their teams. Idempotent: a member or a pending person of the same email gets the missing teams, never a duplicate; a role is raised to admin, never lowered. Administrators add anyone; a team lead adds members to the teams they lead only. A pending person joins all their teams at their first sign-in. In French: ajouter membre, inscrire, rattacher équipe.",
   schema: memberAddArgsSchema,
-  examples: [{ email: "lea.roux@example.com", teams: ["ventes"] }, { email: "admin@example.com", role: "admin" }],
+  examples: [{ email: "lea.roux@example.com", teams: ["ventes", "support"] }, { email: "admin@example.com", role: "admin" }],
   refusals: [
     "A member who is neither an administrator nor a team lead; a lead who names a team they do not lead, no team, or the admin role.",
     "An unknown team: the refusal lists the teams.",
-    "More than one team for a pending person.",
     "The organisation at its members limit (pending people counted).",
   ],
   next: ["member.list", "member.set_teams"],
@@ -226,7 +224,7 @@ async function setTeams(context: FunctionContext, email: string, given: readonly
   if (found.kind === "pending") {
     const { role } = found.invitation
     const { id, changed } = await setPending(db, identity, found.invitation, { role, teamIds: wantedIds })
-    const text = changed ? `${email} is pending, now in ${teams[0] ?? "no team"}.` : `${email} is pending with these teams: nothing to change.`
+    const text = changed ? `${email} is pending, now in ${teams.length > 0 ? teams.join(", ") : "no team"}.` : `${email} is pending with these teams: nothing to change.`
     return personOutput(text, { member_id: id, email, status: "pending", role, teams, changed })
   }
   const { person } = found
@@ -249,13 +247,12 @@ export const memberSetTeams = defineFunction({
   class: "write",
   origin: "paquet",
   description:
-    "Replaces the teams of a member or a pending person, by email: they end in exactly the teams given, which changes their role in the host when its roles are teams. Administrators change any team; a team lead adds or removes members of the teams they lead only, and must list the other teams of the person unchanged. All or nothing. In French: changer équipes, changer rôle, retirer équipe.",
+    "Replaces the teams of a member or a pending person, by email: they end in exactly the teams given, which changes their role in the host when its roles are teams. Administrators change any team; a team lead adds or removes members of the teams they lead only, and must list the other teams of a member unchanged (a pending person keeps the teams the lead does not see). All or nothing. In French: changer équipes, changer rôle, retirer équipe.",
   schema: memberSetTeamsArgsSchema,
   examples: [{ member: "lea.roux@example.com", teams: ["ventes"] }],
   refusals: [
     "A member who is neither an administrator nor a team lead; a lead who adds to or removes from a team they do not lead, or removes a lead.",
     "An unknown person or team.",
-    "More than one team for a pending person.",
   ],
   next: ["member.list"],
   run: (context, args) => setTeams(context, args.member, args.teams),

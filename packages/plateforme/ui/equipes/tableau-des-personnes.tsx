@@ -7,7 +7,7 @@
 // qui n'appellent pas la même action ; quand une ligne part avec son déclencheur, le focus va au tableau,
 // jamais à `<body>`. Changé : les colonnes Rôle et Dernière connexion, que l'écran d'aujourd'hui montre
 // (AC-x2 ; plus d'Équipe par défaut, E05-S13 AC-26) ; une invitation en attente est une ligne « Invitée » nommée par son adresse,
-// avec qui l'a envoyée et son échéance ; le tri et le filtre vivent dans l'adresse de l'hôte (`useHote`).
+// avec qui l'a envoyée, son échéance et ses équipes, réglées par le même « + » qu'un membre ; le tri et le filtre vivent dans l'adresse de l'hôte (`useHote`).
 // Retiré : TanStack Query, les pages enchaînées, « Connexions à son nom » et « Depuis » (sans source).
 import { Users } from "@phosphor-icons/react/dist/csr/Users"
 import { WarningCircle } from "@phosphor-icons/react/dist/csr/WarningCircle"
@@ -15,7 +15,6 @@ import { AnimatedIcon } from "../ds/react/icon"
 import { EmptyState } from "../ds/react/empty-state"
 import { Avatar, Badge } from "../ds/react/primitives"
 import { Table, type Column } from "../ds/react/table"
-import { Tag } from "../ds/react/tag"
 import { dateLisible } from "../format/dates"
 import { useHote } from "../hote/navigation"
 import { EquipesDUnePersonne, type EquipeProposee } from "./equipes-d-une-personne"
@@ -78,8 +77,7 @@ function colonnes({ moi, nomOrganisation, toutes, apresUnDepart }: Contexte, ave
     {
       key: "equipes",
       header: c.equipes,
-      render: (ligne) =>
-        ligne.genre === "membre" ? <EquipesDUnePersonne membre={ligne} toutes={toutes} moi={moi} apresUnDepart={apresUnDepart} /> : ligne.equipe ? <Tag>{ligne.equipe}</Tag> : <span className="oto-caption">{PERSONNES.aucune}</span>,
+      render: (ligne) => <EquipesDUnePersonne ligne={ligne} toutes={toutes} moi={moi} apresUnDepart={apresUnDepart} />,
     },
     {
       key: "connexion",

@@ -1,0 +1,6 @@
+### Hosts
+- UI: the organisation block at the top of the rail is the link to the home page (tooltip « Accueil », marked current there); the « Accueil » line is gone. « Changer d'espace » sits on its right from two reachable organisations, or when the host gives its signup address. « Rechercher » follows, outside the scrolling area.
+- UI: the company menu at the top of the rail is gone. Its screens (Organisation, Équipes & accès, Activité, Abonnement, Retours) are in the account menu, under the organisation's name and logo; « Connecteurs » leaves the foot of the rail for the « Vous » group of the same menu; the « Contexte » view is reached from the palette only. The account menu opens on the person (avatar, name, email), and « Mode sombre » is a switch under « Apparence ».
+- UI: the rail never scrolls sideways by itself any more, however the page was reached.
+- UI: `RailApplication` and `DonneesDuRail` take an optional `email`; `PiedDuRail` takes optional `email` and `entreprise`; `EntrepriseDuRail`'s `administre` is now optional and ignored.
+- UI: the design system gains `DropdownMenu`'s `head`, `MenuItem`'s `switch` and a group's `icon`, `RailAccount`'s `email`, and `RailItem`'s `org` variant; menu group headings and rail headings are small, grey and in sentence case.

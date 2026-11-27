@@ -1,0 +1,3 @@
+### Hosts
+- UI: the header of a page or a procedure gains, for who writes it, an icon button showing its kind (« Page ⇄ Procédure »): one click publishes the other kind, without confirmation, then reads the page again. A write from the screen that changes only `kind` is now all or nothing: a refused `call` block leaves the page a page, with no draft kept. Nothing to change on the host's side.
+- MCP: `write`'s structured result gains `warnings` (the publication warnings: links, procedure writing advice; the first 20, with `warnings_total` beyond) when a page or a procedure is published with some; a table keeps its header warnings there as before. Added only.

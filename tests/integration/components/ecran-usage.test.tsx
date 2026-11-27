@@ -142,7 +142,9 @@ describe("EcranUsage states (AC15)", () => {
 describe("EcranUsage window and team (AC2)", () => {
   it("should offer the three windows as a segmented choice, the active one checked, each opening its address by the host", () => {
     rendre(donnees(USAGE))
-    expect(screen.getByText("Sur les 7 derniers jours · équipe Ventes")).toBeInTheDocument()
+    // La phrase passe sous le titre, les réglages dessous à 375 px : l'en-tête empilé du design system, demandé par la méta.
+    expect(screen.getByText("Sur les 7 derniers jours · équipe Ventes")).toHaveAttribute("data-entete-empile")
+    expect(screen.getByText("Sur les 7 derniers jours · équipe Ventes").parentElement).toHaveClass("oto-screen-header-meta")
     const fenetres = within(screen.getByRole("radiogroup", { name: "La période observée" })).getAllByRole("radio")
     expect(fenetres.map((fenetre) => [fenetre.textContent, fenetre.getAttribute("aria-checked")])).toEqual([
       ["7 jours", "true"],

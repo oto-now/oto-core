@@ -30,6 +30,7 @@ import { memberRole, type Identity, type MemberRole } from "./identity"
 import { oidcMode } from "./issuer"
 import { orgLimits, requireUnderLimit } from "./limits"
 import { invitationMail, mailSender, type MailContent } from "./mail"
+import { addInvitationTeams, requireAllowedTeams, visibleTeamIds } from "./invitation-teams"
 import { PlatformConfigError } from "./sql"
 
 /** Au plus autant d'invitations listées : l'écran les montre toutes, sans pagination (V1). */
@@ -48,7 +49,10 @@ type CreatedInvitation = {
   id: string
   email: string
   role: InvitationRole
+  /** La première de `teamIds`, ou `null` : la forme d'avant les équipes multiples (`invitations.team_id`). */
   teamId: string | null
+  /** Les équipes où la personne entre à sa première connexion (`invitation_teams`). */
+  teamIds: string[]
   /** `null` : une inscription sans email (`registerInvitation`), qui n'expire pas. */
   expiresAt: string | null
 }
@@ -60,7 +64,10 @@ type Invitation = {
   id: string
   email: string
   role: InvitationRole
+  /** La première de `teamIds`, ou `null` : la forme d'avant les équipes multiples. */
   teamId: string | null
+  /** Les équipes de l'invitation que l'appelant voit : toutes pour l'administrateur, celles qu'il mène pour un responsable. */
+  teamIds: string[]
   invitedBy: string | null
   createdAt: string
   expiresAt: string | null
@@ -222,8 +229,9 @@ function platformEmail(identity: Identity, to: string, redirectTo: string): Invi
 }
 
 /**
- * Le droit d'inviter `invite` (rôle et équipe), décidé avant toute écriture par `invitationOptions` : seul un
- * administrateur invite un administrateur ; un responsable d'équipe invite dans une équipe qu'il mène.
+ * Le droit d'inviter `invite` (rôle et équipes), décidé avant toute écriture par `invitationOptions` : seul un
+ * administrateur invite un administrateur ; un responsable d'équipe invite dans une équipe qu'il mène au moins, et
+ * seulement dans des équipes qu'il mène ; un administrateur peut n'en donner aucune.
  */
 async function authorizeInvitation(db: PlatformDb, identity: Identity, invite: Invite): Promise<void> {
   const allowed = await invitationOptions(db, identity)
@@ -232,13 +240,8 @@ async function authorizeInvitation(db: PlatformDb, identity: Identity, invite: I
       reason: "admin_role_reserved",
     })
   }
-  const inAllowedTeam = invite.teamId !== undefined && allowed.teams.some((team) => team.id === invite.teamId)
-  if (allowed.teamRequired && !inAllowedTeam) {
-    throw new PlatformError("forbidden", "Choose a team you lead.", { reason: "team_required" })
-  }
-  if (invite.teamId !== undefined && !inAllowedTeam) {
-    throw new PlatformError("invalid_arguments", `Unknown team ${invite.teamId} in ${identity.org.name}.`)
-  }
+  if (allowed.teamRequired && invite.teamIds.length === 0) throw new PlatformError("forbidden", "Choose teams you lead.", { reason: "team_required" })
+  requireAllowedTeams(identity, allowed, invite.teamIds)
 }
 
 /**
@@ -246,28 +249,32 @@ async function authorizeInvitation(db: PlatformDb, identity: Identity, invite: I
  * les limites de l'hôte lues avant la transaction, le refus au plafond en tête de celle-ci (`requireUnderLimit`).
  * `registered` : une inscription sans email, sans échéance, qui révoque d'abord dans la même transaction l'attente
  * qu'elle remplace (`replacing`) ; un refus de l'insertion annule la révocation. Sans lui, l'échéance par défaut.
+ * La première équipe va dans `team_id`, d'où le déclencheur `invitation_teams_from_team_id` la recopie ; les autres
+ * s'ajoutent à `invitation_teams` dans la même transaction.
  */
-async function insertInvitation(db: PlatformDb, identity: Identity, invite: Invite, registered?: { replacing?: string }): Promise<CreatedRow> {
+async function insertInvitation(db: PlatformDb, identity: Identity, invite: Invite, registered?: { replacing?: string }): Promise<CreatedInvitation> {
   const limits = await orgLimits(identity.org)
   return db
     .tx(async (sql) => {
       if (registered?.replacing) await revokeInvitation(db, identity, registered.replacing)
       await requireUnderLimit(sql, { db, identity, limits }, "members_max")
-      return sql<CreatedRow[]>`
+      const [row] = await sql<CreatedRow[]>`
         insert into platform.invitations (org_id, email, role, team_id, invited_by, expires_at)
-        values (${identity.org.id}, ${invite.email}, ${invite.role}, ${invite.teamId ?? null}, ${identity.user.id}, ${registered ? sql`null` : sql`default`})
+        values (${identity.org.id}, ${invite.email}, ${invite.role}, ${invite.teamIds[0] ?? null}, ${identity.user.id}, ${registered ? sql`null` : sql`default`})
         returning id, email, role, team_id, to_json(expires_at) as expires_at`
+      await addInvitationTeams(sql, row.id, invite.teamIds.slice(1))
+      return row
     })
-    .then(([row]) => row, (error) => Promise.reject(insertError(error, invite.email, identity.org.name)))
+    .then((row) => createdInvitation(row, invite.teamIds), (error) => Promise.reject(insertError(error, invite.email, identity.org.name)))
 }
 
-function createdInvitation(data: CreatedRow): CreatedInvitation {
-  return { id: data.id, email: data.email, role: invitationRole(data.role), teamId: data.team_id, expiresAt: data.expires_at }
+function createdInvitation(data: CreatedRow, teamIds: readonly string[]): CreatedInvitation {
+  return { id: data.id, email: data.email, role: invitationRole(data.role), teamId: data.team_id, teamIds: [...teamIds], expiresAt: data.expires_at }
 }
 
-function emailedInvitation(data: CreatedRow): EmailedInvitation {
-  if (data.expires_at === null) throw new Error("[platform] inviteMember: an emailed invitation without its expiry")
-  return { ...createdInvitation(data), expiresAt: data.expires_at }
+function emailedInvitation(data: CreatedInvitation): EmailedInvitation {
+  if (data.expiresAt === null) throw new Error("[platform] inviteMember: an emailed invitation without its expiry")
+  return { ...data, expiresAt: data.expiresAt }
 }
 
 function parsedInvite(input: unknown): Invite {
@@ -309,7 +316,7 @@ export async function inviteMember(
  * à sa première connexion, ses invitations en attente acceptées (`accept_invitations` ; en mode OIDC, dès sa première
  * requête, `resolveIdentity`). Mêmes droits, même plafond et mêmes refus qu'`inviteMember` (`already_member`,
  * `already_invited`) ; seul l'email ne part pas. `replacing` : l'invitation en attente de la même adresse qu'elle
- * remplace (autre rôle, autre équipe), révoquée après la décision du droit (`revokeInvitation` : son émetteur ou un
+ * remplace (un autre rôle), révoquée après la décision du droit (`revokeInvitation` : son émetteur ou un
  * administrateur), dans la transaction de l'insertion : un refus de l'insertion laisse l'attente d'avant intacte.
  * L'inscription n'expire pas (`expires_at` nul) : l'hôte prévient la personne quand il veut, et elle peut se connecter
  * des semaines plus tard ; `member.remove` la retire.
@@ -317,14 +324,14 @@ export async function inviteMember(
 export async function registerInvitation(db: PlatformDb, identity: Identity, input: unknown, replacing?: string): Promise<CreatedInvitation> {
   const invite = parsedInvite(input)
   await authorizeInvitation(db, identity, invite)
-  return createdInvitation(await insertInvitation(db, identity, invite, { replacing }))
+  return insertInvitation(db, identity, invite, { replacing })
 }
 
 type InvitationRow = {
   id: string
   email: string
   role: string
-  team_id: string | null
+  team_ids: string[]
   invited_by: string | null
   created_at: string
   expires_at: string | null
@@ -360,10 +367,11 @@ export async function listInvitations(db: PlatformDb, identity: Identity, query:
       parsed.data.state === "pending"
         ? sql`and i.accepted_at is null and i.declined_at is null and i.revoked_at is null and (i.expires_at is null or i.expires_at > ${now})`
         : sql``
-    const scope = isOrgAdmin(identity) ? sql`` : sql`and (i.email = ${identity.user.email.toLowerCase()} or i.team_id = any(${led}))`
+    const ofLedTeam = sql`exists (select 1 from platform.invitation_teams it where it.invitation_id = i.id and it.team_id = any(${led}::uuid[]))`
+    const scope = isOrgAdmin(identity) ? sql`` : sql`and (i.email = ${identity.user.email.toLowerCase()} or ${ofLedTeam})`
     // L'ordre sur la colonne de la table (`i.`), jamais sur son texte rendu du même nom.
     return sql<InvitationRow[]>`
-      select i.id, i.email, i.role, i.team_id, i.invited_by, to_json(i.created_at) as created_at,
+      select i.id, i.email, i.role, ${visibleTeamIds(sql, identity)} as team_ids, i.invited_by, to_json(i.created_at) as created_at,
              to_json(i.expires_at) as expires_at, to_json(i.accepted_at) as accepted_at,
              to_json(i.declined_at) as declined_at, to_json(i.revoked_at) as revoked_at
         from platform.invitations i
@@ -376,7 +384,8 @@ export async function listInvitations(db: PlatformDb, identity: Identity, query:
     id: row.id,
     email: row.email,
     role: invitationRole(row.role),
-    teamId: row.team_id,
+    teamId: row.team_ids[0] ?? null,
+    teamIds: row.team_ids,
     invitedBy: row.invited_by,
     createdAt: row.created_at,
     expiresAt: row.expires_at,

@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { InviterQuelquUn } from "@otomata_tech/oto_platform/ui"
-import { choisirDansLaListe, libellesDesChoix } from "../../helpers/liste-de-choix"
+import { libellesDesChoix } from "../../helpers/liste-de-choix"
 
 const VENTES = { id: "0e8e5a3c-7f10-4a5b-8d3b-2b1c4d5e6f70", nom: "Ventes" }
 const SUPPORT = { id: "5b0d1c56-0f3a-4a57-9d8e-6f1f1b9e2c11", nom: "Support" }
@@ -39,25 +39,44 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** Les cases du groupe « Équipes », par libellé, et si chacune est cochée. */
+function casesDesEquipes() {
+  const groupe = screen.getByRole("group", { name: "Équipes" })
+  return within(groupe)
+    .getAllByRole("checkbox")
+    .map((boite) => [boite.closest("label")?.textContent, (boite as HTMLInputElement).checked])
+}
+
 describe("InviterQuelquUn fields", () => {
-  it("should offer email, role and team with « Aucune équipe » to an administrator", () => {
+  it("should offer email, role and one unchecked box per team to an administrator, with the help under them", () => {
     rendreAdmin()
 
     expect(screen.getByLabelText("Adresse email")).toHaveAttribute("type", "email")
     const role = screen.getByLabelText("Rôle")
     expect(libellesDesChoix(role)).toEqual(["Membre", "Administrateur"])
-    const equipe = screen.getByLabelText("Équipe")
-    expect(libellesDesChoix(equipe)).toEqual(["Aucune équipe", "Ventes", "Support"])
+    expect(casesDesEquipes()).toEqual([
+      ["Ventes", false],
+      ["Support", false],
+    ])
+    expect(screen.getByRole("group", { name: "Équipes" })).toHaveAccessibleDescription("Elle rejoint les équipes cochées à sa première connexion.")
     expect(screen.getByRole("button", { name: "Envoyer l'invitation" })).toBeEnabled()
   })
 
-  it("should hide the role and require a team for a team lead", () => {
+  it("should hide the role and check the only team of a team lead", () => {
     render(<InviterQuelquUn equipes={[VENTES]} rolesPermis={["member"]} equipeObligatoire />)
 
     expect(screen.queryByLabelText("Rôle")).toBeNull()
-    const equipe = screen.getByLabelText("Équipe")
-    expect(libellesDesChoix(equipe)).toEqual(["Ventes"])
-    expect(equipe).toHaveValue(VENTES.id)
+    expect(casesDesEquipes()).toEqual([["Ventes", true]])
+  })
+
+  it("should require a lead to check one of her teams, under the list, before calling the API", async () => {
+    render(<InviterQuelquUn equipes={[VENTES, SUPPORT]} rolesPermis={["member"]} equipeObligatoire />)
+
+    saisirEtEnvoyer("new@x.test")
+
+    expect(await screen.findByText("Cochez au moins une de vos équipes.")).toBeInTheDocument()
+    expect(screen.getByRole("group", { name: "Équipes" })).toHaveAccessibleDescription("Cochez au moins une de vos équipes.")
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("should mount the status region empty from the start", () => {
@@ -70,7 +89,8 @@ describe("InviterQuelquUn submission", () => {
   it("should post the shared schema output and announce the email that left", async () => {
     fetchMock.mockResolvedValue(reponse(201, { data: { invitation: { email: "new@x.test" }, emailed: true } }))
     rendreAdmin()
-    choisirDansLaListe(screen.getByLabelText("Équipe"), "Support")
+    fireEvent.click(screen.getByRole("checkbox", { name: "Support" }))
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ventes" }))
 
     saisirEtEnvoyer("  New@X.test ")
 
@@ -81,7 +101,7 @@ describe("InviterQuelquUn submission", () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe("/api/platform/invitations")
     expect(init?.method).toBe("POST")
-    expect(JSON.parse(String(init?.body))).toEqual({ email: "new@x.test", role: "member", teamId: SUPPORT.id })
+    expect(JSON.parse(String(init?.body))).toEqual({ email: "new@x.test", role: "member", teamIds: [SUPPORT.id, VENTES.id] })
   })
 
   it("should have the page re-read after sending, the invitation then listed as pending (E05-S03, AC5)", async () => {

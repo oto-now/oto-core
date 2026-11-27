@@ -127,7 +127,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? SUITE : `${SUITE} (${SQL_SKIP_RE
   describe("handlePlateforme journal (AC21)", () => {
     it("should write the line of a mutation only when the deferred task runs", async () => {
       vi.mocked(inviteMember).mockResolvedValue({
-        invitation: { id: INVITATION_ID, email: "a@x.test", role: "member", teamId, expiresAt: "2026-10-01T00:00:00Z" },
+        invitation: { id: INVITATION_ID, email: "a@x.test", role: "member", teamId, teamIds: [teamId], expiresAt: "2026-10-01T00:00:00Z" },
         emailed: true,
       })
       const { tasks } = await call(request("POST", "invitations", { body: JSON.stringify({ email: "A@x.test", teamId }) }))

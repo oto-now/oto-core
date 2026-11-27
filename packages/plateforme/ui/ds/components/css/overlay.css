@@ -151,19 +151,37 @@
 
 .oto-menu-sep { block-size: 1px; background: var(--hair); margin: var(--space-1) 0; }
 
+/* Le titre d'un groupe (D4, `portage-ecrans.md § 8`) : sa taille, sa graisse et sa couleur sont celles d'`.oto-group-title`, dont il est l'alias (`tokens/typography.css`) ; ici, sa place dans le menu. */
 .oto-menu-group-label {
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tr-mono);
-  text-transform: uppercase;
-  color: var(--faint);
   padding: var(--space-2) var(--space-2) var(--space-1);
   /* Ce libellé peut porter une donnée (« Dans <espace> », un nom choisi par le client) : coupé d'une ellipse, sinon un nom long passe à la ligne dans une surface qui découpe. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Un titre de groupe précédé d'une image (le logo de l'organisation) : la rangée centre, le nom seul se coupe. */
+.oto-menu-group-label[data-icon] { display: flex; align-items: center; gap: var(--space-1-5); }
+.oto-menu-group-label[data-icon] > span:last-child { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* La tête du menu (`head`) : ce qui ne s'active pas, au-dessus des lignes (la personne : avatar, nom, email), séparé par un filet ; le nom en encre, l'email en `--mute`. */
+.oto-menu-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-block-end: 1px solid var(--hair);
+  min-inline-size: 0;
+}
+.oto-menu-head-text { display: flex; flex-direction: column; min-inline-size: 0; }
+.oto-menu-head-name { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--ink); }
+.oto-menu-head-meta { font-size: var(--fs-xs); color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* La ligne à interrupteur (`switch`) : la piste de `Switch` (`choice.css`) en fin de ligne, l'état lu sur `aria-checked` de la ligne, qui n'a pas d'`input`. */
+.oto-menu-item > .oto-switch-track { margin-inline-start: auto; }
+.oto-menu-item[aria-checked="true"] > .oto-switch-track { background: var(--btn-bg); }
+.oto-menu-item[aria-checked="true"] > .oto-switch-track::after { transform: translateX(14px); }
+[dir="rtl"] .oto-menu-item[aria-checked="true"] > .oto-switch-track::after { transform: translateX(-14px); }
 
 /* sous-menu : le chevron dit qu'il y en a un, l'enveloppe gère → et ← */
 .oto-menu-item[aria-haspopup] > .oto-menu-chevron { margin-inline-start: auto; color: var(--faint); }

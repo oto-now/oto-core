@@ -218,12 +218,9 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
         ].join("\n"),
       )
       expect(team.structured?.next_actions).toEqual([])
+      // L'espace qui reçoit le nœud (règle de JB du 27/11) : le Privé d'une autre personne, jamais, administrateur compris.
       expect((await node({ op: "transfer_owner", path: "ventes/tarifs", owner: `user:${admin.persons.claire.email}` })).text).toBe(
-        [
-          "About to give ventes/tarifs and its 1 descendant that inherits its owner to Claire Morel (personal).",
-          `Only Claire Morel will see these nodes: the administrators of ${acme} and the platform team lose access (personal space).`,
-          NOTHING,
-        ].join("\n"),
+        "ventes/tarifs cannot go to the private space of Claire Morel: only they put content there. Give it to yourself, or to a team or the organisation you write in.",
       )
       expect((await node({ op: "transfer_owner", path: "ventes/tarifs/remises", owner: "inherit" })).text).toBe(
         [
@@ -255,8 +252,9 @@ describe.skipIf(!sqlConfigured)(portable("admin_node on a real database"), { tim
       await admin.write({ access_rules: [{ ...hidden, subject_team_id: null, subject_user_id: PERSONS.claire.id, level: "none" }] })
       try {
         const { node } = await session(admin, "claire")
-        const summary = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: "team:support" })
-        expect(summary.text.split("\n")[0]).toBe("About to give ventes/tarifs to team Support.")
+        // Son propre Privé : Claire n'écrit pas dans Support (règle de JB du 27/11).
+        const summary = await node({ op: "transfer_owner", path: "ventes/tarifs", owner: `user:${admin.persons.claire.email}` })
+        expect(summary.text.split("\n")[0]).toBe("About to give ventes/tarifs to Claire Morel (personal).")
       } finally {
         await seed.admin`delete from platform.access_rules where id = ${admin.id(hidden.id)}`
       }

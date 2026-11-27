@@ -89,7 +89,7 @@ test.describe("marque de l'organisation", () => {
       const racines = page.locator('.oto:not([aria-hidden="true"])')
       await expect(racines).toHaveCount(1)
       await expect(racines).toHaveAttribute("data-oto-theme", "foret")
-      await expect(page.getByRole("navigation", { name: "Navigation principale" }).getByRole("button", { name: new RegExp(`^Entreprise : ${ESPACE.nom}`) })).toBeVisible()
+      await expect(page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: ESPACE.nom, exact: true })).toBeVisible()
       await auRepos(page.getByRole("main"))
       await page.screenshot({ path: testInfo.outputPath(`marque-${mode}.png`), caret: "initial" })
       for (const theme of THEMES) {

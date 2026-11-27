@@ -8,14 +8,11 @@ import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/f
 import { ouvrirLeChamp } from "../../helpers/champ-du-bloc"
 import { bloc, simulerLAPI, vueDuNoeud } from "../../helpers/noeud"
 
-// L'écran d'un Contexte (E05-S04, AC10 à AC12 ; P39 ; E05-S09, partie c1 : porté d'oto-frontend) : l'écran
-// de nœud d'E05-S02 en deux colonnes et ses annexes (la note de ce qu'il est et de qui le reçoit, l'encart
-// de ce que l'agent va lire), la publication d'un Contexte. E05-S11 (AC-8 à AC-11) : « Ma fiche » quitte la
-// colonne ; l'encart se titre « Voici ce que votre agent va lire », sans texte servi replié, le total en
-// dernière ligne, chaque ligne un lien vers la vue « Contexte » de l'accueil. E11-S10 (lot g) : l'encart sans titre
-// visible ni « Règles Oto », ses lignes vers `/context` ; la publication sans phrase de recharge. E11-S05 (AC-e2) :
-// « À quoi sert cette page » est un repli fermé à l'arrivée, en tête de la colonne de droite. `fetch` simulé pour
-// `POST /api/platform/nodes`, relecture espionnée.
+// L'écran d'un Contexte (E05-S04, AC10 à AC12 ; P39 ; E05-S09, partie c1 : porté d'oto-frontend ; refonte #217) :
+// l'écran de nœud d'E05-S02, à plat ; sous la méta, la phrase qui dit qui le reçoit (et, pour « Mes instructions », la
+// reprise) ; au pied, « Ce que reçoit votre assistant » : la jauge, puis ce que l'assistant va lire, chaque ligne un lien
+// vers la vue « Contexte » de l'accueil (E05-S11, AC-8 à AC-11 ; E11-S10, lot g) ; la publication d'un Contexte. `fetch`
+// simulé pour `POST /api/platform/nodes`, relecture espionnée.
 
 const rafraichir = vi.fn()
 const EQUIPES = [{ slug: "ventes", name: "Ventes" }]
@@ -61,12 +58,9 @@ function monterLesAnnexes(props: Partial<AnnexesProps> = {}) {
   render(<ContexteDeRafraichissement.Provider value={rafraichir}>{annexes(props)}</ContexteDeRafraichissement.Provider>)
 }
 
-/** « À quoi sert cette page » (E11-S05, AC-e2) : un `<details>`, rôle `group`, nommé par son titre. */
-const aQuoiSert = () => screen.getByRole("group", { name: "À quoi sert cette page" })
-const note = () => within(aQuoiSert())
-const apercu = () => within(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }))
-/** Les phrases de « À quoi sert cette page » (E05-S13, AC-17) : les paragraphes de son corps replié. */
-const phrases = () => [...(aQuoiSert().querySelector(".oto-linked-body")?.children ?? [])].map((enfant) => [enfant.tagName, enfant.className, enfant.textContent])
+const apercu = () => within(screen.getByRole("region", { name: "Ce que reçoit votre assistant" }))
+/** Le pied d'un Contexte : la section « Ce que reçoit votre assistant ». */
+const pied = () => within(screen.getByRole("region", { name: "Ce que reçoit votre assistant" }))
 
 afterEach(() => {
   cleanup()
@@ -77,8 +71,8 @@ beforeEach(() => {
   rafraichir.mockReset()
 })
 
-describe("écran d'un Contexte (AC10)", () => {
-  it("should show the node screen of a Contexte in two columns, masculine meta, neither move nor delete, its notes beside the document: who receives it and how it is written, then what the model will receive", () => {
+describe("écran d'un Contexte (AC10 ; refonte #217)", () => {
+  it("should show the node screen of a Contexte flat, its nature in the meta, neither move nor delete, who receives it under the meta and what the model will receive at the foot", () => {
     render(
       <EcranDeNoeud
         chemin="ventes/contexte"
@@ -92,35 +86,27 @@ describe("écran d'un Contexte (AC10)", () => {
         hrefDuChemin={(chemin) => `/n/${chemin}`}
         prefixeDesPages="/n/"
         annexes={annexes()}
+        piedDeColonne={annexes({ place: "pied" })}
       />,
     )
-    expect(screen.getByText(/^modifié /)).toBeInTheDocument()
+    expect(screen.getByText(/^Contexte · Modifié /)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Déplacer" })).toBeNull()
     expect(screen.queryByRole("button", { name: /supprimer la page/i })).toBeNull()
-    // Le document dans la colonne principale ; la colonne de droite commence par « À quoi sert cette page », fermé à
-    // l'arrivée, sans compte, son glyphe (E11-S05, AC-e2).
-    expect(screen.getByRole("region", { name: "Contexte" }).closest(".oto-two-columns-main")).not.toBeNull()
-    expect(aQuoiSert().parentElement).toHaveClass("oto-two-columns-aside")
-    expect(aQuoiSert().parentElement?.firstElementChild).toBe(aQuoiSert())
-    expect(aQuoiSert()).not.toHaveAttribute("open")
-    expect(aQuoiSert().querySelector("summary")?.textContent).toBe("À quoi sert cette page")
-    expect(aQuoiSert().querySelector(".oto-linked-count")).toBeNull()
-    expect(aQuoiSert().querySelector("summary .oto-icon")).not.toBeNull()
-    // Une note porte le rôle `note` : aucun repère complémentaire dans la colonne d'annexes (M31 ; axe
-    // `landmark-complementary-is-top-level`).
-    expect(screen.getAllByRole("complementary").filter((repere) => repere.parentElement?.closest("aside, [role='complementary']"))).toEqual([])
-    // E05-S13 (AC-17) : deux phrases, dans un seul style, sans « Reçu par », recharge ni pied.
-    expect(phrases()).toEqual([
-      ["P", "", "Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe Ventes, lit à chaque conversation."],
-      ["P", "", "Vous l'écrivez comme n'importe quelle page."],
-    ])
-    expect(note().queryByText("Reçu par")).toBeNull()
-    // E11-S10 (AC-g1) : l'encart n'a plus de titre visible ; son nom accessible reste.
-    expect(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }).querySelector(".oto-note-head")).toBeNull()
+    // Aucune colonne de droite ; la phrase de portée, en corps, sous la méta et avant le texte, sans repli ni titre.
+    expect(document.querySelector(".oto-two-columns-aside")).toBeNull()
+    const phrase = screen.getByText("Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe Ventes, lit à chaque conversation.")
+    expect(phrase.closest(".oto-node-lead")).not.toBeNull()
+    expect(phrase.compareDocumentPosition(screen.getByRole("region", { name: "Contexte" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText("À quoi sert cette page")).toBeNull()
+    expect(screen.queryByText("Vous l'écrivez comme n'importe quelle page.")).toBeNull()
+    // Au pied, sous son intitulé : ce que l'assistant va lire, sans le titre « Voici ce que votre agent va lire ».
+    expect(pied().getByRole("heading", { name: "Ce que reçoit votre assistant" })).toBeInTheDocument()
+    expect(pied().getByRole("list", { name: "Ordre de lecture" })).toBeInTheDocument()
     expect(screen.queryByText("Voici ce que votre agent va lire")).toBeNull()
+    expect(screen.getByRole("region", { name: "Ce que reçoit votre assistant" }).closest(".oto-node-foot")).not.toBeNull()
   })
 
-  // E05-S13 (AC-17 ; D128) : la première phrase dit, par portée, qui le reçoit.
+  // E05-S13 (AC-17 ; D128) : la phrase dit, par portée, qui le reçoit.
   it.each([
     ["contexte", "Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'organisation, lit à chaque conversation."],
     // Le `handle` de la personne : son propre Contexte Perso lui est servi.
@@ -129,32 +115,30 @@ describe("écran d'un Contexte (AC10)", () => {
     ["private/marc/contexte", "Ce que l'assistant de la personne de cet espace lit à chaque conversation ; elle seule le reçoit."],
   ])("should say in one sentence who receives %s", (chemin, phrase) => {
     monterLesAnnexes({ cheminCourant: chemin })
-    expect(phrases()).toEqual([
-      ["P", "", phrase],
-      ["P", "", "Vous l'écrivez comme n'importe quelle page."],
-    ])
+    expect(screen.getByText(phrase)).toHaveClass("oto-body")
   })
 
   // AC-8 : ses champs sont dans Profil ; aucun Contexte, pas même le sien, ne porte plus « Ma fiche ».
-  it("should not give « Ma fiche » in the column of the person's own Contexte", () => {
+  it("should not give « Ma fiche » on the person's own Contexte", () => {
     monterLesAnnexes({ cheminCourant: "private/lea/contexte" })
     expect(screen.queryByRole("region", { name: "Ma fiche" })).toBeNull()
     expect(screen.queryByText("Ma fiche")).toBeNull()
   })
 
-  // « Mes instructions » : la phrase de reprise, sur le Contexte privé de la personne seulement, copiée telle quelle.
-  it("should give the take-over sentence to copy on the person's own Contexte only", async () => {
+  // « Mes instructions » : la phrase de reprise, sur le Contexte privé de la personne seulement, copiée telle quelle, sans intertitre.
+  it("should give the take-over sentence to copy on the person's own Contexte only, without its title", async () => {
     const ecrire = vi.fn(async () => {})
     Object.defineProperty(navigator, "clipboard", { value: { writeText: ecrire }, configurable: true })
     monterLesAnnexes({ cheminCourant: "private/lea/contexte" })
-    const reprise = within(screen.getByRole("note", { name: "Reprendre vos préférences" }))
-    expect(reprise.getByText("Range mes préférences actuelles dans mes instructions Oto, sans doublon")).toBeInTheDocument()
-    fireEvent.click(reprise.getByRole("button", { name: "Copier la phrase de reprise" }))
+    expect(screen.getByText("Votre assistant garde déjà des préférences ? Copiez-lui cette phrase : il les range ici.")).toBeInTheDocument()
+    expect(screen.getByText("Range mes préférences actuelles dans mes instructions Oto, sans doublon")).toBeInTheDocument()
+    expect(screen.queryByText("Reprendre vos préférences")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Copier la phrase de reprise" }))
     await waitFor(() => expect(ecrire).toHaveBeenCalledWith("Range mes préférences actuelles dans mes instructions Oto, sans doublon"))
     cleanup()
     for (const chemin of ["ventes/contexte", "contexte", "private/marc/contexte"]) {
       monterLesAnnexes({ cheminCourant: chemin })
-      expect(screen.queryByRole("note", { name: "Reprendre vos préférences" })).toBeNull()
+      expect(screen.queryByRole("button", { name: "Copier la phrase de reprise" })).toBeNull()
       cleanup()
     }
   })
@@ -233,7 +217,7 @@ describe("publier un Contexte (AC11)", () => {
 
 describe("voici ce que votre agent va lire (AC12 ; E05-S11, AC-9 à AC-11)", () => {
   it("should give each served block in reading order by name, this context marked, each a link to its part of the home's « Contexte » view, without any figure (E05-S13, AC-13)", () => {
-    monterLesAnnexes()
+    monterLesAnnexes({ place: "pied" })
     // Les couches servies, dans l'ordre : leur nom seul (ni taille ni état, E05-S13) ; la couche regardée marquée ;
     // chacune un lien, atteint au clavier comme tout lien, vers la même partie de la vue « Contexte » (AC-11).
     const couches = within(apercu().getByRole("list", { name: "Ordre de lecture" }))
@@ -254,17 +238,19 @@ describe("voici ce que votre agent va lire (AC12 ; E05-S11, AC-9 à AC-11)", () 
     for (const lien of apercu().getAllByRole("link")) expect(lien).not.toHaveAttribute("tabindex", "-1")
     // AC-10 : le texte servi replié est parti (il se lit dans la vue « Contexte »).
     expect(apercu().queryByText("Texte servi")).toBeNull()
-    expect(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }).querySelector("details")).toBeNull()
+    // Refonte #216 : une liste simple au pied de sa section, sans note encadrée autour.
+    expect(screen.queryByRole("note")).toBeNull()
+    const liste = apercu().getByRole("list", { name: "Ordre de lecture" })
+    expect(liste.querySelector("details")).toBeNull()
     // E05-S13 (AC-13) : ni note des versions, ni total, ni légende visible (« Ordre de lecture » ne nomme que la liste).
-    const encart = screen.getByRole("note", { name: "Voici ce que votre agent va lire" })
-    expect(encart.textContent).not.toMatch(/caractères|reflète les versions|Ordre de lecture|complet|coupé|omis/)
-    expect(encart.lastElementChild).toBe(apercu().getByRole("list", { name: "Ordre de lecture" }))
+    expect(liste.textContent).not.toMatch(/caractères|reflète les versions|Ordre de lecture|complet|coupé|omis/)
+    expect(screen.getByRole("region", { name: "Ce que reçoit votre assistant" }).lastElementChild).toBe(liste)
   })
 
-  it("should say a failed preview with « Réessayer » on the same address, the rest of the annexes shown", () => {
-    monterLesAnnexes({ apercu: { error: "Une erreur est survenue. Réessayez." } })
+  it("should say a failed preview with « Réessayer » on the same address, under its title, without the gauge", () => {
+    monterLesAnnexes({ place: "pied", apercu: { error: "Une erreur est survenue. Réessayez." } })
     expect(apercu().getByRole("alert")).toHaveTextContent("L'aperçu n'a pas pu être calculé.")
     expect(apercu().getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/n/ventes/contexte")
-    expect(note().getByText("Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe Ventes, lit à chaque conversation.")).toBeInTheDocument()
+    expect(pied().getByRole("heading", { name: "Ce que reçoit votre assistant" })).toBeInTheDocument()
   })
 })

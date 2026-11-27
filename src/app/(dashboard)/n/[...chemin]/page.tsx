@@ -15,6 +15,7 @@ import {
   fileView,
   isPlatformError,
   lastConnections,
+  listComments,
   listMembers,
   listNodeRules,
   loadNode,
@@ -32,7 +33,6 @@ import {
 import {
   adresseDesReglages,
   AnnexesDuContexte,
-  JaugeDuBudget,
   blocsAffiches,
   EcranDeNoeud,
   EcranDeTableauChargement,
@@ -190,20 +190,20 @@ type Complements = { db: PlatformDb; identity: Identity; vue: NodeView; lu: Lu; 
 async function complementsDuNoeud({ db, identity, vue, lu, ici }: Complements) {
   if (vue.kind !== "context") return {}
   const apercu = lu.apercu ?? (await resultatDe(previewContext(db, identity, {})))
-  const annexes = (
-    <AnnexesDuContexte
-      cheminCourant={vue.path}
-      handle={identity.member.profile.handle ?? null}
-      apercu={apercu}
-      // Les équipes de l'organisation ; en panne (dite dans l'arbre), celles de la personne, que l'aperçu sert.
-      equipes={lu.equipes.error === undefined ? lu.equipes.data : identity.teams}
-      hrefDuContexteServi={CONTEXTE_SERVI}
-      ici={ici}
-      Lien={Link}
-    />
-  )
-  // La jauge du budget, tout en bas de la colonne (2026-10-20) ; un aperçu en échec est déjà dit par les annexes.
-  const piedDeColonne = apercu.error === undefined ? <JaugeDuBudget apercu={apercu.data} cheminCourant={vue.path} /> : undefined
+  const props = {
+    cheminCourant: vue.path,
+    handle: identity.member.profile.handle ?? null,
+    apercu,
+    // Les équipes de l'organisation ; en panne (dite dans l'arbre), celles de la personne, que l'aperçu sert.
+    equipes: lu.equipes.error === undefined ? lu.equipes.data : identity.teams,
+    hrefDuContexteServi: CONTEXTE_SERVI,
+    ici,
+    Lien: Link,
+  }
+  // Sous la méta, la phrase de portée (et la reprise de « Mes instructions ») ; au pied, « Ce que reçoit votre assistant »,
+  // la jauge et l'ordre de lecture (refonte #217).
+  const annexes = <AnnexesDuContexte {...props} />
+  const piedDeColonne = <AnnexesDuContexte {...props} place="pied" />
   return { annexes, piedDeColonne }
 }
 
@@ -317,6 +317,9 @@ export default async function NoeudPage({ params, searchParams }: Parametres) {
     return <EcranDeNoeud {...commun} nomOrganisation={identity.org.name} handle={handle} noeud={lu.noeud} arbre={lu.arbre} equipes={lu.equipes} fichierVu={{ id: vu, resultat }} />
   }
   const liens = vue ? liensLus : undefined
+  // Les fils de commentaires (D8), lus ici et non par l'écran une fois hydraté : la visite ne compte qu'après la réponse
+  // (`after`), que ces fils servis à l'écran font attendre ; leur « non lu » se lit donc sur la visite précédente.
+  const fils = vue ? resultatDe(listComments(session.db, identity, vue.path)) : undefined
   const complement = vue?.kind === "table" ? complementDuTableau(session.db, identity, vue, parametres) : undefined
   // Les blocs `reference` (E07-S03) et ce qu'un Contexte ajoute (E05-S04), en parallèle.
   const [references, complements] = await Promise.all([
@@ -333,6 +336,7 @@ export default async function NoeudPage({ params, searchParams }: Parametres) {
       equipes={lu.equipes}
       partage={partage}
       liens={liens}
+      fils={fils}
       complement={complement}
       referencesRendues={references}
       // Un tableau ne devient ni procédure ni Contexte (E03-S03) : son complément et ceux-ci ne se recouvrent pas.

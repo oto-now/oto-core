@@ -84,10 +84,13 @@ function ecran(partage: Partial<NonNullable<Props["partage"]>> = {}) {
 }
 
 /** Monte l'écran et ouvre « Partager » ; `relire` le rerend, comme l'hôte après `rafraichir`. */
+/** Le nom du panneau : « Partager « <titre> » », sans tiret (#219). */
+const NOM_DU_PANNEAU = /^Partager « .+ »$/
+
 function ouvrir(partage: Partial<NonNullable<Props["partage"]>> = {}) {
   const rendu = render(ecran(partage))
-  fireEvent.click(screen.getByRole("button", { name: "Partager · Ventes" }))
-  return { panneau: () => within(screen.getByRole("dialog", { name: "Partager — Ventes" })), relire: (suite: Partial<NonNullable<Props["partage"]>>) => rendu.rerender(ecran(suite)) }
+  fireEvent.click(screen.getByRole("button", { name: "Partager" }))
+  return { panneau: () => within(screen.getByRole("dialog", { name: NOM_DU_PANNEAU })), relire: (suite: Partial<NonNullable<Props["partage"]>>) => rendu.rerender(ecran(suite)) }
 }
 
 function reponse(status: number, body: unknown): Response {
@@ -169,18 +172,20 @@ afterEach(() => {
 })
 
 describe("Partager, who has access (AC-b5)", () => {
-  it("should list each added team or person with its level in a menu of Notion's words, the owner team on its own line, without the word « règle »", async () => {
+  it("should list the owner team first, then each added team or person with its level in a menu of Notion's words, under two small headings, without the word « règle »", async () => {
     const { panneau } = ouvrir()
-    const liste = within(panneau().getByRole("list", { name: "Personnes et équipes ajoutées" }))
-    // 1.4.13 : la règle de l'équipe propriétaire se règle sur sa ligne de l'accès par défaut, pas parmi les ajoutés.
-    expect(liste.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Léa Martin", "Accès de Marc Dupont"])
-    expect(liste.getAllByRole("listitem")[0]).toHaveTextContent("Léa Martinvous")
+    await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
+    const liste = within(panneau().getByRole("list", { name: "Partager avec" }))
+    // #219 : l'équipe propriétaire en tête de « Partager avec », sa règle réglée sur sa ligne et non parmi les ajoutés.
+    expect(liste.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Niveau de l'équipe Ventes", "Accès de Léa Martin", "Accès de Marc Dupont"])
+    expect(liste.getAllByRole("listitem")[1]).toHaveTextContent("Léa Martinvous")
     const menu = liste.getByRole("combobox", { name: "Accès de Léa Martin" })
     expect(menu).toHaveValue("read")
     // 1.4.12 : « Aucun accès » rend le contenu et ce qu'il range invisibles à la personne ou à l'équipe.
     expect(libellesDesChoix(menu)).toEqual(["Accès complet", "Peut modifier", "Peut lire", "Aucun accès", "Retirer"])
     expect(liste.getByRole("combobox", { name: "Accès de Marc Dupont" })).toHaveValue("manage")
-    expect(panneau().getByRole("heading", { name: "Personnes et équipes ajoutées · 2" })).toBeInTheDocument()
+    // D4 : deux intertitres seulement, sans compte ; « Publier sur le web » est l'intitulé de son interrupteur.
+    expect(panneau().getAllByRole("heading").map((titre) => titre.textContent)).toEqual(["Accès par défaut", "Partager avec"])
 
     // L'accès par défaut : l'équipe, lue à l'ouverture, et toute l'organisation, chacune à son niveau.
     const equipe = await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
@@ -195,7 +200,7 @@ describe("Partager, who has access (AC-b5)", () => {
     fireEvent.click(equipe)
     // 1.5.1 : le pied « Votre accès » est retiré.
     expect(panneau().queryByText("Votre accès")).toBeNull()
-    expect(screen.getByRole("dialog", { name: "Partager — Ventes" }).textContent).not.toMatch(/règle/i)
+    expect(screen.getByRole("dialog", { name: NOM_DU_PANNEAU }).textContent).not.toMatch(/règle/i)
   })
 
   // N6 : l'accès complet ne s'accorde que par un administrateur ; celui d'une ligne se garde, il est déjà là.
@@ -210,7 +215,7 @@ describe("Partager, who has access (AC-b5)", () => {
 
   it("should show the levels as pills and change nothing for someone without full access", async () => {
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, viewerLevel: 2, general: { id: "r1", level: "write" } } } })
-    expect(within(panneau().getByRole("list", { name: "Personnes et équipes ajoutées" })).getAllByRole("listitem")[1]).toHaveTextContent("Marc DupontAccès complet")
+    expect(within(panneau().getByRole("list", { name: "Partager avec" })).getAllByRole("listitem")[2]).toHaveTextContent("Marc DupontAccès complet")
     expect(panneau().getByText("Toute l'organisation Démo").closest(".oto-pop-row")).toHaveTextContent("Toute l'organisation DémoPeut modifier")
     // La ligne de l'équipe se lit aussi pour qui ne gère pas : son niveau vient de la même lecture.
     await waitFor(() => expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).toHaveTextContent("Équipe VentesPeut modifier"))
@@ -231,7 +236,7 @@ describe("Partager, who has access (AC-b5)", () => {
   ])("should say the default access of a node owned by $cas", ({ owner, libelle, details, ouvrable }) => {
     servis.team = null
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, owner, rules: [], general: null } } })
-    expect(panneau().getByText("Personne n'a été ajouté à ce contenu.")).toBeInTheDocument()
+    expect(panneau().queryByText("Personne n'a été ajouté à ce contenu.")).toBeNull()
     expect(panneau().getByText(libelle)).toBeInTheDocument()
     for (const detail of details) expect(panneau().getByText(detail)).toBeInTheDocument()
     expect(panneau().queryByRole("combobox", { name: /toute l'organisation/ }) !== null).toBe(ouvrable)
@@ -263,10 +268,11 @@ describe("Partager, default access of the owner team and of the organisation", (
     await waitFor(() => expect(envoye()).toEqual({ url: `/api/platform/rules/${REGLE_VENTES}`, methode: "DELETE", corps: undefined }))
   })
 
-  it("should mark an inherited team level, and leave the organisation at « Aucun accès » by removing its access", async () => {
+  it("should name the owner team without an inherited tag, and leave the organisation at « Aucun accès » by removing its access", async () => {
     servis.team = { ...EQUIPE, ruleId: null }
     const { panneau } = ouvrir({ regles: { data: { ...REGLES, rules: REGLES.rules.slice(1), general: { id: "regle-org", level: "read" } } } })
-    await waitFor(() => expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).toHaveTextContent("Équipe Ventes" + "hérité"))
+    await panneau().findByRole("combobox", { name: "Niveau de l'équipe Ventes" })
+    expect(panneau().getByText("Équipe Ventes").closest(".oto-pop-row")).not.toHaveTextContent("hérité")
     choisirDansLaListe(panneau().getByRole("combobox", { name: "Niveau de toute l'organisation" }), "Aucun accès")
     await waitFor(() => expect(envoye()).toEqual({ url: "/api/platform/nodes/access", methode: "POST", corps: { path: "ventes/modele_relance", access: "restricted" } }))
   })
@@ -320,8 +326,13 @@ describe("Partager, members of the owner team", () => {
   it("should list the members without access of their own with their real level, mark an exception, and restrict one on this page only", async () => {
     servis.people = people
     const { panneau } = ouvrir()
-    // Lus à l'ouverture du panneau, par `GET rules?path=` : l'affichage de la page ne les calcule pas.
-    const membres = within(await panneau().findByRole("list", { name: "Membres de l'équipe Ventes" }))
+    // Lus à l'ouverture du panneau, par `GET rules?path=` : l'affichage de la page ne les calcule pas ; repliés sous l'équipe (#219).
+    const deplier = await panneau().findByRole("button", { name: "3 membres" })
+    expect(deplier).toHaveAttribute("aria-expanded", "false")
+    expect(panneau().queryByRole("list", { name: "Membres de l'équipe Ventes" })).toBeNull()
+    fireEvent.click(deplier)
+    expect(deplier).toHaveAttribute("aria-expanded", "true")
+    const membres = within(panneau().getByRole("list", { name: "Membres de l'équipe Ventes" }))
     // Léa a une règle sur la page : elle est parmi les ajoutés, où « Retirer » rend son niveau hérité.
     expect(membres.getAllByRole("combobox").map((menu) => menu.getAttribute("aria-label"))).toEqual(["Accès de Nora Écoffier", "Accès de Paul Henry", "Accès de Zoé Arnaud"])
     expect(membres.getAllByRole("listitem")[0]).toHaveTextContent("Nora Écoffierresponsable")
@@ -360,7 +371,7 @@ describe("Partager, changing a level (AC-b5)", () => {
 
     // La relecture retire la ligne : le focus va à l'intitulé de la liste, jamais à `<body>`.
     relire({ regles: { data: { ...REGLES, rules: REGLES.rules.filter((regle) => regle.id !== REGLE_MARC) } } })
-    await waitFor(() => expect(document.activeElement).toBe(panneau().getByRole("heading", { name: "Personnes et équipes ajoutées · 1" })))
+    await waitFor(() => expect(document.activeElement).toBe(panneau().getByRole("heading", { name: "Partager avec" })))
   })
 
   it("should say a refusal and bring the menu back to the served level", async () => {
@@ -389,8 +400,8 @@ describe("Partager sur le web (AC-d1)", () => {
     })
     const { panneau } = ouvrir(SANS_AJOUT)
 
-    const interrupteur = await panneau().findByRole("switch", { name: "Partager sur le web" })
-    expect(interrupteur).toHaveAccessibleDescription("Toute personne qui a le lien lit la dernière version publiée, sans compte ; jamais indexé par un moteur de recherche.")
+    const interrupteur = await panneau().findByRole("switch", { name: "Publier sur le web" })
+    expect(interrupteur).toHaveAccessibleDescription("Toute personne qui a le lien peut lire la page, sans compte.")
     expect(interrupteur).not.toBeChecked()
     expect(appels()[0]).toEqual({ url: LECTURE, methode: "GET", corps: undefined })
     expect(panneau().queryByRole("button", { name: "Copier le lien" })).toBeNull()
@@ -431,7 +442,7 @@ describe("Partager sur le web (AC-d1)", () => {
   it("should read an active link at opening, with its sub-contents setting", async () => {
     api(() => reponse(200, { data: { share: { ...LIEN, includeChildren: true } } }))
     const { panneau } = ouvrir(SANS_AJOUT)
-    expect(await panneau().findByRole("switch", { name: /Partager sur le web/ })).toBeChecked()
+    expect(await panneau().findByRole("switch", { name: "Publier sur le web" })).toBeChecked()
     expect(panneau().getByRole("checkbox", { name: /Inclure les sous-contenus/ })).toBeChecked()
   })
 
@@ -450,7 +461,7 @@ describe("Partager sur le web (AC-d1)", () => {
   ])("should say the refusal of the service for %s, the switch left off", async (_cas, statut, code, phrase) => {
     api(({ methode }) => (methode === "GET" ? reponse(200, { data: { share: null } }) : reponse(statut, { error: { code, message: "refused" } })))
     const { panneau } = ouvrir(SANS_AJOUT)
-    const interrupteur = await panneau().findByRole("switch", { name: /Partager sur le web/ })
+    const interrupteur = await panneau().findByRole("switch", { name: "Publier sur le web" })
     fireEvent.click(interrupteur)
     expect(await panneau().findByRole("alert")).toHaveTextContent(phrase)
     expect(interrupteur).not.toBeChecked()
@@ -467,7 +478,7 @@ describe("Partager sur le web (AC-d1)", () => {
     const { panneau } = ouvrir(SANS_AJOUT)
     expect(await panneau().findByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez.")
     fireEvent.click(panneau().getByRole("button", { name: "Réessayer" }))
-    expect(await panneau().findByRole("switch", { name: /Partager sur le web/ })).toBeChecked()
+    expect(await panneau().findByRole("switch", { name: "Publier sur le web" })).toBeChecked()
     expect(panneau().queryByRole("alert")).toBeNull()
   })
 })

@@ -64,12 +64,16 @@ const TABLEAU = ACME_TABLE.path
  * session, `commit`). Avant elle : une page 65 instructions dans 33 transactions, une procédure 55 dans 29, un
  * tableau 72 dans 40. Depuis la bascule d'organisation (plusieurs organisations par personne), le layout lit en plus
  * les organisations de la personne (`listMyOrganisations`) : une instruction et une transaction de plus par affichage, en
- * parallèle des autres lectures du rail.
+ * parallèle des autres lectures du rail. Depuis la refonte de l'écran (D8), la page lit les fils de commentaires
+ * (`listComments`) que l'écran lisait par l'API une fois hydraté : sept instructions (le nœud et son niveau, les fils,
+ * les membres qui lisent la page et l'annuaire, pour les mentions) dans une transaction de plus, en parallèle. Elles ne
+ * s'ajoutent pas à une visite : la requête de l'écran à l'API disparaît. Lues avant que la visite ne compte (`after`), elles seules
+ * disent quels fils sont non lus.
  */
 const PLAFONDS = {
-  page: { instructions: 32, transactions: 7 },
-  procedure: { instructions: 30, transactions: 7 },
-  tableau: { instructions: 41, transactions: 9 },
+  page: { instructions: 39, transactions: 8 },
+  procedure: { instructions: 37, transactions: 8 },
+  tableau: { instructions: 48, transactions: 10 },
 } as const
 
 /** Les promesses que la page laisse à ses `<Suspense>`, où qu'elles soient dans l'arbre rendu. */

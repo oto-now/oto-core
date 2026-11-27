@@ -148,6 +148,9 @@ ADDED.push("connector_activations_insert_server")
 // L'API de l'hôte d'une organisation (`20261123150000`, fonctions d'un hôte) : lue par les membres, écrite par l'équipe
 // plateforme sur une organisation qu'elle atteint (`STAFF_ROLE_REQUIRED`).
 ADDED.push("host_apis_select_member", "host_apis_insert_staff", "host_apis_update_staff")
+// Les équipes d'une invitation (`20261127150000`, personne en attente) : lues, ajoutées et retirées par l'administrateur
+// ou le responsable de l'équipe de la ligne, sur une invitation ouverte de l'organisation (`ROLE_REQUIRED`).
+ADDED.push("invitation_teams_select_admin_lead", "invitation_teams_insert_admin_lead", "invitation_teams_delete_admin_lead")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [
@@ -178,6 +181,9 @@ const ROLE_REQUIRED: Record<string, string> = {
   members_update_admin: "updateMember (server/members.ts): requireAdmin, isOrgAdmin",
   invitations_insert_admin: "inviteMember (server/invitations.ts): invitationOptions, isOrgAdmin, or a lead inviting a member into a team she leads (leadsTeam)",
   invitations_update_revoke: "revokeInvitation, withdraw (server/invitations.ts): its sender or isOrgAdmin",
+  invitation_teams_select_admin_lead: "listInvitations, openInvitation (server/invitations.ts, pending-members.ts): visibleTeamIds, isOrgAdmin, or the lead of the row's team (leadsTeam)",
+  invitation_teams_insert_admin_lead: "insertInvitation, changeInvitationTeams (server/invitations.ts, pending-members.ts): invitationOptions, isOrgAdmin, or the lead of the added team (leadsTeam), on an open invitation",
+  invitation_teams_delete_admin_lead: "changeInvitationTeams (server/pending-members.ts): invitationOptions, isOrgAdmin, or the lead of the removed team (leadsTeam), on an open invitation",
   teams_insert_admin: "createTeam (server/teams.ts): requireAdmin, isOrgAdmin",
   teams_update_admin: "updateTeam (server/teams.ts): requireAdmin, isOrgAdmin",
   team_members_insert_admin: "addTeamMember (server/teams.ts): requireComposer, isOrgAdmin, or a lead adding a member (leadsTeam); setSoleLead: isOrgAdmin",

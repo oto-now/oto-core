@@ -632,13 +632,38 @@
 
 /* E05-S10 (partie b) — l'en-tête d'un nœud et son panneau « Partager ». */
 
-/* L'en-tête d'un nœud (`.oto-node-header`) : la ligne « modifiée … » passe sous le titre, alignée à droite, à l'écart d'un rang (`row-gap`, 4 px) ; posée à côté du titre, elle le serrait et partait à la ligne au gré de sa longueur. En une colonne, elle suit le titre dans l'ordre du DOM, toujours à droite. */
-.oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: 3 / 1 / 4 / -1; justify-self: end; align-self: start; }
-/* Le titre, et son champ en place, prennent alors toute la largeur de l'en-tête : la ligne ne partage plus son rang. */
-.oto-screen-header.oto-node-header > .oto-page-title { grid-area: 2 / 1 / 3 / -1; display: flex; min-inline-size: 0; }
+/* L'en-tête d'un nœud (`.oto-node-header`, refonte #217) : le fil et les gestes sur le premier rang, à toutes les largeurs (à 375 px aussi, le fil réduit à son dernier ancêtre par `Breadcrumb`) ; puis le grand titre sur toute la largeur, puis la méta, alignée à gauche sous lui. */
+.oto-screen-header.oto-node-header { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-2); margin-block-end: var(--space-6); }
+.oto-screen-header.oto-node-header > .oto-screen-header-path { grid-area: 1 / 1; }
+.oto-screen-header.oto-node-header > .oto-screen-header-side { grid-area: 1 / 2; justify-self: end; }
+.oto-screen-header.oto-node-header > .oto-page-title { grid-area: 2 / 1 / 3 / -1; display: flex; min-inline-size: 0; margin-block-start: var(--space-6); font-size: var(--fs-4xl); }
+.oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: 3 / 1 / 4 / -1; justify-self: start; align-self: start; color: var(--mute); font-size: var(--fs-sm); }
+/* La rangée du fil et des gestes prend la largeur du contenu, la même pour tous les genres et qu'un panneau soit ouvert ou non ; le titre et la méta d'un document (l'en-tête posé dans le contenu, hors du cadre d'un tableau) suivent la colonne de lecture, centrée comme elle. */
+.oto-content > .oto-screen-header.oto-node-header > :is(.oto-page-title, .oto-screen-header-meta) {
+  inline-size: 100%;
+  max-inline-size: var(--content-max-doc);
+  justify-self: center;
+}
+/* Les gestes de l'en-tête serrés comme sur la maquette : des icônes à 4 px, « Partager » et « ⋯ » à la suite. */
+.oto-screen-header.oto-node-header .oto-screen-header-access { gap: var(--space-1); }
 @media (max-width: 767px) {
-  .oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: auto; justify-self: end; }
-  .oto-screen-header.oto-node-header > .oto-page-title { grid-area: auto; }
+  .oto-screen-header.oto-node-header { grid-template-columns: minmax(0, 1fr) auto; }
+  /* `stretch` : le `start` du repli en une colonne (au-dessus) taille le fil à son contenu, qui déborde alors sa colonne sous les gestes au lieu de s'y ellipser. */
+  .oto-screen-header.oto-node-header > .oto-screen-header-path { grid-area: 1 / 1; justify-self: stretch; }
+  .oto-screen-header.oto-node-header > .oto-screen-header-side { grid-area: 1 / 2; justify-self: end; }
+  .oto-screen-header.oto-node-header > .oto-page-title { grid-area: 2 / 1 / 3 / -1; margin-block-start: var(--space-3); font-size: var(--fs-3xl); }
+  .oto-screen-header.oto-node-header > .oto-screen-header-meta { grid-area: 3 / 1 / 4 / -1; justify-self: start; }
+}
+/* Sous 640 px, la rangée tient sur une ligne (maquette « Mobile ») : le fil ne garde que le dernier ancêtre, « ‹ Ventes », et cède la place ; Liens et Historique passent dans « ⋯ » (`actions-du-noeud.tsx`), Commentaires, Partager et « ⋯ » restent. Le bouton Liens reste dans la rangée, invisible et hors du flux : il est l'ancre de son popover, que l'entrée du menu ouvre. */
+@media (max-width: 639px) {
+  /* Le `nav` du fil, élément flex du créneau : sans `min-inline-size: 0`, sa largeur minimale est le libellé entier et l'ellipse du maillon (`navigation.css`) ne joue jamais. */
+  .oto-node-header .oto-screen-header-path > nav { min-inline-size: 0; }
+  .oto-node-header .oto-breadcrumb > li:not(:nth-last-child(2), :only-child) { display: none; }
+  .oto-node-header .oto-breadcrumb > li:nth-last-child(2) > .oto-breadcrumb-sep { display: none; }
+  .oto-node-header .oto-breadcrumb > li:nth-last-child(2) > .oto-breadcrumb-item::before { content: "‹" / ""; }
+  /* `.oto-btn` dans le sélecteur : `.oto-btn.oto-node-action { position: relative }` (`node-page.css`, chargé après) l'emportait, et le bouton invisible gardait sa place dans la rangée. */
+  .oto-node-header .oto-btn.oto-node-links-trigger { position: absolute; visibility: hidden; }
+  .oto-node-header .oto-node-history { display: none; }
 }
 
 /* La ligne sous le titre (« modifiée il y a 3 jours, par Claire ») porte une infobulle : le pointillé la signale, le focus l'ouvre au clavier. */
@@ -653,40 +678,53 @@
 /* E11-S05 (lot c) — « Télécharger » à gauche de « Partager » : les commandes de l'accès vont à la ligne plutôt que de déborder à 375 px, et le refus d'un téléchargement passe dessous, sur toute la largeur. */
 .oto-screen-header-access { flex-wrap: wrap; justify-content: flex-end; }
 
-/* Le niveau d'une ligne du partage : le `Select` à sa largeur, poussé en fin de ligne comme `.oto-pop-meta` (E05-S11, retour 8). 1.4.13 : une pastille de la couleur du niveau, fond et texte d'un badge de ton (`badge.css` : couleur d'état à `--st-tint` sur l'îlot, texte `-text`, paire vérifiée à 4,5:1 dans les deux thèmes), un point devant le mot ; Aucun accès gris, Peut lire bleu, Peut modifier vert, Accès complet violet. */
+/* Le niveau d'une ligne du partage : le `Select` à sa largeur, poussé en fin de ligne comme `.oto-pop-meta` (E05-S11, retour 8). 1.4.13 : une pastille de la couleur du niveau, fond et texte d'un badge de ton (`badge.css` : couleur d'état à `--st-tint` sur l'îlot, texte `-text`, paire vérifiée à 4,5:1 dans les deux thèmes), un point devant le mot ; Aucun accès gris, Peut lire bleu, Peut modifier vert, Accès complet violet. D7 (#219) : la pastille garde ses couleurs, plus petite (24 px, chevron de 12 px) sous un pointeur fin ; au doigt, la hauteur d'un petit contrôle. */
 .oto-share-level { flex: none; inline-size: auto; margin-inline-start: auto; --niveau: var(--st-idle); --niveau-texte: var(--st-idle-text); }
 .oto-share-level[data-niveau="read"] { --niveau: var(--st-run); --niveau-texte: var(--st-run-text); }
 .oto-share-level[data-niveau="write"] { --niveau: var(--st-live); --niveau-texte: var(--st-live-text); }
 .oto-share-level[data-niveau="manage"] { --niveau: var(--st-think); --niveau-texte: var(--st-think-text); }
 .oto-share-level .oto-select-trigger,
 .oto-share-pill {
+  gap: var(--space-1);
   border-color: transparent;
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--niveau) var(--st-tint), var(--island));
   color: var(--niveau-texte);
   font-weight: var(--fw-medium);
 }
-.oto-share-level .oto-select-trigger > .oto-icon { color: currentColor; }
-.oto-share-pill { display: inline-flex; align-items: center; block-size: var(--ctrl-h-sm); padding-inline: var(--space-2-5); font-size: var(--fs-xs); white-space: nowrap; }
+.oto-share-level .oto-select-trigger { padding-inline: var(--space-2) var(--space-1-5); }
+.oto-share-level .oto-select-trigger > .oto-icon { inline-size: 12px; block-size: 12px; color: currentColor; }
+.oto-share-pill { display: inline-flex; align-items: center; block-size: var(--ctrl-h-sm); padding-inline: var(--space-2); font-size: var(--fs-xs); white-space: nowrap; }
 .oto-share-level .oto-select-trigger::before,
-.oto-share-pill::before { content: ""; flex: none; inline-size: 6px; block-size: 6px; margin-inline-end: var(--space-1-5); border-radius: 50%; background: var(--niveau); }
-
-/* Le panneau « Partager » en sections (1.4.13) : un intertitre en étiquette du ton Oto (le primary de l'organisation, `--oto-bg` et `--oto-ink`, la paire du badge `oto`), l'icône et le compte dedans ; des lignes resserrées, le nom suivi de ses étiquettes (« vous », « responsable », « exception »). */
-.oto-share-panel { display: flex; flex-direction: column; gap: var(--space-3); }
-.oto-share-section { display: flex; flex-direction: column; gap: var(--space-1); }
-.oto-share-heading {
-  display: inline-flex; align-self: flex-start; align-items: center; gap: var(--space-1-5);
-  block-size: 22px; margin: 0; padding-inline: var(--space-2);
-  border-radius: var(--r-pill);
-  background: var(--oto-bg); color: var(--oto-ink);
-  font-family: var(--mono); font-size: var(--fs-2xs); font-weight: var(--fw-semibold); letter-spacing: var(--tr-mono); text-transform: uppercase;
+.oto-share-pill::before { content: ""; flex: none; inline-size: 6px; block-size: 6px; margin-inline-end: var(--space-0-5); border-radius: 50%; background: var(--niveau); }
+@media (pointer: fine) {
+  .oto-share-level .oto-select-trigger,
+  .oto-share-pill { block-size: 24px; }
 }
-.oto-share-heading:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.oto-share-heading-icon { display: inline-flex; }
-.oto-share-heading-icon > svg { inline-size: 12px; block-size: 12px; }
-.oto-share-count { font-variant-numeric: tabular-nums; }
-.oto-share-section .oto-pop-row { padding-block: var(--space-1); }
-.oto-share-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1-5); min-inline-size: 0; }
+
+/* Le panneau « Partager » (#219) : trois groupes de haut en bas, séparés d'un filet (`.oto-separator`, sans sa marge : l'écart du panneau la donne), chacun sous un `.oto-group-title` ; des lignes de 28 px (l'avatar rond d'une personne, la marque carrée d'une équipe ou de l'organisation), le nom en demi-gras suivi de ses étiquettes (« vous », « responsable », « exception »). */
+.oto-share-panel { display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--fs-base); }
+.oto-share-panel > .oto-separator { margin-block: 0; }
+.oto-share-section { display: flex; flex-direction: column; }
+.oto-share-list { display: flex; flex-direction: column; gap: var(--space-0-5); margin-block-start: var(--space-1-5); }
+.oto-share-panel .oto-pop-row { padding-block: var(--space-1-5); }
+.oto-share-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1-5); min-inline-size: 0; font-weight: var(--fw-medium); }
+.oto-share-who { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
+.oto-share-who > .oto-share-name { align-self: stretch; }
+/* La ligne de l'équipe, sur deux lignes (nom, « N membres ») : marque et niveau restent en haut, à la hauteur du nom. */
+.oto-share-panel .oto-pop-row:has(> .oto-share-who) { align-items: flex-start; }
+/* La marque d'une équipe, de l'organisation ou de Privé : carrée comme une `.oto-tool-mark` (« carré pour quelque chose »), à la taille d'un avatar de ligne, `--mute` sur `--hair` comme l'avatar sans image. */
+.oto-share-mark { display: inline-grid; place-items: center; flex: none; inline-size: 28px; block-size: 28px; border-radius: var(--r-ctrl); background: var(--hair); color: var(--mute); }
+/* « 4 membres » sous le nom de l'équipe : un bouton-lien gris (`--mute`, 5,39:1 sur l'îlot au plus bas), le chevron se retourne quand la liste est dépliée. */
+.oto-share-panel .oto-btn.oto-share-members { gap: var(--space-1); margin-block-start: var(--space-0-5); color: var(--mute); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
+.oto-share-members[aria-expanded="true"] > .oto-icon { rotate: 180deg; }
+/* Les membres dépliés : sous le nom de l'équipe, décalés de la marque et de son écart. */
+.oto-share-members-list { display: flex; flex-direction: column; gap: var(--space-1); padding-inline-start: calc(28px + var(--space-2-5)); }
+/* « Publier sur le web » : l'intitulé et sa phrase à gauche, l'interrupteur en fin de ligne ; puis le lien, la case et « Désactiver ». */
+.oto-share-web { display: flex; flex-direction: column; gap: var(--space-2); }
+.oto-share-web > .oto-choice:has(> .oto-switch-track) { display: flex; flex-direction: row-reverse; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-base); }
+.oto-share-web > .oto-choice:has(> .oto-switch-track) > .oto-choice-text > :first-child { font-weight: var(--fw-medium); }
+.oto-share-web > .oto-choice:has(> .oto-switch-track) .oto-choice-desc { font-size: var(--fs-sm); }
 
 /* Les suggestions du champ « Ajouter une personne ou une équipe » : dans le panneau, sous le champ, au pas d'un menu. */
 .oto-share-suggestions { display: flex; flex-direction: column; max-block-size: 240px; overflow: auto; padding: var(--space-1); border: 1px solid var(--island-bd); border-radius: var(--r-ctrl); }
@@ -706,7 +744,7 @@
 .oto-rail-item[data-rang="apres"]::before { inset-block-end: -1px; }
 .oto-rail-item[data-rang="apres"]::after { inset-block-end: -4px; }
 
-/* L'en-tête empilé, opt-in : un écran le demande en posant `data-entete-empile` sur le contenu de sa méta (Connecteurs, Plateforme). La phrase toujours sous le titre, les actions à droite sur les deux rangs ; sous 640 px, tout s'empile : le titre, la phrase, puis les actions. Aucun autre écran ne change ; avec un fil d'Ariane, l'en-tête garde sa forme. */
+/* L'en-tête empilé, opt-in : un écran le demande en posant `data-entete-empile` sur le contenu de sa méta (Connecteurs, Plateforme, Statistiques d'Activité). La phrase toujours sous le titre, les actions à droite sur les deux rangs ; sous 640 px, tout s'empile : le titre, la phrase, puis les actions. Aucun autre écran ne change ; avec un fil d'Ariane, l'en-tête garde sa forme. */
 .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -717,4 +755,7 @@
 @media (max-width: 639px) {
   .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) { grid-template-columns: minmax(0, 1fr); }
   .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-side { grid-area: 3 / 1; justify-self: start; margin-block-start: var(--space-2); }
+  /* Plusieurs réglages (le filtre d'équipe, puis la période d'Activité) passent à la ligne au lieu de sortir de l'écran à 375 px. */
+  .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-side,
+  .oto-screen-header:not(:has(> .oto-screen-header-path)):has(> .oto-screen-header-meta > [data-entete-empile]) > .oto-screen-header-side > .oto-screen-header-actions { flex-wrap: wrap; }
 }

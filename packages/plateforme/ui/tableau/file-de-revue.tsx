@@ -21,7 +21,7 @@ import { WaitList } from "../ds/react/wait-list"
 import { nombreLisible } from "../format/nombres"
 import { Cellule, valeurDe } from "./cellule"
 import { DecisionDeRevue } from "./decision-de-revue"
-import { aRevoir, FICHE, REVUE } from "./libelles"
+import { aRevoir, FICHE, libelleDeColonne, REVUE } from "./libelles"
 
 /** L'îlot de la file : le focus y va après une décision (`accessibility-patterns.md § Focus Management`). */
 const ANCRE_DE_LA_REVUE = "tableau-revue"
@@ -83,7 +83,7 @@ function ValeursDeLaLigne({ entete, ligne }: { entete: TableHeader; ligne: Table
         return (
           <span key={colonne.name}>
             {rang > 0 && " · "}
-            <span className="font-medium">{colonne.name}</span> <Cellule colonne={colonne} valeur={valeur} raisonDuVide={raisonDuVide} />
+            <span className="font-medium">{libelleDeColonne(colonne)}</span> <Cellule colonne={colonne} valeur={valeur} raisonDuVide={raisonDuVide} />
             {aPreuve && <PreuveDeLaValeur provenance={ligne.provenance?.[colonne.name]} raisonDuVide={raisonDuVide} exigee={entete.proof === true} />}
           </span>
         )

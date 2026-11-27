@@ -103,6 +103,12 @@ async function prepare({ sql, admin }, doc, options, targetHost) {
   return { plan, unconfirmed: emails.map(([, email]) => email).filter((email) => unconfirmed.has(email)).sort() }
 }
 
+/**
+ * Tables dont une ligne du fichier peut déjà être en base, écrite par un déclencheur d'une table insérée avant : la
+ * première équipe d'une invitation (`invitation_teams_from_team_id`). Le doublon se saute, jamais une autre erreur.
+ */
+const SKIPPED_DUPLICATES = new Set(['invitation_teams'])
+
 /** Les colonnes de la carte (`TABLES`) que porte une ligne : jamais un nom venu du fichier. */
 function columnsOf(table, row) {
   return TABLES.find((spec) => spec.name === table).columns.filter((column) => Object.hasOwn(row, column))
@@ -117,7 +123,8 @@ function columnsOf(table, row) {
 function insertQuery(tx, table, columns, rows) {
   const target = tx(`platform.${table}`)
   const list = identifiers(tx, columns)
-  return tx`insert into ${target} (${list}) select ${list} from jsonb_populate_recordset(null::${target}, ${tx.json(rows)})`
+  const duplicates = SKIPPED_DUPLICATES.has(table) ? tx`on conflict do nothing` : tx``
+  return tx`insert into ${target} (${list}) select ${list} from jsonb_populate_recordset(null::${target}, ${tx.json(rows)}) ${duplicates}`
 }
 
 /** Une écriture ; son refus se dit « <table> : <code> », la cause gardée pour dire ce qu'il laisse. */

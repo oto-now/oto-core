@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test"
 import { attendre, capturer, seConnecterSurLEspace } from "./fixtures/noeud"
-import { CHEMINS, EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
+import { CHEMINS, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
 // E05-S10, partie d (le partage public, ADR-013) et AC-b13 (l'accès général, ADR-014), en contrôle visuel
 // connecté sur l'organisation de la campagne : le compte E2E, administrateur de l'organisation (`espace.ts`), en clair puis en sombre, à
@@ -46,30 +46,30 @@ async function assurerPublie(page: Page, chemin: string, titre: string, texte: s
 }
 
 /** Ouvre « Partager » de la page courante ; rend le panneau. */
-async function ouvrirLePartage(page: Page, espace: string) {
-  await page.getByRole("button", { name: `Partager · ${espace}` }).click()
-  return page.getByRole("dialog", { name: `Partager — ${espace}` })
+async function ouvrirLePartage(page: Page) {
+  await page.getByRole("button", { name: "Partager", exact: true }).click()
+  return page.getByRole("dialog", { name: /^Partager « .+ »$/ })
 }
 
 /** Le lien public du panneau ouvert : l'interrupteur allumé (un reste d'un passage interrompu est d'abord coupé). */
-async function creerLeLien(page: Page, espace: string): Promise<string> {
-  const panneau = await ouvrirLePartage(page, espace)
-  const interrupteur = panneau.getByRole("switch", { name: /Partager sur le web/ })
+async function creerLeLien(page: Page): Promise<string> {
+  const panneau = await ouvrirLePartage(page)
+  const interrupteur = panneau.getByRole("switch", { name: "Publier sur le web" })
   await attendre(interrupteur).toBeVisible()
-  if (await interrupteur.isChecked()) await desactiver(page, espace)
+  if (await interrupteur.isChecked()) await desactiver(page)
   // L'élément natif est masqué sous son libellé (`.oto-choice > input`) : on clique le libellé, comme une personne.
-  await panneau.locator("label.oto-choice").filter({ hasText: "Partager sur le web" }).click()
+  await panneau.locator("label.oto-choice").filter({ hasText: "Publier sur le web" }).click()
   await attendre(interrupteur).toBeChecked()
   const lien = panneau.locator("code").filter({ hasText: "/p/" })
   await attendre(lien).toBeVisible()
   return (await lien.textContent()) ?? ""
 }
 
-async function desactiver(page: Page, espace: string): Promise<void> {
-  const panneau = page.getByRole("dialog", { name: `Partager — ${espace}` })
+async function desactiver(page: Page): Promise<void> {
+  const panneau = page.getByRole("dialog", { name: /^Partager « .+ »$/ })
   await panneau.getByRole("button", { name: "Désactiver le lien" }).click()
   await panneau.getByRole("group", { name: /Désactiver ce lien/ }).getByRole("button", { name: "Désactiver le lien" }).click()
-  await attendre(panneau.getByRole("switch", { name: /Partager sur le web/ })).not.toBeChecked()
+  await attendre(panneau.getByRole("switch", { name: "Publier sur le web" })).not.toBeChecked()
 }
 
 /**
@@ -111,7 +111,7 @@ test.describe("E05-S10 partie d : le partage public", () => {
 
         // AC-d1 : le lien se crée depuis « Partager ».
         await page.goto(`${ESPACE.adresse}/n/${parent}`)
-        const adresse = await creerLeLien(page, "Privé")
+        const adresse = await creerLeLien(page)
         expect(adresse).toMatch(new RegExp(`^${ESPACE.adresse}/p/[A-Za-z0-9_-]{43}$`))
         await capturer(page, testInfo, `partager-web-${suffixe}`)
         await page.keyboard.press("Escape")
@@ -135,7 +135,7 @@ test.describe("E05-S10 partie d : le partage public", () => {
         await capturer(lecteur, testInfo, `page-publique-404-${suffixe}`)
 
         // AC-d3 : avec les sous-contenus, le dessous s'ouvre par le même jeton ; le Contexte reste du texte.
-        const panneau = await ouvrirLePartage(page, "Privé")
+        const panneau = await ouvrirLePartage(page)
         const sousContenus = panneau.getByRole("checkbox", { name: /Inclure les sous-contenus/ })
         await panneau.locator("label.oto-choice").filter({ hasText: "Inclure les sous-contenus" }).click()
         await attendre(sousContenus).toBeChecked()
@@ -159,8 +159,8 @@ test.describe("E05-S10 partie d : le partage public", () => {
 
         // AC-d5 : désactivé, le lien rend le même 404.
         await page.goto(`${ESPACE.adresse}/n/${parent}`)
-        await ouvrirLePartage(page, "Privé")
-        await desactiver(page, "Privé")
+        await ouvrirLePartage(page)
+        await desactiver(page)
         expect((await lecteur.goto(adresse))?.status()).toBe(404)
         await expect(lecteur.getByRole("heading", { level: 1 })).toHaveText("Page introuvable")
         await lecteur.context().close()
@@ -173,7 +173,7 @@ test.describe("E05-S10 partie d : le partage public", () => {
         await page.setViewportSize({ width: largeur, height: 900 })
         await seConnecterSurLEspace(page, { email, password })
         await page.goto(`${ESPACE.adresse}/n/${CHEMINS.tableau}`)
-        const adresse = await creerLeLien(page, EQUIPE.nom)
+        const adresse = await creerLeLien(page)
         await page.keyboard.press("Escape")
         const lecteur = await sansSession(browser, mode, largeur)
         try {
@@ -182,8 +182,8 @@ test.describe("E05-S10 partie d : le partage public", () => {
           expect(await telechargerSansRequete(lecteur, /^Télécharger en \.csv/)).toBe(`${CHEMINS.tableau.split("/").at(-1)}.csv`)
           await capturer(lecteur, testInfo, `tableau-public-${mode}-${largeur}`)
         } finally {
-          await ouvrirLePartage(page, EQUIPE.nom)
-          await desactiver(page, EQUIPE.nom)
+          await ouvrirLePartage(page)
+          await desactiver(page)
           await lecteur.context().close()
         }
       })
@@ -194,9 +194,9 @@ test.describe("E05-S10 partie d : le partage public", () => {
         await page.setViewportSize({ width: largeur, height: 900 })
         await seConnecterSurLEspace(page, { email, password })
         await page.goto(`${ESPACE.adresse}/n/${CHEMINS.procedure}`)
-        const panneau = await ouvrirLePartage(page, EQUIPE.nom)
+        const panneau = await ouvrirLePartage(page)
         await attendre(panneau.getByRole("combobox", { name: "Niveau de toute l'organisation" })).toBeVisible()
-        await attendre(panneau.getByRole("switch", { name: /Partager sur le web/ })).toBeVisible()
+        await attendre(panneau.getByRole("switch", { name: "Publier sur le web" })).toBeVisible()
         await capturer(page, testInfo, `acces-general-${mode}-${largeur}`)
       })
     }

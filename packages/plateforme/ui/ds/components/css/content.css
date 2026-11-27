@@ -11,8 +11,9 @@
   min-inline-size: 0;
 }
 
-/* Le panneau d'accès (« Partager ») : 500 px, la largeur que ses lignes demandent (nom, étiquettes, pastille de niveau), sans dépasser l'écran (1.5.1). */
-.oto-pop.oto-access-pop { inline-size: min(500px, calc(100vw - var(--space-4))); max-inline-size: min(500px, calc(100vw - var(--space-4))); }
+/* Le panneau d'accès (« Partager ») : 440 px et 16 px de marge intérieure (#219), la largeur que ses lignes demandent (nom, étiquettes, pastille de niveau) ; sous elle, toute la fenêtre moins 16 px de chaque côté. */
+.oto-pop.oto-access-pop { inline-size: min(440px, calc(100vw - var(--space-8))); max-inline-size: min(440px, calc(100vw - var(--space-8))); }
+.oto-pop.oto-access-pop > .oto-pop-body { padding: var(--space-4); }
 
 /* ── le périmètre et le « ⋯ », deux déclencheurs de popover posés sur le bureau : le filet et le fond `--island` les détachent du grain, un bouton fantôme y disparaîtrait ; `[data-icon-only]`, l'attribut que pose déjà `IconButton`. */
 .oto-scope {
@@ -428,6 +429,8 @@
 .oto-fil-etat { flex: none; }
 .oto-fil-etat[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .oto-fil-etat[aria-disabled="true"]:hover { background: var(--island); }
+/* Le genre d'un contenu (« Page ⇄ Procédure ») bloqué ou en cours d'envoi : désactivé par la couleur, comme un bouton `disabled` (`_interaction.css`), le focus et l'infobulle qui dit pourquoi restant (`aria-disabled`). */
+.oto-genre[aria-disabled="true"] { background: var(--hair); border-color: var(--hair); color: var(--faint); box-shadow: none; }
 .oto-fil-citation { padding-inline-start: var(--space-2); border-inline-start: var(--space-0-5) solid var(--primary); font-size: var(--fs-xs); color: var(--mute); overflow-wrap: anywhere; }
 .oto-fil-commentaires { display: flex; flex-direction: column; gap: var(--space-2); }
 .oto-fil-pied { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1-5); }

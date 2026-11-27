@@ -26,7 +26,7 @@ import { dateEtHeureLisibles, dateLisible } from "../format/dates"
 import { nombreLisible } from "../format/nombres"
 import { adresseSansIdentifiants, libelleDUneAdresse } from "../noeud/en-ligne"
 import { EnLigne, type Liens } from "../noeud/rendu-des-blocs"
-import { PROVENANCE, TEXTES_DE_CELLULE } from "./libelles"
+import { libelleDeColonne, PROVENANCE, TEXTES_DE_CELLULE } from "./libelles"
 
 type ProvenanceLue = NonNullable<TableRowRead["provenance"]>[string]
 
@@ -131,15 +131,16 @@ export function contenuDeCellule({ colonne, valeur, raisonDuVide, provenance, li
   const texte = valeur !== undefined ? valeurLisible(colonne, valeur) : raisonDuVide !== undefined ? TEXTES_DE_CELLULE.verifieVide : TEXTES_DE_CELLULE.vide
   const corps = corpsDeCellule(colonne, valeur, texte, liens)
   if (!provenance) return corps
+  const nom = TEXTES_DE_CELLULE.provenance(libelleDeColonne(colonne))
   return (
     <span className="oto-cell-info">
       <span className="text-ink">{corps}</span>
       <Popover
         align="start"
         // Un dialogue sans nom n'existe pas pour un lecteur d'écran : le panneau porte celui de son bouton.
-        aria-label={TEXTES_DE_CELLULE.provenance(colonne.name)}
+        aria-label={nom}
         trigger={
-          <IconButton size="sm" className="oto-cell-info-btn" label={TEXTES_DE_CELLULE.provenance(colonne.name)}>
+          <IconButton size="sm" className="oto-cell-info-btn" label={nom}>
             <Icon as={Info} size="xs" />
           </IconButton>
         }

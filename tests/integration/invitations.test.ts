@@ -24,6 +24,7 @@ import {
   type PlatformDb,
 } from "@otomata_tech/oto_platform/server"
 import type { TreeNode } from "@otomata_tech/oto_platform/schemas"
+import { changeInvitationTeams } from "../../packages/plateforme/server/pending-members"
 import { sectionsDeLArbre } from "../../packages/plateforme/ui/arbre/depuis-l-arbre"
 import { hex } from "../helpers/plateforme"
 import { contentTables, ORG, OTHER_ORG, PEOPLE, TEAMS, type Person } from "../helpers/reference-org"
@@ -142,6 +143,9 @@ describe.skipIf(!sqlConfigured)(
           ["claire", { email: invited, role: "admin", teamId: ventes }, "forbidden", "admin_role_reserved"],
           ["claire", { email: invited, role: "member" }, "forbidden", "team_required"],
           ["claire", { email: invited, role: "member", teamId: support }, "forbidden", "team_required"],
+          // Chaque équipe vérifiée une à une : une équipe qu'elle ne mène pas, à côté de la sienne, refuse l'invitation.
+          ["claire", { email: invited, role: "member", teamIds: [ventes, support] }, "forbidden", "team_required"],
+          ["ada", { email: invited, role: "member", teamIds: [ventes, randomUUID()] }, "invalid_arguments", undefined],
           ["ada", { email: "pas-une-adresse", role: "member" }, "invalid_arguments", undefined],
           ["ada", { email: invited, role: "member", teamId: randomUUID() }, "invalid_arguments", undefined],
         ]
@@ -170,7 +174,7 @@ describe.skipIf(!sqlConfigured)(
           select org_id, email, role, team_id, invited_by, revoked_at, to_json(expires_at) #>> '{}' as expires_at
             from platform.invitations where id = ${created.invitation.id}`
         expect(ref.readable({ created, stored })).toEqual({
-          created: { invitation: { id: expect.any(String), email: invited, role: "member", teamId: TEAMS.ventes.id, expiresAt: stored.expires_at }, emailed: true },
+          created: { invitation: { id: expect.any(String), email: invited, role: "member", teamId: TEAMS.ventes.id, teamIds: [TEAMS.ventes.id], expiresAt: stored.expires_at }, emailed: true },
           stored: { org_id: ORG.id, email: invited, role: "member", team_id: TEAMS.ventes.id, invited_by: PEOPLE.claire.id, revoked_at: null, expires_at: stored.expires_at },
         })
       })
@@ -185,6 +189,149 @@ describe.skipIf(!sqlConfigured)(
         await ref.write({ members: [{ org_id: OTHER_ORG.id, user_id: PEOPLE.ada.id, role: "member" }] })
         const offered = await invitationOptions(dbOf(ref, "ada"), ref.identityOf("ada"))
         expect(offered.teams.map((team) => team.name)).toEqual(["achats", "Études", "Support", "Ventes", "Zèbre"])
+      })
+
+      it("should invite into two teams for an administrator, write both, and let the person into both at her first sign-in", async () => {
+        const ref = await seedO()
+        const nina = { ...seed.person(), name: "Nina Nouvelle" }
+        const teamIds = [ref.id(TEAMS.support.id), ref.id(TEAMS.ventes.id)]
+        const { invitation } = await inviteMember(dbOf(ref, "ada"), ref.identityOf("ada"), { email: nina.email, teamIds }, REDIRECT)
+        const written = await seed.admin`select team_id from platform.invitation_teams where invitation_id = ${invitation.id} order by team_id`
+        await acceptInvitations(await personDb(nina))
+        const joined = await seed.admin`select team_id, role from platform.team_members where user_id = ${nina.id} order by team_id`
+
+        expect(ref.readable(invitation)).toMatchObject({ teamId: TEAMS.support.id, teamIds: [TEAMS.support.id, TEAMS.ventes.id] })
+        expect(written.map((row) => row.team_id)).toEqual([...teamIds].sort())
+        expect(joined).toEqual([...teamIds].sort().map((team_id) => ({ team_id, role: "member" })))
+      })
+    })
+
+    // La RLS de `invitation_teams`, sous la session de chacun : la frontière que le service redit (`invitationOptions`).
+    describe("invitation_teams under row level security", () => {
+      const codeOf = (promise: Promise<unknown>) => promise.then(() => null, (error: { code?: string }) => error.code ?? "unknown")
+
+      it("should be read by an administrator and the lead of the row's team only, and written by them on an open invitation of their organisation", async () => {
+        const ref = await seedO(
+          [invitation("i-two", { team_id: TEAMS.ventes.id }), invitation("i-none"), invitation("i-closed", { revoked_at: ago(1) })],
+          [{ id: "team-p", org_id: OTHER_ORG.id, slug: "equipe_p", name: "Autre", lead_user_id: null }],
+        )
+        const [two, none, closed] = ["i-two", "i-none", "i-closed"].map((id) => ref.id(id))
+        const [ventes, support] = [ref.id(TEAMS.ventes.id), ref.id(TEAMS.support.id)]
+        // L'équipe de `team_id` vient du déclencheur ; Support, une seconde équipe.
+        await seed.admin`insert into platform.invitation_teams (invitation_id, team_id) values (${two}, ${support})`
+        const seen = async (person: Person) =>
+          ref.readable((await dbOf(ref, person).tx((sql) => sql<{ team_id: string }[]>`select team_id from platform.invitation_teams where invitation_id = ${two}`)).map((row) => row.team_id)).sort()
+        const insert = (person: Person, invitationId: string, teamId: string) =>
+          codeOf(dbOf(ref, person).tx((sql) => sql`insert into platform.invitation_teams (invitation_id, team_id) values (${invitationId}, ${teamId})`))
+
+        expect({ ada: await seen("ada"), claire: await seen("claire"), paul: await seen("paul"), lea: await seen("lea") }).toEqual({
+          ada: [TEAMS.support.id, TEAMS.ventes.id],
+          claire: [TEAMS.ventes.id],
+          paul: [TEAMS.support.id],
+          lea: [],
+        })
+        expect({
+          leadOtherTeam: await insert("claire", none, support),
+          member: await insert("lea", none, ventes),
+          otherOrgTeam: await insert("ada", none, ref.id("team-p")),
+          closed: await insert("ada", closed, ventes),
+          lead: await insert("claire", none, ventes),
+          admin: await insert("ada", none, support),
+        }).toEqual({ leadOtherTeam: "42501", member: "42501", otherOrgTeam: "42501", closed: "42501", lead: null, admin: null })
+        // Une suppression que la RLS écarte n'efface rien : Claire ne retire pas Support, Paul le retire.
+        const removed = async (person: Person, teamId: string) =>
+          (await dbOf(ref, person).tx((sql) => sql`delete from platform.invitation_teams where invitation_id = ${two} and team_id = ${teamId} returning team_id`)).length
+        expect([await removed("claire", support), await removed("paul", support)]).toEqual([0, 1])
+      })
+    })
+
+    // Le « + » d'une personne en attente (`POST` et `DELETE invitations/<id>/teams/<teamId>`) : chaque équipe décidée
+    // par le service, avant toute écriture.
+    describe("changeInvitationTeams", () => {
+      it("should let a lead add or remove the teams he leads only, an administrator any team, and refuse a closed invitation", async () => {
+        const ref = await seedO([invitation("i-open", { team_id: TEAMS.support.id }), invitation("i-closed", { revoked_at: ago(1) })])
+        const [open, closed] = [ref.id("i-open"), ref.id("i-closed")]
+        const [ventes, support] = [ref.id(TEAMS.ventes.id), ref.id(TEAMS.support.id)]
+        const change = (person: Person, invitationId: string, add: string[], remove: string[]) => {
+          const spy = spyDb(dbOf(ref, person))
+          const done = changeInvitationTeams(spy.db, ref.identityOf(person), invitationId, { add, remove }).then(
+            () => null,
+            (error: { code?: string; details?: { reason?: string } }) => `${error.code}${error.details?.reason ? `:${error.details.reason}` : ""}`,
+          )
+          return done.then((outcome) => ({ outcome, writes: writesOf(spy.sent).length }))
+        }
+        const teamsOf = async () => ref.readable((await seed.admin`select team_id from platform.invitation_teams where invitation_id = ${open} order by team_id`).map((row) => row.team_id)).sort()
+        vi.spyOn(console, "error").mockImplementation(() => {})
+
+        expect({
+          leadRemovesOther: await change("claire", open, [], [support]),
+          leadAddsOther: await change("claire", open, [support], []),
+          memberAdds: await change("lea", open, [ventes], []),
+          leadAddsHis: await change("claire", open, [ventes], []),
+          afterLead: await teamsOf(),
+          adminRemovesAny: await change("ada", open, [], [support]),
+          afterAdmin: await teamsOf(),
+          closed: await change("ada", closed, [ventes], []),
+        }).toEqual({
+          leadRemovesOther: { outcome: "forbidden:team_required", writes: 0 },
+          leadAddsOther: { outcome: "forbidden:team_required", writes: 0 },
+          memberAdds: { outcome: expect.stringMatching(/^forbidden/), writes: 0 },
+          leadAddsHis: { outcome: null, writes: 1 },
+          afterLead: [TEAMS.support.id, TEAMS.ventes.id].sort(),
+          adminRemovesAny: { outcome: null, writes: 1 },
+          afterAdmin: [TEAMS.ventes.id],
+          closed: { outcome: "conflict", writes: 0 },
+        })
+      })
+
+      // `changeInvitationTeams` et `accept_invitations` prennent le verrou 7101 de l'invitation (organisation, adresse) :
+      // la fenêtre entre la lecture de l'invitation ouverte et l'écriture de ses équipes, rendue sûre par une table
+      // tenue en partage, ne laisse plus passer l'acceptation. Sans le verrou, elle passe : la personne entre sans
+      // l'équipe ajoutée, écrite sur une invitation close (ou refusée par la RLS, hors de `conflict`).
+      it("should not interleave with accept_invitations: the team added reaches the member, or the change is a conflict and writes nothing", async () => {
+        const ref = await seedO()
+        const nina = { ...seed.person(), name: "Nina Nouvelle" }
+        const [ventes, support] = [ref.id(TEAMS.ventes.id), ref.id(TEAMS.support.id)]
+        const [{ id: invitationId }] = await seed.admin<{ id: string }[]>`
+          insert into platform.invitations (org_id, email, role, team_id) values (${ref.org.id}, ${nina.email}, 'member', ${support}) returning id`
+        const ninaDb = await personDb(nina)
+        const waiting = async (condition: string) =>
+          (await seed.admin.unsafe<{ waiting: boolean }[]>(`select exists (select 1 from pg_catalog.pg_locks where not granted and ${condition}) as waiting`))[0].waiting
+        let changed: Promise<string | null> = Promise.resolve(null)
+        let accepted: Promise<unknown> = Promise.resolve()
+        await seed.admin.begin(async (tx) => {
+          await tx`lock table platform.invitation_teams in share mode`
+          changed = changeInvitationTeams(dbOf(ref, "claire"), ref.identityOf("claire"), invitationId, { add: [ventes], remove: [] }).then(
+            () => null,
+            (error: { code?: string }) => error.code ?? "unknown",
+          )
+          for (let tries = 0; !(await waiting(`locktype = 'relation' and relation = 'platform.invitation_teams'::regclass`)); tries += 1) {
+            if (tries > 500) throw new Error("the change never reached the write of its teams")
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          let settled = false
+          accepted = acceptInvitations(ninaDb).finally(() => {
+            settled = true
+          })
+          for (let tries = 0; !settled && !(await waiting(`locktype = 'advisory' and classid = 7101`)); tries += 1) {
+            if (tries > 500) throw new Error("the acceptance neither ended nor waited for the invitation lock")
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+        })
+        const [outcome] = await Promise.all([changed, accepted])
+        const joined = (await seed.admin`select team_id from platform.team_members where user_id = ${nina.id} order by team_id`).map((row) => row.team_id)
+        const written = (await seed.admin`select team_id from platform.invitation_teams where invitation_id = ${invitationId} order by team_id`).map((row) => row.team_id)
+
+        expect([null, "conflict"]).toContain(outcome)
+        if (outcome === null) expect(ref.readable(joined).sort()).toEqual([TEAMS.support.id, TEAMS.ventes.id].sort())
+        else expect([ref.readable(joined), ref.readable(written)]).toEqual([[TEAMS.support.id], [TEAMS.support.id]])
+      })
+
+      it("should refuse an invitation id that is not a UUID with invalid_arguments, before any query", async () => {
+        const ref = await seedO([])
+        const spy = spyDb(dbOf(ref, "ada"))
+        const refused = await changeInvitationTeams(spy.db, ref.identityOf("ada"), "pas-un-id", { add: [ref.id(TEAMS.ventes.id)], remove: [] }).catch((error: { code?: string }) => error.code)
+        expect([refused, spy.sent]).toEqual(["invalid_arguments", []])
       })
     })
 
@@ -289,7 +436,7 @@ describe.skipIf(!sqlConfigured)(
                  to_json(created_at) #>> '{}' as "createdAt", to_json(expires_at) #>> '{}' as "expiresAt"
             from platform.invitations where org_id = ${ref.org.id} order by created_at desc`
         const states = ["pending", "accepted", "declined", "revoked", "expired"]
-        expect(all).toEqual(stored.map((row, rank) => ({ ...row, state: states[rank] })))
+        expect(all).toEqual(stored.map((row, rank) => ({ ...row, teamIds: [], state: states[rank] })))
       })
     })
 

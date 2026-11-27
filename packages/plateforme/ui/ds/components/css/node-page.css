@@ -1,0 +1,176 @@
+/* L'écran d'un contenu, à plat (refonte #217, #218 ; `docs/design/system.md § Direction`) : le texte posé sur le fond de la coque, sans îlot ni ombre ; titres en encre ; un seul accent (les liens, la pastille d'un fil qui attend, le focus, « Partager ») ; les gestes à la demande ; le pied en trois colonnes. Ajouté sans équivalent dans oto-frontend, qui posait le document dans un îlot ; chaque pourquoi en une ligne. Les textes sont en `--ink` ou en `--mute` sur le bureau : 4,5:1 au moins dans les huit teintes, jour et nuit (mesure de `button.css`, `.oto-icon-btn`). */
+
+/* ── LES GESTES DE L'EN-TÊTE */
+
+/* Commentaires, Liens, Historique et « ⋯ » : des boutons fantômes serrés, glyphe et nombre ; le nombre au corps des boutons `sm`. */
+.oto-btn.oto-node-action { position: relative; padding-inline: var(--space-2); color: var(--mute); }
+.oto-btn.oto-node-action:hover:not(:disabled) { color: var(--ink); }
+.oto-btn.oto-node-action[aria-expanded="true"] { background: var(--hair); color: var(--ink); }
+/* Un fil est non lu pour la personne : une pastille à l'accent, sur le glyphe ; le nom du bouton le dit aussi (jamais la couleur seule). L'accent (`--primary`) sur `--hair` ou le bureau tient 3:1 au moins, un élément d'interface (mesure de `blocks.css`, `.oto-bulle-compte`). */
+.oto-btn.oto-node-action[data-non-lu]::after {
+  content: "";
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-start: calc(var(--space-2) + 11px);
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  box-shadow: 0 0 0 2px var(--desk);
+}
+
+/* « Partager » : la seule action pleine de l'écran, au remplissage du bouton primaire (`button.css`, paire `--btn-fg` sur `--btn-bg`), libellé seul ; le chevron du périmètre part avec le périmètre, passé dans la méta. */
+.oto-node-share > .oto-scope {
+  block-size: var(--ctrl-h-sm);
+  margin-inline-start: var(--space-2);
+  padding-inline: var(--space-3);
+  border-color: transparent;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: var(--fw-semibold);
+}
+.oto-node-share > .oto-scope:hover { background: color-mix(in srgb, var(--btn-bg) 88%, var(--ink)); }
+.oto-node-share > .oto-scope > .oto-icon { display: none; }
+/* Sous 640 px, la cible garde les 44 px du doigt (`islands.css`) mais la pilule visible reste à la hauteur d'un petit
+   contrôle, comme au bureau : un bord transparent sur la hauteur, le fond limité à l'intérieur du bord. */
+@media (max-width: 639.98px) {
+  .oto-node-share > .oto-scope {
+    border-block: calc((var(--touch) - var(--ctrl-h-sm)) / 2) solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+/* Les conseils d'écriture servis après « Transformer en procédure », sous leur repli : une liste à puces resserrée ; `.oto ul.…` bat le reset (`.oto ul`, qui retire les puces). */
+.oto ul.oto-advice-list { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-1) 0 0; padding-inline-start: var(--space-5); list-style: disc; }
+.oto ul.oto-advice-list > li { list-style: inherit; }
+
+/* Le menu « ⋯ » : une entrée bloquée dit sa raison en seconde ligne, fine, sous son libellé (`meta` du `DropdownMenu`). */
+.oto-node-more .oto-menu-item[aria-disabled="true"] { flex-wrap: wrap; }
+.oto-node-more .oto-menu-item[aria-disabled="true"] > .oto-pop-meta { flex-basis: 100%; margin-inline-start: 0; white-space: normal; text-align: start; }
+
+/* Le popover « Liens » : deux groupes, des lignes d'une hauteur de menu, l'espace en fin de ligne. */
+.oto-pop.oto-node-links { inline-size: min(340px, calc(100vw - var(--space-8))); padding: var(--space-2); }
+.oto-node-links-group + .oto-node-links-group { margin-block-start: var(--space-2); padding-block-start: var(--space-2); border-block-start: 1px solid var(--hair); }
+.oto-node-links .oto-group-title { margin: 0; padding: var(--space-2) var(--space-2) var(--space-1); }
+.oto-node-links-list { margin: 0; padding: 0; list-style: none; }
+.oto-node-links-list > .oto-node-foot-item { padding: var(--space-1-5) var(--space-2); border-radius: var(--r-ctrl); }
+.oto-node-links-list > .oto-node-foot-item:hover { background: var(--hair); }
+.oto-node-links-link { flex: 1; min-inline-size: 0; display: flex; color: var(--ink); text-decoration: none; border-radius: var(--r-ctrl); }
+
+/* ── LA LIGNE PROPRE AU GENRE, sous la méta : le résumé d'une procédure, la portée d'un Contexte et sa reprise. */
+.oto-node-lead { display: flex; flex-direction: column; gap: var(--space-2); margin-block-end: var(--space-6); color: var(--ink); }
+.oto-context-reprise { display: flex; flex-direction: column; gap: var(--space-1-5); }
+
+/* ── LE DOCUMENT À PLAT : le corps de lecture garde son rythme (`content.css`, `[data-reading]`), sans le rembourrage ni le défilement d'un îlot. */
+.oto-node-document { position: relative; min-inline-size: 0; }
+.oto-node-document > .oto-island-body { padding: 0; overflow: visible; }
+/* La place de la bulle d'un bloc qui a des fils, à droite du texte (`blocks.css`), gardée hors survol. */
+.oto-node-document > .oto-island-body:has(.oto-bulle, .oto-bulle-compte) { padding-inline-end: var(--space-8); }
+/* Titres de blocs en encre, au même poids (D10) : la couleur du thème ne porte plus l'intertitre. */
+.oto-node-document .oto-reader-heading,
+.oto-node-document .oto-block-field[data-kind="heading"] { color: var(--ink); }
+
+/* Un bloc lu, survolé ou focalisé : un fond à peine marqué, qui dit à quel bloc vont ses gestes. */
+.oto-node-document .oto-bloc-lu { border-radius: var(--r-ctrl); transition: background-color var(--dur-fast) var(--ease-standard); }
+.oto-node-document .oto-bloc-lu:is(:hover, :focus-within) { background-color: color-mix(in oklab, var(--hair) 60%, transparent); }
+
+/* Le petit groupe flottant des gestes d'un bloc (« Commenter ce bloc », « Historique du bloc ») : au survol et au focus seulement, à hauteur du haut du bloc, à gauche de la pastille ; dans la marge droite quand la colonne en laisse une. Un filet et l'ombre des flottants (`--sh-pop`), au-dessus du texte. */
+.oto-block-tools {
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-end: 100%;
+  display: flex;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  border: 1px solid var(--island-bd);
+  border-radius: var(--r-ctrl);
+  background: var(--island);
+  box-shadow: var(--sh-pop);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+:is(.oto-bloc-lu, .oto-block-row):is(:hover, :focus-within) > .oto-block-menu > .oto-block-tools { opacity: 1; pointer-events: auto; }
+@container (min-width: 1000px) {
+  .oto-content > .oto-content-max[data-width="document"] .oto-node-document .oto-block-tools { inset-inline-end: auto; inset-inline-start: 100%; }
+}
+
+/* La gouttière d'un bloc écrit (« + » et poignée, `blocks.css`) hors de la colonne : le texte d'un bloc s'aligne sur le titre, la méta et le pied, au lieu de s'en décaler de 48 px. Quand le contenu laisse 48 px de chaque côté de la colonne (830 + 2 × 48 = 926 px), elle se pose dans la marge de gauche ; plus étroit, rien n'est réservé au repos (le texte d'un téléphone n'était plus coupé en deux tiers), et seul le bloc qu'on écrit ou qu'on déplace reprend sa gouttière. */
+.oto-node-document .oto-block-row { margin-inline: 0; }
+@container (max-width: 925px) {
+  .oto-node-document .oto-block-row:not([data-state]) > .oto-block-gutter { display: none; }
+  .oto-node-document .oto-block-row[data-state] { margin-inline-start: var(--block-gutter); }
+}
+/* Sans survol (écran tactile), les gestes restent montrés, comme la bulle (`blocks.css`). */
+@media (hover: none) {
+  .oto-block-tools { position: static; opacity: 1; pointer-events: auto; border: 0; box-shadow: none; background: none; }
+}
+
+/* La pastille des fils ouverts d'un bloc, neutre (D10, un seul accent) : le texte en `--ink` sur `--hair`, la paire des boutons fantômes survolés. */
+.oto-node-document .oto-bulle-compte { background: var(--hair); color: var(--ink); }
+
+/* ── LA PISTE DE DROITE, dès 1 024 px, monté seulement ouverte (`ColonnesDuNoeud`) : le panneau des commentaires ou celui de l'historique, sur une piste de 360 px (22,5 rem, au lieu des 280 des annexes) ; collé en haut pendant qu'on fait défiler le texte. L'en-tête ne bouge pas, le texte non plus : son bord gauche reste celui de la colonne centrée (la première piste en vaut la marge), seule sa largeur cède la place du panneau. Les pistes sans écart, l'écart porté par le panneau : une première piste nulle laisserait sinon 10 px devant le texte. Les lignes du texte gardent leur rythme (pas d'écart de grille entre elles). */
+.oto-two-columns[data-aside="panneau"]:not([data-main]) { grid-template-columns: minmax(0, 1fr) calc(22.5rem + var(--space-2-5)); column-gap: 0; }
+.oto-two-columns[data-main="document"][data-aside="panneau"] {
+  grid-template-columns: max(0px, calc((100% - var(--content-max-doc)) / 2)) minmax(0, var(--content-max-doc)) calc(22.5rem + var(--space-2-5));
+  column-gap: 0;
+  justify-content: start;
+  max-inline-size: none;
+}
+.oto-two-columns[data-main="document"][data-aside="panneau"] > .oto-two-columns-main { grid-column: 2; }
+.oto-two-columns[data-main="document"][data-aside="panneau"] > .oto-two-columns-aside { grid-column: 3; }
+.oto-two-columns[data-aside="panneau"] > .oto-two-columns-main { row-gap: 0; }
+.oto-two-columns[data-aside="panneau"] > .oto-two-columns-aside { padding-inline-start: var(--space-2-5); }
+.oto-comments-panel,
+.oto-history-panel {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-inline-size: none;
+  max-block-size: calc(100dvh - var(--space-8));
+  overflow: auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--island-bd);
+  border-radius: var(--r-island);
+  background: var(--island);
+}
+.oto-comments-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.oto-comments-panel-head > h2 { margin: 0; }
+/* Le pied de l'historique (« Revenir à cette version ») sous la liste, sous un filet, comme le pied d'un tiroir. */
+.oto-history-panel-foot { padding-block-start: var(--space-3); border-block-start: 1px solid var(--hair); }
+
+/* ── LE PIED : sous un filet, trois colonnes à partir de 768 px, empilées dessous ; la section d'un Contexte d'abord, sur toute la largeur. Sans colonne, ni filet ni marge (`:empty` ne compte pas les marques du flux). */
+.oto-node-foot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6) var(--space-8);
+  margin-block-start: var(--space-12);
+  padding-block-start: var(--space-6);
+  border-block-start: 1px solid var(--hair);
+}
+.oto-node-foot:empty { display: none; }
+.oto-node-foot-wide { grid-column: 1 / -1; }
+.oto-node-foot-column { min-inline-size: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.oto-node-foot-column > .oto-group-title { margin: 0; }
+.oto-node-foot-count { font-weight: var(--fw-regular); }
+.oto-node-foot-list { align-self: stretch; display: flex; flex-direction: column; gap: var(--space-2-5); margin: 0; padding: 0; list-style: none; }
+.oto-node-foot-item { display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; color: var(--mute); }
+/* Le lien centre son texte : sous 640 px il prend les 44 px du doigt, et l'icône doit rester en face du nom. */
+.oto-node-foot-item > a { min-inline-size: 0; display: inline-flex; align-items: center; }
+.oto-node-foot-name { display: block; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); }
+@media (max-width: 767px) {
+  .oto-node-foot { grid-template-columns: minmax(0, 1fr); }
+}
+.oto-context-foot { display: flex; flex-direction: column; gap: var(--space-2); }
+.oto-context-foot > .oto-group-title { margin: 0; }
+/* « Ce que reçoit votre assistant » : une liste simple, celle du pied, sans boîte ni bordure de couleur ; le Contexte ouvert ne se marque que par « (ce contexte) », en demi-gras, à la couleur de son lien. */
+.oto-node-foot-here { font-weight: var(--fw-semibold); }
+
+/* ── LE TABLEAU : la grille dans un filet arrondi, sans ombre ni fond de carte ; elle a besoin d'un cadre pour se lire en défilement horizontal (D97). */
+.oto-island.oto-node-table-frame { background: transparent; border-color: var(--island-bd); box-shadow: none; }
+/* Le cadre prend la hauteur de sa grille, sans plafond : découpé (`clip`) sans être un conteneur de défilement, il ne rétrécit plus à la hauteur de la fenêtre, où ses deux corps se partageaient la place (une bande vide sous la recherche, la moitié des lignes) ; la recherche garde sa hauteur, la grille prend la sienne. */
+.oto-island.oto-node-table-frame { overflow: clip; }
+.oto-node-table-frame > .oto-island-body:first-child { flex: none; }
+.oto-content > .oto-content-max:has(.oto-node-table-frame) { flex-shrink: 0; }

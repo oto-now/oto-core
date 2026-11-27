@@ -6,6 +6,7 @@ import { PlatformError, type Identity } from "@otomata_tech/oto_platform/server"
 import type { VerifyToken } from "../../packages/plateforme/mcp/auth"
 import { resolveIdentity } from "../../packages/plateforme/server/identity"
 import { inviteMember, listInvitations, revokeInvitation } from "../../packages/plateforme/server/invitations"
+import { changeInvitationTeams } from "../../packages/plateforme/server/pending-members"
 
 // La porte seule, sans base : identité et services simulés, un client dont aucune face n'est lue. La
 // ligne de journal d'une mutation (AC21) s'écrit sur une vraie base, dans une suite portable :
@@ -33,6 +34,8 @@ vi.mock("../../packages/plateforme/server/invitations", () => ({
   listInvitations: vi.fn(),
   revokeInvitation: vi.fn(),
 }))
+
+vi.mock("../../packages/plateforme/server/pending-members", () => ({ changeInvitationTeams: vi.fn() }))
 
 const HOST = "acme.test"
 const ORIGIN = `https://${HOST}`
@@ -163,7 +166,7 @@ describe("handlePlateforme routes", () => {
 
   it("should invite with 201 and a return link to the calling address", async () => {
     const created = {
-      invitation: { id: INVITATION_ID, email: "a@x.test", role: "member" as const, teamId: TEAM_ID, expiresAt: "2026-10-01T00:00:00Z" },
+      invitation: { id: INVITATION_ID, email: "a@x.test", role: "member" as const, teamId: TEAM_ID, teamIds: [TEAM_ID], expiresAt: "2026-10-01T00:00:00Z" },
       emailed: true as const,
     }
     vi.mocked(inviteMember).mockResolvedValue(created)
@@ -179,7 +182,7 @@ describe("handlePlateforme routes", () => {
   // transmis du client ne l'abaisse pas ; le contrôle d'`Origin`, lui, compare toujours l'origine appelée.
   it("should keep the invitation link in https when the proxy forwards http", async () => {
     vi.mocked(inviteMember).mockResolvedValue({
-      invitation: { id: INVITATION_ID, email: "a@x.test", role: "member" as const, teamId: null, expiresAt: "2026-10-01T00:00:00Z" },
+      invitation: { id: INVITATION_ID, email: "a@x.test", role: "member" as const, teamId: null, teamIds: [], expiresAt: "2026-10-01T00:00:00Z" },
       emailed: true as const,
     })
     const req = request("POST", "invitations", { body: JSON.stringify({ email: "a@x.test" }), headers: { "x-forwarded-proto": "http", origin: `http://${HOST}` } })
@@ -195,6 +198,23 @@ describe("handlePlateforme routes", () => {
     const { response, body } = await call(request("DELETE", `invitations/${INVITATION_ID}`))
     expect(response.status).toBe(200)
     expect(body).toEqual({ data: { invitation: { id: INVITATION_ID, state: "revoked", teamId: null } } })
+  })
+
+  it("should add a team to a pending person by POST and remove it by DELETE, and answer 400 when the service refuses an invitation id that is not one", async () => {
+    vi.mocked(changeInvitationTeams).mockResolvedValue(undefined)
+    const added = await call(request("POST", `invitations/${INVITATION_ID}/teams/${TEAM_ID}`, { body: "{}" }))
+    const removed = await call(request("DELETE", `invitations/${INVITATION_ID}/teams/${TEAM_ID}`))
+    // Le service décide le refus (`changeInvitationTeams`, `invitations.test.ts`) ; la route ne fait que le traduire.
+    vi.mocked(changeInvitationTeams).mockRejectedValueOnce(new PlatformError("invalid_arguments", "The invitation id must be a UUID."))
+    const refused = await call(request("DELETE", `invitations/pas-un-id/teams/${TEAM_ID}`))
+
+    expect([added.response.status, removed.response.status, refused.response.status]).toEqual([200, 200, 400])
+    expect(added.body).toEqual({ data: { invitation: { id: INVITATION_ID, teamId: TEAM_ID } } })
+    expect(vi.mocked(changeInvitationTeams).mock.calls.map((args) => args.slice(1))).toEqual([
+      [IDENTITY, INVITATION_ID, { add: [TEAM_ID], remove: [] }],
+      [IDENTITY, INVITATION_ID, { add: [], remove: [TEAM_ID] }],
+      [IDENTITY, "pas-un-id", { add: [], remove: [TEAM_ID] }],
+    ])
   })
 })
 

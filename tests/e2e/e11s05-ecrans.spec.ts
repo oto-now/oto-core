@@ -7,9 +7,9 @@ import { assurerLeNoeud, attendre, capturer, lireLeHtml, ouvrirAQuoiSert, ouvrir
 
 // Contrôle visuel connecté des écrans d'un contenu après E11-S05 : le compte E2E, administrateur de l'organisation de
 // la campagne (`espace.ts`), en clair puis en sombre, à 375 et à 1 280 px. Une page jetable `private/<handle>/essai_e11s05`,
-// sa sous-page et une page qui la cite : « Cité dans », « Cite » et « Sous-pages » dans la colonne de droite, fermés,
-// sous la carte à 375 px, un encart s'ouvre (AC-e1, AC-e5) ; le Contexte Privé : « À quoi sert cette page » en tête de la
-// colonne, ouvert par Entrée (AC-e2) ; le tableau de l'équipe : ses encarts en ligne au-dessus de la grille, le chevron
+// sa sous-page et une page qui la cite : au pied, sous le texte et sans colonne de droite (refonte #217), « Sous-pages
+// · N » et « Cité dans N contenus » sur la page, « Cite N contenus » sur celle qui la cite ; le Contexte Privé : sa
+// ligne de portée sous la méta (AC-e2) ; le tableau de l'équipe : ses encarts en ligne au-dessus de la grille, le chevron
 // d'une cellule au survol, puis ouverte, la ligne à revoir, « Télécharger en .csv » (AC-a1, AC-a4, AC-c1, AC-e3) ; un
 // tableau et une page créés par le « + » du rail : le vide nommé par l'assistant (AC-h1), le Texte vide, son invite et
 // le focus (AC-g1, AC-g2), puis mis à la corbeille. Aucun défilement horizontal. Une capture par étape dans `test-results/`.
@@ -34,8 +34,8 @@ async function sansDefilementHorizontal(page: Page): Promise<boolean> {
   return page.locator(".oto-content").first().evaluate((contenu) => contenu.scrollWidth <= contenu.clientWidth)
 }
 
-/** Le titre et le total des encarts de la page, dans l'ordre du document. */
-const encarts = (racine: Locator) => racine.locator("details.oto-linked > summary").allInnerTexts()
+/** Les intitulés des colonnes du pied, dans l'ordre du document (refonte #217). */
+const intitulesDuPied = (page: Page) => page.locator("footer.oto-node-foot h2").allInnerTexts()
 
 /** Un nœud neuf, créé par le « + » de la ligne « Mes instructions » du rail ; rend son chemin. */
 async function creerDansPrive(page: Page, largeur: number, genre: "Une page" | "Un tableau"): Promise<string> {
@@ -105,21 +105,24 @@ test.describe("écrans d'un contenu (E11-S05)", () => {
         )
         expect(creee).toBe(200)
         try {
+          // Refonte #217 : plus de colonne de droite ; au pied, sous le texte, « Sous-pages · N » puis « Cité dans N
+          // contenus » sur la page citée, « Cite N contenus » sur celle qui cite, chaque ligne un lien.
           await page.goto(`${ESPACE.adresse}/n/${essai}`)
-          const colonne = page.locator(".oto-two-columns-aside")
-          await attendre(colonne.locator("details.oto-linked").first()).toBeVisible()
+          await attendre(page.getByRole("region", { name: "Sous-pages" })).toBeVisible()
           await attendre(page.getByText("Lecture des liens…")).toHaveCount(0)
-          expect((await encarts(colonne)).map((texte) => texte.replace(/\d+$/, "").trim())).toEqual(["Commentaires", "Cité dans", "Sous-pages"])
-          const carte = page.locator(".oto-two-columns-main .oto-island").first()
-          const [enCarte, enColonne] = [await boite(carte), await boite(colonne.locator("details.oto-linked").first())]
-          if (largeur === 1_280) expect(Math.abs(enColonne.y - enCarte.y)).toBeLessThanOrEqual(1)
-          else expect(enColonne.y).toBeGreaterThan(enCarte.y + enCarte.height)
-          const sousPages = colonne.locator("details.oto-linked").filter({ hasText: "Sous-pages" })
-          await sousPages.locator("summary").click()
-          await expect(sousPages).toHaveAttribute("open", "")
-          await expect(sousPages.getByRole("link", { name: /^Dessous/ })).toBeVisible()
+          await expect(page.locator(".oto-two-columns-aside")).toHaveCount(0)
+          expect(await intitulesDuPied(page)).toEqual([expect.stringMatching(/^Sous-pages · \d+$/), expect.stringMatching(/^Cité dans \d+ contenus?$/)])
+          const [enTexte, auPied] = [await boite(page.locator(".oto-node-document").first()), await boite(page.locator("footer.oto-node-foot"))]
+          expect(auPied.y).toBeGreaterThanOrEqual(enTexte.y + enTexte.height)
+          await expect(page.getByRole("region", { name: "Sous-pages" }).getByRole("link", { name: /^Dessous/ })).toBeVisible()
+          await expect(page.getByRole("region", { name: "Cité dans" }).getByRole("link", { name: /^Essai citant/ }).first()).toBeVisible()
           expect(await sansDefilementHorizontal(page)).toBe(true)
-          await capturer(page, testInfo, `page-encarts-${nom}`)
+          await capturer(page, testInfo, `page-pied-${nom}`)
+          await page.goto(`${ESPACE.adresse}/n/${citant}`)
+          await attendre(page.getByRole("region", { name: "Cite" })).toBeVisible()
+          expect(await intitulesDuPied(page)).toEqual(["Cite 1 contenu"])
+          await expect(page.getByRole("region", { name: "Cite" }).getByRole("link", { name: /^Essai des encarts/ })).toBeVisible()
+          expect(await sansDefilementHorizontal(page)).toBe(true)
         } finally {
           await alaCorbeille(page, citant)
         }
@@ -127,7 +130,7 @@ test.describe("écrans d'un contenu (E11-S05)", () => {
         // AC-e2 : le Contexte Privé, « À quoi sert cette page » en tête de la colonne, ouvert par Entrée.
         await page.goto(`${ESPACE.adresse}/n/private/${handle}/contexte`)
         const aQuoiSert = await ouvrirAQuoiSert(page)
-        await expect(aQuoiSert.getByText("Vous l'écrivez comme n'importe quelle page.")).toBeVisible()
+        await expect(aQuoiSert.getByText("Vous l'écrivez comme n'importe quelle page.")).toHaveCount(0)
         expect(await sansDefilementHorizontal(page)).toBe(true)
         await capturer(page, testInfo, `contexte-${nom}`)
 

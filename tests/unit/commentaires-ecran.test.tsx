@@ -3,11 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { CommentThreadView, CommentView, NodeCommentsView } from "@otomata_tech/oto_platform/schemas"
 import { BulleDeBloc } from "../../packages/plateforme/ui/noeud/commentaires/bulle-de-bloc"
-import { EncartCommentaires } from "../../packages/plateforme/ui/noeud/commentaires/encart-commentaires"
+import { BoutonDesCommentaires } from "../../packages/plateforme/ui/noeud/commentaires/bouton-des-commentaires"
+import { CorpsDesCommentaires, PanneauDesCommentaires } from "../../packages/plateforme/ui/noeud/commentaires/encart-commentaires"
 import { FournisseurDeCommentaires } from "../../packages/plateforme/ui/noeud/commentaires/fournisseur-de-commentaires"
 import { passageChoisi, plageDeLaCitation } from "../../packages/plateforme/ui/noeud/commentaires/passage"
 
-// L'écran des commentaires d'une page (parcours 5.4) : l'encart, la carte d'un fil selon qui la lit, le champ et ses
+// L'écran des commentaires d'une page (parcours 5.4) : le bouton de l'en-tête et le panneau (D8), la carte d'un fil selon qui la lit, le champ et ses
 // mentions, la bulle d'un bloc. `fetch` simulé pour l'API du paquet : chaque cas sert ses fils et lit ce qui est parti.
 
 const CHEMIN = "ventes/relance"
@@ -48,6 +49,7 @@ function fil(propres: Partial<CommentThreadView> = {}): CommentThreadView {
     resolvedAt: null,
     createdAt: "2026-11-10T09:00:00.000Z",
     waitingAssistant: false,
+    unread: false,
     comments: [commentaire()],
     ...propres,
   }
@@ -86,12 +88,28 @@ function rendre(document: ReactNode = null, blocsPublies: string[] = [BLOC]) {
   return render(
     <FournisseurDeCommentaires chemin={CHEMIN} revision={3} blocsPublies={blocsPublies}>
       {document}
-      <EncartCommentaires />
+      <BoutonDesCommentaires />
+      <CorpsDesCommentaires />
     </FournisseurDeCommentaires>,
   )
 }
 
-const encart = () => screen.getByText("Commentaires").closest("details") as HTMLDetailsElement
+/** Le panneau tel que l'écran le monte à côté du texte : rendu seulement ouvert ; `servis`, la lecture que la page a lancée. */
+function rendreLePanneau(servis?: NodeCommentsView) {
+  return render(
+    <FournisseurDeCommentaires chemin={CHEMIN} revision={3} blocsPublies={[BLOC]} filsServis={servis && Promise.resolve({ data: servis })}>
+      <BoutonDesCommentaires />
+      <PanneauDesCommentaires />
+    </FournisseurDeCommentaires>,
+  )
+}
+
+/** La fenêtre atteint le palier où le panneau tient à côté du texte (1 024 px). */
+function fenetreLarge(large: boolean) {
+  vi.stubGlobal("matchMedia", (requete: string) => ({ matches: large, media: requete, addEventListener: () => {}, removeEventListener: () => {} }))
+}
+
+const boutonDesCommentaires = () => screen.getByRole("button", { name: /^Commentaires/ })
 const carte = (nom: string | RegExp) => screen.findByRole("article", { name: nom })
 
 beforeEach(() => {
@@ -104,28 +122,47 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("EncartCommentaires", () => {
-  it("should open on arrival while a thread is open, with the count of open threads and both tabs counted", async () => {
-    servir(vue([fil(), fil({ id: "f2", status: "resolved", block: null, anchor: "page", quote: null, section: null })]))
-    rendre()
-    await carte("Fil sur Étape 3 : relance ferme")
-    expect(encart().open).toBe(true)
-    expect(within(encart().querySelector("summary") as HTMLElement).getByText("1")).toBeInTheDocument()
+describe("PanneauDesCommentaires", () => {
+  it("should open on arrival when the threads the page served have an unread one, with the count and the dot on the header button, asking nothing of the API", async () => {
+    fenetreLarge(true)
+    rendreLePanneau(vue([fil({ unread: true }), fil({ id: "f2", status: "resolved", block: null, anchor: "page", quote: null, section: null })]))
+    expect(await screen.findByRole("region", { name: "Commentaires" })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+    const bouton = screen.getByRole("button", { name: "Commentaires, 1 fil ouvert dont 1 non lu" })
+    expect(bouton).toHaveAttribute("aria-expanded", "true")
+    expect(bouton).toHaveAttribute("data-non-lu")
     expect(screen.getByRole("tab", { name: "Ouverts 1" })).toHaveAttribute("aria-selected", "true")
     fireEvent.click(screen.getByRole("tab", { name: "Résolus 1" }))
     expect(await carte("Fil sur Sur la page")).toBeInTheDocument()
-    expect(screen.queryByRole("article", { name: "Fil sur Étape 3 : relance ferme" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Fermer les commentaires" }))
+    expect(screen.queryByRole("region", { name: "Commentaires" })).not.toBeInTheDocument()
   })
 
-  it("should stay closed on arrival without an open thread, still present, without a count of zero", async () => {
+  it("should stay closed on arrival when no open thread is unread, even one without a comment of the person, or on a narrow window", async () => {
+    fenetreLarge(true)
+    servir(vue([fil()]))
+    rendreLePanneau()
+    await waitFor(() => expect(screen.getByRole("button", { name: "Commentaires, 1 fil ouvert" })).not.toHaveAttribute("data-non-lu"))
+    expect(screen.queryByRole("region", { name: "Commentaires" })).not.toBeInTheDocument()
+    cleanup()
+    fenetreLarge(false)
+    servir(vue([fil({ unread: true })]))
+    rendreLePanneau()
+    await waitFor(() => expect(screen.getByRole("button", { name: "Commentaires, 1 fil ouvert dont 1 non lu" })).toHaveAttribute("aria-expanded", "false"))
+    expect(screen.queryByRole("region", { name: "Commentaires" })).not.toBeInTheDocument()
+  })
+
+  it("should open on its button without a count of zero when no thread is open", async () => {
     servir(vue([fil({ status: "resolved" })]))
-    rendre()
-    // Les onglets sont là : la lecture est faite ; la pastille ne dit pas « 0 ».
-    await waitFor(() => expect(encart().querySelector(".oto-tabs")).not.toBeNull())
-    expect(within(encart().querySelector("summary") as HTMLElement).queryByText("0")).toBeNull()
-    expect(encart().open).toBe(false)
+    rendreLePanneau()
+    await waitFor(() => expect(boutonDesCommentaires()).toHaveAccessibleName("Commentaires"))
+    expect(within(boutonDesCommentaires()).queryByText("0")).toBeNull()
+    fireEvent.click(boutonDesCommentaires())
+    expect(await screen.findByRole("region", { name: "Commentaires" })).toBeInTheDocument()
   })
+})
 
+describe("CorpsDesCommentaires", () => {
   it("should say how to start when the page has no thread, and open a thread on the whole page", async () => {
     servir(vue([]), reponse(201, { data: { thread: fil({ id: "f9", block: null, anchor: "page", quote: null, section: null, comments: [commentaire({ mine: true, text: "Une question" })] }) } }))
     rendre()
@@ -319,7 +356,7 @@ describe("BulleDeBloc", () => {
     fireEvent.focus(bulle)
     expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Commenter ce bloc/)
     fireEvent.click(bulle)
-    expect(encart().open).toBe(true)
+    expect(boutonDesCommentaires()).toHaveAttribute("aria-expanded", "true")
     fireEvent.change(await screen.findByRole("textbox", { name: "Votre commentaire…" }), { target: { value: "À revoir" } })
     fireEvent.click(screen.getByRole("button", { name: "Envoyer" }))
     await carte("Fil sur Étape 3 : relance ferme")
@@ -342,7 +379,6 @@ describe("BulleDeBloc", () => {
     servir(vue([fil({ status: "resolved", id: "f0" }), fil(), fil({ id: "f2", quote: null })]))
     rendre(page)
     const pastille = await screen.findByRole("button", { name: "2 fils ouverts sur ce bloc — Sans réponse 30 jours" })
-    fireEvent.click(encart().querySelector("summary") as HTMLElement)
     fireEvent.click(pastille)
     const ouvertes = await screen.findAllByRole("article", { name: "Fil sur Étape 3 : relance ferme" })
     await waitFor(() => expect(document.activeElement).toBe(ouvertes[0]))

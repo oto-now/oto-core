@@ -26,7 +26,7 @@ import { useHote } from "../hote/navigation"
 import { adresseDuTableau, avecTri, type Reglages } from "./adresse"
 import { contenuDeCellule, valeurDe } from "./cellule"
 import { FiltreDeColonne } from "./filtre-de-colonne"
-import { GRILLE } from "./libelles"
+import { GRILLE, libelleDeColonne } from "./libelles"
 
 type Ecran = { entete: TableHeader; reglages: Reglages; adresse: string; liens?: Pick<Liens, "Lien" | "hrefDuChemin"> }
 
@@ -74,7 +74,7 @@ function colonneDuDS(colonne: TableColumn, ecran: Ecran): Column<TableRowRead> {
   const { entete, reglages, adresse } = ecran
   return {
     key: colonne.name,
-    header: colonne.name,
+    header: libelleDeColonne(colonne),
     numeric: colonne.type === "number",
     primary: colonne.name === entete.key,
     sortable: true,

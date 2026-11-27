@@ -107,7 +107,7 @@ describe("FileDeRevue, the queue (AC10)", () => {
     const demande = region.querySelector(".oto-wait-item-demand")
     expect(demande).toHaveTextContent("P-003")
     // Les valeurs, la clé non répétée, au format de la grille : le nom de la colonne, puis sa valeur.
-    expect(demande?.nextElementSibling).toHaveTextContent("entreprise Mairie de Valbrune · montant_estime 95 000 · statut à revoir")
+    expect(demande?.nextElementSibling).toHaveTextContent("Entreprise Mairie de Valbrune · Montant estime 95 000 · Statut à revoir")
     expect(raison()).toHaveAttribute("maxlength", "500")
     expect(section.getAllByRole("button").map((un) => un.textContent)).toEqual(["Refuser → écarté", "Approuver → qualifié"])
   })
@@ -180,7 +180,7 @@ describe("FileDeRevue, the proof of each value on the card (fiche D99, M54, P3)"
     render(ecran({ entete, revue: file(ligne, 1) }))
     const valeurs = document.querySelector(".oto-wait-item-demand")?.nextElementSibling
     expect(valeurs).toHaveTextContent(
-      "entreprise Garage Moreau · contact Luc Moreau (sans preuve) · email vérifié vide (« Aucune adresse publiée ») · site https://garage-moreau.test (« Registre public », https://registre.test/garage-moreau) · montant_estime — · statut à revoir",
+      "Entreprise Garage Moreau · Contact Luc Moreau (sans preuve) · Email vérifié vide (« Aucune adresse publiée ») · Site https://garage-moreau.test (« Registre public », https://registre.test/garage-moreau) · Montant estime — · Statut à revoir",
     )
     expect(within(valeurs as HTMLElement).getByRole("link", { name: "https://registre.test/garage-moreau" })).toHaveAttribute("rel", "noopener noreferrer")
   })
@@ -189,7 +189,7 @@ describe("FileDeRevue, the proof of each value on the card (fiche D99, M54, P3)"
     render(ecran({ entete: { ...entete, proof: false }, revue: file(ligne, 1) }))
     const valeurs = document.querySelector(".oto-wait-item-demand")?.nextElementSibling
     expect(valeurs).toHaveTextContent(
-      "entreprise Garage Moreau · contact Luc Moreau · email vérifié vide (« Aucune adresse publiée ») · site https://garage-moreau.test (« Registre public », https://registre.test/garage-moreau) · montant_estime — · statut à revoir",
+      "Entreprise Garage Moreau · Contact Luc Moreau · Email vérifié vide (« Aucune adresse publiée ») · Site https://garage-moreau.test (« Registre public », https://registre.test/garage-moreau) · Montant estime — · Statut à revoir",
     )
   })
 })

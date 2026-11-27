@@ -113,14 +113,15 @@ describe("(dashboard) layout brand (AC3, AC4)", () => {
     expect(within(racines[0]).getByText("Contenu")).toBeInTheDocument()
   })
 
-  // Depuis E05-S09 (AC-a3), la tête du rail est la pastille d'entreprise d'oto-frontend : le logo, à la
-  // place du mark, puis le nom de l'organisation (E05-S13, AC-3 : un ancien nom affiché n'est plus lu).
-  it("should open the rail with the logo, then the organisation name", async () => {
+  // Depuis E05-S09 (AC-a3), la tête du rail porte le logo, à la place du mark, puis le nom de l'organisation (E05-S13,
+  // AC-3 : un ancien nom affiché n'est plus lu) ; depuis #221, ce bloc est le lien de l'accueil.
+  it("should open the rail with the logo, then the organisation name, leading home", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({ logo_url: LOGO, display_name: "Acme Forêt" }))
 
     render(await DashboardLayout({ children: <p>Contenu</p> }))
 
-    const entreprise = screen.getByRole("button", { name: /^Entreprise : Acme Énergies\./ })
+    const entreprise = screen.getByRole("link", { name: "Acme Énergies" })
+    expect(entreprise).toHaveAttribute("href", "/")
     const logo = entreprise.firstElementChild
     expect(logo?.tagName).toBe("IMG")
     expect(logo).toHaveAttribute("src", LOGO)
@@ -154,16 +155,17 @@ describe("(dashboard) layout brand (AC3, AC4)", () => {
     expect(screen.queryByRole("button", { name: "Couleur du thème" })).toBeNull()
   })
 
-  // E05-S11 (AC-32, AC-6, AC-e22) : les adresses que le layout donne au pied du rail ; le menu de
-  // l'entreprise (AC-31, AC-33) : `admin-pages.test.tsx`.
-  // E11-S10 (AC-e1) : « Contexte » en tête du menu du compte, à `/context`. Le compte porte le nom de la personne.
-  it("should give the rail Connecteurs at its foot, then Contexte, Profil and Corbeille in the account menu", async () => {
+  // E05-S11 (AC-6, AC-e22) et #221 : les adresses que le layout donne au menu du compte, « Connecteurs » compris, la
+  // personne en tête avec son email ; le groupe de l'organisation : `admin-pages.test.tsx`. La vue « Contexte » est dans
+  // la palette. Le compte porte le nom de la personne.
+  it("should give the account menu the person's email, then Profil, Connecteurs, Brancher and Corbeille, without a Connecteurs line in the rail", async () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(sousLaMarque({}))
 
     render(await DashboardLayout({ children: <p>Contenu</p> }))
 
-    expect(screen.getByRole("link", { name: "Connecteurs" })).toHaveAttribute("href", "/admin/connectors")
-    expect(menuDuCompte("claire")).toEqual(["Contexte", "Profil", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille", "Déconnexion"])
+    expect(screen.queryByRole("link", { name: "Connecteurs" })).toBeNull()
+    expect(menuDuCompte("claire").slice(0, 4)).toEqual(["Profil", "Connecteurs", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille"])
+    expect(screen.getByRole("menu").querySelector(".oto-menu-head")).toHaveTextContent("claire@acme.test")
   })
 })
 
@@ -187,7 +189,7 @@ describe("(dashboard) layout navigation and re-read (E05-S03, AC3 ; E05-S09, AC-
 
     expect(screen.getAllByRole("navigation").map((nav) => nav.getAttribute("aria-label"))).toEqual(["Navigation principale"])
     expect(within(screen.getByRole("main")).getByText("Contenu")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: /^Entreprise : Acme Énergies/ }))
+    fireEvent.click(screen.getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }))
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Équipes & accès" }))
     expect(push).toHaveBeenCalledWith("/teams")
   })

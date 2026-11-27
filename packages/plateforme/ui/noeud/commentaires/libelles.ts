@@ -18,6 +18,7 @@ export const COMMENTAIRES = {
   aucunResolu: "Aucun fil résolu.",
   filsOuverts: "Fils ouverts",
   filsResolus: "Fils résolus",
+  fermer: "Fermer les commentaires",
 } as const
 
 export const BULLE = {
@@ -25,6 +26,8 @@ export const BULLE = {
   commenterAide: "Commenter ce bloc : poser une question, signaler une erreur, ou demander une correction à l'assistant",
   nom: (mots: string) => `Commenter ce bloc — ${mots}`,
   fils: (nombre: number, mots: string) => `${nombre > 1 ? `${nombre} fils ouverts` : "1 fil ouvert"} sur ce bloc — ${mots}`,
+  /** L'icône « Historique du bloc » au survol, nommée par les premiers mots du bloc comme sa voisine. */
+  historique: (mots: string) => `Historique du bloc « ${mots} »`,
   filsAide: (nombre: number) => `${nombre > 1 ? `${nombre} fils ouverts` : "1 fil ouvert"} sur ce bloc : cliquer pour le lire`,
 } as const
 

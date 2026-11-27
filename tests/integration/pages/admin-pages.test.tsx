@@ -144,15 +144,18 @@ describe("/admin/feedback, reserved to who handles the feedback (E08-S09, AC1 ; 
   })
 })
 
-// Depuis E05-S09 (AC-a4), les entrées sont celles du menu de l'entreprise, au haut du rail ; depuis E05-S11
-// (AC-31, AC-33), « Réglages » puis « Suivi » ; Connecteurs est au pied du rail (AC-32), « Brancher un
-// assistant » au menu du compte. E05-S13 : Retours à qui les traite (AC-9), Journal dans les réglages, un seul groupe
-// sans sous-titre pour un membre (AC-10). 1.4.13 : « Activité » (Statistiques et Journal) à la place du Journal ; Retours
-// sous « Suivi de l'entreprise » pour qui administre, décidé sur l'identité seule, sans lire l'option.
+// Depuis E05-S09 (AC-a4), les entrées sont celles du menu de l'entreprise ; depuis #221, il est au menu du compte, sous
+// le nom de l'organisation : les réglages puis le suivi. E05-S13 : Retours à qui les traite (AC-9), Journal dans les
+// réglages (AC-10). 1.4.13 : « Activité » (Statistiques et Journal) à la place du Journal ; Retours pour qui administre,
+// décidé sur l'identité seule, sans lire l'option.
 describe("(dashboard) layout administration entries (E08-S03 N9 ; E05-S09, AC-a4 ; E05-S13, AC-8 to AC-10)", () => {
+  /** Les entrées du groupe de l'organisation, au menu du compte : les lignes qui suivent son titre, jusqu'au titre ou au filet suivant. */
   const ouvrir = () => {
-    fireEvent.click(screen.getByRole("button", { name: /^Entreprise : Démo/ }))
-    return screen.getByRole("menu")
+    fireEvent.click(screen.getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }))
+    const lignes = [...screen.getByRole("menu").querySelectorAll(".oto-menu-group-label, .oto-menu-sep, [role^='menuitem']")]
+    const suite = lignes.slice(lignes.findIndex((ligne) => ligne.matches(".oto-menu-group-label") && ligne.lastChild?.textContent === "Démo") + 1)
+    const fin = suite.findIndex((ligne) => !ligne.matches("[role^='menuitem']"))
+    return { menu: screen.getByRole("menu"), entrees: suite.slice(0, fin === -1 ? undefined : fin).map((ligne) => ligne.textContent) }
   }
 
   it.each([
@@ -167,8 +170,8 @@ describe("(dashboard) layout administration entries (E08-S03 N9 ; E05-S09, AC-a4
     expect(handlesFeedback).not.toHaveBeenCalled()
 
     // Les sous-titres (un seul groupe, aucun) : `rail-application.test.tsx`.
-    const menu = ouvrir()
-    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(attendues)
+    const { menu, entrees } = ouvrir()
+    expect(entrees).toEqual(attendues)
     // Une entrée mène à sa page, par le routeur de l'hôte.
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Activité" }))
     expect(push).toHaveBeenCalledWith("/journal")

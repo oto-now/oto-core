@@ -524,6 +524,41 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       expect(await settle(writeNode(db, who("lea"), edited, { kind: "human" }))).toMatchObject({ code: "invalid_arguments" })
       expect(await nodeState("ventes/devis")).toEqual({ exists: true, drafts: 1 })
     })
+
+    it("should keep a page whose call block is refused when the screen turns it into a procedure, with no draft (« Page ⇄ Procédure »)", async () => {
+      await content(shortDevis())
+      const db = await ref.db("lea")
+      // Une page publie son bloc `call` sans contrôle ; seul le passage en procédure le contrôle.
+      const withCall = { path: "ventes/devis", base_revision: 1, ops: [{ op: "add_section", section: "Appel", text: unknownCall }] }
+      expect(await settle(writeNode(db, who("lea"), withCall, { kind: "human" }))).toBeNull()
+      const kindOnly = { path: "ventes/devis", base_revision: 2, kind: "procedure" }
+      expect(await settle(writeNode(db, who("lea"), kindOnly, { kind: "human" }))).toMatchObject({
+        code: "invalid_arguments",
+        message: expect.stringContaining("refused: 1 problem(s). Nothing was written.\n"),
+        details: { refusals: [expect.objectContaining({ kind: "unknown_function" })] },
+      })
+      expect([(await nodeRow("ventes/devis"))?.kind, await nodeState("ventes/devis")]).toEqual(["page", { exists: true, drafts: 0 }])
+    })
+
+    it("should serve the publication warnings in data when a page becomes a procedure, and none on a page without any", async () => {
+      await content(shortDevis())
+      const db = await ref.db("lea")
+      const asPage = await writeNode(db, who("lea"), { path: "ventes/devis", base_revision: 1, ops: [{ op: "add_section", section: "Note", text: "Relire." }] }, { kind: "human" })
+      expect(asPage.data).not.toHaveProperty("warnings")
+      const turned = await writeNode(db, who("lea"), { path: "ventes/devis", base_revision: 2, kind: "procedure" }, { kind: "human" })
+      expect(turned.data).not.toHaveProperty("warnings_total")
+      expect(turned.data?.warnings).toEqual([
+        "Procedure: no part « When to use it » (or « Quand l'utiliser »): say when to use it, when not, and where to go instead (read path help, section procedures).",
+      ])
+    })
+
+    it("should serve the first 20 publication warnings in data, and their total beyond", async () => {
+      await content(shortDevis())
+      const absent = Array.from({ length: 25 }, (_, rang) => `[[ventes/absente_${String(rang).padStart(2, "0")}]]`).join(" ")
+      const output = await writeNode(await ref.db("lea"), who("lea"), { path: "ventes/devis", base_revision: 1, ops: [{ op: "add_section", section: "Liens", text: absent }] }, { kind: "human" })
+      const warnings = output.data?.warnings
+      expect([Array.isArray(warnings) ? warnings.length : null, output.data?.warnings_total]).toEqual([20, 25])
+    })
   })
 
   describe("node.move (E11-S18, AC-5)", () => {

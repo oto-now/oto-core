@@ -338,6 +338,7 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
         hrefDuContexteServi="/context"
         ici={`/n/${cheminCourant}`}
         Lien={LienDeTest}
+        place="pied"
       />,
     )
   }

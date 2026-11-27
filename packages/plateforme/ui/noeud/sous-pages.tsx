@@ -1,48 +1,20 @@
-// Les encarts des liens d'un nœud (E11-S05, lot e, AC-e1 ; ils remplacent « Contenus liés » d'E05-S10, AC-b6) :
-// « Cité dans » (les contenus qui le citent), « Cite » (ceux que cite un de ses blocs) et « Sous-pages » (les nœuds
-// dessous et leur nature), hors de la carte des blocs, fermés par défaut. Server Component ; aucun
-// encart quand rien n'est lié (un repli qui s'ouvre sur « rien » est une impasse). Les liens arrivent après la
-// page, sous leur propre `<Suspense>` : l'en-tête et le document ne les attendent pas. Sans lui, les nœuds
-// dessous et ce qui cite une page ne se lisent nulle part à l'écran.
-//
-// Porté d'oto-frontend (`components/noeud/qui-sen-sert.tsx`) : `LinkedContent`, ses intitulés et sa note,
-// `ContentTree`, `ObjectLink`. Changé : les rubriques, lues dans `loadNode` et dans les liens `links` que sert
-// `read` (E03-S07) ; retiré : la note de pied d'Oto.
-//
-// E05-S11 (retours 13 et 20, fiche D107) : trois rubriques, chacune absente quand elle est vide. Les mêmes liens
-// donnent aux blocs le titre et la place de chaque page citée (`ciblesDesLiens`).
-//
-// E11-S05 (lot e ; HN-E11S05-12) : plus de bandeau « Contenus liés » ; trois encarts repliables, « Cité dans »,
-// « Cite », « Sous-pages », chacun son glyphe et son total, fermés à l'arrivée, absents à 0 ; dans la colonne de
-// droite d'une page, d'une procédure et d'un Contexte, sur une ligne au-dessus de la grille d'un tableau.
-// E11-S15 (AC-a2) : le nom d'une ligne tient sur une ligne, coupé par « … » ; plus de résumé ; rien n'élargit la page.
-// (AC-a9) : un Contexte se nomme comme ailleurs à l'écran (« Contexte · SAV »), dans les encarts et dans les liens des blocs.
-import { Suspense, use, type ReactNode } from "react"
-import { ArrowSquareIn } from "@phosphor-icons/react/dist/ssr/ArrowSquareIn"
-import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut"
-import { TreeStructure } from "@phosphor-icons/react/dist/ssr/TreeStructure"
-import type { NodeView, TreeNode } from "../../schemas"
+// Les liens d'un nœud lus dans `read` (E11-S05, AC-e1 ; E05-S11, fiche D107) : « Cité dans » (les contenus qui le
+// citent), « Cite » (ceux que cite un de ses blocs), le nom montré d'un Contexte (E11-S15, AC-a9), les cibles des pages
+// que citent les blocs (`ciblesDesLiens`) et le genre de chaque nœud visible. Leur rendu est au pied du contenu
+// (`pied-du-noeud.tsx`) et dans le popover « Liens » de l'en-tête (`liens-de-l-en-tete.tsx`), depuis la refonte #217
+// qui retire la colonne de droite et ses encarts (`ContenusLies`). Sans lui, chaque lecteur des liens les relirait à sa façon.
+import type { TreeNode } from "../../schemas"
 import type { Resultat } from "../api/resultat"
 import { natureDuGenre } from "../arbre/depuis-l-arbre"
-import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import type { NatureDeNoeud } from "../arbre/types"
-import { ErreurDeLecture } from "../components/erreur-de-lecture"
-import { ContentTree, ContentTreeItem } from "../ds/react/content-tree"
-import { AnimatedIcon, type Glyphe } from "../ds/react/icon"
-import { LinkedContent } from "../ds/react/linked-content"
-import { ObjectLink } from "../ds/react/object-link"
 import { cibleDe, dernierSegment, type CiblesDesLiens } from "./en-ligne"
 import { titreDuContexte } from "./fil"
-import { GlypheDeNature } from "./glyphes"
-import { ENCARTS, NATURES } from "./libelles"
 
 /** Un contenu cité par un bloc du nœud : `missing`, sans cible visible ; `moved`, rangé depuis à `vers`. */
 export type ContenuCite = { chemin: string; titre: string | null; etat: "ok" | "missing" | "moved"; vers?: string }
 
 /** Les liens d'un nœud, les premiers de chaque côté et leur total (`read`, E03-S07 AC4). */
 export type LiensDuNoeud = { cites: ContenuCite[]; totalCites: number; citant: { chemin: string; titre: string }[]; totalCitant: number }
-
-type Navigation = { Lien: LienDeLHote; hrefDuChemin: (chemin: string) => string; ici: string }
 
 const estObjet = (valeur: unknown): valeur is Record<string, unknown> => typeof valeur === "object" && valeur !== null && !Array.isArray(valeur)
 const texte = (valeur: unknown): string | null => (typeof valeur === "string" && valeur !== "" ? valeur : null)
@@ -135,147 +107,6 @@ export function ciblesLues(cibles: CiblesDesLiens | undefined, lu: Resultat<Reco
 }
 
 /** La nature de chaque nœud visible, par chemin : le glyphe d'un contenu cité ; un chemin inconnu se montre en page. */
-function naturesParChemin(arbre: readonly TreeNode[] | null): ReadonlyMap<string, NatureDeNoeud> {
+export function naturesParChemin(arbre: readonly TreeNode[] | null): ReadonlyMap<string, NatureDeNoeud> {
   return new Map((arbre ? aplatir(arbre) : []).map((noeud) => [noeud.path, natureDuGenre(noeud.kind)]))
-}
-
-/** `contextes` : le nom montré d'un Contexte, au lieu de son titre enregistré (E11-S15, AC-a9). */
-type NavigationDesLignes = Pick<Navigation, "Lien" | "hrefDuChemin"> & { contextes: NomsDesContextes }
-
-type EncartProps = { glyphe: Glyphe; titre: string; total: number; montres: number; children: ReactNode }
-
-/**
- * Un encart (AC-e1) : un repli fermé à l'arrivée, son glyphe, son titre et son total ; ouvert, sa liste nommée, puis
- * ce que le service n'a pas servi. Un total nul : rien, une commande qui s'ouvre sur « rien » est une impasse.
- */
-function Encart({ glyphe, titre, total, montres, children }: EncartProps) {
-  if (total === 0) return null
-  return (
-    <LinkedContent icon={<AnimatedIcon as={glyphe} size="xs" />} title={titre} count={total}>
-      <ContentTree aria-label={titre}>{children}</ContentTree>
-      {total > montres && <p className="oto-linked-note">{ENCARTS.autres(total - montres)}</p>}
-    </LinkedContent>
-  )
-}
-
-/**
- * Le nom d'une ligne d'encart (E11-S15, AC-a2) : sur une ligne, coupé par « … » ; entier au survol (`title`) et pour un
- * lecteur d'écran (le texte reste entier, seule la vue le coupe). Une boîte à lui : `.oto-object-link-name` est un
- * conteneur flex, où `text-overflow` ne coupe rien.
- */
-function NomCoupe({ nom }: { nom: string }) {
-  return (
-    <span className="truncate" title={nom}>
-      {nom}
-    </span>
-  )
-}
-
-/** « Sous-pages » : les nœuds dessous et leur nature, sans résumé (E11-S15, AC-a2). Connu avec le nœud. */
-function SousPages({ enfants, total, Lien, hrefDuChemin, contextes }: NavigationDesLignes & { enfants: NodeView["children"]; total: number }) {
-  return (
-    <Encart glyphe={TreeStructure} titre={ENCARTS.sousPages} total={total} montres={enfants.length}>
-      {enfants.map((enfant) => (
-        <ContentTreeItem key={enfant.path} icon={<GlypheDeNature nature={natureDuGenre(enfant.kind)} />}>
-          <ObjectLink as={Lien} href={hrefDuChemin(enfant.path)} name={<NomCoupe nom={contextes.get(enfant.path) ?? enfant.title} />} meta={NATURES[enfant.kind]} />
-        </ContentTreeItem>
-      ))}
-    </Encart>
-  )
-}
-
-/** Un contenu cité : son lien (vers sa nouvelle place s'il a été rangé ailleurs), ou son chemin seul, sans cible. */
-function LigneCitee({ cite, nature, Lien, hrefDuChemin, contextes }: NavigationDesLignes & { cite: ContenuCite; nature: NatureDeNoeud }) {
-  if (cite.etat === "missing") {
-    return (
-      <ContentTreeItem broken icon={<GlypheDeNature nature={nature} />}>
-        <span className="oto-object-link">
-          <span className="oto-object-link-name">
-            <NomCoupe nom={cite.chemin} />
-          </span>
-          <span className="oto-object-link-meta">{ENCARTS.sansCible}</span>
-        </span>
-      </ContentTreeItem>
-    )
-  }
-  const deplace = cite.etat === "moved" && cite.vers ? cite.vers : null
-  return (
-    <ContentTreeItem icon={<GlypheDeNature nature={nature} />}>
-      <ObjectLink as={Lien} href={hrefDuChemin(deplace ?? cite.chemin)} name={<NomCoupe nom={contextes.get(deplace ?? cite.chemin) ?? cite.titre ?? cite.chemin} />} meta={deplace ? ENCARTS.deplace(deplace) : undefined} />
-    </ContentTreeItem>
-  )
-}
-
-type LiensProps = Navigation & { liens: Resultat<LiensDuNoeud>; natures: ReadonlyMap<string, NatureDeNoeud>; contextes: NomsDesContextes }
-
-/** « Cité dans » (ce qui cite le nœud) puis « Cite » (ce que ses blocs citent) ; leur lecture en échec se dit à leur place. */
-function Liens({ liens, natures, contextes, Lien, hrefDuChemin, ici }: LiensProps) {
-  if (liens.error !== undefined) return <ErreurDeLecture message={liens.error} href={ici} Lien={Lien} />
-  const { cites, totalCites, citant, totalCitant } = liens.data
-  return (
-    <>
-      <Encart glyphe={ArrowSquareIn} titre={ENCARTS.citeDans} total={totalCitant} montres={citant.length}>
-        {citant.map((source) => (
-          <ContentTreeItem key={source.chemin} icon={<GlypheDeNature nature={natures.get(source.chemin) ?? "page"} />}>
-            <ObjectLink as={Lien} href={hrefDuChemin(source.chemin)} name={<NomCoupe nom={contextes.get(source.chemin) ?? source.titre} />} />
-          </ContentTreeItem>
-        ))}
-      </Encart>
-      <Encart glyphe={ArrowSquareOut} titre={ENCARTS.cite} total={totalCites} montres={cites.length}>
-        {cites.map((cite) => (
-          <LigneCitee key={cite.chemin} cite={cite} nature={natures.get(cite.vers ?? cite.chemin) ?? "page"} Lien={Lien} hrefDuChemin={hrefDuChemin} contextes={contextes} />
-        ))}
-      </Encart>
-    </>
-  )
-}
-
-function LiensLus({ lecture, ...props }: Omit<LiensProps, "liens"> & { lecture: Promise<Resultat<Record<string, unknown>>> }) {
-  const lu = use(lecture)
-  return <Liens {...props} liens={lu.error !== undefined ? lu : { data: liensDeLaLecture(lu.data) }} />
-}
-
-export type ContenusLiesProps = Navigation & {
-  vue: Pick<NodeView, "children" | "childrenTotal">
-  /** L'arbre visible : la nature d'un contenu cité ; `null` si sa lecture a échoué (le glyphe d'une page). */
-  arbre: readonly TreeNode[] | null
-  /** Les champs de `read` sur le nœud (ses liens), lus par l'hôte après la page ; absents, « Cité dans » et « Cite » ne sont pas rendus. */
-  liens?: Promise<Resultat<Record<string, unknown>>>
-  /**
-   * `colonne` : les encarts l'un sous l'autre, dans la colonne de droite d'une page (AC-e1) ; `ligne` : sur une ligne
-   * au-dessus de la grille d'un tableau, qui garde toute la largeur (AC-e3).
-   */
-  disposition: "colonne" | "ligne"
-  /** Le nom montré de chaque Contexte (`nomsDesContextes`), pour ses lignes (E11-S15, AC-a9). */
-  contextes: NomsDesContextes
-  /** Un encart de l'écran posé avant eux, dans leur conteneur : la colonne, ou leur ligne (l'encart « Commentaires »). */
-  avant?: ReactNode
-}
-
-/**
- * « Cité dans », « Cite », « Sous-pages » (AC-e1, AC-e3, AC-e4). Seuls les liens attendent leur `<Suspense>` : « Sous-pages »,
- * connu avec le nœud, se rend tout de suite, hors de lui, une seule fois dans le flux ; à la place des deux autres,
- * « Lecture des liens… », puis leur échec et « Réessayer ».
- */
-export function ContenusLies({ vue, arbre, liens, disposition, contextes, avant, ...navigation }: ContenusLiesProps) {
-  const encarts = (
-    <>
-      {avant}
-      {liens && (
-        <Suspense
-          fallback={
-            <p role="status" className="oto-linked-note">
-              {ENCARTS.chargement}
-            </p>
-          }
-        >
-          <LiensLus lecture={liens} natures={naturesParChemin(arbre)} contextes={contextes} {...navigation} />
-        </Suspense>
-      )}
-      <SousPages enfants={vue.children} total={vue.childrenTotal} Lien={navigation.Lien} hrefDuChemin={navigation.hrefDuChemin} contextes={contextes} />
-    </>
-  )
-  if (disposition === "colonne") return encarts
-  // Sans encart, liens lus, la ligne part (HN-E11S05-14) : `:empty` ne compte pas les marques de commentaire du flux.
-  return <div className="flex flex-wrap items-start gap-(--gap) empty:hidden">{encarts}</div>
 }

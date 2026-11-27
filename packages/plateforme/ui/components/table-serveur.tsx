@@ -1,5 +1,5 @@
 // La table d'un écran serveur (E05-S09 partie d2 ; M31) : l'enveloppe qui défile dans son îlot, la légende lue
-// seule, l'en-tête en mono capitales, une colonne numérique alignée à droite ; le corps est celui de l'écran.
+// seule, l'en-tête en casse de phrase, une colonne numérique alignée à droite ; le corps est celui de l'écran.
 // Server Component, sans lequel chaque écran qui liste en table (usage, retours, vue d'un tableau, liste des
 // procédures) écrirait son enveloppe et son en-tête, ou les classes de `classes.ts`.
 //

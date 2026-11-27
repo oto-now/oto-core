@@ -12,7 +12,8 @@ export type InvitationEnAttente = {
   id: string
   email: string
   role: InvitationRole
-  teamId: string | null
+  /** Les équipes où la personne entrera, celles que qui regarde voit : toutes pour l'administrateur, les siennes pour un responsable. */
+  teamIds: string[]
   invitedBy: string | null
   /** `null` : une inscription sans email, qui n'expire pas. */
   expiresAt: string | null

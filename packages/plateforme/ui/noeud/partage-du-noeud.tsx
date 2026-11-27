@@ -18,32 +18,27 @@
 // qui a l'accès complet (`PartageSurLeWeb`, AC-d1, ADR-013) ; leurs annonces et leurs refus passent par les
 // régions de ce panneau.
 //
-// 1.4.13 : quatre sections titrées en étiquettes (accès par défaut, ajoutés, membres de l'équipe, sur le web), les niveaux
-// en pastilles de couleur (`partage-visuel.tsx`), l'équipe propriétaire réglée sur sa propre ligne et non plus parmi les
-// ajoutés.
-import { useLayoutEffect, useRef, useState } from "react"
-import { Globe } from "@phosphor-icons/react/dist/csr/Globe"
-import { ShieldCheck } from "@phosphor-icons/react/dist/csr/ShieldCheck"
-import { UserPlus } from "@phosphor-icons/react/dist/csr/UserPlus"
-import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
+// #219, de haut en bas : « Accès par défaut » (toute l'organisation), un filet, « Partager avec » (le champ, l'équipe
+// propriétaire et ses membres repliés sous son nom, puis les ajoutés), un filet, « Publier sur le web ». Deux intertitres
+// petits et gris en casse de phrase (D4), les niveaux en petites pastilles de couleur (D7, `partage-visuel.tsx`).
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { ACCESS_LEVEL_NAMES, setNodeRuleSchema, type AccessLevelName, type NodeRulesView } from "../../schemas"
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur, type MessagesDuGeste } from "../api/messages"
 import { replierLeFocusSur } from "../components/focus"
-import { AnimatedIcon } from "../ds/react/icon"
-import { Avatar } from "../ds/react/primitives"
+import { Alert, Avatar, Button } from "../ds/react/primitives"
 import type { SelectOption } from "../ds/react/select"
 import type { SujetsDeRegle } from "../equipes/types"
 import { useRafraichir } from "../hote/rafraichir"
 import { PartageSurLeWeb } from "../public/partage-sur-le-web"
-import { AccesParDefaut } from "./acces-general"
+import { AccesParDefaut, LigneDeLEquipe } from "./acces-general"
 import { ChampDAjoutDAcces, nomDuCandidat, type Candidat } from "./champ-d-ajout-d-acces"
 import { NIVEAUX_D_ACCES, PARTAGE } from "./libelles"
-import { EtatDesNiveaux, MembresDeLEquipe, useNiveauxDesMembres } from "./niveau-d-un-membre"
-import { ChoixDuNiveau, EtiquetteDeLigne, NiveauLu, optionDuNiveau, SectionDuPartage } from "./partage-visuel"
+import { MembresDeLEquipe, useNiveauxDesMembres, type NiveauxDesMembres } from "./niveau-d-un-membre"
+import { ChoixDuNiveau, EtiquetteDeLigne, MarqueDuSujet, NiveauLu, optionDuNiveau, SectionDuPartage } from "./partage-visuel"
 
 /**
- * L'ancre du panneau : l'intitulé de la liste, qui reçoit le focus quand la relecture emporte le contrôle
+ * L'ancre du panneau : l'intertitre « Partager avec », qui reçoit le focus quand la relecture emporte le contrôle
  * qui l'avait (une ligne retirée, son propre accès complet perdu). Une valeur fixe : une page ne monte
  * qu'un panneau.
  */
@@ -126,6 +121,7 @@ function LigneDAcces({ chemin, regle, gere, niveaux, moi, envoyer, enCours }: Li
   }
   const equipe = regle.subject.kind === "team"
   const nom = equipe ? PARTAGE.equipe(regle.subject.name) : regle.subject.name
+  const vous = regle.subject.kind === "user" && regle.subject.id === moi
 
   async function changer(valeur: string) {
     const choix = envoiDuChoix(chemin, regle, valeur)
@@ -142,16 +138,10 @@ function LigneDAcces({ chemin, regle, gere, niveaux, moi, envoyer, enCours }: Li
 
   return (
     <li className="oto-pop-row">
-      {equipe ? (
-        <span className="oto-avatar" data-size="sm" aria-hidden="true">
-          <AnimatedIcon as={UsersThree} size="xs" />
-        </span>
-      ) : (
-        <Avatar name={regle.subject.name} size="sm" aria-hidden="true" />
-      )}
+      {equipe ? <MarqueDuSujet portee="equipe" /> : <Avatar name={regle.subject.name} size="md" self={vous} aria-hidden="true" />}
       <span className="oto-share-name">
         {nom}
-        {regle.subject.kind === "user" && regle.subject.id === moi && <EtiquetteDeLigne accent>{PARTAGE.vous}</EtiquetteDeLigne>}
+        {vous && <EtiquetteDeLigne>{PARTAGE.vous}</EtiquetteDeLigne>}
       </span>
       {gere ? (
         <ChoixDuNiveau ref={geste} valeur={choisi} servi={regle.level} aria-label={PARTAGE.accesDe(nom)} options={optionsDeNiveau(niveaux, regle.level)} onChange={(evenement) => void changer(evenement.target.value)} disabled={enCours} />
@@ -162,16 +152,34 @@ function LigneDAcces({ chemin, regle, gere, niveaux, moi, envoyer, enCours }: Li
   )
 }
 
-type ListeProps = Omit<LigneProps, "regle"> & { regles: readonly Regle[] }
+type ListeProps = Omit<LigneProps, "regle"> & { regles: readonly Regle[]; equipe: ReactNode }
 
-function ListeDesAcces({ regles, ...ligne }: ListeProps) {
-  if (regles.length === 0) return <p className="oto-caption">{PARTAGE.personneAjoutee}</p>
+/** « Partager avec » : l'équipe propriétaire en tête, puis les ajoutés ; rien quand ni l'une ni les autres n'existent. */
+function ListeDesAcces({ regles, equipe, ...ligne }: ListeProps) {
+  if (regles.length === 0 && !equipe) return null
   return (
-    <ul aria-label={PARTAGE.ajoutes} className="flex flex-col">
+    <ul aria-labelledby={ANCRE} className="oto-share-list">
+      {equipe}
       {regles.map((regle) => (
         <LigneDAcces key={regle.id} regle={regle} {...ligne} />
       ))}
     </ul>
+  )
+}
+
+/** Une lecture des niveaux en échec, à la place de l'équipe : dite avec « Réessayer », qui la rejoue. */
+function NiveauxIllisibles({ niveaux }: { niveaux: NiveauxDesMembres }) {
+  if (niveaux.lecture.etat !== "erreur") return null
+  return (
+    <Alert
+      tone="fail"
+      title={PARTAGE.niveauxIllisibles(niveaux.lecture.message)}
+      actions={
+        <Button variant="secondary" size="sm" onClick={niveaux.relire}>
+          {PARTAGE.reessayer}
+        </Button>
+      }
+    />
   )
 }
 
@@ -206,7 +214,7 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
   const lusDesMembres = useNiveauxDesMembres(noeud.path, cle)
   const vue = lusDesMembres.lecture.etat === "pret" ? lusDesMembres.lecture.vue : null
   const membres = (vue?.people ?? []).filter((membre) => membre.ruleId === null)
-  // La règle de l'équipe propriétaire se règle sur sa ligne de l'accès par défaut, pas parmi les ajoutés.
+  // La règle de l'équipe propriétaire se règle sur sa ligne, en tête de « Partager avec », pas parmi les ajoutés.
   const ajoutes = noeud.rules.filter((regle) => !(regle.subject.kind === "team" && regle.subject.id === noeud.owner.teamId))
   // « Aucun accès » (1.4.12) : la personne ou l'équipe ne voit plus ce contenu ni ce qu'il range, à l'écran comme par le MCP ;
   // l'accès complet reste réservé à l'administrateur (N6).
@@ -227,45 +235,42 @@ export function PartageDuNoeud({ noeud, sujets, gestionAccordable, moi, nomOrgan
     return true
   }
 
+  const equipeLue = vue ? (vue.team ?? null) : lusDesMembres.lecture.etat === "erreur" ? null : undefined
+  const acces = { noeud, organisation: vue?.organisation ?? undefined, gere, gestionAccordable, envoyer, enCours }
+  const ligneDeLEquipe =
+    noeud.owner.kind === "team" ? (
+      <LigneDeLEquipe
+        {...acces}
+        equipe={equipeLue}
+        nombreDeMembres={membres.length}
+        membres={<MembresDeLEquipe membres={membres} equipe={noeud.owner.teamName ?? ""} chemin={noeud.path} gere={gere} moi={moi} niveauDeLEquipe={vue?.team?.level} gestionAccordable={gestionAccordable} envoyer={envoyer} enCours={enCours} />}
+      />
+    ) : null
+  const web = gere && surLeWeb
+  // Pour qui lit seulement, sans équipe ni ajouté (Privé, Tout le monde), « Partager avec » n'aurait que son intertitre.
+  const avec = gere || ligneDeLEquipe !== null || ajoutes.length > 0 || lusDesMembres.lecture.etat === "erreur"
+
   return (
     <div className="oto-share-panel">
-      {gere && <AjoutDAcces chemin={noeud.path} candidats={candidatsDe(sujets, noeud.rules)} envoyer={envoyer} enCours={enCours} />}
-      <SectionDuPartage id={`${ANCRE}-defaut`} icone={<ShieldCheck />} titre={PARTAGE.parDefaut}>
-        <AccesParDefaut
-          noeud={noeud}
-          equipe={vue ? (vue.team ?? null) : lusDesMembres.lecture.etat === "erreur" ? null : undefined}
-          organisation={vue?.organisation ?? undefined}
-          nomOrganisation={nomOrganisation}
-          gere={gere}
-          gestionAccordable={gestionAccordable}
-          envoyer={envoyer}
-          enCours={enCours}
-        />
+      <SectionDuPartage id={`${ANCRE}-defaut`} titre={PARTAGE.parDefaut}>
+        <AccesParDefaut {...acces} nomOrganisation={nomOrganisation} />
       </SectionDuPartage>
-      <SectionDuPartage id={ANCRE} icone={<UserPlus />} titre={PARTAGE.ajoutes} compte={ajoutes.length}>
-        <ListeDesAcces regles={ajoutes} chemin={noeud.path} gere={gere} niveaux={niveaux} moi={moi} envoyer={envoyer} enCours={enCours} />
-      </SectionDuPartage>
-      {membres.length > 0 && (
-        <SectionDuPartage id={`${ANCRE}-membres`} icone={<UsersThree />} titre={PARTAGE.membresDe(noeud.owner.teamName ?? "")} compte={membres.length}>
-          <MembresDeLEquipe
-            membres={membres}
-            equipe={noeud.owner.teamName ?? ""}
-            chemin={noeud.path}
-            gere={gere}
-            moi={moi}
-            niveauDeLEquipe={vue?.team?.level}
-            gestionAccordable={gestionAccordable}
-            envoyer={envoyer}
-            enCours={enCours}
-          />
-        </SectionDuPartage>
+      {avec && (
+        <>
+          <hr className="oto-separator" data-orientation="horizontal" />
+          <SectionDuPartage id={ANCRE} titre={PARTAGE.partagerAvec}>
+            {gere && <AjoutDAcces chemin={noeud.path} candidats={candidatsDe(sujets, noeud.rules)} envoyer={envoyer} enCours={enCours} />}
+            <ListeDesAcces regles={ajoutes} equipe={ligneDeLEquipe} chemin={noeud.path} gere={gere} niveaux={niveaux} moi={moi} envoyer={envoyer} enCours={enCours} />
+            <NiveauxIllisibles niveaux={lusDesMembres} />
+          </SectionDuPartage>
+        </>
       )}
-      {lusDesMembres.lecture.etat === "erreur" && <EtatDesNiveaux niveaux={lusDesMembres} />}
-      {/* Partie d (ADR-013) : réservé à l'accès complet, comme le service le décide (AC-d1). */}
-      {gere && surLeWeb && (
-        <SectionDuPartage id={`${ANCRE}-web`} icone={<Globe />} titre={PARTAGE.surLeWeb}>
+      {/* Partie d (ADR-013) : réservé à l'accès complet, comme le service le décide (AC-d1), jamais sur une racine. */}
+      {web && (
+        <>
+          <hr className="oto-separator" data-orientation="horizontal" />
           <PartageSurLeWeb chemin={noeud.path} annoncer={setAnnonce} signaler={setErreur} />
-        </SectionDuPartage>
+        </>
       )}
       {!gere && <p className="oto-caption">{PARTAGE.reserve}</p>}
       <div role="status" className="oto-caption">

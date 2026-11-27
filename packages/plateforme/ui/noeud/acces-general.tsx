@@ -9,13 +9,16 @@
 // L'équipe suit l'organisation : sa liste ne propose rien sous le niveau de l'organisation, et le service monte sa règle
 // quand l'organisation monte au-dessus. Le service décide (la gestion du nœud, l'administrateur pour l'accès complet,
 // jamais Privé). Sans lui, le niveau de l'équipe était figé et l'équipe et l'organisation ne se réglaient pas ensemble.
-import type { ReactNode } from "react"
+// #219 : l'organisation reste sous « Accès par défaut » (`AccesParDefaut`) ; l'équipe passe en tête de « Partager avec »
+// (`LigneDeLEquipe`), ses membres repliés sous son nom (« 4 membres »).
+import { useId, useState, type ReactNode } from "react"
 import { ACCESS_LEVEL_NAMES, generalAccessSchema, setNodeRuleSchema, type AccessLevelName, type NodeRulesView } from "../../schemas"
 import type { MessagesDuGeste } from "../api/messages"
+import { Button } from "../ds/react/primitives"
 import type { SelectOption } from "../ds/react/select"
-import { GlypheDePortee, type PorteeDEspace } from "./glyphes"
+import type { PorteeDEspace } from "./glyphes"
 import { ACCES_GENERAL, NIVEAUX_D_ACCES, PARTAGE, REFUS_DE_L_ACCES_GENERAL } from "./libelles"
-import { ChoixDuNiveau, EtiquetteDeLigne, NiveauLu, optionDuNiveau } from "./partage-visuel"
+import { ChoixDuNiveau, EtiquetteDeLigne, MarqueDuSujet, NiveauLu, optionDuNiveau } from "./partage-visuel"
 
 type Envoi = { methode: "POST" | "DELETE"; ressource: string; corps?: unknown }
 
@@ -42,9 +45,7 @@ const niveauLu = (valeur: string): AccessLevelName | null => ACCESS_LEVEL_NAMES.
 function Ligne({ portee, nom, etiquette, children }: { portee: PorteeDEspace; nom: string; etiquette?: ReactNode; children: ReactNode }) {
   return (
     <div className="oto-pop-row">
-      <span className="oto-avatar" data-size="sm" aria-hidden="true">
-        <GlypheDePortee portee={portee} />
-      </span>
+      <MarqueDuSujet portee={portee} />
       <span className="oto-share-name">
         {nom}
         {etiquette}
@@ -90,40 +91,78 @@ function envoiDeLEquipe(chemin: string, equipe: NonNullable<NodeRulesView["team"
   return corps.success ? { methode: "POST", ressource: "rules", corps: corps.data } : null
 }
 
-function LigneDeLEquipe({ noeud, equipe, organisation, gere, gestionAccordable, envoyer, enCours }: Omit<AccesParDefautProps, "nomOrganisation">) {
+/** Le chevron du bouton « N membres », qui se retourne quand la liste est dépliée. */
+const CHEVRON = (
+  <svg className="oto-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+)
+
+type LigneDeLEquipeProps = Omit<AccesParDefautProps, "nomOrganisation"> & {
+  /** Le nombre de membres sans accès propre, lus avec le niveau de l'équipe : le bouton « N membres » n'existe qu'au-delà de zéro. */
+  nombreDeMembres: number
+  /** Leur liste, montée sous la ligne quand on la déplie. */
+  membres: ReactNode
+}
+
+/** Le niveau de l'équipe propriétaire : une liste pour qui gère, le mot sinon ; « Lecture… » pendant la lecture, rien après un échec. */
+function NiveauDeLEquipe({ noeud, equipe, organisation, gere, gestionAccordable, envoyer, enCours }: Omit<LigneDeLEquipeProps, "nombreDeMembres" | "membres">) {
   const nom = noeud.owner.teamName ?? ""
   if (equipe === undefined || equipe === null) {
     return (
-      <Ligne portee="equipe" nom={PARTAGE.equipe(nom)}>
-        <span aria-busy={equipe === undefined} className="oto-pop-meta">
-          {equipe === undefined ? ACCES_GENERAL.lecture : ""}
-        </span>
-      </Ligne>
+      <span aria-busy={equipe === undefined} className="oto-pop-meta">
+        {equipe === undefined ? ACCES_GENERAL.lecture : ""}
+      </span>
     )
   }
-  const etiquette = equipe.ruleId === null ? <EtiquetteDeLigne>{ACCES_GENERAL.herite}</EtiquetteDeLigne> : undefined
+  if (!gere) return <NiveauLu niveau={equipe.level} />
+  const servie = equipe
   async function changer(valeur: string) {
     const niveau = niveauLu(valeur)
-    const envoi = niveau && equipe ? envoiDeLEquipe(noeud.path, equipe, niveau) : null
+    const envoi = niveau ? envoiDeLEquipe(noeud.path, servie, niveau) : null
     if (niveau && envoi) await envoyer(envoi, PARTAGE.change(PARTAGE.equipe(nom), NIVEAUX_D_ACCES[niveau]))
   }
   return (
+    <ChoixDuNiveau
+      valeur={equipe.level}
+      servi={equipe.level}
+      aria-label={ACCES_GENERAL.niveauEquipe(nom)}
+      options={niveauxDepuis(niveauDeLOrganisation(noeud, organisation), gestionAccordable, equipe.level)}
+      disabled={enCours}
+      onChange={(evenement) => void changer(evenement.target.value)}
+    />
+  )
+}
+
+/**
+ * L'équipe propriétaire, en tête de « Partager avec » (#219) : son nom, sans étiquette (son niveau, hérité ou posé ici,
+ * se lit dans son choix), le bouton « N membres » qui déplie ses membres en place, et son niveau.
+ */
+export function LigneDeLEquipe({ nombreDeMembres, membres, ...props }: LigneDeLEquipeProps) {
+  const id = useId()
+  const [deplie, setDeplie] = useState(false)
+  const nom = PARTAGE.equipe(props.noeud.owner.teamName ?? "")
+  const ouverte = deplie && nombreDeMembres > 0
+  return (
     <>
-      <Ligne portee="equipe" nom={PARTAGE.equipe(nom)} etiquette={etiquette}>
-        {gere ? (
-          <ChoixDuNiveau
-            valeur={equipe.level}
-            servi={equipe.level}
-            aria-label={ACCES_GENERAL.niveauEquipe(nom)}
-            options={niveauxDepuis(niveauDeLOrganisation(noeud, organisation), gestionAccordable, equipe.level)}
-            disabled={enCours}
-            onChange={(evenement) => void changer(evenement.target.value)}
-          />
-        ) : (
-          <NiveauLu niveau={equipe.level} />
-        )}
-      </Ligne>
-      {gere && <p className="oto-caption">{ACCES_GENERAL.responsableGarde}</p>}
+      <li className="oto-pop-row">
+        <MarqueDuSujet portee="equipe" />
+        <span className="oto-share-who">
+          <span className="oto-share-name">{nom}</span>
+          {nombreDeMembres > 0 && (
+            <Button variant="link" size="sm" className="oto-share-members" aria-expanded={ouverte} aria-controls={`${id}-membres`} iconEnd={CHEVRON} onClick={() => setDeplie(!deplie)}>
+              {PARTAGE.membres(nombreDeMembres)}
+            </Button>
+          )}
+        </span>
+        <NiveauDeLEquipe {...props} />
+      </li>
+      {ouverte && (
+        <li id={`${id}-membres`} className="oto-share-members-list">
+          {membres}
+          {props.gere && <p className="oto-caption">{ACCES_GENERAL.responsableGarde}</p>}
+        </li>
+      )}
     </>
   )
 }
@@ -162,8 +201,8 @@ function LigneDeLOrganisation({ noeud, organisation, nomOrganisation, gere, gest
   )
 }
 
-/** Les deux lignes de l'accès par défaut ; dans Privé, la seule phrase de l'espace (le service refuse d'ouvrir, ADR-014 § 2). */
-export function AccesParDefaut(props: AccesParDefautProps) {
+/** L'accès par défaut : toute l'organisation ; dans Privé, la seule phrase de l'espace (le service refuse d'ouvrir, ADR-014 § 2). */
+export function AccesParDefaut(props: Omit<AccesParDefautProps, "equipe">) {
   const { noeud, gere } = props
   if (noeud.owner.kind === "user") {
     return (
@@ -176,10 +215,5 @@ export function AccesParDefaut(props: AccesParDefautProps) {
       </>
     )
   }
-  return (
-    <>
-      {noeud.owner.kind === "team" && <LigneDeLEquipe {...props} />}
-      <LigneDeLOrganisation {...props} />
-    </>
-  )
+  return <LigneDeLOrganisation {...props} />
 }

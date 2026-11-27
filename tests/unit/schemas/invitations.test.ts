@@ -29,15 +29,17 @@ describe("inviteSchema", () => {
     expect(inviteSchema.safeParse({ email: "a@x.test", role: "owner" }).success).toBe(false)
   })
 
-  it("should read an empty team as no team", () => {
-    expect(inviteSchema.parse({ email: "a@x.test", teamId: "" }).teamId).toBeUndefined()
-    expect(inviteSchema.parse({ email: "a@x.test", teamId: null }).teamId).toBeUndefined()
+  it("should read no team, an empty team and a null team as no team", () => {
+    expect([{}, { teamId: "" }, { teamId: null }, { teamIds: [] }].map((teams) => inviteSchema.parse({ email: "a@x.test", ...teams }).teamIds)).toEqual([[], [], [], []])
   })
 
-  it("should keep a valid team id and reject an invalid one", () => {
-    const teamId = randomUUID()
-    expect(inviteSchema.parse({ email: "a@x.test", teamId }).teamId).toBe(teamId)
+  it("should give every team once, the single team of the older form first, and reject an invalid id or more than 50 teams", () => {
+    const [a, b] = [randomUUID(), randomUUID()]
+    expect(inviteSchema.parse({ email: "a@x.test", teamId: a, teamIds: [b, a, b] }).teamIds).toEqual([a, b])
+    expect(inviteSchema.parse({ email: "a@x.test", teamId: a })).toEqual({ email: "a@x.test", role: "member", teamIds: [a] })
     expect(inviteSchema.safeParse({ email: "a@x.test", teamId: "ventes" }).success).toBe(false)
+    expect(inviteSchema.safeParse({ email: "a@x.test", teamIds: ["ventes"] }).success).toBe(false)
+    expect(inviteSchema.safeParse({ email: "a@x.test", teamIds: Array.from({ length: 51 }, () => randomUUID()) }).success).toBe(false)
   })
 })
 

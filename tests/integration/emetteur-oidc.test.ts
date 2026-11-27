@@ -311,7 +311,7 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "issuer wired to the gates (E01-
     const [row] = await seed.admin`select id, revoked_at from platform.invitations where org_id = ${org.id} and email = ${email}`
 
     expect(response.status).toBe(201)
-    expect(body.data).toEqual({ invitation: { id: row.id, email, role: "member", teamId: null, expiresAt: expect.any(String) }, emailed: true })
+    expect(body.data).toEqual({ invitation: { id: row.id, email, role: "member", teamId: null, teamIds: [], expiresAt: expect.any(String) }, emailed: true })
     expect(row.revoked_at).toBeNull()
     expect(relay.sent).toHaveLength(1)
     const [message] = relay.sent

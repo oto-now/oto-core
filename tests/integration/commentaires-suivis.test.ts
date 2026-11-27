@@ -8,8 +8,8 @@
 // Suite portable.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { resolveIdentity, type Identity, type PlatformDb } from "@otomata_tech/oto_platform/server"
-import { homeComments, pagesWithNewComments } from "../../packages/plateforme/server/comments/followed"
-import { postComment, setThreadStatus } from "../../packages/plateforme/server/comments/threads"
+import { followedThreads, homeComments, pagesWithNewComments } from "../../packages/plateforme/server/comments/followed"
+import { listComments, postComment, setThreadStatus } from "../../packages/plateforme/server/comments/threads"
 import { recentBlock } from "../../packages/plateforme/server/context/blocks/recent"
 import { recordNodeView } from "../../packages/plateforme/server/node-views"
 import { day } from "../../packages/plateforme/server/nodes/read-format"
@@ -131,6 +131,41 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
     const afterAReply = await unreadOf()
 
     expect([before, afterTheView, afterAReply]).toEqual([[[thread, true]], [[thread, false]], [[thread, true]]])
+  })
+
+  it("should mark unread on the screen of the page exactly the threads that the follow-up of the home marks unread, before and after a visit (D8)", async () => {
+    const p = await page("Barème des frais")
+    const mention = await post("marc", { path: p.path, text: `@${o.people.lea.name} le barème est-il signé ?` })
+    const talk = await post("lea", { path: p.path, text: "Qui valide les frais ?" })
+    await post("marc", { path: p.path, thread: talk, text: "Claire, je crois." })
+    const resolved = await post("marc", { path: p.path, text: `@${o.people.lea.name} ancien point.` })
+    await setThreadStatus(as("marc").db, as("marc").identity, resolved, { status: "resolved" })
+    const readers = ["claire", "lea", "marc"] as const
+    /** Pour chacun, les fils non lus : par l'écran de la page (`listComments`), puis par le suivi de l'accueil (`followedThreads`). */
+    const unread = async () =>
+      Object.fromEntries(
+        await Promise.all(
+          readers.map(async (who) => {
+            const { db, identity } = as(who)
+            const screen = (await listComments(db, identity, p.path)).threads.filter((thread) => thread.unread).map((thread) => thread.id)
+            const followed = (await followedThreads(db, identity, null)).filter((thread) => thread.node.path === p.path && thread.others.some((one) => one.unseen)).map((thread) => thread.id)
+            return [who, [screen.sort(), followed.sort()]]
+          }),
+        ),
+      )
+
+    const before = await unread()
+    await recordNodeView(as("lea").db, as("lea").identity, { path: p.path })
+    const afterLeasVisit = await unread()
+
+    // Claire mène l'équipe propriétaire : les deux nouveaux fils ouverts l'attendent ; Marc n'a que ses propres commentaires
+    // et la réponse à Léa ; le fil résolu n'est non lu pour personne.
+    expect(before).toEqual({
+      claire: [[mention, talk].sort(), [mention, talk].sort()],
+      lea: [[mention, talk].sort(), [mention, talk].sort()],
+      marc: [[], []],
+    })
+    expect(afterLeasVisit).toEqual({ ...before, lea: [[], []] })
   })
 
   it("should leave out a resolved thread, a thread of a trashed page and of a page the person no longer reads, on the home and in context (AC4)", async () => {

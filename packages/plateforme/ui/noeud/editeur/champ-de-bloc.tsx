@@ -1,8 +1,8 @@
 "use client"
 
 // Le champ d'un bloc (E05-S02 ; E05-S08, AC1, AC7, AC9 ; E05-S09, partie c1) : un `<textarea>` natif, monté quand
-// le bloc est touché ou sous la souris (1.1.3, qui remplace le champ toujours monté de la fiche D21 B ; ailleurs, le bloc
-// se lit dans `ChampAuRepos`), dont la hauteur suit le texte, au nom accessible obligatoire, sans fond ni bordure au repos
+// le bloc est touché (1.1.3, qui remplace le champ toujours monté de la fiche D21 B ; ailleurs, le bloc se lit dans
+// `ChampAuRepos`), dont la hauteur suit le texte, au nom accessible obligatoire, sans fond ni bordure au repos
 // ni au focus : seul le curseur se voit, et la gouttière de sa rangée paraît (HN-E05S08-4). Une liste porte ses
 // repères (puces, numéros à partir de `start`, cases) sur la copie de ses éléments (`elements-de-liste.tsx`).
 // Sa frappe, sa sortie et son clavier vont aux gestes de l'éditeur. Sans lui, un bloc ne s'écrit pas.
@@ -21,7 +21,7 @@
 //
 // E05-S11 : au repos, un texte qui porte des liens se lit comme en lecture, liens dans la phrase (retour 11, fiche
 // D107) : son rendu est posé sur le champ, dans la même case, le champ transparent dessous ; au focus, le rendu
-// s'efface et le texte brut paraît (`editeur.css`). Un clic hors d'un lien traverse le rendu jusqu'au champ ; un
+// s'efface et le texte brut paraît (`editeur.css`). Un clic hors d'un lien, sur le rendu, ouvre le champ au caractère cliqué ; un
 // clic sur un lien ouvre son panneau (E11-S06). Le champ monté reste le même élément : aucun focus perdu quand un lien paraît. Tout
 // le texte sélectionné ouvre le menu de la poignée (AC-28) ; Échap ou la frappe suivante le referme.
 //
@@ -47,13 +47,17 @@
 //
 // E11-S17 (lot a) : ⌘A une seconde fois, le texte déjà tout sélectionné ou le bloc vide, prend tous les blocs de la page
 // (AC-a2, `selection-de-blocs.ts`).
+//
+// L'édition au clic, sans la déclencher par erreur : le survol ne monte plus le champ ; un clic qui ne laisse aucune
+// sélection de texte l'ouvre, curseur au caractère cliqué ; un glissé ou un appui long au doigt laissent le texte lu,
+// sélectionné à travers les blocs, à copier.
 import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type SyntheticEvent } from "react"
 import type { Resultat } from "../../api/resultat"
 import { aDesLiens, aDuBalisage, type CiblesDesLiens } from "../en-ligne"
 import { LIEN_DU_BLOC } from "../libelles"
 import { EnLigne } from "../rendu-des-blocs"
 import { tableauColle } from "./blocs-de-page"
-import { ChampAuRepos, DiagrammeAuRepos } from "./champ-au-repos"
+import { ChampAuRepos, DiagrammeAuRepos, rangAuClic } from "./champ-au-repos"
 import { ListeDesChoix, useChoixParBarre } from "./choix-de-bloc"
 import { idDOption, ListeACiter, useCitation } from "./citer"
 import { ElementsDeListe } from "./elements-de-liste"
@@ -74,13 +78,6 @@ export type LiensDesBlocs = { prefixe: string; cibles?: CiblesDesLiens; lecture?
 /** Les touches qui ne font que préparer une autre : elles ne ferment pas le menu ouvert par la sélection. */
 const MODIFICATEURS = new Set(["Shift", "Control", "Alt", "Meta"])
 
-/**
- * Le bloc survolé en dernier, qui démonte son champ quand un autre l'est : un départ du pointeur que le navigateur ne
- * signale pas (le champ monté sous lui, un défilement) ne laisse jamais qu'un champ monté par le survol. Son `setState`,
- * stable d'un rendu à l'autre ; `null` quand le pointeur a quitté le dernier bloc survolé.
- */
-let survolEnCours: ((survole: boolean) => void) | null = null
-
 type ChampDeBlocProps = {
   cle: string
   texte: string
@@ -100,7 +97,7 @@ type ChampDeBlocProps = {
   liens: LiensDesBlocs | null
   /** Le menu de la poignée est ouvert par la sélection de tout le texte (AC-28). */
   menuOuvert: boolean
-  /** Le bloc touché : le `<textarea>` est monté ; sinon le bloc se lit (`ChampAuRepos`), sauf sous la souris. */
+  /** Le bloc touché : le `<textarea>` est monté ; sinon le bloc se lit (`ChampAuRepos`). */
   ouvert: boolean
   /** L'invite du champ vide : le Texte d'une page vide (E11-S05, AC-g1). */
   invite?: string
@@ -108,10 +105,7 @@ type ChampDeBlocProps = {
   joindre?: (quoi: Genre) => void
   /** « / » propose « Intégration », un cadre écrit après le bloc (1.4.3). */
   integrer?: () => void
-  /**
-   * Un diagramme non vide tel qu'à la lecture (1.1.4) : au repos, il remplace le texte brut (`DiagrammeAuRepos`) ; le
-   * survol ne monte pas le champ, qui cacherait le dessin sous la souris.
-   */
+  /** Un diagramme non vide tel qu'à la lecture (1.1.4) : au repos, il remplace le texte brut (`DiagrammeAuRepos`). */
   diagrammeLu?: ReactNode
 }
 
@@ -199,11 +193,9 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
   const choix = useChoixParBarre(texte, (un) => gestes.remplacerParChoix(cle, un), joindreParBarre, integrerParBarre)
   // Le focus du champ choisit ce que montre la copie d'une liste : son texte brut au focus, son rendu au repos (E11-S06).
   const [auFocus, setAuFocus] = useState(false)
-  // Sous la souris, le `<textarea>` est monté avant l'appui : le clic pose le curseur, le glissé sélectionne, comme partout.
-  const [survole, setSurvole] = useState(false)
   // Un champ qui a le focus reste monté jusqu'à sa sortie, même quand un geste en ouvre un autre : démonté avec le focus,
   // il ne recevrait pas de `blur`, et son texte ne partirait pas (ni son bloc vidé ne se retirerait).
-  const monte = ouvert || auFocus || (survole && diagrammeLu === undefined)
+  const monte = ouvert || auFocus
   const enListe = genre === "list" || genre === "checklist"
   // Au focus, les liens se montrent réduits à leur titre, la source gardée de côté (story `liens-en-edition`).
   const masque = useLiensMasques(texte, liens !== null, enListe, champ)
@@ -254,6 +246,17 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
   const toutSelectionner = (evenement: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((evenement.metaKey || evenement.ctrlKey) && evenement.key.toLowerCase() === "a") selectionner(evenement)
   }
+  // Un clic sur le bloc lu (son texte brut, son rendu ou la copie d'une liste) ouvre le champ au caractère cliqué, sauf
+  // sur un lien (il se suit) ou une case, et sauf s'il laisse une sélection de texte : on lit et on copie sans éditer.
+  const ouvrirAuClic = (evenement: MouseEvent<HTMLElement>) => {
+    const cible = evenement.target
+    if (monte || evenement.button !== 0 || !(cible instanceof Element) || cible.closest("a, input, button, label")) return
+    const pile = evenement.currentTarget
+    const selection = pile.ownerDocument.getSelection()
+    if (selection !== null && !selection.isCollapsed) return
+    const lu = pile.querySelector<HTMLElement>("[data-au-repos]")
+    gestes.ouvrirLeChamp(cle, (lu && rangAuClic(pile, lu, evenement.clientX, evenement.clientY)) ?? texte.length)
+  }
   // Le panneau « Lien » ouvert au repos par le menu contextuel : le champ reste monté, le panneau lui rend le focus.
   const menuContextuel = (evenement: MouseEvent<HTMLElement>) => {
     lien.menuContextuel(evenement)
@@ -273,16 +276,7 @@ export function ChampDeBloc({ cle, texte, nom, decritPar, genre, debut, cases, l
       <span
         className="oto-block-pile"
         onContextMenuCapture={menuContextuel}
-        onPointerEnter={(evenement) => {
-          if (evenement.pointerType !== "mouse" || survole) return
-          if (survolEnCours !== setSurvole) survolEnCours?.(false)
-          survolEnCours = setSurvole
-          setSurvole(true)
-        }}
-        onPointerLeave={() => {
-          setSurvole(false)
-          if (survolEnCours === setSurvole) survolEnCours = null
-        }}
+        onClick={ouvrirAuClic}
       >
         {/* La copie d'une liste précède le champ : ses cases, à gauche du texte, viennent avant lui au clavier. */}
         {enListe && <ElementsDeListe cle={cle} texte={miroir ? masque.visible : texte} genre={genre} debut={debut} cases={cases} lectureSeule={lectureSeule} rendu={auRepos && !auFocus ? liens : null} miroir={miroir ? morceauxParLigne(masque.masque) : null} />}
