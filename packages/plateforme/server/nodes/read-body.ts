@@ -6,8 +6,8 @@
 import { findSections, splitSections, type ReadNodeInput } from "../../schemas"
 import { ACCESS_LEVELS, type AccessLevel } from "../access"
 import { PlatformError } from "../errors"
-import { blocksSize, displayRefs, formatCount, type DocBlock } from "./document"
-import { PAGE_FULL_MAX } from "./limits"
+import { blocksSize, displayRefs, formatCount, headingLevel, type DocBlock } from "./document"
+import { OUTLINE_FILES_MAX, PAGE_FULL_MAX } from "./limits"
 import type { NodeRow } from "./lookup"
 import { plural, quotedList } from "./op-kit"
 import { diffLines, outlineLines, outlineOf, renderServed, startOfPageLines, type ReferenceRender, type Version } from "./read-format"
@@ -52,7 +52,33 @@ function footerOf(request: BodyRequest): string[] {
   return lines
 }
 
-/** Le plan servi (AC7, AC8) : compte, une ligne par titre, puis comment lire une section. */
+/**
+ * Les fichiers joints d'une page servie en plan : sans ces lignes, un assistant qui ne reçoit que les titres ignore que
+ * la page en porte, et devrait lire chaque section pour le découvrir. Une ligne par fichier, celle que la page sert
+ * (`[nom (taille, type)](adresse)`), puis la section qui le range ; bornées, puis comment en lire le texte. Rien pour
+ * une page sans fichier joint : son plan ne change pas.
+ */
+function fileLines(request: BodyRequest): string[] {
+  let section: string | null = null
+  const files: string[] = []
+  for (const block of request.blocks) {
+    if (headingLevel(block) !== null) section = block.text ?? ""
+    else if (block.type === "file") {
+      const where = section === null ? "at the start of the page" : `in « ${section} »`
+      files.push(`- ${renderServed([block], null, request.reference, request.fileRoute)} ${where}`)
+    }
+  }
+  if (files.length === 0) return []
+  const more = files.length - OUTLINE_FILES_MAX
+  return [
+    `files (${formatCount(files.length)}):`,
+    ...files.slice(0, OUTLINE_FILES_MAX),
+    ...(more > 0 ? [`- … and ${formatCount(more)} more`] : []),
+    `Read the text of a file with ${request.prefix}_read ${callArguments({ path: request.context.node.path, file: "<id>" })}: its id ends its address.`,
+  ]
+}
+
+/** Le plan servi (AC7, AC8) : compte, une ligne par titre, comment lire une section, puis les fichiers joints. */
 function outlineText(request: BodyRequest, refs: Map<DocBlock, string> | null, over: boolean): string {
   const { blocks, prefix, input } = request
   const entries = outlineOf(blocks, refs)
@@ -63,6 +89,7 @@ function outlineText(request: BodyRequest, refs: Map<DocBlock, string> | null, o
     ...startOfPageLines(blocks),
     ...outlineLines(entries, refs !== null),
     `Read one with ${prefix}_read ${callArguments({ path: request.context.node.path, ...flags, section: "<title>" })}.`,
+    ...fileLines(request),
   ].join("\n")
 }
 
