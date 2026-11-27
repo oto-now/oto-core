@@ -43,6 +43,7 @@ import { LiensDeLEnTete } from "./liens-de-l-en-tete"
 import { PartageDuNoeud } from "./partage-du-noeud"
 import { PiedDuNoeud } from "./pied-du-noeud"
 import { ciblesDesLiens, nomsDesContextes } from "./sous-pages"
+import { VeilleDeLaPage } from "./veille-de-la-page"
 import { VisionneuseDeFichier } from "./visionneuse-de-fichier"
 
 type Equipe = { slug: string; name: string }
@@ -198,12 +199,14 @@ function PageDuNoeud(props: PageDuNoeudProps) {
   )
   const pied = <PiedDuNoeud vue={vue} arbre={arbreLu} liens={props.liens} contextes={contextes} ici={props.ici} avant={props.piedDeColonne} {...navigation} />
   // L'en-tête et le corps sont frères dans le contenu ; l'en-tête prend la largeur du contenu quel que soit le genre, son
-  // titre et sa méta alignés sur la colonne du document (`product.css`) ; le texte posé à plat, puis le pied ; un panneau
-  // ouvert (commentaires, historique) se pose à droite (`ColonnesDuNoeud`). Un tableau garde toute la largeur (AC-e3) :
-  // sa grille encadrée, ses agrégats, puis le pied.
+  // titre et sa méta alignés sur la colonne du document (`product.css`) ; la ligne du genre, le bandeau de la veille de la
+  // page ouverte (retour RET-008, brief § 5.1 point 5 : une ligne en `Alert` sous la méta, rien tant qu'elle n'a pas
+  // changé ailleurs), le texte posé à plat, puis le pied ; un panneau ouvert (commentaires, historique) se pose à droite
+  // (`ColonnesDuNoeud`). Un tableau garde toute la largeur (AC-e3) : sa grille encadrée, ses agrégats, puis le pied.
   const colonnes = (
     <ColonnesDuNoeud mesure={vue.kind === "table" ? undefined : "document"}>
       {lead}
+      <VeilleDeLaPage chemin={vue.path} revision={vue.revision} />
       <CorpsDuNoeud {...corps} />
       {pied}
     </ColonnesDuNoeud>

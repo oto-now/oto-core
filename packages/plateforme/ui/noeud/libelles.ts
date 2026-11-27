@@ -18,6 +18,12 @@ export const PAGE_VIDE = "Cette page n'a pas encore de contenu."
 export const ARBRE_TRONQUE = "L'arbre n'affiche que les 5 000 premiers nœuds."
 
 /** Les mots de l'écran porté d'oto-frontend (E05-S09, partie c1) : en-tête, états, accès, sous-pages. */
+/** La veille d'une page ouverte (retour RET-008) : modifiée ailleurs pendant qu'on y écrit. */
+export const VEILLE = {
+  modifiee: "Cette page a été modifiée ailleurs, par un assistant ou une autre personne.",
+  recharger: "Recharger la page",
+} as const
+
 export const ECRAN = {
   /** Le titre d'un écran qui n'a pas de nœud à nommer (lecture en échec). */
   page: "Page",

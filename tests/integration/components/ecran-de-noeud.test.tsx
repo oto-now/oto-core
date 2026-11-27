@@ -300,7 +300,8 @@ describe("EcranDeNoeud, le pied et les liens (refonte #217, #218 ; E11-S05, AC-e
     await act(async () => {
       rendre({ liens: lecture })
     })
-    expect(screen.getByRole("status")).toHaveTextContent("Lecture des liens…")
+    // La veille de la page (retour RET-008) a aussi sa région `status`, vide : on vise celle des liens.
+    expect(screen.getByText("Lecture des liens…")).toHaveAttribute("role", "status")
     await act(async () => {
       servir({ error: "Une erreur est survenue. Réessayez." })
     })
