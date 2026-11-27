@@ -281,7 +281,7 @@ async function identityAtHost(
   })
 }
 
-type MemberRow = { role: string; profile: Json }
+type MemberRow = { role: string; profile: Json; name: string | null }
 
 /**
  * Ce que l'identité lit de la personne dans l'organisation, en une fois : sa ligne `members`, les
@@ -294,7 +294,7 @@ type MemberRow = { role: string; profile: Json }
  */
 async function personInOrg(sql: Tx, orgId: string, userId: string) {
   const [members, teams, memberships, staff] = await Promise.all([
-    sql<MemberRow[]>`select role, profile from platform.members where org_id = ${orgId} and user_id = ${userId}`,
+    sql<MemberRow[]>`select role, profile, name from platform.members where org_id = ${orgId} and user_id = ${userId}`,
     sql<TeamRow[]>`select id, slug, name from platform.teams where org_id = ${orgId} order by id`,
     sql<{ team_id: string; role: string }[]>`select team_id, role from platform.team_members where user_id = ${userId}`,
     sql<{ user_id: string }[]>`select user_id from platform.platform_staff where user_id = ${userId}`,
@@ -332,7 +332,8 @@ export async function identityInOrg(
     const role: MemberRole = member ? memberRole(member.role) : "admin"
     return {
       org,
-      user: { id: caller.userId, email: caller.email, name: profile.name ?? caller.email.split("@")[0] },
+      // Le nom du profil, sinon celui du compte (copie des claims, tenue à chaque connexion), comme l'annuaire.
+      user: { id: caller.userId, email: caller.email, name: profile.name ?? (member?.name?.trim() || caller.email.split("@")[0]) },
       member: { role, profile },
       teams: identityTeams(teams, memberships),
       isStaff,

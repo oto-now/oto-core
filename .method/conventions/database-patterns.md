@@ -101,6 +101,11 @@ CREATE TRIGGER set_updated_at
   `git diff --name-status --diff-filter=A <tag précédent> <tag> -- packages/plateforme/migrations` liste plus d'un
   fichier `.sql` ; `pnpm check:migrations` et le job `bare-postgres` passent sur le fichier fusionné ;
   `supabase migration list` du projet de test est égal aux fichiers de `main`.
+- **Une migration de développement fusionne avec un horodatage postérieur au dernier fichier de version de `main`** :
+  une version publiée entre son écriture et sa fusion la renomme, car un projet déjà monté à cette version recevrait
+  une migration à insérer avant sa dernière, que `supabase db push` refuse sans `--include-all`. **Vérifiable :**
+  dans `packages/plateforme/migrations`, aucun fichier sans `_vX_Y_Z` ne précède, dans l'ordre des noms, le dernier
+  `_vX_Y_Z.sql`.
 - **Une table dérivée avec organisation se range dans `NEVER_EXPORTED`** (`scripts/lib/org-transfer.mjs`) : elle se
   recalcule depuis les tables qu'elle résume, et un import ne l'écrit jamais (`lexicon`). **Vérifiable :** le
   test de la carte `TABLES` (`tests/integration/org-transfer.test.ts`) nomme chaque table du projet, exportée ou non.

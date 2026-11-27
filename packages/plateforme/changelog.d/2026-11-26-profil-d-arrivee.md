@@ -1,0 +1,3 @@
+### Hosts
+- Migrations: apply `20261125160000_platform_profil_d_arrivee.sql` (development file, merged into the version's single file before the tag): a person who creates an organisation (`signup_org`, or `create_org` then `claim_org_admin`) and arrives there without a profile name takes the names of their profile in another organisation, each cut to 80 characters; joining someone else's organisation leaves the profile blank. No existing row is rewritten; the package does not depend on it.
+- Server: the identity names a person without a profile name by their account name (`members.name`) before the start of their email, as the directory does.

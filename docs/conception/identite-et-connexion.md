@@ -1,7 +1,7 @@
 # Identité et connexion
 
 - **Statut** : validé avec JB le 23/09/2026
-- **Dernière révision** : 2026-11-22
+- **Dernière révision** : 2026-11-26
 
 ## Résumé
 
@@ -30,6 +30,7 @@ Une personne a un compte dans l'annuaire de l'application hôte : il sert aux é
 - E02-S01 N9 : sans session, l'API répond 401 avec le code `forbidden` ; le statut porte la différence.
 - H18 : `members.role` n'admet que `admin` et `member`. E02-S01 N8 : `teams.lead_user_id` est la seule source du responsable d'une équipe ; le rôle d'équipe de l'identité (`lead` ou `member`) en est dérivé (amendé depuis par D128, [droits d'accès](droits-d-acces.md)).
 - D27 : `members.email` et `members.name` sont des copies tenues par l'outillage et par la session ; l'annuaire (`member_directory`) les lit là, jamais dans `auth.users`. HN-M08-5 : sous une session, une ligne `members` qui change de `user_id` perd l'email, le nom et la dernière connexion de la précédente ; si la personne nouvelle est l'appelante, elle reçoit les copies de ses claims.
+- **Le nom d'une personne qui arrive dans un espace** : un profil (`members.profile`) est propre à chaque espace. Seulement dans un espace qu'elle crée elle-même (déclencheur `members_profile_on_arrival` : l'organisation est née dans la transaction de son arrivée, `orgs.created_at = now()`, et n'a encore aucun membre, ce que font `signup_org` et `create_org` suivi de `claim_org_admin`), un profil sans nom reprend le nom, le prénom et le nom de famille de son profil dans l'espace qu'elle a rejoint le plus récemment, chacun coupé à 80 caractères, la borne d'`update_my_profile` (le nom est servi aux assistants) ; sans profil nommé ailleurs, rien n'est copié. Rejoindre l'espace d'un autre (invitation, entrée par domaine, outillage) laisse le profil vierge : le nom qu'elle porte ailleurs n'y entre pas sans elle, qui peut s'y nommer autrement. L'identité (`identityInOrg`) nomme une personne par le nom de son profil, sinon par celui de son compte (`members.name`, copie des claims tenue à chaque connexion), sinon par le début de son email, comme l'annuaire (`member_directory`) : copié dans le profil, le nom du compte s'y figerait. Un profil qui porte déjà un nom n'est pas touché ; un nom changé ensuite dans un espace ne change pas les autres ; les lignes existantes ne sont pas reprises. Sans lui, une personne qui créait un espace y apparaissait sous le début de son email.
 - E02-S01 N17 : `unique_handle` translittère aussi les majuscules accentuées avant `lower()` : sous une ctype `C`, `lower()` ne touche que l'ASCII.
 
 ### Émetteur : un hôte, un émetteur
@@ -90,6 +91,7 @@ Une personne a un compte dans l'annuaire de l'application hôte : il sert aux é
 - **Identification par adresse réseau ou empreinte UA + IP** : inutilisable, les hosts changent d'adresse à chaque requête (mesuré au banc).
 - **Compte de service pour les routines** : écarté en V1 ; un jeton de service haché émis dans l'écran admin reste une piste V2.
 - **Refus d'invitation par l'invité** : non construit (E02-S01 N5).
+- **Le nom recopié dans tout espace rejoint** : gênant pour qui porte un autre nom selon l'espace, le profil étant propre à chacun. Écarté pour la copie dans les seuls espaces qu'elle crée, le cas qui a motivé la règle ; **proposer le nom prérempli, à valider à l'arrivée**, l'autre voie proposée en relecture, n'a pas été retenue par JB.
 - **CAPTCHA sur l'inscription ouverte** : D13 accepte que l'API publique de Supabase distingue une adresse invitée d'une autre, sans CAPTCHA, `/login` répondant pareil pour toute adresse.
 
 ## Sécurité et confidentialité
@@ -124,5 +126,7 @@ Aucune à ce jour.
 - 2026-10-19 : le lien de l'invitation d'un administrateur nommé par l'équipe plateforme suit la même règle (`linkOrigin`), `x-forwarded-proto` n'étant plus lu — décidé par Alexis (source : écart relevé avec le correctif de l'origine des liens sortants).
 
 - 2026-10-20 : connexion par l'adresse d'abord, accueil d'une invitation (mot de passe, fournisseur ou plus tard), organisations de la personne à l'adresse commune — demandé par JB (source : session du 20/10/2026).
+- 2026-11-19 : le profil d'une personne qui arrive dans un espace reprend son nom d'un autre espace, et l'identité prend le nom du compte en secours — décidé par JB (source : retour d'usage RET-010).
+- 2026-11-26 : le nom n'est recopié que dans un espace que la personne crée elle-même, coupé à 80 caractères ; rejoindre l'espace d'un autre laisse le profil vierge — décidé par JB (source : relecture de sécurité d'Alexis de la pull request du profil d'arrivée).
 - 2026-11-13 : le contact d'une organisation (`org_contact`) n'est plus rendu à un non-membre ; l'écran « aucune organisation » ne le nomme plus — décidé par JB (source : retour d'audit d'un hôte du 13/11/2026).
 - 2026-11-22 : une personne s'inscrit en attente sans email, par l'hôte qui tient son annuaire (`member.add`) ; une équipe au plus, comme toute invitation, et sans échéance (migration `20261122184838`) : l'hôte prévient lui-même la personne, qui peut se connecter des semaines plus tard — demandé par le responsable d'Oto (source : besoin d'un hôte en marque blanche, 22/11/2026).
