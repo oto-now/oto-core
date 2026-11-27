@@ -15,7 +15,8 @@ import { callData, fittedPage, HIDDEN_ARGS, summaryData, type PageFrame, type Pa
 import { readConversation, readConversations } from "../../../server/journal-read"
 import { oneLine, plural, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 
-const RESTARTED = "The cursor is no longer valid: this is the first page again."
+/** Un curseur qui ne mène plus à rien : la première page, dite par `admin_journal` et `admin_connector catalogue`. */
+export const RESTARTED = "The cursor is no longer valid: this is the first page again."
 const TRUNCATED = "The period has more than 2,000 calls: only the most recent are grouped here. Narrow the period or filter."
 
 /** Le plus grand nombre d'éléments qui tiennent sous le plafond (H26, AC22), une ligne chacun, la suite par `next_cursor`. */

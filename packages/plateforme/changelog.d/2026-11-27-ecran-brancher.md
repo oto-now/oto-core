@@ -1,2 +1,4 @@
 ### Hosts
 - UI: `EcranConnexion` (`/connect`) shows the guide in two times, add the connector (with direct links to Claude, ChatGPT and Mistral) then paste the sentence in the personal preferences, which names the connector by the same name as the Copy field, under a status line of the last connections; no tabs, no Claude Code, no requests to try. Its `prompts` prop stays accepted and is no longer read.
+- Server: `lastConnections` names each family by its assistant, like the usage statistics: `Claude` (claude.ai, Claude Desktop and Claude Code in one line), `ChatGPT`, `Mistral`; `claude.ai` and `Claude Code` are no longer returned.
+- UI: `Progress` (`label`, `value`, `max`), the design system's progress bar named by its label, is exported; the sentence of the guide is the same for every assistant.

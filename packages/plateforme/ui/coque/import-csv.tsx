@@ -6,7 +6,7 @@
 // le fichier, un aperçu des 20 premières lignes (`Table`), puis l'envoi par lots de 500 avec sa progression et la
 // reprise d'un lot refusé. Le fichier est lu par le navigateur, jamais téléversé : seules partent les lignes, en
 // JSON. Fichier à part du dialogue (`import-de-fichier.tsx`) pour la borne de 300 lignes d'ESLint.
-import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
   checkImport,
   CSV_SEPARATORS,
@@ -24,6 +24,7 @@ import { COLUMN_TYPES, KEY_COLUMN_TYPES } from "../../schemas/tables"
 import { messageDErreur } from "../api/messages"
 import { Field } from "../ds/react/forms"
 import { Alert, Button } from "../ds/react/primitives"
+import { Progress } from "../ds/react/progress"
 import { Select } from "../ds/react/select"
 import { Table, type Column } from "../ds/react/table"
 import { nombreLisible } from "../format/nombres"
@@ -147,21 +148,6 @@ function phraseDuRefus(refus: Refus): string {
   return refus === "adresses" ? IMPORT.aucuneAdresse : messageDErreur(refus, IMPORT.refus)
 }
 
-/** La progression de l'envoi (AC-b3) : la barre du design system (`oto-progress`), nommée par son libellé. */
-function Progression({ faites, total }: { faites: number; total: number }) {
-  const id = useId()
-  return (
-    <div>
-      <div className="oto-progress-label">
-        <span id={id}>{IMPORT.progression}</span>
-      </div>
-      <div className="oto-progress" role="progressbar" aria-labelledby={id} aria-valuemin={0} aria-valuemax={total} aria-valuenow={faites}>
-        <div className="oto-progress-bar" style={{ "--progress": `${(faites / Math.max(total, 1)) * 100}%` } as CSSProperties} />
-      </div>
-    </div>
-  )
-}
-
 export function ReglagesDuCsv(proprietes: Proprietes) {
   const { octets, tableau } = proprietes
   const [encodage, setEncodage] = useState<Encodage>(() => encodageDe(octets))
@@ -200,7 +186,8 @@ export function ReglagesDuCsv(proprietes: Proprietes) {
       {controle?.tooLarge && <Alert tone="fail">{IMPORT.tropGrand}</Alert>}
       {controle && <Problemes problemes={controle.problems} />}
       {plan && <Apercu plan={plan} />}
-      {envoi.progression && <Progression {...envoi.progression} />}
+      {/* La progression de l'envoi (AC-b3). */}
+      {envoi.progression && <Progress label={IMPORT.progression} value={envoi.progression.faites} max={envoi.progression.total} />}
       {envoi.arret && (
         <Alert tone="fail" actions={<Button onClick={() => void envoi.envoyer(envoi.arret?.faites ?? 0, envoi.arret?.chemin ?? null)}>{IMPORT.reprendre}</Button>}>
           {`${phraseDuRefus(envoi.arret.refus)} ${IMPORT.ecrites(nombreLisible(envoi.arret.faites), total)}`}

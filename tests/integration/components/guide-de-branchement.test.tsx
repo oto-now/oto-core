@@ -85,8 +85,8 @@ describe("GuideDeBranchement links (AC-8)", () => {
     const enOnglet = (assistant: string, href: string) => [`${assistant} (nouvel onglet)`, href, "_blank", "noopener noreferrer"]
     expect(lus).toEqual({
       [CONNECTEUR]: [
-        enOnglet("Claude", "https://claude.ai/customize/connectors"),
-        enOnglet("ChatGPT", "https://chatgpt.com/#settings/Connectors"),
+        enOnglet("Claude", "https://claude.ai/plugins?filter=connectors-only"),
+        enOnglet("ChatGPT", "https://chatgpt.com/plugins?directoryTab=personal"),
         enOnglet("Mistral", "https://chat.mistral.ai/connections"),
       ],
       [PREFERENCES]: [],

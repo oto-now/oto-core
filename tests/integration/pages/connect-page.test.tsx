@@ -43,7 +43,7 @@ beforeEach(() => {
   vi.mocked(getPlatformIdentity).mockResolvedValue({ data: { identity: IDENTITE, session: SESSION } })
   vi.mocked(getRequestOrigin).mockResolvedValue("https://acme.example.test")
   vi.mocked(usefulProcedures).mockResolvedValue([{ path: "ventes/qualifier_prospects", title: "Qualifier un prospect" }])
-  vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude Code", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
+  vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
 })
 
 afterEach(() => {
@@ -79,7 +79,7 @@ describe("/connect page reads (AC1, AC7, AC-13)", () => {
     expect(lastConnections).toHaveBeenCalledWith(SESSION.db, IDENTITE)
     expect([...document.querySelectorAll("dd code")].map((valeur) => valeur.textContent)).toEqual(["acme", "https://acme.example.test/api/mcp"])
     expect(within(screen.getByRole("list", { name: "Vos connexions" })).getByRole("listitem")).toHaveTextContent(
-      "Claude Code · dernière connexion le 23 septembre 2026",
+      "Claude · dernière connexion le 23 septembre 2026",
     )
   })
 })

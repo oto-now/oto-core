@@ -9,11 +9,14 @@ export type AdresseDeConnexion = {
   nom: string
   /** Le nom du serveur pour Claude Code : le préfixe de l'organisation. */
   nomCli: string
-  /** La phrase des préférences personnelles de claude.ai. */
+  /** La phrase des préférences personnelles, la même pour tous les assistants. */
   phrase: string
 }
 
-/** Un prompt à essayer : le titre d'une procédure, le message que `prompts/get` envoie (P37). */
+/**
+ * Un prompt à essayer : le titre d'une procédure, le message que `prompts/get` envoie (P37).
+ * @deprecated Plus lu : l'écran ne montre plus de demandes à essayer. Gardé pour qu'un hôte qui l'importe compile encore.
+ */
 export type ExempleDePrompt = { titre: string }
 
 /** La dernière connexion d'une famille d'assistants, lue au journal (`initialize`, H29). */

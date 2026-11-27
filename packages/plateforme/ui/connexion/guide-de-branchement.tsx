@@ -64,7 +64,7 @@ export function GuideDeBranchement({ adresse }: GuideDeBranchementProps) {
       <li className="space-y-2">
         <p className="oto-section-title">{GUIDE.preferences}</p>
         <ValeurCopiable valeur={adresse.phrase} cible={GUIDE.copierPhrase} />
-        {/* Les liens directs des préférences reviendront une fois relevés au banc, comme ceux du connecteur. */}
+        {/* Sans lien direct : aucune adresse des préférences personnelles n'est relevée pour ces assistants. */}
       </li>
     </ol>
   )

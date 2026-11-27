@@ -445,7 +445,7 @@ describe("TableauDuNoeud, four states (AC9)", () => {
     expect(screen.getByText("C'est votre assistant qui pourra créer et modifier ses lignes.")).toBeInTheDocument()
     expect(screen.queryByRole("table")).toBeNull()
     cleanup()
-    rendre({ lignes: lignes([], 0, 0), assistant: "claude.ai" })
+    rendre({ lignes: lignes([], 0, 0), assistant: "Claude" })
     expect(screen.getByText("C'est Claude qui pourra créer et modifier ses lignes.")).toBeInTheDocument()
     cleanup()
     rendre({ lignes: lignes([], 0, 10), parametres: { f: "statut:eq:écarté" } })

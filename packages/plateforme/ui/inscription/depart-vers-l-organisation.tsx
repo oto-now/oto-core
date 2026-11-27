@@ -6,7 +6,7 @@
 // puis la conduit à l'adresse dès qu'elle répond. Au bout de deux minutes sans réponse, il le dit et donne alors le lien
 // (jamais avant : l'adresse ne répond pas encore), sans cesser de sonder : il part seul dès qu'elle répond. Sans lui,
 // `FormulaireDInscription` porterait la sonde, ses minuteurs et cet écran.
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useState } from "react"
 import { Check } from "@phosphor-icons/react/dist/csr/Check"
 import { CircleNotch } from "@phosphor-icons/react/dist/csr/CircleNotch"
 import { adresseRepond } from "../api/client"
@@ -14,6 +14,7 @@ import { IlotDAuthentification } from "../authentification/ilot-d-authentificati
 import { LIEN } from "../components/classes"
 import { useMediaQuery } from "../ds/react/hooks"
 import { Icon } from "../ds/react/icon"
+import { Progress } from "../ds/react/progress"
 
 /** L'adresse est sondée trois secondes après chaque réponse ; le retard se dit à deux minutes d'horloge, pas au compte des
  * sondes : un onglet en arrière-plan espace ses minuteurs. */
@@ -102,9 +103,7 @@ export function DepartVersLOrganisation({ adresse }: { adresse: string }) {
         </ol>
         {etat !== "retard" && (
           <>
-            <div className="oto-progress" role="progressbar" aria-label="Mise en ligne de votre espace">
-              <div className="oto-progress-bar" style={{ "--progress": `${progres}%` } as CSSProperties} />
-            </div>
+            <Progress label="Mise en ligne de votre espace" value={progres} max={100} />
             <p className="text-sm text-ink">En général moins d&apos;une minute, deux au plus. Vous pouvez rester sur cette page : elle s&apos;ouvrira toute seule.</p>
             {/* Hauteur réservée : le texte change sans déplacer la page ; il n'est pas annoncé, seul le statut l'est. */}
             <p key={rang} className="oto-in-fade min-h-16 text-sm text-mute">

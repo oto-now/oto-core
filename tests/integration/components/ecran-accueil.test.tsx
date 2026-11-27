@@ -61,7 +61,7 @@ const DONNEES: DonneesDeLAccueil = {
   procedures: { data: [] },
 }
 
-const CLAUDE = { famille: "claude.ai", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }
+const CLAUDE = { famille: "Claude", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }
 
 
 /** Le lien de l'hôte : une ancre marquée, pour reconnaître ce qu'il rend. */
@@ -230,16 +230,16 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
   })
 
   it("should name each connected assistant with its last connection", () => {
-    monter({ data: { ...DONNEES, connexions: { data: [CLAUDE, { famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-20T09:00:00Z" }] } } })
+    monter({ data: { ...DONNEES, connexions: { data: [CLAUDE, { famille: "ChatGPT", signature: "openai-mcp@1.0.0", date: "2026-09-20T09:00:00Z" }] } } })
 
     expect(ilot(BRANCHER).getAllByRole("listitem").slice(3).map((ligne) => ligne.textContent)).toEqual([
-      "claude.ai · dernière connexion le 24 septembre 2026",
-      "Claude Code · dernière connexion le 20 septembre 2026",
+      "Claude · dernière connexion le 24 septembre 2026",
+      "ChatGPT · dernière connexion le 20 septembre 2026",
     ])
   })
 
   it("should open on « Brancher » the large window on the guide, without status line nor any link to /connect, and close it (AC-10)", async () => {
-    monter({ data: { ...DONNEES, connexions: { data: [{ famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-24T09:00:00Z" }, CLAUDE] } } })
+    monter({ data: { ...DONNEES, connexions: { data: [{ famille: "ChatGPT", signature: "openai-mcp@1.0.0", date: "2026-09-24T09:00:00Z" }, CLAUDE] } } })
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
 
     const fenetre = screen.getByRole("dialog", { name: GUIDE })

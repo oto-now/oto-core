@@ -9,6 +9,7 @@ import type { PlatformDb } from "./db"
 import { inTransaction } from "./errors"
 import type { Identity } from "./identity"
 import { MCP_RESOURCE_PATH } from "./oauth"
+import { assistantName } from "./usage-statistics"
 
 /** Ce que la page fait copier, pour l'organisation de l'adresse. */
 export type ConnectAddress = {
@@ -18,7 +19,7 @@ export type ConnectAddress = {
   name: string
   /** Nom du serveur pour Claude Code : le préfixe, en ASCII (`mcp-patterns.md § 3`). */
   cliName: string
-  /** Phrase des préférences personnelles de claude.ai : `context` chargé une fois par conversation, pour que les consignes de la personne s'appliquent aussi à une demande qui n'est pas du travail (`mcp-patterns.md § 9`) ; ses préférences vivent dans son Contexte privé, « Mes instructions » à l'écran. */
+  /** Phrase des préférences personnelles, la même pour tous les assistants : `context` chargé une fois par conversation, pour que les consignes de la personne s'appliquent aussi à une demande qui n'est pas du travail (`mcp-patterns.md § 9`) ; ses préférences vivent dans son Contexte privé, « Mes instructions » à l'écran. */
   preferenceSentence: string
 }
 
@@ -44,18 +45,15 @@ export function connectAddress(identity: Identity, origin: string): ConnectAddre
 }
 
 /**
- * Famille d'un assistant d'après la signature `client_name@version` de son `initialize` (H29, table
- * de HN-E02S04-2, empreintes du banc E03) ; une signature inconnue forme sa propre famille, nommée par
- * la partie avant `@`.
+ * Famille d'un assistant d'après la signature `client_name@version` de son `initialize` (H29) : le nom
+ * de l'assistant des statistiques (« Claude », « ChatGPT », « Mistral »…), un seul classement pour les
+ * deux écrans ; une signature inconnue forme sa propre famille, nommée par la partie avant `@`.
  */
 function hostFamily(signature: string): string {
   const at = signature.lastIndexOf("@")
   const client = at === -1 ? signature : signature.slice(0, at)
-  if (client === "claude-ai" || client.startsWith("Anthropic/")) return "claude.ai"
-  if (client === "claude-code") return "Claude Code"
-  if (client === "openai-mcp") return "ChatGPT"
-  if (client === "?" || client === "") return "Client non identifié"
-  return client
+  if (client === "?" || client.trim() === "") return "Client non identifié"
+  return assistantName(signature) ?? "Client non identifié"
 }
 
 /**

@@ -6,9 +6,10 @@
 // fichier. Comme le tableau et le repli (`tableau-edite.tsx`, `repli-edite.tsx`) : un bloc écrit par ses propres champs,
 // dont les gestes viennent du contexte de l'éditeur. Sans lui, un envoi ne se verrait pas, et une image ne se décrirait
 // qu'à travers un assistant.
-import { useEffect, useId, useState, type CSSProperties } from "react"
+import { useEffect, useId, useState } from "react"
 import { Input } from "../../ds/react/forms"
 import { Button } from "../../ds/react/primitives"
+import { Progress } from "../../ds/react/progress"
 import { CarteDeFichier } from "../fichier-du-bloc"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { RenduDUnBloc } from "../rendu-des-blocs"
@@ -39,7 +40,6 @@ export function DepotEnCours({ cle, depot }: { cle: string; depot: Depot }) {
   const apercu = useApercu(depot.genre === "image" ? depot.fichier : null)
   const nom = depot.fichier.name
   const refuse = depot.erreur !== null
-  const idDeLEnvoi = useId()
   return (
     <div className="mb-3.5 flex flex-col gap-2" aria-busy={!refuse}>
       {/* L'aperçu redit l'image dont le nom suit : décoratif. */}
@@ -53,15 +53,8 @@ export function DepotEnCours({ cle, depot }: { cle: string; depot: Depot }) {
           </p>
         </>
       ) : (
-        // La barre du design system (`oto-progress`), nommée par son libellé ; la progression va de 0 à 1.
-        <div>
-          <div className="oto-progress-label">
-            <span id={idDeLEnvoi}>{FICHIERS.envoi(nom)}</span>
-          </div>
-          <div className="oto-progress" role="progressbar" aria-labelledby={idDeLEnvoi} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(depot.progression * 100)}>
-            <div className="oto-progress-bar" style={{ "--progress": `${depot.progression * 100}%` } as CSSProperties} />
-          </div>
-        </div>
+        // La progression va de 0 à 1, montrée en pour cent.
+        <Progress label={FICHIERS.envoi(nom)} value={Math.round(depot.progression * 100)} max={100} />
       )}
       <div>
         <Button variant="ghost" size="sm" aria-label={refuse ? FICHIERS.retirerNom(nom) : FICHIERS.annulerNom(nom)} onClick={() => gestes.annulerLEnvoi(cle)}>

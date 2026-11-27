@@ -10,9 +10,7 @@ import { isSimulatedConnector } from "../../../server/connectors/modes"
 import { fittedPage, type PagePiece } from "../../../server/journal-model"
 import { normalizedText } from "../../../server/pseudonym/normalize"
 import { day, targetOf, type AdminOutput, type OpCall } from "../ops"
-
-/** Un curseur qui ne nomme plus aucun connecteur : la première page, dite comme celle d'`admin_journal`. */
-const CURSOR_RESTARTED = "The cursor is no longer valid: this is the first page again."
+import { RESTARTED } from "./journal"
 
 type Fn = { name: string; class: string }
 type ConnectorData = { name: string; kind: "simulated" | "live" | "built_in" | "application"; activable: boolean; state: string; since: string | null; functions: Fn[] }
@@ -79,7 +77,7 @@ export async function catalogue(call: OpCall): Promise<AdminOutput> {
   const cursor = typeof call.input.cursor === "string" ? call.input.cursor : null
   const found = cursor === null ? 0 : matching.findIndex((entry) => entry.name === cursor)
   const start = Math.max(found, 0)
-  const head = [...(found < 0 ? [CURSOR_RESTARTED] : []), ...(filter === null ? [] : [`${matching.length} of ${all.length} connectors match "${filter}".`])]
+  const head = [...(found < 0 ? [RESTARTED] : []), ...(filter === null ? [] : [`${matching.length} of ${all.length} connectors match "${filter}".`])]
   const pieces = matching.slice(start)
   const again = filter === null ? "with this cursor" : "with this cursor and the same filter"
   const page = fittedPage(

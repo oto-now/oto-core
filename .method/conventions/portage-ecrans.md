@@ -12,7 +12,7 @@ exclut et ce qu'exige `ui-patterns.md`, qui l'emporte (§ 8). Source en lecture 
 
 - L'application a **une seule coque** : le rail d'oto-frontend (`src/components/coque/rail-application.tsx`
   et ses voisins : entreprise en tête, Accueil, recherche, une section par espace avec le Contexte en
-  tête puis l'arbre, et le pied avec Connecteurs pour qui administre et le menu du compte : Contexte, Profil, Brancher mon Claude, ChatGPT ou Mistral, Corbeille, Déconnexion), porté dans `ui/` et monté une fois par le
+  tête puis l'arbre, et le pied avec Connecteurs pour qui administre et le menu du compte : Mes instructions, Contexte, Profil, Brancher mon Claude, ChatGPT ou Mistral, Corbeille, Déconnexion), porté dans `ui/` et monté une fois par le
   layout de l'hôte. L'hôte ne pose **aucune navigation propre**, et aucun écran ne rend un second arbre
   dans son contenu.
 - **Tout ce que l'arbre porte est une page** : page, tableau, procédure et Contexte s'ouvrent à

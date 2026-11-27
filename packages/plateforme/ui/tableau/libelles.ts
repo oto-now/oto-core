@@ -96,12 +96,11 @@ export const REVUE = {
 
 /**
  * Le nom de l'assistant de la personne dans le vide d'un tableau (E11-S05, AC-h1 ; HN-E11S05-17, HN-E11S05-18) : la
- * famille de sa connexion la plus récente (`lastConnections`), « Claude » pour claude.ai et Claude Code, « ChatGPT »,
- * sinon « votre assistant » (famille inconnue, client non identifié, aucune connexion ou lecture en échec).
+ * famille de sa connexion la plus récente (`lastConnections`), « Claude » ou « ChatGPT », sinon « votre assistant »
+ * (famille inconnue, client non identifié, aucune connexion ou lecture en échec).
  */
 export function nomDeLAssistant(famille: string | undefined): string {
-  if (famille === "claude.ai" || famille === "Claude Code") return "Claude"
-  if (famille === "ChatGPT") return "ChatGPT"
+  if (famille === "Claude" || famille === "ChatGPT") return famille
   return "votre assistant"
 }
 

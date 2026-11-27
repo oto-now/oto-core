@@ -43,7 +43,8 @@
 /* Les rôles de l'application. */
 .oto .oto-page-title  { font-size: var(--fs-xl);   font-weight: var(--fw-bold);     letter-spacing: var(--tr-2xl);  line-height: var(--lh-snug); }
 .oto .oto-card-title  { font-size: var(--fs-lg);   font-weight: var(--fw-bold);     letter-spacing: var(--tr-lg);   line-height: var(--lh-snug); }
-/* Ajouté (sans équivalent dans oto-frontend) : l'intertitre d'une partie dans un îlot, sous le titre de la carte et au corps du texte, que le poids seul distingue ; jamais en `--mute` (ui-patterns.md § Composition). */
+/* Ajouté (sans équivalent dans oto-frontend) : l'intertitre d'une partie dans un îlot, sous le titre de la carte et au corps du texte, que le poids seul distingue ; jamais en `--mute` (ui-patterns.md § Composition).
+   `--ink` tient 11,81:1 sur l'îlot et 10,49:1 sur la carte au plus bas des huit teintes, jour et nuit (la nuit, la plus basse ; ratios WCAG calculés sur les formules d'`oto.css`, comme `.oto-label`). */
 .oto .oto-section-title { font-size: var(--fs-base); font-weight: var(--fw-semibold); letter-spacing: var(--tr-base); line-height: var(--lh-snug); color: var(--ink); }
 .oto .oto-body        { font-size: var(--fs-base); font-weight: var(--fw-regular);  letter-spacing: var(--tr-base); line-height: var(--lh-normal); }
 .oto .oto-caption     { font-size: var(--fs-xs);   font-weight: var(--fw-regular);  color: var(--mute);             line-height: var(--lh-normal); }

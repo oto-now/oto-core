@@ -252,12 +252,12 @@ Delta : exploitation).
 | # | Geste et prompt | Attendu au journal |
 |---|-----------------|--------------------|
 | B1 | claude.ai : connecteur nommé comme le recommande `/connect`, phrase de préférences posée, « Actualiser la liste d'outils » ; nouvelle conversation : « Relance les devis en attente. » | `acme_context` en premier appel, `target` = la phrase |
-| B2 | ChatGPT (mode développeur) : connecteur ajouté, « Actualiser » fait, aucune phrase ; nouvelle conversation avec `@Acme Énergies` : « Qu'est-ce que je peux te demander ici ? » | `acme_context` seul |
-| B3 | Claude Code après les deux commandes de `/connect` ; nouvelle session : « Qu'est-ce que je peux te demander ici ? » | `initialize` `claude-code@…` puis `acme_context` ; la ligne « Claude Code » apparaît dans « Vos connexions » |
+| B2 | ChatGPT (mode développeur) : connecteur ajouté sous le nom que fait copier `/connect`, « Actualiser » fait, phrase de préférences posée ; nouvelle conversation avec `@acme` : « Qu'est-ce que je peux te demander ici ? » | `acme_context` seul, une fois ; jamais rappelé à chaque tour |
+| B3 | Le Chat : connecteur ajouté sous le nom que fait copier `/connect`, phrase de préférences posée ; nouvelle conversation : « Qu'est-ce que je peux te demander ici ? » | `initialize` de Le Chat puis `acme_context` ; la ligne d'état de `/connect` dit « Mistral · dernière connexion le … » |
 
 ### Contexte chargé une fois par conversation — phrase de préférences de `/connect` (organisation Démo, `demo_`)
 
-La phrase : « Au début de chaque conversation, appelle une fois l'outil de contexte du connecteur « <Nom> » : il porte mes consignes. Utilise ensuite ses autres outils seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données). ». Avec elle, N1 à N3 joués en début de conversation sur claude.ai donnent P1, plus « aucun appel ».
+La phrase, la même pour tous les assistants, au second temps du guide : « Au début de chaque conversation, appelle une fois l'outil de contexte du connecteur « <nom> » : il porte mes consignes. Mes préférences sont dans mes instructions Oto. Utilise ensuite ses autres outils seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données). ». Avec elle, N1 à N3 joués en début de conversation sur claude.ai donnent P1, plus « aucun appel ».
 
 | # | Geste et prompt | Attendu au journal |
 |---|-----------------|--------------------|
@@ -265,8 +265,10 @@ La phrase : « Au début de chaque conversation, appelle une fois l'outil de con
 | P2 | Même conversation, tour 2 : « Écris un haïku sur l'automne. » | Aucun appel |
 | P3 | Même conversation, tour 3 : une demande de travail du pilote (Q1) | La procédure est routée (`demo_context` avec `since_ctx` et la phrase, ou `demo_find`) ; aucun `demo_context` complet rechargé |
 | P4 | claude.ai : deux organisations branchées, la phrase posée pour Démo seulement ; nouvelle conversation : « Traduis « bonjour » en espagnol. » | `demo_context` seul ; le `context` de l'autre organisation jamais appelé |
-| P5 | ChatGPT, Le Chat, Claude Code, sans phrase ; nouvelle conversation : « Traduis « bonjour » en espagnol. » | Aucun appel `demo_*` |
-| P6 | Chaque assistant ; nouvelle conversation : une demande de travail du pilote (Q1) | `demo_context` en premier appel, `target` = la phrase ; son routage inchangé |
+| P5 | Claude Code, sans phrase ; nouvelle conversation : « Traduis « bonjour » en espagnol. » | Aucun appel `demo_*` |
+| P5 bis | ChatGPT et Le Chat, phrase de préférences posée ; nouvelle conversation : « Traduis « bonjour » en espagnol. », puis tour 2 : « Écris un haïku sur l'automne. » | Comme P1 et P2 : `demo_context` une fois au tour 1, aucun appel au tour 2 (la mesure qui écartait la phrase de ChatGPT, à rejouer avec celle-ci) |
+| P8 | Chaque assistant : « Retiens que je veux du vouvoiement. » | `demo_context` → `demo_read private/<handle>/contexte` (révision, facultatif) → `demo_write private/<handle>/contexte` avec la préférence ; la réponse dit qu'elle est écrite dans « Mes instructions » ; rien gardé dans la mémoire de l'assistant seule |
+| P8 bis | Même personne, nouvelle conversation : « Rédige un mail de relance à Mme Lacaze. » | `demo_context` sert le Contexte privé ; le brouillon vouvoie || P6 | Chaque assistant ; nouvelle conversation : une demande de travail du pilote (Q1) | `demo_context` en premier appel, `target` = la phrase ; son routage inchangé |
 | P7 | Personne membre de plus de trois équipes (dont Ventes) ; nouvelle conversation : « Relance les devis envoyés la semaine dernière. » | `demo_context` avec la phrase : Tout le monde, Privé et trois Contextes d'équipe entiers, dont celui de Ventes ; chaque autre équipe en une ligne qui finit par « Read it in full with demo_read … » ; aucun avis de budget atteint (2026-10-20) |
 
 ### Pilote V1 : qualification de prospects — E06-S01 (organisation Démo, `demo_`)
@@ -371,6 +373,8 @@ L'attendu se lit dans `admin_journal`.
 | A11 | Classe le ticket FB-0012 : on ne le fera pas, hors périmètre. | `admin_context` → `admin_feedback set_state {ticket: "FB-0012", state: "declined", resolution}` ; sans `resolution`, le refus est suivi d'un second appel avec elle |
 | A12 | Quelle version tourne, et quelles migrations sont appliquées ? | `admin_context` → `admin_cell version` → `admin_cell migrations` |
 | AN3 | Résume ce texte en trois points : « … ». (négatif) | Aucun appel `admin_*` |
+| A13 | Quels connecteurs de compta puis-je activer chez Acme ? (indirect) | `admin_context` → `admin_connector catalogue {org: "acme", filter}` avec un mot du domaine (« compta », ou un nom d'outil comptable) ; si « No connector matches », un second appel avec un autre mot ; aucune écriture |
+| A14 | Montre-moi tout le catalogue des connecteurs d'Acme. | `admin_context` → `admin_connector catalogue {org: "acme"}` sans filtre → tant que la coupe donne un `next_cursor`, `admin_connector catalogue` avec `cursor` = ce `next_cursor` (et le même filtre s'il y en a un) ; jamais un curseur inventé |
 
 | Outil | Doivent y mener | Ne doit pas |
 |-------|-----------------|-------------|
@@ -378,7 +382,7 @@ L'attendu se lit dans `admin_journal`.
 | `admin_org` | A1 ; A2 ; « Passe le seuil de routage d'Acme à 0,7 » | « Crée une équipe » (c'est `admin_team`) |
 | `admin_team` | A3 ; A4 ; « Liste les équipes de Démo » | « Retire l'accès de Paul à Acme » (c'est `admin_org revoke_access`) |
 | `admin_node` | A7 ; A8 ; « Qui a accès à ventes/ chez Acme ? » | « Crée une page » (c'est `write` côté utilisateur) |
-| `admin_connector` | A9 ; « Crée un compte mail simulé pour l'équipe Ventes » ; « Quels connecteurs sont actifs chez Acme ? » | « Envoie ce mail » (c'est `call`) |
+| `admin_connector` | A9 ; A13 ; A14 ; « Crée un compte mail simulé pour l'équipe Ventes » ; « Quels connecteurs sont actifs chez Acme ? » | « Envoie ce mail » (c'est `call`) |
 | `admin_journal` | A10 ; « Montre la conversation 7K3Q-M2XA » ; « Qu'ai-je fait hier sur le connecteur admin ? » | « Combien de prospects à Valbrune ? » |
 | `admin_feedback` | A11 ; « Quels retours sont ouverts chez Acme ? » ; « Rouvre FB-0007 » | « Signale ce problème » (c'est `feedback`) |
 | `admin_cell` | A12 ; « La base répond ? » ; « Quelles migrations sont appliquées ? » | « Mets à jour le paquet » (action JB) |
@@ -425,6 +429,8 @@ L'attendu se lit dans `admin_journal`.
 | 2026-11-26 | Description de `<p>_feedback` (« After sending it, tell the user in one short sentence that you sent a note to the platform maintainers, without a reference number. Include no personal data beyond what describes the problem. »), résultat (« Recorded for the platform maintainers. Tell the user in one short sentence… », doublon sans « nothing to tell the user »), règle servie et ligne du guide (ADR-002 § 1) | Signalement de sécurité : une description d'outil qui demande de cacher un envoi à la personne est un signal d'alerte | à rejouer après « Actualiser » : FB1 à FB3 |
 | 2026-10-20 | Texte servi de `<p>_context` : au-delà de trois équipes, trois Contextes d'équipe entiers au plus, les plus proches de la demande, les autres en une ligne « <résumé> Summarised here: other team contexts are closer to this request. Read it in full with <p>_read {"path": …}. » (1.4.13) | Retour d'usage : une personne de dix équipes recevait dix Contextes par nom, coupés au budget quelle que soit la demande | à jouer après « Actualiser » : P7, puis C1 à C7 |
 | 2026-10-27 | Description de `<p>_context` (« Returns the ctx code that every other <p>_ tool requires, the rules, the procedures closest to the request (the best match first when it is clear: read it, then follow its steps), who you work for, and recent and new content. Follow the instruction that comes with the procedures. ») ; texte servi : plus d'étapes de procédure ni de « Procedures you can run » ; cinq procédures proches, la décidée en tête (« best match ») à lire par `<p>_read` ; huit contenus proches ; « What's new » fusionné dans « Recent content (new: published since …) », 20 lignes ; l'adresse d'Oto en première règle ; plus de borne de taille d'une procédure (contrat `write.procedure`, guide) | Décision de JB : `context` trop lourd | à rejouer après « Actualiser » : C1 à C7, I-news, PRN1, QP-D1 à QP-D3, QP-I1 à QP-I5 ; non rejoué sur les hosts à la livraison |
+
+| 2026-11-27 | Règle servie de plus dans « How this workspace works » (« « Remember that… », « from now on… », « my instructions »: write the preference in private/<handle>/contexte with <p>_write, not in your memory, and say so. ») ; phrase de préférences de `/connect` (« Mes préférences sont dans mes instructions Oto. »), servie à tous les assistants ; champs `filter` et `cursor` d'`admin_connector`, `catalogue` servi par pages (ADR-002 § 1) | Une préférence dite à l'assistant restait dans sa mémoire, invisible des autres assistants et de « Mes instructions » ; le catalogue entier dépassait le plafond d'un résultat | à rejouer après « Actualiser » : P1 à P8 bis, B1 à B3, A13, A14, A9 ; non rejoué sur les hosts à la livraison |
 
 ## Rapports de frictions agent (mcp-patterns §8)
 

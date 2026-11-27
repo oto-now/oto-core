@@ -19,12 +19,9 @@ export const GUIDE = {
 /** Le lien direct d'un assistant, nommé par l'assistant, ouvert dans un nouvel onglet (AC-8). */
 export type LienDirect = { assistant: string; href: string }
 
-/**
- * Où ajouter le connecteur (HN-E11S09-3) : claude.ai et Le Chat relevés dans leur aide ; celui de ChatGPT
- * n'est donné par aucune page d'OpenAI, à relire au banc.
- */
+/** Où ajouter le connecteur (HN-E11S09-3) : la page des connecteurs de chaque assistant. */
 export const LIENS_CONNECTEURS: readonly LienDirect[] = [
-  { assistant: "Claude", href: "https://claude.ai/customize/connectors" },
-  { assistant: "ChatGPT", href: "https://chatgpt.com/#settings/Connectors" },
+  { assistant: "Claude", href: "https://claude.ai/plugins?filter=connectors-only" },
+  { assistant: "ChatGPT", href: "https://chatgpt.com/plugins?directoryTab=personal" },
   { assistant: "Mistral", href: "https://chat.mistral.ai/connections" },
 ]

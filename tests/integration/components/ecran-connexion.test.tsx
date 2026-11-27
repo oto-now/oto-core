@@ -96,13 +96,13 @@ describe("EcranConnexion status line (AC7)", () => {
   it("should give one line per assistant family, newest first, in the format of the home, without signature", () => {
     const connexions: DerniereConnexion[] = [
       { famille: "ChatGPT", signature: "openai-mcp@1.0.0", date: "2026-09-24T10:00:00Z" },
-      { famille: "claude.ai", signature: "claude-ai@0.1.0", date: "2026-09-22T08:00:00Z" },
+      { famille: "Claude", signature: "claude-ai@0.1.0", date: "2026-09-22T08:00:00Z" },
     ]
     rendre({ connexions: { data: connexions } })
 
     expect(within(ligneDEtat() ?? document.body).getAllByRole("listitem").map((ligne) => ligne.textContent)).toEqual([
       "ChatGPT · dernière connexion le 24 septembre 2026",
-      "claude.ai · dernière connexion le 22 septembre 2026",
+      "Claude · dernière connexion le 22 septembre 2026",
     ])
   })
 
