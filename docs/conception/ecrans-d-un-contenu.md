@@ -1,7 +1,7 @@
 # Écrans d'un contenu
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-20
+- **Dernière révision** : 2026-11-27
 
 ## Résumé
 
@@ -55,7 +55,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 - Créer depuis le rail : le nœud reçoit le résumé « À compléter. » (le service en exige un, 1 à 200 caractères), à réécrire en place (HN-E05S10b-2), et prend la première adresse libre parmi `sans_titre`, `sans_titre_2`, `_3`… ; un refus `conflict` ou `stale_revision` fait essayer la suivante, cinq au plus ; le premier titre, comme tout renommage, fait suivre le chemin, l'ancien restant un alias (HN-E05S10b-3).
 - L'adresse suit le titre à chaque publication d'un titre changé, quelle que soit la porte (écran, `write`, `admin_node publish`) ; le résultat dit « Renamed: now at <chemin> », l'ancien chemin reste un alias, sans outil ni argument ajouté (ADR-002) (HN-E05S10e-17). Le segment tiré d'un titre suit la règle du slug d'équipe (60 caractères, `sans_titre` sans lettre ni chiffre), premier libre parmi `<segment>`, `_2`… `_50` ; racine, espaces, Contextes et dossiers d'équipe gardent leur chemin ; un refus du déplacement après la publication part au log (HN-E05S10e-5 ; la règle générale du chemin libre : D125).
 - Ranger : `nodes.position` est nulle par défaut ; les frères se rangent par position, puis les nœuds sans position, puis par chemin ; un parent reçoit des positions (1 024 × rang) au premier rangement d'un de ses enfants, un nœud neuf naît sans position ; une mise à jour qui ne change que `position` garde `updated_at` (HN-E05S10e-1). Déposé dans le rail, un contenu demande confirmation (`ConfirmDialog`) seulement s'il change d'espace (Tout le monde, une équipe, Privé) (HN-E05S10b-9). L'aperçu d'un déplacement se lit au niveau 1 sur le nœud et sur le parent de destination ; il compte les membres de l'organisation, 20 par liste avec les totaux ; les règles propres du nœud le suivent (HN-E05S10e-7).
-- Dupliquer exige la lecture du nœud et l'écriture sous son parent ; la copie est publiée (révision 1), sans règle ni propriétaire explicite, sans descendant que la personne ne lit pas, sans brouillon, lignes sans bail, titrée « <titre> (copie) » (HN-E05S10e-6) ; `duplicate_subtree` ne calcule aucun niveau, le service décide avant l'appel, la fonction borne l'organisation de l'appelant et la forme, `execute` à `authenticated` seul (HN-E05S10e-18).
+- Dupliquer exige la lecture du nœud et l'écriture sous son parent ; la copie est publiée (révision 1), sans propriétaire explicite ni règle qui ouvre, mais avec les règles « Aucun accès » de chaque page copiée, et une règle au seul nom de qui copie là où elles lui cacheraient une page qu'il lit (la copie garde les masquages, décidé par JB le 2026-11-27, [droits d'accès](droits-d-acces.md) § Règles d'accès), sans descendant que la personne ne lit pas, sans brouillon, lignes sans bail, titrée « <titre> (copie) » (HN-E05S10e-6) ; `duplicate_subtree` ne calcule aucun niveau, le service décide avant l'appel, la fonction borne l'organisation de l'appelant et la forme, `execute` à `authenticated` seul (HN-E05S10e-18).
 - Corbeille : un nœud à la corbeille vaut 0 pour tout service ; la purge (30 jours, le nœud et son sous-arbre) se fait au passage de qui lit la corbeille ou y met un contenu, par une fonction `security definer` bornée à son organisation (`purge_trash`, `20261021140000`), qui emporte aussi les pages qu'il ne lit pas ; l'export d'une organisation garde la corbeille avec sa date, l'import la restitue (HN-E05S10e-2). « Supprimer » exige la gestion et refuse un sous-arbre qui porte un contenu que la personne ne voit pas (HN-E05S10e-3). « Restaurer » remet le nœud sous son parent s'il est vivant, sinon sous son plus proche ancêtre vivant (jamais hors de son espace), au premier chemin libre de son segment, l'écriture exigée sur cet ancêtre ; ce qui était parti avec lui revient avec lui (HN-E05S10e-4).
 
 ### « Partager »
@@ -77,7 +77,7 @@ Les écrans viennent d'`oto-frontend` ([écrans et coque](ecrans-et-coque.md)). 
 
 ## Sécurité et confidentialité
 
-- Chaque geste passe par le service, qui décide le droit avant la requête : un sous-arbre qui cache un contenu ne se supprime pas (HN-E05S10e-3), une copie ne recopie ni règle ni descendant illisible (HN-E05S10e-6).
+- Chaque geste passe par le service, qui décide le droit avant la requête : un sous-arbre qui cache un contenu ne se supprime pas (HN-E05S10e-3), une copie ne recopie ni règle qui ouvre ni descendant illisible (HN-E05S10e-6), et garde les masquages de l'original : personne ne lit dans la copie ce qu'il ne lisait pas dans l'original (2026-11-27).
 - Le lien public est borné à ce que son auteur lit à l'instant, et jamais posé sur un espace personnel ou un Contexte (HN-E05S10e-19, HN-E05S10e-21).
 - Une adresse nue ne montre jamais identifiant ni mot de passe, et son hôte vient de `new URL` (HN-E11S15-b8).
 
@@ -101,3 +101,4 @@ Aucune à ce jour.
 - 2026-09-30 : retours sur la 1.1.1, livrés dans la 1.1.2 : encarts de la vue « Contexte », mise en page centrée, panneaux larges, liens au repos, contenus récents de « @ » — décidé par JB (source : story E11-S15).
 - 2026-10-01 : refonte en document de conception vivant, qui reprend P18, les fiches D97, D140 et les choix des stories E05-S10, E11-S05, E11-S15 — décidé par Alexis, accord de JB.
 - 2026-10-20 : provenance par une icône « info » et un panneau, cellules de texte qui vont à la ligne, liens suivis dans les cellules, adresses raccourcies — décidé par JB (source : session du 20/10/2026).
+- 2026-11-27 : la copie garde les masquages — décidé par JB (source : décision du 27/11/2026 sur la duplication).
