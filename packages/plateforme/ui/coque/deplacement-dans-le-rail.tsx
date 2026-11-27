@@ -26,7 +26,6 @@ import { Alert } from "../ds/react/primitives"
 import { useHote } from "../hote/navigation"
 import { useRafraichir } from "../hote/rafraichir"
 import { cheminSous, envoyerLeDeplacement, FormulaireDeDeplacement, type RefusDuDeplacement } from "../noeud/deplacement-du-noeud"
-import { sectionDuChemin } from "../noeud/fil"
 import { aplatir, freresParParent, parentDe, placeDuDepot, placeDuPas, zoneDuPointeur, type Place, type Zone } from "./freres"
 import { ligneDuRail } from "./gestes-du-rail"
 import { ConfirmationDuDeplacement, lireLImpact, type DemandeConfirmee } from "./impact-du-deplacement"
@@ -62,7 +61,7 @@ async function envoyerLeRangement(chemin: string, place: Place): Promise<RefusDu
   return { message: messageDErreur(reponse.erreur, DEPLACEMENT_RAIL.refusDuRangement), disparu: reponse.erreur.code === "not_found" }
 }
 
-type Lecture = { arbre: TreeNode[]; equipes: EquipeDuRail[]; handle: string | null; prefixe: string; ouverts: ReadonlySet<string> }
+type Lecture = { arbre: TreeNode[]; equipes: EquipeDuRail[]; prefixe: string; ouverts: ReadonlySet<string> }
 
 /**
  * Les nœuds visibles par chemin, leurs frères rangés, et ce qui ne se déplace pas (E03-S07 AC9, P39) : racine,
@@ -117,7 +116,7 @@ export type DeplacementDansLeRail = {
 }
 
 /** Les envois d'un déplacement et d'un rangement, et ce qu'ils disent : l'état de la confirmation, de l'envoi, du refus. */
-function useEnvoisDuRail({ equipes, handle, prefixe }: Pick<Lecture, "equipes" | "handle" | "prefixe">, lu: ArbreLu) {
+function useEnvoisDuRail({ prefixe }: Pick<Lecture, "prefixe">, lu: ArbreLu) {
   const { naviguer } = useHote()
   const rafraichir = useRafraichir()
   const [confirmation, setConfirmation] = useState<(Demande & DemandeConfirmee) | null>(null)
@@ -163,8 +162,6 @@ function useEnvoisDuRail({ equipes, handle, prefixe }: Pick<Lecture, "equipes" |
       place,
       nom: nomDe(chemin),
       sousContenus: lu.sousContenus(chemin),
-      avant: sectionDuChemin(chemin, equipes, handle).titre,
-      apres: sectionDuChemin(nouveau, equipes, handle).titre,
     }
     setRefus(null)
     setAnnonce("")
@@ -210,9 +207,9 @@ function useEnvoisDuRail({ equipes, handle, prefixe }: Pick<Lecture, "equipes" |
   return { demander, ranger, retour }
 }
 
-export function useDeplacementDansLeRail({ arbre, equipes, handle, prefixe, ouverts }: Lecture): DeplacementDansLeRail {
+export function useDeplacementDansLeRail({ arbre, equipes, prefixe, ouverts }: Lecture): DeplacementDansLeRail {
   const lu = useArbreLu({ arbre, equipes })
-  const envois = useEnvoisDuRail({ equipes, handle, prefixe }, lu)
+  const envois = useEnvoisDuRail({ prefixe }, lu)
   const glisse = useRef<string | null>(null)
   const [choix, setChoix] = useState<{ chemin: string; nom: string } | null>(null)
 

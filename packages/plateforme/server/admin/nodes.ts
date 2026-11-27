@@ -11,7 +11,10 @@
 // ne lit que la sienne) ; retiré : l'ancien propriétaire personne qui garde l'écriture (H52).
 //
 // Face SQL (E01-S10, lot d2) : les héritiers en une lecture récursive, l'écriture gardée par l'`updated_at`
-// lu en texte (`findNode`), chacune dans sa transaction (`inTransaction`, `members.ts`).
+// lu en texte (`findNode`) ; les héritiers relus dans la transaction de l'écriture, qui refuse s'ils ont changé.
+// Depuis que l'espace est écrit sur chaque nœud (migration 20261126172651) : les héritiers sont les descendants qui
+// portent le même propriétaire que le nœud, sans interruption, et le transfert l'écrit sur eux aussi ; `inherit` écrit
+// celui du parent. Un transfert est le geste explicite qui change un espace ; un déplacement ne le change pas.
 import { ownerRefSchema } from "../../schemas"
 import { ACCESS_LEVELS, describeOwner, nodeLevels, requireNodeLevel, ROOT_PATH, unknownPath, type Owner } from "../access"
 import type { PlatformDb } from "../db"
@@ -20,6 +23,7 @@ import { changedMeanwhile, inTransaction, PlatformError } from "../errors"
 import type { Identity } from "../identity"
 import { findNode, parentPath, type NodeRow } from "../nodes/lookup"
 import { ownerOf } from "../nodes/view"
+import type { Tx } from "../sql"
 import { readRef, resolveRef, type ResolvedRef } from "./context"
 
 /** Ce qu'un transfert change (AC3) : la gestion avant et après, décrite, et les descendants qui héritent. */
@@ -42,7 +46,8 @@ export type Transfer = TransferPlan & { changed: number }
 
 type TransferInput = { path: string; owner: unknown }
 
-type Decided = { node: NodeRow; owner: Owner | null; plan: TransferPlan }
+/** `owner` : le propriétaire écrit, celui du parent pour `inherit` ; `heirs` : les descendants qui le suivent. */
+type Decided = { node: NodeRow; owner: Owner | null; heirs: string[]; plan: TransferPlan }
 
 /**
  * Un propriétaire tel que le MCP admin le décrit (AC1, AC3 à AC5) : l'équipe et son responsable ou les
@@ -76,7 +81,7 @@ function refuseStructure(path: string): void {
   if (/^private\/[^/]+$/.test(path)) throw new PlatformError("invalid_arguments", `The owner of ${path} cannot change: it is a personal space.`)
 }
 
-/** Le propriétaire explicite demandé : `null` pour `inherit`, qui retire les colonnes (H52, N32). */
+/** Le propriétaire explicite demandé : `null` pour `inherit`, qui écrit celui du parent (H52). */
 function explicitOwner(ref: ResolvedRef): Owner | null {
   if (ref.kind === "inherit") return null
   if (ref.kind === "team") return { kind: "team", teamId: ref.team.id, userId: null }
@@ -85,27 +90,52 @@ function explicitOwner(ref: ResolvedRef): Owner | null {
 }
 
 function sameOwner(node: NodeRow, owner: Owner | null): boolean {
-  if (!owner) return node.owner_kind === null
+  if (!owner) return false
   return node.owner_kind === owner.kind && (node.owner_team_id ?? null) === owner.teamId && (node.owner_user_id ?? null) === owner.userId
 }
 
 /**
- * Les descendants qui tiennent leur propriétaire du nœud (H52) : sans propriétaire explicite, de parent
- * en enfants jusqu'au prochain qui en porte un ; comptés parmi ceux que l'appelant lit (niveau ≥ 1, en un
- * lot, `security-patterns.md § Droits dans le service`).
+ * Les descendants qui partagent l'espace du nœud (H52) : de parent en enfants, tant qu'ils portent le même
+ * propriétaire que lui ; un descendant d'un autre espace (rendu personnel, transféré) et ce qu'il range gardent le leur.
  */
-async function inheritorsOf(db: PlatformDb, identity: Identity, node: NodeRow): Promise<number> {
-  const org = identity.org.id
-  const rows = await inTransaction(db, "transfer: descendants", (sql) => sql<{ id: string }[]>`
+async function heirsIn(sql: Tx, org: string, node: NodeRow): Promise<string[]> {
+  const owner = [node.owner_kind, node.owner_team_id ?? null, node.owner_user_id ?? null]
+  const rows = await sql<{ id: string }[]>`
     with recursive heirs as (
-      select n.id from platform.nodes n where n.org_id = ${org} and n.parent_id = ${node.id} and n.owner_kind is null
+      select n.id from platform.nodes n
+       where n.org_id = ${org} and n.parent_id = ${node.id}
+         and (n.owner_kind, n.owner_team_id, n.owner_user_id) is not distinct from (${owner[0]}::text, ${owner[1]}::uuid, ${owner[2]}::uuid)
       union
-      select n.id from platform.nodes n join heirs h on n.parent_id = h.id where n.org_id = ${org} and n.owner_kind is null
+      select n.id from platform.nodes n join heirs h on n.parent_id = h.id
+       where n.org_id = ${org}
+         and (n.owner_kind, n.owner_team_id, n.owner_user_id) is not distinct from (${owner[0]}::text, ${owner[1]}::uuid, ${owner[2]}::uuid)
     )
-    select id from heirs`)
-  const found = rows.map((row) => row.id)
-  const levels = await nodeLevels(db, identity, found)
-  return found.filter((id) => (levels.get(id) ?? ACCESS_LEVELS.none) >= ACCESS_LEVELS.read).length
+    select id from heirs order by id`
+  return rows.map((row) => row.id)
+}
+
+function heirsOf(db: PlatformDb, identity: Identity, node: NodeRow): Promise<string[]> {
+  return inTransaction(db, "transfer: descendants", (sql) => heirsIn(sql, identity.org.id, node))
+}
+
+/**
+ * Les héritiers que l'appelant lit (niveau ≥ 1), et ceux qu'il ne gère pas (niveau < 3), en un lot
+ * (`security-patterns.md § Droits dans le service`) : le transfert les écrit tous, et `nodes_gesture_guard` exige la
+ * gestion de chacun ; le service refuse donc avant l'aperçu, plutôt que la base après.
+ */
+async function heirLevels(db: PlatformDb, identity: Identity, ids: string[]): Promise<{ readable: number; unmanaged: number }> {
+  const levels = await nodeLevels(db, identity, ids)
+  const of = (id: string) => levels.get(id) ?? ACCESS_LEVELS.none
+  return { readable: ids.filter((id) => of(id) >= ACCESS_LEVELS.read).length, unmanaged: ids.filter((id) => of(id) < ACCESS_LEVELS.manage).length }
+}
+
+/** Des héritiers que l'appelant ne gère pas : le transfert les laisserait dans un autre espace que le nœud. */
+function unmanagedRefusal(path: string, unmanaged: number): PlatformError {
+  const pages = unmanaged === 1 ? "1 content" : `${unmanaged} contents`
+  return new PlatformError(
+    "forbidden",
+    `${path} holds ${pages} of the same space that you do not manage: the transfer would move them too. Ask an administrator of the organisation.`,
+  )
 }
 
 /**
@@ -127,8 +157,11 @@ async function decide(db: PlatformDb, identity: Identity, input: TransferInput):
   // Le chemin du parent se déduit du chemin (`nodes_guard` : le chemin est celui du parent plus un segment).
   const parent = { id: node.parent_id, path: parentPath(node.path) ?? ROOT_PATH }
   // Fiche D18 B (M26) : rendre le nœud personnel n'est plus réservé à l'administrateur ; la gestion suffit.
-  const [current, inherited, inheritors] = await Promise.all([ownerOf(db, node.id), owner ? null : ownerOf(db, parent.id), inheritorsOf(db, identity, node)])
-  const [before, after] = await Promise.all([ownerDescription(db, identity, current), ownerDescription(db, identity, owner ?? inherited)])
+  const [current, inherited, heirs] = await Promise.all([ownerOf(db, node.id), owner ? null : ownerOf(db, parent.id), heirsOf(db, identity, node)])
+  const [before, after, levels] = await Promise.all([ownerDescription(db, identity, current), ownerDescription(db, identity, owner ?? inherited), heirLevels(db, identity, heirs)])
+  const unchanged = sameOwner(node, owner ?? inherited)
+  if (!unchanged && levels.unmanaged > 0) throw unmanagedRefusal(node.path, levels.unmanaged)
+  const inheritors = levels.readable
   const plan: TransferPlan = {
     path: node.path,
     before,
@@ -136,9 +169,9 @@ async function decide(db: PlatformDb, identity: Identity, input: TransferInput):
     inheritors,
     person: resolved.kind === "user" ? resolved.person.name : null,
     parent: owner ? null : parent.path,
-    unchanged: sameOwner(node, owner),
+    unchanged,
   }
-  return { node, owner, plan }
+  return { node, owner: owner ?? inherited, heirs, plan }
 }
 
 /** Le premier temps de `transfer_owner` (AC3, N2) : ce qui changerait, sans rien écrire. */
@@ -149,18 +182,28 @@ export async function describeTransfer(db: PlatformDb, identity: Identity, input
 /**
  * Le second temps (AC4) : les colonnes du propriétaire écrites sous le jeton de l'appelant, gardées par
  * l'`updated_at` lu (une course n'écrase rien) ; le même propriétaire n'écrit rien ; zéro ligne après la
- * décision → `conflict`, journalisé (HN-E01S07-6).
+ * décision, ou des héritiers relus dans la transaction autres que ceux décidés → `conflict`, journalisé
+ * (HN-E01S07-6). `changed` compte les lignes écrites.
  */
 export async function transferOwner(db: PlatformDb, identity: Identity, input: TransferInput): Promise<Transfer> {
-  const { node, owner, plan } = await decide(db, identity, input)
+  const { node, owner, heirs, plan } = await decide(db, identity, input)
   if (plan.unchanged) return { ...plan, changed: 0 }
-  // `updated_at` tel que `findNode` le lit (texte à la microseconde), converti dans la requête.
-  const written = await inTransaction(db, "transferOwner: nodes", (sql) => sql`
-    update platform.nodes
-       set owner_kind = ${owner?.kind ?? null}, owner_team_id = ${owner?.teamId ?? null}, owner_user_id = ${owner?.userId ?? null},
-           updated_by = ${identity.user.id}
-     where org_id = ${identity.org.id} and id = ${node.id} and updated_at = ${node.updated_at}::text::timestamptz
-    returning id`)
-  if (written.length === 0) throw changedMeanwhile("transferOwner", node.id, `${node.path} changed meanwhile: retry the transfer.`)
-  return { ...plan, changed: plan.inheritors + 1 }
+  if (!owner) throw new PlatformError("internal", "Internal error.")
+  // `updated_at` tel que `findNode` le lit (texte à la microseconde), converti dans la requête ; le nœud écrit d'abord
+  // (son verrou tient la suite), puis ses héritiers relus dans la même transaction, sous les mêmes droits (la gestion de
+  // chacun, `nodes_gesture_guard`) : s'ils ne sont plus ceux de la décision, rien n'est écrit.
+  const meanwhile = () => changedMeanwhile("transferOwner", node.id, `${node.path} changed meanwhile: retry the transfer.`)
+  const changed = await inTransaction(db, "transferOwner: nodes", async (sql) => {
+    const set = sql`owner_kind = ${owner.kind}, owner_team_id = ${owner.teamId}, owner_user_id = ${owner.userId}, updated_by = ${identity.user.id}`
+    const done = await sql`
+      update platform.nodes set ${set}
+       where org_id = ${identity.org.id} and id = ${node.id} and updated_at = ${node.updated_at}::text::timestamptz
+      returning id`
+    if (done.length === 0) throw meanwhile()
+    const now = await heirsIn(sql, identity.org.id, node)
+    if (now.length !== heirs.length || now.some((id, i) => id !== heirs[i])) throw meanwhile()
+    const followed = heirs.length > 0 ? await sql`update platform.nodes set ${set} where org_id = ${identity.org.id} and id in ${sql(heirs)} returning id` : []
+    return done.length + followed.length
+  })
+  return { ...plan, changed }
 }

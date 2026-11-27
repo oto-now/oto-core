@@ -234,15 +234,19 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 describe("How this workspace works (E05-S12, AC-10)", () => {
   // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB) ;
   // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus ; la règle des commentaires, une ligne,
-  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus.
-  it("should hold 20 lines and 3,950 characters at most with a 10-character prefix, the same for everyone", () => {
+  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus ; l'espace
+  // d'une création, ce qu'un membre lit et écrit par défaut et la question avant d'écrire là où d'autres lisent (texte
+  // resserré par JB à la relecture, une ligne de moins), 220 de plus.
+  it("should hold 19 lines and 4,150 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
-    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(20)
-    expect(rules.length).toBeLessThanOrEqual(3_950)
+    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(19)
+    expect(rules.length).toBeLessThanOrEqual(4_150)
     expect(rules.split("\n")[3]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
     expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
     expect(rules).toContain("A procedure is a page of numbered steps")
+    expect(rules).toContain('anywhere else abcdefghij_write keeps it private to you unless you pass space: "everyone"')
+    expect(rules).toContain("By default a member reads everyone's contents, writes in their teams' and manages their private ones")
     expect(rules).toContain("A good procedure has a part « When to use it »")
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
     expect(rules.split("\n")[0]).toBe("## How this workspace works")

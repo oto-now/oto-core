@@ -507,6 +507,28 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   Lue par les membres de l'organisation (`member_orgs()`), écrite par l'équipe plateforme (`member_orgs()` et
   `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
   échoue sur le catalogue d'une organisation. Rien à relancer avant.
+- `20261126172651_platform_espace_ecrit.sql` (l'espace écrit sur le nœud, décidé avec JB le 03/11 ; droits d'accès,
+  § Propriétaires, déplacements, personnel) : chaque nœud reçoit, figé dans `owner_kind`, `owner_team_id` et
+  `owner_user_id`, le propriétaire qu'il héritait (aucune visibilité ne change, `updated_at` gardé) ; contrainte
+  `nodes_owner_written_check` (propriétaire toujours écrit) ; déclencheur `nodes_owner_at_creation` (un ajout sans
+  propriétaire prend celui de son parent ; sous une session, seul celui du parent ou le Privé de
+  l'auteur, sinon `42501`) et ajout des trois colonnes accordé à `authenticated` ; `node_owner` rend le propriétaire du
+  nœud et le haut de son espace ; `node_level_of` re-versionnée à signature identique (le propriétaire lu sur le nœud, le
+  plancher d'un espace personnel au haut de cet espace) ; `duplicate_subtree` re-versionnée (la copie prend l'espace de sa
+  source, sauf celle du contenu d'une autre personne, à l'appelant ; la page d'une autre personne se copie sous le
+  Privé de l'appelant). Le paquet de la même version calcule pareil (`nodeLevelOf`) et choisit l'espace d'une création (`write`).
+  Avant toute écriture, la reprise compte les contenus Privés qui recevraient le partage d'un dossier de la même
+  personne au-dessus d'eux (le plancher d'un Privé monte au haut de son espace) et s'arrête s'il y en a, sans rien
+  écrire (`espace_ecrit_partages_herites`, P0001) : les ranger hors de ce dossier ou retirer le partage, puis rejouer.
+  La reprise coupe `set_updated_at` et `nodes_guard` le temps de son UPDATE (un membre retiré garde son espace
+  personnel, que la garde refuserait de recopier), puis rend leur mode aux contraintes (seule la clé différée de
+  `owner_team_id` passe en immédiat, le temps de rallumer les déclencheurs) ; elle réécrit tous les nœuds sans
+  propriétaire en une transaction qui bloque les écritures sur `nodes`. Deux versions du paquet sur une même base
+  (canari et production) ne tiennent pas autour d'elle : l'ancien paquet sur base migrée échoue sur `transfer_owner`
+  `inherit` (23514), le nouveau sur base non migrée refuse toute création privée par défaut (42501) ; migration, puis
+  paquet sur tous les hôtes de la base à la fois.
+  Privilèges redits ; aucune table, colonne, policy ni index. Fichier de développement, à réunir avec les autres de
+  la version avant le tag.
 
 ## Installer sur un hôte neuf
 

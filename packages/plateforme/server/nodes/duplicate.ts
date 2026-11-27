@@ -1,7 +1,10 @@
 // « Dupliquer » (E05-S10, AC-b10 ; HN-E05S10e-6) : un nœud et son sous-arbre copiés sous le même parent,
 // juste après l'original, sous « <titre> (copie) » et un chemin neuf tiré de ce titre ; blocs publiés et
-// lignes d'un tableau compris ; ni règle d'accès ni propriétaire explicite (la copie hérite de son
-// parent) ; les descendants que la personne ne lit pas restent (et ce qui est sous eux). Décidé par le
+// lignes d'un tableau compris ; aucune règle d'accès, et chaque copie garde l'espace de sa source (son propriétaire,
+// écrit sur elle, migration 20261126172651), sauf la copie du contenu d'une autre personne, qui appartient à qui la
+// copie : une page d'une autre personne se copie dans le Privé de qui la copie (`private/<handle>`, rangée par son
+// chemin comme une création), pas à côté de l'original (décidé par Alexis le 26/11) ; sans cela, la copie restait au
+// Privé de l'autre, sans règle, invisible de qui l'avait faite. Les descendants que la personne ne lit pas restent (et ce qui est sous eux). Décidé par le
 // service seul (ADR-012 § 3) : lire le nœud et chaque descendant copié, écrire sous son parent ; puis
 // `duplicate_subtree`, une transaction, qui ne calcule aucun niveau et borne sous le verrou de l'arbre
 // l'organisation et la forme de la copie (HN-E05S10e-18). Sans lui, un contenu ne se copie pas.
@@ -62,6 +65,24 @@ async function copiedDescendants(db: PlatformDb, identity: Identity, node: NodeR
 }
 
 /**
+ * Où va la copie : sous le parent de l'original, ou, pour la page d'une autre personne, dans le Privé de qui la copie
+ * (`duplicate_subtree` en décide de même). Sans Privé, refusé comme une écriture qui y tomberait (`write-space.ts`).
+ */
+async function copyPlace(db: PlatformDb, identity: Identity, node: NodeRow & { parent_id: string }): Promise<{ parentId: string; parentAt: string; foreign: boolean }> {
+  const foreign = node.owner_kind === "user" && node.owner_user_id !== identity.user.id
+  if (!foreign) return { parentId: node.parent_id, parentAt: parentPath(node.path) ?? ROOT_PATH, foreign }
+  const handle = identity.member.profile.handle
+  const space = handle ? await findNode(db, identity, `private/${handle}`) : null
+  if (!space) {
+    throw new PlatformError(
+      "invalid_arguments",
+      `${node.path} belongs to another person: its copy goes to your private space, and you have no private space in ${identity.org.name}.`,
+    )
+  }
+  return { parentId: space.node.id, parentAt: space.node.path, foreign }
+}
+
+/**
  * Duplique un nœud et son sous-arbre (AC-b10) : le nœud lu par `findNode` (lecture) ; ce que l'arbre garde
  * en place refusé ; l'écriture exigée sous son parent ; puis, dans une transaction, sa position juste après
  * l'original et `duplicate_subtree`. Rend le chemin de la copie et le nombre de nœuds copiés.
@@ -73,9 +94,8 @@ export async function duplicateNode(db: PlatformDb, identity: Identity, input: u
   if (!found) throw unknownNode(parsed.data.path, identity.org.prefix)
   const { node } = found
   await refuseStructure(db, identity, node)
-  const parentId = node.parent_id
-  const parentAt = parentPath(node.path) ?? ROOT_PATH
-  if (!parentId) throw new PlatformError("invalid_arguments", `${node.path} cannot be duplicated: it is the root of the tree.`)
+  if (!node.parent_id) throw new PlatformError("invalid_arguments", `${node.path} cannot be duplicated: it is the root of the tree.`)
+  const { parentId, parentAt, foreign } = await copyPlace(db, identity, { ...node, parent_id: node.parent_id })
   if ((await nodeLevel(db, identity, parentId)) < ACCESS_LEVELS.write) {
     const owner = await ownerOf(db, parentId)
     throw new PlatformError("forbidden", reservedTo("write", `under ${parentAt}`, owner ? await describeOwner(db, identity, owner) : "its managers"))
@@ -86,7 +106,8 @@ export async function duplicateNode(db: PlatformDb, identity: Identity, input: u
   // Lu chez l'hôte avant la transaction (E12-S02) : la copie ne sait qu'après l'insertion si elle porte des fichiers.
   const quota = await orgStorageQuota(identity.org)
   const { count, files } = await inTransaction(db, "duplicate: copy", async (sql) => {
-    const position = await positionAfter(sql, identity.org.id, { parentId, afterId: node.id, movingId: null })
+    // Dans le Privé de qui copie, la copie se range par son chemin, comme une création.
+    const position = foreign ? null : await positionAfter(sql, identity.org.id, { parentId, afterId: node.id, movingId: null })
     const copies = await sql<{ copy_path: string; copied_files: Record<string, string> }[]>`
       select copy_path, copied_files from platform.duplicate_subtree(p_source => ${node.id}, p_nodes => ${descendants}::uuid[],
                                                        p_segment => ${lastSegment(path)}, p_title => ${title}, p_position => ${position})`
@@ -100,6 +121,6 @@ export async function duplicateNode(db: PlatformDb, identity: Identity, input: u
   })
   // E10-S02 (AC-e3) : les objets des fichiers copiés, après le commit ; une copie en échec laisse sa ligne `pending`.
   await copyFileObjects(db, identity, files)
-  // La copie hérite du propriétaire de son parent : l'équipe du journal est la sienne.
-  return { data: { path, from: node.path, count }, target: path, teamId: teamOf(await ownerOf(db, parentId)) }
+  // La copie garde l'espace de sa source : l'équipe du journal est celle de la source, qui est la sienne.
+  return { data: { path, from: node.path, count }, target: path, teamId: teamOf(await ownerOf(db, node.id)) }
 }

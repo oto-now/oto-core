@@ -176,6 +176,9 @@ describe("read and write input schemas, extended by additions only (AC1)", () =>
     delete fields.count
     expect(items.required).toEqual(["op"])
     items.required = ["op", "section"]
+    // 20261126172651 : `space` place un nœud créé, par addition.
+    expect(at(properties, "space").enum).toEqual(["everyone", "private"])
+    delete properties.space
     expect(write).toEqual(E03_S01.write)
     for (const field of ["revision", "input"]) expect(fields).not.toHaveProperty(field)
     expect(properties).not.toHaveProperty("draft_stamp")
