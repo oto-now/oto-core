@@ -12,15 +12,17 @@ const KEY_FACTORIES = { uuid: () => randomUUID(), ctx: newCtxCode, sim: newSimId
 /**
  * Tables dont une ligne sautée emporte les lignes qui la désignent (AC9) : les nœuds personnels d'une
  * personne absente (et leurs descendants), ses comptes personnels ; les fils de commentaires d'un nœud sauté, dont les
- * commentaires suivent.
+ * commentaires suivent ; les invitations laissées (AC13), dont les équipes suivent.
  */
-const CASCADING = ['nodes', 'accounts', 'comment_threads']
+const CASCADING = ['nodes', 'accounts', 'comment_threads', 'invitations']
 
 /** Colonnes hors de l'empreinte (AC8) : ce que l'import change, et les clés propres que rien ne désigne. */
 const UNCOMPARED = {
   orgs: ['slug', 'prefix', 'name', 'rules_version', 'updated_at'],
   access_rules: ['id'],
   invitations: ['id'],
+  // La première équipe d'une invitation importée est celle que pose son déclencheur, datée de l'import.
+  invitation_teams: ['created_at'],
   platform_grants: ['id'],
   // Un lien public reçoit un nouvel identifiant et arrive désactivé dans la copie (HN-E05S10e-9).
   node_shares: ['id', 'revoked_at'],
@@ -168,6 +170,7 @@ function planRow(spec, row, state) {
     state.memberEmails ??= new Set([...context.members].map((id) => state.emailOf.get(id)))
     if (!importedInvitation(row, state.memberEmails, state.now)) {
       plan.closedInvitations += 1
+      state.skippedKeys.invitations.add(row.id)
       return
     }
   }
@@ -257,7 +260,7 @@ function rank(refs, rows, key, label) {
 
 /**
  * Référence naturelle de chaque identifiant du fichier (AC8, HN-E09S04-11) : nœud → chemin, équipe →
- * slug, personne → email, compte → libellé, `ctx` et `sim_outbox` → rang, bloc → chemin de son nœud,
+ * slug, personne → email, compte → libellé, invitation → adresse, `ctx` et `sim_outbox` → rang, bloc → chemin de son nœud,
  * état (publié s'il l'est), puis `#<clé>` ou `@<position>`.
  */
 function naturalRefs(doc) {
@@ -267,6 +270,8 @@ function naturalRefs(doc) {
   for (const person of doc.people) refs.set(person.id, `person:${person.email ?? person.id}`)
   for (const team of tables.teams ?? []) refs.set(team.id, `team:${team.slug}`)
   for (const account of tables.accounts ?? []) refs.set(account.id, `account:${account.label}`)
+  // Une invitation importée, par son adresse : une seule en attente par adresse (`invitations_guard`).
+  for (const invitation of tables.invitations ?? []) refs.set(invitation.id, `invitation:${invitation.email}`)
   const paths = new Map((tables.nodes ?? []).map((node) => [node.id, node.path]))
   for (const [id, path] of paths) refs.set(id, `node:${path}`)
   // E10-S02 (AC-e4) : un fichier joint, par son nœud et son nom ; son identifiant change à l'import.
@@ -289,7 +294,7 @@ function omit(row, columns) {
 /**
  * Empreinte d'un export (AC8) : pour chaque table, les lignes où chaque identifiant est remplacé par sa
  * référence naturelle, dans les colonnes comme dans les instantanés, triées ; `org_domains`, les
- * invitations non importées et les liens sautés hors de l'empreinte, comme les colonnes de
+ * invitations non importées et leurs équipes, et les liens sautés hors de l'empreinte, comme les colonnes de
  * `UNCOMPARED`. Deux organisations dont l'une est la copie de l'autre ont la même empreinte.
  * @param {any} doc
  * @param {Date} [now]
@@ -301,7 +306,12 @@ export function fingerprint(doc, now = new Date()) {
   const memberEmails = new Set((doc.tables.members ?? []).map((row) => emailOf.get(row.user_id)))
   const published = publishedBlocks(doc)
   /** @type {Record<string, (row: Record<string, any>) => boolean>} */
-  const importable = { invitations: (row) => importedInvitation(row, memberEmails, now), links: (row) => importedLink(row, published) }
+  const invitations = new Set((doc.tables.invitations ?? []).filter((row) => importedInvitation(row, memberEmails, now)).map((row) => row.id))
+  const importable = {
+    invitations: (row) => invitations.has(row.id),
+    invitation_teams: (row) => invitations.has(row.invitation_id),
+    links: (row) => importedLink(row, published),
+  }
   /** @type {Record<string, Record<string, any>[]>} */
   const result = {}
   for (const spec of TABLES) {

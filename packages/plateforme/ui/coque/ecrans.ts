@@ -6,6 +6,9 @@
 // (AC-32) ; la Corbeille et Profil au menu du compte (AC-e22, AC-6). E05-S13 (AC-10) : « Journal » se range dans
 // les réglages, après « Équipes & accès » ; au suivi restent Usage et Retours, que l'hôte ne donne qu'à qui y a droit.
 // « Connecteurs » s'ouvre à chaque membre, qui y voit ses comptes personnels (`connecteurs-et-comptes.md` § Écran Connecteurs).
+// 2026-11-27 (#221) : le menu de l'entreprise quitte le haut du rail ; ses écrans passent au menu du compte, sous le nom de
+// l'organisation, et « Connecteurs » quitte le pied pour le groupe « Vous » du même menu ; la vue « Contexte » n'y est plus,
+// la palette la garde.
 // E11-S10 (AC-e1) : la vue « Contexte » en tête du menu du compte, hors de l'accueil. 1.1.3 : Usage et Retours
 // sortent du menu (« Suivi de l'entreprise » disparaît), outils de l'équipe d'Oto : la palette les garde. 1.4.13 : « Activité »
 // (la page des Statistiques, pour qui administre, et du Journal, à l'adresse du journal) prend la place du Journal dans
@@ -27,10 +30,10 @@ import { COMPTE, ENTREPRISE, RAIL } from "./libelles"
 import type { AdressesDuRail } from "./types"
 
 /**
- * Où l'écran se range : un titre du menu de l'entreprise, une ligne du pied du rail, le menu du compte, ou
- * nulle part hors de la palette (Accueil, qui a sa ligne en tête du rail).
+ * Où l'écran se range dans le menu du compte : le groupe de l'organisation (ses réglages, puis son suivi), le groupe
+ * « Vous », ou nulle part hors de la palette (Accueil, où mène le bloc de l'organisation ; la vue « Contexte »).
  */
-export type Rangement = "reglages" | "suivi" | "pied" | "compte" | "hors-menu"
+export type Rangement = "reglages" | "suivi" | "compte" | "hors-menu"
 
 type Ecran = { cle: Exclude<keyof AdressesDuRail, "pages">; libelle: string; glyphe: Glyphe; rangement: Rangement; admin: boolean }
 
@@ -42,9 +45,9 @@ const ECRANS: readonly Ecran[] = [
   // E12-S02 : l'abonnement de l'hôte qui vend le paquet, s'il en donne l'adresse.
   { cle: "abonnement", libelle: ENTREPRISE.abonnement, glyphe: CreditCard, rangement: "reglages", admin: true },
   { cle: "retours", libelle: ENTREPRISE.retours, glyphe: ChatCircleText, rangement: "suivi", admin: true },
-  { cle: "connecteurs", libelle: RAIL.connecteurs, glyphe: Plug, rangement: "pied", admin: false },
-  { cle: "contexte", libelle: COMPTE.contexte, glyphe: Info, rangement: "compte", admin: false },
+  { cle: "contexte", libelle: COMPTE.contexte, glyphe: Info, rangement: "hors-menu", admin: false },
   { cle: "profil", libelle: COMPTE.profil, glyphe: UserCircle, rangement: "compte", admin: false },
+  { cle: "connecteurs", libelle: RAIL.connecteurs, glyphe: Plug, rangement: "compte", admin: false },
   { cle: "brancher", libelle: COMPTE.brancher, glyphe: Robot, rangement: "compte", admin: false },
   { cle: "corbeille", libelle: RAIL.corbeille, glyphe: Trash, rangement: "compte", admin: false },
 ]

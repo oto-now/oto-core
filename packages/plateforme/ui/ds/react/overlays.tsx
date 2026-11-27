@@ -6,7 +6,9 @@
 // îlot, fermée par Échap et le clic extérieur, parcourue aux flèches ; tels quels, en TypeScript.
 // Changé : le portail se monte dans la racine `.oto` du déclencheur, qui porte les jetons ; Échap et un
 // choix rendent le focus au déclencheur ; le menu désigne sa ligne surlignée (`aria-activedescendant`),
-// ses lignes sont hors de la tabulation ; l'écran peut l'ouvrir sans lui donner le focus (E05-S11, AC-28). Retiré :
+// ses lignes sont hors de la tabulation ; l'écran peut l'ouvrir sans lui donner le focus (E05-S11, AC-28). Ajouté (#221) :
+// une tête qui ne s'active pas (`head`, la personne du menu du compte), un titre de groupe qui porte une image (le logo de
+// l'organisation), une ligne à interrupteur (`switch`, le mode sombre). Retiré :
 // `Popover`, `Tooltip`, `Drawer` (la coque ne les emploie pas) ; `Dialog` et `CommandPalette` vivent à
 // côté (`dialog.tsx`, `command-palette.tsx`) ; l'`Anchor` vit dans `anchor.tsx`, partagé avec `Popover` et `Tooltip`.
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react"
@@ -15,7 +17,7 @@ import { Anchor } from "./anchor"
 import { useAnchor, useDismiss, useIsoLayoutEffect, useRovingFocus } from "./hooks"
 import { cx } from "./outils"
 
-/** Un élément du menu : une action, un choix (`radio`, `checked`), un titre de groupe ou un filet. */
+/** Un élément du menu : une action, un choix (`radio`, `checked`, `switch`), un titre de groupe (son `icon` le précède) ou un filet. */
 export type MenuItem = {
   label?: string
   icon?: ReactNode
@@ -25,6 +27,8 @@ export type MenuItem = {
   disabled?: boolean
   checked?: boolean
   radio?: boolean
+  /** Avec `checked` : un interrupteur en fin de ligne au lieu de la coche en tête (`menuitemcheckbox`). */
+  switch?: boolean
   meta?: ReactNode
   /** L'item bascule sans fermer le menu. */
   keepOpen?: boolean
@@ -57,7 +61,8 @@ type LigneProps = { id: string; item: MenuItem; surligne: boolean; surSurvol: ()
  */
 function LigneDeMenu({ id, item, surligne, surSurvol, choisir }: LigneProps) {
   const radio = item.radio === true
-  const coche = (radio || item.checked !== undefined) && (
+  const interrupteur = item.switch === true && item.checked !== undefined
+  const coche = (radio || (item.checked !== undefined && !interrupteur)) && (
     <span className="oto-menu-check" aria-hidden="true">
       {item.checked && COCHE}
     </span>
@@ -83,6 +88,8 @@ function LigneDeMenu({ id, item, surligne, surSurvol, choisir }: LigneProps) {
       {item.meta != null && <span className="oto-pop-meta">{item.meta}</span>}
       {item.shortcut && <span className="oto-menu-shortcut">{item.shortcut}</span>}
       {radio && coche}
+      {/* La piste de `Switch` (`choice.css`), décorative : l'état est `aria-checked` de la ligne. */}
+      {interrupteur && <span className="oto-switch-track" aria-hidden="true" />}
     </button>
   )
 }
@@ -95,7 +102,12 @@ function MenuDesItems({ idDesLignes, items, parcourus, index, surSurvol, choisir
       {items.map((item, rang) => {
         if (item.separator) return <div key={`filet-${rang}`} className="oto-menu-sep" role="separator" />
         if (item.group) {
-          return (
+          return item.icon ? (
+            <p key={`groupe-${rang}`} className="oto-menu-group-label" data-icon="">
+              {item.icon}
+              <span>{item.group}</span>
+            </p>
+          ) : (
             <p key={`groupe-${rang}`} className="oto-menu-group-label">
               {item.group}
             </p>
@@ -120,10 +132,12 @@ type DropdownMenuProps = {
    */
   ouvertSansFocus?: boolean
   surFermeture?: () => void
+  /** En tête du menu, au-dessus des lignes, ce qui ne s'active pas (la personne du menu du compte, #221). */
+  head?: ReactNode
 }
 
 /** Un menu d'actions : choisir ferme, sauf un item `keepOpen` ; les filets et les titres ne se parcourent pas. */
-export function DropdownMenu({ trigger, items, side = "bottom", align = "start", className, ouvertSansFocus = false, surFermeture }: DropdownMenuProps) {
+export function DropdownMenu({ trigger, items, side = "bottom", align = "start", className, ouvertSansFocus = false, surFermeture, head }: DropdownMenuProps) {
   const [open, setOuvert] = useState(false)
   const ouvert = open || ouvertSansFocus
   const [conteneur, setConteneur] = useState<Element | null>(null)
@@ -193,6 +207,7 @@ export function DropdownMenu({ trigger, items, side = "bottom", align = "start",
             aria-activedescendant={index >= 0 ? `${idDesLignes}-${index}` : undefined}
             onKeyDown={surToucheDuMenu}
           >
+            {head != null && <div className="oto-menu-head">{head}</div>}
             <MenuDesItems idDesLignes={idDesLignes} items={items} parcourus={parcourus} index={index} surSurvol={setIndex} choisir={choisir} />
           </div>
         </Portail>

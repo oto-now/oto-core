@@ -126,11 +126,11 @@ test.describe("E05-S10 partie b : la coque et les actions d'en-tête", () => {
 
         // Plus de « Déplacer » en tête : le rail déplace (E05-S13, AC-20, qui remplace AC-b4).
         await expect(page.getByRole("button", { name: "Déplacer", exact: true })).toHaveCount(0)
-        const partager = page.getByRole("button", { name: "Partager · Privé" })
+        const partager = page.getByRole("button", { name: "Partager", exact: true })
 
         // « Partager » (AC-b5) : le champ, l'accès par défaut, qui a accès ; aucun mot « règle ».
         await partager.click()
-        const panneauPartager = page.getByRole("dialog", { name: "Partager — Privé" })
+        const panneauPartager = page.getByRole("dialog", { name: /^Partager « .+ »$/ })
         await expect(panneauPartager.getByRole("combobox", { name: "Ajouter une personne ou une équipe" })).toBeVisible()
         await expect(panneauPartager.getByText("Accès par défaut", { exact: true })).toBeVisible()
         await expect(panneauPartager.getByText("Seulement les personnes ajoutées")).toBeVisible()
@@ -142,15 +142,12 @@ test.describe("E05-S10 partie b : la coque et les actions d'en-tête", () => {
         await page.keyboard.press("Escape")
         await expect(panneauPartager).toHaveCount(0)
 
-        // « Sous-pages » (E11-S05, AC-e1, qui remplace « Contenus liés » d'AC-b6) : replié, hors de la carte des blocs.
-        const sousPages = page.locator("details.oto-linked").filter({ has: page.locator("summary strong", { hasText: "Sous-pages" }) })
-        await expect(sousPages).not.toHaveAttribute("open")
-        await expect(sousPages.locator("xpath=ancestor::*[contains(@class, 'oto-island')]")).toHaveCount(0)
-        await sousPages.locator("summary").click()
-        await expect(sousPages.getByRole("list", { name: "Sous-pages" }).getByRole("link", { name: /^Enfant d'essai/ })).toBeVisible()
-        // Les liens lus, un encart vide n'est pas rendu.
+        // « Sous-pages » (E11-S05, AC-e1 ; refonte #217) : au pied, sans repli, une colonne et ses liens.
+        const sousPages = page.locator(".oto-node-foot").getByRole("list", { name: "Sous-pages" })
+        await expect(sousPages.getByRole("link", { name: /^Enfant d'essai/ })).toBeVisible()
+        // Les liens lus, une colonne vide n'est pas rendue.
         await attendre(page.getByText("Lecture des liens…")).toHaveCount(0)
-        await expect(page.locator("details.oto-linked summary strong", { hasText: /^Cit/ })).toHaveCount(0)
+        await expect(page.locator(".oto-node-foot-column > h2", { hasText: /^Cit/ })).toHaveCount(0)
         await capturer(page, testInfo, `encarts-${nom}`)
         await context.close()
       })

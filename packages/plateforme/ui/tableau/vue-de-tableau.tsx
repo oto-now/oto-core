@@ -11,7 +11,7 @@ import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { LIEN } from "../components/classes"
 import { TableServeur } from "../components/table-serveur"
 import { Cellule, valeurDe } from "./cellule"
-import { lignesSur, REFERENCES } from "./libelles"
+import { libelleDeColonne, lignesSur, REFERENCES } from "./libelles"
 
 type VueDeTableauProps = { vue: ScreenView; Lien: LienDeLHote; hrefDuChemin: (chemin: string) => string }
 
@@ -27,7 +27,7 @@ export function VueDeTableau({ vue, Lien, hrefDuChemin }: VueDeTableauProps) {
           <p aria-hidden="true" className="text-sm font-medium text-ink">
             {titre}
           </p>
-          <TableServeur legende={titre} colonnes={vue.columns.map((colonne) => ({ entete: colonne.name }))}>
+          <TableServeur legende={titre} colonnes={vue.columns.map((colonne) => ({ entete: libelleDeColonne(colonne) }))}>
             {vue.rows.map((ligne) => (
               <tr key={String(ligne.key)}>
                 {vue.columns.map((colonne) =>

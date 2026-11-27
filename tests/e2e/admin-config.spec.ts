@@ -28,9 +28,9 @@ type Parcours = { page: Page; capturer: (nom: string) => Promise<void> }
 /** Le maillon courant du fil de l'en-tête : l'écran ouvert. */
 const ecranOuvert = (page: Page, nom: string) => page.getByRole("navigation", { name: "Chemin" }).getByRole("button", { name: nom, exact: true })
 
-/** Ouvre une entrée du menu de l'entreprise et attend son écran, que le fil nomme. */
+/** Ouvre une entrée de l'organisation, au menu du compte (#221), et attend son écran, que le fil nomme. */
 async function ouvrir(page: Page, entree: string) {
-  await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("button", { name: /^Entreprise : / }).click()
+  await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }).click()
   await page.getByRole("menu").getByRole("menuitem", { name: entree, exact: true }).click()
   await expect(ecranOuvert(page, entree)).toHaveAttribute("aria-current", "page")
 }
@@ -77,13 +77,12 @@ async function organisation({ page, capturer }: Parcours) {
 }
 
 async function connecteurs({ page, capturer }: Parcours) {
-  // Une ligne du pied du rail, pour qui administre (E05-S11, AC-32) ; son écran n'a plus de fil (aucun groupe du menu).
-  const ligne = page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: "Connecteurs", exact: true })
-  await ligne.click()
+  // Au menu du compte, groupe « Vous » (#221) ; son écran n'a pas de fil (aucun groupe de l'organisation).
+  await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }).click()
+  await page.getByRole("menu").getByRole("menuitem", { name: "Connecteurs", exact: true }).click()
   // Seule spec à ouvrir « Connecteurs » : un serveur de développement y compile l'écran, au-delà des 5 s par défaut
   // sous une campagne complète (constaté).
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connecteurs", { timeout: 20_000 })
-  await expect(ligne).toHaveAttribute("aria-current", "page")
   // Un seul objet, le connecteur : plus d'îlot des outils de l'organisation.
   await expect(page.getByRole("region", { name: "Outils de l'organisation" })).toHaveCount(0)
   // La liste : le compte de l'équipe, sur sa ligne, dit à qui il est.

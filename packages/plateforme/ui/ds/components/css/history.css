@@ -1,0 +1,61 @@
+/* HistoryList · HistoryItem · DiffLine (`ui/ds/react/history-list.tsx`) : la liste des versions d'un objet, la version choisie et son écart ; ajoutés au design system pour le tiroir « Historique des versions » de la refonte, sur les seuls jetons du contrat. */
+
+.oto-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
+
+/* Une version est un bouton entier : la cible fait toute la ligne, 44 px au moins sous le doigt. */
+.oto-history-head {
+  inline-size: 100%;
+  min-block-size: var(--touch);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+  padding: var(--space-2) var(--space-2-5);
+  border: 0;
+  border-radius: var(--r-ctrl);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.oto-history-head:hover { background: var(--hair); }
+.oto-history-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* La version choisie : le fond de la carte et un filet d'encre à gauche, que `aria-current` redit ; son détail suit dans le même fond. */
+.oto-history-item[data-selected] .oto-history-head,
+.oto-history-item[data-selected] .oto-history-detail { background: var(--card); box-shadow: inset 3px 0 0 var(--ink); }
+.oto-history-item[data-selected] .oto-history-head { border-end-start-radius: 0; border-end-end-radius: 0; }
+.oto-history-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-3) calc(var(--space-2-5) + 24px + var(--space-2-5));
+  border-end-start-radius: var(--r-ctrl);
+  border-end-end-radius: var(--r-ctrl);
+}
+
+.oto-history-lead { flex: none; display: grid; place-items: center; }
+.oto-history-text { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
+.oto-history-top { display: flex; justify-content: space-between; gap: var(--space-2); }
+.oto-history-title { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: var(--fw-semibold); min-inline-size: 0; }
+/* `--mute` sur `--card` (la version choisie) : 4,78:1 au plus bas des huit teintes, de nuit (5,65:1 de jour). */
+.oto-history-meta { flex: none; font-size: var(--fs-xs); color: var(--mute); white-space: nowrap; }
+.oto-history-desc { font-size: var(--fs-xs); color: var(--mute); }
+
+/* L'écart : un mot en pastille d'état (`Badge`, paire vérifiée), puis le texte sur la teinte d'état à 14 % ; encre sur teinte : 8,80:1 au plus bas des huit teintes, jour et nuit. Retiré barré, ajouté sans soulignement : le mot porte le sens, jamais la couleur seule. */
+.oto-diff-line { margin: 0; display: flex; align-items: baseline; gap: var(--space-1-5); font-size: var(--fs-sm); line-height: 1.55; }
+.oto-diff-line > .oto-badge { flex: none; }
+.oto-diff-text { border-radius: var(--r-chip); padding: 1px 2px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.oto-diff-line[data-change="deleted"] .oto-diff-text { background: color-mix(in srgb, var(--st-fail) var(--st-tint), var(--island)); text-decoration: line-through; }
+.oto-diff-line[data-change="added"] .oto-diff-text { background: color-mix(in srgb, var(--st-ok) var(--st-tint), var(--island)); text-decoration: none; }
+.oto-diff { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2-5) var(--space-3); border: 1px solid var(--island-bd); border-radius: var(--r-ctrl); background: var(--island); }
+
+/* Les piles de l'historique (son corps, son chargement, un écart, son pied), au lieu d'utilitaires posés à la main : une colonne, l'écart d'une liste (`data-gap` le resserre). */
+.oto-history-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.oto-history-stack[data-gap="sm"] { gap: var(--space-2); }
+.oto-history-stack[data-gap="xs"] { gap: var(--space-1); }
+/* Une version en attente de lecture : l'avatar puis ses deux lignes, comme une version lue (`.oto-history-head`). */
+.oto-history-skeleton { display: flex; align-items: flex-start; gap: var(--space-2-5); }
+/* Le pied : toute la largeur du tiroir ; la date de la version à gauche, « Revenir à cette version » à droite, l'un sous l'autre quand la place manque. */
+.oto-history-foot { inline-size: 100%; }
+.oto-history-foot-row { inline-size: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }

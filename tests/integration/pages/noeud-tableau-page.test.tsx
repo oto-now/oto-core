@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NodeView, TableHeader } from "@otomata_tech/oto_platform/schemas"
 import {
   lastConnections,
+  listComments,
   listMembers,
   listNodeRules,
   listTeams,
@@ -53,6 +54,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   resolveReferencesForScreen: vi.fn(),
   nodeLinks: vi.fn(),
   lastConnections: vi.fn(),
+  listComments: vi.fn(),
 }))
 
 const TABLEAU = "ventes/suivi_prospects"
@@ -96,14 +98,14 @@ async function montrer(arbre: ReactNode) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // L'encart « Commentaires » lit les fils du nœud une fois l'écran monté : aucun, ici ; toute autre requête échoue comme sans serveur.
+  // La page lit les fils du nœud (`listComments`) : aucun, ici ; toute requête de l'écran échoue comme sans serveur.
   vi.stubGlobal(
     "fetch",
-    vi.fn<typeof fetch>(async (adresse) => {
-      if (String(adresse).includes("/comments?path=")) return new Response(JSON.stringify({ data: { path: TABLEAU, threads: [], readers: [], mailEnabled: false } }), { status: 200 })
+    vi.fn<typeof fetch>(async () => {
       throw new TypeError("fetch failed")
     }),
   )
+  vi.mocked(listComments).mockResolvedValue({ path: TABLEAU, threads: [], readers: [], mailEnabled: false })
   vi.mocked(getPlatformIdentitySafely).mockResolvedValue({ data: { identity: IDENTITE, session: SESSION } })
   vi.mocked(loadNode).mockResolvedValue(tableau())
   // Les liens du nœud (« Cité dans », « Cite » ; E05-S10 AC-b6, E11-S05 AC-e3), lus par `nodeLinks` : aucun.
@@ -133,8 +135,8 @@ describe("/n/[...chemin] page of a table (AC1, AC4 à AC8, AC10)", () => {
     expect(tableGridSummary).toHaveBeenCalledWith(...lecture, selection)
     expect(tableReviewQueue).toHaveBeenCalledWith(...lecture, { table: TABLEAU })
     expect(resolveReferencesForScreen).not.toHaveBeenCalled()
-    // E05-S10, AC-a7 : les lignes passent dans l'infobulle de « modifié … ».
-    const meta = screen.getByText(/^modifié /)
+    // E05-S10, AC-a7 : les lignes passent dans l'infobulle de « Tableau · Modifié … ».
+    const meta = screen.getByText(/^Tableau · Modifié /)
     act(() => meta.focus())
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Lignes10 lignes")
     expect(await screen.findByRole("table", { name: "Suivi des prospects — 10 lignes · 1 ligne correspond" })).toBeInTheDocument()

@@ -3,15 +3,16 @@
 // `nodePathSchema`, les lectures des services avec le client de la session, le refus `not_found`
 // traduit en « introuvable » (H68), et la gestion qu'accorde le panneau des règles selon le rôle.
 // Session de l'hôte et services du paquet simulés ; l'écran est le vrai. Le panneau « Partager » s'ouvre
-// depuis « Partager · <espace> » de l'en-tête (E05-S09, partie c1 ; E05-S10, AC-b5) ; les liens du nœud
+// depuis « Partager » de l'en-tête (E05-S09, partie c1 ; E05-S10, AC-b5) ; les liens du nœud
 // (« Contenus liés », AC-b6) sont lus par `nodeLinks` dès le chemin connu, et arrivent après la page (M58).
 import type { ReactNode } from "react"
 import { after } from "next/server"
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NodeRulesView, TreeNode } from "@otomata_tech/oto_platform/schemas"
 import {
   checkProcedure,
+  listComments,
   listMembers,
   listNodeRules,
   listTeams,
@@ -55,6 +56,7 @@ vi.mock("@otomata_tech/oto_platform/server", async (importOriginal) => ({
   previewContext: vi.fn(),
   nodeLinks: vi.fn(),
   recordNodeView: vi.fn(),
+  listComments: vi.fn(),
 }))
 
 const LEA = "0b6f1f0e-1c1a-4a8e-9a51-0d7c1a2b3c02"
@@ -104,10 +106,10 @@ async function monter(element: ReactNode) {
   })
 }
 
-/** Le panneau « Partager », ouvert depuis l'accès de l'en-tête, nommé par la section du nœud (AC19, AC-b5). */
-function ouvrirLePartage(section = "Ventes") {
-  fireEvent.click(screen.getByRole("button", { name: `Partager · ${section}` }))
-  return within(screen.getByRole("dialog", { name: `Partager — ${section}` }))
+/** Le panneau « Partager », ouvert depuis l'accès de l'en-tête, nommé par le titre du contenu (AC19, AC-b5, #219). */
+function ouvrirLePartage() {
+  fireEvent.click(screen.getByRole("button", { name: "Partager" }))
+  return within(screen.getByRole("dialog", { name: /^Partager « .+ »$/ }))
 }
 
 beforeEach(() => {
@@ -120,6 +122,7 @@ beforeEach(() => {
   vi.mocked(listNodeRules).mockResolvedValue(REGLES)
   vi.mocked(nodeLinks).mockResolvedValue({ links_out: [], links_out_total: 0, links_in: [], links_in_total: 0 })
   vi.mocked(recordNodeView).mockResolvedValue(undefined)
+  vi.mocked(listComments).mockResolvedValue({ path: "ventes/modele_relance", threads: [], readers: [], mailEnabled: false })
 })
 
 afterEach(() => {
@@ -158,6 +161,15 @@ describe("/n/[...chemin] page view (1.4.13)", () => {
     expect(recordNodeView).toHaveBeenCalledWith(SESSION.db, identite("member"), { path: "ventes/modele_relance" })
   })
 
+  it("should read the comment threads before the view is counted, so that their unread mark reads the previous visit (D8)", async () => {
+    await monter(await page(["ventes", "modele_relance"]))
+    await apresLaReponse()
+    const [lecture] = vi.mocked(listComments).mock.invocationCallOrder
+    const [vue] = vi.mocked(recordNodeView).mock.invocationCallOrder
+    expect(vi.mocked(listComments).mock.calls).toEqual([[SESSION.db, identite("member"), "ventes/modele_relance"]])
+    expect(lecture).toBeLessThan(vue)
+  })
+
   it("should keep the page when the view cannot be counted, saying a failure other than an unknown page in the server log", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {})
     vi.mocked(recordNodeView).mockRejectedValueOnce(new PlatformError("not_found", "Unknown path."))
@@ -189,16 +201,15 @@ describe("/n/[...chemin] page reads (AC9, AC19, AC22)", () => {
     fireEvent.click(within(screen.getByRole("navigation", { name: "Chemin" })).getByRole("button", { name: "Ventes" }))
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Privé" }))
     expect(naviguer).toHaveBeenCalledWith("/n/private/lea/contexte")
-    expect(within(ouvrirLePartage().getByRole("list", { name: "Personnes et équipes ajoutées" })).getByRole("combobox", { name: "Accès de Équipe Ventes" })).toHaveValue("write")
+    expect(within(ouvrirLePartage().getByRole("list", { name: "Partager avec" })).getByRole("combobox", { name: "Accès de Équipe Ventes" })).toHaveValue("write")
   })
 
-  it("should read the links of the node by nodeLinks, with the page, and fold them in « Cité dans » (E11-S05, AC-e1)", async () => {
+  it("should read the links of the node by nodeLinks, with the page, and list them at the foot in « Cité dans » (E11-S05, AC-e1 ; refonte #217)", async () => {
     vi.mocked(nodeLinks).mockResolvedValue({ links_out: [], links_out_total: 0, links_in: [{ path: "conseil/guide", title: "Guide du conseil" }], links_in_total: 1 })
     await monter(await page(["ventes", "modele_relance"]))
     expect(nodeLinks).toHaveBeenCalledWith(SESSION.db, identite("member"), { path: "ventes/modele_relance" })
-    const titre = await screen.findByText("Cité dans", { selector: "strong" })
-    await waitFor(() => expect(titre.closest("summary")).toHaveTextContent("Cité dans1"))
-    expect(within(titre.closest("details") ?? document.body).getByRole("link", { name: /^Guide du conseil/ })).toHaveAttribute("href", "/n/conseil/guide")
+    expect(await screen.findByRole("heading", { name: "Cité dans 1 contenu" })).toBeInTheDocument()
+    expect(within(screen.getByRole("list", { name: "Cité dans" })).getByRole("link", { name: "Guide du conseil" })).toHaveAttribute("href", "/n/conseil/guide")
   })
 
   it("should show a writer the published version on ?version=published", async () => {
@@ -258,7 +269,9 @@ describe("/n/[...chemin] page not found and failures (AC6, AC7)", () => {
   ])("should say a failed read of %s in « Partager », with « Réessayer » on the same address", async (_lecture, section, enPanne) => {
     enPanne()
     await monter(await page(["ventes", "modele_relance"], { version: "published" }))
-    const repli = ouvrirLePartage(section)
+    // La section se dit dans la méta, depuis que « Partager » ne la porte plus (refonte #218).
+    expect(document.querySelector(".oto-screen-header-meta")?.textContent?.endsWith(` · ${section}`)).toBe(true)
+    const repli = ouvrirLePartage()
     expect(repli.getByRole("alert")).toHaveTextContent(ECHEC)
     expect(repli.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/n/ventes/modele_relance?version=published")
     expect(repli.queryByRole("combobox")).toBeNull()
@@ -312,7 +325,7 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     expect(previewContext).not.toHaveBeenCalled()
     expect(screen.queryByRole("region", { name: "Contrôle du brouillon" })).toBeNull()
     expect(screen.queryByRole("region", { name: "Tester une phrase" })).toBeNull()
-    expect(screen.queryByRole("group", { name: "À quoi sert cette page" })).toBeNull()
+    expect(screen.queryByRole("region", { name: "Ce que reçoit votre assistant" })).toBeNull()
   })
 
   const lea = (): Identity => {
@@ -337,18 +350,17 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
     await monter(await page(chemin.split("/")))
 
     expect(previewContext).toHaveBeenCalledWith(SESSION.db, lea(), {})
-    const note = within(screen.getByRole("group", { name: "À quoi sert cette page" }))
-    // E05-S13 (AC-17) : qui le reçoit, dit en une phrase.
-    expect(note.getByText(recu)).toBeInTheDocument()
-    const encart = within(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }))
+    // E05-S13 (AC-17) : qui le reçoit, dit en une phrase, sous la méta (refonte #217).
+    expect(screen.getByText(recu).closest(".oto-node-lead")).not.toBeNull()
+    const encart = within(screen.getByRole("list", { name: "Ordre de lecture" }))
     // E11-S10 (AC-e4, AC-g2) : chaque ligne mène à `/context#<ancre>`, sans « Règles Oto » ; l'ancre garde son rang d'origine.
     expect(encart.getByRole("link", { name: /^Contexte : Tout le monde/ })).toHaveAttribute("href", "/context#everyone-context")
     expect(encart.queryByRole("link", { name: "Règles Oto" })).toBeNull()
     expect(screen.queryByRole("region", { name: "Ma fiche" })).toBeNull()
-    // 2026-10-20 : la jauge du budget, tout en bas de la colonne, après l'aperçu et les encarts.
+    // Refonte #217 : la jauge du budget en tête de « Ce que reçoit votre assistant », au pied, puis l'ordre de lecture.
     const jauge = screen.getByText(/^Votre assistant reçoit/)
-    expect(screen.getByRole("note", { name: "Voici ce que votre agent va lire" }).compareDocumentPosition(jauge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(jauge.closest(".oto-budget")?.nextElementSibling).toBeNull()
+    expect(jauge.closest("[aria-label='Ce que reçoit votre assistant']")?.closest(".oto-node-foot")).not.toBeNull()
+    expect(jauge.compareDocumentPosition(screen.getByRole("list", { name: "Ordre de lecture" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   // E05-S11 (AC-17) : le titre du document d'un Contexte est celui de son `<h1>`, « Contexte · <section> » ;
@@ -361,7 +373,7 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
 
   it("should give a page neither annexes, nor a control, nor a phrase test", async () => {
     await monter(await page(["ventes", "modele_relance"], { phrase: "Relance le devis" }))
-    expect(screen.queryByRole("group", { name: "À quoi sert cette page" })).toBeNull()
+    expect(screen.queryByRole("region", { name: "Ce que reçoit votre assistant" })).toBeNull()
     expect(screen.queryByRole("region", { name: "Tester une phrase" })).toBeNull()
     expect(checkProcedure).not.toHaveBeenCalled()
   })

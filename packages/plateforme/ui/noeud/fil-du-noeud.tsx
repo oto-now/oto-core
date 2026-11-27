@@ -33,10 +33,11 @@ function menuDe(freres: readonly FrereDuFil[], naviguer: (adresse: string) => vo
 }
 
 function maillonsDe(maillons: readonly MaillonDuFil[], naviguer: (adresse: string) => void): Maillon[] {
+  // Sans glyphe dans le fil (refonte #216, maquette validée) : la couleur du thème n'y marque plus le maillon courant ;
+  // les frères ouverts depuis un maillon gardent le leur.
   return maillons.map((maillon) => ({
     id: maillon.id,
     label: maillon.libelle,
-    icon: maillon.glyphe ? <Glyphe glyphe={maillon.glyphe} /> : undefined,
     current: maillon.courant,
     menu: maillon.freres.length > 0 ? menuDe(maillon.freres, naviguer) : undefined,
   }))

@@ -15,28 +15,50 @@ export const GLYPHE_FERMER = (
 
 /**
  * Ouvre ou ferme un `<dialog>` selon `open`, en laissant jouer l'animation de sortie ; Échap passe par
- * `onClose`. Démonté ouvert, il rend le focus à ce qui l'avait avant `showModal()`.
+ * `onClose`. Démonté ouvert, il rend le focus à ce qui l'avait avant `showModal()`. `modal: false` l'ouvre par
+ * `show()`, hors de la couche du dessus, le fond restant actif (un panneau qu'on lit à côté de la page) ; Échap y
+ * passe par `onClose` aussi. Un changement de `modal` pendant qu'il est ouvert le rouvre dans l'autre mode.
  */
-export function useNativeDialog(ref: RefObject<HTMLDialogElement | null>, open: boolean, onClose?: () => void): boolean {
+export function useNativeDialog(ref: RefObject<HTMLDialogElement | null>, open: boolean, onClose?: () => void, modal = true): boolean {
   const [closing, setClosing] = useState(false)
   const retour = useRef<Element | null>(null)
+  const ouvertEnModal = useRef<boolean | null>(null)
 
   useEffect(() => {
     const element = ref.current
     if (!element) return
+    // `show()` et `showModal()` sur un dialogue déjà ouvert dans l'autre mode lèvent : il se referme d'abord.
+    const rouvert = open && element.open && ouvertEnModal.current !== null && ouvertEnModal.current !== modal
+    if (rouvert) element.close()
     if (open && !element.open) {
-      retour.current = document.activeElement
-      element.showModal()
+      if (!rouvert) retour.current = document.activeElement
+      if (modal) element.showModal()
+      else element.show()
+      ouvertEnModal.current = modal
     }
     if (!open && element.open) {
       setClosing(true)
       const minuterie = setTimeout(() => {
         setClosing(false)
         element.close()
+        ouvertEnModal.current = null
       }, 140)
       return () => clearTimeout(minuterie)
     }
-  }, [open, ref])
+  }, [open, ref, modal])
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element || modal) return
+    // Un dialogue non modal ne reçoit pas `cancel` à Échap : la touche se lit sur lui.
+    const surEchap = (evenement: KeyboardEvent) => {
+      if (evenement.key !== "Escape") return
+      evenement.preventDefault()
+      onClose?.()
+    }
+    element.addEventListener("keydown", surEchap)
+    return () => element.removeEventListener("keydown", surEchap)
+  }, [ref, onClose, modal])
 
   useEffect(() => {
     const element = ref.current

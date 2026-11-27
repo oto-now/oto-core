@@ -3,14 +3,14 @@ import { clientAuth } from "./fixtures/base"
 import { assurerLeNoeud, attendre, capturer, lireLeHtml, seConnecterSurLEspace } from "./fixtures/noeud"
 import { CHEMINS, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
-// Contrôle visuel connecté des écrans du Contexte après E05-S12, lot C, et E11-S05, lot e : le compte E2E,
-// administrateur de l'organisation (`espace.ts`), en clair puis en sombre, à 375 et à 1 280 px. Une page jetable
-// `private/<handle>/essai_e05s12` et une page rangée sous le Contexte Privé (D110) donnent à l'une et à l'autre leur
-// encart « Sous-pages ». À 1 280 px, rail ouvert, la colonne de droite commence au haut de la carte, dans une piste
-// d'au moins 270 px : sur la page, « Sous-pages » ; sur le Contexte, « À quoi sert cette page » (AC-21, E11-S05 AC-e1,
-// AC-e2) ; à 375 px, une colonne, la carte puis les encarts (AC-e5) ; aucun défilement horizontal du contenu, sur le
-// Contexte et sur la vue « Contexte », à `/context` depuis E11-S10, sans « Règles Oto » ni tête servie. Une capture par
-// étape dans `test-results/`.
+// Contrôle visuel connecté des écrans du Contexte après E05-S12, lot C, E11-S05, lot e, et la refonte de l'écran d'un
+// contenu (#217) : le compte E2E, administrateur de l'organisation (`espace.ts`), en clair puis en sombre, à 375 et à
+// 1 280 px. Une page jetable `private/<handle>/essai_e05s12` et une page rangée sous le Contexte Privé (D110) donnent à
+// l'une et à l'autre leur colonne « Sous-pages » au pied. Aucune colonne de droite : le pied suit le texte, à toute
+// largeur ; sur la page, « Sous-pages · N » ; sur le Contexte, la ligne de portée sous la méta, puis au pied « Ce que
+// reçoit votre assistant » et « Sous-pages · N » ; aucun défilement horizontal du contenu, sur le Contexte et sur la vue
+// « Contexte », à `/context` depuis E11-S10, sans « Règles Oto » ni tête servie. Une capture par étape dans
+// `test-results/`.
 
 const email = process.env.E2E_USER_EMAIL ?? ""
 const password = process.env.E2E_USER_PASSWORD ?? ""
@@ -32,22 +32,21 @@ async function sansDefilementHorizontal(page: Page): Promise<boolean> {
 }
 
 /**
- * La colonne de droite commence au haut de la carte du document, à droite d'elle, lisible (280 px, `--annexes-w`,
- * sous 1 410 px de contenu) ; sous 1 024 px, une colonne, sous la carte (AC-21 ; E11-S05, AC-e1, AC-e5).
+ * Le pied suit le texte, à toute largeur (refonte #217) : ni colonne de droite ni carte autour du document ; `premier`,
+ * la première section du pied, commence sous le document.
  */
-async function colonneALaCarte(page: Page, premier: Locator, largeur: number) {
-  const carte = page.locator(".oto-two-columns-main .oto-island").first()
-  await attendre(carte).toBeVisible()
+async function piedSousLeTexte(page: Page, premier: Locator) {
+  const texte = page.locator(".oto-node-document").first()
+  await attendre(texte).toBeVisible()
   await attendre(premier).toBeVisible()
-  const [enCarte, enColonne] = [await boite(carte), await boite(premier)]
-  if (largeur === 1_280) {
-    expect(Math.abs(enColonne.y - enCarte.y)).toBeLessThanOrEqual(1)
-    expect(enColonne.x).toBeGreaterThan(enCarte.x + enCarte.width)
-    expect(enColonne.width).toBeGreaterThanOrEqual(270)
-  } else {
-    expect(enColonne.y).toBeGreaterThan(enCarte.y + enCarte.height)
-  }
+  await expect(page.locator(".oto-two-columns-aside")).toHaveCount(0)
+  await expect(page.locator(".oto-two-columns-main .oto-island")).toHaveCount(0)
+  const [enTexte, auPied] = [await boite(texte), await boite(premier)]
+  expect(auPied.y).toBeGreaterThanOrEqual(enTexte.y + enTexte.height)
 }
+
+/** Les intitulés des sections du pied, dans l'ordre du document. */
+const intitulesDuPied = (page: Page) => page.locator("footer.oto-node-foot h2").allInnerTexts()
 
 test.describe("écrans du Contexte (E05-S12, lot C)", () => {
   test.skip(!ESPACE.semee, SANS_ESPACE)
@@ -59,7 +58,7 @@ test.describe("écrans du Contexte (E05-S12, lot C)", () => {
 
   for (const mode of MODES) {
     for (const largeur of LARGEURS) {
-      test(`should align the right column with the card, on a page and on a Contexte (${mode}, ${largeur} px)`, async ({ browser }, testInfo) => {
+      test(`should put the foot under the text, without a right column, on a page and on a Contexte (${mode}, ${largeur} px)`, async ({ browser }, testInfo) => {
         test.setTimeout(600_000)
         const context = await browser.newContext({ colorScheme: mode, viewport: { width: largeur, height: 900 } })
         const page = await context.newPage()
@@ -74,19 +73,25 @@ test.describe("écrans du Contexte (E05-S12, lot C)", () => {
         await assurerLeNoeud(page, { chemin: `${essai}/enfant`, titre: "Enfant", resume: "Sous-page jetable." })
         await assurerLeNoeud(page, { chemin: `private/${handle}/contexte/essai_e05s12`, titre: "Rangée sous le Contexte", resume: "Page jetable sous le Contexte Privé (D110)." })
 
-        // Une page : « Sous-pages » en tête de la colonne de droite ; ni chapô ni résumé (E11-S05, AC-f1).
+        // Une page : « Sous-pages · N » au pied, sous le texte ; ni chapô ni résumé (E11-S05, AC-f1).
         await page.goto(`${ESPACE.adresse}/n/${essai}`)
-        await colonneALaCarte(page, page.locator(".oto-two-columns-aside details.oto-linked").first(), largeur)
+        const sousPages = page.getByRole("region", { name: "Sous-pages" })
+        await piedSousLeTexte(page, sousPages)
+        await expect(sousPages.getByRole("link", { name: /^Enfant/ })).toBeVisible()
+        expect(await intitulesDuPied(page)).toEqual([expect.stringMatching(/^Sous-pages · \d+$/)])
         await expect(page.locator(".oto-node-lead")).toHaveCount(0)
         await expect(page.getByText("Page jetable du contrôle visuel d'E05-S12.")).toHaveCount(0)
         expect(await sansDefilementHorizontal(page)).toBe(true)
         await capturer(page, testInfo, `page-${nom}`)
 
-        // Le Contexte Privé : « À quoi sert cette page » en tête de la colonne de droite, replié (AC-e2).
+        // Le Contexte Privé : la ligne de portée sous la méta ; au pied, « Ce que reçoit votre assistant » en premier, puis
+        // « Sous-pages · N » (la page rangée sous lui).
         await page.goto(`${ESPACE.adresse}/n/private/${handle}/contexte`)
-        const aQuoiSert = page.getByRole("group", { name: "À quoi sert cette page" })
-        await colonneALaCarte(page, aQuoiSert, largeur)
-        await expect(aQuoiSert).not.toHaveAttribute("open")
+        await attendre(page.locator(".oto-node-lead")).toBeVisible()
+        await piedSousLeTexte(page, page.getByRole("region", { name: "Ce que reçoit votre assistant" }))
+        const intitules = await intitulesDuPied(page)
+        expect(intitules[0]).toBe("Ce que reçoit votre assistant")
+        expect(intitules).toContainEqual(expect.stringMatching(/^Sous-pages · \d+$/))
         expect(await sansDefilementHorizontal(page)).toBe(true)
         await capturer(page, testInfo, `contexte-${nom}`)
 

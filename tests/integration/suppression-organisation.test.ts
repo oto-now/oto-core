@@ -107,7 +107,8 @@ describe.skipIf(!sqlConfigured || privatePending)(name(SUITE), () => {
     await admin`insert into platform.host_apis (org_id, refused_address, refused_at, problems) values (${org.org.id}, 'https://hote.example.test', now(), '[]'::jsonb)`
     await admin`insert into platform.pseudonym_orgs (org_id, salt, witness) values (${org.org.id}, ${randomBytes(12).toString("hex")}, 'abcd')`
     await admin`insert into platform.member_exclusions (org_id, user_id) values (${org.org.id}, ${(await fx.createUser()).id})`
-    await admin`insert into platform.invitations (org_id, email, invited_by) values (${org.org.id}, ${`test-${hex(6)}@example.invalid`}, ${org.people.ada.id})`
+    // À une équipe : le déclencheur de `20261127150000` en écrit la ligne de `invitation_teams`.
+    await admin`insert into platform.invitations (org_id, email, team_id, invited_by) values (${org.org.id}, ${`test-${hex(6)}@example.invalid`}, ${org.teams.ventes}, ${org.people.ada.id})`
     await fx.grantPlatformAccess(org.org.id, staff.id, staff.id)
     await admin`
       insert into platform.admin_journal (org_id, user_id, ctx, method, tool, op, target, args, error, is_error, duration_ms)

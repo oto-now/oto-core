@@ -18,13 +18,12 @@
 // `aria-current`), chaque couche un lien. Changé : le poids se compte en caractères, la mesure du budget,
 // chaque couche dit son état. Repris d'Oto (`capabilities/agent_context.py` l. 1-17, 44-52) : « exactement ce
 // que son Claude reçoit », mesuré par couche, dans l'ordre d'injection ; retiré : la notice, la toolbox, les
-// déroulés.
+// déroulés. Refonte #216 : une liste simple, celle du pied (`.oto-node-foot-list`), ni note encadrée (`NotePanel`) ni
+// carte par couche (`LayerLink`) ; la couche ouverte se marque par « (ce contexte) » en demi-gras et `aria-current`.
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
-import { FOCUS } from "../components/classes"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
-import { LayerLink, LayerStack } from "../ds/react/layer-stack"
-import { NotePanel } from "../ds/react/note-panel"
 import { APERCU_DU_CONTEXTE, nomDuBloc, type EquipesNommees } from "./libelles"
 import { ancreDeLaPartie } from "./parties-du-contexte"
 
@@ -67,34 +66,27 @@ type CouchesProps = Pick<ApercuDuContexteProps, "cheminCourant" | "equipes" | "h
  */
 function Couches({ apercu, cheminCourant, equipes, hrefDuContexteServi, Lien }: CouchesProps) {
   return (
-    <LayerStack role="list" aria-label={APERCU_DU_CONTEXTE.legende}>
+    <ul className="oto-node-foot-list" aria-label={APERCU_DU_CONTEXTE.legende}>
       {apercu.blocks.map((bloc, rang) => {
         if (bloc.name === "code") return null
         // Par le nom, le chemin du Contexte même quand il n'est pas servi (brouillon, vide : E05-S12, AC-8).
         const ici = bloc.name === cheminCourant
-        const nom = `${nomDuBloc(bloc, equipes)}${ici ? ` ${APERCU_DU_CONTEXTE.ceContexte}` : ""}`
         // Un bloc servi n'a pas d'identité propre : son rang dans l'ordre servi, que rien ne réordonne.
         return (
-          <div key={rang} role="listitem">
-            <LayerLink as={Lien} href={`${hrefDuContexteServi}#${ancreDeLaPartie(bloc, rang)}`} className={FOCUS} name={nom} here={ici} />
-          </div>
+          <li key={rang} className="oto-node-foot-item">
+            <Lien href={`${hrefDuContexteServi}#${ancreDeLaPartie(bloc, rang)}`} className={LIEN} aria-current={ici ? "page" : undefined}>
+              {nomDuBloc(bloc, equipes)}
+              {/* Le Contexte ouvert se marque par ces seuls mots, en demi-gras : ni fond ni bordure. */}
+              {ici && <span className="oto-node-foot-here"> {APERCU_DU_CONTEXTE.ceContexte}</span>}
+            </Lien>
+          </li>
         )
       })}
-    </LayerStack>
+    </ul>
   )
 }
 
 export function ApercuDuContexte({ apercu, cheminCourant, equipes, hrefDuContexteServi, ici, Lien }: ApercuDuContexteProps) {
-  if (apercu.error !== undefined) {
-    return (
-      <NotePanel aria-label={APERCU_DU_CONTEXTE.titre}>
-        <ErreurDeLecture titre={APERCU_DU_CONTEXTE.echec} message={apercu.error} href={ici} Lien={Lien} />
-      </NotePanel>
-    )
-  }
-  return (
-    <NotePanel aria-label={APERCU_DU_CONTEXTE.titre}>
-      <Couches apercu={apercu.data} cheminCourant={cheminCourant} equipes={equipes} hrefDuContexteServi={hrefDuContexteServi} Lien={Lien} />
-    </NotePanel>
-  )
+  if (apercu.error !== undefined) return <ErreurDeLecture titre={APERCU_DU_CONTEXTE.echec} message={apercu.error} href={ici} Lien={Lien} />
+  return <Couches apercu={apercu.data} cheminCourant={cheminCourant} equipes={equipes} hrefDuContexteServi={hrefDuContexteServi} Lien={Lien} />
 }

@@ -5,14 +5,16 @@ import type { NodeView, TreeNode } from "@otomata_tech/oto_platform/schemas"
 import { ContexteDeLHote, EcranDeNoeud, EcranDeNoeudChargement } from "@otomata_tech/oto_platform/ui"
 import { cheminsCites } from "../../../packages/plateforme/ui/noeud/corps-du-noeud"
 import { texteDuBloc } from "../../helpers/champ-du-bloc"
+import { simulerLesDialogues } from "../../helpers/dialogue"
 import { avecCle, bloc, ID, PAGE, simulerLAPI, vueDuNoeud } from "../../helpers/noeud"
 
 // L'écran d'un nœud (E05-S02 : AC1 à AC9, AC14, AC17, AC19 ; E05-S09, partie c1 : porté d'oto-frontend ;
 // E05-S10, partie b : AC-a7, AC-b4, AC-b6), rendu comme la page de l'hôte le monte : lectures en
 // `resultat`, lien de l'hôte marqué, adresse d'un chemin ; la navigation du fil passe par l'hôte
 // (`ContexteDeLHote`), espionnée. Le panneau « Partager » a son fichier (`partager.test.tsx`). E05-S11 :
-// le titre d'un Contexte (AC-17), une page citée par son titre (AC-26, AC-27). E11-S05 : « Cité dans », « Cite » et
-// « Sous-pages » en encarts (lot e), « Télécharger » (lot c), le résumé d'une procédure seule (lot f), la page vide (lot g).
+// le titre d'un Contexte (AC-17), une page citée par son titre (AC-26, AC-27). E11-S05 : « Télécharger » (lot c), le
+// résumé d'une procédure seule (lot f), la page vide (lot g). Refonte #217, #218 : la page à plat, la méta, le pied
+// « Sous-pages », « Cité dans », « Cite », « Liens » et le menu « ⋯ » de l'en-tête.
 
 type EcranDeNoeudProps = ComponentProps<typeof EcranDeNoeud>
 
@@ -86,9 +88,11 @@ const lignesDuMenu = () => within(screen.getByRole("menu")).getAllByRole("menuit
 const ancre = (racine: HTMLElement, id: string) => racine.querySelector(`[id="${id}"]`)
 const brouillon = (blocs = PAGE, baseRevision = 4): NodeView["draft"] => ({ baseRevision, savedAt: "2026-09-24T10:00:00Z", draftStamp: "2026-09-24T10:00:00.000000+00:00", blocks: blocs, title: null, summary: null, kind: null, meta: null })
 
-describe("EcranDeNoeud, en-tête (AC2 ; AC-a2)", () => {
-  it("should show the header of the design system, without any tree in the content: trail, glyph and title, meta and owner, no summary for a page", () => {
-    rendre()
+describe("EcranDeNoeud, en-tête (AC2 ; AC-a2 ; refonte #217, #218)", () => {
+  it("should show the flat header: trail ending with the title, the big title once without glyph, the meta under it, the gestures on the right, no summary for a page", async () => {
+    await act(async () => {
+      rendre({ partage: { regles: { data: null }, sujets: { data: { equipes: [], personnes: [] } }, gestionAccordable: false, moi: null } })
+    })
     // L'arbre ne vit plus que dans le rail (AC-a2) : le contenu n'en rend aucun.
     expect(screen.queryByRole("navigation", { name: "Arbre des connaissances" })).toBeNull()
     expect(screen.getAllByRole("navigation")).toHaveLength(1)
@@ -98,16 +102,22 @@ describe("EcranDeNoeud, en-tête (AC2 ; AC-a2)", () => {
     const titre = screen.getByRole("heading", { level: 1 })
     expect(titre).toHaveTextContent("Modèle de relance")
     expect(titre).toHaveClass("oto-page-title")
+    expect(titre.querySelector("svg")).toBeNull()
     // Le résumé d'une page ne se montre pas (E11-S05, AC-f1).
     expect(screen.queryByText("Relancer un devis resté sans réponse.")).toBeNull()
-    expect(screen.getByText("modifiée il y a 3 jours, par Claire Morel").closest("p")).toHaveClass("oto-screen-header-meta")
-    // Le document est un îlot nommé par son titre, au corps de lecture du design system.
-    expect(screen.getByRole("region", { name: "Modèle de relance" })).toHaveClass("oto-island")
+    expect(screen.getByText("Modifiée il y a 3 jours par Claire Morel · Ventes").closest("p")).toHaveClass("oto-screen-header-meta")
+    // Le document est posé à plat, nommé par son titre, sans îlot.
+    const document_ = screen.getByRole("region", { name: "Modèle de relance" })
+    expect(document_).not.toHaveClass("oto-island")
+    expect(document_.closest(".oto-island")).toBeNull()
+    // À droite, dans cet ordre : Commentaires, Historique, Partager, puis « ⋯ » (les liens ne sont pas servis ici).
+    const gestes = Array.from(document.querySelectorAll<HTMLElement>(".oto-screen-header-access button")).map((bouton) => bouton.getAttribute("aria-label") ?? bouton.textContent)
+    expect(gestes).toEqual(["Commentaires", "Historique des versions", "Partager", "Plus d'actions"])
   })
 
   it("should make each link of the trail open its siblings, the current one checked, each leading through the host, an invisible segment staying inert", async () => {
     rendre({ noeud: { data: vueDuNoeud({ path: "ventes/modele_relance/exemple", title: "Exemple", status: "draft", revision: 0, updatedByName: null }) } })
-    expect(screen.getByText("modifiée il y a 3 jours")).toBeInTheDocument()
+    expect(screen.getByText("Modifiée il y a 3 jours · Ventes")).toBeInTheDocument()
 
     // La section ouvre les espaces, chacun menant à son Contexte.
     fireEvent.click(maillon("Ventes"))
@@ -138,13 +148,12 @@ describe("EcranDeNoeud, en-tête (AC2 ; AC-a2)", () => {
   })
 })
 
-describe("EcranDeNoeud, la ligne sous le titre (E05-S10, AC-a7)", () => {
-  it("should keep « modifiée <quand>, par <qui> » and open, on hover and on focus, a tooltip with the type, state, revision and owner", async () => {
+describe("EcranDeNoeud, la ligne sous le titre (E05-S10, AC-a7 ; brief § 5.6)", () => {
+  it("should say « Modifiée <quand> par <qui> · <espace> », the nature first except for a page, and open a tooltip with the type, state, revision and owner", async () => {
     rendre({ noeud: { data: vueDuNoeud({ owner: { kind: "user", userName: "Claire Morel" } }) } })
-    const meta = screen.getByText("modifiée il y a 3 jours, par Claire Morel")
-    expect(meta.closest("p")).toHaveClass("oto-screen-header-meta")
-    // Ni type, ni état, ni révision dans la ligne : ils passent dans l'infobulle.
-    expect(document.querySelector(".oto-screen-header-meta")?.textContent).toBe("modifiée il y a 3 jours, par Claire Morel")
+    const meta = screen.getByText("Modifiée il y a 3 jours par Claire Morel · Ventes")
+    // Ni type, ni état, ni révision dans la ligne : ils passent dans l'infobulle ; la ligne n'a que son texte.
+    expect(document.querySelector(".oto-screen-header-meta")?.textContent).toBe("Modifiée il y a 3 jours par Claire Morel · Ventes")
     expect(screen.queryByText(/^Propriétaire :/)).toBeNull()
     expect(screen.queryByRole("tooltip")).toBeNull()
 
@@ -167,16 +176,20 @@ describe("EcranDeNoeud, la ligne sous le titre (E05-S10, AC-a7)", () => {
     expect(await screen.findByRole("tooltip")).toBeInTheDocument()
     cleanup()
 
-    // Un tableau jamais publié : l'accord au masculin, l'état et ses lignes dans l'infobulle, sans le mot
-    // « brouillon » (E11-S02, AC-c4).
+    rendre({ noeud: { data: vueDuNoeud({ kind: "procedure" }) } })
+    expect(screen.getByText("Procédure · Modifiée il y a 3 jours par Claire Morel · Ventes")).toBeInTheDocument()
+    cleanup()
+
+    // Un tableau jamais publié : l'accord au masculin, sa nature en tête, l'état et ses lignes dans l'infobulle, sans le
+    // mot « brouillon » (E11-S02, AC-c4).
     rendre({ noeud: { data: vueDuNoeud({ kind: "table", status: "draft", revision: 0, blocks: [], rowsTotal: 12, updatedByName: null }) } })
-    const tableau = screen.getByText("modifié il y a 3 jours")
+    const tableau = screen.getByText("Tableau · Modifié il y a 3 jours · Ventes")
     act(() => tableau.focus())
     expect(await screen.findByRole("tooltip")).toHaveTextContent("TypeTableauÉtatNon publiéRévisionaucuneLignes12 lignesPropriétaireéquipe Ventes (responsable : Claire Morel)")
   })
 })
 
-describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
+describe("EcranDeNoeud, le pied et les liens (refonte #217, #218 ; E11-S05, AC-e1)", () => {
   const ENFANT = { path: "ventes/modele_relance/exemple", title: "Exemple", summary: "Un cas réel.", kind: "procedure" as const, status: "published" as const }
   const NOTE = { path: "ventes/modele_relance/note", title: "Note", summary: "Un résumé de page.", kind: "page" as const, status: "published" as const }
   const LIENS = {
@@ -190,86 +203,114 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
     links_in: [{ path: "conseil/guide", title: "Guide du conseil" }],
     links_in_total: 1,
   }
-  /** Les encarts rendus, dans l'ordre du document : le texte de leur `summary` (titre et total). */
-  const encarts = (racine: ParentNode = document) => Array.from(racine.querySelectorAll("details.oto-linked")).map((repli) => repli.querySelector("summary")?.textContent)
-  const encart = (titre: string) => {
-    const repli = screen.getByText(titre, { selector: "strong" }).closest("details")
-    if (!repli) throw new Error(`encart ${titre} absent`)
-    return repli
-  }
+  /** Les colonnes du pied, dans l'ordre : leur intitulé. */
+  const colonnes = () => Array.from(document.querySelectorAll(".oto-node-foot-column > h2")).map((titre) => titre.textContent)
+  const colonne = (nom: string) => within(screen.getByRole("list", { name: nom }))
+  const liens = (liste: ReturnType<typeof colonne>) => liste.getAllByRole("link").map((lien) => [lien.textContent, lien.getAttribute("href")])
 
-  it("should put « Cité dans », « Cite » and « Sous-pages » in the right column, in this order, folded, each with its total (AC-e1, AC-f2)", async () => {
+  it("should list « Sous-pages », « Cité dans » and « Cite » in three columns under the text, each line a link with its glyph, and no right column", async () => {
     await act(async () => {
       rendre({ noeud: { data: vueDuNoeud({ children: [ENFANT, NOTE], childrenTotal: 2 }) }, liens: Promise.resolve({ data: LIENS }) })
     })
-    // « Commentaires » en tête, toujours présent, même sans fil (parcours 5.4, AC12).
-    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1", "Cite3", "Sous-pages2"]))
-    const colonne = document.querySelector(".oto-two-columns-aside")
-    if (!colonne) throw new Error("colonne de droite absente")
-    expect(encarts(colonne)).toHaveLength(4)
-    expect(Array.from(colonne.querySelectorAll("details")).some((repli) => repli.hasAttribute("open"))).toBe(false)
-    // Le document est dans la colonne principale d'un `TwoColumns main="document"`.
-    expect(screen.getByRole("region", { name: "Modèle de relance" }).closest(".oto-two-columns-main")?.parentElement).toHaveAttribute("data-main", "document")
-    expect(screen.queryByText("Contenus liés")).toBeNull()
-    expect(screen.queryByText(/Mentionn/)).toBeNull()
+    await waitFor(() => expect(colonnes()).toEqual(["Sous-pages · 2", "Cité dans 1 contenu", "Cite 3 contenus"]))
+    expect(document.querySelector(".oto-two-columns-aside")).toBeNull()
+    expect(document.querySelector("details.oto-linked")).toBeNull()
+    // Le pied suit le document, dans la colonne de lecture ; sans panneau ouvert, aucune piste de `TwoColumns`.
+    const pied = document.querySelector(".oto-node-foot")
+    expect(screen.getByRole("region", { name: "Modèle de relance" }).compareDocumentPosition(pied as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(pied?.closest(".oto-content-max")).toHaveAttribute("data-width", "document")
+    expect(document.querySelector(".oto-two-columns")).toBeNull()
 
-    const sousPages = within(within(encart("Sous-pages")).getByRole("list", { name: "Sous-pages" }))
-    // Chaque nœud dessous ne dit que sa nature, sans résumé, procédure comprise (E11-S15, AC-a2).
-    expect(sousPages.getAllByRole("link").map((lien) => [lien.textContent, lien.getAttribute("href")])).toEqual([
-      ["ExempleProcédure", "/n/ventes/modele_relance/exemple"],
-      ["NotePage", "/n/ventes/modele_relance/note"],
+    // Chaque nœud dessous, son nom seul, entier au survol (E11-S15, AC-a2).
+    expect(liens(colonne("Sous-pages"))).toEqual([
+      ["Exemple", "/n/ventes/modele_relance/exemple"],
+      ["Note", "/n/ventes/modele_relance/note"],
     ])
-    const cite = within(within(encart("Cite")).getByRole("list", { name: "Cite" }))
+    expect(colonne("Sous-pages").getByText("Exemple")).toHaveAttribute("title", "Exemple")
     // Deux ancres d'un même contenu : une ligne ; un contenu rangé ailleurs mène à sa nouvelle place ; sans cible, un texte.
-    expect(cite.getAllByRole("link").map((lien) => [lien.textContent, lien.getAttribute("href")])).toEqual([
+    expect(liens(colonne("Cite"))).toEqual([
       ["Grille", "/n/ventes/grille"],
-      ["Nouveaudéplacé vers conseil/nouveau", "/n/conseil/nouveau"],
+      ["Nouveau", "/n/conseil/nouveau"],
     ])
-    expect(cite.getByText("ventes/perdu").closest("li")).toHaveAttribute("data-broken")
-    expect(cite.getByText("sans cible")).toBeInTheDocument()
-    const citeDans = within(within(encart("Cité dans")).getByRole("list", { name: "Cité dans" }))
-    expect(citeDans.getAllByRole("link").map((lien) => [lien.textContent, lien.getAttribute("href")])).toEqual([["Guide du conseil", "/n/conseil/guide"]])
+    expect(colonne("Cite").getByText("déplacé vers conseil/nouveau")).toBeInTheDocument()
+    expect(colonne("Cite").getByText("sans cible")).toBeInTheDocument()
+    expect(liens(colonne("Cité dans"))).toEqual([["Guide du conseil", "/n/conseil/guide"]])
+
+    // « Liens » de l'en-tête : leur total, et le popover « Cité dans » puis « Cite », chaque ligne avec son espace (D1).
+    const bouton = screen.getByRole("button", { name: "Liens, 4 contenus" })
+    fireEvent.click(bouton)
+    const popover = within(await screen.findByRole("dialog", { name: "Liens de la page" }))
+    expect(popover.getAllByRole("heading").map((titre) => titre.textContent)).toEqual(["Cité dans 1 contenu", "Cite 3 contenus"])
+    expect(popover.getByRole("link", { name: "Guide du conseil" })).toHaveAttribute("href", "/n/conseil/guide")
   })
 
-  it("should leave out an encart whose total is 0, count what the service did not serve, and keep the right column empty when nothing is linked (AC-e1, HN-E11S05-13)", async () => {
+  it("should move Liens and Historique into « ⋯ » under 640 px, « Liens » opening its popover and « Historique des versions » the history", async () => {
+    // La fenêtre d'un téléphone : toute rupture répond (maquette « Mobile », la rangée tient sur une ligne).
+    simulerLesDialogues()
+    vi.stubGlobal("matchMedia", (requete: string) => ({ matches: true, media: requete, addEventListener: () => {}, removeEventListener: () => {} }))
+    try {
+      await act(async () => {
+        rendre({ liens: Promise.resolve({ data: LIENS }) })
+      })
+      await screen.findByRole("button", { name: "Liens, 4 contenus" })
+      const menu = () => within(screen.getByRole("menu"))
+      fireEvent.click(screen.getByRole("button", { name: "Plus d'actions" }))
+      expect(menu().getAllByRole("menuitem").map((ligne) => ligne.textContent).slice(0, 2)).toEqual(["Liens", "Historique des versions"])
+      fireEvent.click(menu().getByRole("menuitem", { name: "Liens" }))
+      expect(await screen.findByRole("dialog", { name: "Liens de la page" })).toBeInTheDocument()
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Liens de la page" })).toBeNull())
+      fireEvent.click(screen.getByRole("button", { name: "Plus d'actions" }))
+      fireEvent.click(menu().getByRole("menuitem", { name: "Historique des versions" }))
+      expect(await screen.findByRole("dialog", { name: "Historique des versions" })).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("should leave out an empty column, show five lines then « Voir les N autres », count what the service did not serve, and render no foot when nothing is linked", async () => {
     await act(async () => {
       rendre({ liens: Promise.resolve({ data: { links_out: [], links_out_total: 0, links_in: [{ path: "conseil/guide", title: "Guide du conseil" }], links_in_total: 1 } }) })
     })
-    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1"]))
+    await waitFor(() => expect(colonnes()).toEqual(["Cité dans 1 contenu"]))
     cleanup()
 
-    // Le service ne sert que les premiers nœuds dessous : le nombre est le total.
-    rendre({ noeud: { data: vueDuNoeud({ children: [ENFANT], childrenTotal: 60 }) } })
-    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Sous-pages60"]))
-    expect(within(encart("Sous-pages")).getByText("et 59 autres")).toBeInTheDocument()
+    // Sept nœuds servis sur soixante : cinq lignes, la suite à la demande, puis ce que le service n'a pas servi.
+    const enfants = Array.from({ length: 7 }, (_, rang) => ({ ...NOTE, path: `ventes/modele_relance/n${rang}`, title: `Note ${rang}` }))
+    rendre({ noeud: { data: vueDuNoeud({ children: enfants, childrenTotal: 60 }) } })
+    expect(colonnes()).toEqual(["Sous-pages · 60"])
+    expect(colonne("Sous-pages").getAllByRole("link")).toHaveLength(5)
+    expect(screen.getByText("et 53 autres")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Voir les 2 autres" }))
+    expect(colonne("Sous-pages").getAllByRole("link")).toHaveLength(7)
+    await waitFor(() => expect(document.activeElement).toBe(colonne("Sous-pages").getByRole("link", { name: "Note 5" })))
+    expect(screen.queryByRole("button", { name: "Voir les 2 autres" })).toBeNull()
     cleanup()
 
     await act(async () => {
       rendre({ liens: Promise.resolve({ data: { links_out: [], links_out_total: 0, links_in: [], links_in_total: 0 } }) })
     })
-    expect(screen.getByRole("region", { name: "Modèle de relance" })).toBeInTheDocument()
-    await waitFor(() => expect(encarts()).toEqual(["Commentaires"]))
-    // La colonne garde sa piste : le document ne bouge pas quand les liens arrivent.
-    expect(document.querySelector(".oto-two-columns-aside")).not.toBeNull()
+    expect(colonnes()).toEqual([])
+    expect(screen.queryByRole("button", { name: /^Liens/ })).toBeNull()
   })
 
-  it("should say « Lecture des liens… » while the links are read, then their failure with « Réessayer », even without a sub-page (AC-e4)", async () => {
+  it("should say « Lecture des liens… » while the links are read, then their failure with « Réessayer » at the foot, even without a sub-page (AC-e4)", async () => {
     let servir: (lu: { error: string }) => void = () => {}
-    const liens = new Promise<{ error: string }>((resolve) => (servir = resolve))
+    const lecture = new Promise<{ error: string }>((resolve) => (servir = resolve))
     await act(async () => {
-      rendre({ liens })
+      rendre({ liens: lecture })
     })
     expect(screen.getByRole("status")).toHaveTextContent("Lecture des liens…")
     await act(async () => {
       servir({ error: "Une erreur est survenue. Réessayez." })
     })
-    const colonne = within(document.querySelector<HTMLElement>(".oto-two-columns-aside") ?? document.body)
-    await waitFor(() => expect(colonne.getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez."))
-    expect(colonne.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/n/ventes/modele_relance")
+    const pied = within(document.querySelector<HTMLElement>(".oto-node-foot") ?? document.body)
+    await waitFor(() => expect(pied.getByRole("alert")).toHaveTextContent("Une erreur est survenue. Réessayez."))
+    expect(pied.getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/n/ventes/modele_relance")
     expect(screen.queryByText("Lecture des liens…")).toBeNull()
   })
 
-  it("should put the encarts of a table on a line above its grid, which keeps the full width (AC-e3)", async () => {
+  it("should put the foot of a table under its grid, which keeps the full width (AC-e3)", async () => {
     await act(async () => {
       rendre({
         noeud: { data: vueDuNoeud({ kind: "table", blocks: [], children: [NOTE], childrenTotal: 1 }) },
@@ -277,15 +318,13 @@ describe("EcranDeNoeud, encarts et blocs (AC4 ; E11-S05, lot e)", () => {
         complement: <p>La grille du tableau</p>,
       })
     })
-    await waitFor(() => expect(encarts()).toEqual(["Commentaires", "Cité dans1", "Cite3", "Sous-pages1"]))
+    await waitFor(() => expect(colonnes()).toEqual(["Sous-pages · 1", "Cité dans 1 contenu", "Cite 3 contenus"]))
+    const pied = document.querySelector(".oto-node-foot")
+    expect(screen.getByText("La grille du tableau").compareDocumentPosition(pied as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Sans panneau ouvert, aucune piste : la grille et le pied dans le cadre de l'écran, sans mesure de lecture.
     expect(document.querySelector(".oto-two-columns")).toBeNull()
-    const ligne = encart("Cité dans").parentElement
-    expect(ligne).toBe(encart("Sous-pages").parentElement)
-    // « Commentaires » est sur la ligne des autres encarts (parcours 5.4, AC12).
-    expect(ligne).toBe(encart("Commentaires").parentElement)
-    expect(ligne?.compareDocumentPosition(screen.getByText("La grille du tableau")) ?? 0).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    const cadre = screen.getByText("La grille du tableau").closest(".oto-content-max")
-    expect(cadre).not.toHaveAttribute("data-width")
+    const cadres = Array.from(document.querySelectorAll(".oto-content-max")).filter((cadre) => cadre.contains(screen.getByText("La grille du tableau")))
+    expect(cadres.map((cadre) => cadre.hasAttribute("data-width"))).toEqual([false])
   })
 
   it("should render each block by its type, in order, with its reference as anchor, its inline text marked and no HTML injected", () => {
@@ -601,7 +640,7 @@ describe("EcranDeNoeud, sections toujours visibles comme titres (AC14 ; E05-S08,
   })
 })
 
-describe("EcranDeNoeud, accès et partage (AC19 ; E05-S10, AC-b5)", () => {
+describe("EcranDeNoeud, accès et partage (AC19 ; E05-S10, AC-b5 ; refonte #218)", () => {
   const partage = (surcharge: Partial<NonNullable<EcranDeNoeudProps["partage"]>> = {}): EcranDeNoeudProps["partage"] => ({
     regles: { data: { path: "ventes/modele_relance", title: "Modèle de relance", owner: { kind: "team", teamName: "Ventes" }, viewerLevel: 3, rules: [] } },
     sujets: { data: { equipes: [{ id: "t-conseil", nom: "Conseil" }], personnes: [] } },
@@ -610,72 +649,70 @@ describe("EcranDeNoeud, accès et partage (AC19 ; E05-S10, AC-b5)", () => {
     ...surcharge,
   })
 
-  it("should open « Partager » from « Partager · <espace> » of the header, clear a search on a first Escape, close on the next and give the focus back", async () => {
+  it("should open « Partager » from the header, named after the content, clear a search on a first Escape, close on the next and give the focus back", async () => {
     rendre({ partage: partage() })
-    const partager = screen.getByRole("button", { name: "Partager · Ventes" })
+    const partager = screen.getByRole("button", { name: "Partager" })
     expect(partager).toHaveAttribute("aria-expanded", "false")
     act(() => partager.focus())
     fireEvent.click(partager)
-    const panneau = screen.getByRole("dialog", { name: "Partager — Ventes" })
+    const panneau = screen.getByRole("dialog", { name: "Partager « Modèle de relance »" })
     expect(partager).toHaveAttribute("aria-expanded", "true")
     await waitFor(() => expect(document.activeElement).toBe(panneau))
     const champ = within(panneau).getByRole("combobox", { name: "Ajouter une personne ou une équipe" })
     fireEvent.change(champ, { target: { value: "cons" } })
     fireEvent.keyDown(champ, { key: "Escape" })
     expect(champ).toHaveValue("")
-    expect(screen.getByRole("dialog", { name: "Partager — Ventes" })).toBeInTheDocument()
+    expect(screen.getByRole("dialog", { name: /^Partager « .+ »$/ })).toBeInTheDocument()
     fireEvent.keyDown(champ, { key: "Escape" })
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
     expect(document.activeElement).toBe(partager)
   })
 })
 
-describe("EcranDeNoeud, réglages d'un tableau (E11-S01, AC-g1, AC-g6)", () => {
+/** Les entrées du menu « ⋯ » de l'en-tête, ouvert par son déclencheur ; aucune sans menu. */
+function entreesDuMenu(): (string | null)[] {
+  const plus = screen.queryByRole("button", { name: "Plus d'actions" })
+  if (!plus) return []
+  fireEvent.click(plus)
+  return within(screen.getByRole("menu")).getAllByRole("menuitem").map((entree) => entree.textContent)
+}
+
+describe("EcranDeNoeud, réglages d'un tableau (E11-S01, AC-g1, AC-g6 ; refonte #218)", () => {
   const ENTETE = { columns: [{ name: "entreprise", type: "text" }], key: "entreprise" }
   const tableau = (surcharge: Partial<NodeView> = {}) => vueDuNoeud({ kind: "table", blocks: [], meta: ENTETE, ...surcharge })
-  const partage: EcranDeNoeudProps["partage"] = {
-    regles: { data: { path: "ventes/modele_relance", title: "Modèle de relance", owner: { kind: "team", teamName: "Ventes" }, viewerLevel: 3, rules: [] } },
-    sujets: { data: { equipes: [], personnes: [] } },
-    gestionAccordable: false,
-    moi: null,
-  }
-  const reglages = () => screen.queryByRole("button", { name: "Réglages" })
 
-  it("should put « Réglages » after « Télécharger en .csv » and before « Partager · <espace> » for a table read at the write or manage level, and open « Réglages du tableau »", () => {
+  beforeEach(() => simulerLesDialogues())
+
+  it("should offer « Importer un fichier… » and « Réglages du tableau… » after « Télécharger en .csv » in « ⋯ » for a table read at the write or manage level, the latter opening « Réglages du tableau »", () => {
     for (const level of [2, 3] as const) {
-      rendre({ noeud: { data: tableau({ level }) }, partage, complement: <p>La grille du tableau</p> })
-      const bouton = screen.getByRole("button", { name: "Réglages" })
-      const telecharger = screen.getByRole("button", { name: "Télécharger en .csv" })
-      const partager = screen.getByRole("button", { name: "Partager · Ventes" })
-      expect(bouton.closest(".oto-screen-header-access")).toBe(partager.closest(".oto-screen-header-access"))
-      expect(telecharger.closest(".oto-screen-header-access")).toBe(partager.closest(".oto-screen-header-access"))
-      expect(telecharger.compareDocumentPosition(bouton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(bouton.compareDocumentPosition(partager) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      fireEvent.click(bouton)
+      rendre({ noeud: { data: tableau({ level }) }, complement: <p>La grille du tableau</p> })
+      expect(entreesDuMenu()).toEqual(["Télécharger en .csv", "Importer un fichier…", "Réglages du tableau…"])
+      fireEvent.click(screen.getByRole("menuitem", { name: "Réglages du tableau…" }))
       expect(screen.getByRole("dialog", { name: "Réglages du tableau" })).toBeInTheDocument()
       cleanup()
     }
   })
 
-  it("should give no « Réglages » to a reader, on ?version=published, or to a page, a procedure or a Contexte", () => {
-    rendre({ noeud: { data: tableau({ level: 1 }) }, partage })
-    expect(reglages()).toBeNull()
+  it("should give no settings to a reader, on ?version=published, or to a page, a procedure or a Contexte", () => {
+    rendre({ noeud: { data: tableau({ level: 1 }) } })
+    expect(entreesDuMenu()).toEqual(["Télécharger en .csv"])
     cleanup()
-    rendre({ noeud: { data: tableau({ level: 2 }) }, partage, versionPubliee: true })
-    expect(reglages()).toBeNull()
+    rendre({ noeud: { data: tableau({ level: 2 }) }, versionPubliee: true })
+    expect(entreesDuMenu()).toEqual(["Télécharger en .csv"])
     cleanup()
     for (const kind of ["page", "procedure", "context"] as const) {
-      rendre({ noeud: { data: vueDuNoeud({ kind, level: 2, meta: ENTETE }) }, partage })
-      expect(reglages()).toBeNull()
+      rendre({ noeud: { data: vueDuNoeud({ kind, level: 2, meta: ENTETE }) } })
+      expect(entreesDuMenu(), kind).not.toContain("Réglages du tableau…")
       cleanup()
     }
   })
 
-  it("should block the panel on a pending header in the draft, and not on a draft of the title or the summary only (AC-g6)", () => {
+  it("should block the settings on a pending header in the draft, and not on a draft of the title or the summary only (AC-g6)", () => {
     const attente = "Un changement de l'en-tête attend en brouillon. Demandez à l'assistant de le publier ou de l'abandonner, puis rechargez la page."
     const draft = brouillon([])
     rendre({ noeud: { data: tableau({ level: 2, draft: draft && { ...draft, meta: { ...ENTETE, closed: true } } }) } })
-    fireEvent.click(screen.getByRole("button", { name: "Réglages" }))
+    entreesDuMenu()
+    fireEvent.click(screen.getByRole("menuitem", { name: "Réglages du tableau…" }))
     expect(screen.getByText(attente)).toBeInTheDocument()
     // L'état publié, et non celui du brouillon : « Fermé » reste décoché.
     expect(screen.getByRole("switch", { name: "Fermé" })).not.toBeChecked()
@@ -683,42 +720,37 @@ describe("EcranDeNoeud, réglages d'un tableau (E11-S01, AC-g1, AC-g6)", () => {
     cleanup()
 
     rendre({ noeud: { data: tableau({ level: 2, draft: draft && { ...draft, title: "Suivi des prospects 2026" } }) } })
-    fireEvent.click(screen.getByRole("button", { name: "Réglages" }))
+    entreesDuMenu()
+    fireEvent.click(screen.getByRole("menuitem", { name: "Réglages du tableau…" }))
     expect(screen.queryByText(attente)).toBeNull()
     for (const un of screen.getAllByRole("switch")) expect(un).toBeEnabled()
   })
 })
 
 // E11-S05 (lot c ; HN-E11S05-8, HN-E11S05-9) : le fichier publié, par les routes d'export d'E10-S01.
-describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
-  const partage: EcranDeNoeudProps["partage"] = {
-    regles: { data: { path: "ventes/modele_relance", title: "Modèle de relance", owner: { kind: "team", teamName: "Ventes" }, viewerLevel: 1, rules: [] } },
-    sujets: { data: { equipes: [], personnes: [] } },
-    gestionAccordable: false,
-    moi: null,
-  }
-  const commandes = () => Array.from(document.querySelectorAll(".oto-screen-header-access button")).map((bouton) => bouton.textContent)
-
+describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3 ; refonte #218)", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
-  it("should offer « Télécharger en .md » for a page, a procedure or a Contexte and « Télécharger en .csv » for a table, before « Partager », none for a node never published (AC-c1)", () => {
+  it("should offer « Télécharger en .md » for a page, a procedure or a Contexte and « Télécharger en .csv » for a table in « ⋯ », none for a node never published (AC-c1)", () => {
     for (const [kind, libelle] of [["page", "Télécharger en .md"], ["procedure", "Télécharger en .md"], ["context", "Télécharger en .md"], ["table", "Télécharger en .csv"]] as const) {
-      rendre({ noeud: { data: vueDuNoeud({ kind, blocks: [] }) }, partage })
-      expect(commandes()).toEqual([libelle, "Partager · Ventes"])
+      rendre({ noeud: { data: vueDuNoeud({ kind, blocks: [] }) } })
+      expect(entreesDuMenu(), kind).toEqual([libelle])
       cleanup()
     }
-    // Sans panneau de partage, le bouton est seul ; jamais publié, aucun bouton (HN-E11S05-9).
-    rendre()
-    expect(commandes()).toEqual(["Télécharger en .md"])
+    // Jamais publié : ni téléchargement ni historique ; un menu vide n'est pas rendu (HN-E11S05-9, brief § 5.7).
+    rendre({ noeud: { data: vueDuNoeud({ status: "draft", revision: 0 }) } })
+    expect(screen.queryByRole("button", { name: "Plus d'actions" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Historique des versions" })).toBeNull()
     cleanup()
-    rendre({ noeud: { data: vueDuNoeud({ status: "draft", revision: 0, level: 2 }) }, partage })
-    expect(commandes()).toEqual(["Partager · Ventes"])
+    // Au niveau écriture, « Transformer en procédure » reste.
+    rendre({ noeud: { data: vueDuNoeud({ status: "draft", revision: 0, level: 2 }) } })
+    expect(entreesDuMenu()).toEqual(["Transformer en procédure"])
   })
 
-  it("should download the published file of the export route, the button disabled meanwhile, and say a refusal in an alert without any file (AC-c2, AC-c3)", async () => {
+  it("should download the published file of the export route, the entry disabled meanwhile, and say a refusal in an alert without any file (AC-c2, AC-c3)", async () => {
     let repondre: (reponse: Response) => void = () => {}
     const requetes = vi.fn<typeof fetch>((adresse) => (lectureDesFils(adresse) ? Promise.resolve(sansFil()) : new Promise<Response>((resolve) => (repondre = resolve))))
     vi.stubGlobal("fetch", requetes)
@@ -726,17 +758,18 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: creer, revokeObjectURL: vi.fn() }))
     const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined)
     rendre({ noeud: { data: vueDuNoeud({ kind: "table", blocks: [] }) } })
-    const bouton = screen.getByRole("button", { name: "Télécharger en .csv" })
 
-    fireEvent.click(bouton)
+    entreesDuMenu()
+    fireEvent.click(screen.getByRole("menuitem", { name: "Télécharger en .csv" }))
     expect(requetes).toHaveBeenCalledWith("/api/platform/tables/export?path=ventes%2Fmodele_relance", expect.objectContaining({ method: "GET" }))
-    await waitFor(() => expect(bouton).toBeDisabled())
+    entreesDuMenu()
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Télécharger en .csv" })).toHaveAttribute("aria-disabled", "true"))
     await act(async () => {
       repondre(new Response(JSON.stringify({ data: { filename: "modele_relance.csv", content: "nom\r\n" } }), { status: 200 }))
     })
     await waitFor(() => expect(clic).toHaveBeenCalledTimes(1))
     expect(creer).toHaveBeenCalledWith(expect.objectContaining({ type: "text/csv;charset=utf-8" }))
-    expect(bouton).not.toBeDisabled()
+    expect(screen.getByRole("menuitem", { name: "Télécharger en .csv" })).not.toHaveAttribute("aria-disabled")
     cleanup()
 
     // Un refus : sa phrase sous l'en-tête, aucun fichier.
@@ -744,7 +777,8 @@ describe("EcranDeNoeud, télécharger (E11-S05, AC-c1 to AC-c3)", () => {
       lectureDesFils(adresse) ? sansFil() : new Response(JSON.stringify({ error: { code: "too_large", message: "Too many rows." } }), { status: 422 }),
     )
     rendre()
-    fireEvent.click(screen.getByRole("button", { name: "Télécharger en .md" }))
+    entreesDuMenu()
+    fireEvent.click(screen.getByRole("menuitem", { name: "Télécharger en .md" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Ce tableau a trop de lignes pour un export : filtrez-le, ou demandez à un assistant de le lire par pages.")
     expect(requetes).toHaveBeenLastCalledWith("/api/platform/nodes/export?path=ventes%2Fmodele_relance", expect.objectContaining({ method: "GET" }))
     expect(clic).toHaveBeenCalledTimes(1)

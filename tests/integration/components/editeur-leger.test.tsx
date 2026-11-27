@@ -88,26 +88,37 @@ describe("EditeurDeBlocs, le seul bloc touché monte son champ (1.1.3)", () => {
     expect(leBloc(TEXTE)).not.toBeInstanceOf(HTMLTextAreaElement)
   })
 
-  it("should put the cursor on the character a finger touches in a read block", () => {
+  it("should leave a read block read on the focus its press gives, and open its field on the click, cursor on the clicked character", () => {
     monter()
     const lu = leBloc(TEXTE)
     const texteBrut = lu.firstChild
-    // Le navigateur dit le caractère sous le doigt ; jsdom ne calcule pas le rendu.
+    // Le navigateur dit le caractère sous le pointeur ; jsdom ne calcule pas le rendu.
     Object.defineProperty(document, "caretRangeFromPoint", { configurable: true, value: () => ({ startContainer: texteBrut, startOffset: 6 }) })
     fireEvent.pointerDown(lu)
     act(() => lu.focus())
+    expect(champsMontes()).toHaveLength(0)
+    fireEvent.click(lu)
     const champ = champMonte(TEXTE)
     expect(document.activeElement).toBe(champ)
     expect(champ.selectionStart).toBe(6)
   })
 
-  it("should mount the field under the mouse without taking the focus, and read the block again when the mouse leaves", () => {
+  it("should keep read blocks read when a click leaves a text selection across them, to be copied", () => {
     monter()
-    souris(leBloc(CODE), "pointerover")
-    const monte = champMonte(CODE)
-    expect(document.activeElement).toBe(document.body)
-    souris(monte, "pointerout", document.body)
+    const debut = leBloc(TITRE).firstChild
+    const fin = leBloc(TEXTE).firstChild
+    if (!debut || !fin) throw new Error("blocs lus sans texte")
+    const plage = document.createRange()
+    plage.setStart(debut, 2)
+    plage.setEnd(fin, 5)
+    // La sélection du document n'a qu'une plage : celle d'avant se retire d'abord.
+    document.getSelection()?.removeAllRanges()
+    document.getSelection()?.addRange(plage)
+    fireEvent.pointerDown(leBloc(TITRE))
+    fireEvent.click(leBloc(TEXTE))
     expect(champsMontes()).toHaveLength(0)
+    expect(document.getSelection()?.isCollapsed).toBe(false)
+    document.getSelection()?.removeAllRanges()
   })
 
   it("should go to the previous block with ↑ at the start of a text, cursor at its end, and to the next one with ↓ at the end", () => {
@@ -155,15 +166,12 @@ describe("EditeurDeBlocs, le seul bloc touché monte son champ (1.1.3)", () => {
     expect(api.envoyes.flatMap((corps) => corps.ops ?? [])).toContainEqual(expect.objectContaining({ op: "replace_block", block: ID.objet }))
   })
 
-  it("should mount nothing under a finger passing over a block, and one field only under a mouse going from block to block", () => {
+  it("should mount nothing under a finger or a mouse passing over blocks", () => {
     monter()
     fireEvent(leBloc(TEXTE), Object.assign(new MouseEvent("pointerover", { bubbles: true }), { pointerType: "touch" }))
-    expect(champsMontes()).toHaveLength(0)
-    // La sortie du premier bloc n'est pas signalée (le champ monté sous le pointeur) : le suivant le démonte.
     souris(leBloc(TEXTE), "pointerover")
     souris(leBloc(CODE), "pointerover")
-    expect(champsMontes()).toHaveLength(1)
-    champMonte(CODE)
+    expect(champsMontes()).toHaveLength(0)
   })
 
   it("should follow a link of a read block, and open the « Lien » panel from its context menu, the field mounted behind it", async () => {
@@ -226,13 +234,12 @@ describe("ChampDeBloc, la hauteur du champ (1.1.3)", () => {
     expect(lectures).not.toHaveBeenCalled()
   })
 
-  it("should measure elsewhere the fields mounted together in one pass at the next frame, then the typed field alone at once", async () => {
+  it("should measure elsewhere a mounted field at the next frame, then the typed field at once", async () => {
     const lectures = vi.spyOn(Element.prototype, "scrollHeight", "get")
     const images = vi.spyOn(window, "requestAnimationFrame")
     vi.stubGlobal("CSS", { supports: () => false })
     monter()
-    // Deux champs montés dans la même image : l'un sous la souris, l'autre ouvert ; aucune mesure au montage, une seule passe.
-    souris(leBloc(CODE), "pointerover")
+    // Aucune mesure au montage : une passe, à l'image suivante.
     const texte = ouvrirLeChamp(TEXTE)
     expect(lectures).not.toHaveBeenCalled()
     expect(images).toHaveBeenCalledTimes(1)

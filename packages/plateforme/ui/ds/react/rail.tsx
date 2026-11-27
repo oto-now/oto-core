@@ -4,11 +4,12 @@
 // `RailAccount`, `RailThemePicker` — le titre d'un espace et son « + », le déclencheur de la recherche
 // (clic ou ⌘K), la ligne de compte et son menu, les huit teintes ; des classes, des attributs et le
 // clavier, le CSS d'`ui/ds/app/islands.css` fait le reste. Tels quels, en TypeScript. Changé : glyphes
-// Phosphor ; les huit thèmes viennent de `schemas/brand.ts`. `RailTree` vit à côté (`rail-tree.tsx`).
+// Phosphor ; les huit thèmes viennent de `schemas/brand.ts`. `RailTree` vit à côté (`rail-tree.tsx`). #221 : le menu du
+// compte s'ouvre sur la personne (avatar, nom, email) et son déclencheur porte un chevron vers le haut, là où il s'ouvre.
 import { useEffect, useRef, type ComponentProps, type ElementType, type ReactNode } from "react"
 import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight"
+import { CaretUp } from "@phosphor-icons/react/dist/csr/CaretUp"
 import { CaretUpDown } from "@phosphor-icons/react/dist/csr/CaretUpDown"
-import { Gear } from "@phosphor-icons/react/dist/csr/Gear"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus"
 import { OTO_THEMES, THEME_LABELS, type Theme } from "../../../schemas/brand"
@@ -127,12 +128,21 @@ export function RailSearch({ label = "Rechercher", placeholder = "Rechercher", s
   )
 }
 
-/** La ligne de compte du pied : son engrenage dit qu'elle ouvre SES réglages. */
-export function RailAccount({ name, avatarSrc, items }: { name: string; avatarSrc?: string | null; items: MenuItem[] }) {
+/** La ligne de compte du pied : elle ouvre au-dessus d'elle le menu de la personne, coiffé de son avatar, son nom et son `email`. */
+export function RailAccount({ name, email, avatarSrc, items }: { name: string; email?: string | null; avatarSrc?: string | null; items: MenuItem[] }) {
   return (
     <DropdownMenu
       side="top"
       align="start"
+      head={
+        <>
+          <Avatar name={name} src={avatarSrc} size="lg" self aria-hidden="true" />
+          <span className="oto-menu-head-text">
+            <span className="oto-menu-head-name">{name}</span>
+            {email ? <span className="oto-menu-head-meta">{email}</span> : null}
+          </span>
+        </>
+      }
       trigger={
         <RailItem
           as="button"
@@ -140,7 +150,7 @@ export function RailAccount({ name, avatarSrc, items }: { name: string; avatarSr
           label={name}
           aria-label={`Compte : ${name}. Ouvrir le menu`}
           icon={<Avatar name={name} src={avatarSrc} size="sm" self />}
-          end={<AnimatedIcon as={Gear} anim="turn" size="xs" />}
+          end={<AnimatedIcon as={CaretUp} size="xs" />}
         />
       }
       items={items}

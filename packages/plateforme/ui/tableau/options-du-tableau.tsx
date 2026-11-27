@@ -1,7 +1,7 @@
 "use client"
 
-// Les réglages d'un tableau à l'écran (E11-S01, lot g ; AC-g1 à AC-g7 ; HN-E11S01-16 à 21) : « Réglages » dans
-// l'en-tête d'écran, dès le niveau écriture, ouvre le popover « Réglages du tableau » et ses interrupteurs,
+// Les réglages d'un tableau à l'écran (E11-S01, lot g ; AC-g1 à AC-g7 ; HN-E11S01-16 à 21) : « Réglages du tableau… »
+// du menu « ⋯ » de l'en-tête (refonte #218), dès le niveau écriture, ouvre le dialogue « Réglages du tableau » et ses interrupteurs,
 // « Preuve exigée » (`proof`), « L'assistant peut décider la revue » (`lifecycle.review.agents_may_decide`,
 // seulement si le tableau a une revue) et « Fermé » (`closed`). Chaque bascule publie l'en-tête en un geste par
 // la file d'opérations de la page (`POST /api/platform/nodes`, la porte de `write`), qui pose la révision et
@@ -14,8 +14,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { TableHeader } from "../../schemas"
 import { messageDErreur } from "../api/messages"
-import { Popover, PopoverBody } from "../ds/react/popover"
-import { Button } from "../ds/react/primitives"
+import { Dialog } from "../ds/react/dialog"
 import { Switch } from "../ds/react/switch"
 import { useRafraichir } from "../hote/rafraichir"
 import { useFileDOperations } from "../noeud/editeur/file-d-operations"
@@ -143,31 +142,27 @@ function Interrupteurs({ entete, bloques }: { entete: TableHeader; bloques: bool
   )
 }
 
-type OptionsDuTableauProps = {
+type ReglagesDuTableauProps = {
   /** L'en-tête publié du tableau (`tableHeaderSchema`). */
   entete: TableHeader
   /** Un changement d'en-tête attend dans le brouillon (`vue.draft.meta`) : le panneau est bloqué (AC-g6). */
   enAttente: boolean
+  open: boolean
+  onClose: () => void
 }
 
-/** « Réglages » et son popover (AC-g1) ; monté sous la file d'opérations de la page, au niveau écriture seulement. */
-export function OptionsDuTableau({ entete, enAttente }: OptionsDuTableauProps) {
+/**
+ * Le dialogue « Réglages du tableau » (AC-g1 ; refonte #218), ouvert par « Réglages du tableau… » du menu « ⋯ » de
+ * l'en-tête ; ses interrupteurs et leurs textes inchangés. Monté sous la file d'opérations de la page, au niveau
+ * écriture seulement.
+ */
+export function ReglagesDuTableau({ entete, enAttente, open, onClose }: ReglagesDuTableauProps) {
   return (
-    <Popover
-      data-size="lg"
-      align="end"
-      aria-label={OPTIONS.titre}
-      trigger={
-        <Button variant="secondary" size="sm">
-          {OPTIONS.bouton}
-        </Button>
-      }
-    >
-      <PopoverBody className="flex flex-col gap-3">
-        <p className="oto-pop-label">{OPTIONS.titre}</p>
+    <Dialog open={open} onClose={onClose} title={OPTIONS.titre} size="md">
+      <div className="flex flex-col gap-3">
         {enAttente && <p className="text-sm text-ink">{OPTIONS.enAttente}</p>}
         <Interrupteurs entete={entete} bloques={enAttente} />
-      </PopoverBody>
-    </Popover>
+      </div>
+    </Dialog>
   )
 }

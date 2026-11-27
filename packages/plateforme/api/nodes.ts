@@ -12,6 +12,7 @@
 // ne les porte (liste figée, ADR-002). `GET nodes/export?path=` (E10-S01, AC-a5) : le `.md` d'un nœud publié.
 // `GET nodes/tree` (E11-S20, AC-1) : l'arbre visible, celui que le layout de l'hôte passe au rail, que le rail relit
 // seul à la navigation client, où Next ne rejoue pas le layout.
+// `GET nodes/history`, `GET nodes/history/diff` et `POST nodes/restore` : l'historique des versions (`node-history.ts`).
 import { generalAccessSchema, moveNodeSchema, nodePathBodySchema, placeNodeSchema, writeNodeBodySchema } from "../schemas"
 import { nodeHeadQuerySchema, type NodeHead } from "../schemas/search"
 import { invalidInput } from "../server/errors"
@@ -26,6 +27,7 @@ import { loadNode } from "../server/nodes/read"
 import { visibleTree } from "../server/nodes/tree"
 import { writeNode } from "../server/nodes/write"
 import type { ResourceRoutes } from "./handler"
+import { historyReadRoutes, restoreRoute } from "./node-history"
 
 /** Les paramètres de l'adresse d'un `GET`, que le service valide par son schéma. */
 function queryOf(request: Request): Record<string, string> {
@@ -88,6 +90,7 @@ export const nodesRoutes: ResourceRoutes = {
         return { status: 200, data: await visibleTree(db, identity) }
       },
     },
+    ...historyReadRoutes,
   ],
   POST: [
     {
@@ -150,5 +153,6 @@ export const nodesRoutes: ResourceRoutes = {
         return { status: 200, data, journal: { target, teamId } }
       },
     },
+    restoreRoute,
   ],
 }

@@ -174,11 +174,11 @@ export const TABLES = [
     // `closed_by` : `null`, jamais l'auteur de l'import, qui n'a pas fermé le connecteur (une fermeture sans auteur connu).
     people: { activated_by: 'auteur', closed_by: 'null' },
   }),
-  table('invitations', {
-    columns: cols('id org_id email role team_id invited_by created_at expires_at accepted_at accepted_by declined_at revoked_at'),
-    refs: { org_id: 'orgs', team_id: 'teams' },
-    people: { invited_by: 'auteur', accepted_by: 'null' },
-  }),
+  // Les équipes d'une invitation suivent la leur (une invitation laissée emporte les siennes, `CASCADING` du plan) ; la
+  // première y est déjà, posée par le déclencheur de l'invitation : l'import saute ce doublon (`org-import.mjs`). Chaque
+  // table sur une ligne : le fichier est au plafond de lignes d'ESLint.
+  table('invitations', { columns: cols('id org_id email role team_id invited_by created_at expires_at accepted_at accepted_by declined_at revoked_at'), refs: { org_id: 'orgs', team_id: 'teams' }, people: { invited_by: 'auteur', accepted_by: 'null' } }),
+  table('invitation_teams', { parent: { table: 'invitations', column: 'invitation_id' }, key: ['invitation_id', 'team_id'], newKey: null, columns: cols('invitation_id team_id created_at'), refs: { invitation_id: 'invitations', team_id: 'teams' } }),
   table('platform_grants', {
     columns: cols('id org_id user_id granted_by granted_at revoked_at revoked_by reason user_email user_name'),
     refs: { org_id: 'orgs' },

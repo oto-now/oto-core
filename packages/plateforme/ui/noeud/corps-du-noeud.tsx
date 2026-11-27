@@ -1,5 +1,5 @@
 // Le corps d'un nœud (E05-S02, AC3, AC4, AC7 à AC9, AC17 ; E05-S09, partie c1) : l'avis de la version
-// publiée, le document dans son îlot (ses blocs lus, ou l'éditeur au niveau écriture), et le complément de
+// publiée, le document posé à plat (ses blocs lus, ou l'éditeur au niveau écriture), et le complément de
 // l'hôte ; les sous-pages sont dans l'encart « Sous-pages », hors du document (E11-S05, AC-e1). Un tableau n'a pas d'éditeur : son brouillon (titre et résumé en
 // attente, en-tête écrit en place) a sa publication, sa grille vit dans le complément (E07-S03,
 // HN-E05S02-27) ; ni bandeau ni lien « Voir la version publiée » depuis E11-S02 (AC-c3). Server Component.
@@ -25,7 +25,6 @@ import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { LIEN } from "../components/classes"
 import { CREATION } from "../coque/libelles"
 import { EmptyState } from "../ds/react/empty-state"
-import { Island } from "../ds/react/island"
 import { Alert } from "../ds/react/primitives"
 import { Reader } from "../ds/react/reader"
 import { EditeurDeBlocs } from "./editeur/editeur-de-blocs"
@@ -147,7 +146,8 @@ export function CorpsDuNoeud(props: CorpsDuNoeudProps) {
       {vue.kind === "table" ? (
         niveauDEcriture !== null && <BrouillonDuTableau />
       ) : (
-        <Island aria-label={titre}>
+        // Le document à plat (refonte #217) : posé sur le fond de la coque, sans îlot ni ombre ; nommé par le titre.
+        <section className="oto-node-document" aria-label={titre}>
           {niveauDEcriture === null ? (
             <Lecture blocs={blocs} Lien={Lien} hrefDuChemin={hrefDuChemin} referencesRendues={props.referencesRendues} cibles={props.cibles} liens={props.liens} />
           ) : (
@@ -165,7 +165,7 @@ export function CorpsDuNoeud(props: CorpsDuNoeudProps) {
               focusALOuverture={blocs.length === 0 && titre !== CREATION.sansTitre}
             />
           )}
-        </Island>
+        </section>
       )}
       {props.complement}
     </>

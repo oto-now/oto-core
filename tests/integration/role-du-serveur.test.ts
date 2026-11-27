@@ -154,6 +154,7 @@ const DELETED_BY_AUTHENTICATED: Record<string, string> = {
   connector_consents: "the person consumes her own consent request; expired ones swept, under platform_server (server/connectors/consent.ts)",
   files: "undone upload, size mismatch (server/uploads-write.ts, server/files/service.ts): the policy requires the write level of the node (node_level_for >= 2, 20261021170000); the caller's transit file (server/files/transit.ts), its author; the abandoned uploads go through purge_pending_files (20261021170000), the trash purge through purge_trash and erase_team_trash (20261021140000)",
   hosted_link_requests: "expired requests swept, a request left without a link withdrawn (server/connectors/hosted-link.ts)",
+  invitation_teams: "changeInvitationTeams (server/pending-members.ts): an administrator, or the lead of the team removed from a pending person; the policy requires the same on an open invitation (20261127150000)",
   members: "an administrator removes a member (removeMember, server/members.ts); the policy requires is_org_admin (20261019150000)",
   nodes: "an undone upload creation (server/uploads-write.ts), its author, never published; the trash purge goes through purge_trash and erase_team_trash (20261021140000, 20261021150000)",
   org_domains: "a platform team member who administers the organisation removes an address (removeHost, server/admin/hosts.ts); the policy requires is_staff and is_org_admin (20261019150000)",

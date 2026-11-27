@@ -1,9 +1,9 @@
 // La largeur du rail à la main (`PoigneeDuRail`) : au clavier, au double-clic, gardée dans ce navigateur ; la ligne
-// courante amenée dans le champ du rail (`amenerEnVue`), en hauteur et en largeur.
+// courante amenée dans le champ du rail (`amenerEnVue`), en hauteur seulement : le rail ne glisse jamais en largeur (D11).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { RAIL } from "../../../packages/plateforme/ui/coque/libelles"
-import { amenerEnVue, defilementEnLargeur, suitUnGesteDuRail } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
+import { amenerEnVue } from "../../../packages/plateforme/ui/coque/ligne-courante-en-vue"
 import { PoigneeDuRail } from "../../../packages/plateforme/ui/coque/poignee-du-rail"
 
 function monter() {
@@ -59,33 +59,27 @@ describe("amenerEnVue", () => {
     return { conteneur, element }
   }
 
-  it("should scroll down to a line below the view, and not sideways for a first-level line that overflows", () => {
-    const { conteneur, element } = cadre(boite(120, 600, 300, 28))
-    const arbre = document.createElement("ul")
-    arbre.className = "oto-rail-tree"
-    arbre.append(element)
-    conteneur.append(arbre)
-    amenerEnVue(conteneur, element)
-    expect(conteneur.scrollTop).toBe(236)
-    expect(conteneur.scrollLeft).toBe(0)
-  })
-
-  // #92 : la page ouverte par un clic dans l'arbre était sous les yeux ; le rail ne glisse plus de côté.
-  it("should scroll only down, never sideways, for a line opened from the tree, even one that overflows", () => {
-    const { conteneur, element } = cadre(boite(120, 600, 300, 28))
-    const arbre = document.createElement("ul")
-    arbre.className = "oto-rail-tree"
-    const imbrique = document.createElement("ul")
-    imbrique.className = "oto-rail-tree"
-    imbrique.style.paddingInlineStart = "16px"
-    imbrique.append(element)
-    arbre.append(imbrique)
-    conteneur.append(arbre)
-    conteneur.scrollLeft = 5
-    amenerEnVue(conteneur, element, false)
-    expect([conteneur.scrollTop, conteneur.scrollLeft]).toEqual([236, 5])
-    amenerEnVue(conteneur, element)
-    expect(conteneur.scrollLeft).toBe(16)
+  // D11 (#87 appliqué partout) : quelle que soit la façon d'arriver sur la page, `scrollLeft` reste où la personne l'a laissé.
+  it("should scroll only down for a deep line that overflows, leaving the sideways scroll where it was, 0 by default", () => {
+    const verdicts = [0, 40].map((laisse) => {
+      const { conteneur, element } = cadre(boite(120, 600, 300, 28))
+      let parent: HTMLElement = conteneur
+      for (let niveau = 0; niveau < 3; niveau++) {
+        const arbre = document.createElement("ul")
+        arbre.className = "oto-rail-tree"
+        arbre.style.paddingInlineStart = "16px"
+        parent.append(arbre)
+        parent = arbre
+      }
+      parent.append(element)
+      conteneur.scrollLeft = laisse
+      amenerEnVue(conteneur, element)
+      return [conteneur.scrollTop, conteneur.scrollLeft]
+    })
+    expect(verdicts).toEqual([
+      [236, 0],
+      [236, 40],
+    ])
   })
 
   it("should not scroll for a line already in view", () => {
@@ -93,27 +87,5 @@ describe("amenerEnVue", () => {
     amenerEnVue(conteneur, element)
     expect(conteneur.scrollTop).toBe(0)
     expect(conteneur.scrollLeft).toBe(0)
-  })
-})
-
-describe("suitUnGesteDuRail", () => {
-  it("should hold a gesture in the tree for the navigation of the next ten seconds, and none without a gesture", () => {
-    expect([suitUnGesteDuRail(1_000, 1_500), suitUnGesteDuRail(1_000, 10_999), suitUnGesteDuRail(1_000, 11_000), suitUnGesteDuRail(0, 500)]).toEqual([true, true, false, false])
-  })
-})
-
-// 1.5.1 : en largeur, un pas de retrait par niveau sous le premier, jamais plus, et seulement si la ligne dépasse.
-describe("defilementEnLargeur", () => {
-  it("should scroll each line by one indent step per level under the first, only when it overflows", () => {
-    const cas = [
-      { profondeur: 1, pas: 16, deborde: true, actuel: 0, attendu: 0 },
-      { profondeur: 2, pas: 16, deborde: true, actuel: 0, attendu: 16 },
-      { profondeur: 3, pas: 16, deborde: true, actuel: 0, attendu: 32 },
-      { profondeur: 3, pas: 16, deborde: true, actuel: 200, attendu: 32 },
-      { profondeur: 3, pas: 16, deborde: false, actuel: 40, attendu: 40 },
-      { profondeur: 0, pas: 16, deborde: true, actuel: 0, attendu: 0 },
-    ]
-    const nom = ({ profondeur, deborde, actuel }: (typeof cas)[number]) => `depth ${profondeur}, overflowing ${deborde}, from ${actuel}`
-    expect(Object.fromEntries(cas.map((un) => [nom(un), defilementEnLargeur(un.profondeur, un.pas, un.deborde, un.actuel)]))).toEqual(Object.fromEntries(cas.map((un) => [nom(un), un.attendu])))
   })
 })

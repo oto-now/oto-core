@@ -99,7 +99,7 @@ describe.skipIf(!sqlConfigured)(portable("tables written through write"), { time
         // Un attribut inconnu, refusé par la forme stricte du patch (N1) : à la création, dans le cadre de l'AC2.
         [
           salons("ventes/salons", { ...SALONS_HEADER, columns: [...SALONS_HEADER.columns, { name: "stand", type: "text", width: 3 }] }),
-          `Invalid table header: header.columns[4]: unknown key « width »; keys: name, type, options, required, allow_verified_empty, max_length. ${contract}`,
+          `Invalid table header: header.columns[4]: unknown key « width »; keys: name, label, type, options, required, allow_verified_empty, max_length. ${contract}`,
         ],
         [{ ...salons("ventes/salons"), ops: [{ op: "append", section: "Colonnes", text: "x" }] }, "ventes/salons is a table: it has no sections. Write its rows with acme_call table.write."],
       ]

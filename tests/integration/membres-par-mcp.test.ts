@@ -77,21 +77,43 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "members and teams through call 
     ])
   })
 
-  it("should add a pending person without email, idempotently, list her, and let her in with her team at her first sign-in", async () => {
+  it("should add a pending person without email, idempotently, give her a second team, list her, and let her into both at her first sign-in", async () => {
     const person = seed.person()
     const added = await as("ada").add({ email: person.email.toUpperCase(), teams: ["Ventes"] })
     const again = await as("ada").add({ email: person.email, teams: ["ventes"] })
-    const two = await settle(as("ada").add({ email: person.email, teams: ["ventes", "support"] }))
+    const two = await as("ada").add({ email: person.email, teams: ["ventes", "support"] })
+    const sortedTeams = async () => (await listed(person.email))?.teams.sort()
 
     expect(added.data).toMatchObject({ email: person.email, status: "pending", role: "member", teams: ["ventes"], changed: true })
     expect(again.data).toMatchObject({ member_id: added.data?.member_id, status: "pending", changed: false })
-    expect(two.error).toMatchObject({ code: "invalid_arguments", details: { reason: "pending_single_team" } })
-    expect(await listed(person.email)).toEqual({ member_id: added.data?.member_id, email: person.email, role: "member", status: "pending", teams: ["ventes"] })
+    // Ses équipes changent sans que son attente soit remplacée : son identifiant reste.
+    expect(two.data).toMatchObject({ member_id: added.data?.member_id, status: "pending", changed: true })
+    expect(await listed(person.email)).toMatchObject({ member_id: added.data?.member_id, email: person.email, role: "member", status: "pending" })
+    expect(await sortedTeams()).toEqual(["support", "ventes"])
 
     // Sa première connexion : l'invitation acceptée (en mode OIDC, `resolveIdentity` le fait à sa première requête).
     await acceptInvitations(asCaller(person.id, person.email))
 
-    expect(await listed(person.email)).toMatchObject({ member_id: person.id, status: "active", teams: ["ventes"] })
+    expect(await listed(person.email)).toMatchObject({ member_id: person.id, status: "active" })
+    expect(await sortedTeams()).toEqual(["support", "ventes"])
+  })
+
+  it("should let a lead add or remove the team she leads on a pending person, the teams she does not see kept", async () => {
+    const person = seed.person()
+    await as("ada").add({ email: person.email, teams: ["support"] })
+    const added = await as("claire").add({ email: person.email, teams: ["ventes"] })
+    const afterAdd = (await listed(person.email))?.teams.sort()
+    const seenByClaire = (await as("claire").list()).data.people.find((entry) => entry.email === person.email)
+    const outside = await settle(as("claire").setTeams(person.email, ["support"]))
+    const removed = await as("claire").setTeams(person.email, [])
+
+    expect(added.data).toMatchObject({ status: "pending", changed: true })
+    expect(afterAdd).toEqual(["support", "ventes"])
+    // Claire ne voit pas Support, que mène Paul : son geste ne porte que sur Ventes.
+    expect(seenByClaire?.teams).toEqual(["ventes"])
+    expect(outside.error).toMatchObject({ code: "forbidden", details: { reason: "team_required" } })
+    expect(removed.data).toMatchObject({ status: "pending", teams: [], changed: true })
+    expect((await listed(person.email))?.teams).toEqual(["support"])
   })
 
   it("should keep a pending person open with no expiry, listed and counted, and let her in weeks later", async () => {
@@ -116,14 +138,16 @@ describe.skipIf(!sqlConfigured)(sqlConfigured ? "members and teams through call 
   it("should leave a pending person as she was when the replacement of her invitation is refused", async () => {
     const person = seed.person()
     await as("ada").add({ email: person.email, teams: ["ventes"] })
-    // L'organisation passe sous son plafond de membres : la révocation et l'inscription, dans une transaction, s'annulent.
+    // L'organisation passe sous son plafond de membres : un autre rôle remplace l'attente, et la révocation et
+    // l'inscription, dans une transaction, s'annulent ; changer ses équipes ne la remplace pas, et passe.
     registerOrgLimits({ read: ({ id }) => (id === ref.org.id ? { members_max: 1 } : null) })
-    const refused = await settle(as("ada").setTeams(person.email, ["support"]))
+    const refused = await settle(as("ada").add({ email: person.email, role: "admin" }))
+    const moved = await as("ada").setTeams(person.email, ["support"])
     registerOrgLimits(null)
 
     expect(refused.error).toMatchObject({ code: "forbidden", details: { reason: "limit", limit: "members_max" } })
-    expect(await listed(person.email)).toMatchObject({ status: "pending", teams: ["ventes"] })
-    expect((await as("ada").setTeams(person.email, ["support"])).data).toMatchObject({ status: "pending", teams: ["support"], changed: true })
+    expect(moved.data).toMatchObject({ status: "pending", role: "member", teams: ["support"], changed: true })
+    expect(await listed(person.email)).toMatchObject({ status: "pending", role: "member", teams: ["support"] })
   })
 
   it("should let a lead add a member to the team she leads only, as a member, and refuse a plain member", async () => {

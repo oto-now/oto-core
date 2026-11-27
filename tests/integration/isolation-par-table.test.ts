@@ -32,6 +32,9 @@ const SUITE = "isolation between organisations, table by table"
 /** Les tables du contenu d'un nœud, que la base ne rend qu'à qui lit le nœud (`20261021130000` ; ses commentaires, `20261112090000`). */
 const CONTENT = ["blocks", "comment_threads", "comments", "files", "links", "node_drafts", "node_shares", "node_versions"]
 
+/** Les équipes d'une invitation, que seuls un administrateur et le responsable de l'équipe lisent (`20261127150000`). */
+const ADMIN_OR_LEAD = ["invitation_teams"]
+
 /** Tables sans écriture accordée à `authenticated` : rien à tenter (AC4). */
 const SELECT_ONLY = ["links", "node_aliases", "node_versions"]
 
@@ -107,6 +110,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     accountA: "",
     grantA: "",
     invitationToBea: "",
+    invitationTeamA: "",
     ticketA: "",
     simA: "",
     teamB: "",
@@ -127,7 +131,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   async function scopeOf(org: string): Promise<Scope> {
     const teams = await fx.admin<{ id: string }[]>`select id from platform.teams where org_id = ${org}`
     const nodes = await fx.admin<{ id: string }[]>`select id from platform.nodes where org_id = ${org}`
-    return { org, parents: { teams: teams.map((row) => row.id), nodes: nodes.map((row) => row.id) } }
+    const invitations = await fx.admin<{ id: string }[]>`select id from platform.invitations where org_id = ${org}`
+    return { org, parents: { teams: teams.map((row) => row.id), nodes: nodes.map((row) => row.id), invitations: invitations.map((row) => row.id) } }
   }
 
   /** Lignes complètes de l'organisation, relues par la connexion d'administration, rangées par clé : ce qu'un refus doit laisser. */
@@ -193,10 +198,12 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
     ids.simA = outbox.find((row) => row.org_id === a.org.id)?.id ?? ""
     const [toBea] = await admin<{ id: string }[]>`
       insert into platform.invitations (org_id, email, invited_by) values (${a.org.id}, ${people.bea.email}, ${ada.id}) returning id`
-    await admin`
-      insert into platform.invitations (org_id, email, team_id, invited_by) values (${a.org.id}, ${`test-${hex(6)}@example.invalid`}, ${a.teams.ventes}, ${claire.id})`
-    await admin`insert into platform.invitations (org_id, email, invited_by) values (${b.id}, ${`test-${hex(6)}@example.invalid`}, ${people.bea.id})`
+    // Une invitation à une équipe dans A et dans B : le déclencheur de `20261127150000` recopie son équipe dans `invitation_teams`.
+    const [toTeamA] = await admin<{ id: string }[]>`
+      insert into platform.invitations (org_id, email, team_id, invited_by) values (${a.org.id}, ${`test-${hex(6)}@example.invalid`}, ${a.teams.ventes}, ${claire.id}) returning id`
+    await admin`insert into platform.invitations (org_id, email, team_id, invited_by) values (${b.id}, ${`test-${hex(6)}@example.invalid`}, ${ids.teamB}, ${people.bea.id})`
     ids.invitationToBea = toBea.id
+    ids.invitationTeamA = toTeamA.id
     await fx.seedCtxJournal(a.org, claire, [{ tool: "t_read", target: "ventes/offre" }])
     await fx.seedCtxJournal(a.org, lea, [{ tool: "t_context", target: null }])
     await fx.seedCtxJournal({ id: b.id }, people.bea, [{ tool: "t_read", target: "equipe_b/offre" }])
@@ -334,6 +341,8 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
         ["org_domains delete", "0 rows", () => bea((sql) => sql`delete from platform.org_domains where host = ${a.host} returning host`)],
         ["invitations insert", "42501", () => insert("bea", "invitations", { org_id: org, email: `test-${hex(6)}@example.invalid`, invited_by: people.bea.id })],
         ["invitations update", "0 rows", () => bea((sql) => sql`update platform.invitations set revoked_at = ${now} where id = ${ids.invitationToBea} returning id`)],
+        ["invitation_teams insert", "42501", () => insert("bea", "invitation_teams", { invitation_id: ids.invitationTeamA, team_id: a.teams.support })],
+        ["invitation_teams delete", "0 rows", () => bea((sql) => sql`delete from platform.invitation_teams where invitation_id = ${ids.invitationTeamA} returning team_id`)],
         [
           "nodes insert",
           "23503",
@@ -449,11 +458,11 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
   // Depuis `20261021130000`, la lecture du contenu exige en base le niveau que son service décide : le contenu de A est
   // semé sous `ventes/offre`, de l'équipe Ventes, dont Marc n'est pas. Une règle de lecture de l'organisation sur
   // `ventes` lui en ouvre le publié (blocs, versions, liens, fichiers), jamais le brouillon (écriture) ni le lien
-  // public (partage).
+  // public (partage). Ni administrateur ni responsable d'équipe, il ne lit pas les équipes d'une invitation.
   it("should let a plain member without a team read every row of his organisation but the content he does not read (AC5)", async () => {
     const all = await keysOf(service, scopeA)
     const hidden = (tables: string[]) => Object.fromEntries(tables.map((table) => [table, []]))
-    expect(await keysOf(session("marc"), scopeA)).toEqual({ ...all, ...hidden(CONTENT) })
+    expect(await keysOf(session("marc"), scopeA)).toEqual({ ...all, ...hidden([...CONTENT, ...ADMIN_OR_LEAD]) })
     const [rule] = await fx.admin<{ id: string }[]>`
       insert into platform.access_rules (org_id, node_id, subject_org, level, created_by)
       values (${a.org.id}, ${a.nodes.ventes}, true, 'read', ${a.people.claire.id}) returning id`
@@ -461,7 +470,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
       const opened = await keysOf(service, scopeA)
       const published = (opened.blocks as string[]).filter((key) => key.endsWith("/published"))
       expect(published.length).toBeGreaterThan(0)
-      expect(await keysOf(session("marc"), scopeA)).toEqual({ ...opened, ...hidden(["node_drafts", "node_shares"]), blocks: published })
+      expect(await keysOf(session("marc"), scopeA)).toEqual({ ...opened, ...hidden(["node_drafts", "node_shares", ...ADMIN_OR_LEAD]), blocks: published })
     } finally {
       await fx.admin`delete from platform.access_rules where id = ${rule.id}`
     }

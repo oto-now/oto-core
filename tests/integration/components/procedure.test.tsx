@@ -234,8 +234,9 @@ describe("un appel déjà écrit, sur l'écran d'une page (M59)", () => {
     expect(ancre(claim.ref)?.textContent).toBe(LU.claim)
     expect(ancre(schema.ref)?.textContent).toBe("Appel de table.schema")
     expect(ancre(brut.ref)?.textContent).toBe('Appel de mail.create_draft : { "subject": "<b>Relance</b>", "body": "**gras** _ici_ [[ventes/contexte]]" }')
-    // Dans le document : la pastille d'un encart de la colonne de droite a son titre en gras.
-    expect(container.querySelector(".oto-two-columns-main")?.querySelector("b, strong, em, script, a[href='/n/ventes/contexte']")).toBeNull()
+    // Dans le document seul (refonte #217 : plus de colonne de droite à demeure) : les annexes d'un Contexte, sous la méta
+    // et au pied, ont leurs titres en gras.
+    expect(container.querySelector(".oto-node-document")?.querySelector("b, strong, em, script, a[href='/n/ventes/contexte']")).toBeNull()
     expect(envois.mock.calls.map(([adresse]) => String(adresse))).toEqual(["/api/platform/comments?path=ventes%2Fcontexte"])
   })
 

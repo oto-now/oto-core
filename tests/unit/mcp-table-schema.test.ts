@@ -71,7 +71,7 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table through MCP"), {
       )
       expect(lines.slice(rules + 1, examples)).toEqual(
         expect.arrayContaining([
-          "1. columns are merged by name: an existing column receives the attributes given (type, options, required, allow_verified_empty, max_length) and keeps the others; a new column needs its type and is added at the end; the order of the existing columns never changes.",
+          "1. columns are merged by name: an existing column receives the attributes given (type, options, required, allow_verified_empty, max_length, label) and keeps the others; a new column needs its type and is added at the end; the order of the existing columns never changes.",
           "3. key, lifecycle, closed and proof replace their value; lifecycle is replaced whole, and the options of its state column change in the same header as its states.",
         ]),
       )
@@ -80,6 +80,40 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table through MCP"), {
       const writes = lines.slice(examples + 1, refusals).filter((line) => line.startsWith("acme_write ")).map((line) => JSON.parse(line.slice("acme_write ".length)))
       expect(writes.map((input) => [writeNodeSchema.safeParse(input).success, tableHeaderPatchSchema.safeParse(input.header).success])).toEqual(Array(4).fill([true, true]))
       expect(lines.slice(refusals + 1)).toHaveLength(7)
+    })
+  })
+
+  describe("column labels (#225)", () => {
+    it("should write a label with the header, keep it through later patches, change it, refuse a blank one, and serve it with table.schema", async () => {
+      const claire = await session()
+      const created = await claire.write({
+        path: "ventes/remises",
+        kind: "table",
+        title: "Remises",
+        summary: "Les remises accordées par l'équipe Ventes.",
+        header: { columns: [{ name: "ref", type: "text", label: " Réf. " }, { name: "montant_estime", type: "number" }], key: "ref" },
+        publish: true,
+      })
+      expect(created.isError).toBe(false)
+      const labelled = await claire.write({ path: "ventes/remises", base_revision: 1, header: { columns: [{ name: "montant_estime", label: "Montant estimé" }, { name: "ref", max_length: 20 }] }, publish: true })
+      expect([labelled.isError, labelled.text]).toEqual([false, "Published ventes/remises revision 2: changed ref (max_length); changed montant_estime (label). Next write: base_revision 2."])
+      const blank = await claire.write({ path: "ventes/remises", base_revision: 2, header: { columns: [{ name: "ref", label: "  " }] }, publish: true })
+      expect([blank.isError, blank.text]).toEqual([true, "header.columns[0].label: a label holds 1 to 100 characters"])
+      const renamed = await claire.write({ path: "ventes/remises", base_revision: 2, header: { columns: [{ name: "ref", label: "Référence" }] }, publish: true })
+      expect([renamed.isError, renamed.text]).toEqual([false, "Published ventes/remises revision 3: changed ref (label). Next write: base_revision 3."])
+      const schema = await claire.call("call", { ctx: ref.id(CTX), function: "table.schema", arguments: { table: "ventes/remises" } })
+      expect(schema.text.split("\n").filter((line) => line.startsWith("- "))).toEqual([
+        "- ref: text, required, 20 characters at most, shown as « Référence » (key)",
+        "- montant_estime: number, shown as « Montant estimé »",
+      ])
+      expect(schema.result.structuredContent).toMatchObject({
+        result: {
+          columns: [
+            { name: "ref", type: "text", label: "Référence", max_length: 20 },
+            { name: "montant_estime", type: "number", label: "Montant estimé" },
+          ],
+        },
+      })
     })
   })
 

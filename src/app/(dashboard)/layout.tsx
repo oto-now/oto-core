@@ -36,7 +36,7 @@ const ADRESSES: AdressesDuRail = {
   connecteurs: "/admin/connectors",
   corbeille: "/trash",
   profil: "/profile",
-  // E11-S10 (AC-e1) : la vue « Contexte », en tête du menu du compte.
+  // E11-S10 (AC-e1) : la vue « Contexte », dans la palette.
   contexte: "/context",
 }
 
@@ -70,7 +70,7 @@ export default async function DashboardLayout({
         // Des équipes, le rail ne lit que le dossier et le nom : l'annuaire (membres, emails, rôles) ne
         // part pas dans chaque page rendue.
         resultatDe(lireLesEquipes(lu.session.db, lu.identity).then((lues) => lues.map(({ slug, name }) => ({ slug, name })))),
-        // Les organisations de la personne, pour la bascule du menu de l'entreprise ; leur panne ne montre pas de bascule.
+        // Les organisations de la personne, pour « Changer d'espace » ; leur panne ne montre pas de bascule.
         listMyOrganisations(lu.session.db, lu.identity, lu.session.host).catch(() => undefined),
       ])
     : [ECHEC, ECHEC, undefined]
@@ -88,6 +88,8 @@ export default async function DashboardLayout({
             equipes={equipes}
             handle={identity?.member.profile.handle ?? null}
             compte={identity ? (identity.member.profile.name ?? identity.user.name) : null}
+            // Sous le nom, en tête du menu du compte (#221).
+            email={identity?.user.email ?? null}
             // Les entrées d'administration pour qui administre l'organisation (E08-S03 N9) : du confort,
             // chaque page `/admin/*` revérifie l'accès.
             administre={identity ? isOrgAdmin(identity) : false}

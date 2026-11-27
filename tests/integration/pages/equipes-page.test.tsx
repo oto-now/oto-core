@@ -240,6 +240,7 @@ describe("/teams page for a lead who is not an administrator (AC6, AC13)", () =>
       email,
       role: "member" as const,
       teamId,
+      teamIds: [teamId],
       invitedBy,
       createdAt: "2026-09-24T10:00:00Z",
       expiresAt: "2026-10-01T10:00:00Z",

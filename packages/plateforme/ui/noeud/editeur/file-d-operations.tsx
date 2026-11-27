@@ -31,6 +31,8 @@ export type ReponseDEcriture = {
   touched: { op: string; blocks: { id: string; ref: string; revision: number }[] }[]
   /** Les constructions gardées en texte par le mode tolérant (E10-S01, AC-a2) ; absent en mode strict. */
   kept_as_text?: number
+  /** Les avertissements d'une publication (liens, conseils d'une procédure), en anglais ; absent sans avertissement. */
+  warnings?: string[]
 }
 
 export type IssueDEnvoi =

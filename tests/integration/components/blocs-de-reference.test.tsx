@@ -71,7 +71,7 @@ describe("referencesRendues (AC15, AC16)", () => {
     const table = screen.getByRole("table", { name: "Suivi des prospects — vue" })
     // La table du design system (M31), plus les classes de `classes.ts`.
     expect(table).toHaveClass("oto-table")
-    expect(within(table).getAllByRole("columnheader").map((entete) => entete.textContent)).toEqual(["ref", "entreprise", "statut"])
+    expect(within(table).getAllByRole("columnheader").map((entete) => entete.textContent)).toEqual(["Ref", "Entreprise", "Statut"])
     expect(within(table).getAllByRole("rowheader").map((entete) => entete.textContent)).toEqual(["P-001", "P-003"])
     expect(screen.getByText("2 lignes sur 3")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Ouvrir le tableau" })).toHaveAttribute("href", `/n/${TABLEAU}`)

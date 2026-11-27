@@ -152,6 +152,11 @@ export type CommentThreadView = {
   createdAt: string
   /** Ouvert, adressé à l'assistant, et sans réponse d'un assistant depuis (« en attente d'un assistant »). */
   waitingAssistant: boolean
+  /**
+   * Ouvert, destiné à l'appelant, et un commentaire d'un autre suit sa dernière visite de la page : la règle de son
+   * accueil (`unreadBy`). La page de l'hôte lit les fils avant de compter la visite en cours.
+   */
+  unread: boolean
   comments: CommentView[]
 }
 

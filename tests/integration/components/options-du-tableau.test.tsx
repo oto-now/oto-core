@@ -1,13 +1,15 @@
+import { useState } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { tableHeaderSchema, type TableHeader } from "@otomata_tech/oto_platform/schemas"
 import { ContexteDeRafraichissement } from "@otomata_tech/oto_platform/ui"
 import { FileDOperations } from "../../../packages/plateforme/ui/noeud/editeur/file-d-operations"
-import { OptionsDuTableau } from "../../../packages/plateforme/ui/tableau/options-du-tableau"
+import { ReglagesDuTableau } from "../../../packages/plateforme/ui/tableau/options-du-tableau"
+import { simulerLesDialogues } from "../../helpers/dialogue"
 import { simulerLAPI } from "../../helpers/noeud"
 
-// Les réglages d'un tableau à l'écran (E11-S01, lot g : AC-g2, AC-g3, AC-g5, AC-g6, AC-g7), montés comme
-// l'en-tête d'écran les pose : sous la file d'opérations de la page, `fetch` simulé pour
+// Les réglages d'un tableau à l'écran (E11-S01, lot g : AC-g2, AC-g3, AC-g5, AC-g6, AC-g7), le dialogue que « Réglages
+// du tableau… » du menu « ⋯ » ouvre (refonte #218, ici par un bouton de test), monté comme l'en-tête le pose : sous la file d'opérations de la page, `fetch` simulé pour
 // `POST /api/platform/nodes`, relecture espionnée. Qui voit « Réglages » (AC-g1) et d'où vient le blocage
 // (AC-g6, `vue.draft.meta`) : `ecran-de-noeud.test.tsx`.
 
@@ -27,6 +29,19 @@ const enTeteDe = (surcharge: Record<string, unknown> = {}): TableHeader =>
     proof: true,
     ...surcharge,
   })
+
+/** Le déclencheur du dialogue, comme l'entrée du menu « ⋯ » : il ouvre, le dialogue se ferme seul. */
+function OptionsDuTableau({ entete, enAttente }: { entete: TableHeader; enAttente: boolean }) {
+  const [ouvert, setOuvert] = useState(false)
+  return (
+    <>
+      <button type="button" aria-expanded={ouvert} onClick={() => setOuvert(true)}>
+        Réglages
+      </button>
+      <ReglagesDuTableau entete={entete} enAttente={enAttente} open={ouvert} onClose={() => setOuvert(false)} />
+    </>
+  )
+}
 
 const rafraichir = vi.fn()
 let api: ReturnType<typeof simulerLAPI>
@@ -49,6 +64,7 @@ function ouvrir() {
 const interrupteurs = () => screen.getAllByRole("switch")
 
 beforeEach(() => {
+  simulerLesDialogues()
   api = simulerLAPI()
   rafraichir.mockReset()
 })
@@ -58,7 +74,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("OptionsDuTableau, les interrupteurs (AC-g2)", () => {
+describe("ReglagesDuTableau, les interrupteurs (AC-g2)", () => {
   it("should show, in order, the switches named by their label, described by their help and checked as published; the review switch only with a review", () => {
     monter(enTeteDe({ lifecycle: { ...CYCLE, review: { ...REVUE, agents_may_decide: true } }, closed: false }))
     const panneau = ouvrir()
@@ -88,7 +104,7 @@ describe("OptionsDuTableau, les interrupteurs (AC-g2)", () => {
   })
 })
 
-describe("OptionsDuTableau, un geste, une publication (AC-g3)", () => {
+describe("ReglagesDuTableau, un geste, une publication (AC-g3)", () => {
   it.each([
     ["Preuve exigée", { proof: false }, "Preuve exigée : désactivée."],
     ["L'assistant peut décider la revue", { lifecycle: { ...CYCLE, review: { ...REVUE, agents_may_decide: true } } }, "L'assistant peut décider la revue : activée."],
@@ -132,7 +148,7 @@ describe("OptionsDuTableau, un geste, une publication (AC-g3)", () => {
 })
 
 // La phrase d'un autre refus (forbidden) : `tests/unit/ui-messages.test.ts`, que l'écran lit par `messageDErreur`.
-describe("OptionsDuTableau, refus (AC-g5)", () => {
+describe("ReglagesDuTableau, refus (AC-g5)", () => {
   it("should say stale_revision under the switches, put the switch back to its published state and keep the focus on it", async () => {
     monter()
     ouvrir()
@@ -154,7 +170,7 @@ describe("OptionsDuTableau, refus (AC-g5)", () => {
   })
 })
 
-describe("OptionsDuTableau, brouillon d'en-tête en attente (AC-g6)", () => {
+describe("ReglagesDuTableau, brouillon d'en-tête en attente (AC-g6)", () => {
   it("should disable the switches, showing the published state, say why under the title, and send nothing", () => {
     monter(enTeteDe(), true)
     const panneau = ouvrir()
@@ -170,13 +186,13 @@ describe("OptionsDuTableau, brouillon d'en-tête en attente (AC-g6)", () => {
   })
 })
 
-describe("OptionsDuTableau, clavier (AC-g7)", () => {
-  it("should close on Escape and give the focus back to « Réglages »", async () => {
+describe("ReglagesDuTableau, clavier (AC-g7)", () => {
+  it("should close on Escape (the dialog's cancel) and give the focus back to its trigger", async () => {
     monter()
+    act(() => reglages().focus())
     ouvrir()
-    await waitFor(() => expect(screen.getByRole("dialog", { name: "Réglages du tableau" }).contains(document.activeElement)).toBe(true))
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
-    expect(screen.queryByRole("dialog", { name: "Réglages du tableau" })).toBeNull()
+    fireEvent(screen.getByRole("dialog", { name: "Réglages du tableau" }), new Event("cancel"))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Réglages du tableau" })).toBeNull())
     expect(document.activeElement).toBe(reglages())
     expect(reglages()).toHaveAttribute("aria-expanded", "false")
   })

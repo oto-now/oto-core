@@ -208,7 +208,9 @@ auteur d'un nœud (`nodes.updated_by`), que chaque service pose à l'appelant, v
 ou changé (déclencheur des gestes, `20261021120000`) ; celui d'un bloc (`blocks.updated_by`) aussi, nul ou `auth.uid()`
 (`blocks_insert_writer`, `blocks_update_writer`, `20261021130000`). Quand une seule policy couvre des gestes de niveaux différents, ou
 que la règle dépend de l'ancienne valeur, un déclencheur sous `authenticated` et `platform_server` juge le geste sur
-l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste) ; une
+l'avant et l'après (`nodes_gesture_guard` : le niveau lu sur la ligne d'avant, jamais sur celle qu'écrit le geste ;
+exception, le propriétaire changé, dont l'espace qui reçoit le nœud se lit sur la ligne écrite, l'écriture de l'appelant
+y étant exigée comme à la création, `20261127150000`) ; une
 policy de `nodes` ne relisant pas `nodes` (42P17), le niveau du parent d'une création s'y lit aussi, avant chaque ajout
 (`nodes_guard_creation`, `20261021110000`). Une colonne qu'aucun service n'écrit sous une session ne s'accorde pas : la
 table s'accorde colonne par colonne, à l'ajout comme à la mise à jour, et ce qu'on ne peut pas poser n'a pas à être

@@ -1,6 +1,6 @@
 /* Porté d'oto-frontend (src/design-system/components/css/table.css), tel quel ; chaque pourquoi en une ligne, l'historique retiré (portage-ecrans.md § 5). */
 
-/* Table, quatre décisions : la ligne à 40 px (32 en dense), prise à `--row-h`, jamais à un padding ; l'en-tête colle dans l'îlot qui défile, pas à la fenêtre ; les en-têtes de colonne en mono capitales, des repères ; sous 768 px le tableau devient des cartes, sans défilement horizontal, mesuré sur l'îlot (container query) autant que sur la fenêtre. */
+/* Table, quatre décisions : la ligne à 40 px (32 en dense), prise à `--row-h`, jamais à un padding ; l'en-tête colle dans l'îlot qui défile, pas à la fenêtre ; les en-têtes de colonne, et leurs étiquettes dans une carte, en casse de phrase dans le caractère des cellules, des repères ; sous 768 px le tableau devient des cartes, sans défilement horizontal, mesuré sur l'îlot (container query) autant que sur la fenêtre. */
 
 /* ── la surface du tableau est celle de l'îlot, `--island`, jamais `--card` (la surface de ce qui est posé dans un îlot) : les lignes sont transparentes, et un corps en `--card` sous un en-tête en `--island` faisait deux tons dans le même cadre ; aucune variante creusée n'est posée, personne ne la demande. */
 .oto-table-wrap {
@@ -37,13 +37,11 @@
   padding: 0 var(--space-3);
   text-align: start;
   white-space: nowrap;
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
+  /* Le caractère des cellules (police et taille de `.oto-table`), en casse de phrase : ni capitales, ni chasse, ni mono ; l'en-tête se distingue par sa couleur seule. */
   /* Regular, pas semibold : un en-tête de colonne est un repère, plus lourd il pèserait plus que la donnée qu'il annonce. */
   font-weight: var(--fw-regular);
-  letter-spacing: var(--tr-mono);
-  text-transform: uppercase;
-  color: var(--faint);
+  /* `--mute` sur `--island` : 5,39:1 au plus bas des huit teintes ; `--faint` ne tient pas 4,5:1 à cette taille. */
+  color: var(--mute);
 }
 
 /* ── tri : `aria-sort` porte l'information, le chevron la montre, en permanence et discret (sans survol au doigt, la fonction n'existerait pas) ; le libellé est un `<button>` (`.oto-th-sort`), sinon aucun tri au clavier. */
@@ -161,7 +159,7 @@
   text-align: end;
   font-variant-numeric: tabular-nums;
 }
-/* Le chiffre est la donnée, pas une légende : il se lit à l'encre ; restreint à `td`, sur un `<th>` il écraserait la mono capitales de l'en-tête. */
+/* Le chiffre est la donnée, pas une légende : il se lit à l'encre ; restreint à `td`, sur un `<th>` il écraserait le caractère et le gris de l'en-tête. */
 .oto-table td[data-numeric] { font-family: var(--mono); font-size: var(--fs-xs); color: var(--ink); }
 .oto-table [data-align="center"] { text-align: center; }
 
@@ -302,12 +300,9 @@
     content: attr(data-label);
     flex: none;
     inline-size: 38%;
-    font-family: var(--mono);
-    font-size: var(--fs-2xs);
-    font-weight: var(--fw-semibold);
-    letter-spacing: var(--tr-mono);
-    text-transform: uppercase;
-    color: var(--faint);
+    /* Le caractère des cellules, en casse de phrase, comme l'en-tête qu'elle remplace. `--mute` sur `--card` : 4,78:1 au plus bas des huit teintes, de nuit. */
+    font-weight: var(--fw-regular);
+    color: var(--mute);
   }
   .oto-table[data-responsive="cards"] tbody td:not([data-label])::before { content: none; }
   .oto-table[data-responsive="cards"] tbody td[data-primary] {
@@ -352,17 +347,14 @@
   }
   .oto-table[data-responsive="cards"] tbody td:last-child { border-block-end: 0; }
 
-  /* l'en-tête de colonne redevient une étiquette, en mono capitales */
+  /* l'en-tête de colonne redevient une étiquette, dans le caractère des cellules, en casse de phrase */
   .oto-table[data-responsive="cards"] tbody td::before {
     content: attr(data-label);
     flex: none;
     inline-size: 38%;
-    font-family: var(--mono);
-    font-size: var(--fs-2xs);
-    font-weight: var(--fw-semibold);
-    letter-spacing: var(--tr-mono);
-    text-transform: uppercase;
-    color: var(--faint);
+    /* `--mute` sur `--card` : 4,78:1 au plus bas des huit teintes, de nuit. */
+    font-weight: var(--fw-regular);
+    color: var(--mute);
   }
   /* une cellule sans `data-label` (la case à cocher, les actions) prend toute la largeur au lieu d'afficher une étiquette vide */
   .oto-table[data-responsive="cards"] tbody td:not([data-label])::before { content: none; }

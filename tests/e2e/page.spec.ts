@@ -4,7 +4,7 @@ import { assurerLeNoeud, attendre, attendreLEnregistrement, capturer, ouvrirAQuo
 import { CHEMINS, EQUIPE, ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
 // Contrôle visuel connecté de la page d'un nœud (E05-S02, AC24 ; E05-S08, AC10 : chaque bloc se lit, nommé comme son
-// champ, qui se monte au survol ou au focus depuis la 1.1.3 ;
+// champ, qui se monte au clic ou au focus ;
 // E05-S09, partie c1 : porté d'oto-frontend) : le compte E2E, administrateur de l'organisation de la campagne et
 // responsable de son équipe (`espace.ts`), en clair puis en sombre. Le Contexte de l'équipe, ouvert par le rail,
 // montre son document et ses notes en deux colonnes, l'encart « À quoi sert cette page » en une phrase (E05-S13,
@@ -148,7 +148,7 @@ test.describe("page d'un nœud", () => {
       const note = await ouvrirAQuoiSert(page)
       await attendre(note.getByText(`Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe ${EQUIPE.nom}, lit à chaque conversation.`)).toBeVisible()
       await expect(note.getByRole("definition")).toHaveCount(0)
-      await expect(page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
+      await expect(page.getByRole("region", { name: "Ce que reçoit votre assistant" }).getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
       await capturerLesThemes(page, testInfo, `contexte-${mode}`)
       const handle = /^\/n\/private\/([^/]+)\/contexte$/.exec((await rail.getByRole("link", { name: "Mes instructions" }).getAttribute("href")) ?? "")?.[1]
       expect(handle).toBeTruthy()
@@ -225,14 +225,14 @@ test.describe("page d'un nœud", () => {
       await page.keyboard.press("Escape")
       await expect(page.getByRole("menu")).toHaveCount(0)
 
-      // « Partager · Privé » ouvre le panneau des règles de la page, Échap le referme (AC19).
-      await page.getByRole("button", { name: "Partager · Privé" }).click()
-      const partage = page.getByRole("dialog", { name: "Partager — Privé" })
+      // « Partager » ouvre le panneau des règles de la page, Échap le referme (AC19).
+      await page.getByRole("button", { name: "Partager", exact: true }).click()
+      const partage = page.getByRole("dialog", { name: /^Partager « .+ »$/ })
       await attendre(partage.getByText("Accès par défaut", { exact: true })).toBeVisible()
       await capturer(page, testInfo, `partage-${mode}`)
       await page.keyboard.press("Escape")
       await expect(partage).toHaveCount(0)
-      await expect(page.getByRole("button", { name: "Partager · Privé" })).toBeFocused()
+      await expect(page.getByRole("button", { name: "Partager", exact: true })).toBeFocused()
 
       // Déplacer sous le dossier d'essai, puis revenir (AC20).
       await deplacerSous(page, dossier, `${dossier}/essai_ecran`)

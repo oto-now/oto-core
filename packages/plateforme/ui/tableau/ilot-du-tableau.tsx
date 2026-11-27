@@ -41,7 +41,8 @@ export function IlotDuTableau({ titre, children }: { titre: string; children: Re
 
   return (
     // `-1` : l'îlot n'entre dans la tabulation que lorsque le script l'y pose.
-    <Island id={id} tabIndex={-1} aria-label={titre} onClickCapture={noterUnClic} onSubmitCapture={noter}>
+    // Un filet arrondi, sans ombre ni fond de carte (refonte #217) : la grille garde un cadre pour défiler en largeur.
+    <Island id={id} tabIndex={-1} aria-label={titre} className="oto-node-table-frame" onClickCapture={noterUnClic} onSubmitCapture={noter}>
       {children}
     </Island>
   )

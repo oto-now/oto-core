@@ -47,6 +47,7 @@ export const MARKERS = {
 /** Rattachement d'une table sans `org_id` à son organisation, par sa ligne parente (AC3). */
 const PARENTS: Readonly<Record<string, { table: string; column: string }>> = {
   team_members: { table: "teams", column: "team_id" },
+  invitation_teams: { table: "invitations", column: "invitation_id" },
   node_versions: { table: "nodes", column: "node_id" },
   node_drafts: { table: "nodes", column: "node_id" },
 }
@@ -369,6 +370,8 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
   await admin`insert into platform.access_rules (org_id, account_id, subject_org, level, created_by) values (${b.id}, ${account.id}, true, 'read', ${people.b.id})`
   await one(admin`select id from platform.account_share_events where org_id = ${b.id} and account_id = ${account.id}`, "share journal of B read")
   const team = await one(admin<{ id: string }[]>`select id from platform.teams where org_id = ${b.id} and slug = 'support'`, "team of B read")
+  // Une équipe de l'invitation de B (`20261127150000`) : lue par l'administrateur et le responsable de l'équipe de B seuls.
+  await admin`insert into platform.invitation_teams (invitation_id, team_id) values (${invitation.id}, ${team.id})`
   // Le lexique (E01-S13) : les déclencheurs de la publication le remplissent (script Démo, marqueurs), aucun
   // client ne l'écrit ; le mot témoin de B y est.
   await one(admin`select word from platform.lexicon where org_id = ${b.id} and word = ${MARKERS.page.word}`, "lexicon of B read")

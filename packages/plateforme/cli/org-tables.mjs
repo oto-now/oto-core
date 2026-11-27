@@ -23,6 +23,7 @@ export const ORG_TABLES = [
   deleted('members'),
   deleted('member_exclusions'),
   deleted('invitations'),
+  deleted('invitation_teams', { table: 'invitations', column: 'invitation_id' }),
   deleted('teams'),
   deleted('team_members', { table: 'teams', column: 'team_id' }),
   deleted('platform_grants'),

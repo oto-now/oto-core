@@ -18,6 +18,19 @@ type FieldProps = Omit<ComponentProps<"div">, "children"> & {
   children: ReactNode
 }
 
+/** L'erreur d'un champ ou d'un groupe de cases (`CheckboxGroup`), son icône devant : la couleur n'est jamais seule. */
+export function FieldError({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <p className="oto-field-error" id={id}>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true" style={{ flex: "none", marginBlockStart: "1px" }}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+      {children}
+    </p>
+  )
+}
+
 export function Field({ label, hint, error, required, id, className, children, ...rest }: FieldProps) {
   const auto = useId()
   const fieldId = id || auto
@@ -36,15 +49,7 @@ export function Field({ label, hint, error, required, id, className, children, .
         </label>
       )}
       {controle}
-      {error && (
-        <p className="oto-field-error" id={errId}>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true" style={{ flex: "none", marginBlockStart: "1px" }}>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4M12 16h.01" />
-          </svg>
-          {error}
-        </p>
-      )}
+      {error && <FieldError id={errId}>{error}</FieldError>}
       {hint && !error && (
         <p className="oto-field-hint" id={hintId}>
           {hint}

@@ -282,6 +282,15 @@ exclut et ce qu'exige `ui-patterns.md`, qui l'emporte (§ 8). Source en lecture 
     tiennent pas dans des segments à 375 px, que la phrase dit déjà ce qu'on choisit et que la variante
     du design system reste telle quelle ; décidé par JB, sur le brief de design de la fiche à plusieurs
     façons.
+  - `§ Composition` (titre de section jamais en muted) : les petits intertitres d'un groupe sont petits,
+    gris (`--rail-mute` dans le rail, `--mute` ailleurs), en casse de phrase, sans capitales ni chasse
+    ni mono, à la même taille (`--fs-sm`) et à la même graisse partout : sections du rail
+    (`.oto-rail-group`), groupes des menus, celui du compte compris, et groupes d'un panneau comme
+    « Accès par défaut » et « Partager avec » de « Partager », un seul style (`.oto-group-title`,
+    `ui/ds/tokens/typography.css`, dont `.oto-menu-group-label` est l'alias), parce qu'ils nomment le groupe
+    sans concurrencer ses lignes et que la petite capitale grise est une signature interdite
+    (`§ Signatures IA`) ; décidé par JB le 27/11/2026 (décision D4 du brief de la refonte,
+    `docs/conception/ecrans-et-coque.md`).
 - **Vérifiable :** en revue, tout écart à une règle de `ui-patterns.md` dans `packages/plateforme/ui/**`
   ou `src/app/(dashboard)/**` cite sa ligne ci-dessus ; un écart sans ligne est un finding sourcé
   `portage-ecrans.md § 8. Écarts à ui-patterns.md, décidés par JB`, et une ligne ajoutée sans

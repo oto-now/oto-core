@@ -132,7 +132,6 @@ export function useSelectionDeBlocs({ modele, actions, fermerLeMenu }: Parametre
   const vider = useCallback(() => setSelection((actuelle) => (actuelle.cles.length === 0 ? actuelle : SELECTION_VIDE)), [])
   const pointeur = usePointeurDeLaSelection({
     zone,
-    prendre: (de, a) => poser({ cles: plage(modele, de, a), ancre: de, tete: a }),
     prendreLesBlocs: (prises) => poser(prises.length === 0 ? SELECTION_VIDE : { cles: prises, ancre: prises[0], tete: prises[prises.length - 1] }),
     vider,
   })

@@ -4,7 +4,7 @@ import { CHEMINS, EQUIPE, ESPACE, PROCEDURE as TITRE_DE_LA_PROCEDURE, SANS_ESPAC
 import { attendreLEnregistrement, lireLeHtml, ouvrirAQuoiSert, seConnecterSurLEspace } from "./fixtures/noeud"
 
 // Contrôle visuel connecté des écrans d'une procédure et d'un Contexte (E05-S04, AC16 ; E05-S08, AC10 :
-// chaque bloc se lit, son champ monté au survol ou au focus depuis la 1.1.3 ; M59, fiche D104 : l'écran d'une
+// chaque bloc se lit, son champ monté au clic ou au focus ; M59, fiche D104 : l'écran d'une
 // procédure est celui d'une page) : le compte E2E,
 // administrateur de l'organisation de la campagne et responsable de son équipe (`espace.ts`), en clair puis en sombre. Le rail
 // mène à la procédure semée (une procédure est une page de l'arbre, E05-S09 AC-a5), dont
@@ -185,7 +185,7 @@ test.describe("procédure et contexte", () => {
       // Repliée à l'arrivée (E11-S05, AC-e2) : ouverte par Entrée.
       const annexes = await ouvrirAQuoiSert(page)
       await attendre(annexes.getByText(`Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe ${EQUIPE.nom}, lit à chaque conversation.`)).toBeVisible()
-      await expect(page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
+      await expect(page.getByRole("region", { name: "Ce que reçoit votre assistant" }).getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
       await capturer(page, testInfo, `contexte-equipe-${theme}`)
 
       // Le Contexte Perso : ses annexes, sans « Ma fiche » (E05-S11, AC-8) ; une ligne de l'encart, « Contexte :
@@ -193,7 +193,7 @@ test.describe("procédure et contexte", () => {
       await page.goto(`${ADRESSE}/n/private/${handle}/contexte`)
       await attendre((await ouvrirAQuoiSert(page)).getByText(/vous seul le recevez\.$/)).toBeVisible()
       await expect(page.getByRole("region", { name: "Ma fiche" })).toHaveCount(0)
-      await page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("link", { name: /^Mes instructions/ }).click()
+      await page.getByRole("list", { name: "Ordre de lecture" }).getByRole("link", { name: /^Mes instructions/ }).click()
       await attendre(page).toHaveURL(`${ADRESSE}/context#private-context`)
       // L'adresse change aussitôt, la vue paraît quand ses lectures finissent (aperçu du Contexte compris,
       // `<Suspense>`) : 2,8 s au calme, 3,9 s sous une campagne complète, au-delà de 5 s au plus chargé (mesuré).

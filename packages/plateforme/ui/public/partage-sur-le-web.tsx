@@ -12,6 +12,7 @@
 // l'intitulé de section, le commutateur en balisage natif habillé du design system (`oto-choice`,
 // `oto-switch-track`), le lien sous lui. Changé : le geste part au réseau, la copie par `ValeurCopiable`, la case
 // des sous-contenus, la désactivation confirmée. Retiré : l'historique du lien.
+// #219 : « Publier sur le web » et sa phrase, l'interrupteur en fin de ligne (`.oto-share-web`), sans intertitre au-dessus.
 import { useEffect, useRef, useState } from "react"
 import { shareNodeSchema, type ShareView } from "../../schemas"
 import { appelerPlateforme } from "../api/client"
@@ -134,7 +135,7 @@ export function PartageSurLeWeb({ chemin, annoncer, signaler }: { chemin: string
     )
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="oto-share-web">
       <Switch
         ref={entree}
         label={PARTAGE_WEB.titre}

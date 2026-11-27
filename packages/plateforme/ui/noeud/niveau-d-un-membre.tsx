@@ -143,21 +143,21 @@ type MembresDeLEquipeProps = Omit<NiveauDUnMembreProps, "membre"> & {
 function EtiquettesDuMembre({ membre, moi, niveauDeLEquipe }: { membre: Membre; moi: string | null; niveauDeLEquipe?: AccessLevelName }) {
   return (
     <>
-      {membre.userId === moi && <EtiquetteDeLigne accent>{PARTAGE.vous}</EtiquetteDeLigne>}
+      {membre.userId === moi && <EtiquetteDeLigne>{PARTAGE.vous}</EtiquetteDeLigne>}
       {membre.lead && <EtiquetteDeLigne>{PARTAGE.responsable}</EtiquetteDeLigne>}
       {!membre.lead && niveauDeLEquipe !== undefined && membre.level !== niveauDeLEquipe && <EtiquetteDeLigne>{PARTAGE.exception}</EtiquetteDeLigne>}
     </>
   )
 }
 
-/** « Membres de l'équipe … » dans « Partager » : chacun, son niveau réel, et le menu qui le surcharge sur ce contenu. */
+/** Les membres de l'équipe propriétaire, dépliés sous sa ligne dans « Partager » : chacun, son niveau réel, et le menu qui le surcharge sur ce contenu. */
 export function MembresDeLEquipe({ membres, equipe, gere, moi, niveauDeLEquipe, ...niveau }: MembresDeLEquipeProps) {
   if (membres.length === 0) return null
   return (
     <ul aria-label={PARTAGE.membresDe(equipe)} className="flex flex-col">
       {membres.map((membre) => (
         <li key={membre.userId} className="oto-pop-row">
-          <Avatar name={membre.name} size="sm" aria-hidden="true" />
+          <Avatar name={membre.name} size="md" self={membre.userId === moi} aria-hidden="true" />
           <span className="oto-share-name">
             {membre.name}
             <EtiquettesDuMembre membre={membre} moi={moi} niveauDeLEquipe={niveauDeLEquipe} />

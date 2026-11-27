@@ -32,6 +32,7 @@ import { BLOCK_SQL_COLUMNS, docBlock, loadBlocks } from "../nodes/store"
 import { memberNames, ownerOf, teamOf } from "../nodes/view"
 import type { InOperation } from "../rules"
 import type { Tx } from "../sql"
+import { unreadBy } from "./followed"
 import { addressesAssistant, readersOf, readMentions } from "./mentions"
 
 /** D'où vient un commentaire écrit : l'écran (API du paquet), ou l'assistant de son auteur (fonction de `call`). */
@@ -64,6 +65,10 @@ type CommentRow = {
   edited_at: string | null
   to_assistant: boolean
   via_assistant: boolean
+  /** Le commentaire suit la dernière visite de la page par l'appelant (`node_views.last_at`), ou il ne l'a jamais visitée. */
+  unseen: boolean
+  /** L'appelant mène l'équipe propriétaire de la page (la même valeur sur chaque ligne). */
+  led: boolean
 }
 
 /**
@@ -137,16 +142,21 @@ export async function reachedThread({ db, sql }: InOperation, identity: Identity
 
 /**
  * Les fils tels que l'appelant les lit, dans l'ordre servi : leurs commentaires du plus ancien au plus récent, le nom de
- * chaque auteur, la section et l'état du passage sur les blocs publiés (lus seulement si un fil commente un bloc), et ce
- * que l'appelant peut faire.
+ * chaque auteur, la section et l'état du passage sur les blocs publiés (lus seulement si un fil commente un bloc), ce
+ * que l'appelant peut faire, et s'il est non lu pour lui (`unreadBy`, la règle de l'accueil, sur sa dernière visite de
+ * la page lue dans la même requête que les commentaires).
  */
 async function threadViews({ db, sql }: InOperation, identity: Identity, node: CommentedNode, rows: readonly ThreadRow[]): Promise<CommentThreadView[]> {
   if (rows.length === 0) return []
+  const me = identity.user.id
+  const led = identity.teams.filter((team) => team.role === "lead").map((team) => team.id)
   const [comments, names, blocks] = await Promise.all([
     sql<CommentRow[]>`
       select c.id, c.thread_id, c.author, c.text, c.mentions::text[] as mentions, to_json(c.created_at) as created_at, to_json(c.edited_at) as edited_at,
-             c.to_assistant, c.via_assistant
+             c.to_assistant, c.via_assistant, (s.seen_at is null or c.created_at > s.seen_at) as unseen, coalesce(l.led, false) as led
         from platform.comments c
+        left join lateral (select max(v.last_at) as seen_at from platform.node_views v where v.org_id = ${identity.org.id} and v.node_id = ${node.id} and v.user_id = ${me}) s on true
+        left join lateral (select o.owner_team_id = any(${led}::uuid[]) as led from platform.node_owner(${node.id}) o) l on true
        where c.thread_id = any(${rows.map((row) => row.id)}::uuid[])
        order by c.created_at, c.id`,
     memberNames(db, identity.org.id),
@@ -155,7 +165,9 @@ async function threadViews({ db, sql }: InOperation, identity: Identity, node: C
   const published = new Map(blocks.flatMap((block) => (block.id === null ? [] : [[block.id, block.revision] as const])))
   const nameOf = (userId: string | null) => (userId === null ? null : (names.get(userId) ?? null))
   const byThread = new Map<string, CommentView[]>()
+  const ruledOf = new Map<string, CommentRow[]>()
   for (const comment of comments) {
+    ruledOf.set(comment.thread_id, [...(ruledOf.get(comment.thread_id) ?? []), comment])
     const view: CommentView = {
       id: comment.id,
       author: nameOf(comment.author),
@@ -178,6 +190,7 @@ async function threadViews({ db, sql }: InOperation, identity: Identity, node: C
       const block = anchor === "intact" || anchor === "changed" ? row.block_id : null
       const status = statusOf(row.status)
       const comments = byThread.get(row.id) ?? []
+      const ruled = ruledOf.get(row.id) ?? []
       return {
         id: row.id,
         status,
@@ -190,6 +203,7 @@ async function threadViews({ db, sql }: InOperation, identity: Identity, node: C
         resolvedAt: row.resolved_at,
         createdAt: row.created_at,
         waitingAssistant: waitingAssistant(status, comments),
+        unread: status === "open" && unreadBy(me, { author: row.created_by, teamLeads: ruled[0]?.led ? [me] : [], comments: ruled }),
         comments,
       }
     }),

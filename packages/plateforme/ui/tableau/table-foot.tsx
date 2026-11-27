@@ -15,7 +15,7 @@ import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { nombreLisible } from "../format/nombres"
 import { auMaximum, avecPlus, type Reglages } from "./adresse"
-import { affichees, GRILLE } from "./libelles"
+import { affichees, GRILLE, libelleDuNom } from "./libelles"
 import { LienBouton } from "./lien-bouton"
 
 type Navigation = { reglages: Reglages; Lien: LienDeLHote; hrefDuTableau: (reglages: Reglages) => string }
@@ -26,9 +26,9 @@ function Resume({ resume, entete, reglages, Lien, hrefDuTableau }: Navigation & 
   const { states, sums } = resume.data
   return (
     <div className="oto-caption">
-      {states && entete.lifecycle && <p>{`Par ${entete.lifecycle.column} : ${states.map((etat) => `${etat.state} ${nombreLisible(etat.count)}`).join(" · ")}`}</p>}
+      {states && entete.lifecycle && <p>{`Par ${libelleDuNom(entete.columns, entete.lifecycle.column)} : ${states.map((etat) => `${etat.state} ${nombreLisible(etat.count)}`).join(" · ")}`}</p>}
       {sums.map((somme) => (
-        <p key={somme.column}>{`${somme.column} : total ${nombreLisible(somme.total)}`}</p>
+        <p key={somme.column}>{`${libelleDuNom(entete.columns, somme.column)} : total ${nombreLisible(somme.total)}`}</p>
       ))}
     </div>
   )

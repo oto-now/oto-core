@@ -19,6 +19,7 @@ import {
   type TableHeader,
   type TableImportBody,
 } from "../../schemas"
+import { tableColumnSchema } from "../../schemas/tables"
 import { appelerPlateforme, type ErreurPlateforme } from "../api/client"
 
 /** L'encodage d'un CSV lu (AC-b1) : UTF-8 s'il se décode sans faute, sinon Windows-1252 ; modifiable. */
@@ -60,11 +61,22 @@ function colonneChoisie(colonne: ImportColumn, type: ColumnType | undefined, opt
   return type === "text" ? { ...colonne, type } : { name: colonne.name, type }
 }
 
-/** Le plan d'un tableau nouveau (AC-b1, AC-b2) : noms, types déduits puis choisis, clé proposée, sinon `ligne` générée. */
+/**
+ * Une colonne créée par l'import, avec son en-tête d'origine pour libellé (#228) : rogné, quand il diffère du nom tiré
+ * et tient dans un libellé ; « Montant estimé » le garde, « ref » ne prend rien.
+ */
+function avecLibelle(colonne: ImportColumn, cellule: string | undefined): ImportColumn & { label?: string } {
+  const libelle = (cellule ?? "").trim()
+  // La borne et le rognage sont ceux du schéma de la colonne : un libellé qu'il refuse n'est pas posé.
+  if (libelle === colonne.name || !tableColumnSchema.shape.label.safeParse(libelle).success) return colonne
+  return { ...colonne, label: libelle }
+}
+
+/** Le plan d'un tableau nouveau (AC-b1, AC-b2) : noms, types déduits puis choisis, libellés, clé proposée, sinon `ligne` générée. */
 function planNouveau(entete: readonly string[], lignes: string[][], choix: Choix): PlanDuCsv {
   const noms = columnNames(entete)
   const deduit = inferTable(lignes, noms)
-  const colonnes = deduit.columns.map((colonne, rang) => colonneChoisie(colonne, choix.types[colonne.name], () => valeursDe(lignes, rang)))
+  const colonnes = deduit.columns.map((colonne, rang) => avecLibelle(colonneChoisie(colonne, choix.types[colonne.name], () => valeursDe(lignes, rang)), entete[rang]))
   const cle = choix.cle === undefined ? deduit.key : choix.cle
   if (cle !== null) return { columns: colonnes, key: cle, names: noms, rows: lignes, ignorees: [], entete: { columns: colonnes, key: cle }, cleGeneree: false, entetes: [...entete] }
   const genere = withLineKey(noms, lignes)

@@ -22,19 +22,19 @@ export type AdressesDuRail = {
   marque?: string
   drapeaux?: string
   acces?: string
-  /** Les connecteurs : une ligne du pied du rail, pour qui administre (E05-S11, AC-32). */
+  /** Les connecteurs : au menu du compte, groupe « Vous », pour chaque membre (#221). */
   connecteurs?: string
   /** La corbeille (E05-S10, AC-b11) : au menu du compte (E05-S11, AC-e22), et dans la palette. */
   corbeille?: string
   /** La page « Profil » (E05-S11, AC-6) : au menu du compte, et dans la palette. */
   profil?: string
-  /** La vue « Contexte », ce que lit l'assistant (E11-S10, AC-e1) : en tête du menu du compte, et dans la palette. */
+  /** La vue « Contexte », ce que lit l'assistant (E11-S10, AC-e1) : dans la palette (hors du menu du compte depuis #221). */
   contexte?: string
   /** L'écran d'abonnement de l'hôte (E12-S02) : aux réglages de l'entreprise, pour qui administre, et dans la palette ; absente, rien. */
   abonnement?: string
   /**
    * La page d'inscription de l'hôte, un chemin de son application (elle monte `FormulaireDInscription`) : « Créer une
-   * organisation », sous la bascule du menu de l'entreprise, pour toute personne ; absente, rien.
+   * organisation », dans le menu de « Changer d'espace », pour toute personne ; absente, rien.
    */
   inscription?: string
 }
@@ -50,9 +50,11 @@ export type DonneesDuRail = {
   handle: string | null
   /** Le nom de la personne, au pied ; `null` quand l'identité n'a pas été lue. */
   compte: string | null
+  /** L'email de la personne, sous son nom en tête du menu du compte (#221) ; absent, le nom seul. */
+  email?: string | null
   /** `isOrgAdmin` de l'identité : les entrées d'administration. */
   administre: boolean
-  /** Les organisations de la personne (`listMyOrganisations`) : à partir de deux, le menu de l'entreprise porte la bascule. */
+  /** Les organisations de la personne (`listMyOrganisations`) : à partir de deux, « Changer d'espace » à droite du bloc de l'organisation. */
   organisations?: PersonOrganisation[]
   /**
    * Les slugs des équipes de la personne (`identity.teams`) : les sections des autres équipes, où elle ne voit que ce

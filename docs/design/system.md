@@ -15,11 +15,30 @@ Deux jeux coexistent :
 
 ## Direction
 
-Celle d'`oto-frontend` : les écrans se copient fidèles à 90 ou 95 % de l'original et ne changent
-que le routeur, la donnée et les icônes (`portage-ecrans.md`, ADR-008 § 1 et § 6). Le thème est
-celui de l'organisation ou de la personne, parmi les huit du contrat, jour et nuit. Aucune
-audience, densité ni ton n'est écrit au-delà : un écran nouveau prend ceux de l'écran porté le
-plus proche, et une direction qui s'en écarte se pose en question.
+Celle de la refonte de l'écran d'un contenu et de la coque (décision D10 de JB, 27/11/2026,
+maquette validée), qui remplace la fidélité à 90 ou 95 % d'`oto-frontend` :
+
+- **Léger** : l'écran ne parle que de son objet ; ce qui n'est pas lu tous les jours ne s'affiche
+  pas en permanence.
+- **À plat** : le contenu est posé sur le fond de la coque, sans carte, sans ombre ni bordure ;
+  un cadre ne reste que là où il porte un sens (le filet d'une grille qui défile en largeur, un
+  flottant au-dessus du texte).
+- **Un seul accent** : la couleur du thème ne porte, dans la zone de contenu, que les liens, la
+  pastille de ce qui attend la personne, l'anneau de focus et l'action pleine de l'écran
+  (« Partager ») ; compteurs, pastilles et lignes actives sont neutres.
+- **Titres en encre** : un titre se distingue par son corps et son poids, jamais par la couleur
+  du thème ; les petits intertitres de groupe sont gris, en casse de phrase (`.oto-group-title`,
+  `portage-ecrans.md § 8`).
+- **Gestes à la demande** : les gestes rares vont dans un menu « ⋯ », les panneaux (commentaires,
+  liens, historique, partage) s'ouvrent au clic ; les gestes d'un bloc paraissent au survol et au
+  focus, et restent montrés sans survol.
+- **Coque en îlots** : le rail reste détaché des bords, arrondi, le fond visible autour ; la page,
+  elle, est à plat.
+
+Le thème est celui de l'organisation ou de la personne, parmi les huit du contrat, jour et nuit.
+Les écrans portés d'`oto-frontend` gardent leur routeur, leur donnée et leurs icônes
+(`portage-ecrans.md`, ADR-008 § 1 et § 6) ; un écart à leur dessin qui suit cette direction ne se
+pose plus en question, un écart qui s'en éloigne, si.
 
 ## Patterns de page
 

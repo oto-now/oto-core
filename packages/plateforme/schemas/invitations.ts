@@ -10,12 +10,20 @@ export const INVITATION_STATES = ["pending", "accepted", "declined", "revoked", 
 export type InvitationRole = (typeof INVITATION_ROLES)[number]
 export type InvitationState = (typeof INVITATION_STATES)[number]
 
-export const inviteSchema = z.object({
-  email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
-  role: z.enum(INVITATION_ROLES).default("member"),
-  // Le `""` du <select> « Aucune équipe » vaut « pas d'équipe ».
-  teamId: z.preprocess((value) => (value === "" || value === null ? undefined : value), z.uuid().optional()),
-})
+/** Au plus autant d'équipes dans une invitation : la borne des équipes de `member.add` (`member-functions.ts`). */
+const MAX_INVITATION_TEAMS = 50
+
+// Les équipes où la personne entre à sa première connexion : `teamIds`, aucune, une ou plusieurs. `teamId`, une
+// seule, est la forme d'avant les équipes multiples, encore acceptée d'un client qui l'envoie (`""` ou `null` : aucune) ;
+// elle passe en tête de `teamIds`, chaque équipe une fois.
+export const inviteSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
+    role: z.enum(INVITATION_ROLES).default("member"),
+    teamId: z.preprocess((value) => (value === "" || value === null ? undefined : value), z.uuid().optional()),
+    teamIds: z.array(z.uuid()).max(MAX_INVITATION_TEAMS).default([]),
+  })
+  .transform(({ teamId, teamIds, ...invite }) => ({ ...invite, teamIds: [...new Set([...(teamId ? [teamId] : []), ...teamIds])] }))
 
 export type InviteInput = z.input<typeof inviteSchema>
 export type Invite = z.output<typeof inviteSchema>

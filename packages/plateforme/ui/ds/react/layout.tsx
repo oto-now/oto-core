@@ -99,7 +99,8 @@ type RailItemProps = Omit<ComponentProps<"a">, "ref"> & {
   end?: ReactNode
   /** Pose `aria-current="page"`, que le lecteur d'écran annonce « page courante ». */
   active?: boolean
-  variant?: "context" | "account" | "skin"
+  /** `org` : le bloc de l'organisation en tête du rail, logo et nom, le chemin de l'accueil (#221). */
+  variant?: "context" | "account" | "skin" | "org"
   /** L'élément hôte : `a` par défaut, `button`, ou le lien de l'hôte (portage-ecrans.md § 1). */
   as?: ElementType
 }

@@ -5,7 +5,8 @@
 // déplace, mesuré après le rendu et posé en variables CSS. Tel quel, en TypeScript. Changé : `chain` et
 // `useRefList` (`hooks.js` d'oto-frontend) vivent ici, `hooks.ts` ne les porte pas ; le curseur n'a pas de
 // mesure avant la première (le serveur n'en a pas), et le CSS pose alors la pilule sur le segment coché ;
-// l'observateur de taille est gardé par `typeof ResizeObserver`, comme dans le fil d'Ariane.
+// l'observateur de taille est gardé par `typeof ResizeObserver`, comme dans le fil d'Ariane. Ajouté (refonte #216) : la
+// variante `neutral`, le segment coché sur `--hair` à l'encre, et la mesure qui lit le segment coché courant.
 import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type KeyboardEvent, type ReactNode } from "react"
 import { useControllable, useIsoLayoutEffect } from "./hooks"
 import { cx } from "./outils"
@@ -20,6 +21,8 @@ type SegmentedControlProps = Omit<ComponentProps<"div">, "onChange" | "defaultVa
   size?: "lg"
   block?: boolean
   label?: string
+  /** `neutral` : le segment coché sur `--hair`, à l'encre, sans l'accent du thème (la portée d'un historique, qui ne filtre pas un écran). */
+  variant?: "neutral"
 }
 
 /** Une ref par élément d'une liste rendue. */
@@ -41,13 +44,19 @@ function chain<E>(leur: ((evenement: E) => void) | undefined, notre: (evenement:
     : notre
 }
 
-export function SegmentedControl({ options, value, defaultValue, onChange, size, block, label, className, ...rest }: SegmentedControlProps) {
+export function SegmentedControl({ options, value, defaultValue, onChange, size, block, label, variant, className, ...rest }: SegmentedControlProps) {
   const [active, setActive] = useControllable(value, defaultValue ?? options[0]?.value ?? "", onChange)
   const { list, set } = useRefList<HTMLButtonElement>()
   const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null)
+  // Le segment coché lu au moment de la mesure : l'observateur de taille garde la `measure` de son premier rendu, et un
+  // contrôle monté caché (un tiroir fermé) puis coché ailleurs à l'ouverture y reposait le curseur sur le premier choix.
+  const actif = useRef(active)
+  useIsoLayoutEffect(() => {
+    actif.current = active
+  }, [active])
 
   const measure = () => {
-    const element = list.current[options.findIndex((option) => option.value === active)]
+    const element = list.current[options.findIndex((option) => option.value === actif.current)]
     if (element) setThumb({ x: element.offsetLeft, w: element.offsetWidth })
   }
 
@@ -88,6 +97,7 @@ export function SegmentedControl({ options, value, defaultValue, onChange, size,
       className={cx("oto-segmented", className)}
       data-size={size}
       data-block={block ? "" : undefined}
+      data-variant={variant}
       role="radiogroup"
       aria-label={label ?? rest["aria-label"]}
       onKeyDown={chain(rest.onKeyDown, onKeyDown)}

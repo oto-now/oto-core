@@ -82,8 +82,8 @@ describe("the « Contexte » view, index lists (E11-S15, AC-a1)", () => {
   })
 })
 
-describe("the encarts of a page (E11-S15, AC-a2)", () => {
-  const LONG = "Un titre de sous-page assez long pour ne jamais tenir sur la ligne d'un encart de la colonne de droite"
+describe("the foot of a page (E11-S15, AC-a2 ; refonte #217)", () => {
+  const LONG = "Un titre de sous-page assez long pour ne jamais tenir sur la ligne d'une colonne du pied"
 
   it("should show a line by its full name, cut on screen only, with no summary, a procedure included", () => {
     const enfant = { path: "ventes/modele_relance/long", title: LONG, summary: "Un résumé qui ne se montre plus.", kind: "procedure" as const, status: "published" as const }
@@ -91,7 +91,7 @@ describe("the encarts of a page (E11-S15, AC-a2)", () => {
     const lien = within(screen.getByRole("list", { name: "Sous-pages" })).getByRole("link", { name: /^Un titre de sous-page/ })
     // Le nom entier reste le texte du lien (lecteur d'écran) et son `title` (survol) ; seule la vue le coupe.
     expect(within(lien).getByTitle(LONG)).toHaveTextContent(LONG)
-    expect(lien.textContent).toBe(`${LONG}Procédure`)
+    expect(lien.textContent).toBe(LONG)
     expect(screen.queryByText(/Un résumé qui ne se montre plus/)).toBeNull()
   })
 })
@@ -197,14 +197,14 @@ describe("the connection guide (E11-S15, AC-a5)", () => {
   })
 })
 
-describe("« Importer un fichier… » of a table (E11-S15, AC-a7)", () => {
+describe("« Importer un fichier… » of a table (E11-S15, AC-a7 ; refonte #218)", () => {
   const ENTETE: TableHeader = { columns: [{ name: "entreprise", type: "text" }], key: "entreprise", closed: false, proof: false }
 
-  it("should sit in the row of the header buttons, before « Réglages », and open the import into this table", () => {
+  it("should sit in the « ⋯ » menu of the header, before « Réglages du tableau… », and open the import into this table", () => {
     rendreLeNoeud(vueDuNoeud({ kind: "table", level: 2, blocks: [], meta: ENTETE, title: "Prospects" }), { complement: <p>La grille du tableau</p> })
-    const importer = screen.getByRole("button", { name: "Importer un fichier…" })
-    const reglages = screen.getByRole("button", { name: "Réglages" })
-    expect(importer.closest(".oto-screen-header-access")).toBe(reglages.closest(".oto-screen-header-access"))
+    fireEvent.click(screen.getByRole("button", { name: "Plus d'actions" }))
+    const importer = screen.getByRole("menuitem", { name: "Importer un fichier…" })
+    const reglages = screen.getByRole("menuitem", { name: "Réglages du tableau…" })
     expect(importer.compareDocumentPosition(reglages) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     fireEvent.click(importer)
     expect(screen.getByRole("dialog", { name: "Importer dans « Prospects »" })).toBeInTheDocument()

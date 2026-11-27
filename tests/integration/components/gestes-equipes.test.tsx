@@ -38,7 +38,7 @@ const EQUIPES: TeamView[] = [
   { id: VENTES, slug: "ventes", name: "Ventes", leadName: "Claire Morel", members: [{ userId: CLAIRE, name: "Claire Morel", email: "claire@demo.test", role: "lead" }] },
 ]
 
-const EN_ATTENTE = { id: INVITATION, email: "new@demo.test", role: "member" as const, teamId: null, invitedBy: ADA, expiresAt: "2026-10-01T10:00:00Z" }
+const EN_ATTENTE = { id: INVITATION, email: "new@demo.test", role: "member" as const, teamIds: [], invitedBy: ADA, expiresAt: "2026-10-01T10:00:00Z" }
 
 const fetchMock = vi.fn<typeof fetch>()
 const rafraichir = vi.fn()
@@ -180,6 +180,25 @@ describe("member gestures (AC6 to AC9)", () => {
     choisir("Régler les équipes de Claire Morel", "menuitemcheckbox", "Ventes")
     expect(await screen.findByRole("alert")).toHaveTextContent("Vous n'avez pas le droit de faire cela.")
     expect(envoi(1)).toMatchObject({ url: `/api/platform/teams/${VENTES}/members/${CLAIRE}`, methode: "DELETE" })
+  })
+
+  it("should show every team of a pending person, and add or remove one through the same « + », on her invitation", async () => {
+    // Une réponse neuve par envoi : un corps ne se lit qu'une fois.
+    fetchMock.mockImplementation(() => Promise.resolve(reponse(200, { data: { invitation: {} } })))
+    rendre({ invitations: { data: [{ ...EN_ATTENTE, teamIds: [SUPPORT, VENTES] }] } })
+
+    const ligne = screen.getByRole("row", { name: /new@demo\.test/ })
+    expect(within(ligne).getByText("Support")).toBeInTheDocument()
+    expect(within(ligne).getByText("Ventes")).toBeInTheDocument()
+    choisir("Régler les équipes de new@demo.test", "menuitemcheckbox", "Ventes")
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
+    expect(envoi()).toEqual({ url: `/api/platform/invitations/${INVITATION}/teams/${VENTES}`, methode: "DELETE", corps: undefined })
+
+    cleanup()
+    rendre()
+    choisir("Régler les équipes de new@demo.test", "menuitemcheckbox", "Support")
+    await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(2))
+    expect(envoi(1)).toEqual({ url: `/api/platform/invitations/${INVITATION}/teams/${SUPPORT}`, methode: "POST", corps: {} })
   })
 
   it("should ask before removing someone, and say what falls with them", () => {

@@ -6,6 +6,9 @@ import { ContexteDeLHote, CoquilleOto, EcranEquipes, EcranEquipesChargement, typ
 import { simulerLesDialogues } from "../../helpers/dialogue"
 import { libellesDesChoix } from "../../helpers/liste-de-choix"
 
+/** Les cases du groupe « Équipes » du dialogue d'invitation, par libellé : aucune cochée vaut « aucune équipe ». */
+const casesDesEquipes = (dialogue: HTMLElement) => within(within(dialogue).getByRole("group", { name: "Équipes" })).getAllByRole("checkbox").map((boite) => boite.closest("label")?.textContent)
+
 // L'écran « Équipes et droits », porté d'oto-frontend (E05-S09 partie d1 : AC-d1, AC-x2 ; E05-S03 : AC1,
 // AC2, AC4 à AC7, AC10, AC13, AC15, AC18) sur des données en mémoire, rendues comme la page de l'hôte les
 // passe, sous la racine `.oto` et avec ce que l'hôte prête (`ContexteDeLHote`).
@@ -54,7 +57,7 @@ const EQUIPES: TeamView[] = [
   },
 ]
 
-const INVITATION = { id: "9d1c7e2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a", email: "new@demo.test", role: "member" as const, teamId: VENTES, invitedBy: ADA, expiresAt: "2026-10-01T10:00:00Z" }
+const INVITATION = { id: "9d1c7e2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a", email: "new@demo.test", role: "member" as const, teamIds: [VENTES], invitedBy: ADA, expiresAt: "2026-10-01T10:00:00Z" }
 
 const ADMIN = { userId: ADA, estAdmin: true, equipesDirigees: [VENTES] }
 const SIMPLE_MEMBRE = { userId: CLAIRE, estAdmin: false, equipesDirigees: [] }
@@ -166,7 +169,7 @@ describe("EcranEquipes header and tabs (AC1, AC-d1)", () => {
 
     const dialogue = screen.getByRole("dialog", { name: "Inviter quelqu'un" })
     expect(libellesDesChoix(within(dialogue).getByLabelText("Rôle"))).toEqual(["Membre", "Administrateur"])
-    expect(libellesDesChoix(within(dialogue).getByLabelText("Équipe"))).toEqual(["Aucune équipe", "Support", "Ventes"])
+    expect(casesDesEquipes(dialogue)).toEqual(["Support", "Ventes"])
   })
 
   it("should fix the member role and offer the led teams only to a lead (H72)", () => {
@@ -176,7 +179,7 @@ describe("EcranEquipes header and tabs (AC1, AC-d1)", () => {
 
     const dialogue = screen.getByRole("dialog", { name: "Inviter quelqu'un" })
     expect(within(dialogue).queryByLabelText("Rôle")).toBeNull()
-    expect(libellesDesChoix(within(dialogue).getByLabelText("Équipe"))).toEqual(["Ventes"])
+    expect(casesDesEquipes(dialogue)).toEqual(["Ventes"])
   })
 
   it("should offer no invitation to a plain member, and « Créer une équipe » to an administrator only", () => {

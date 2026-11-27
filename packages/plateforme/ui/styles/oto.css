@@ -49,7 +49,9 @@
   --base-dk:#302612; --desk-dk:#141007; --card-dk:#382f1b; --island-bd-dk:#433a27;
   --rail-tint:#1f1a14;
   --island:    var(--base);
-  --desk:      var(--desk-l);
+  /* Le fond du bureau, posé à plat sous la page : un blanc cassé, tiré du blanc de l'îlot (maquette de la refonte,
+     validée par JB), le gris du bureau d'origine n'en gardant qu'un tiers. */
+  --desk:      color-mix(in srgb, var(--desk-l) 35%, var(--base));
   --card:      var(--card-l);
   --field:     var(--base);
   --island-bd: var(--island-bd-l);

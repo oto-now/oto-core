@@ -92,6 +92,7 @@ export { usefulProcedures } from "./context/blocks/procedures"
 export { homeContents } from "./home-contents"
 // Le bloc « Commentaires » de l'accueil : les fils ouverts destinés à la personne.
 export { homeComments } from "./comments/followed"
+export { listComments } from "./comments/threads"
 export { recordNodeView } from "./node-views"
 export { describeTeamDeletion } from "./teams"
 export type { TeamDeletion } from "./teams"

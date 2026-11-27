@@ -33,7 +33,10 @@ export const MENU_DE_TOUT_LE_MONDE = {
 } as const
 
 export const RAIL = {
+  /** L'infobulle du bloc de l'organisation, en tête du rail, qui mène à l'accueil (#221, D6), et la commande de la palette. */
   accueil: "Accueil",
+  /** Le bouton à droite du bloc de l'organisation, à partir de deux organisations joignables (#221, D5). */
+  changerDEspace: "Changer d'espace",
   arbreEnPanne: "L'arbre n'a pas pu être chargé",
   /** Sous les sections, après trois relectures de l'arbre en échec (E11-S20, AC-6) : l'arbre montré reste. */
   arbreNonActualise: "L'arbre n'a pas pu être actualisé.",
@@ -43,7 +46,7 @@ export const RAIL = {
   largeur: "Largeur du menu",
   /** L'écran de la corbeille (E05-S10, AC-b11), au menu du compte (E05-S11, AC-e22). */
   corbeille: "Corbeille",
-  /** L'écran des connecteurs, au pied du rail pour qui administre (E05-S11, AC-32). */
+  /** L'écran des connecteurs, au menu du compte, groupe « Vous » (#221). */
   connecteurs: "Connecteurs",
 } as const
 
@@ -65,15 +68,23 @@ export const ENTREPRISE = {
   creer: "Créer une organisation",
 } as const
 
-/** Le menu du compte, ouvert par l'engrenage du pied : Contexte, Profil, « Brancher mon Claude, ChatGPT ou Mistral », Corbeille, puis Déconnexion (E05-S11, AC-6, AC-e22 ; E11-S09, AC-14). */
+/**
+ * Le menu du compte, ouvert par la personne au pied du rail (#221) : la personne en tête, « Vous » (Mes instructions,
+ * Profil, Connecteurs, « Brancher mon Claude, ChatGPT ou Mistral », Corbeille), l'organisation, « Apparence », puis
+ * Déconnexion.
+ */
 export const COMPTE = {
-  /** La vue « Contexte », en tête du menu du compte (E11-S10, AC-e1). */
+  /** Le groupe des écrans de la personne. */
+  vous: "Vous",
+  /** Le groupe du mode sombre, quand l'hôte le sert. */
+  apparence: "Apparence",
+  /** La vue « Contexte » (E11-S10, AC-e1) : une commande de la palette, hors du menu du compte depuis #221. */
   contexte: "Contexte",
   profil: "Profil",
   brancher: "Brancher mon Claude, ChatGPT ou Mistral",
   deconnexion: "Déconnexion",
+  /** Un interrupteur : il nomme le mode sombre, coché quand l'hôte l'a mis. */
   modeSombre: "Mode sombre",
-  modeClair: "Mode clair",
   anonyme: "Mon compte",
 } as const
 

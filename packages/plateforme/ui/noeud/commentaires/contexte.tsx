@@ -20,6 +20,7 @@ export type Commentaires = {
   blocsPublies: ReadonlySet<string>
   onglet: CommentThreadStatus
   choisirLOnglet: (onglet: CommentThreadStatus) => void
+  /** Le panneau des commentaires (à droite dès 1 024 px, en tiroir dessous) est ouvert. */
   encartOuvert: boolean
   ouvrirLEncart: (ouvert: boolean) => void
   /** Le fil ouvert : sa carte est mise en valeur, son bloc aussi. */
@@ -45,6 +46,14 @@ export type Commentaires = {
 }
 
 export const ContexteDesCommentaires = createContext<Commentaires | null>(null)
+
+/**
+ * Les fils non lus pour la personne (D8, refonte #218), tels que le moteur les sert (`unread`, la règle de son accueil sur
+ * sa dernière visite de la page) : ils ouvrent le panneau à l'arrivée et marquent le bouton de l'en-tête.
+ */
+export function filsNonLus(fils: readonly CommentThreadView[]): CommentThreadView[] {
+  return fils.filter((fil) => fil.unread)
+}
 
 /** Les commentaires de la page, ou `null` hors de leur fournisseur (page publique, widget, visionneuse) : pas de bulle. */
 export function useCommentaires(): Commentaires | null {

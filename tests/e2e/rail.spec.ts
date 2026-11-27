@@ -64,8 +64,8 @@ test.describe("le rail", () => {
         await palette.getByRole("group", { name: "Procédures" }).getByRole("option", { name: PROCEDURE }).click()
         await expect(page).toHaveURL(`${ESPACE.adresse}/n/${CHEMINS.procedure}`)
 
-        await rail.getByRole("button", { name: /^Entreprise : / }).click()
-        // 1.4.13 : « Activité » réunit Statistiques et Journal ; aucune des deux n'a d'entrée à part.
+        await rail.getByRole("button", { name: /^Compte : .*Ouvrir le menu$/ }).click()
+        // 1.4.13 : « Activité » réunit Statistiques et Journal ; aucune des deux n'a d'entrée à part (au menu du compte, #221).
         await expect(page.getByRole("menu").getByRole("menuitem", { name: "Activité" })).toBeVisible()
         await expect(page.getByRole("menu").getByRole("menuitem", { name: "Journal" })).toHaveCount(0)
         await expect(page.getByRole("menu").getByRole("menuitem", { name: "Statistiques" })).toHaveCount(0)

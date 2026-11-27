@@ -134,6 +134,15 @@
 .oto-drawer[data-side="right"] { margin-inline: auto var(--inset); animation: oto-slide-r var(--dur-slow) var(--ease-out) both; }
 .oto-drawer[data-side="left"]  { margin-inline: var(--inset) auto; animation: oto-slide-l var(--dur-slow) var(--ease-out) both; }
 
+/* latéral non modal (`modal={false}`) : hors de la couche du dessus, il se pose lui-même contre le bord, au-dessus de la page et sous les menus (60) ; la page reste active à côté. */
+.oto-drawer[data-modal="false"] {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inset-inline-start: auto;
+  z-index: 50;
+}
+
 /* bas — la forme mobile */
 .oto-drawer[data-side="bottom"] {
   inline-size: calc(100vw - var(--inset) * 2);

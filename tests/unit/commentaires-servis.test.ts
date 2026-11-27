@@ -17,7 +17,7 @@ function comment(fields: Partial<CommentView> & Pick<CommentView, "text" | "crea
 }
 
 function thread(fields: Partial<CommentThreadView> & Pick<CommentThreadView, "id" | "comments">): CommentThreadView {
-  return { status: "open", anchor: "page", block: null, quote: null, section: null, canResolve: false, resolvedBy: null, resolvedAt: null, createdAt: "2026-11-10T08:00:00+00:00", waitingAssistant: false, ...fields }
+  return { status: "open", anchor: "page", block: null, quote: null, section: null, canResolve: false, resolvedBy: null, resolvedAt: null, createdAt: "2026-11-10T08:00:00+00:00", waitingAssistant: false, unread: false, ...fields }
 }
 
 /** Un fil sur un bloc publié de nouveau depuis, adressé à l'assistant ; un fil sur la page, auquel un assistant a répondu. */

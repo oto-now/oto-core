@@ -1,7 +1,7 @@
 // L'écriture d'un assistant qui publie, entière ou rien (E11-S18, AC-1 ; ADR-011 § 3 amendé) : création du nœud,
 // brouillon, publication, adresse qui suit le titre et ligne du `ctx` de son auteur tiennent dans une seule transaction ;
 // un refus l'annule, et son texte ne parle plus d'un brouillon gardé. L'écran garde son brouillon (il sauve la frappe
-// d'une personne), comme `publish: false`. Fichier à part de `write.ts`, déjà au-delà de la borne de 300 lignes
+// d'une personne), comme `publish: false`, sauf pour le seul genre (`writesAtomically`). Fichier à part de `write.ts`, déjà au-delà de la borne de 300 lignes
 // (`coding-standards.md § Complexité`).
 import { acceptOwnContextWrite } from "../ctx"
 import type { PlatformDb } from "../db"
@@ -17,9 +17,15 @@ import { contextChangedLine, type WriteAtPath, type WriteOrigin } from "./write-
 const NOTHING_WRITTEN = "Nothing was written."
 const DRAFT_BEFORE_STAYS = "Nothing was written; the draft saved before this call stays."
 
-/** Une écriture d'assistant qui publie (HN-E11S18-1) : `write` du MCP, `upload.link`, `table.import`, `node.write_many`. */
-export function writesAtomically(body: Pick<WriteAtPath, "publish">, origin: WriteOrigin): boolean {
-  return origin.kind === "agent" && body.publish !== false
+/**
+ * Une écriture d'assistant qui publie (HN-E11S18-1) : `write` du MCP, `upload.link`, `table.import`, `node.write_many` ;
+ * et, par toute porte, une écriture publiée qui ne change que le genre (« Page ⇄ Procédure » de l'écran) : elle n'a
+ * aucune frappe à sauver, et un brouillon gardé après un refus de publier ses blocs `call` porterait le genre refusé.
+ */
+export function writesAtomically(body: Pick<WriteAtPath, "publish" | "kind" | "ops" | "title" | "summary" | "header">, origin: WriteOrigin): boolean {
+  if (body.publish === false) return false
+  const kindOnly = body.kind !== undefined && (body.ops?.length ?? 0) === 0 && body.title === undefined && body.summary === undefined && body.header === undefined
+  return origin.kind === "agent" || kindOnly
 }
 
 /**

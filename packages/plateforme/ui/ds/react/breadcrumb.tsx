@@ -6,7 +6,8 @@
 // `aria-current="page"`, le dernier à défaut ; un maillon sans l'un ni l'autre reste affiché, un fil à trous
 // ne dit plus où l'on est. Troncature par le milieu : la racine et la feuille restent, le milieu se replie
 // derrière « … » quand un libellé est rogné (mesuré après le rendu) ; le plancher est le CSS (`nowrap`,
-// l'ordre de rétrécissement). En TypeScript. Changé : ce maillon est un texte, plus un bouton inerte (M31).
+// l'ordre de rétrécissement). En TypeScript. Changé : ce maillon est un texte, plus un bouton inerte (M31) ; le
+// séparateur est « › », celui de la maquette de la refonte (#216), au lieu de « / ».
 import { useEffect, useRef, useState, type ComponentProps, type ElementType, type ReactNode } from "react"
 import { useIsoLayoutEffect } from "./hooks"
 import { DropdownMenu, type MenuItem } from "./overlays"
@@ -127,7 +128,7 @@ export function Breadcrumb({ items, max = 4, label = "Chemin", as: hoteParDefaut
               )}
               {!dernier && (
                 <span className="oto-breadcrumb-sep" aria-hidden="true">
-                  /
+                  ›
                 </span>
               )}
             </li>

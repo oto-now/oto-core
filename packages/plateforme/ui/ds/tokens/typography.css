@@ -46,6 +46,11 @@
 /* Ajouté (sans équivalent dans oto-frontend) : l'intertitre d'une partie dans un îlot, sous le titre de la carte et au corps du texte, que le poids seul distingue ; jamais en `--mute` (ui-patterns.md § Composition).
    `--ink` tient 11,81:1 sur l'îlot et 10,49:1 sur la carte au plus bas des huit teintes, jour et nuit (la nuit, la plus basse ; ratios WCAG calculés sur les formules d'`oto.css`, comme `.oto-label`). */
 .oto .oto-section-title { font-size: var(--fs-base); font-weight: var(--fw-semibold); letter-spacing: var(--tr-base); line-height: var(--lh-snug); color: var(--ink); }
+/* Ajouté (D4, écart décidé par JB : portage-ecrans.md § 8) : le petit intertitre d'un groupe dans un panneau ou un menu (« Accès par défaut », « Partager avec », un groupe du menu du compte), en casse de phrase, ni capitales ni mono ; gris parce qu'il nomme le groupe sans le concurrencer, au contraire d'`.oto-section-title`. Un seul style pour les deux places : `.oto-menu-group-label`, le titre d'un groupe de menu, en est l'alias (sa marge et sa coupe restent dans `overlay.css`) ; la taille est celle des sections du rail (`.oto-rail-group`).
+   `--mute` tient 5,39:1 sur l'îlot et 4,78:1 sur la carte au plus bas des huit teintes, jour et nuit (ratios d'`.oto-label`, même couleur). */
+.oto .oto-group-title,
+.oto .oto-menu-group-label { font-size: var(--fs-sm); font-weight: var(--fw-medium); letter-spacing: var(--tr-base); line-height: var(--lh-snug); color: var(--mute); }
+.oto .oto-group-title { margin: 0 0 var(--space-2); }
 .oto .oto-body        { font-size: var(--fs-base); font-weight: var(--fw-regular);  letter-spacing: var(--tr-base); line-height: var(--lh-normal); }
 .oto .oto-caption     { font-size: var(--fs-xs);   font-weight: var(--fw-regular);  color: var(--mute);             line-height: var(--lh-normal); }
 .oto .oto-kpi         { font-size: var(--fs-3xl);  font-weight: var(--fw-bold);     letter-spacing: var(--tr-3xl);  line-height: var(--lh-tight);
