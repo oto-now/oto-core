@@ -34,7 +34,7 @@ const RENAMED_TO = ["rename", "new_name", "renamed_to"]
 const RENAMED_FROM = "old_name"
 
 /** Les attributs d'une colonne, dans l'ordre où l'écart les nomme (AC12). */
-const ATTRIBUTES = ["type", "options", "required", "allow_verified_empty", "max_length"] as const
+const ATTRIBUTES = ["type", "options", "required", "allow_verified_empty", "max_length", "label"] as const
 
 /** Le renvoi au contrat, en fin des refus d'un en-tête (AC2, AC5). */
 function contractHint(prefix: string): string {

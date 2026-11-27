@@ -50,6 +50,18 @@ describe("header patch merge (AC3)", () => {
     const retyped = targetHeader({ base, patch, path: PROSPECTS.path, prefix: "acme" })
     expect(retyped.columns.slice(-2)).toEqual([{ name: "segment", type: "text" }, { name: "site", type: "number" }])
   })
+
+  it("should set a column's label trimmed, keep it through other patches and a type change, replace it, and refuse a blank or too long one (#225)", () => {
+    const merge = (base: TableHeader, header: Record<string, unknown>) => targetHeader({ base, patch: readHeaderPatch({ header }, "acme") ?? {}, path: PROSPECTS.path, prefix: "acme" })
+    const labelled = merge(HEADER, { columns: [{ name: "ville", label: "  Ville du siège " }] })
+    expect(labelled.columns.find((column) => column.name === "ville")).toEqual({ name: "ville", type: "text", label: "Ville du siège" })
+    const kept = merge(labelled, { columns: [{ name: "ville", type: "email", max_length: 80 }] })
+    expect(kept.columns.find((column) => column.name === "ville")).toEqual({ name: "ville", type: "email", max_length: 80, label: "Ville du siège" })
+    expect(merge(kept, { columns: [{ name: "ville", label: "Commune" }] }).columns.find((column) => column.name === "ville")?.label).toBe("Commune")
+    for (const label of ["   ", "x".repeat(101)]) {
+      expect(() => readHeaderPatch({ header: { columns: [{ name: "ville", label }] } }, "acme")).toThrow("header.columns[0].label: a label holds 1 to 100 characters")
+    }
+  })
 })
 
 describe.skipIf(!sqlConfigured)(portable("the header of a table written by patch"), { timeout: NETWORK_TIMEOUT }, () => {
@@ -165,7 +177,7 @@ describe.skipIf(!sqlConfigured)(portable("the header of a table written by patch
         [{ header: { columns: [{ name: "fax", type: "text" }], remove_columns: ["fax"] } }, `Invalid table header: « fax » is both in columns and remove_columns. ${contract}`],
         [{ header: { remove_columns: ["notes"], confirm_remove: true } }, "confirm_remove only applies when the write publishes: remove publish: false."],
         [{ header: { order: ["ville"] } }, "header: unknown key « order »; keys: columns, remove_columns, key, lifecycle, closed, proof, confirm_remove"],
-        [{ header: { columns: [{ name: "ville", width: 3 }] } }, "header.columns[0]: unknown key « width »; keys: name, type, options, required, allow_verified_empty, max_length"],
+        [{ header: { columns: [{ name: "ville", width: 3 }] } }, "header.columns[0]: unknown key « width »; keys: name, label, type, options, required, allow_verified_empty, max_length"],
         // Des clés inconnues sans nombre fixé : 20 citées, puis leur nombre restant (`mcp-patterns.md § 4`).
         [
           { header: Object.fromEntries(Array.from({ length: 25 }, (_, index) => [`k${index + 1}`, 1])) },

@@ -2,7 +2,7 @@
 // revue et des blocs `reference`, pluriels et résumé de revue. Tout autre refus de l'API prend le texte
 // de `messageDErreur` (`ui/api/messages.ts`), que complètent les phrases propres à la décision. Depuis la
 // reprise d'oto-frontend (E05-S09 partie c2), celles de sa grille : la recherche, les deux vides, l'échec.
-import { REVIEW_REASON_MAX, TABLE_VIEW_ROWS_MAX, type ScreenReferenceProblem, type TableLifecycle } from "../../schemas"
+import { REVIEW_REASON_MAX, TABLE_VIEW_ROWS_MAX, type ScreenReferenceProblem, type TableColumn, type TableLifecycle } from "../../schemas"
 import { FILTERED_ROWS_MAX, FORMER_MEMBER } from "../../schemas/tables"
 import type { MessagesDuGeste } from "../api/messages"
 import { nombreLisible } from "../format/nombres"
@@ -10,6 +10,19 @@ import { nombreLisible } from "../format/nombres"
 /** « 0 ligne », « 1 ligne », « 3 lignes » : 0 et 1 prennent le singulier en français. */
 function compte(n: number, singulier: string, pluriel: string): string {
   return `${nombreLisible(n)} ${n > 1 ? pluriel : singulier}`
+}
+
+/**
+ * Ce que l'écran affiche d'une colonne (#225), partout où il la montre (en-tête, totaux, filtre, provenance, revue,
+ * vue) : son libellé déclaré, sinon son nom.
+ */
+export function libelleDeColonne(colonne: Pick<TableColumn, "name" | "label">): string {
+  return colonne.label ?? colonne.name
+}
+
+/** Le libellé de la colonne d'un nom parmi `colonnes` ; un nom hors des colonnes se dit tel quel. */
+export function libelleDuNom(colonnes: readonly Pick<TableColumn, "name" | "label">[], nom: string): string {
+  return libelleDeColonne(colonnes.find((colonne) => colonne.name === nom) ?? { name: nom })
 }
 
 export const nLignes = (n: number) => compte(n, "ligne", "lignes")
