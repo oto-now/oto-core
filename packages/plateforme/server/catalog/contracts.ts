@@ -104,7 +104,7 @@ const writeTable: Contract = {
       {
         title: "Rules:",
         lines: [
-          "1. columns are merged by name: an existing column receives the attributes given (type, options, required, allow_verified_empty, max_length) and keeps the others; a new column needs its type and is added at the end; the order of the existing columns never changes.",
+          "1. columns are merged by name: an existing column receives the attributes given (type, options, required, allow_verified_empty, max_length, label) and keeps the others; a new column needs its type and is added at the end; the order of the existing columns never changes.",
           "2. remove_columns names the columns to remove; the key column cannot be removed, and a name cannot be both in columns and remove_columns.",
           "3. key, lifecycle, closed and proof replace their value; lifecycle is replaced whole, and the options of its state column change in the same header as its states.",
           `4. Columns cannot be renamed: add the new column, copy the values with ${p}_call table.write, then remove the old one.`,

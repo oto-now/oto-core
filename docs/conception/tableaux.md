@@ -1,7 +1,7 @@
 # Tableaux
 
 - **Statut** : proposé
-- **Dernière révision** : 2026-10-19
+- **Dernière révision** : 2026-11-27
 
 ## Résumé
 
@@ -24,6 +24,7 @@ Les équipes tiennent des listes (prospects, devis, fiches) qu'un assistant doit
 
 - H91 : l'en-tête vit dans `nodes.meta` : colonnes, colonne `key` (la clé de chaque ligne), cycle de vie facultatif (états, état de travail, revue) et `closed`, qui refuse les lignes nouvelles ; l'en-tête en attente vit dans `node_drafts.meta`. Il se crée et évolue par `write`, comme toute page (E07-S04).
 - H90 : une colonne a l'un des huit types `text`, `number`, `date`, `datetime`, `bool`, `enum`, `email`, `url`, et les seules contraintes `required`, `max_length`, `options` ; un attribut inconnu est refusé. E07-S04 N1 : un attribut, une clé ou un type inconnus dans un patch d'en-tête sont refusés par sa forme stricte (clés citées 20 au plus) ; à la création, le refus porte le cadre « Invalid table header: … Contract: … ».
+- #225 : une colonne peut déclarer un `label` (1 à 100 caractères, blancs de bord retirés, comme une option d'`enum`), écrit par l'en-tête de `write` (création ou patch, fusionné comme les autres attributs), servi par `table.schema` (« shown as « … » » et dans `columns`). L'écran l'affiche partout où il montre la colonne (en-tête, filtre, provenance, totaux, file de revue, vue d'une page), le nom sinon (`libelleDeColonne`, `ui/tableau/libelles.ts`). Aucune unicité exigée ; un libellé se remplace, jamais ne s'efface, comme `max_length` ; un changement de type le garde. Il n'entre ni dans un filtre, ni dans un tri, ni dans une écriture de ligne, qui nomment la colonne par son nom.
 - E07-S01 N1 : `key` nomme une colonne déclarée `text`, `email`, `url` ou `number`, implicitement requise ; sa valeur en texte est la clé de ligne (`blocks.key`, unique par tableau), aussi rangée dans `data`, servie typée dans `key` et dans `set`. HN-E10S01-29 : une colonne `date` peut aussi porter la clé (décision de JB, FB-0014, 1.1.3) ; `KEY_COLUMN_TYPES` (`schemas/tables.ts`) est la seule liste, lue par l'en-tête, la clé proposée et l'écran d'import ; `datetime` ne porte pas la clé.
 - E07-S01 N2 : une colonne texte sans `max_length` tient 2 000 caractères au plus ; `max_length` va jusqu'à 10 000.
 - HN-E11S01-3 : l'attribut de colonne `allow_verified_empty` (défaut `true`) vaut pour toute colonne ; « obligatoire strict » = `required: true` et `allow_verified_empty: false` (D132). HN-E11S01-24 : dans `table.schema`, la clé et la colonne d'état se disent `required` seul, `verified_empty` y étant toujours refusé. HN-E11S01-25 : publier `allow_verified_empty: false` sur une colonne déjà requise avertit (`missing_required`) des seules lignes qui n'y ont qu'un `verified_empty` ; une colonne rendue requise et stricte d'un coup avertit de toute ligne sans vraie valeur.
@@ -128,3 +129,4 @@ Le markdown et le CSV sont des gestes d'import et d'export vers la page et le ta
 - 2026-10-06 : une clé répétée dans un même `table.write` fusionne avant écriture, le compte rendu le dit, une contradiction refuse l'appel — décidé par Alexis, à valider avec JB.
 - 2026-10-20 : écrire les lignes d'un tableau exige aussi en base l'écriture du tableau (`20261021120000`) ; un import de 5 000 lignes mesuré avant et après — décidé par Alexis (source : revue des policies de `blocks`).
 - 2026-10-21 : lire les lignes d'un tableau exige aussi en base la lecture du tableau (`20261021130000`), mesurée avant et après sur un tableau de 5 000 lignes — décidé par Alexis le 20/10 (source : revue des policies de lecture).
+- 2026-11-27 : libellé déclaré d'une colonne (`label`), affiché par l'écran à la place du nom (#225) — demandé par JB dans l'issue.

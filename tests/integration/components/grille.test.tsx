@@ -425,6 +425,22 @@ describe("TableauDuNoeud, summary (AC8)", () => {
   })
 })
 
+describe("TableauDuNoeud, column labels (#225)", () => {
+  it("should show the declared label of a column wherever the column appears, and its name without one", () => {
+    const libelles: Record<string, string> = { montant_estime: "Montant estimé", statut: "État" }
+    const entete: TableHeader = { ...ENTETE, columns: ENTETE.columns.map((colonne) => (libelles[colonne.name] ? { ...colonne, label: libelles[colonne.name] } : colonne)) }
+    rendre({ entete, reglages: reglagesDepuisLAdresse({}, entete) })
+    expect(within(table()).getAllByRole("columnheader").map((th) => th.querySelector(".oto-th-sort")?.firstChild?.textContent)).toEqual(
+      ENTETE.columns.map((colonne) => libelles[colonne.name] ?? colonne.name),
+    )
+    expect(screen.getByRole("button", { name: "Filtrer sur Montant estimé" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Filtrer sur entreprise" })).toBeInTheDocument()
+    expect(within(cellule("P-001", "montant_estime")).getByRole("button", { name: "Provenance de « Montant estimé »" })).toBeInTheDocument()
+    expect(screen.getByText(/^Montant estimé : total/)).toHaveTextContent("Montant estimé : total 21 000")
+    expect(screen.getByText(/^Par État :/)).toBeInTheDocument()
+  })
+})
+
 describe("TableauDuNoeud, four states (AC9)", () => {
   it("should show the loading rows, a failed read with « Réessayer » and the toolbar, an empty table, and no match with the gesture that clears it", () => {
     render(<EcranDeTableauChargement />)

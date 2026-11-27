@@ -57,6 +57,8 @@ function columnLine(column: TableColumn, header: TableHeader): string {
   if (required !== null) parts.push(required)
   // La longueur que `valueProblem` accepte : une adresse email ou une URL garde son plafond (N30).
   if (column.max_length !== undefined) parts.push(`${formatCount(maxLengthOf(column) ?? column.max_length)} characters at most`)
+  // #225 : le libellé que l'écran affiche, pour que l'assistant nomme la colonne comme la personne la voit.
+  if (column.label !== undefined) parts.push(`shown as « ${column.label} »`)
   return `- ${column.name}: ${parts.join(", ")}${key ? " (key)" : ""}`
 }
 

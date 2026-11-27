@@ -31,8 +31,19 @@ export const columnNameSchema = z
   .string()
   .regex(COLUMN_NAME_PATTERN, { error: "lowercase letters, digits and _, starting with a letter, 60 characters at most, e.g. montant_estime" })
 
+/** Caractères au plus d'un libellé de colonne, comme une option d'`enum` (`header.ts`). */
+const COLUMN_LABEL_MAX = 100
+
+/** Libellé d'une colonne (#225) : ce que l'écran affiche, accents et sigles compris ; sans lui, le nom. */
+const columnLabelSchema = z
+  .string()
+  .trim()
+  .min(1, { error: `a label holds 1 to ${COLUMN_LABEL_MAX} characters` })
+  .max(COLUMN_LABEL_MAX, { error: `a label holds 1 to ${COLUMN_LABEL_MAX} characters` })
+
 export const tableColumnSchema = z.strictObject({
   name: columnNameSchema.describe("Column name, e.g. montant_estime."),
+  label: columnLabelSchema.optional().describe(`What screens show for this column, 1 to ${COLUMN_LABEL_MAX} characters, e.g. Montant estimé (default: the name).`),
   type: columnTypeSchema.describe("text, number, date, datetime, bool, enum, email or url."),
   options: z.array(z.string()).optional().describe('enum only: the values, 1 to 100, e.g. ["à traiter", "en cours"].'),
   required: z.boolean().optional().describe("true: a row cannot lack this column: a value, or verified_empty with a reason (default false)."),
@@ -350,6 +361,7 @@ export type TableRowRead = z.infer<typeof tableRowReadSchema>
 
 export const tableColumnPatchSchema = z.strictObject({
   name: columnNameSchema.describe("Column name: an existing column receives the attributes given, a new one is added at the end, e.g. telephone."),
+  label: columnLabelSchema.optional().describe(`What screens show for this column, 1 to ${COLUMN_LABEL_MAX} characters, e.g. Téléphone (default: unchanged; the name for a new column).`),
   type: columnTypeSchema.optional().describe("text, number, date, datetime, bool, enum, email or url; required for a new column, e.g. text (default: unchanged)."),
   options: z.array(z.string()).min(1).max(100).optional().describe('enum only: the values, 1 to 100, e.g. ["à contacter", "inscrit"] (default: unchanged).'),
   required: z.boolean().optional().describe("true: a row cannot lack this column: a value, or verified_empty with a reason, e.g. true (default: unchanged; false for a new column)."),
