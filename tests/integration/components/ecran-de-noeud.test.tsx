@@ -406,8 +406,9 @@ describe("EcranDeNoeud, titre d'un Contexte (E05-S11, AC-17)", () => {
     ["Tout le monde", "contexte", null],
     ["a team", "ventes/contexte", null],
     ["Privé", "private/claire/contexte", "claire"],
-  ] as const)("should title the Contexte of %s « Contexte · <section> », never in place, the saved title unchanged", (_section, path, handle) => {
-    const titres = { contexte: "Contexte · Tout le monde", "ventes/contexte": "Contexte · Ventes", "private/claire/contexte": "Contexte · Privé" }
+    ["another person's Privé", "private/marc/contexte", "claire"],
+  ] as const)("should title the Contexte of %s « Contexte · <section> » (« Mes instructions » for one's own Privé only), never in place, the saved title unchanged", (_section, path, handle) => {
+    const titres = { contexte: "Contexte · Tout le monde", "ventes/contexte": "Contexte · Ventes", "private/claire/contexte": "Mes instructions", "private/marc/contexte": "Contexte · Privé" }
     rendre({ chemin: path, handle, noeud: { data: vueDuNoeud({ path, kind: "context", title: "Contexte de l'organisation", level: 3 }) } })
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(titres[path])
     expect(screen.queryByRole("textbox", { name: "Titre" })).toBeNull()

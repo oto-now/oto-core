@@ -141,7 +141,7 @@ function Partie({ nom, ...corps }: PartieProps) {
   const { partie } = corps
   return (
     <section id={partie.ancre} aria-labelledby={`${partie.ancre}-titre`} className="flex flex-col gap-2">
-      <h2 id={`${partie.ancre}-titre`} className="text-base font-semibold text-ink">
+      <h2 id={`${partie.ancre}-titre`} className="oto-section-title">
         {nom}
       </h2>
       <CorpsDeLaPartie {...corps} />

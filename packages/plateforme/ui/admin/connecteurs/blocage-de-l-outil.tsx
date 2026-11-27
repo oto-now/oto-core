@@ -89,7 +89,7 @@ function Declencheur({ outil, presentation, ouvrir }: Pick<BlocageProps, "outil"
   if (presentation === "bouton") {
     return (
       // Secondaire, le texte au ton du danger : le rouge plein ne vient qu'à la confirmation.
-      <Button variant="secondary" size="sm" onClick={ouvrir}>
+      <Button variant="secondary" onClick={ouvrir}>
         <span className="oto-etat" data-state="failed">
           Bloquer…<span className="oto-sr-only">{` ${outil} pour l'organisation`}</span>
         </span>

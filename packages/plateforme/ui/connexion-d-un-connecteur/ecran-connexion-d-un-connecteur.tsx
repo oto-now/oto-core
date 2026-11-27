@@ -14,6 +14,7 @@ import { echecDuConsentement, type IssueDuConsentement } from "../admin/connecte
 import { faconDeLAcces } from "../admin/connecteurs/etat-du-compte"
 import type { Resultat } from "../api/resultat"
 import { ActionPlateforme } from "../components/action-plateforme"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { ValeurCopiable } from "../connexion/valeur-copiable"
 import { Icon } from "../ds/react/icon"
@@ -41,7 +42,7 @@ function Acces({ connecteur, outil, acces }: { connecteur: string; outil: string
     <ul className="flex flex-col gap-1 text-sm text-ink" aria-label={MOTS.listeDesAcces}>
       {ranges.map(({ choix, dit }) => (
         <li key={choix.name}>
-          <a className="underline" href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name, ...(choix.space ? { space: choix.space } : {}) }).toString()}`}>
+          <a className={LIEN} href={`/connect/${encodeURIComponent(connecteur)}?${new URLSearchParams({ access: choix.name, ...(choix.space ? { space: choix.space } : {}) }).toString()}`}>
             {faconDeLAcces(outil, dit, aDire)}
           </a>
         </li>
@@ -145,7 +146,7 @@ function Issue({ issue, reessayer }: { issue: IssueDuConsentement; reessayer: st
   }
   return (
     <Alert tone="fail" title={echecDuConsentement(issue.raison)}>
-      <a className="underline" href={reessayer}>
+      <a className={LIEN} href={reessayer}>
         {MOTS.reessayer}
       </a>
     </Alert>

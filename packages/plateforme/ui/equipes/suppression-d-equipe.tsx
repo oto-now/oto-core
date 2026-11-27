@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react"
 import type { TeamDeletionView, TeamView } from "../../schemas"
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
+import { LIEN } from "../components/classes"
 import { ConfirmDialog } from "../ds/react/confirm-dialog"
 import { Button } from "../ds/react/primitives"
 import { useHote } from "../hote/navigation"
@@ -39,7 +40,7 @@ function useRecapitulatif(slug: string) {
 function CeQuiPart({ vue }: { vue: TeamDeletionView }) {
   return (
     <section aria-labelledby="suppression-part" className="flex flex-col gap-1">
-      <h3 id="suppression-part" className="text-sm font-semibold text-ink">
+      <h3 id="suppression-part" className="oto-section-title">
         {SUPPRESSION.part}
       </h3>
       <ul className="list-disc ps-5 text-sm text-ink">
@@ -57,14 +58,14 @@ function CeQuiBloque({ bloque, prefixeDesPages }: { bloque: NonNullable<TeamDele
   const { Lien } = useHote()
   return (
     <section aria-labelledby="suppression-bloque" className="flex flex-col gap-1">
-      <h3 id="suppression-bloque" className="text-sm font-semibold text-ink">
+      <h3 id="suppression-bloque" className="oto-section-title">
         {SUPPRESSION.bloque}
       </h3>
       <p className="text-sm text-mute">{SUPPRESSION.bloqueDetail}</p>
       <ul className="list-disc ps-5 text-sm text-ink">
         {bloque.nodes.map(({ path }) => (
           <li key={path}>
-            <Lien href={`${prefixeDesPages}${path}`} className="underline">
+            <Lien href={`${prefixeDesPages}${path}`} className={LIEN}>
               {path}
             </Lien>
           </li>

@@ -150,7 +150,7 @@ test.describe("page d'un nœud", () => {
       await expect(note.getByRole("definition")).toHaveCount(0)
       await expect(page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("list", { name: "Ordre de lecture" })).toBeVisible()
       await capturerLesThemes(page, testInfo, `contexte-${mode}`)
-      const handle = /^\/n\/private\/([^/]+)\/contexte$/.exec((await rail.getByRole("link", { name: "Contexte · Privé" }).getAttribute("href")) ?? "")?.[1]
+      const handle = /^\/n\/private\/([^/]+)\/contexte$/.exec((await rail.getByRole("link", { name: "Mes instructions" }).getAttribute("href")) ?? "")?.[1]
       expect(handle).toBeTruthy()
 
       const essai = `private/${handle}/essai_ecran`
@@ -250,14 +250,14 @@ test.describe("page d'un nœud", () => {
       const page = await context.newPage()
       await seConnecterSurLEspace(page, { email, password })
       const rail = page.getByRole("navigation", { name: "Navigation principale" })
-      const contexte = (await rail.getByRole("link", { name: "Contexte · Privé" }).getAttribute("href")) ?? ""
+      const contexte = (await rail.getByRole("link", { name: "Mes instructions" }).getAttribute("href")) ?? ""
       expect(contexte).toMatch(/^\/n\/private\/[^/]+\/contexte$/)
       await page.goto(`${ESPACE.adresse}${contexte}`)
 
       // AC-c1 : le « + » de la ligne du Contexte de Privé crée une page, publiée dès sa création, et l'ouvre.
-      const ligne = rail.getByRole("link", { name: "Contexte · Privé", exact: true })
+      const ligne = rail.getByRole("link", { name: "Mes instructions", exact: true })
       await ligne.hover()
-      await ligne.locator("xpath=..").getByRole("button", { name: "Ajouter dans Contexte · Privé" }).click()
+      await ligne.locator("xpath=..").getByRole("button", { name: "Ajouter dans Mes instructions" }).click()
       await page.getByRole("menuitem", { name: "Une page" }).click()
       await attendre(page).toHaveURL(new RegExp(`${contexte}/sans_titre(_\\d+)?$`))
       const cree = new URL(page.url()).pathname.slice("/n/".length)

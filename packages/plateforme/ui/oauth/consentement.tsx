@@ -13,6 +13,7 @@
 // ressource la remplace, E09-S02), la carte et les jetons du gabarit.
 import type { ReactNode } from "react"
 import { webUrl } from "../../schemas/oauth"
+import { LIEN } from "../components/classes"
 import { Island, IslandBody, IslandFoot, IslandHead } from "../ds/react/island"
 import { Alert } from "../ds/react/primitives"
 import { Skeleton } from "../ds/react/skeleton"
@@ -43,12 +44,11 @@ function nomDeLOrganisation(organisation: OrganisationDeLaDemande): string {
   return "Non déterminée"
 }
 
-// Le terme en capitales, comme l'étiquette du design system, mais en `mute` : l'`oto-label` est en
-// `--faint`, sous les 4,5:1 d'un texte de cette taille sur l'îlot.
+// Le terme : l'étiquette du design system, dont la marge du bas donne l'air au-dessus de la valeur.
 function Detail({ terme, children }: { terme: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-mute">{terme}</dt>
+    <div className="flex flex-col">
+      <dt className="oto-label">{terme}</dt>
       <dd>{children}</dd>
     </div>
   )
@@ -83,7 +83,7 @@ function EnTeteDuClient({ client, organisation }: { client: DemandeDeConsentemen
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="oto-page-title break-words">{`${client.nom} demande l'accès à votre compte`}</h1>
             {site && (
-              <a href={site} target="_blank" rel="noopener noreferrer" className="break-all text-sm underline underline-offset-4">
+              <a href={site} target="_blank" rel="noopener noreferrer" className={`break-all text-sm ${LIEN}`}>
                 {site}
               </a>
             )}

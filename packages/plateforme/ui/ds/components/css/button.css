@@ -70,6 +70,15 @@
 }
 .oto-btn[data-variant="link"]:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
 
+/* ── le lien de texte ────────────────────────────────────────────────
+   Ajouté (sans équivalent dans oto-frontend) : un lien dans une phrase, une cellule ou une alerte. Souligné au repos, pas seulement au survol : la couleur seule ne le distinguerait pas du texte qui l'entoure (WCAG 1.4.1). À la couleur de ce texte (l'encre d'une phrase, le gris d'un détail ou d'une alerte), donc au contraste qu'il tient déjà, et non en `--link`, qui tombe à 4,43:1 sur la carte et à 4,22:1 sur le bureau (Manuscrit, le jour), sous les 4,5:1 d'un texte, là où se posent une alerte ou une carte. L'anneau de focus est celui de `reset.css` (`--focus-ring`, l'encre), arrondi comme un contrôle. */
+.oto .oto-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--r-ctrl);
+}
+
 /* ── pleine largeur ──────────────────────────────────────────────── */
 .oto-btn[data-block] { inline-size: 100%; }
 

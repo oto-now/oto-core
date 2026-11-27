@@ -24,7 +24,6 @@
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
-import type { ExempleDePrompt } from "../connexion/types"
 import { HomeLayout } from "../ds/react/home"
 import { Island, IslandBody } from "../ds/react/island"
 import { ScreenHeader } from "../ds/react/screen-header"
@@ -88,11 +87,6 @@ function IlotDesActivites({ lu, premierJour, hrefDuJournal, hrefDeConversation, 
   )
 }
 
-/** Les procédures utiles, déjà lues pour l'îlot de droite, sont les demandes à essayer du guide (E11-S09, AC-11). */
-function exemplesDe(procedures: DonneesDeLAccueil["procedures"]): Resultat<ExempleDePrompt[]> {
-  return procedures.error !== undefined ? procedures : { data: procedures.data.map(({ title }) => ({ titre: title })) }
-}
-
 export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
   if (donnees.error !== undefined) {
     return (
@@ -111,7 +105,7 @@ export function EcranDAccueil({ donnees, ...props }: EcranDAccueilProps) {
         main={<IlotDesActivites {...props} lu={lu} premierJour={premierJour} />}
         cards={
           <>
-            <BranchementIA adresse={lu.adresse} exemples={exemplesDe(lu.procedures)} connexions={lu.connexions} />
+            <BranchementIA adresse={lu.adresse} connexions={lu.connexions} />
             {/* Les fils qui attendent la personne, juste au-dessus de « Lancer avec Claude ». */}
             <CommentairesSuivis commentaires={lu.commentaires} Lien={props.Lien} prefixeDesPages={props.prefixeDesPages} />
             {/* Le premier jour retire les procédures : une façon de plus de dire « il n'y a rien » à côté d'un îlot qui le dit déjà. */}

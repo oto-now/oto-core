@@ -61,7 +61,7 @@ const DONNEES: DonneesDeLAccueil = {
   procedures: { data: [] },
 }
 
-const CLAUDE = { famille: "claude.ai", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }
+const CLAUDE = { famille: "Claude", signature: "claude-ai@1.0", date: "2026-09-24T09:00:00Z" }
 
 
 /** Le lien de l'hôte : une ancre marquée, pour reconnaître ce qu'il rend. */
@@ -230,23 +230,23 @@ describe("home screen Brancher mon Claude, ChatGPT ou Mistral (E11-S09, AC-9, AC
   })
 
   it("should name each connected assistant with its last connection", () => {
-    monter({ data: { ...DONNEES, connexions: { data: [CLAUDE, { famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-20T09:00:00Z" }] } } })
+    monter({ data: { ...DONNEES, connexions: { data: [CLAUDE, { famille: "ChatGPT", signature: "openai-mcp@1.0.0", date: "2026-09-20T09:00:00Z" }] } } })
 
     expect(ilot(BRANCHER).getAllByRole("listitem").slice(3).map((ligne) => ligne.textContent)).toEqual([
-      "claude.ai · dernière connexion le 24 septembre 2026",
-      "Claude Code · dernière connexion le 20 septembre 2026",
+      "Claude · dernière connexion le 24 septembre 2026",
+      "ChatGPT · dernière connexion le 20 septembre 2026",
     ])
   })
 
-  it("should open on « Brancher » the large window on the guide, on the tab of the latest family, without any link to /connect, and close it (AC-10)", async () => {
-    monter({ data: { ...DONNEES, connexions: { data: [{ famille: "Claude Code", signature: "claude-code@2.1", date: "2026-09-24T09:00:00Z" }, CLAUDE] } } })
+  it("should open on « Brancher » the large window on the guide, without status line nor any link to /connect, and close it (AC-10)", async () => {
+    monter({ data: { ...DONNEES, connexions: { data: [{ famille: "ChatGPT", signature: "openai-mcp@1.0.0", date: "2026-09-24T09:00:00Z" }, CLAUDE] } } })
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
 
     const fenetre = screen.getByRole("dialog", { name: GUIDE })
     expect(fenetre).toHaveAttribute("data-size", "lg")
     const dedans = within(fenetre)
-    expect(dedans.getByText("Ajoutez Démo à votre assistant : il agira avec votre compte, dans la limite de vos droits.")).toBeInTheDocument()
-    expect(dedans.getByRole("tab", { name: "Claude Code" })).toHaveAttribute("aria-selected", "true")
+    expect(dedans.getByText("Ajoutez un connecteur personnalisé")).toBeInTheDocument()
+    expect(dedans.queryByText(/dernière connexion/)).toBeNull()
     expect(dedans.queryByRole("link", { name: /Guides d'installation/ })).toBeNull()
     expect(fenetre.querySelector("a[href='/connect']")).toBeNull()
     fireEvent.click(within(fenetre.querySelector("footer") ?? fenetre).getByRole("button", { name: "Fermer" }))

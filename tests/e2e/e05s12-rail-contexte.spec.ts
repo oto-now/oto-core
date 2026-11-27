@@ -5,7 +5,7 @@ import { ESPACE, SANS_ESPACE } from "./fixtures/espace"
 
 // E05-S12, lot D (fiche D110 a), en contrôle visuel connecté sur l'organisation de la campagne : le compte E2E, en clair puis en sombre, à
 // 1 280 et 375 px (le rail en tiroir). Dans son Privé, pour que rien ne paraisse aux autres : le « + » de
-// « Contexte · Privé » crée une procédure sous le Contexte, qui s'ouvre et paraît sous sa ligne, dépliée (AC-25,
+// « Mes instructions » crée une procédure sous le Contexte, qui s'ouvre et paraît sous sa ligne, dépliée (AC-25,
 // AC-27) ; à 1 280 px, une page jetable (`e05s12d_mobile`, créée si elle manque) glissée sur la ligne du Contexte
 // se range sous lui (AC-26), puis revient par l'API. La procédure créée part à la corbeille par l'API (purgée à
 // 30 jours). Une capture par étape, dans `test-results/`.
@@ -14,7 +14,7 @@ const email = process.env.E2E_USER_EMAIL ?? ""
 const password = process.env.E2E_USER_PASSWORD ?? ""
 const MODES = ["light", "dark"] as const
 const LARGEURS = [1280, 375] as const
-const CONTEXTE = "Contexte · Privé"
+const CONTEXTE = "Mes instructions"
 const MOBILE = "Mobile E05-S12 D"
 
 // Les passages écrivent le même nœud jetable : l'un après l'autre.

@@ -161,7 +161,7 @@ export function CarteDeFichier({ id, nom, taille, routeDesFichiers = FILE_ADDRES
       <Icon as={glyphe} size="md" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-ink">{nom}</p>
-        <p className="text-xs text-mute">{servi ? [tailleLisible(taille), ligneDOrigine(origine)].filter(Boolean).join(" · ") : FICHIERS.indisponible}</p>
+        <p className="oto-caption">{servi ? [tailleLisible(taille), ligneDOrigine(origine)].filter(Boolean).join(" · ") : FICHIERS.indisponible}</p>
       </div>
       {servi && vue !== null && (
         <LienBouton href={vue} nom={FICHIERS.voirNom(nom)} glyphe={Eye} nouvelOnglet>

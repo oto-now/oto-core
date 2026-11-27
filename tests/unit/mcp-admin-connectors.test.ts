@@ -273,6 +273,45 @@ describe.skipIf(!sqlConfigured)(portable("admin_connector of the admin MCP (E08-
       const untouched = await session()
       expect((await untouched.connector({ op: "catalogue" })).text.split("\n")[1]).toBe("- mail (simulated): open by default — mail.create_draft (write), mail.send_draft (sensitive)")
     })
+
+    it("should page a catalogue larger than 45,000 characters by cursor, saying the total, and narrow it by name or domain", async () => {
+      // 120 connecteurs réels de six fonctions : bien plus que ce qui tient sous le plafond ; l'un porte un domaine.
+      const bulk = Array.from({ length: 120 }, (_, index) => describedConnector(`bulk${String(index).padStart(3, "0")}`))
+      registerConnectors([...bulk, { ...describedConnector("compta"), label: "Compta", logoDomain: "ledger.example" }])
+      const { connector } = await session()
+      const names = (result: { structured: Record<string, unknown> | null }) => (result.structured?.connectors as { name: string }[]).map((entry) => entry.name)
+      const first = await connector({ op: "catalogue" })
+      const total = first.structured?.total as number
+      // Un connecteur par nom de connecteur du registre, activable ou natif : sans fonction de l'application, pas de ligne `application`.
+      expect(total).toBe(new Set(catalogFunctions().map((fn) => fn.connector)).size)
+      expect(total).toBeGreaterThan(121)
+      expect(names(first).length).toBeLessThan(total)
+      expect(JSON.stringify(first.structured).length).toBeLessThanOrEqual(45_000)
+      expect(first.structured?.truncated).toBeUndefined()
+      const cursor = first.structured?.next_cursor as string
+      expect(first.text.split("\n").at(-1)).toBe(`Shown 1 to ${names(first).length} of ${total} connectors. next_cursor: ${cursor} (call catalogue again with this cursor for the rest).`)
+      // Page après page jusqu'au bout : chaque connecteur une fois, la dernière page sans curseur.
+      const served = [...names(first)]
+      let next: string | null = cursor
+      while (next) {
+        const page = await connector({ op: "catalogue", cursor: next })
+        expect(names(page)[0]).toBe(next)
+        served.push(...names(page))
+        next = page.structured?.next_cursor as string | null
+      }
+      expect(served.length).toBe(total)
+      expect(new Set(served).size).toBe(total)
+      // Le filtre, sans casse : par nom, puis par domaine de l'outil ; rien ne correspond, et le dire.
+      const byName = await connector({ op: "catalogue", filter: "MAIL" })
+      expect([names(byName), byName.structured?.total, byName.structured?.next_cursor]).toEqual([["mail"], 1, null])
+      expect(byName.text.split("\n")[0]).toBe(`1 of ${total} connectors match "MAIL".`)
+      expect(names(await connector({ op: "catalogue", filter: "ledger" }))).toEqual(["compta"])
+      expect((await connector({ op: "catalogue", filter: "fax" })).text).toBe(`No connector matches "fax" among ${total}.`)
+      // Un curseur qui ne nomme plus aucun connecteur : la première page, dite.
+      const stale = await connector({ op: "catalogue", filter: "bulk", cursor: "gone" })
+      expect(stale.text.split("\n")[0]).toBe("The cursor is no longer valid: this is the first page again.")
+      expect(names(stale)[0]).toBe("bulk000")
+    })
   })
 
   describe("admin_connector activate (AC8)", () => {

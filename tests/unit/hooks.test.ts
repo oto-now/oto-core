@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -427,6 +428,50 @@ describe("verify-receipt", { timeout: RECEIPT_TIMEOUT }, () => {
     } finally {
       rmSync(repo, { recursive: true, force: true })
       rmSync(`${repo}-receipt.json`, { force: true })
+    }
+  })
+
+  it("sans commit, compte comme supprimé un fichier indexé puis retiré du disque", () => {
+    // Export d'une vague, sans commit : un fichier indexé puis supprimé, passé à `hash-object --stdin-paths`, faisait
+    // échouer le lot, et le repli fichier par fichier le comptait « illisible » en deux minutes par empreinte.
+    const repo = join(tmpdir(), `empty-deleted-${process.pid}`)
+    const recu = `${repo}-receipt.json`
+    rmSync(repo, { recursive: true, force: true })
+    execFileSync("git", ["init", "--quiet", repo], { stdio: "pipe" })
+    const env = { ...process.env, VERIFY_RECEIPT_PATH: recu, VERIFY_RECEIPT_ROOT: repo }
+    const g = (args: string[], input?: string) => execFileSync("git", args, { cwd: repo, stdio: "pipe", input }).toString().trim()
+    const receiptIn = (action: string): number => {
+      try {
+        execFileSync("node", [RECEIPT_SCRIPT, action], { cwd: repo, stdio: "pipe", env })
+        return 0
+      } catch (error) {
+        return (error as { status: number }).status
+      }
+    }
+    const empreinte = () => (JSON.parse(readFileSync(recu, "utf8")) as { hash: string }).hash
+    try {
+      writeFileSync(join(repo, "a.ts"), "export const a = 1\n")
+      writeFileSync(join(repo, "b.ts"), "export const b = 1\n")
+      g(["add", "a.ts", "b.ts"])
+      rmSync(join(repo, "b.ts"))
+
+      expect(receiptIn("write")).toBe(0)
+      expect(receiptIn("check")).toBe(0)
+      // L'empreinte de `worktreeHash` recomposée : `b.ts` y est « supprimé », jamais « illisible ».
+      const attendue = createHash("sha256").update(["sans-commit", `a.ts:${g(["hash-object", "a.ts"])}`, "b.ts:supprimé"].join("\n")).digest("hex")
+      expect(empreinte()).toBe(attendue)
+
+      // Le contenu indexé du fichier supprimé change : il reste supprimé, l'empreinte ne bouge pas.
+      const autre = g(["hash-object", "-w", "--stdin"], "export const b = 2\n")
+      g(["update-index", "--cacheinfo", `100644,${autre},b.ts`])
+      expect(receiptIn("check")).toBe(0)
+
+      // Le fichier rendu au disque : le code a changé.
+      writeFileSync(join(repo, "b.ts"), "export const b = 1\n")
+      expect(receiptIn("check")).toBe(1)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+      rmSync(recu, { force: true })
     }
   })
 

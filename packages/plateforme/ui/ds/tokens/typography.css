@@ -4,7 +4,8 @@
 
 /* Rôles composites : un rôle règle famille, corps, graisse, interligne et interlettrage d'un coup ; un composant applique un rôle, il ne réassemble pas les réglages. */
 
-/* L'étiquette mono, le rôle le plus employé : elle nomme, elle n'est pas la donnée, elle se lit en retrait (`--faint`) et respire au-dessus ; 11 px et non 10, rien ne descend sous 11 px ; les marges sur l'axe de bloc, sans effet en ligne. */
+/* L'étiquette mono, le rôle le plus employé : elle nomme, elle n'est pas la donnée, elle se lit en retrait et respire au-dessus ; 11 px et non 10, rien ne descend sous 11 px ; les marges sur l'axe de bloc, sans effet en ligne.
+   ÉCART VOULU : oto-frontend la pose en `--faint`, qui tombe à 3,38:1 sur l'îlot la nuit (4,14:1 le jour) ; `--mute` tient 5,39:1 sur l'îlot et 4,78:1 sur la carte au plus bas des huit teintes, jour et nuit (ratios WCAG calculés sur les formules d'`oto.css`, comme `.oto-icon-btn`). */
 .oto-label,
 .oto .oto-label {
   font-family: var(--mono);
@@ -13,7 +14,7 @@
   letter-spacing: var(--tr-mono);
   text-transform: uppercase;
   line-height: var(--lh-snug);
-  color: var(--faint);
+  color: var(--mute);
   margin-block: var(--space-3) var(--space-1);
 }
 /* En tête de bloc, l'air du dessus est déjà donné par le conteneur. */
@@ -42,6 +43,9 @@
 /* Les rôles de l'application. */
 .oto .oto-page-title  { font-size: var(--fs-xl);   font-weight: var(--fw-bold);     letter-spacing: var(--tr-2xl);  line-height: var(--lh-snug); }
 .oto .oto-card-title  { font-size: var(--fs-lg);   font-weight: var(--fw-bold);     letter-spacing: var(--tr-lg);   line-height: var(--lh-snug); }
+/* Ajouté (sans équivalent dans oto-frontend) : l'intertitre d'une partie dans un îlot, sous le titre de la carte et au corps du texte, que le poids seul distingue ; jamais en `--mute` (ui-patterns.md § Composition).
+   `--ink` tient 11,81:1 sur l'îlot et 10,49:1 sur la carte au plus bas des huit teintes, jour et nuit (la nuit, la plus basse ; ratios WCAG calculés sur les formules d'`oto.css`, comme `.oto-label`). */
+.oto .oto-section-title { font-size: var(--fs-base); font-weight: var(--fw-semibold); letter-spacing: var(--tr-base); line-height: var(--lh-snug); color: var(--ink); }
 .oto .oto-body        { font-size: var(--fs-base); font-weight: var(--fw-regular);  letter-spacing: var(--tr-base); line-height: var(--lh-normal); }
 .oto .oto-caption     { font-size: var(--fs-xs);   font-weight: var(--fw-regular);  color: var(--mute);             line-height: var(--lh-normal); }
 .oto .oto-kpi         { font-size: var(--fs-3xl);  font-weight: var(--fw-bold);     letter-spacing: var(--tr-3xl);  line-height: var(--lh-tight);

@@ -6,6 +6,7 @@ import { FileText } from "@phosphor-icons/react/dist/ssr/FileText"
 import { Info } from "@phosphor-icons/react/dist/ssr/Info"
 import { Play } from "@phosphor-icons/react/dist/ssr/Play"
 import { Table } from "@phosphor-icons/react/dist/ssr/Table"
+import { Skeleton } from "../ds/react/skeleton"
 import { BrancheDArbre } from "./branche-d-arbre"
 import { ARBRE_VIDE } from "./depuis-l-arbre"
 import type { NatureDeNoeud, NoeudDArbre, ResultatDArbre, SectionDArbre } from "./types"
@@ -98,7 +99,7 @@ function Sections({ sections, ...navigation }: Omit<NoeudsProps, "noeuds"> & { s
     const intitule = `${base}-section-${rang}`
     return (
       <div key={section.titre} className="pt-3 first:pt-0">
-        <p id={intitule} className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-mute">
+        <p id={intitule} className="oto-label px-2 pb-1">
           {section.titre}
         </p>
         <ul aria-labelledby={intitule}>
@@ -142,8 +143,8 @@ export function NavigateurDArbreChargement() {
   return (
     <div role="status" aria-busy="true" className="space-y-2">
       <span className="sr-only">Chargement de l&apos;arbre…</span>
-      {["w-2/3", "w-1/2", "w-3/5"].map((largeur) => (
-        <div key={largeur} aria-hidden="true" className={`h-6 rounded-md bg-skeleton ${largeur}`} />
+      {["66%", "50%", "60%"].map((largeur) => (
+        <Skeleton key={largeur} shape="row" width={largeur} className="block" />
       ))}
     </div>
   )

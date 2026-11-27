@@ -16,6 +16,7 @@ import { signupSchema, type SignupInput } from "../../schemas"
 import { appelerPlateforme, type ErreurPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
 import { IlotDAuthentification } from "../authentification/ilot-d-authentification"
+import { LIEN } from "../components/classes"
 import { Checkbox } from "../ds/react/checkbox"
 import { Field, Input } from "../ds/react/forms"
 import { Button } from "../ds/react/primitives"
@@ -221,7 +222,7 @@ export function FormulaireDInscription({ conditions }: FormulaireDInscriptionPro
             label={
               <>
                 {"J'accepte les "}
-                <a href={conditions.url} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
+                <a href={conditions.url} target="_blank" rel="noreferrer" className={LIEN}>
                   {conditions.libelle}
                 </a>
               </>

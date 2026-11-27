@@ -1,70 +1,48 @@
-"use client"
-
-// Le guide de branchement (E11-S09, FR-CONN-04) : un onglet par assistant (claude.ai, ChatGPT, Mistral,
-// Claude Code), ses étapes numérotées, le lien vers la page des connecteurs de l'assistant, les valeurs à
-// coller et, en dernière étape, trois demandes à essayer. Monté par la fenêtre de l'accueil et par la page
-// `/connect` : une seule source, là où deux copies divergeraient. Client pour l'onglet choisi seul ; il ne
-// lit pas la base, il reçoit l'adresse et deux lectures en `resultat` (`portage-ecrans.md § 4`).
-import { useState } from "react"
-import { ArrowSquareOut } from "@phosphor-icons/react/dist/csr/ArrowSquareOut"
-import type { Resultat } from "../api/resultat"
+// Le guide de branchement (E11-S09, FR-CONN-04) : deux temps, les mêmes pour tous les assistants, ajouter le
+// connecteur (nom et adresse à copier, avec les liens directs de claude.ai, ChatGPT et Mistral) puis coller
+// la phrase dans les préférences personnelles. Monté par la fenêtre de l'accueil et par la page
+// `/connect` : une seule source, là où deux copies divergeraient. Sans état, donc sans `"use client"` : seules
+// les copies sont client. Il ne lit pas la base, il reçoit l'adresse (`portage-ecrans.md § 4`).
+import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut"
 import { LIEN } from "../components/classes"
-import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { Icon } from "../ds/react/icon"
-import { Tabs } from "../ds/react/tabs"
-import { ASSISTANTS, ETAPES, EXEMPLES_GENERIQUES, GUIDE, type Assistant, type EtapeDuGuide, type Segment } from "./libelles"
-import type { AdresseDeConnexion, DerniereConnexion, ExempleDePrompt } from "./types"
+import { GUIDE, LIENS_CONNECTEURS, type LienDirect } from "./libelles"
+import type { AdresseDeConnexion } from "./types"
 import { ValeurCopiable } from "./valeur-copiable"
 
 type GuideDeBranchementProps = {
   adresse: AdresseDeConnexion
-  /** Les procédures utiles, les plus utilisées d'abord : leurs titres sont les demandes à essayer (AC-7). */
-  exemples: Resultat<ExempleDePrompt[]>
-  /** Les dernières connexions, la plus récente d'abord : sa famille choisit l'onglet ouvert (AC-2). */
-  connexions: Resultat<DerniereConnexion[]>
 }
 
-const DEMANDES_MONTREES = 3
-// Des marqueurs de liste, donc pas de flex : un `li` devenu élément flex peut perdre son numéro. Un filet entre deux
-// étapes (`oto-etapes`, E11-S15, AC-a5).
-const LISTE_D_ETAPES = "oto-etapes list-decimal space-y-4 ps-6"
-const ONGLETS = ASSISTANTS.map((assistant) => ({ value: assistant, label: assistant }))
+// Des marqueurs de liste, donc pas de flex : un `li` devenu élément flex peut perdre son numéro. Un filet entre les
+// deux temps (`oto-etapes`, E11-S15, AC-a5).
+const LISTE_DES_TEMPS = "oto-etapes list-decimal space-y-4 ps-6"
 
-/** L'onglet ouvert d'abord : l'assistant de la connexion la plus récente, claude.ai sans connexion connue (HN-E11S09-2). */
-function ongletDeDepart(connexions: Resultat<DerniereConnexion[]>): Assistant {
-  const famille = connexions.data?.[0]?.famille
-  return ASSISTANTS.find((assistant) => assistant === famille) ?? "claude.ai"
-}
-
-/** Les titres des procédures d'abord, dans l'ordre reçu, puis les exemples génériques, trois en tout. */
-function troisDemandes(exemples: ExempleDePrompt[]): string[] {
-  return [...exemples.map(({ titre }) => titre), ...EXEMPLES_GENERIQUES].slice(0, DEMANDES_MONTREES)
-}
-
-function Texte({ segments }: { segments: readonly Segment[] }) {
-  return segments.map((segment, rang) => (typeof segment === "string" ? segment : <code key={rang} className="oto-mono">{segment.code}</code>))
-}
-
-/** Le lien vers la page de l'assistant : un autre site, dans un nouvel onglet, qui se dit dans son nom (AC-8). */
-function LienExterne({ href, libelle }: NonNullable<EtapeDuGuide["lien"]>) {
+/** Les liens d'un temps, côte à côte : un autre site, dans un nouvel onglet, qui se dit dans son nom (AC-8). */
+function Liens({ liens }: { liens: readonly LienDirect[] }) {
   return (
-    <p>
-      <a href={href} target="_blank" rel="noopener noreferrer" className={`${LIEN} inline-flex items-center gap-1`}>
-        {libelle}
-        <Icon as={ArrowSquareOut} size="xs" />
-        <span className="oto-sr-only">{GUIDE.nouvelOnglet}</span>
-      </a>
-    </p>
+    <ul className="flex flex-wrap gap-x-4 gap-y-1">
+      {liens.map(({ assistant, href }) => (
+        <li key={assistant}>
+          {/* `inline-flex` : la hauteur de 44 px des cibles tactiles (< 640 px) ne prend pas sur un élément en ligne. */}
+          <a href={href} target="_blank" rel="noopener noreferrer" className={`${LIEN} inline-flex items-center gap-1`}>
+            {assistant}
+            <Icon as={ArrowSquareOut} size="xs" />
+            <span className="oto-sr-only">{GUIDE.nouvelOnglet}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
   )
 }
 
-/** Les deux champs du connecteur, en liste de définitions : le nom (ou le préfixe) puis l'adresse. */
-function Champs({ adresse, nom }: { adresse: AdresseDeConnexion; nom: "nom" | "nomCli" }) {
+/** Les deux champs du connecteur, en liste de définitions : un seul nom, sans espace, que Mistral exige. */
+function Champs({ adresse }: { adresse: AdresseDeConnexion }) {
   return (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3">
       <dt className="font-medium">{GUIDE.nom}</dt>
       <dd>
-        <ValeurCopiable valeur={adresse[nom]} cible={GUIDE.copierNom} />
+        <ValeurCopiable valeur={adresse.nomCli} cible={GUIDE.copierNom} />
       </dd>
       <dt className="font-medium">{GUIDE.adresse}</dt>
       <dd>
@@ -74,62 +52,20 @@ function Champs({ adresse, nom }: { adresse: AdresseDeConnexion; nom: "nom" | "n
   )
 }
 
-/** Les demandes à essayer ; une lecture en échec se dit ici seul, « Réessayer » relit la page. */
-function Demandes({ exemples }: { exemples: Resultat<ExempleDePrompt[]> }) {
-  if (exemples.error !== undefined) return <ErreurDeLecture message={exemples.error} />
+export function GuideDeBranchement({ adresse }: GuideDeBranchementProps) {
   return (
-    <ul className="flex flex-col gap-1">
-      {troisDemandes(exemples.data).map((demande, rang) => (
-        // Deux procédures peuvent porter le même titre : le rang départage.
-        <li key={rang}>
-          <ValeurCopiable valeur={demande} cible={GUIDE.copierDemande(demande)} />
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function Etape({ etape, adresse, exemples }: { etape: EtapeDuGuide; adresse: AdresseDeConnexion; exemples: GuideDeBranchementProps["exemples"] }) {
-  return (
-    <li className="space-y-2">
-      <p>
-        {etape.branche && <strong>{`${GUIDE.branche} `}</strong>}
-        <Texte segments={etape.texte(adresse)} />
-      </p>
-      {etape.lien && <LienExterne {...etape.lien} />}
-      {etape.champs && <Champs adresse={adresse} nom={etape.champs.nom} />}
-      {etape.copie && <ValeurCopiable valeur={etape.copie.valeur(adresse)} cible={etape.copie.cible} />}
-      {etape.branche && <Demandes exemples={exemples} />}
-      {etape.note && <p className="oto-caption">{etape.note}</p>}
-    </li>
-  )
-}
-
-function EtapesDe({ assistant, adresse, exemples }: { assistant: Assistant } & Omit<GuideDeBranchementProps, "connexions">) {
-  return (
-    <ol className={LISTE_D_ETAPES}>
-      {ETAPES[assistant].map((etape, rang) => (
-        // L'ordre des étapes est fixe : le rang est leur identité.
-        <Etape key={rang} etape={etape} adresse={adresse} exemples={exemples} />
-      ))}
+    <ol className={LISTE_DES_TEMPS}>
+      <li className="space-y-2">
+        <p className="oto-section-title">{GUIDE.connecteur}</p>
+        <Champs adresse={adresse} />
+        <Liens liens={LIENS_CONNECTEURS} />
+        <p className="oto-caption">{GUIDE.chatGpt}</p>
+      </li>
+      <li className="space-y-2">
+        <p className="oto-section-title">{GUIDE.preferences}</p>
+        <ValeurCopiable valeur={adresse.phrase} cible={GUIDE.copierPhrase} />
+        {/* Sans lien direct : aucune adresse des préférences personnelles n'est relevée pour ces assistants. */}
+      </li>
     </ol>
-  )
-}
-
-export function GuideDeBranchement({ adresse, exemples, connexions }: GuideDeBranchementProps) {
-  const [assistant, setAssistant] = useState<Assistant>(() => ongletDeDepart(connexions))
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-mute">{GUIDE.intro(adresse.nom)}</p>
-      <Tabs
-        tabs={ONGLETS}
-        label={GUIDE.onglets}
-        value={assistant}
-        // `Tabs` rend la valeur en `string` : elle se reconnaît dans la liste, qui l'a fournie.
-        onChange={(valeur) => setAssistant(ASSISTANTS.find((cle) => cle === valeur) ?? assistant)}
-      >
-        <EtapesDe assistant={assistant} adresse={adresse} exemples={exemples} />
-      </Tabs>
-    </div>
   )
 }

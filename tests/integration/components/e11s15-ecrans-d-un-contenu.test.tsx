@@ -190,8 +190,8 @@ describe("« Partager », anchored to its button (E11-S15, AC-a4)", () => {
 
 describe("the connection guide (E11-S15, AC-a5)", () => {
   it("should mark its steps as separated from one another", () => {
-    render(<GuideDeBranchement adresse={{ url: "https://acme.example.test/api/mcp", nom: "Acme", nomCli: "acme", phrase: "Commence par le contexte." }} exemples={{ data: [] }} connexions={{ data: [] }} />)
-    const etapes = screen.getByRole("tabpanel").querySelector("ol")
+    render(<GuideDeBranchement adresse={{ url: "https://acme.example.test/api/mcp", nom: "Acme", nomCli: "acme", phrase: "Commence par le contexte." }} />)
+    const etapes = document.querySelector("ol")
     expect(etapes).toHaveClass("oto-etapes")
     expect(etapes?.children.length).toBeGreaterThan(1)
   })

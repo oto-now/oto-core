@@ -155,6 +155,13 @@ describe("described connector engine", () => {
     expect(output.text).toBe('crm.get_contact:\n{"id":"c-42","name":"Ada","email":"ada@example.test"}')
   })
 
+  it("should name a function that engages by its served _act name in its result text, never by the plain name it is not served under", async () => {
+    stub(json({ id: 9 }), new Response(null, { status: 204 }))
+    const posted = await run("crm_act.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "15" }] })
+    const empty = await run("crm_act.post_entry", { label: "Fees", lines: [{ debit: "15.00" }, { credit: "15" }] })
+    expect([posted.text, empty.text]).toEqual(['crm_act.post_entry:\n{"id":9}', "crm_act.post_entry: done; Crm returned no content."])
+  })
+
   it("should translate a status by the function's refusals first, then the connector's table, never with the token (AC9)", async () => {
     const statuses: [number, string, string][] = [
       [404, "not_found", "No contact with this id. (contact_not_found)"],

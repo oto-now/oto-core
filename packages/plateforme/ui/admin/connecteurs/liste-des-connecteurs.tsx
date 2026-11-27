@@ -7,34 +7,43 @@
 // dans l'adresse de l'hôte (`useHote().naviguer`), le détail s'ouvre par un lien, et toute la ligne le suit au clic
 // (`suivreLeLienDeLaLigne`) ; le lien du nom reste la seule cible du clavier et des lecteurs d'écran. L'état se lit par
 // son mot, le point et la couleur ne font que l'accompagner. Sur le modèle de `journal/tableau-des-conversations.tsx`.
-import type { MouseEvent } from "react"
+import { useId, type MouseEvent } from "react"
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/csr/MagnifyingGlass"
 import { AnimatedIcon } from "../../ds/react/icon"
 import { ListTools } from "../../ds/react/list-tools"
+import { ObjectLink } from "../../ds/react/object-link"
 import { Table, type Column } from "../../ds/react/table"
+import { LIEN } from "../../components/classes"
 import { useHote } from "../../hote/navigation"
+import { LogoDOrganisation } from "../../marque/logo-d-organisation"
 import { FiltreSegmente, type ChoixDuFiltre } from "../filtre-segmente"
 import { ConnexionParConsentement } from "./connexion-par-consentement"
 import type { LigneDeConnecteur } from "./lignes-des-connecteurs"
-import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const RECHERCHER = "Rechercher un connecteur"
 
+/**
+ * La rangée d'objet du DS (`ObjectLink` à tuile) : la tuile, le nom et sa phrase forment le lien. Son nom accessible reste
+ * le nom du connecteur, la phrase le décrit (`aria-describedby`) : un lien nommé de toute sa rangée se lirait mal dans la
+ * liste des liens.
+ */
 function Connecteur({ ligne }: { ligne: LigneDeConnecteur }) {
   const { Lien } = useHote()
+  const phrase = useId()
+  // L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois, sauf suivi de la façon du compte, qui distingue deux connecteurs d'un même outil.
+  const meta = (ligne.description ?? (ligne.outil !== ligne.libelle || ligne.facon ? ligne.outil : null)) ? [ligne.description ?? ligne.outil, ligne.facon].filter(Boolean).join(" · ") : null
   return (
-    <span className="flex min-w-0 items-center gap-3 py-1">
-      <TuileDeLOutil nom={ligne.outil} logo={ligne.logo} />
-      <span className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-        <Lien href={ligne.ouverture} data-ouvre-la-ligne="" className={`font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ink ${ligne.desactive ? "text-mute" : "text-ink"}`}>
-          {ligne.libelle}
-        </Lien>
-        {/* L'outil sous un nom qui le redit déjà ne s'écrit pas deux fois, sauf suivi de la façon du compte, qui distingue deux connecteurs d'un même outil. */}
-        {(ligne.description ?? (ligne.outil !== ligne.libelle || ligne.facon ? ligne.outil : null)) && (
-          <span className="oto-caption">{[ligne.description ?? ligne.outil, ligne.facon].filter(Boolean).join(" · ")}</span>
-        )}
-      </span>
-    </span>
+    <ObjectLink
+      as={Lien}
+      href={ligne.ouverture}
+      data-ouvre-la-ligne=""
+      aria-label={ligne.libelle}
+      aria-describedby={meta ? phrase : undefined}
+      className="focus-visible:ring-2 focus-visible:ring-ink"
+      lead={<LogoDOrganisation nom={ligne.outil} logo={ligne.logo} taille={40} tuile />}
+      name={<span className={ligne.desactive ? "text-mute" : "text-ink"}>{ligne.libelle}</span>}
+      meta={meta ? <span id={phrase}>{meta}</span> : undefined}
+    />
   )
 }
 
@@ -173,7 +182,7 @@ function RechercheSansReponse({ q, effacer }: { q: string; effacer: string }) {
       <span className="font-semibold text-ink">{`Aucun connecteur ne correspond à « ${q} ».`}</span>
       <span className="oto-caption">
         Cherchez par nom, outil ou description.{" "}
-        <Lien href={effacer} className="text-ink underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink">
+        <Lien href={effacer} className={LIEN}>
           Effacer la recherche
         </Lien>
       </span>

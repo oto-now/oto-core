@@ -1,8 +1,8 @@
 "use client"
 
 // L'aparté « Brancher mon Claude, ChatGPT ou Mistral » de l'accueil (E05-S09, partie b, AC-b1 ; E11-S09,
-// AC-9, AC-10) : l'état du branchement ; « Brancher » ouvre la grande fenêtre, qui montre le guide par
-// assistant (`GuideDeBranchement`, le même que `/connect`), adresse comprise. Porté d'oto-frontend
+// AC-9, AC-10) : l'état du branchement ; « Brancher » ouvre la grande fenêtre, qui montre le guide en deux
+// temps, le même pour tous les assistants (`GuideDeBranchement`, le même que `/connect`), adresse comprise. Porté d'oto-frontend
 // (`accueil/branchement-ia.tsx`). Repris : l'îlot et son en-tête, « Brancher » au bout de la bande et sans
 // `data-reveal` (c'est le sujet de la carte), l'état dans le corps. Changé : l'état vient des dernières
 // connexions de la personne (E02-S04) ; le tutoriel « Bientôt » est le guide servi, en fenêtre `lg`.
@@ -13,20 +13,18 @@
 import { useState } from "react"
 import type { Resultat } from "../api/resultat"
 import { GuideDeBranchement } from "../connexion/guide-de-branchement"
-import type { AdresseDeConnexion, DerniereConnexion, ExempleDePrompt } from "../connexion/types"
+import { ConnexionsRecentes } from "../connexion/connexions-recentes"
+import type { AdresseDeConnexion, DerniereConnexion } from "../connexion/types"
 import { COMPTE } from "../coque/libelles"
 import { Dialog } from "../ds/react/dialog"
 import { Island, IslandBody, IslandHead } from "../ds/react/island"
 import { Button } from "../ds/react/primitives"
 import { StatusDot } from "../ds/react/status-dot"
-import { dateLisible } from "../format/dates"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { BRANCHEMENT } from "./libelles"
 
 type BranchementIAProps = {
   adresse: AdresseDeConnexion
-  /** Les demandes à essayer du guide : les titres des procédures utiles (AC-7, AC-11). */
-  exemples: Resultat<ExempleDePrompt[]>
   connexions: Resultat<DerniereConnexion[]>
 }
 
@@ -43,7 +41,7 @@ function Assistants() {
   )
 }
 
-/** L'état : un point décoratif, le mot le porte (`accessibility-patterns.md § Couleurs & Contraste`). */
+/** L'état : « aucun » tant qu'aucun assistant ne s'est connecté, sinon une ligne par assistant (`ConnexionsRecentes`). Le point est décoratif, le mot le porte. */
 function EtatDuBranchement({ connexions }: Pick<BranchementIAProps, "connexions">) {
   if (connexions.error !== undefined) return <ErreurDeLecture message={connexions.error} />
   if (connexions.data.length === 0) {
@@ -54,21 +52,12 @@ function EtatDuBranchement({ connexions }: Pick<BranchementIAProps, "connexions"
       </p>
     )
   }
-  return (
-    <ul className="flex flex-col gap-1">
-      {connexions.data.map(({ famille, date }) => (
-        <li key={famille} className="oto-caption flex items-center gap-2">
-          <StatusDot state="ok" aria-hidden="true" />
-          {BRANCHEMENT.derniere(famille, dateLisible(date) ?? "?")}
-        </li>
-      ))}
-    </ul>
-  )
+  return <ConnexionsRecentes connexions={connexions.data} />
 }
 
-export function BranchementIA({ adresse, exemples, connexions }: BranchementIAProps) {
+export function BranchementIA({ adresse, connexions }: BranchementIAProps) {
   const [ouverte, setOuverte] = useState(false)
-  // Chaque ouverture remonte le guide : il s'ouvre sur la famille la plus récente (AC-2) ; il reste monté
+  // Chaque ouverture remonte le guide : ses copies repartent sans « Copié » d'une ouverture passée ; il reste monté
   // pendant la sortie animée de la fenêtre, et rien n'est rendu avant la première.
   const [ouvertures, setOuvertures] = useState(0)
   const ouvrir = () => {
@@ -106,7 +95,7 @@ export function BranchementIA({ adresse, exemples, connexions }: BranchementIAPr
           </Button>
         }
       >
-        {ouvertures > 0 && <GuideDeBranchement key={ouvertures} adresse={adresse} exemples={exemples} connexions={connexions} />}
+        {ouvertures > 0 && <GuideDeBranchement key={ouvertures} adresse={adresse} />}
       </Dialog>
     </Island>
   )

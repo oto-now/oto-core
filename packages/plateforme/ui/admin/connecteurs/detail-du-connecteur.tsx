@@ -16,6 +16,7 @@ import { Avatar } from "../../ds/react/primitives"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { dateLisible } from "../../format/dates"
 import { TiroirDeConversation } from "../../journal/tiroir-de-conversation"
+import { LogoDOrganisation } from "../../marque/logo-d-organisation"
 import { EtiquetteDeLigne } from "../../noeud/partage-visuel"
 import { questionDeDesactivationDuCompte } from "../textes"
 import { BlocageDeLOutil, DeblocageDeLOutil } from "./blocage-de-l-outil"
@@ -30,7 +31,6 @@ import { PartageDuConnecteur } from "./partage-du-connecteur"
 import { REFUS_DE_LA_REACTIVATION } from "./refus-des-connecteurs"
 import { SaisieDuCompte } from "./saisie-du-compte"
 import { DetailDuTest, TestDuConnecteur } from "./test-de-connexion"
-import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 type SectionProps = { titre: string; children: ReactNode; zone?: boolean; id?: string; aside?: ReactNode }
 
@@ -41,7 +41,7 @@ function Section({ titre, children, zone = false, id, aside }: SectionProps) {
       <hr className="oto-separator" data-orientation="horizontal" />
       <section className={`flex flex-col gap-3 ${zone ? "rounded-lg bg-desk p-4" : ""}`}>
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
-          <h3 id={id} tabIndex={id ? -1 : undefined} className="text-base font-bold text-ink">
+          <h3 id={id} tabIndex={id ? -1 : undefined} className="oto-section-title">
             {titre}
           </h3>
           {aside}
@@ -96,7 +96,7 @@ function Etat({ compte, formulaire, etat, ici }: Detail) {
   )
   return (
     // Une bande : l'état et sa précision sur une ligne, les gestes à droite. Elle reçoit le focus quand un geste emporte le sien.
-    <div id={ANCRE_DE_L_ETAT} tabIndex={-1} role="group" aria-label="État" className="flex flex-col gap-2 rounded-lg bg-card p-3 focus-visible:ring-2 focus-visible:ring-ink">
+    <div id={ANCRE_DE_L_ETAT} tabIndex={-1} role="group" aria-label="État" className="oto-card flex flex-col gap-2 focus-visible:ring-2 focus-visible:ring-ink">
       {aSaCle(compte, formulaire) ? (
         <SaisieDuCompte compte={compte} formulaire={formulaire} libelle={etat.geste === "saisir" ? "Saisir la clé" : "Remplacer la clé"} ouverte={etat.geste === "saisir" || etat.geste === "remplacer"} etat={ligne} gestes={gestes} />
       ) : (
@@ -315,7 +315,7 @@ export function DetailDuConnecteur({ compte, formulaire, outil, logo, fonctions,
   const aRemplacer = etat.code === "a_remplacer"
   const titre = (
     <span className="flex min-w-0 items-center gap-3">
-      <TuileDeLOutil nom={outil} logo={logo} />
+      <LogoDOrganisation nom={outil} logo={logo} taille={40} tuile />
       <span className="min-w-0">{compte.label}</span>
     </span>
   )

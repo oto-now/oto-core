@@ -187,13 +187,13 @@ describe("/n/[...chemin] page of an empty table (E11-S05, AC-h1)", () => {
     cleanup()
 
     vi.mocked(tableGridRows).mockResolvedValue(vide)
-    vi.mocked(lastConnections).mockResolvedValue([connexion("ChatGPT"), connexion("claude.ai")])
+    vi.mocked(lastConnections).mockResolvedValue([connexion("ChatGPT"), connexion("Claude")])
     await montrer(await page(["ventes", "suivi_prospects"]))
     expect(lastConnections).toHaveBeenCalledWith(SESSION.db, IDENTITE)
     expect(await screen.findByText("C'est ChatGPT qui pourra créer et modifier ses lignes.")).toBeInTheDocument()
     cleanup()
 
-    vi.mocked(lastConnections).mockResolvedValue([connexion("Claude Code")])
+    vi.mocked(lastConnections).mockResolvedValue([connexion("Claude")])
     await montrer(await page(["ventes", "suivi_prospects"]))
     expect(await screen.findByText("C'est Claude qui pourra créer et modifier ses lignes.")).toBeInTheDocument()
   })

@@ -16,7 +16,7 @@ type CarteDeNoeudProps = { carte: ScreenCard; Lien: LienDeLHote; hrefDuChemin: (
 
 export function CarteDeNoeud({ carte, Lien, hrefDuChemin }: CarteDeNoeudProps) {
   return (
-    <div className="space-y-1 rounded-md bg-card p-3 text-ink">
+    <div className="oto-card space-y-1 text-ink">
       <p className="font-medium">
         <Lien href={hrefDuChemin(carte.path)} className={LIEN}>
           {carte.title}

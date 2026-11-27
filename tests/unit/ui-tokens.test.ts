@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import tailwindcss from "@tailwindcss/postcss"
 import postcss from "postcss"
+import ts from "typescript"
 import { describe, it, expect } from "vitest"
 
 const root = path.resolve(__dirname, "../..")
@@ -73,6 +74,20 @@ function bordersColorees(fichiers: string[]): string[] {
   )
 }
 
+// Un bouton des écrans du paquet est le `Button` du design system (`oto-btn`) : une chaîne qui porte à la fois un
+// arrondi et les deux marges internes dessine un bouton à la main, hors des tailles et de la pilule du DS
+// (`portage-ecrans.md § 3`). Lue chaîne par chaîne, elle se trouve aussi rangée dans une constante.
+const FORME_DE_BOUTON = /["'`][^"'`\n]*["'`]/g
+const dessineUnBouton = (chaine: string) => /\brounded\b|\brounded-/.test(chaine) && /\bpx-/.test(chaine) && /\bpy-/.test(chaine)
+// Nommée : la ligne de l'arbre, un lien qui n'agit pas.
+const FORMES_ADMISES = new Set(["packages/plateforme/ui/arbre/navigateur-d-arbre.tsx"])
+
+function boutonsDessines(fichiers: string[]): string[] {
+  return fichiers
+    .filter((f) => !FORMES_ADMISES.has(relatif(f)))
+    .flatMap((f) => [...fs.readFileSync(f, "utf8").matchAll(FORME_DE_BOUTON)].filter((m) => dessineUnBouton(m[0])).map((m) => `${relatif(f)} : ${m[0]}`))
+}
+
 describe("ui/ design tokens (ADR-008)", () => {
   it("should find host-only tokens to guard against", () => {
     expect(HOTE_SEUL).toContain("muted-foreground")
@@ -84,6 +99,27 @@ describe("ui/ design tokens (ADR-008)", () => {
 
   it("should use no colored border in a ported screen", () => {
     expect(bordersColorees(ecransOto)).toEqual([])
+  })
+
+  it("should tell a hand-drawn button from the chains it lets through", () => {
+    const chaines = {
+      bouton: "`rounded-md px-3 py-2 text-sm font-medium ${FOCUS}`",
+      lien: "`rounded-sm text-ink underline ${FOCUS}`",
+      carte: '"rounded-lg bg-island p-3 ring-1 ring-hair"',
+      tuile: '"rounded-lg px-1.5 pb-2.5 pt-3.5"',
+      design: '"oto-btn"',
+    }
+    expect(Object.fromEntries(Object.entries(chaines).map(([cas, chaine]) => [cas, dessineUnBouton(chaine)]))).toEqual({
+      bouton: true,
+      lien: false,
+      carte: false,
+      tuile: false,
+      design: false,
+    })
+  })
+
+  it("should draw no button by hand in a ported screen, the design system's Button instead", () => {
+    expect(boutonsDessines(fichiersTsEtTsx(uiDir).filter((f) => !relatif(f).startsWith("packages/plateforme/ui/ds/")))).toEqual([])
   })
 
   // La compilation Tailwind scanne tout le dépôt : au-delà des 5 s par défaut sur Windows. Une seule
@@ -120,6 +156,105 @@ describe("ui/ design tokens (ADR-008)", () => {
   it("should not find the class used only in packages/plateforme/ui anywhere in src/", () => {
     const hits = fichiers(path.join(root, "src"), /\.(ts|tsx|css)$/).filter((file) => fs.readFileSync(file, "utf8").includes(PACKAGE_ONLY_CLASS))
     expect(hits).toEqual([])
+  })
+})
+
+// Les gestes du design system, gardés hors de `ui/ds/` : chaque motif refusé redessinait à la main ce qu'un rôle ou un
+// composant du DS porte déjà, aux couleurs et aux tailles du navigateur ou de Tailwind plutôt qu'à celles du thème.
+const horsDuDs = (f: string) => !relatif(f).startsWith("packages/plateforme/ui/ds/")
+const ecransHorsDuDs = ecransOto.filter(horsDuDs)
+// Le lien de texte n'a que deux sources : `LIEN` et `LienDeCellule`.
+const SOURCES_DU_LIEN = new Set(["packages/plateforme/ui/components/classes.ts", "packages/plateforme/ui/components/table-serveur.tsx"])
+
+const occurrences = (fichiers: string[], motif: RegExp) =>
+  fichiers.flatMap((f) => fs.readFileSync(f, "utf8").split("\n").flatMap((ligne, rang) => (motif.test(ligne) ? [`${relatif(f)}:${rang + 1}`] : [])))
+
+/** Les balises JSX d'un source, chacune avec le nom de ses attributs et le texte de sa `className`. */
+function balises(source: string, nom = "source.tsx"): { attributs: Set<string>; classes: string; ligne: number }[] {
+  const fichier = ts.createSourceFile(nom, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const trouvees: { attributs: Set<string>; classes: string; ligne: number }[] = []
+  const visiter = (noeud: ts.Node) => {
+    if (ts.isJsxOpeningElement(noeud) || ts.isJsxSelfClosingElement(noeud)) {
+      const attributs = noeud.attributes.properties.filter(ts.isJsxAttribute)
+      const classe = attributs.find((attribut) => attribut.name.getText(fichier) === "className")
+      trouvees.push({
+        attributs: new Set(attributs.map((attribut) => attribut.name.getText(fichier))),
+        classes: classe?.initializer?.getText(fichier) ?? "",
+        ligne: fichier.getLineAndCharacterOfPosition(noeud.getStart(fichier)).line + 1,
+      })
+    }
+    ts.forEachChild(noeud, visiter)
+  }
+  visiter(fichier)
+  return trouvees
+}
+
+/** Une infobulle native sur un bouton à icône : `title` double le `Tooltip` du DS, qui seul passe au focus et au toucher. */
+const infobulleNative = (balise: { attributs: Set<string> }) => balise.attributs.has("data-icon-only") && balise.attributs.has("title")
+/** Une étiquette refaite : petite et grise, c'est `.oto-label` ou `.oto-caption`, aux tailles et au contraste mesurés du DS. */
+const etiquetteRefaite = (balise: { classes: string }) => /\btext-xs\b/.test(balise.classes) && /\btext-mute\b/.test(balise.classes)
+
+const balisesFautives = (fichiers: string[], fautive: (balise: { attributs: Set<string>; classes: string }) => boolean) =>
+  fichiers.flatMap((f) => balises(fs.readFileSync(f, "utf8"), f).filter(fautive).map((balise) => `${relatif(f)}:${balise.ligne}`))
+
+describe("ui/ design system gestures, outside ui/ds/", () => {
+  it("should tell the faulty tags from the ones they let through", () => {
+    const source = [
+      '<a data-icon-only="" title="Ouvrir" />',
+      '<a data-icon-only="" aria-label="Ouvrir" />',
+      '<p className="text-xs font-semibold text-mute" />',
+      '<p className={`text-xs ${x ? "text-mute" : ""}`} />',
+      '<p className="oto-caption text-xs" />',
+    ].join("\n")
+    expect(balises(source).map((balise) => [infobulleNative(balise), etiquetteRefaite(balise)])).toEqual([
+      [true, false],
+      [false, false],
+      [false, true],
+      [false, true],
+      [false, false],
+    ])
+  })
+
+  // Une barre native se peint aux couleurs du navigateur, hors thème : `.oto-progress`.
+  it("should use no native <progress>, the design system's .oto-progress instead", () => {
+    expect(occurrences(ecransHorsDuDs, /<progress\b/)).toEqual([])
+  })
+
+  // Un rectangle `bg-skeleton` n'a ni le balayage ni la forme du DS, ni sa coupure sous « réduire les animations » : `Skeleton`.
+  it("should draw no skeleton by hand, the design system's Skeleton instead", () => {
+    expect(occurrences(ecransHorsDuDs, /\bbg-skeleton\b/)).toEqual([])
+  })
+
+  // Un soulignement à la main n'a ni le décalage ni l'arrondi de focus de `.oto-link` : `LIEN` ou `LienDeCellule`.
+  it("should underline no link by hand outside LIEN and LienDeCellule", () => {
+    const sources = fichiersTsEtTsx(uiDir).filter((f) => horsDuDs(f) && !SOURCES_DU_LIEN.has(relatif(f)))
+    expect(occurrences(sources, /\bunderline\b/)).toEqual([])
+  })
+
+  // Les capitales à la main refont `.oto-label`, en mono, à la taille et au contraste mesurés du DS.
+  it("should set no uppercase by hand, the .oto-label role instead", () => {
+    expect(occurrences(ecransHorsDuDs, /\buppercase\b/)).toEqual([])
+  })
+
+  it("should put no text-xs with text-mute on the same className, the .oto-label or .oto-caption role instead", () => {
+    expect(balisesFautives(ecransHorsDuDs, etiquetteRefaite)).toEqual([])
+  })
+
+  it("should put no title= on an icon-only control, the design system's Tooltip instead", () => {
+    expect(balisesFautives(ecransHorsDuDs, infobulleNative)).toEqual([])
+  })
+
+  // Un titre en `text-2xl` ou `text-xl` sort de l'échelle des rôles : `oto-page-title`, `oto-card-title` ou `oto-empty-title`.
+  it("should set no text-2xl nor text-xl, a title role of the design system instead", () => {
+    expect(occurrences(ecransHorsDuDs, /\btext-(?:2xl|xl)\b/)).toEqual([])
+  })
+
+  // `--faint` tombe sous 4,5:1 sur l'îlot la nuit : `.oto-label`, un texte, reste en `--mute`.
+  it("should not colour .oto-label in var(--faint) in typography.css", () => {
+    const typographie = fs.readFileSync(path.join(uiDir, "ds/tokens/typography.css"), "utf8")
+    const regles = [...typographie.matchAll(/([^{}]*)\{([^}]*)\}/g)].filter((regle) => regle[1].includes(".oto-label"))
+    expect(regles.length).toBeGreaterThan(0)
+    expect(regles.filter((regle) => /\bcolor\s*:\s*var\(--faint\)/.test(regle[2])).map((regle) => regle[1].trim())).toEqual([])
   })
 })
 

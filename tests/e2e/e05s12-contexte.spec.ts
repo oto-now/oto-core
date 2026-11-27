@@ -93,7 +93,7 @@ test.describe("écrans du Contexte (E05-S12, lot C)", () => {
         // E11-S10 (lot f) : la vue « Contexte », à `/context`, sans « Règles Oto », sans tête servie ni lien vers
         // Profil dans la partie Privé ; aucune ancienne partie (AC-6).
         await page.goto(`${ESPACE.adresse}/context`)
-        const prive = page.getByRole("region", { name: "Contexte : Privé" })
+        const prive = page.getByRole("region", { name: "Mes instructions" })
         await attendre(prive).toBeVisible()
         await expect(page.getByRole("region", { name: "Règles Oto" })).toHaveCount(0)
         await expect(page.getByRole("main")).not.toContainText("How this workspace works")

@@ -25,11 +25,17 @@ export function natureDuGenre(genre: string): NatureDeNoeud {
 }
 
 /**
+ * Le nom du Contexte privé à l'écran : le mot des assistants pour leurs instructions personnalisées ; son chemin,
+ * `private/<handle>/contexte`, ne change pas.
+ */
+const MES_INSTRUCTIONS = "Mes instructions"
+
+/**
  * Le titre montré d'un Contexte, composé à l'écran (E05-S11, AC-17, HN-E05S11-13) : « Contexte · <section> »
- * (« Tout le monde », le nom de l'équipe, « Privé ») ; le titre enregistré ne change pas.
+ * (« Tout le monde », le nom de l'équipe), « Mes instructions » pour celui de « Privé » ; le titre enregistré ne change pas.
  */
 export function titreDeContexte(section: string): string {
-  return `Contexte · ${section}`
+  return section === SECTION_PERSO ? MES_INSTRUCTIONS : `Contexte · ${section}`
 }
 
 /** Un Contexte se titre « Contexte », en tête de sa section (P39). */

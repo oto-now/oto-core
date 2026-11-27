@@ -7,7 +7,7 @@
 // valeurs sont invalides. ».
 import type { ProcedureRefusal } from "../../schemas"
 import { isRecord } from "../../schemas/tables"
-import { FOCUS, LIEN } from "../components/classes"
+import { LIEN } from "../components/classes"
 import { CONTROLE, GENRE_INCONNU, GENRES_DE_REFUS } from "./libelles"
 
 /** Un refus lu dans `details.refusals` ; un genre que l'écran ne connaît pas encore reste lisible. */
@@ -85,7 +85,7 @@ export function RefusDePublication({ refus, blocs }: RefusDePublicationProps) {
               </a>
             )}
             <details>
-              <summary className={`cursor-pointer rounded-sm ${FOCUS}`}>{CONTROLE.detail}</summary>
+              <summary className={`w-fit cursor-pointer ${LIEN}`}>{CONTROLE.detail}</summary>
               <p className="break-words font-mono">{un.message}</p>
             </details>
           </li>

@@ -12,6 +12,7 @@ import type { ConversationDetail, JournalCall } from "../../schemas"
 import type { Resultat } from "../api/resultat"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { Badge } from "../ds/react/primitives"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { dateEtHeureLisibles, dureeLisible, heureLisible } from "../format/dates"
 import { ABSENT, ARGUMENTS_NON_MONTRES, CONVERSATION_INTROUVABLE, erreurs, ISSUES, PERSONNE_RETIREE } from "./libelles"
@@ -47,7 +48,7 @@ function Appel({ appel }: { appel: JournalCall }) {
         <p className="oto-caption">{ARGUMENTS_NON_MONTRES}</p>
       ) : (
         <details>
-          <summary className="w-fit">Arguments</summary>
+          <summary className={`w-fit cursor-pointer ${LIEN}`}>Arguments</summary>
           {/* Rendus en texte par React, jamais en HTML (`security-patterns.md § XSS Prevention`). */}
           <pre className="oto-mono mt-1 overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(appel.args, null, 2)}</pre>
         </details>

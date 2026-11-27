@@ -24,6 +24,7 @@ import { COLUMN_TYPES, KEY_COLUMN_TYPES } from "../../schemas/tables"
 import { messageDErreur } from "../api/messages"
 import { Field } from "../ds/react/forms"
 import { Alert, Button } from "../ds/react/primitives"
+import { Progress } from "../ds/react/progress"
 import { Select } from "../ds/react/select"
 import { Table, type Column } from "../ds/react/table"
 import { nombreLisible } from "../format/nombres"
@@ -85,7 +86,7 @@ function EnTeteDeColonne({ entete, nom }: { entete: string; nom: string | null }
   return (
     <>
       {entete}
-      <span className="block text-xs font-normal text-mute">{nom ?? IMPORT.colonneIgnoree}</span>
+      <span className="oto-caption block">{nom ?? IMPORT.colonneIgnoree}</span>
     </>
   )
 }
@@ -185,12 +186,8 @@ export function ReglagesDuCsv(proprietes: Proprietes) {
       {controle?.tooLarge && <Alert tone="fail">{IMPORT.tropGrand}</Alert>}
       {controle && <Problemes problemes={controle.problems} />}
       {plan && <Apercu plan={plan} />}
-      {envoi.progression && (
-        <label className="flex flex-col gap-1 text-sm">
-          {IMPORT.progression}
-          <progress value={envoi.progression.faites} max={Math.max(envoi.progression.total, 1)} />
-        </label>
-      )}
+      {/* La progression de l'envoi (AC-b3). */}
+      {envoi.progression && <Progress label={IMPORT.progression} value={envoi.progression.faites} max={envoi.progression.total} />}
       {envoi.arret && (
         <Alert tone="fail" actions={<Button onClick={() => void envoi.envoyer(envoi.arret?.faites ?? 0, envoi.arret?.chemin ?? null)}>{IMPORT.reprendre}</Button>}>
           {`${phraseDuRefus(envoi.arret.refus)} ${IMPORT.ecrites(nombreLisible(envoi.arret.faites), total)}`}

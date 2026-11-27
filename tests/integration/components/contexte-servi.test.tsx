@@ -103,7 +103,7 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
       // Sans « Règles Oto » (E11-S10, AC-f4) : les autres parties gardent leur ancre.
       expect(parties.map((une) => [une.getAttribute("aria-labelledby") ? within(une).getByRole("heading", { level: 2 }).textContent : une.getAttribute("aria-label"), une.id])).toEqual([
         ["Contexte : Tout le monde", "everyone-context"],
-        ["Contexte : Privé", "private-context"],
+        ["Mes instructions", "private-context"],
         ["Contexte : équipe Ventes", "context-ventes"],
         ["Contenus récents et nouveautés", "recent-content"],
         ["Fin du texte", ""],
@@ -123,10 +123,10 @@ describe("la vue « Contexte » servie (E05-S11)", () => {
       monter()
       // Gestion (Ventes) et écriture (Privé) : l'éditeur d'une page, chaque bloc modifiable (lu au repos, champ monté au focus).
       expect(partie("Contexte : équipe Ventes").getByRole("textbox", { name: "Modifier ce texte — Tutoie les clients." })).toBeInTheDocument()
-      expect(partie("Contexte : Privé").getByRole("textbox", { name: "Modifier ce texte — Signature : Léa." })).toBeInTheDocument()
+      expect(partie("Mes instructions").getByRole("textbox", { name: "Modifier ce texte — Signature : Léa." })).toBeInTheDocument()
       // Écrire publie (E11-S02, AC-c2) : au niveau écriture aussi, la publication seule, sans phrase.
-      expect(partie("Contexte : Privé").getByRole("group", { name: "Publication" })).toBeInTheDocument()
-      expect(partie("Contexte : Privé").queryByText(/La publication revient/)).toBeNull()
+      expect(partie("Mes instructions").getByRole("group", { name: "Publication" })).toBeInTheDocument()
+      expect(partie("Mes instructions").queryByText(/La publication revient/)).toBeNull()
       // Lecture (Tout le monde) : le texte servi, aucun champ.
       expect(partie("Contexte : Tout le monde").queryByRole("textbox")).toBeNull()
       expect(partie("Contexte : Tout le monde").getByText("Nous vendons des logiciels.", { selector: "pre" })).toBeInTheDocument()
@@ -349,13 +349,13 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
     it("should name every part in the view and in the insert, a Contexte not served by its name, and none after the old blocks", () => {
       monterLaVue()
       // Sans « Règles Oto » (E11-S10, AC-f4, AC-g2) ; plus de « Nouveautés » à part depuis le 2026-10-27.
-      const noms = ["Contexte : Tout le monde", "Contexte : Privé", "Contexte : équipe Ventes", "Contexte : équipe Conseil", "Contenus récents et nouveautés"]
+      const noms = ["Contexte : Tout le monde", "Mes instructions", "Contexte : équipe Ventes", "Contexte : équipe Conseil", "Contenus récents et nouveautés"]
       expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby") ?? "")?.textContent)).toEqual(noms)
       for (const ancien of ["Vous", "Organisation", "Vos équipes", "Connecteurs", "Code de la conversation", "Documents récents"]) {
         expect(screen.queryByRole("region", { name: ancien })).toBeNull()
       }
       // Le Privé d'une personne sans `handle` s'appelle `private` (AC-3) : c'est toujours sa partie Privé.
-      expect(nomDuBloc({ name: "private" }, EQUIPES)).toBe("Contexte : Privé")
+      expect(nomDuBloc({ name: "private" }, EQUIPES)).toBe("Mes instructions")
       cleanup()
       monterLEncart("ventes/contexte")
       const lignes = within(screen.getByRole("list", { name: "Ordre de lecture" })).getAllByRole("link")
@@ -376,8 +376,8 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
       expect(textesServis("Contexte : équipe Ventes")).toEqual([])
       expect(partie("Contexte : équipe Ventes").getByRole("textbox", { name: "Modifier ce texte — Tutoie les clients." })).toBeInTheDocument()
       // Le Privé, jamais publié donc non servi, mais écrivable : son éditeur, sans lien vers Profil.
-      expect(textesServis("Contexte : Privé")).toEqual([])
-      expect(partie("Contexte : Privé").getByRole("textbox", { name: "Modifier ce texte — Signature : Léa." })).toBeInTheDocument()
+      expect(textesServis("Mes instructions")).toEqual([])
+      expect(partie("Mes instructions").getByRole("textbox", { name: "Modifier ce texte — Signature : Léa." })).toBeInTheDocument()
       expect(screen.queryByRole("link", { name: "Modifier dans Profil" })).toBeNull()
       // Conseil, non servi et en échec de lecture pour la page : rien de servi, aucun champ, et l'échec se dit
       // (portage-ecrans.md § 4 ; un Contexte absent, `not_found`, la page ne le lit pas en erreur).
@@ -395,7 +395,7 @@ describe("une partie par Contexte (E05-S12, lot C)", () => {
         ["everyone-context", "private-context", "context-ventes", "context-conseil", "recent-content"].map((ancre) => `/context#${ancre}`),
       )
       const marquees = liste.getAllByRole("link").filter((lien) => lien.getAttribute("aria-current") === "page")
-      expect(marquees.map((lien) => lien.textContent?.startsWith("Contexte : Privé (ce contexte)"))).toEqual([true])
+      expect(marquees.map((lien) => lien.textContent?.startsWith("Mes instructions (ce contexte)"))).toEqual([true])
       cleanup()
       monterLaVue()
       expect(screen.getAllByRole("region").map((region) => region.id)).toEqual(["everyone-context", "private-context", "context-ventes", "context-conseil", "recent-content"])

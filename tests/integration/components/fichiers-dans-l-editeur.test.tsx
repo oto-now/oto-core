@@ -208,7 +208,7 @@ describe("EditeurDeBlocs — an image (AC-b1)", () => {
     expect(appels.find((un) => un.adresse === "/api/platform/files" && un.methode === "POST")?.corps).toEqual({ node: "ventes/modele_relance", name: "plan.png", mime: "image/png", size: 4 })
     expect(document.querySelector('img[src="blob:apercu"]')).not.toBeNull()
     act(() => envoi.progresser(2, 4))
-    expect(screen.getByRole("progressbar", { name: (nom) => nom.startsWith(FICHIERS.envoi("plan.png")) })).toHaveAttribute("value", "0.5")
+    expect(screen.getByRole("progressbar", { name: (nom) => nom.startsWith(FICHIERS.envoi("plan.png")) })).toHaveAttribute("aria-valuenow", "50")
     expect(ecritures()).toEqual([])
     await act(async () => envoi.repondre(200))
     await waitFor(() => expect(ecritures()).toHaveLength(1))

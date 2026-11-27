@@ -94,7 +94,7 @@ export function DiagrammeMermaid({ id, texte, children }: Props) {
           {/* Assaini par mermaid (`securityLevel: "strict"`, DOMPurify), voir l'en-tête. */}
           <div role="img" aria-label={DIAGRAMME.nom(nomDuDiagramme(texte))} className="oto-diagramme-dessin" dangerouslySetInnerHTML={{ __html: etat.svg }} />
           <details className="oto-diagramme-code">
-            <summary className="rounded-sm text-xs text-mute focus-visible:ring-2 focus-visible:ring-ink">{DIAGRAMME.voirLeCode}</summary>
+            <summary className="oto-caption rounded-sm focus-visible:ring-2 focus-visible:ring-ink">{DIAGRAMME.voirLeCode}</summary>
             {children}
           </details>
         </>

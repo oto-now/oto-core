@@ -16,10 +16,10 @@ import { useEffect, useRef, useState } from "react"
 import { shareNodeSchema, type ShareView } from "../../schemas"
 import { appelerPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
-import { BOUTON_DISCRET } from "../components/classes"
 import { useConfirmationEnLigne } from "../components/confirmation-en-ligne"
 import { ValeurCopiable } from "../connexion/valeur-copiable"
 import { Checkbox } from "../ds/react/checkbox"
+import { Button } from "../ds/react/primitives"
 import { Switch } from "../ds/react/switch"
 import { PARTAGE_WEB, REFUS_DU_PARTAGE_WEB } from "../noeud/libelles"
 
@@ -128,9 +128,9 @@ export function PartageSurLeWeb({ chemin, annoncer, signaler }: { chemin: string
   }
   if (lecture.etat === "echec") {
     return (
-      <button type="button" className={BOUTON_DISCRET} onClick={relire}>
+      <Button type="button" variant="secondary" size="sm" onClick={relire}>
         {PARTAGE_WEB.reessayer}
-      </button>
+      </Button>
     )
   }
   return (
@@ -156,9 +156,9 @@ export function PartageSurLeWeb({ chemin, annoncer, signaler }: { chemin: string
           {question.ouverte ? (
             question.rendu
           ) : (
-            <button type="button" className={BOUTON_DISCRET} disabled={enCours} onClick={question.demander}>
+            <Button type="button" variant="secondary" size="sm" disabled={enCours} onClick={question.demander}>
               {PARTAGE_WEB.desactiver}
-            </button>
+            </Button>
           )}
         </>
       )}

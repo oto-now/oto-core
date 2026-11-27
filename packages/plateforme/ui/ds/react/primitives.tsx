@@ -2,7 +2,7 @@
 // `Badge`, `Avatar`, `Kbd`, `Alert`, tels quels, en TypeScript — des classes et des attributs
 // `data-*`, le CSS fait le reste ; `{...rest}` d'abord, les garanties du composant ensuite. Retiré :
 // les primitives que la coque n'emploie pas (Card, Stat, Tag, StatusDot, AvatarGroup, ToolMark,
-// Separator, Skeleton, EmptyState, Progress) : chaque écran porté les reprend au besoin.
+// Separator, Skeleton, EmptyState) : chaque écran porté les reprend au besoin ; `Progress` vit dans `progress.tsx`.
 import { forwardRef, Fragment, type ComponentProps, type MouseEvent, type ReactNode } from "react"
 import { cx, initials } from "./outils"
 

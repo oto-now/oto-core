@@ -138,6 +138,12 @@ export const ADMIN_INPUTS = {
     level: setAccountRuleSchema.shape.level.optional().describe("Rule level (add_account_rule); sensitive opens the sensitive functions, write does not"),
     address: z.string().optional().describe("Address of the host API, https without trailing slash, e.g. https://erp.example.test (refresh_host_api; omitted: the served one)"),
     confirm: confirm("deactivate, disable_account, refresh_host_api"),
+    // Ajoutés en dernier, le schéma servi n'évoluant que par ajout : le catalogue entier dépasse le plafond d'un résultat.
+    filter: z
+      .string()
+      .optional()
+      .describe("Text to look for in a connector's name, label, tool domain (e.g. pennylane.com) or description, case and accents ignored (catalogue)"),
+    cursor: z.string().optional().describe("next_cursor returned by the previous page; pass the same filter (catalogue)"),
   }),
   admin_journal: z.object({
     ctx,

@@ -17,14 +17,18 @@
 //
 // E11-S05 (AC-e2) : « À quoi sert cette page » devient un repli fermé à l'arrivée, du même dessin que les encarts
 // « Cité dans », « Cite » et « Sous-pages » (`LinkedContent`), nommé par son titre ; le texte ne change pas.
+// « Mes instructions » (le Contexte privé de la personne) : une note ouverte porte la phrase de reprise, à copier dans
+// l'assistant (`ValeurCopiable`).
 import { Info } from "@phosphor-icons/react/dist/ssr/Info"
 import type { Resultat } from "../api/resultat"
 import { PERSO } from "../arbre/depuis-l-arbre"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { AnimatedIcon } from "../ds/react/icon"
 import { LinkedContent } from "../ds/react/linked-content"
+import { NotePanel } from "../ds/react/note-panel"
+import { ValeurCopiable } from "../connexion/valeur-copiable"
 import { ApercuDuContexte, type DonneesDeLApercu } from "./apercu-du-contexte"
-import { ANNEXES, aQuoiSert, porteeDe, type EquipesNommees, type Portee } from "./libelles"
+import { ANNEXES, aQuoiSert, porteeDe, REPRISE_DES_PREFERENCES, type EquipesNommees, type Portee } from "./libelles"
 
 type AnnexesDuContexteProps = {
   /** Le chemin du Contexte ouvert : sa portée, et sa couche marquée dans l'aperçu. */
@@ -60,6 +64,13 @@ export function AnnexesDuContexte({ cheminCourant, handle, apercu, equipes, href
         <p>{aQuoiSert(portee)}</p>
         <p>{ANNEXES.ecriture}</p>
       </LinkedContent>
+      {/* « Mes instructions » seulement : la phrase qui y range les préférences que l'assistant garde dans sa mémoire. */}
+      {portee.genre === "private" && (
+        <NotePanel title={REPRISE_DES_PREFERENCES.titre}>
+          <p>{REPRISE_DES_PREFERENCES.explication}</p>
+          <ValeurCopiable valeur={REPRISE_DES_PREFERENCES.phrase} cible={REPRISE_DES_PREFERENCES.cible} />
+        </NotePanel>
+      )}
       <ApercuDuContexte apercu={apercu} cheminCourant={cheminCourant} equipes={equipes} hrefDuContexteServi={hrefDuContexteServi} ici={ici} Lien={Lien} />
     </>
   )

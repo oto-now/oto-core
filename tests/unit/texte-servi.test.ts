@@ -234,14 +234,16 @@ describe("the head in the report of renderContext (E05-S12, AC-4)", () => {
 describe("How this workspace works (E05-S12, AC-10)", () => {
   // 1.4.3 : les références et les pièges ajoutent moins de 1 200 caractères aux 1 900 d'avant (cahier des charges de JB) ;
   // 1.4.12 : la notice d'une procédure, en deux lignes, moins de 600 de plus ; la règle des commentaires, une ligne,
-  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus.
-  it("should hold 20 lines and 3,950 characters at most with a 10-character prefix, the same for everyone", () => {
+  // moins de 300 de plus ; 1.8.0 : la relance de `find` en cours de tâche, une ligne, moins de 250 de plus ; la préférence
+  // à garder, écrite dans le Contexte privé et non dans la mémoire de l'assistant, une ligne, 130 de plus.
+  it("should hold 21 lines and 4,080 characters at most with a 10-character prefix, the same for everyone", () => {
     const rules = workspaceRules("abcdefghij")
     // La section et la ligne « ## This request » qui la suit dans le bloc code.
-    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(20)
-    expect(rules.length).toBeLessThanOrEqual(3_950)
+    expect(`${rules}\n## This request`.split("\n").length).toBeLessThanOrEqual(21)
+    expect(rules.length).toBeLessThanOrEqual(4_080)
     expect(rules.split("\n")[3]).toBe("- In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run abcdefghij_find before you answer or escalate.")
     expect(rules).toContain("\n- A content you can read can be commented without editing it, to ask, flag or suggest, or when a write is refused: abcdefghij_call comment.add opens a thread on a block or on the whole page, or replies to one; @Full Name in the text notifies that reader. abcdefghij_read of a page serves its open threads, each with the call to reply.\n")
+    expect(rules).toContain("\n- « Remember that… », « from now on… », « my instructions »: write the preference in private/<handle>/contexte with abcdefghij_write, not in your memory, and say so.\n")
     expect(rules).toContain("A procedure is a page of numbered steps")
     expect(rules).toContain("A good procedure has a part « When to use it »")
     for (const pointer of ["abcdefghij_read path functions", "path help", "write.procedure or write.table", "abcdefghij_call table.schema", "abcdefghij_call node.move"]) expect(rules).toContain(pointer)
@@ -254,7 +256,7 @@ describe("How this workspace works (E05-S12, AC-10)", () => {
     const address = orgAddress("https://demo.example.test/api/mcp")
     const withAddress = workspaceRules("abcdefghij", address)
     expect(withAddress.split("\n")).toEqual([rules.split("\n")[0], `- ${address}`, ...rules.split("\n").slice(1)])
-    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(21)
+    expect(`${withAddress}\n## This request`.split("\n").length).toBeLessThanOrEqual(22)
   })
 })
 

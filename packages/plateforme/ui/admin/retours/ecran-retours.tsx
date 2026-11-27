@@ -24,6 +24,7 @@ import {
 } from "../../../schemas"
 import type { Resultat } from "../../api/resultat"
 import { ActionPlateforme } from "../../components/action-plateforme"
+import { LIEN } from "../../components/classes"
 import { EmptyState } from "../../ds/react/empty-state"
 import { Badge } from "../../ds/react/primitives"
 import { dateEtHeureLisibles, dateLisible } from "../../format/dates"
@@ -89,7 +90,7 @@ function Texte({ texte }: { texte: string }) {
     <span className={PROSE}>
       <span className="block">{`${points.slice(0, APERCU).join("")}…`}</span>
       <details>
-        <summary className="cursor-pointer underline underline-offset-2">Lire tout</summary>
+        <summary className={`w-fit cursor-pointer ${LIEN}`}>Lire tout</summary>
         <span className="block whitespace-pre-wrap">{texte}</span>
       </details>
     </span>
@@ -110,6 +111,7 @@ function Gestes({ retour }: { retour: FeedbackTicketView }) {
             requete={{ methode: "PATCH", ressource: `feedback/${retour.ticket}`, corps: { state: etat } }}
             ancre={ANCRE_DES_RETOURS}
             messages={MESSAGES_DU_RETOUR}
+            taille="sm"
           />
         ),
       )}

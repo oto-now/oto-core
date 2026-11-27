@@ -64,7 +64,7 @@ export function RoutageDeLaDemande({ apercu, ...navigation }: Navigation & { ape
   const proches = candidats.filter((candidat) => candidat.path !== retenue?.path)
   return (
     <section aria-labelledby={TITRE_DU_ROUTAGE} className="flex flex-col gap-2">
-      <h2 id={TITRE_DU_ROUTAGE} className="text-base font-semibold text-ink">
+      <h2 id={TITRE_DU_ROUTAGE} className="oto-section-title">
         {TEST_D_UNE_DEMANDE.routage}
       </h2>
       <Island as="div">

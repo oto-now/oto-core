@@ -12,6 +12,7 @@ import { Prohibit } from "@phosphor-icons/react/dist/csr/Prohibit"
 import { ShieldCheck } from "@phosphor-icons/react/dist/csr/ShieldCheck"
 import { UsersThree } from "@phosphor-icons/react/dist/csr/UsersThree"
 import { ACCOUNT_LEVEL_NAMES, type AccountLevelName } from "../../../schemas"
+import { LIEN } from "../../components/classes"
 import { AnimatedIcon, Icon } from "../../ds/react/icon"
 import { Avatar } from "../../ds/react/primitives"
 import { Select, type SelectOption } from "../../ds/react/select"
@@ -103,7 +104,7 @@ export function LigneDeToutLOrganisation({ valeur, servi, actions, administre, d
 }
 
 /** Le style des liens discrets du partage : « Ouvrir à toute l'organisation », « Journal des partages ». */
-export const LIEN_DISCRET = "inline-flex items-center gap-1.5 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-ink"
+export const LIEN_DISCRET = "inline-flex items-center gap-1.5 text-sm focus-visible:ring-2 focus-visible:ring-ink"
 
 /**
  * « Ouvrir à toute l'organisation », sous les lignes tant qu'elle n'a pas d'accès : un lien qui l'ajoute en « Lire ».
@@ -116,7 +117,7 @@ export function OuvrirAToutLOrganisation({ ouvrir, refus, disabled = false }: { 
       type="button"
       aria-disabled={refus !== undefined || disabled || undefined}
       onClick={refus === undefined && !disabled ? ouvrir : undefined}
-      className={`${LIEN_DISCRET} self-start ${refus === undefined ? "text-ink underline underline-offset-2" : "cursor-default text-mute"}`}
+      className={`${LIEN_DISCRET} self-start ${refus === undefined ? LIEN : "cursor-default rounded-sm text-mute"}`}
     >
       <Icon as={UsersThree} size="xs" />
       Ouvrir à toute l&apos;organisation

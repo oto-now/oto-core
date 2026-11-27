@@ -84,7 +84,7 @@ beforeEach(() => {
     threads: [{ id: "f1", path: "ventes/grille", title: "Grille tarifaire", author: "Marc Petit", viaAssistant: false, excerpt: "Le tarif est-il à jour ?", at: "2026-09-20T08:00:00Z", unread: true }],
     more: 0,
   })
-  vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude Code", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
+  vi.mocked(lastConnections).mockResolvedValue([{ family: "Claude", signature: "claude-code@2.1.280", at: "2026-09-23T09:00:00Z" }])
 })
 
 afterEach(() => {
@@ -133,12 +133,11 @@ describe("/ page reads (AC-b1)", () => {
     ouvrirLeFil()
     expect(ilot("Reprendre").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/n/ventes/relance")
     expect(ilot("Lancer avec Claude").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
-    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code · dernière connexion le 23 septembre 2026")
-    // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête, et les procédures déjà lues (AC-11).
+    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude · dernière connexion le 23 septembre 2026")
+    // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête (AC-11).
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
-    const guide = within(screen.getByRole("dialog", { name: GUIDE })).getByRole("tabpanel", { name: "Claude Code" })
-    expect(within(guide).getByText("claude mcp add --transport http demo https://demo.example.test/api/mcp")).toBeInTheDocument()
-    expect(within(guide).getByRole("button", { name: "Copier la demande « Relancer les impayés »" })).toBeInTheDocument()
+    const guide = within(screen.getByRole("dialog", { name: GUIDE }))
+    expect(guide.getByText("https://demo.example.test/api/mcp")).toBeInTheDocument()
     expect(usefulProcedures).toHaveBeenCalledTimes(1)
     expect(previewContext).not.toHaveBeenCalled()
     expect(loadNode).not.toHaveBeenCalled()
@@ -153,7 +152,7 @@ describe("/ page reads (AC-b1)", () => {
 
     expect(screen.getAllByRole("alert").filter((alerte) => alerte.textContent !== "")).toHaveLength(1)
     expect(ilot("Reprendre").getAllByRole("alert").find((alerte) => alerte.textContent !== "")).toHaveTextContent(ECHEC)
-    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code")
+    expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude · dernière connexion")
   })
 
   it("should say once that the home could not be read when the identity cannot be resolved, reading nothing", async () => {

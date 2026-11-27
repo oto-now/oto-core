@@ -9,6 +9,7 @@ import { useRef, useState } from "react"
 import { Lightning } from "@phosphor-icons/react/dist/csr/Lightning"
 import type { AccountHealth, AccountProbe, ConnectorProbeInput } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
+import { LIEN } from "../../components/classes"
 import { Icon } from "../../ds/react/icon"
 import { Button } from "../../ds/react/primitives"
 import { useRafraichir } from "../../hote/rafraichir"
@@ -47,7 +48,7 @@ export function AnnonceDeLEssai({ essai }: { essai: Essai }) {
 export function DetailDuTest({ raison }: { raison: string }) {
   return (
     <details>
-      <summary className="cursor-pointer text-sm text-ink underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink">Détail du test</summary>
+      <summary className={`w-fit cursor-pointer text-sm ${LIEN}`}>Détail du test</summary>
       <p lang="en" className="oto-caption">
         {raison}
       </p>

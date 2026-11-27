@@ -166,14 +166,14 @@ graph LR
 | Connexion, mot de passe oublié | oto-frontend | Email et mot de passe, lien magique, Google et Microsoft ; thème de l'organisation de l'adresse ; « Données hébergées en France ». Avec un émetteur OIDC, la page de l'émetteur |
 | Aucune organisation | Description | Le nom et l'email de l'admin à qui demander |
 | Consentement OAuth | Description | Client, compte, organisation, à sa marque ; avertit un non-membre que l'assistant aura accès au compte entier |
-| Brancher mon Claude, ChatGPT ou Mistral | oto-frontend | Guide par host en onglets (claude.ai, ChatGPT, Mistral, Claude Code) : adresse, nom recommandé, phrase de préférences, prompts d'exemple ; dernières connexions. En fenêtre depuis l'accueil et sur `/connect` |
+| Brancher mon Claude, ChatGPT ou Mistral | oto-frontend | Un guide en deux temps, le même pour Claude, ChatGPT et Mistral : nom et adresse du connecteur avec liens directs, puis phrase de préférences ; dernières connexions. En fenêtre depuis l'accueil et sur `/connect` |
 
 | ID | Exigence | Priorité | État |
 |---|---|---|---|
 | FR-CONN-01 | Connexion web par email et mot de passe ou lien magique ; un compte ne se crée que sur une invitation en attente ; une personne sans appartenance voit à qui demander. Avec un émetteur OIDC, l'invitation part par un email de la plateforme, au service d'envoi de l'hôte | Must | Livrée |
 | FR-CONN-02 | Connexion des assistants en OAuth 2.1 : découverte sur un 401, enregistrement dynamique et consentement par le serveur d'autorisation de l'hôte, jeton vérifié à chaque appel, jamais de mode anonyme (détail : `docs/conception/identite-et-connexion.md`) | Must | Livrée |
 | FR-CONN-03 | L'organisation vient de l'adresse appelée, jamais du jeton (avec Supabase Auth, le jeton n'est lié à aucune ressource) ; l'appartenance est revérifiée à chaque appel : retirer un membre coupe son accès dès l'appel suivant, révoquer un assistant coupe au rafraîchissement du jeton (une heure) | Must | Livrée |
-| FR-CONN-04 | Page « Brancher mon Claude, ChatGPT ou Mistral », aussi en fenêtre depuis l'accueil : guide par host (claude.ai, ChatGPT, Mistral, Claude Code) avec adresse du serveur, nom recommandé, phrase de préférences, demandes à essayer tirées de ses procédures les plus utilisées, état de ses connexions ; les métadonnées OAuth y renvoient | Should | Livrée |
+| FR-CONN-04 | Page « Brancher mon Claude, ChatGPT ou Mistral », aussi en fenêtre depuis l'accueil : guide en deux temps, le même pour Claude, ChatGPT et Mistral : nom et adresse du serveur avec liens directs, puis phrase de préférences ; état de ses connexions ; les métadonnées OAuth y renvoient | Should | Livrée |
 | FR-CONN-05 | Google et Microsoft, pour les seules personnes invitées ; SAML sur exigence d'un client, réglé chez l'émetteur de l'hôte (ADR-004) | Could | Livrée pour Google et Microsoft ; SAML : V2, à la première exigence |
 
 | ID | Catégorie | Exigence | Cible | État |

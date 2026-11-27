@@ -9,6 +9,7 @@
 import { useEffect, useId, useState } from "react"
 import { Input } from "../../ds/react/forms"
 import { Button } from "../../ds/react/primitives"
+import { Progress } from "../../ds/react/progress"
 import { CarteDeFichier } from "../fichier-du-bloc"
 import { FICHIERS } from "../libelles-des-fichiers"
 import { RenduDUnBloc } from "../rendu-des-blocs"
@@ -52,10 +53,8 @@ export function DepotEnCours({ cle, depot }: { cle: string; depot: Depot }) {
           </p>
         </>
       ) : (
-        <label className="flex flex-col gap-1 text-sm text-ink">
-          {FICHIERS.envoi(nom)}
-          <progress value={depot.progression} max={1} />
-        </label>
+        // La progression va de 0 à 1, montrée en pour cent.
+        <Progress label={FICHIERS.envoi(nom)} value={Math.round(depot.progression * 100)} max={100} />
       )}
       <div>
         <Button variant="ghost" size="sm" aria-label={refuse ? FICHIERS.retirerNom(nom) : FICHIERS.annulerNom(nom)} onClick={() => gestes.annulerLEnvoi(cle)}>

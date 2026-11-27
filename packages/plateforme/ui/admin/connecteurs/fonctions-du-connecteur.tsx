@@ -31,27 +31,21 @@ export function classesDuNiveau(niveau: Exclude<AccountLevelName, "none">): Clas
 function Groupe({ titre, glyphe, avant, noms }: { titre: string; glyphe: Glyphe; avant?: string; noms: string[] }) {
   const nombre = nombreDeFonctions(noms.length)
   return (
-    <li className="rounded-lg ring-1 ring-inset ring-hair">
-      <details className="group">
-        <summary
-          aria-label={`${titre}${avant ? `, ${avant}` : ""}. ${nombre}, afficher la liste`}
-          className="flex cursor-pointer list-none items-center gap-3 rounded-lg p-3 text-ink focus-visible:ring-2 focus-visible:ring-ink"
-        >
-          <span aria-hidden="true" className="flex size-7 flex-none items-center justify-center rounded-md bg-card">
-            <Icon as={glyphe} size="sm" />
-          </span>
+    <li>
+      <details className="oto-accordion-item">
+        <summary aria-label={`${titre}${avant ? `, ${avant}` : ""}. ${nombre}, afficher la liste`} className="oto-accordion-trigger focus-visible:ring-2 focus-visible:ring-ink">
+          <Icon as={glyphe} size="sm" />
           <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-            <span className="font-semibold">{titre}</span>
+            {titre}
             {avant && <span className="oto-caption">{avant}</span>}
           </span>
           <span className="oto-caption flex-none">{nombre}</span>
-          <span aria-hidden="true" className="flex-none transition-transform group-open:rotate-180 motion-reduce:transition-none">
-            <Icon as={CaretDown} size="xs" />
-          </span>
+          <Icon as={CaretDown} size="xs" className="oto-accordion-chevron" />
         </summary>
-        <ul className="flex flex-col gap-1 px-3 pb-3 pl-13">
+        {/* Sous le titre, au-delà du glyphe (16 px) et de l'écart du déclencheur (10 px). */}
+        <ul className="oto-accordion-body flex flex-col gap-1 pl-6.5">
           {noms.map((nom) => (
-            <li key={nom} className="font-mono text-sm text-ink">
+            <li key={nom} className="font-mono text-ink">
               {nom}
             </li>
           ))}
@@ -77,11 +71,11 @@ export function FonctionsDuConnecteur({ titre, fonctions, classes = ["read", "wr
     .filter(({ noms }) => noms.length > 0)
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-base font-bold text-ink">{titre}</h3>
+      <h3 className="oto-section-title">{titre}</h3>
       {groupes.length === 0 ? (
         <p className="oto-caption">Les fonctions de cet outil ne sont pas décrites dans cette version de la plateforme.</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="oto-accordion">
           {groupes.map(({ classe, titre: libelle, glyphe, avant, noms }) => (
             <Groupe key={classe} titre={libelle} glyphe={glyphe} avant={avant} noms={noms} />
           ))}

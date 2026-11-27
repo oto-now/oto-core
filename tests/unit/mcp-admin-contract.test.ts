@@ -77,7 +77,7 @@ const PROPERTIES: Record<string, string[]> = {
   ],
   admin_team: ["ctx", "op", "org", "team", "name", "email", "confirm"],
   admin_node: ["ctx", "op", "org", "path", "new_path", "owner", "subject", "level", "confirm"],
-  admin_connector: ["ctx", "op", "org", "connector", "account", "owner", "mode", "subject", "level", "address", "confirm"],
+  admin_connector: ["ctx", "op", "org", "connector", "account", "owner", "mode", "subject", "level", "address", "confirm", "filter", "cursor"],
   admin_journal: ["ctx", "op", "org", "code", "team", "email", "errors", "days", "cursor"],
   admin_feedback: ["ctx", "op", "org", "ticket", "state", "type", "resolution", "days", "cursor"],
   admin_cell: ["ctx", "op"],

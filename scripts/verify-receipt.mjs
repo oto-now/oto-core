@@ -108,7 +108,11 @@ export function worktreeHash(root = ROOT) {
   } else {
     // Sans commit, l'index est tout le contenu suivi : l'ignorer rendait l'empreinte aveugle à tout
     // fichier indexé, et `git add -A` avant le commit initial invalidait le reçu (coupe en oto-pkg et oto-saas).
-    modifies.push(...lines(g(['ls-files', '--cached'])))
+    // Un fichier indexé puis supprimé du disque compte comme supprimé : passé à `hash-object --stdin-paths`, il
+    // faisait échouer le lot entier, et le repli fichier par fichier coûtait deux minutes à chaque empreinte.
+    const disparus = new Set(lines(g(['ls-files', '--deleted'])))
+    for (const path of disparus) supprimes.add(path)
+    modifies.push(...lines(g(['ls-files', '--cached'])).filter((path) => !disparus.has(path)))
   }
 
   const paths = [

@@ -5,9 +5,10 @@
 // valeurs de l'écran répéteraient chacune leur copie et leur statut.
 //
 // Porté d'oto-frontend (`src/components/shared/lien-copiable.tsx`, forme `entier`) : la valeur en `code`
-// mono qui prend la ligne (`min-w-0 flex-1`), le bouton secondaire `sm` du design system au glyphe de
+// mono qui prend la ligne (`min-w-0 grow`), le bouton secondaire `sm` du design system au glyphe de
 // copie, qui ne rétrécit pas ; ce qui s'affiche est ce qui se copie (une seule prop). Changé : la valeur
-// passe à la ligne entre les mots (`break-words` : une phrase de préférences garde ses mots) ; la copie
+// passe à la ligne entre les mots (`break-words` : une phrase de préférences garde ses mots) et garde ses
+// lignes (`whitespace-pre-line` : une phrase sur plusieurs lignes se lit comme elle se copie) ; la copie
 // se dit dans une région montée vide, « Copié » puis rien, ou « Copie impossible » (oto-frontend avalait
 // l'échec) ; le nom accessible du bouton dit ce qu'il copie. Retiré : la forme `tronque`.
 import { useEffect, useState } from "react"
@@ -43,8 +44,9 @@ export function ValeurCopiable({ valeur, cible }: ValeurCopiableProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-2">
-        <code className="oto-mono min-w-0 flex-1 select-all break-words">{valeur}</code>
+      {/* La rangée passe à la ligne : sous 24 caractères de place, « Copier » descend sous la valeur au lieu de l'écraser. */}
+      <div className="flex flex-wrap items-start gap-2">
+        <code className="oto-mono min-w-0 grow basis-[24ch] select-all whitespace-pre-line break-words">{valeur}</code>
         <Button
           variant="secondary"
           size="sm"

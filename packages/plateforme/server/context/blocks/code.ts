@@ -28,6 +28,7 @@ export const WORKSPACE_RULES = `${SERVED_RULES.title}
 - In the middle of a task, when you need something the procedure you follow does not give (another team's content, another topic), run <p>_find before you answer or escalate.
 - Every content has a path (e.g. <team>/<page>) and a kind: page (text in blocks), table (rows, through <p>_call table.rows, table.aggregate and table.write), procedure (steps to follow, each call in a call block) or context (the sections below: already served, read one only when it says it was cut). Never put a procedure under a procedure: its sub-steps are pages under it, linked from its steps.
 - Spaces: the organisation's contents sit at the root, a team's under its folder (<team>/...), yours under private/<handle>/, served to you only.
+- « Remember that… », « from now on… », « my instructions »: write the preference in private/<handle>/contexte with <p>_write, not in your memory, and say so.
 - Access is set per content, for the organisation, a team or a person: read, write or manage. A refusal says who to ask: never work around it.
 - <p>_write publishes at once: an assistant keeps no draft. To edit, pass base_revision = the revision you read, or the one your last write returned.
 - A renamed or moved content keeps its old path: it still leads there.

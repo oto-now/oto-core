@@ -66,8 +66,8 @@ describe.skipIf(!sqlConfigured)(
       // Les instants comparés, pas leur graphie ; le texte est celui de PostgREST (décalage horaire, jamais `Z`).
       expect(isoInstants(connections)).toEqual([
         { family: "ChatGPT", signature: "openai-mcp@1.0.0", at: T3 },
-        { family: "Claude Code", signature: "claude-code@2.1.280", at: T2 },
-        { family: "claude.ai", signature: "claude-ai@0.1.0", at: T1 },
+        // claude-code et claude-ai, un seul assistant : la plus récente des deux.
+        { family: "Claude", signature: "claude-code@2.1.280", at: T2 },
         { family: "Client non identifié", signature: "?@?", at: T4 },
         { family: "foo", signature: "foo@1", at: T5 },
       ])

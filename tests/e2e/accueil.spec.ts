@@ -7,8 +7,8 @@ import { ESPACE, SANS_ESPACE } from "./fixtures/espace"
 // L'accueil porté d'oto-frontend (E05-S09, partie b), en contrôle visuel connecté : le compte E2E,
 // administrateur de l'organisation de la campagne (`espace.ts`), en clair puis en sombre. La connexion ouvre
 // l'accueil ; le champ de recherche ouvre la palette du rail ; « Brancher » ouvre la grande fenêtre du guide
-// (E11-S09, AC-10, AC-16) : l'adresse du serveur de l'adresse dans l'onglet ouvert, la flèche → passe à
-// ChatGPT, Échap ferme et rend le focus à « Brancher », rien ne déborde à 375 px ; aucune erreur
+// (E11-S09, AC-10, AC-16) : l'adresse du serveur de l'adresse, sans onglets, Échap ferme et rend le focus à
+// « Brancher », rien ne déborde à 375 px ; aucune erreur
 // d'hydratation. Captures de l'accueil pour la comparaison avec `reel-01-accueil.png` (AC-x1), puis dans
 // les huit thèmes, posés sur la racine `.oto` de la page, sans écrire la marque (AC-x3).
 
@@ -60,18 +60,11 @@ test.describe("l'accueil", () => {
         await brancher.click()
         const dialogue = page.getByRole("dialog", { name: GUIDE })
         await expect(dialogue).toHaveAttribute("data-size", "lg")
-        await expect(dialogue.getByRole("tabpanel").getByText(`${ADRESSE}/api/mcp`, { exact: true })).toBeVisible()
+        await expect(dialogue.getByText(`${ADRESSE}/api/mcp`, { exact: true })).toBeVisible()
         await expect(dialogue.getByRole("link", { name: /Guides d'installation/ })).toHaveCount(0)
-        const choisi = dialogue.getByRole("tab", { selected: true })
-        await choisi.focus()
-        await page.keyboard.press("ArrowRight")
-        await expect(dialogue.getByRole("tab", { name: "ChatGPT" })).toBeFocused()
-        await expect(dialogue.getByRole("tabpanel", { name: "ChatGPT" })).toBeVisible()
+        await expect(dialogue.getByRole("tablist")).toHaveCount(0)
         await auRepos(dialogue)
         await page.screenshot({ path: testInfo.outputPath(`accueil-brancher-${mode}.png`), caret: "initial" })
-        await dialogue.getByRole("tab", { name: "Mistral" }).click()
-        await auRepos(dialogue)
-        await page.screenshot({ path: testInfo.outputPath(`accueil-brancher-mistral-${mode}.png`), caret: "initial" })
         // À 375 px, la page ne défile pas en largeur : le corps de la fenêtre défile seul (AC-10).
         await page.setViewportSize({ width: 375, height: 800 })
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

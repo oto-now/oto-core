@@ -45,10 +45,13 @@ export function sectionDuChemin(chemin: string, equipes: Equipes | null, handle:
 
 /**
  * Le titre montré du Contexte de ce chemin, « Contexte · <section> » (E05-S11, AC-17) : le `<h1>` de l'écran et
- * le `<title>` que la page de l'hôte pose (AC-17, AC-18) ; sans lui, les deux se composeraient chacun.
+ * le `<title>` que la page de l'hôte pose (AC-17, AC-18) ; sans lui, les deux se composeraient chacun. « Mes instructions »
+ * pour le Contexte privé de la personne seule : celui d'un autre, qu'une règle lui partage, reste « Contexte · Privé ».
  */
 export function titreDuContexte(chemin: string, equipes: Equipes | null, handle: string | null): string {
-  return titreDeContexte(sectionDuChemin(chemin, equipes, handle).titre)
+  const section = sectionDuChemin(chemin, equipes, handle)
+  const [premier, espace] = chemin.split("/")
+  return premier === PERSO && espace !== handle ? `Contexte · ${section.titre}` : titreDeContexte(section.titre)
 }
 
 /** La liste qui range un chemin dans les sections (ses frères, lui compris), dans l'ordre du rail. */

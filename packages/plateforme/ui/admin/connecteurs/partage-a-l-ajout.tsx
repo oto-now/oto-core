@@ -200,7 +200,7 @@ export function PartageALAjout({ partage, changer, proprietaire, nomDeMoi, sujet
   const organisation = partage.general === null ? { refus: refusDeLOrganisation, ajouter: () => changer({ ...partage, general: "read" }) } : undefined
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
-      <h3 ref={titre} id={id} tabIndex={-1} className="text-base font-bold text-ink">
+      <h3 ref={titre} id={id} tabIndex={-1} className="oto-section-title">
         Qui pourra s&apos;en servir
       </h3>
       <div className="oto-share-panel">

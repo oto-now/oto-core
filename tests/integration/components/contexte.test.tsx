@@ -124,7 +124,7 @@ describe("écran d'un Contexte (AC10)", () => {
   it.each([
     ["contexte", "Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'organisation, lit à chaque conversation."],
     // Le `handle` de la personne : son propre Contexte Perso lui est servi.
-    ["private/lea/contexte", "Ce que votre assistant lit à chaque conversation ; vous seul le recevez."],
+    ["private/lea/contexte", "Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez."],
     // Le Contexte Perso d'une autre personne, qu'elle a partagé : servi à elle seule (HN-E05S04-22).
     ["private/marc/contexte", "Ce que l'assistant de la personne de cet espace lit à chaque conversation ; elle seule le reçoit."],
   ])("should say in one sentence who receives %s", (chemin, phrase) => {
@@ -140,6 +140,23 @@ describe("écran d'un Contexte (AC10)", () => {
     monterLesAnnexes({ cheminCourant: "private/lea/contexte" })
     expect(screen.queryByRole("region", { name: "Ma fiche" })).toBeNull()
     expect(screen.queryByText("Ma fiche")).toBeNull()
+  })
+
+  // « Mes instructions » : la phrase de reprise, sur le Contexte privé de la personne seulement, copiée telle quelle.
+  it("should give the take-over sentence to copy on the person's own Contexte only", async () => {
+    const ecrire = vi.fn(async () => {})
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: ecrire }, configurable: true })
+    monterLesAnnexes({ cheminCourant: "private/lea/contexte" })
+    const reprise = within(screen.getByRole("note", { name: "Reprendre vos préférences" }))
+    expect(reprise.getByText("Range mes préférences actuelles dans mes instructions Oto, sans doublon")).toBeInTheDocument()
+    fireEvent.click(reprise.getByRole("button", { name: "Copier la phrase de reprise" }))
+    await waitFor(() => expect(ecrire).toHaveBeenCalledWith("Range mes préférences actuelles dans mes instructions Oto, sans doublon"))
+    cleanup()
+    for (const chemin of ["ventes/contexte", "contexte", "private/marc/contexte"]) {
+      monterLesAnnexes({ cheminCourant: chemin })
+      expect(screen.queryByRole("note", { name: "Reprendre vos préférences" })).toBeNull()
+      cleanup()
+    }
   })
 })
 
@@ -226,7 +243,7 @@ describe("voici ce que votre agent va lire (AC12 ; E05-S11, AC-9 à AC-11)", () 
     // Sans « Règles Oto » (E11-S10, AC-g2) : les autres lignes gardent l'ancre de leur rang d'origine.
     expect(couches).toEqual([
       ["Contexte : Tout le monde", null],
-      ["Contexte : Privé", null],
+      ["Mes instructions", null],
       ["Contexte : équipe Ventes (ce contexte)", "page"],
       ["Contenus récents et nouveautés", null],
       ["calendar", null],

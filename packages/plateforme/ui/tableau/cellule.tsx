@@ -47,9 +47,6 @@ export function valeurDe(ligne: TableRowRead, colonne: TableColumn, cle: string)
   return Object.hasOwn(ligne.set, colonne.name) ? ligne.set[colonne.name] : colonne.name === cle ? ligne.key : undefined
 }
 
-/** Un lien du détail : gris comme le détail, souligné comme tout lien (AC-a2). */
-const LIEN_DU_DETAIL = "rounded-sm text-mute underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink"
-
 function LienExterne({ href, children, className = LIEN, title }: { href: string; children: string; className?: string; title?: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={className} title={title}>
@@ -73,7 +70,7 @@ function DetailDeProvenance({ colonne, provenance, raison }: DetailProps) {
   const quand = dateEtHeureLisibles(provenance.at)
   const { comment, link, imported } = provenance
   return (
-    <div className="min-w-64 max-w-(--reader-measure) space-y-0.5 text-xs text-mute">
+    <div className="oto-caption min-w-64 max-w-(--reader-measure) space-y-0.5">
       <p>{origine(provenance, raison)}</p>
       {quand && <p>{PROVENANCE.le(quand)}</p>}
       {comment && <p className="whitespace-pre-line">{PROVENANCE.commentaire(comment)}</p>}
@@ -81,7 +78,7 @@ function DetailDeProvenance({ colonne, provenance, raison }: DetailProps) {
         <p>
           {PROVENANCE.preuve}
           {EXTERNE.test(link) ? (
-            <LienExterne href={link} className={LIEN_DU_DETAIL}>
+            <LienExterne href={link}>
               {link}
             </LienExterne>
           ) : (

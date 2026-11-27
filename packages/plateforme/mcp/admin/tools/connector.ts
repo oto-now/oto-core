@@ -6,16 +6,15 @@ import * as z from "zod/v4"
 import { accountOwnerRefSchema, connectorRefSchema, createAccountSchema, orgSlugSchema, setAccountRuleSchema, type AccountView, type OrgConnector } from "../../../schemas"
 import { findAccount, ownerWords, readRef, resolveRef } from "../../../server/admin/context"
 import { ownerDescription } from "../../../server/admin/nodes"
-import type { CatalogFunction } from "../../../server/catalog/define"
-import { catalogFunctions } from "../../../server/catalog/registry"
 import { disableAccount } from "../../../server/connectors/account-changes"
 import { quotedDescription } from "../../../server/connectors/account-refusals"
 import { createAccount, listOrgAccounts, markWords } from "../../../server/connectors/accounts"
 import { activateConnector, deactivateConnector, deactivationImpact, listConnectorsForOrg } from "../../../server/connectors/activations"
-import { isSimulatedConnector, modeLabel } from "../../../server/connectors/modes"
+import { modeLabel } from "../../../server/connectors/modes"
 import { listAccountRules, removeAccountRule, setAccountRule } from "../../../server/rules"
-import { day, firstOf, listLines, nothingWas, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
+import { firstOf, listLines, nothingWas, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { noRuleFor, readSubject, ruleOf, rulesOutput, ruleSetText } from "../rule-texts"
+import { activableData, catalogue } from "./catalogue"
 import { HOST_API_OPS } from "./host-api"
 
 /** Chemins de procédures nommés au plus par le récapitulatif d'une désactivation (AC9). */
@@ -23,53 +22,6 @@ const PROCEDURES_NAMED = 10
 const ACCOUNT_DEFAULTS =
   "Without a rule, members read an organisation account, its team uses a team account up to its sensitive functions, its owner manages a personal one. A sensitive function needs the level sensitive, above write."
 const AFTER_ACCOUNT_RULES = ["admin_connector account_rules"]
-
-type Fn = { name: string; class: string }
-type ConnectorData = { name: string; kind: "simulated" | "live" | "built_in" | "application"; activable: boolean; state: string; since: string | null; functions: Fn[] }
-
-const fnText = (functions: readonly Fn[]) => functions.map((fn) => `${fn.name} (${fn.class})`).join(", ")
-
-function activableData(connector: OrgConnector): ConnectorData {
-  const { state, activatedAt, functions } = connector
-  return { name: connector.connector, kind: kindOf(connector.connector), activable: true, state, since: activatedAt, functions }
-}
-
-/** Un connecteur activable est simulé (`mail`) ou réel (H85). */
-const kindOf = (connector: string) => (isSimulatedConnector(connector) ? "simulated" : "live")
-
-/**
- * « - mail (simulated): active since <date> by <nom> — mail.create_draft (write), … » (AC7) ; un connecteur réel dit
- * `live` (H85). Jamais touché : `open by default` ; bloqué par un administrateur : `inactive`.
- */
-function activableLine(connector: OrgConnector): string {
-  const functions = fnText(connector.functions)
-  const kind = kindOf(connector.connector)
-  if (connector.state !== "active") return `- ${connector.connector} (${kind}): inactive — ${functions}`
-  if (!connector.activatedAt) return `- ${connector.connector} (${kind}): open by default — ${functions}`
-  const by = connector.activatedBy?.name ? ` by ${connector.activatedBy.name}` : ""
-  return `- ${connector.connector} (${kind}): active since ${day(connector.activatedAt)}${by} — ${functions}`
-}
-
-/** Les fonctions toujours actives, lues au registre (H81, N15) : natives par connecteur, puis celles de l'application (ERP). */
-function alwaysActive(functions: readonly CatalogFunction[]): { lines: string[]; data: ConnectorData[] } {
-  const fnOf = (fn: CatalogFunction): Fn => ({ name: fn.name, class: fn.class })
-  const native = new Map<string, Fn[]>()
-  for (const fn of functions.filter((candidate) => candidate.origin === "paquet")) native.set(fn.connector, [...(native.get(fn.connector) ?? []), fnOf(fn)])
-  const application = functions.filter((fn) => fn.origin === "erp").map(fnOf)
-  const fixed = (name: string, kind: ConnectorData["kind"], list: Fn[]): ConnectorData => ({ name, kind, activable: false, state: "always_active", since: null, functions: list })
-  const data = [...native].map(([name, list]) => fixed(name, "built_in", list))
-  const lines = data.map((entry) => `- ${entry.name} (built in): always active — ${fnText(entry.functions)}`)
-  if (application.length === 0) return { lines, data }
-  return { lines: [...lines, `- application functions: always active — ${fnText(application)}`], data: [...data, fixed("application", "application", application)] }
-}
-
-async function catalogue(call: OpCall): Promise<AdminOutput> {
-  const identity = targetOf(call)
-  const connectors = await listConnectorsForOrg(call.deps.db, identity)
-  const fixed = alwaysActive(catalogFunctions())
-  const text = [...connectors.map(activableLine), ...fixed.lines].join("\n") || "No connector in the catalogue."
-  return { text, data: { connectors: [...connectors.map(activableData), ...fixed.data] }, nextActions: ["admin_connector accounts", "admin_connector activate"] }
-}
 
 /** L'état du connecteur nommé dans l'organisation, lu avant d'écrire (AC8, AC9) ; `undefined` : ni activable ni connu. */
 async function stateOf(call: OpCall, connector: string): Promise<OrgConnector | undefined> {
@@ -229,10 +181,11 @@ export const CONNECTOR_OPS: OpTable = {
     run: async () => ({ text: renderHelp("admin_connector", CONNECTOR_OPS), nextActions: [] }),
   },
   catalogue: {
-    schema: z.object({ org: orgSlugSchema }),
+    schema: z.object({ org: orgSlugSchema, filter: z.string().trim().max(100).optional(), cursor: z.string().max(200).optional() }),
     org: "target",
     twoStep: false,
-    summary: "Lists the connectors you can activate with their state and functions, then the functions that are always active.",
+    summary:
+      "Lists the connectors you can activate with their state and functions, then the functions that are always active. filter keeps those whose name, label, tool domain or description contains it; a long catalogue comes in pages with its total and a next_cursor.",
     example: { org: "acme" },
     refusals: [],
     run: catalogue,

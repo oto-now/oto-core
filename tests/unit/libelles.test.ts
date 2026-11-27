@@ -9,8 +9,7 @@ import { nomDeLAssistant } from "../../packages/plateforme/ui/tableau/libelles"
 
 describe("nomDeLAssistant (E11-S05, AC-h1)", () => {
   it.each([
-    ["claude.ai", "Claude"],
-    ["Claude Code", "Claude"],
+    ["Claude", "Claude"],
     ["ChatGPT", "ChatGPT"],
     ["mistral-le-chat", "votre assistant"],
     [undefined, "votre assistant"],

@@ -3,6 +3,7 @@
 // (`api/messages.ts`) : l'écran et le refus disent la même limite. Server Component : rien ne s'y passe au clic. Sans
 // lui, un geste refusé ne se saurait qu'après l'envoi.
 import type { LimitState } from "../../schemas"
+import { LIEN } from "../components/classes"
 import { Button } from "../ds/react/primitives"
 
 /** Les limites comptées que disent les écrans (`orgLimitsSchema`). */
@@ -56,7 +57,7 @@ export function LimiteAtteinte({ libelle, nom, etat, lien }: LimiteAtteinteProps
         {lien && (
           <>
             {" "}
-            <a href={lienDeLimite(lien, nom)} className="text-ink underline underline-offset-2">
+            <a href={lienDeLimite(lien, nom)} className={LIEN}>
               Relever la limite
             </a>
           </>

@@ -138,7 +138,7 @@ test.describe("E05-S13 : les retours du soir", () => {
         const prive = await rail.locator('a[href^="/n/private/"][href$="/contexte"]').first().getAttribute("href")
         if (largeur < 768) await page.keyboard.press("Escape")
         await page.goto(`${ESPACE.adresse}${prive ?? ""}`)
-        await attendre((await ouvrirAQuoiSert(page)).getByText("Ce que votre assistant lit à chaque conversation ; vous seul le recevez.", { exact: true })).toBeVisible()
+        await attendre((await ouvrirAQuoiSert(page)).getByText("Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez.", { exact: true })).toBeVisible()
 
         // AC-20 : ni une page, ni une procédure, ni un tableau n'ont « Déplacer » en tête.
         for (const chemin of [CHEMINS.grilleTarifaire, CHEMINS.procedure, CHEMINS.tableau]) {

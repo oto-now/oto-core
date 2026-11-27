@@ -25,6 +25,7 @@ import { EmptyState } from "../ds/react/empty-state"
 import { FeedItem } from "../ds/react/home"
 import { AnimatedIcon } from "../ds/react/icon"
 import { Avatar } from "../ds/react/primitives"
+import { Tooltip } from "../ds/react/tooltip"
 import { dateCourte, dateLisible, heureCourte } from "../format/dates"
 import { useHote } from "../hote/navigation"
 import { PERSONNE_RETIREE } from "../journal/libelles"
@@ -149,17 +150,22 @@ function LigneDuFil({ activite, moi, prefixeDesPages, modeleDeConversation }: Om
   return (
     <div className="oto-fil-rangee">
       {ligne}
-      <Lien
-        href={modeleDeConversation.replace(MARQUE_DE_CONVERSATION, encodeURIComponent(activite.ctx))}
-        className="oto-icon-btn anim-host"
-        data-variant="ghost"
-        data-size="sm"
-        data-icon-only=""
-        aria-label={ACTIVITES.voirLaConversation(activite.title ?? activite.path)}
-        title={ACTIVITES.conversation}
-      >
-        <AnimatedIcon as={Notebook} size="xs" />
-      </Lien>
+      {/* Le déclencheur de l'infobulle est un `<span>`, qui prend la ref : le `Lien` de l'hôte ne promet pas de la transmettre
+          (portage-ecrans.md § 2) ; le survol et le focus du lien remontent jusqu'à lui. */}
+      <Tooltip content={ACTIVITES.conversation}>
+        <span className="flex flex-none">
+          <Lien
+            href={modeleDeConversation.replace(MARQUE_DE_CONVERSATION, encodeURIComponent(activite.ctx))}
+            className="oto-icon-btn anim-host"
+            data-variant="ghost"
+            data-size="sm"
+            data-icon-only=""
+            aria-label={ACTIVITES.voirLaConversation(activite.title ?? activite.path)}
+          >
+            <AnimatedIcon as={Notebook} size="xs" />
+          </Lien>
+        </span>
+      </Tooltip>
     </div>
   )
 }
