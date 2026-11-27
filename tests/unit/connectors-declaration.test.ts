@@ -20,6 +20,13 @@ afterEach(() => {
 
 const declaredNames = () => catalogFunctions().filter((fn) => fn.connector === "crm").map((fn) => fn.name)
 
+/** Un logo tel que la bibliothèque le stocke : le base64 de `size` octets qui commencent par la signature PNG. */
+function pngLogo(size: number): string {
+  const bytes = new Uint8Array(size)
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10])
+  return Buffer.from(bytes).toString("base64")
+}
+
 /** Le connecteur de test, une fonction (par son nom court) remplacée par `change`. */
 function withFunction(short: string, change: (fn: ConnectorFunctionDefinition) => ConnectorFunctionDefinition): ConnectorView {
   const base = describedConnector()
@@ -84,9 +91,9 @@ describe("registerConnectors", () => {
     expect(checkArguments(fn.schema, {})).toEqual({ success: false, issues: [{ path: ["contact_id"], message: "Required", code: "required" }] })
   })
 
-  it("should accept a description and a logo domain, and serve the description in the contract and atop the connector in the list", () => {
+  it("should accept a description, a PNG logo of 16 KB and a logo domain, and serve the description in the contract and atop the connector in the list", () => {
     const description = "Crm is the sales CRM of the team. Use it for companies and their contacts, never for invoices."
-    registerConnectors([{ ...describedConnector(), description, logoDomain: "crm.example.co.uk" }])
+    registerConnectors([{ ...describedConnector(), description, logo: pngLogo(16 * 1024), logoDomain: "crm.example.co.uk" }])
     const contact = findFunction(catalogFunctions(), "crm.get_contact")
     if (!contact) throw new Error("crm.get_contact is not declared")
     const lines = describeFunction(contact, "acme").text.split("\n")
@@ -120,6 +127,18 @@ describe("registerConnectors", () => {
     ["an empty description", () => [{ ...describedConnector(), description: "  " }], "crm: description must be 1 to 2000 characters."],
     ["a description too long", () => [{ ...describedConnector(), description: "a".repeat(2001) }], "crm: description must be 1 to 2000 characters."],
     ["a description that is not text", () => [{ ...describedConnector(), description: 42 } as unknown as ConnectorView], "crm: description must be 1 to 2000 characters."],
+    // Le logo stocké par la bibliothèque : base64 sans préfixe d'une image PNG de 16 Ko au plus.
+    ...(
+      [
+        ["a logo over 16 KB", pngLogo(16 * 1024 + 1)],
+        ["a logo that is not a PNG", Buffer.from("GIF89a-not-a-png").toString("base64")],
+        ["a logo with a data: prefix", `data:image/png;base64,${pngLogo(8)}`],
+        ["a logo that is not base64", `${pngLogo(8)}!`],
+        ["an empty logo", ""],
+      ] as const
+    ).map(([cas, logo]): [string, () => ConnectorView[], string] => [cas, () => [{ ...describedConnector(), logo }], "crm: logo must be a base64 PNG of 16 KB at most."]),
+    // Un nombre, que le type refuse : la déclaration vient d'un module JavaScript de l'hôte, que rien ne type.
+    ["a logo that is not text", () => [{ ...describedConnector(), logo: 42 } as unknown as ConnectorView], "crm: logo must be a base64 PNG of 16 KB at most."],
     ...(["https://crm.example.test", "crm.example.test/app", "Crm.Example.test", "crm.example.test:443", "crm", "crm.example.test.", "-crm.example.test", ""] as const).map(
       (logoDomain): [string, () => ConnectorView[], string] => [
         `a logo domain ${JSON.stringify(logoDomain)}`,

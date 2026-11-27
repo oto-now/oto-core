@@ -257,10 +257,14 @@ function nodeLines(node: NodeMatch, index: number, prefix: string): string[] {
   return [`${index + 1}. ${node.path} (${node.kind}, score ${formatScore(node.score)}): ${title}. ${summary}`, ...blocks, ...hidden, ...edit]
 }
 
-/** Un nœud en une ligne : chemin, genre, score, titre et début du résumé ; les suivants de `find`, les contenus proches de `context`. */
-export function otherLine(node: Pick<NodeMatch, "path" | "kind" | "title" | "summary" | "score">): string {
+/**
+ * Un nœud en une ligne : chemin, genre, score, titre et début du résumé ; les suivants de `find`, les contenus proches de
+ * `context`, qui ne portent pas le score (`score: false`, contexte plus court : il sert l'auteur, que l'aperçu renseigne).
+ */
+export function otherLine(node: Pick<NodeMatch, "path" | "kind" | "title" | "summary" | "score">, options: { score: boolean } = { score: true }): string {
   const { item, kindStart, score, textStart, summaryStart } = SERVED_RELATED
-  return `${item}${node.path}${kindStart}${node.kind}${score}${formatScore(node.score)}${textStart}${cut(`${oneLine(node.title)}${summaryStart}${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
+  const scored = options.score ? `${score}${formatScore(node.score)}` : ""
+  return `${item}${node.path}${kindStart}${node.kind}${scored}${textStart}${cut(`${oneLine(node.title)}${summaryStart}${oneLine(node.summary)}`, OTHER_LINE_MAX)}`
 }
 
 /**
@@ -287,7 +291,7 @@ function renderFind(result: {
     return `No match for « ${query} ». Ask the user to rephrase or to say what they are looking for; do not guess.`
   }
   const lines = [`Top matches for « ${query} »:`, ...nodes.flatMap((node, index) => nodeLines(node, index, prefix))]
-  if (result.others.length > 0) lines.push("Other matches:", ...result.others.map(otherLine))
+  if (result.others.length > 0) lines.push("Other matches:", ...result.others.map((node) => otherLine(node)))
   const beyond = result.moreNodes - result.others.length
   if (beyond > 0) lines.push(`More nodes match (at least ${beyond}): add words or set type to narrow the search.`)
   if (nodes.length > 0) lines.push(`Read one with ${prefix}_read {"path": "<path>"}; a procedure's steps are in its sections.`)

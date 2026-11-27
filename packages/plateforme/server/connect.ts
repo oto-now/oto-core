@@ -18,7 +18,11 @@ export type ConnectAddress = {
   name: string
   /** Nom du serveur pour Claude Code : le préfixe, en ASCII (`mcp-patterns.md § 3`). */
   cliName: string
-  /** Phrase des préférences personnelles de claude.ai : `context` chargé une fois par conversation, pour que les consignes de la personne s'appliquent aussi à une demande qui n'est pas du travail (`mcp-patterns.md § 9`). */
+  /**
+   * Phrase des préférences personnelles de claude.ai, en quatre lignes : `context` chargé au début de chaque conversation,
+   * ce que l'Oto sait faire, les réflexes (chercher dans l'Oto avant de répondre de mémoire, suivre la procédure
+   * trouvée), et, pour qui a plusieurs Oto, ne charger que celui que la demande concerne (`mcp-patterns.md § 9`).
+   */
   preferenceSentence: string
 }
 
@@ -31,14 +35,24 @@ export type LastConnection = { family: string; signature: string; at: string }
  */
 const LAST_CONNECTIONS_ROWS = 200
 
+/** L'espace insécable (U+00A0), composé : un caractère invisible ne s'écrit pas en littéral. */
+const INSECABLE = String.fromCharCode(160)
+
 /** Adresse, noms et phrase de la page ; `origin` : l'origine appelée par le navigateur (fonction pure). */
 export function connectAddress(identity: Identity, origin: string): ConnectAddress {
   const { name, prefix } = identity.org
+  // Le nom entre guillemets français et les deux-points, tenus par des espaces insécables : la phrase se colle telle quelle.
+  const nomCite = `«${INSECABLE}${name}${INSECABLE}»`
   return {
     url: `${origin.replace(/\/+$/, "")}${MCP_RESOURCE_PATH}`,
     name,
     cliName: prefix,
-    preferenceSentence: `Au début de chaque conversation, appelle une fois l'outil de contexte du connecteur « ${name} » : il porte mes consignes. Utilise ensuite ses autres outils seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données).`,
+    preferenceSentence: [
+      `Au début de chaque conversation, charge le contexte de mon Oto ${nomCite} avec son outil context.`,
+      `Dans ${nomCite}, tu peux${INSECABLE}: suivre nos procédures, lire et écrire nos pages et tableaux, utiliser nos connecteurs (emails, comptabilité, CRM…).`,
+      `Réflexes${INSECABLE}: cherche d'abord dans ${nomCite} avant de répondre de mémoire, de chercher sur le web ou de dire que tu ne peux pas ; suis la procédure trouvée pas à pas.`,
+      "Si j'ai plusieurs Oto, charge seulement celui que la demande concerne.",
+    ].join("\n"),
   }
 }
 

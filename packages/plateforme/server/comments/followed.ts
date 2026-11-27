@@ -1,12 +1,12 @@
 // Les fils de commentaires destinés à une personne (parcours 5.3 et 5.2) : ce que son accueil montre (bloc
 // « Commentaires », lus ou non) et ce que `context` dit à son assistant (« 2 new comments » sur la ligne de la page). Un
 // fil lui est destiné quand l'un de ses commentaires la prévient, par la règle de l'email groupé (`recipientsOf`,
-// `cli/comments-mail.mjs`, la seule) : elle y est mentionnée, un autre a écrit dans un fil où elle a écrit, ou elle mène
-// l'équipe propriétaire de la page et le fil est nouveau ; jamais pour ses seuls commentaires. Seuls les fils ouverts,
+// `cli/comments-mail.mjs`, la seule) : elle y est mentionnée, un autre a écrit dans un fil où elle a écrit, ou elle gère
+// la page (`managersOf`) et le fil est nouveau ; jamais pour ses seuls commentaires. Seuls les fils ouverts,
 // d'une page hors corbeille qu'elle lit encore (niveau 1, décidé ici par `nodeLevels`, `security-patterns.md § Droits
 // dans le service`). « Non lu » se lit sur sa dernière visite de la page à l'écran (`node_views.last_at`, ses propres
 // lignes) : aucune table. Sans ce module, un fil qui attend une personne ne se voit que sur sa page.
-import { recipientsOf } from "../../cli/comments-mail.mjs"
+import { managersOf, recipientsOf } from "../../cli/comments-mail.mjs"
 import { HOME_COMMENT_EXCERPT_CHARS, HOME_COMMENTS_SHOWN, type HomeComments } from "../../schemas/accueil"
 import { ACCESS_LEVELS, nodeLevels } from "../access"
 import type { PlatformDb } from "../db"
@@ -21,8 +21,8 @@ const FOLLOWED_THREADS = 200
 /** Un commentaire d'un fil, tel que la règle le lit. */
 type RuledComment = { author: string | null; mentions: readonly string[] }
 
-/** Un fil tel que la règle le lit : son auteur, les responsables de l'équipe propriétaire de sa page, ses commentaires du plus ancien au plus récent. */
-export type RuledThread = { author: string | null; teamLeads: readonly string[]; comments: readonly RuledComment[] }
+/** Un fil tel que la règle le lit : son auteur, ceux qui gèrent sa page (`managersOf`), ses commentaires du plus ancien au plus récent. */
+export type RuledThread = { author: string | null; managers: readonly string[]; comments: readonly RuledComment[] }
 
 /**
  * Le fil est-il destiné à `person` ? Oui quand l'un de ses commentaires la prévient (`recipientsOf`, la règle de l'email
@@ -36,7 +36,7 @@ export function concerns(person: string, thread: RuledThread): boolean {
       first: rank === 0,
       threadAuthor: thread.author,
       earlierAuthors: thread.comments.slice(0, rank).flatMap((earlier) => earlier.author ?? []),
-      teamLeads: thread.teamLeads,
+      managers: thread.managers,
     }).includes(person),
   )
 }
@@ -57,7 +57,10 @@ type Row = {
   path: string
   kind: string
   title: string
+  owner_kind: string | null
+  owner_user: string | null
   led: boolean
+  full_access: boolean
   author: string | null
   mentions: string[]
   text: string
@@ -69,7 +72,8 @@ type Row = {
 
 /**
  * Les fils ouverts destinés à l'appelant, sur les pages hors corbeille qu'il lit. Une lecture : les fils où il a écrit,
- * où il est mentionné, ou d'une page dont il mène l'équipe propriétaire (le propriétaire effectif, `node_owner`),
+ * où il est mentionné, ou d'une page qu'il gère (les faits de `managersOf` pour lui : le propriétaire effectif par
+ * `node_owner`, l'équipe qu'il mène, une règle « Accès complet » de la page ou d'un ancêtre qui le vise),
  * `FOLLOWED_THREADS` au plus, avec leurs commentaires dans l'ordre et sa dernière visite de chaque page ; puis la règle
  * (`concerns`) et les niveaux en un lot. `since` : la borne de `fresh` (texte, converti dans la requête), nulle pour
  * l'accueil, qui ne la lit pas.
@@ -78,21 +82,31 @@ export async function followedThreads(db: PlatformDb, identity: Identity, since:
   const org = identity.org.id
   const me = identity.user.id
   const led = identity.teams.filter((team) => team.role === "lead").map((team) => team.id)
+  const mine = identity.teams.map((team) => team.id)
+  // Administrateur par son rôle de membre, comme la commande de l'email (`members.role`).
+  const admin = identity.member.role === "admin"
   const rows = await inTransaction(db, "comments: followed threads", (sql) => sql<Row[]>`
     with followed as (
-      select t.id, t.created_by, n.id as node_id, n.path, n.kind, n.title,
-             coalesce(o.owner_team_id = any(${led}::uuid[]), false) as led,
+      select t.id, t.created_by, n.id as node_id, n.path, n.kind, n.title, o.owner_kind, o.owner_user_id::text as owner_user,
+             coalesce(o.owner_kind = 'team' and o.owner_team_id = any(${led}::uuid[]), false) as led, fa.full_access,
              (select max(v.last_at) from platform.node_views v where v.org_id = t.org_id and v.node_id = n.id and v.user_id = ${me}) as seen_at
         from platform.comment_threads t
         join platform.nodes n on n.id = t.node_id and n.org_id = t.org_id and n.deleted_at is null
         left join lateral platform.node_owner(n.id) o on true
+        left join lateral (
+          select exists (
+            select 1 from platform.nodes a join platform.access_rules r on r.node_id = a.id and r.level = 'manage'
+             where a.org_id = n.org_id and a.lpath operator(extensions.@>) n.lpath
+               and (r.subject_user_id = ${me} or r.subject_team_id = any(${mine}::uuid[]) or r.subject_org)) as full_access
+        ) fa on true
        where t.org_id = ${org} and t.status = 'open'
-         and (t.created_by = ${me} or o.owner_team_id = any(${led}::uuid[])
+         and (t.created_by = ${me} or (o.owner_kind = 'org' and ${admin}::boolean) or (o.owner_kind = 'team' and o.owner_team_id = any(${led}::uuid[]))
+              or (o.owner_kind = 'user' and o.owner_user_id = ${me}) or fa.full_access
               or exists (select 1 from platform.comments c where c.thread_id = t.id and (c.author = ${me} or ${me}::uuid = any(c.mentions))))
        order by t.created_at desc, t.id
        limit ${FOLLOWED_THREADS}
     )
-    select f.id as thread_id, f.created_by as thread_author, f.node_id, f.path, f.kind, f.title, f.led,
+    select f.id as thread_id, f.created_by as thread_author, f.node_id, f.path, f.kind, f.title, f.owner_kind, f.owner_user, f.led, f.full_access,
            c.author, c.mentions::text[] as mentions, c.text, c.via_assistant, to_json(c.created_at) #>> '{}' as at,
            (f.seen_at is null or c.created_at > f.seen_at) as unseen,
            coalesce(c.created_at > ${since}::text::timestamptz, false) as fresh
@@ -102,7 +116,18 @@ export async function followedThreads(db: PlatformDb, identity: Identity, since:
   const byThread = new Map<string, Row[]>()
   for (const row of rows) byThread.set(row.thread_id, [...(byThread.get(row.thread_id) ?? []), row])
   const destined = [...byThread.values()].filter((comments) =>
-    concerns(me, { author: comments[0].thread_author, teamLeads: comments[0].led ? [me] : [], comments }),
+    concerns(me, {
+      author: comments[0].thread_author,
+      // Les faits de `managersOf` lus pour l'appelant seul : la règle dit s'il est de ceux qui gèrent la page.
+      managers: managersOf({
+        ownerKind: comments[0].owner_kind,
+        ownerUser: comments[0].owner_user,
+        admins: admin ? [me] : [],
+        teamLeads: comments[0].led ? [me] : [],
+        fullAccess: comments[0].full_access ? [me] : [],
+      }),
+      comments,
+    }),
   )
   if (destined.length === 0) return []
   const levels = await nodeLevels(db, identity, [...new Set(destined.map(([first]) => first.node_id))])

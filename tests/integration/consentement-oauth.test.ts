@@ -422,9 +422,11 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     await admin`delete from platform.accounts where org_id = ${o.org.id} and connector = ${CONNECTOR} and owner_user_id = ${o.people.claire.id}`
   })
 
-  it("should renew at expiry and once after a 401, keeping the rotated refresh token; a refused renewal asks to connect again, and reconnecting restores the account", async () => {
+  it("should renew at expiry and once after a 401, keeping the rotated refresh token and the last test; a refused renewal asks to connect again, and reconnecting restores the account and forgets its last test", async () => {
     await connect("lea")
     const { id } = await accountOf("lea")
+    // Un dernier test raté, gardé tant que la connexion ne change pas : un renouvellement du jeton ne l'efface pas.
+    await admin`update platform.accounts set health = jsonb_build_object('last_probe', jsonb_build_object('at', now(), 'healthy', false, 'code', 'credential_rejected', 'reason', 'refused', 'balance', null)) where id = ${id}`
     await admin`update platform.accounts set token_expires_at = now() - interval '1 minute' where id = ${id}`
     await call("lea")
     provider.unauthorizedOnce()
@@ -433,6 +435,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
     const live = provider.latest()
     expect(provider.sent.filter((request) => request.url === TOKEN_URL).map((request) => new URLSearchParams(request.body).get("grant_type"))).toEqual(["authorization_code", "refresh_token", "refresh_token"])
     expect([decryptToken(id, renewed.token_ciphertext), decryptCredential(id, renewed.secret_ciphertext)]).toEqual([live[0], { fields: { refresh_token: live[1] } }])
+    expect((await admin<{ kept: boolean }[]>`select health ? 'last_probe' as kept from platform.accounts where id = ${id}`)[0].kept).toBe(true)
 
     provider.revokeAll()
     await admin`update platform.accounts set token_expires_at = now() - interval '1 minute' where id = ${id}`
@@ -451,6 +454,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: 120_000 }, () => {
 
     await connect("lea")
     expect(await accountOf("lea")).toMatchObject({ id, status: "active", status_reason: null })
+    expect((await admin<{ kept: boolean }[]>`select health ? 'last_probe' as kept from platform.accounts where id = ${id}`)[0].kept).toBe(false)
     expect((await call("lea")).status).toBe("done")
   })
 

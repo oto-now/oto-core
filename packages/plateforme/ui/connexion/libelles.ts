@@ -70,9 +70,8 @@ export const ETAPES: Record<Assistant, readonly EtapeDuGuide[]> = {
     { texte: CONNEXION },
     {
       texte: texte("Ajoutez cette phrase à vos préférences personnelles de claude.ai :"),
+      // Sans note pour qui a plusieurs Oto : la dernière ligne de la phrase ne fait charger que celui que la demande concerne.
       copie: { valeur: ({ phrase }) => phrase, cible: "la phrase de préférences" },
-      // Mesuré : nommer un connecteur quand on en a plusieurs du même genre capte les demandes des autres (§ 9).
-      note: "Vous avez plusieurs connecteurs d'organisation ? N'ajoutez pas cette phrase : elle attirerait les demandes des autres.",
     },
     { texte: texte(DEMANDES), branche: true, note: "Le connecteur n'apparaît pas ? Rechargez la page." },
   ],

@@ -225,7 +225,7 @@ describe("/n/[...chemin] page reads (AC9, AC19, AC22)", () => {
     vi.mocked(getPlatformIdentitySafely).mockResolvedValue(connecte(role))
     await monter(await page(["ventes", "modele_relance"]))
     const niveaux = libellesDesChoix(ouvrirLePartage().getByRole("combobox", { name: "Accès de Équipe Ventes" }))
-    expect(niveaux.includes("Accès complet")).toBe(gestion)
+    expect(niveaux.includes("Accès complet - Responsable")).toBe(gestion)
   })
 })
 

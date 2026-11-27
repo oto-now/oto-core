@@ -19,10 +19,11 @@ import {
   type CommentThreadView,
   type CommentView,
   type NodeCommentsView,
-} from "../../schemas"
-import { ACCESS_LEVELS, describeOwner, nodeLevel, unknownPath, type AccessLevel } from "../access"
+} from "../../schemas"
+import { COMMENT_THREADS_UNDER } from "../../schemas/comments"
+import { ACCESS_LEVELS, describeOwner, nodeDecisions, nodeLevel, unknownPath, type AccessLevel } from "../access"
 import type { PlatformDb } from "../db"
-import { changedMeanwhile, inTransaction, invalidInput, PlatformError } from "../errors"
+import { changedMeanwhile, inTransaction, invalidInput, PlatformError, READ_PAGE_ROWS } from "../errors"
 import type { Identity } from "../identity"
 import { mailRelayConfigured } from "../mail"
 import { parseId, type Mutation } from "../members"
@@ -219,6 +220,50 @@ export async function listComments(db: PlatformDb, identity: Identity, path: str
     const node = await commentedNode(db, identity, path)
     const [threads, readers] = await Promise.all([threadViews({ db, sql }, identity, node, await readThreads(sql, node.id)), readersOf(db, identity, node.id)])
     return { path: node.path, threads, readers, mailEnabled: mailRelayConfigured() }
+  })
+}
+
+/** Les fils sous un dossier : par page, dans l'ordre des chemins, `COMMENT_THREADS_UNDER` au plus ; `total` compte tous ceux des pages lues. */
+export type ThreadsUnder = { path: string; pages: { node: CommentedNode; threads: CommentThreadView[] }[]; total: number }
+
+type CountedNode = { id: string; path: string; kind: string; threads: number }
+
+/**
+ * Les fils du nœud au chemin donné et des nœuds hors corbeille qu'il range, à tout niveau, dans un état (`null` : tous),
+ * sur les seules pages que l'appelant lit : groupés par page dans l'ordre des chemins, chaque page dans l'ordre servi,
+ * `COMMENT_THREADS_UNDER` fils au plus en tout, et le compte de tous. Le nœud du chemin se lit comme pour `listComments`
+ * (`not_found` sinon) ; une page qu'il ne lit pas ne compte pas, sans rien dire d'elle. Une lecture, sans ligne de journal.
+ */
+export async function threadsUnder(db: PlatformDb, identity: Identity, path: string, status: CommentThreadStatus | null): Promise<ThreadsUnder> {
+  return inTransaction(db, "comments: threads under", async (sql) => {
+    const folder = await commentedNode(db, identity, path)
+    const counted = await sql<CountedNode[]>`
+      select n.id, n.path, n.kind, count(*)::int as threads
+        from platform.comment_threads t
+        join platform.nodes n on n.id = t.node_id and n.org_id = t.org_id and n.deleted_at is null
+        join platform.nodes f on f.id = ${folder.id} and f.org_id = n.org_id
+       where t.org_id = ${identity.org.id} and f.lpath operator(extensions.@>) n.lpath
+         and (${status}::text is null or t.status = ${status}::text)
+       group by n.id, n.path, n.kind
+       order by n.path
+       limit ${READ_PAGE_ROWS}`
+    if (counted.length === 0) return { path: folder.path, pages: [], total: 0 }
+    // Niveau exact : `canResolve` se décide à l'écriture, que `nodeLevels` ne dit pas exactement.
+    const decisions = await nodeDecisions(db, identity, counted.map((node) => node.id))
+    const readable = counted.flatMap((node) => {
+      const level = decisions.get(node.id)?.level ?? ACCESS_LEVELS.none
+      return level >= ACCESS_LEVELS.read ? [{ node: { id: node.id, path: node.path, kind: node.kind, level }, threads: node.threads }] : []
+    })
+    const pages: ThreadsUnder["pages"] = []
+    let room = COMMENT_THREADS_UNDER
+    for (const { node } of readable) {
+      if (room === 0) break
+      const threads = (await threadViews({ db, sql }, identity, node, await readThreads(sql, node.id, null, status))).slice(0, room)
+      if (threads.length === 0) continue
+      pages.push({ node, threads })
+      room -= threads.length
+    }
+    return { path: folder.path, pages, total: readable.reduce((sum, page) => sum + page.threads, 0) }
   })
 }
 

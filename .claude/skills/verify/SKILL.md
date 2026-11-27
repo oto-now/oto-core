@@ -40,7 +40,8 @@ reçu ; sans lui, `commit-push` rejouera l'intégralité de la suite quelques in
 sur du code identique, et le hook refusera le commit.
 
 Pour vérifier sans risquer de rejouer inutilement : `pnpm verify:cached` — il ne relance les
-checks que si le code a bougé depuis le dernier passage.
+checks que si le code a bougé depuis le dernier passage, et seulement `check:framework` et le contrôle
+de secrets si seule de la documentation de méthode a changé (reçu doc, `CLAUDE.md § Vérifier, commiter, pousser`).
 
 `check:framework`, `type-check` et `lint` tournent en même temps, la sortie de chacun affichée d'un
 bloc à sa fin ; `test` ne part que s'ils passent tous les trois (`scripts/verify.mjs`). Sur un test

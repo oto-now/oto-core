@@ -61,6 +61,15 @@ describe("connectorLogo", () => {
     await lire("rien", 2 * heure)
     expect(lues.slice(2)).toEqual(["https://cache.example/favicon.ico", "https://rien.example/favicon.ico"])
   })
+
+  it("should serve the declared PNG ahead of the domain favicon, without reading the network", async () => {
+    // Le domaine sert un favicon d'autres octets : l'image servie dit laquelle a gagné.
+    const favicon = new Uint8Array([...PNG, 1])
+    registerConnectors([{ ...describedConnector(), logo: Buffer.from(PNG).toString("base64"), logoDomain: "declare.example" }])
+    const { get, lues } = reseau({ "https://declare.example/favicon.ico": { type: "image/png", corps: favicon } })
+    expect(await connectorLogo("crm", { resolve: PUBLIQUE, get })).toEqual({ bytes: PNG, type: "image/png" })
+    expect(lues).toEqual([])
+  })
 })
 
 describe("connector logo route", () => {

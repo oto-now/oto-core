@@ -182,3 +182,30 @@ describe("receipt of merge commits", { timeout: 60_000 }, () => {
     expect(avertir.output).not.toContain("::error")
   })
 })
+
+describe("receipt of a documentation-only commit", { timeout: 60_000 }, () => {
+  // `pnpm commit:export` sur un reçu doc pose `Verified-tree:` et `Verified: docs seule, …` : `check:framework` seul a
+  // tourné. La CI ne l'accepte que si le commit ne change, par rapport à son premier parent, que de la documentation
+  // de méthode (CLAUDE.md, skills, conventions, docs) ou des chemins exclus.
+  const commitDoc = (depot: string, sujet: string, fichiers: Record<string, string>) => {
+    const sha = commiter(depot, sujet, fichiers)
+    const arbre = arbreDeCodeDuCommit(depot, sha)
+    git(depot, "commit", "--quiet", "--amend", "--no-verify", "-m", `${sujet}\n\nVerified-tree: ${arbre}\nVerified: docs seule, check:framework, 2026-11-26T10:00:00.000Z`)
+    return git(depot, "rev-parse", "HEAD")
+  }
+
+  it("should accept a docs receipt on a commit that changes documentation only, and flag one that changes code", () => {
+    const depot = fs.mkdtempSync(path.join(dir, "docs-"))
+    git(depot, "init", "--quiet", "--initial-branch=main")
+    const base = commiter(depot, "base", { "a.ts": "export const a = 1\n", "CLAUDE.md": "# Méthode\n" }, "vrai")
+    const doc = commitDoc(depot, "méthode", { "CLAUDE.md": "# Méthode v2\n", ".claude/skills/dev/SKILL.md": "skill\n" })
+    const code = commitDoc(depot, "a vaut 2", { "a.ts": "export const a = 2\n", "CLAUDE.md": "# Méthode v3\n" })
+
+    expect(verdict(depot, doc).etat).toBe("atteste")
+    expect(verdict(depot, code).etat).toBe("docHorsDoc")
+    const sortie = lancer(depot, "--depuis", base, "--jusqua", code)
+    expect(sortie.status, sortie.output).toBe(1)
+    expect(sortie.output).toMatch(/^::error title=Reçu du commit::.* a vaut 2 : reçu doc/m)
+    expect(sortie.output).toContain("2 commit(s) lus, 1 sans reçu valable.")
+  })
+})

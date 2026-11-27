@@ -73,7 +73,7 @@ function Ligne({ ligne, equipe, ...navigation }: Navigation & { ligne: LigneServ
     case "proche":
       return (
         <>
-          <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.proche(ligne.nature, ligne.score)} {...navigation} />
+          <VersLeContenu chemin={ligne.chemin} texte={ligne.titre} precision={LIGNES_SERVIES.proche(ligne.nature, ligne.auteur)} {...navigation} />
           {ligne.resume !== "" && <span className="block text-mute">{ligne.resume}</span>}
         </>
       )

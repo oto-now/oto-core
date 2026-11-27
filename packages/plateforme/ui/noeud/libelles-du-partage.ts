@@ -10,7 +10,7 @@ export const NIVEAUX_D_ACCES: Record<AccessLevelName, string> = {
   none: "Aucun accès",
   read: "Peut lire",
   write: "Peut modifier",
-  manage: "Accès complet",
+  manage: "Accès complet - Responsable",
 }
 
 /** Ce que chaque niveau permet, une ligne fine sous son nom dans chaque liste de niveaux (1.4.13) : la différence se lit sans aide. */
@@ -18,7 +18,7 @@ export const DETAIL_DES_NIVEAUX: Record<AccessLevelName, string> = {
   none: "Ne voit ni ce contenu ni ce qu'il range.",
   read: "Voit le contenu, sans le changer.",
   write: "Lit, écrit et publie.",
-  manage: "Modifie, partage, déplace et supprime.",
+  manage: "Modifie, partage, déplace, supprime et reçoit les nouveaux commentaires.",
 }
 
 /** Les phrases du panneau « Partager » (AC-b5) : ni « règle » ni « niveau » à l'écran. */

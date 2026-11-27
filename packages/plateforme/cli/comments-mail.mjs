@@ -27,19 +27,43 @@ export const EXCERPT_CHARS = 200
  * @property {boolean} first  le premier commentaire de son fil : un nouveau fil
  * @property {string | null} threadAuthor  l'auteur du fil
  * @property {readonly string[]} earlierAuthors  les auteurs des commentaires qui le précèdent dans le fil
- * @property {readonly string[]} teamLeads  les responsables de l'équipe propriétaire de la page ; vide sans équipe
+ * @property {readonly string[]} managers  ceux qui gèrent la page (`managersOf`)
  */
 
 /**
+ * @typedef {object} PageManagerFacts
+ * @property {string | null} ownerKind  le propriétaire effectif de la page : `org`, `team`, `user`, nul s'il est introuvable
+ * @property {string | null} ownerUser  la personne d'un espace personnel
+ * @property {readonly string[]} admins  les administrateurs de l'organisation
+ * @property {readonly string[]} teamLeads  les responsables de l'équipe propriétaire ; vide sans équipe
+ * @property {readonly string[]} fullAccess  les personnes qu'une règle « Accès complet » posée sur la page ou un ancêtre
+ *   vise, elles, leur équipe ou toute l'organisation
+ */
+
+/**
+ * Ceux qui gèrent une page, chacun une fois, par son propriétaire : les administrateurs pour Tout le monde, les
+ * responsables pour un dossier d'équipe, la personne pour son espace ; avec eux, qui a reçu l'Accès complet sur la page ou
+ * un ancêtre. Pas tous ceux qui l'écrivent : une page de Tout le monde ouverte en écriture préviendrait toute
+ * l'organisation à chaque fil. Un administrateur ne gère ici un dossier d'équipe que par une règle. Les faits se lisent
+ * en SQL par chaque lecteur (`comments-notify.mjs`, `server/comments/followed.ts`), la règle est ici seule.
+ * @param {PageManagerFacts} facts
+ * @returns {string[]}
+ */
+export function managersOf(facts) {
+  const byOwner = facts.ownerKind === 'org' ? facts.admins : facts.ownerKind === 'team' ? facts.teamLeads : facts.ownerKind === 'user' && facts.ownerUser !== null ? [facts.ownerUser] : []
+  return [...new Set([...byOwner, ...facts.fullAccess])]
+}
+
+/**
  * Les personnes qu'un commentaire prévient, chacune une fois : celles qu'il mentionne ; pour une réponse, l'auteur du
- * fil et ceux qui y ont déjà écrit ; pour un nouveau fil, les responsables de l'équipe propriétaire de la page. Jamais
- * son auteur. Un commentaire écrit par un assistant prévient comme un autre. Qui lit encore la page se décide à
- * l'envoi, sur la base (`comments-notify.mjs`).
+ * fil et ceux qui y ont déjà écrit ; pour un nouveau fil, ceux qui gèrent la page (`managersOf`). Jamais son auteur. Un
+ * commentaire écrit par un assistant prévient comme un autre. Qui lit encore la page se décide à l'envoi, sur la base
+ * (`comments-notify.mjs`).
  * @param {NotifiedComment} comment
  * @returns {string[]}
  */
 export function recipientsOf(comment) {
-  const concerned = comment.first ? comment.teamLeads : [comment.threadAuthor, ...comment.earlierAuthors]
+  const concerned = comment.first ? comment.managers : [comment.threadAuthor, ...comment.earlierAuthors]
   return [...new Set([...comment.mentions, ...concerned])].filter((person) => person !== null && person !== comment.author)
 }
 

@@ -1,8 +1,8 @@
 "use client"
 
-// La tuile d'un outil sur l'écran Connecteurs : son logo, le favicon de son domaine relayé par la plateforme
-// (`GET connectors/<nom>/logo`), sinon son initiale dans un carré : sans domaine déclaré, et quand le logo ne se charge
-// pas (le serveur rend 404 sans favicon). Décorative : le nom de l'outil est toujours écrit à côté. Client pour l'échec
+// La tuile d'un outil sur l'écran Connecteurs : son logo, l'image déclarée ou à défaut le favicon de son domaine, relayé
+// par la plateforme (`GET connectors/<nom>/logo`), sinon son initiale dans un carré : sans logo déclaré, et quand le
+// logo ne se charge pas (le serveur rend 404 sans image). Décorative : le nom de l'outil est toujours écrit à côté. Client pour l'échec
 // du chargement, que seul le navigateur voit ; la liste, la fenêtre d'ajout et le détail la montent comme une balise.
 import { useEffect, useRef, useState } from "react"
 

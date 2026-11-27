@@ -18,6 +18,10 @@ describe("write.procedure contract (AC8)", () => {
     const lines = output.text.split("\n")
     expect(lines[0]).toBe("Contract write.procedure: how to write a procedure with acme_write (not a function; nothing to call).")
     expect(output.text.length).toBeLessThan(45_000)
+    // Contexte plus court (AC5) : le contrat redit la règle du titre et du résumé.
+    expect(output.text).toContain(
+      "a title, the action in the words of those who ask for it (a verb and an object, never the name of a deliverable alone); a summary of 1 to 200 characters that says what it does, then three to five ways people ask for it, abbreviations included",
+    )
     expect([output.nextActions, output.target, output.data]).toEqual([["acme_write"], "write.procedure", { contract: "write.procedure" }])
     expect(output.text).not.toContain("Header (JSON Schema):")
     expect(simulated.calls).toEqual([])

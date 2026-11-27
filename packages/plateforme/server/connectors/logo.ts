@@ -1,11 +1,14 @@
-// Le logo d'un outil sur l'écran Connecteurs : le favicon du domaine que sa déclaration nomme (`logoDomain`), lu par le
-// serveur et servi depuis l'application (`GET connectors/<nom>/logo`). Le navigateur ne contacte ainsi aucun site tiers,
+// Le logo d'un outil sur l'écran Connecteurs, servi depuis l'application (`GET connectors/<nom>/logo`) : l'image PNG que
+// sa déclaration porte (`logo`, stockée par la bibliothèque `connectors`), sans lecture réseau ; à défaut, pour un
+// connecteur déclaré par un hôte, le favicon du domaine qu'elle nomme (`logoDomain`), lu par le serveur, que bien des
+// sites ne servent pas utilisable (plusieurs outils sur un même domaine). Le navigateur ne contacte ainsi aucun site tiers,
 // et la politique de sécurité (CSP) de l'hôte n'a rien à autoriser. La lecture passe par `fetchSource`, comme le logo
 // de l'image de partage : `https` et port 443, jamais une adresse privée, de bouclage ou de métadonnées, trois
 // redirections au plus. Une image raster seulement : un SVG servi depuis l'origine de l'application pourrait porter un
 // script. Sans ce module, la tuile n'a que l'initiale de l'outil.
 import { declaredConnector } from "../catalog/connector-source"
 import { fetchSource, type Resolve, type SourceGet } from "../uploads-fetch"
+import { declaredLogoBytes } from "./presentation-declaration"
 
 export type ConnectorLogo = { bytes: Uint8Array; type: string }
 
@@ -31,9 +34,16 @@ export async function faviconOf(domain: string, deps: LogoDeps = {}): Promise<Co
   return RASTER_TYPES.has(type) ? { bytes: fetched.bytes, type } : null
 }
 
-/** Le logo d'un connecteur déclaré, par le favicon de son domaine, gardé en mémoire ; `null` sans domaine ou sans favicon. */
+/**
+ * Le logo d'un connecteur déclaré : son image déclarée, sinon le favicon de son domaine, gardé en mémoire ; `null` sans
+ * l'une ni l'autre, ou sans favicon.
+ */
 export async function connectorLogo(connector: string, deps: LogoDeps = {}): Promise<ConnectorLogo | null> {
-  const domain = declaredConnector(connector)?.definition.logoDomain
+  const definition = declaredConnector(connector)?.definition
+  // Contrôlé à la déclaration (`presentationProblem`) : décodé ici, il est l'image PNG que la déclaration a admise.
+  const declared = definition?.logo !== undefined ? declaredLogoBytes(definition.logo) : null
+  if (declared) return { bytes: declared, type: "image/png" }
+  const domain = definition?.logoDomain
   if (!domain) return null
   const now = (deps.now ?? Date.now)()
   const kept = memory.get(domain)

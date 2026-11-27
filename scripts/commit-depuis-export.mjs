@@ -12,6 +12,12 @@
  *   Verified-tree: <arbre de code vérifié>
  *   Verified: 4 checks, <n> tests, <n> sautés (<n> fichiers tolérés), <n> forks, base <empreinte>, <n> s, <date>
  *
+ * Export de documentation seule : un reçu doc (`scope: "docs"`, contrôle de méthode et de secrets seulement, écrit
+ * dans l'export par `pnpm check:framework && node scripts/check-public.mjs --secrets-only && node
+ * scripts/verify-receipt.mjs write check:framework,check:public docs`) suffit quand tout ce que le commit change par
+ * rapport à son premier parent est de la documentation de méthode ou un chemin `EXCLUS`
+ * (`scripts/lib/arbre-de-code.mjs`) ; le second trailer le dit : `Verified: docs seule, check:framework, check:public, <date>`.
+ *
  * Le commit s'écrit dans le dépôt `--depot` (le checkout partagé), sans toucher à son index ni à son arbre
  * de travail, et n'est pas poussé : le script affiche son SHA et la commande de push.
  *
@@ -24,7 +30,8 @@
  * - `--base` n'est pas `origin/main` (relu par `git fetch`) : refaire l'export et `pnpm verify` ;
  * - l'arbre de code du commit n'est pas celui du reçu : le code a bougé depuis `pnpm verify`, ou un fichier
  *   non ignoré est apparu ;
- * - le commit ne changerait rien.
+ * - le commit ne changerait rien ;
+ * - reçu doc, et le commit change autre chose que de la documentation par rapport à son premier parent.
  *
  * Sur une branche de travail : `--branche <nom>` empile le commit sur la tête d'`origin/<nom>`, que `--base` doit
  * nommer (l'export est alors celui de cette tête, plus le travail). Tant qu'`origin/main` n'a pas avancé depuis la
@@ -43,13 +50,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arbreDeCodeDuCommit } from './lib/arbre-de-code.mjs'
+import { arbreDeCodeDuCommit, cheminsHorsDoc } from './lib/arbre-de-code.mjs'
 import { empreinteDesMigrations } from './lib/empreinte-des-migrations.mjs'
+import { CHECKS_DOC, CHECKS_REQUIS } from './verify-receipt.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const RECU = process.env.VERIFY_RECEIPT_PATH ?? join(ROOT, '.claude/.verify-receipt.json')
 const AGE_MAX_MS = 60 * 60 * 1000
-const CHECKS = ['check:framework', 'type-check', 'lint', 'test']
 const SAUTS_TOLERES = 'scripts/sauts-toleres.txt'
 
 class Refus extends Error {}
@@ -92,9 +99,12 @@ export function lireLeRecu(chemin, toleres, maintenant = Date.now()) {
   }
   const age = maintenant - new Date(recu.at).getTime()
   if (!Number.isFinite(age) || age < 0 || age > AGE_MAX_MS) throw new Refus('reçu périmé ou mal daté : relancer `pnpm verify`')
-  const manquants = CHECKS.filter((check) => !recu.checks?.includes(check))
+  const doc = recu.scope === 'docs'
+  const manquants = (doc ? CHECKS_DOC : CHECKS_REQUIS).filter((check) => !recu.checks?.includes(check))
   if (manquants.length) throw new Refus(`le reçu ne déclare pas ${manquants.join(', ')} : lancer \`pnpm verify\`, pas un check seul`)
   if (typeof recu.tree !== 'string' || !/^[0-9a-f]{40,64}$/.test(recu.tree)) throw new Refus("le reçu n'a pas d'arbre de code : relancer `pnpm verify`")
+  // Reçu doc : ni tests ni base de test ; `commitDepuisExport` vérifie que le commit ne touche que de la doc.
+  if (doc) return recu
   if (!recu.tests || !Number.isInteger(recu.forks)) throw new Refus('le reçu ne résume pas les tests : relancer `pnpm verify`')
   if (recu.tests.echecs !== 0) throw new Refus(`${recu.tests.echecs} test(s) en échec dans le reçu`)
   if (typeof recu.base?.empreinte !== 'string' || !/^[0-9a-f]{64}$/.test(recu.base.empreinte)) {
@@ -112,11 +122,16 @@ export function lireLeRecu(chemin, toleres, maintenant = Date.now()) {
   return recu
 }
 
+/** Début du trailer `Verified:` d'un commit fait sur un reçu doc ; `scripts/ci/recu.mjs` le relit. */
+export const PREFIXE_DOC = 'docs seule'
+
 /** Le trailer `Verified:`, lisible sans outil. */
 export const ligneVerified = (recu) =>
-  `${recu.checks.length} checks, ${recu.tests.verts} tests, ${recu.tests.sautes} sautés ` +
-  `(${recu.tests.fichiersSautes.length} fichiers tolérés), ${recu.forks} forks, base ${recu.base.empreinte.slice(0, 12)}, ` +
-  `${recu.duree} s, ${recu.at}`
+  recu.scope === 'docs'
+    ? `${PREFIXE_DOC}, ${recu.checks.join(', ')}, ${recu.at}`
+    : `${recu.checks.length} checks, ${recu.tests.verts} tests, ${recu.tests.sautes} sautés ` +
+      `(${recu.tests.fichiersSautes.length} fichiers tolérés), ${recu.forks} forks, base ${recu.base.empreinte.slice(0, 12)}, ` +
+      `${recu.duree} s, ${recu.at}`
 
 /** L'arbre du commit : `base`, puis tout l'export par-dessus, dans un index jetable du dépôt. */
 function arbreDuCommit(depot, base) {
@@ -204,9 +219,19 @@ export function commitDepuisExport({ depot, base, message, branche }) {
         "le code a changé depuis `pnpm verify`, ou un fichier non ignoré est apparu dans l'export"
     )
   }
-  // L'arbre de code de l'export est celui du commit : ses migrations sont celles du commit.
-  const migrations = empreinteDesMigrations(ROOT)
-  if (recu.base.empreinte !== migrations) {
+  if (recu.scope === 'docs') {
+    // Le code du commit doit être celui de son premier parent, déjà vérifié : sur une branche dont `main` a bougé,
+    // le second parent apporte du code que personne n'a vérifié avec la branche, refusé ici aussi.
+    const horsDoc = cheminsHorsDoc(depot, parents[0], arbre)
+    if (horsDoc.length) {
+      const nommes = horsDoc.slice(0, 5).join(', ') + (horsDoc.length > 5 ? ', …' : '')
+      throw new Refus(`reçu doc seule (check:framework, check:public), mais le commit change autre chose que de la documentation : ${nommes} ; lancer \`pnpm verify\``)
+    }
+  }
+  // L'arbre de code de l'export est celui du commit : ses migrations sont celles du commit. Un reçu doc n'a pas de
+  // base de test : son commit ne change aucune migration (ci-dessus).
+  const migrations = recu.scope === 'docs' ? null : empreinteDesMigrations(ROOT)
+  if (migrations !== null && recu.base.empreinte !== migrations) {
     throw new Refus(
       `la base de test du reçu a été construite depuis d'autres migrations (${recu.base.empreinte.slice(0, 12)}) que ` +
         `celles de l'arbre commité (${migrations.slice(0, 12)}) : relancer \`pnpm verify\``

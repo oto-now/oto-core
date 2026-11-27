@@ -232,7 +232,7 @@ describe.skipIf(!sqlConfigured)(portable("assembleContext (E03-S08, AC7)"), { ti
     const db = await ref.db("claire")
     const assembly = { code: "AAAA-BBBB", since: null, budget: CONTEXT_BUDGET }
     const asked = await assembleContext(db, ref.identityOf("claire"), { ...assembly, phrase: "grille tarifaire" })
-    expect(asked.text).toMatch(/\n\n## Pages and tables close to the request\n- conseil\/grille_tarifaire_2026 \(page, score \d\.\d\d\): Grille tarifaire 2026\./)
+    expect(asked.text).toMatch(/\n\n## Pages and tables close to the request\n- conseil\/grille_tarifaire_2026 \(page\): Grille tarifaire 2026\./)
     expect(asked.report.map(({ name }) => name)).toContain("related")
     const none = await assembleContext(db, ref.identityOf("claire"), assembly)
     expect(none.text).not.toContain("## Pages and tables close to the request")

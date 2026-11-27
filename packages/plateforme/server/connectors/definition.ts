@@ -479,6 +479,12 @@ type ConnectorShared = {
    */
   readonly logoDomain?: string
   /**
+   * Le logo de l'outil, tel que la bibliothèque `connectors` le stocke : le contenu base64 (sans préfixe `data:`) d'une
+   * image PNG carrée, 16 Ko au plus une fois décodée. Servi en premier par `GET connectors/<nom>/logo`, sans lecture
+   * réseau ; à défaut, le favicon de `logoDomain`.
+   */
+  readonly logo?: string
+  /**
    * Racine `https://` des chemins, sans `/` final ; gabarit possible sur les réglages (`https://{domain}.example.net`) et
    * sur l'identité du compte, après l'hôte (`https://api.example.com/v2/{account_id}`).
    */

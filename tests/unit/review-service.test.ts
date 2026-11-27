@@ -132,7 +132,7 @@ describe.skipIf(!sqlConfigured)(portable("the human review of a table"), { timeo
       const { db, calls } = spyDb(await ref.db("paul"))
       expect(await refusal(decideReview(db, acmeIdentity(ref, "paul"), { ...CLINIQUE, decision: "approve" }))).toMatchObject({
         code: "forbidden",
-        message: "Writing ventes/suivi_prospects is reserved to team Ventes (lead: Claire Morel). Ask them for access.",
+        message: expect.stringContaining("Writing ventes/suivi_prospects is reserved to team Ventes (lead: Claire Morel). You can read it: suggest the change"),
       })
       expect(blockCalls(calls)).toEqual([])
       expect(await liveRow("Clinique des Saules")).toMatchObject({ revision: 1, data: { statut: "à revoir" } })

@@ -145,7 +145,7 @@ describe.skipIf(!sqlConfigured || privatePending)(privateFolderSuite(sqlConfigur
 
       expect({ code: disabled.code, named: STORAGE_VARIABLES.every((name) => disabled.message?.includes(name)) }).toEqual({ code: "not_enabled", named: true })
       expect(unreadable).toMatchObject({ code: "not_found", message: expect.stringContaining("Unknown path ventes/f_ordre") })
-      expect(readOnly).toMatchObject({ code: "forbidden", message: "Writing ventes/f_ordre is reserved to team Ventes (lead: Claire Morel). Ask them for access." })
+      expect(readOnly).toMatchObject({ code: "forbidden", message: expect.stringContaining("Writing ventes/f_ordre is reserved to team Ventes (lead: Claire Morel). You can read it: suggest the change") })
       expect(badType).toMatchObject({ code: "invalid_arguments", message: expect.stringContaining("Admitted extensions: png, jpeg, jpg, gif, webp, svg, pdf, csv, txt, md, html, json, docx, xlsx, pptx, odt, ods, zip, mp3, wav, m4a, ogg.") })
       expect([tooBig.code, tooBigText.code, empty.code]).toEqual(["too_large", "too_large", "too_large"])
       expect(spies.flatMap((spy) => fileInserts(spy.sent))).toEqual([])

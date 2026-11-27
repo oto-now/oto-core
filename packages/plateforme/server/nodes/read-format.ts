@@ -56,11 +56,14 @@ export type HeaderInput = {
 /** Rendu d'un bloc `reference` passé à `renderBlocks` (option de M05 ; E03-S07 : clôture puis ligne résolue en commentaire). */
 export type ReferenceRender = NonNullable<RenderOptions["reference"]>
 
-/** La ligne d'accès (E11-S02, AC-b4) : écrire publie ; la gestion garde le partage, le déplacement et la corbeille. */
+/**
+ * La ligne d'accès (E11-S02, AC-b4) : écrire publie ; la gestion garde le partage, le déplacement et la corbeille ; qui
+ * lit propose un changement par un commentaire, que qui écrit la page applique ou non.
+ */
 function accessLine(level: AccessLevel, publisher: string | null): string {
   if (level >= ACCESS_LEVELS.manage) return "access: manage (write and publish, share, move, delete)"
   if (level === ACCESS_LEVELS.write) return `access: write (write and publish; sharing, moving and deleting are reserved to ${publisher ?? "its managers"})`
-  return "access: read"
+  return "access: read (suggest changes with comment.add)"
 }
 
 function childrenLines(input: HeaderInput): string[] {

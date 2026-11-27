@@ -1,17 +1,17 @@
 // La vue invité servie par `context`, fonctions pures : les points d'entrée tirés des contenus lisibles
-// (`guestTeamsOf`) et le texte du bloc à chacun de ses quatre paliers (`guestsText`), choisis par la taille seule. La
-// lecture sur une vraie base, les droits et l'assemblage sont dans `tests/integration/vue-invite.test.ts` ; la relecture
-// par l'écran dans `tests/unit/texte-servi.test.ts`.
+// (`guestTeamsOf`) et le texte du bloc (`guestsText`) : la première phrase des résumés, 25 points d'entrée au plus, puis
+// la ligne qui compte les autres (contexte plus court). La lecture sur une vraie base, les droits et l'assemblage sont
+// dans `tests/integration/vue-invite.test.ts` ; la relecture par l'écran dans `tests/unit/texte-servi.test.ts`.
 import { describe, expect, it } from "vitest"
 import { SERVED_GUESTS } from "../../packages/plateforme/schemas"
-import { GUEST_SUMMARY_MAX, GUESTS_FULL_MAX, GUESTS_PLAIN_MAX, guestsText, type GuestView } from "../../packages/plateforme/server/context/blocks/guests"
+import { GUESTS_MAX, guestsText, type GuestView } from "../../packages/plateforme/server/context/blocks/guests"
 import { guestTeamsOf } from "../../packages/plateforme/server/nodes/guest-entries"
 
 const node = (path: string, title = path) => ({ path, title, summary: `Résumé de ${path}.`, kind: "page" })
 
 const HEAD = [
   SERVED_GUESTS.title,
-  "You are not a member of these teams: you read only what is listed here and what sits under a listed folder. Read one with acme_read; search them with acme_find.",
+  "You are not a member of these teams: you read only what they shared with you, whether listed here or not. Read one with acme_read; search them with acme_find.",
 ]
 
 /** Une équipe de `count` entrées, chacune avec un résumé de `summary` caractères faits de mots de neuf lettres. */
@@ -49,43 +49,52 @@ describe("guestTeamsOf", () => {
 })
 
 describe("guestsText", () => {
-  it("should serve whole summaries while the block fits, with the count of a folder, and the same text whatever the request", () => {
-    const support: GuestView = { ...team("Support", 0, 0), entries: [{ path: "support/dossier", title: "Dossier", summary: "Les fiches.", kind: "page", under: 4 }, { path: "support/faq", title: "FAQ", summary: "Les questions.", kind: "page", under: 0 }] }
+  it("should serve the first sentence of each summary, with the count of a folder, and the same text whatever the request", () => {
+    const support: GuestView = {
+      ...team("Support", 0, 0),
+      entries: [
+        { path: "support/dossier", title: "Dossier", summary: "Les fiches. Mises à jour chaque lundi.", kind: "page", under: 4 },
+        { path: "support/faq", title: "FAQ", summary: "Les questions.", kind: "page", under: 0 },
+      ],
+    }
     const finance: GuestView = { ...team("Finance", 1, 20), leads: [] }
 
     const served = guestsText([finance, support], "acme")
 
     expect(served).toEqual({
-      tier: 1,
-      text: [...HEAD, "### Team Finance.", "- finance/page_0 — Page 0 — abcdefghi abcdefghi ", "### Team Support. Lead: Paul Girard.", "- support/dossier (+4 under it) — Dossier — Les fiches.", "- support/faq — FAQ — Les questions."].join("\n"),
+      more: 0,
+      text: [...HEAD, "### Team Finance.", "- finance/page_0 — Page 0 — abcdefghi abcdefghi", "### Team Support. Lead: Paul Girard.", "- support/dossier (+4 under it) — Dossier — Les fiches.", "- support/faq — FAQ — Les questions."].join("\n"),
     })
     expect(guestsText([finance, support], "acme")).toEqual(served)
   })
 
-  it("should fall back by size alone, one tier for the whole block: summaries cut at a word, then none, then one line per team", () => {
-    // 30 entrées à 190 caractères de résumé dépassent 5 000 ; coupées à 100, elles tiennent.
-    const short = guestsText([team("Support", 30, 190)], "acme")
-    // 60 entrées dépassent 5 000 même coupées, et tiennent sans résumé.
-    const plain = guestsText([team("Support", 60, 190)], "acme")
-    // 400 entrées dépassent 10 000 sans résumé : une ligne par équipe.
-    const counted = guestsText([team("Support", 400, 190), { ...team("Ventes", 1, 10), entries: [{ path: "ventes/seul", title: "Seul", summary: "s", kind: "page", under: 0 }] }], "acme")
-    const line = (text: string, rank: number) => text.split("\n")[rank]
+  // Contexte plus court : 25 points d'entrée au plus, toutes équipes comprises, puis une ligne qui compte les autres et
+  // dit de les chercher par `find` ; une équipe dont aucun n'est listé n'a pas d'intertitre. Remplace les paliers de taille.
+  it("should list 25 entry points at most, in team then path order, then say how many more and how to find them", () => {
+    const at = (count: number) => guestsText([team("Finance", count, 20), team("Support", 10, 20)], "acme")
+    const exact = guestsText([team("Finance", GUESTS_MAX, 20)], "acme")
+    const over = guestsText([team("Finance", GUESTS_MAX + 1, 20)], "acme")
+    const lines = at(20).text.split("\n")
 
     expect({
-      tiers: [short.tier, plain.tier, counted.tier],
-      shortLine: line(short.text, 3),
-      shortFits: short.text.length <= GUESTS_FULL_MAX,
-      plainLine: line(plain.text, 3),
-      plainFits: plain.text.length <= GUESTS_PLAIN_MAX,
-      counted: counted.text.split("\n"),
+      max: GUESTS_MAX,
+      shown: lines.filter((line) => line.startsWith("- ")).length,
+      supportShown: lines.filter((line) => line.startsWith("- support/")).length,
+      last: lines.at(-1),
+      more: at(20).more,
+      // Finance prend les 25 : Support n'a plus d'intertitre.
+      supportHeading: at(25).text.includes("### Team Support"),
+      exact: [exact.more, exact.text.split("\n").at(-1)],
+      over: [over.more, over.text.split("\n").at(-1)],
     }).toEqual({
-      tiers: [2, 3, 4],
-      // Le dernier mot entier dans la borne, puis « … » : jamais un mot coupé.
-      shortLine: `- support/page_0 — Page 0 — ${"abcdefghi ".repeat(GUEST_SUMMARY_MAX / 10).trimEnd()}…`,
-      shortFits: true,
-      plainLine: "- support/page_0 — Page 0",
-      plainFits: true,
-      counted: [...HEAD, "### Team Support. Lead: Paul Girard. 400 contents shared with you: search them with acme_find.", "### Team Ventes. Lead: Paul Girard. 1 content shared with you: search it with acme_find."],
+      max: 25,
+      shown: 25,
+      supportShown: 5,
+      last: "and 5 more shared with you: search them with acme_find and the words of what you need.",
+      more: 5,
+      supportHeading: false,
+      exact: [0, "- finance/page_24 — Page 24 — abcdefghi abcdefghi"],
+      over: [1, "and 1 more shared with you: search them with acme_find and the words of what you need."],
     })
   })
 })

@@ -20,8 +20,8 @@ import { plural } from "../nodes/op-kit"
 import { loadBlocks } from "../nodes/store"
 import { ownerOf } from "../nodes/view"
 import { deleteComment, deletionPreview, editComment } from "./comments"
-import { blockRefs, threadText, waitingCount, type ServedThreads } from "./served"
-import { commentedNode, listComments, postComment, setThreadStatus, type CommentedNode } from "./threads"
+import { blockRefs, NOT_PAGE_CONTENT, threadText, waitingCount, type ServedThreads } from "./served"
+import { commentedNode, listComments, postComment, setThreadStatus, threadsUnder, type CommentedNode } from "./threads"
 
 /** Fils servis au plus par `comment.list` (texte et données). */
 const THREADS_LISTED = 20
@@ -51,7 +51,23 @@ async function servedThreads(context: FunctionContext, node: CommentedNode, thre
   }
 }
 
-async function list(context: FunctionContext, args: { path: string; status: "open" | "resolved" | "all" }): Promise<FunctionOutput> {
+/** Ce que `comment.list` rend d'un fil en données : où il porte, son état, et combien de commentaires. */
+function threadData(thread: CommentThreadView, served: ServedThreads) {
+  return {
+    id: thread.id,
+    status: thread.status,
+    block: thread.block === null ? null : served.refOf(thread.block),
+    anchor: thread.anchor,
+    waiting_assistant: thread.waitingAssistant,
+    can_resolve: thread.canResolve,
+    comments: thread.comments.length,
+  }
+}
+
+type ListArgs = { path: string; status: "open" | "resolved" | "all"; under: boolean }
+
+async function list(context: FunctionContext, args: ListArgs): Promise<FunctionOutput> {
+  if (args.under) return listUnder(context, args)
   const { db, identity } = context
   const node = await commentedNode(db, identity, args.path)
   const view = await listComments(db, identity, node.path)
@@ -63,7 +79,7 @@ async function list(context: FunctionContext, args: { path: string; status: "ope
   const text = [
     wanted.length === 0
       ? `No ${which}comment thread on ${node.path}.`
-      : `${wanted.length} ${which}comment ${plural(wanted.length, "thread")} on ${node.path} (${waitingCount(wanted)} waiting for an assistant):`,
+      : `${wanted.length} ${which}comment ${plural(wanted.length, "thread")} on ${node.path} (${waitingCount(wanted)} waiting for an assistant), ${NOT_PAGE_CONTENT}`,
     ...shown.map((thread) => threadText(thread, served)),
     ...(more > 0 ? [`… and ${more} more: resolve some, or read the others on the screen.`] : []),
   ].join("\n\n")
@@ -71,15 +87,37 @@ async function list(context: FunctionContext, args: { path: string; status: "ope
     path: node.path,
     threads_total: wanted.length,
     waiting_assistant: waitingCount(wanted),
-    threads: shown.map((thread) => ({
-      id: thread.id,
-      status: thread.status,
-      block: thread.block === null ? null : served.refOf(thread.block),
-      anchor: thread.anchor,
-      waiting_assistant: thread.waitingAssistant,
-      can_resolve: thread.canResolve,
-      comments: thread.comments.length,
-    })),
+    threads: shown.map((thread) => threadData(thread, served)),
+  }
+  return { text, data }
+}
+
+/**
+ * `comment.list` avec `under` : les fils des pages lues sous le chemin (`threadsUnder`), groupés par page, chacun avec ses
+ * appels à l'adresse de sa page, puis le compte de ceux qui ne sont pas servis et comment les lire.
+ */
+async function listUnder(context: FunctionContext, args: ListArgs): Promise<FunctionOutput> {
+  const { db, identity } = context
+  const found = await threadsUnder(db, identity, args.path, args.status === "all" ? null : args.status)
+  const which = args.status === "all" ? "" : `${args.status} `
+  const pages: { path: string; served: ServedThreads; threads: CommentThreadView[] }[] = []
+  for (const page of found.pages) pages.push({ path: page.node.path, served: await servedThreads(context, page.node, page.threads), threads: page.threads })
+  const shown = pages.reduce((count, page) => count + page.threads.length, 0)
+  const more = found.total - shown
+  const listOne = `${identity.org.prefix}_call {"function": "comment.list", "arguments": {"path": "<page>"}}`
+  const text = [
+    found.total === 0
+      ? `No ${which}comment thread under ${found.path}.`
+      : `${found.total} ${which}comment ${plural(found.total, "thread")} under ${found.path}, on the pages the user reads, ${NOT_PAGE_CONTENT}`,
+    ...pages.flatMap((page) => [`On ${page.path}:`, ...page.threads.map((thread) => threadText(thread, page.served))]),
+    ...(more > 0 ? [`… and ${more} more: list a page with ${listOne}, or a folder below with under: true.`] : []),
+  ].join("\n\n")
+  const data = {
+    path: found.path,
+    under: true,
+    threads_total: found.total,
+    threads_shown: shown,
+    pages: pages.map((page) => ({ path: page.path, threads: page.threads.map((thread) => threadData(thread, page.served)) })),
   }
   return { text, data }
 }
@@ -90,9 +128,9 @@ export const commentList = defineFunction({
   class: "read",
   origin: "paquet",
   description:
-    "Lists the comment threads of a page, procedure or table, the open ones by default: where each thread sits (a block by its short reference, or the page), its quote, its comments with their author and date, whether it waits for an assistant, and the exact calls to reply and to resolve. Use it when the user asks what was commented or what is left to handle on a page, or to get the id of one of their comments before comment.edit or comment.delete. Reading the page already serves its open threads. In French: commentaires, fils, remarques, relecture.",
+    "Lists the comment threads of a page, procedure or table, the open ones by default: where each thread sits (a block by its short reference, or the page), its quote, its comments with their author and date, whether it waits for an assistant, and the exact calls to reply and to resolve. Use it when the user asks what was commented or what is left to handle on a page, or, with under: true on a folder, on all the pages it holds; or to get the id of one of their comments before comment.edit or comment.delete. Reading the page already serves its open threads. In French: commentaires, fils, remarques, relecture, propositions de modification.",
   schema: commentListArgsSchema,
-  examples: [{ path: "ventes/devis" }, { path: "ventes/devis", status: "all" }],
+  examples: [{ path: "ventes/devis" }, { path: "ventes/devis", status: "all" }, { path: "ventes", under: true }],
   refusals: [UNKNOWN_PATH],
   next: ["comment.add", "comment.resolve"],
   run: (context, args) => list(context, args),

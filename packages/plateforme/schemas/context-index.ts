@@ -81,13 +81,14 @@ export const SERVED_BUDGET = {
 
 /**
  * Le bloc des contenus proches de la demande : `## Pages and tables close to the request`, puis
- * `- <chemin> (<genre>, score <s>): <titre>. <résumé>` par contenu, classés comme les procédures par leur titre et leur
- * résumé, puis la consigne de lecture. Sans lui, `context` ne montrait que des procédures, jamais la page qui répond.
+ * `- <chemin> (<genre>): <titre>. <résumé>` par contenu, classés comme les procédures par leur titre et leur résumé, puis
+ * la consigne de lecture ; le score n'est pas servi (il reste aux données de l'aperçu). Sans lui, `context` ne montrait que
+ * des procédures, jamais la page qui répond.
  */
 export const SERVED_RELATED = {
   title: "## Pages and tables close to the request",
   item: "- ",
-  /** `- <chemin> (<genre>, score <s>): <titre>. <résumé>` : ce qui sépare le chemin, le genre, le score, le titre et le résumé. */
+  /** `- <chemin> (<genre>): <titre>. <résumé>` ; `score` : la part du score dans les lignes suivantes de `find`, qui le portent. */
   kindStart: " (",
   score: ", score ",
   textStart: "): ",
@@ -102,20 +103,19 @@ export const SERVED_TEAM = { start: "Team ", leads: ". Lead: ", end: "." } as co
 /**
  * Le bloc de la vue invité (`blocks/guests.ts`) : le titre, une consigne (`You are not a member … Read one with <p>_read;
  * search them with <p>_find.`), puis par équipe `### Team <nom>. Lead: <responsables>.` et une ligne par point d'entrée :
- * `- <chemin> — <titre> — <résumé>` (séparateurs de `CONTEXT_INDEX`), `- <chemin> (+<n> under it) — …` pour un dossier, sans
- * résumé quand la taille l'a retiré, coupé et fini par `…` quand elle l'a raccourci. Au dernier repli,
- * la ligne de l'équipe porte seule `<n> contents shared with you: search them with <p>_find.`
+ * `- <chemin> — <titre> — <résumé>` (séparateurs de `CONTEXT_INDEX`), `- <chemin> (+<n> under it) — …` pour un dossier, le
+ * résumé à sa première phrase. Au-delà de 25 points d'entrée (`GUESTS_MAX`), une dernière ligne :
+ * `and <n> more shared with you: search them with <p>_find and the words of what you need.`
  */
 export const SERVED_GUESTS = {
   title: "## Shared with you by other teams (generated from access rights)",
-  noticeStart: "You are not a member of these teams: you read only what is listed here and what sits under a listed folder. Read one with ",
+  noticeStart: "You are not a member of these teams: you read only what they shared with you, whether listed here or not. Read one with ",
   noticeMiddle: "_read; search them with ",
   noticeEnd: "_find.",
   team: "### ",
   underStart: " (+",
   underEnd: " under it)",
-  cutMark: "…",
-  countOne: " content shared with you: search it with ",
-  countMany: " contents shared with you: search them with ",
-  countEnd: "_find.",
+  moreStart: "and ",
+  moreMiddle: " more shared with you: search them with ",
+  moreEnd: "_find and the words of what you need.",
 } as const

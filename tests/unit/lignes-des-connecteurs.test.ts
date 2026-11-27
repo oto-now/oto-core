@@ -137,14 +137,14 @@ describe("lignesDesConnecteurs", () => {
     },
     [prive.id]: { general: null, rules: [] },
   }
-  // Seul « crm » déclare le domaine de son outil : ses lignes portent l'adresse de son logo.
-  const CRM: OrgConnector = { connector: "crm", label: "Crm Pro", logoDomain: "crm.example", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
+  // Seul « crm » a un logo (déclaré, ou le favicon de son domaine) : ses lignes portent l'adresse de son logo.
+  const CRM: OrgConnector = { connector: "crm", label: "Crm Pro", hasLogo: true, state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
   const MICROSOFT: OrgConnector = { connector: "microsoft", label: "Microsoft 365", state: "active", activatedAt: null, activatedBy: null, functions: [], closedBy: null, accountModes: ["reel"] }
   const sources = { comptes, connecteurs: [CRM, MICROSOFT], formulaires: [CLE], partages, moi: MOI, ici: ICI }
   const vue = (champs: Partial<VueDesConnecteurs> = {}): VueDesConnecteurs => ({ filtre: "all", q: "", compte: null, ...champs })
   const libelles = (une: VueDesConnecteurs) => lignesDesConnecteurs(sources, une).lignes.map((ligne) => ligne.libelle)
 
-  it("should give the lines of a connector that declares its domain the address of its logo, and none to the others", () => {
+  it("should give the lines of a connector that has a logo the address of its logo, and none to the others", () => {
     const comptesDeDeuxOutils = [compte({ label: "Banque" }), compte({ label: "Agenda", connector: "microsoft" })]
     const lignes = lignesDesConnecteurs({ ...sources, comptes: comptesDeDeuxOutils }, vue()).lignes
     expect(lignes.map((ligne) => [ligne.libelle, ligne.logo])).toEqual([

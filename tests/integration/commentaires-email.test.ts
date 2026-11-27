@@ -26,7 +26,7 @@ const suite = !sqlConfigured ? `${SUITE} (${SQL_SKIP_REASON})` : pending ? `${SU
 
 const MINUTE = 60_000
 
-type Who = "claire" | "lea" | "marc"
+type Who = "ada" | "claire" | "lea" | "marc"
 type Mail = { to: string; subject: string; text: string; html: string }
 
 describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, () => {
@@ -93,7 +93,7 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
   beforeAll(async () => {
     fx = createLocalFixtures()
     o = await fx.buildReferenceOrg()
-    for (const who of ["claire", "lea", "marc"] as const) {
+    for (const who of ["ada", "claire", "lea", "marc"] as const) {
       const person = o.people[who]
       const db = fx.as(person)
       sessions.set(who, { db, identity: await resolveIdentity(db, o.host, { userId: person.id, email: person.email }) })
@@ -209,6 +209,37 @@ describe.skipIf(!sqlConfigured || pending)(suite, { timeout: NETWORK_TIMEOUT }, 
     expect(followed).toEqual(mailed)
     // Le jeu distingue les trois personnes : sans cela, l'égalité ne prouverait rien.
     expect(mailed).toEqual({ claire: [first.path, second.path, lost.path], lea: [second.path], marc: [first.path, second.path] })
+  })
+
+  it("should tell of a new thread those who manage its page, by its owner or a full access, alike by email and on the home", async () => {
+    await fresh()
+    // Tout le monde : ses administrateurs. Dossier de Ventes : sa responsable, et Marc par un Accès complet, jamais
+    // l'administratrice. Espace de Marc : Marc. Léa lit chacune et ouvre un fil sur chacune.
+    const sharedPath = `annonce_${hex(3)}`
+    const shared = { id: await fx.createNode(o.org.id, { parentId: o.nodes.root, path: sharedPath, title: "Annonce" }), path: sharedPath }
+    const team = await page("Dossier géré")
+    await fx.admin`update platform.access_rules set level = ${"manage"} where node_id = ${team.id} and subject_user_id = ${o.people.marc.id}`
+    const personalPath = `private/marc/note_${hex(3)}`
+    const personal = { id: await fx.createNode(o.org.id, { parentId: o.spaces.marc, path: personalPath, title: "Note" }), path: personalPath }
+    await fx.addRule({ orgId: o.org.id, nodeId: personal.id, userId: o.people.lea.id, level: "read" })
+    const pages = [shared, team, personal]
+    for (const one of pages) await post("lea", { path: one.path, text: "Un nouveau fil." })
+    const people = ["ada", "claire", "lea", "marc"] as const
+
+    const { mails } = await pass(new Date())
+    const named = (text: string) => pages.filter((one) => text.includes(`/n/${one.path}`)).map((one) => one.path)
+    const mailed = Object.fromEntries(people.map((who) => [who, to(mails, who).flatMap((mail) => named(mail.text))]))
+    const followed = Object.fromEntries(
+      await Promise.all(
+        people.map(async (who) => {
+          const { threads } = await homeComments(session(who).db, session(who).identity)
+          return [who, pages.filter((one) => threads.some((thread) => thread.path === one.path)).map((one) => one.path)]
+        }),
+      ),
+    )
+
+    expect(mailed).toEqual({ ada: [shared.path], claire: [team.path], lea: [], marc: [team.path, personal.path] })
+    expect(followed).toEqual(mailed)
   })
 
   it("should keep the comments of a failed sending for the next pass, and name the failure in the staff journal without the address (AC5)", async () => {

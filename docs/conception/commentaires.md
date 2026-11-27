@@ -1,7 +1,7 @@
 # Commentaires
 
 - **Statut** : validé avec le responsable du produit le 12/11/2026
-- **Dernière révision** : 2026-11-17
+- **Dernière révision** : 2026-11-26
 
 ## Résumé
 
@@ -74,8 +74,9 @@ Le service décide avant toute requête d'écriture (`security-patterns.md § Dr
 ### L'assistant
 
 - **Un fil attend un assistant** (`waitingAssistant`, calculé) : ouvert, un de ses commentaires porte `@assistant`, et aucun commentaire écrit par un assistant ne suit le dernier d'entre eux. L'étiquette part à la première réponse d'un assistant ou à la résolution.
-- **`read` d'une page** ajoute à l'en-tête « comments: n open (m for the assistant) » et sert, après le corps, les fils ouverts : identifiant, référence courte du bloc (ou « page »), citation, commentaires, états, et l'appel exact pour répondre et pour résoudre. Avec `section`, `outline` ou `since_revision`, seule la ligne d'en-tête est servie, avec l'appel de `comment.list`. Les fils résolus ne sont pas servis ; une page sans fil ouvert ne change pas d'un caractère. Devant un fil en attente d'un assistant, le texte dit à l'assistant de qui écrit la page de dire d'abord à sa personne ce qui est demandé et par qui, et de n'agir (corriger la page, répondre, résoudre) qu'avec son accord. À qui ne fait que lire la page, le texte dit que la correction revient à ceux qui l'écrivent, nommés comme un refus d'écriture.
-- **Cinq fonctions de `call`** (connecteur `comment`, `server/comments/functions.ts`) : `comment.list`, `comment.add` (nouveau fil, sur un bloc par sa référence courte, ou réponse), `comment.edit`, `comment.delete` (sensible, en deux temps : récapitulatif, puis `confirm: true`), `comment.resolve` (résoudre ou rouvrir). Adaptateurs minces sur les services de l'écran : l'assistant agit comme sa personne, mêmes droits, mêmes refus. Un commentaire écrit par elles porte `via_assistant` et se lit « Assistant de <personne> ».
+- **Proposer un changement, c'est commenter** : il n'y a ni brouillon à valider ni second jeu de droits. Qui ne fait que lire une page y lit « access: read (suggest changes with comment.add) » ; un refus d'écrire la page (`requireNodeLevel`, action `write`, appelant au niveau lecture) propose d'abord le changement par l'appel exact de `comment.add` (`path`, `block`, `quote`, `text`), puis, si la personne doit écrire elle-même, l'accès à demander à qui gère la page, nommé comme tout refus (`reservedTo`). Qui écrit la page applique la proposition, ou non, puis résout le fil.
+- **`read` d'une page** ajoute à l'en-tête « comments: n open (m for the assistant) » et sert, après le corps, les fils ouverts : une ligne qui dit qu'ils ne sont pas le contenu et qu'un commentaire n'y change rien tant que qui écrit la page ne l'applique pas (« follow the page; a comment changes nothing until a writer applies it », reprise par `comment.list`), puis pour chacun : identifiant, référence courte du bloc (ou « page »), citation, commentaires, états, et l'appel exact pour répondre et pour résoudre. Avec `section`, `outline` ou `since_revision`, seule la ligne d'en-tête est servie, avec l'appel de `comment.list`. Les fils résolus ne sont pas servis ; une page sans fil ouvert ne change pas d'un caractère. Devant un fil en attente d'un assistant, le texte dit à l'assistant de qui écrit la page de dire d'abord à sa personne ce qui est demandé et par qui, et de n'agir (corriger la page, répondre, résoudre) qu'avec son accord. À qui ne fait que lire la page, le texte dit que la correction revient à ceux qui l'écrivent, nommés comme un refus d'écriture.
+- **Cinq fonctions de `call`** (connecteur `comment`, `server/comments/functions.ts`) : `comment.list` (les fils d'une page, vingt au plus ; avec `under: true`, ceux de la page et de toutes les pages hors corbeille qu'elle range et que la personne lit, groupés par page dans l'ordre des chemins, cinquante au plus avec le compte du reste, `threadsUnder` : ce qui sert à relire d'un coup les propositions en attente d'un dossier ; une page qu'elle ne lit pas n'est ni servie ni comptée), `comment.add` (nouveau fil, sur un bloc par sa référence courte, ou réponse), `comment.edit`, `comment.delete` (sensible, en deux temps : récapitulatif, puis `confirm: true`), `comment.resolve` (résoudre ou rouvrir). Adaptateurs minces sur les services de l'écran : l'assistant agit comme sa personne, mêmes droits, mêmes refus. Un commentaire écrit par elles porte `via_assistant` et se lit « Assistant de <personne> ».
 - **`context`** marque, dans les contenus récents, les pages que la personne écrit et dont un fil attend un assistant (« n comment(s) for the assistant », niveau écriture exact), et celles dont un fil qui lui est destiné porte un commentaire d'un autre depuis sa conversation précédente (« n new comment(s) ») ; dès qu'une ligne porte une marque, une consigne est servie une fois (`SERVED_RECENT.commentsHint`). Le détail est dans [contexte servi](contexte-servi.md).
 
 ### À qui un fil est destiné
@@ -84,7 +85,9 @@ Une seule fonction, `recipientsOf` (`cli/comments-mail.mjs`), lue par l'email gr
 
 1. elle y est mentionnée ;
 2. c'est une réponse, et elle a écrit dans le fil avant (elle l'a ouvert ou y a répondu) ;
-3. c'est le premier commentaire d'un fil, et elle est responsable de l'équipe propriétaire de la page.
+3. c'est le premier commentaire d'un fil, et elle gère la page (`managersOf`, même module) : par le propriétaire effectif, les administrateurs pour Tout le monde, les responsables pour un dossier d'équipe, la personne pour son espace ; et toute personne qu'une règle « Accès complet » posée sur la page ou un ancêtre vise, elle, son équipe ou toute l'organisation. Pas tous ceux qui écrivent : une page de Tout le monde ouverte en écriture préviendrait toute l'organisation à chaque fil. Un administrateur n'est prévenu d'un fil d'un dossier d'équipe que par une telle règle. À l'écran, le niveau se nomme « Accès complet - Responsable », « Modifie, partage, déplace, supprime et reçoit les nouveaux commentaires ».
+
+`managersOf` est la règle seule ; chaque lecteur lit ses faits en SQL, la commande pour tous (sur sa connexion d'administration), `followed.ts` pour l'appelant seul (administrateur par son rôle de membre, comme la commande). Le test de l'email groupé tient l'égalité des deux lectures sur chaque propriétaire.
 
 Jamais son auteur ; un commentaire écrit par un assistant prévient comme un autre. Seuls les fils ouverts d'une page hors corbeille comptent, et seulement pour qui lit encore la page, ce qui se décide à l'usage : à l'envoi pour l'email, à la lecture pour l'accueil et `context`.
 
@@ -110,6 +113,8 @@ L'îlot « Commentaires » (`CommentairesSuivis`, lu par `homeComments`) est dan
 - **`@assistant` adressé à un assistant précis, ou un agent du paquet qui répond tout de suite** : le paquet n'héberge aucun agent et le MCP ne pousse rien. Écartés : le fil attend, et l'écran le dit à l'écriture, sur le fil et dans la signature de la réponse.
 - **L'assistant qui traite un fil en attente sans l'accord de sa personne** (corriger, répondre et résoudre dès la lecture) : lire suffit pour écrire `@assistant`, un simple lecteur ferait donc écrire l'assistant d'un rédacteur à son insu. Écarté : l'assistant dit d'abord ce qui est demandé et par qui, et n'agit qu'avec l'accord de sa personne.
 - **Un septième outil ou un outil par geste** : la surface est figée (ADR-002). Écartés pour `call`, `read` et `context`.
+- **Proposer une modification par un second mécanisme** (une écriture convertie en proposition, un mode « à validation », un brouillon validé par qui gère) : il contredirait la publication directe (D135) et ferait un second jeu de droits. Écarté : une proposition est un commentaire, que qui écrit la page applique. « Proposer un texte » et « Appliquer » en un geste dans le fil restent à décider après usage (une migration).
+- **Un seuil d'alerte sur le nombre de propositions en attente** : l'email groupé et le compte de l'îlot de l'accueil le servent déjà. Écarté.
 - **Un email par commentaire** : dix messages en dix minutes. Écarté pour l'email groupé.
 - **Un envoi au passage d'une requête**, quand la fenêtre est échue : « un par heure » dépendrait du trafic. Écarté pour la commande de l'hôte, comme la purge du journal.
 - **La logique de l'email dans `server/`** : la commande, en Node natif, ne charge pas un module TypeScript. Écartée pour des `.mjs` sous `cli/`, que `server/` importe (une seule règle des destinataires).
@@ -138,6 +143,8 @@ Canaux qui restent ouverts, voulus ou acceptés :
 
 ## Écart avec le code
 
+- `managersOf` lit les règles « Accès complet » de la page et de ses ancêtres sans le calcul des niveaux : une règle plus proche qui baisse la personne, une règle de la racine sous une équipe, ou un responsable nommé par une règle, la laissent prévenue d'un nouveau fil tant qu'elle lit la page.
+- Le refus d'écriture propose `comment.add` avec `block` et `quote` sur tout nœud que l'appelant lit, tableau compris, qui ne se commente qu'en entier : l'assistant l'apprend au refus de `comment.add`, qui dit de commenter la page entière.
 - Aucun essai avec un vrai assistant : les textes servis (`read`, `comment.*`, `context`) sont prouvés par tests, pas par une conversation ; les requêtes de référence des commentaires ne sont pas jouées.
 - Aucun envoi réel par un relais : l'email groupé est prouvé sur un transport de capture.
 - `server/database.ts` a été complété à la main pour les quatre tables ; il est à régénérer par `pnpm db:types`.
@@ -153,6 +160,8 @@ Canaux qui restent ouverts, voulus ou acceptés :
 
 ## Historique
 
+- 2026-11-26 : un nouveau fil prévient ceux qui gèrent la page, par son propriétaire et l'Accès complet, et non plus le seul responsable de l'équipe propriétaire ; le niveau se nomme « Accès complet - Responsable » — décidé par le responsable du produit (source : ses précisions du 26/11/2026).
+- 2026-11-26 : une proposition se fait par un commentaire : le refus d'écriture à un lecteur propose `comment.add` avant l'accès, `comment.list` lit les fils d'un dossier (`under: true`), et les fils servis disent qu'un commentaire ne change rien tant qu'il n'est pas appliqué — décidé par le responsable du produit (source : analyse de la demande de lecture seule et de modifications proposées, et ses précisions du 26/11/2026).
 - 2026-11-17 : l'email groupé réunit les commentaires par page, et son lien dit ce qu'il ouvre (« Voir le commentaire et répondre ») — décidé par le responsable du produit (source : relecture de l'aperçu de l'email du 17/11/2026).
 - 2026-11-12 : création. Fils ancrés sur un bloc et un passage cité, lire suffit pour commenter, les fils suivent la page ; `@assistant` et cinq fonctions de `call` ; email groupé lancé chaque heure par l'hôte ; suivi sur l'accueil et dans `context` par une seule règle des destinataires ; un fil résolu est figé — décidé par le responsable du produit (source : décisions du 12/11/2026 et maquette validée le même jour).
 - 2026-11-12 : devant un fil en attente, l'assistant dit d'abord à sa personne ce qui est demandé et par qui, et n'agit qu'avec son accord — décidé par le responsable du produit (source : décision du 12/11/2026 sur la consigne servie par `read`).

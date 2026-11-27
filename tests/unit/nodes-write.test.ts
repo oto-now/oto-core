@@ -301,7 +301,7 @@ describe.skipIf(!sqlConfigured)(portable("write on a real database"), { timeout:
       const marc = await write("marc", { path: "conseil/methode_etude", base_revision: 1, ops: [op] })
       expect(marc.error).toMatchObject({
         code: "forbidden",
-        message: "Writing conseil/methode_etude is reserved to the administrators of Acme Test (Ada Martin). Ask them for access.",
+        message: expect.stringContaining("Writing conseil/methode_etude is reserved to the administrators of Acme Test (Ada Martin). You can read it: suggest the change"),
       })
       for (const outcome of [missing, stale, marc]) expect(writes(outcome.calls)).toEqual([])
     })

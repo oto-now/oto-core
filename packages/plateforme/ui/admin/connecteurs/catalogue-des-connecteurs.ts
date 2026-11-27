@@ -13,7 +13,7 @@ export type OutilAAjouter = {
   connecteur: string
   /** Le nom lisible de l'outil. */
   libelle: string
-  /** L'adresse du logo de l'outil, `null` sans domaine déclaré (`OrgConnector.logoDomain`). */
+  /** L'adresse du logo de l'outil, `null` sans logo ni domaine déclarés (`OrgConnector.hasLogo`). */
   logo: string | null
   /**
    * L'accès du compte à créer, pour un connecteur à plusieurs accès : son nom (envoyé à la création, au consentement et
@@ -104,7 +104,7 @@ export function outilsAAjouter(connecteurs: readonly OrgConnector[], formulaires
       const [premiere] = ouvertes
       if (!premiere) return []
       const facons = faconsDeLOutil(connecteur.label, ouvertes)
-      const logo = connecteur.logoDomain !== undefined ? connectorLogoAddress(connecteur.connector) : null
+      const logo = connecteur.hasLogo === true ? connectorLogoAddress(connecteur.connector) : null
       const miens = deLOutil(connecteur.connector)
       return [
         {

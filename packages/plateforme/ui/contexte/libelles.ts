@@ -7,8 +7,11 @@
 // serveur MCP » (architecture § 10), l'aide servie (`help`).
 import type { TeamView } from "../../schemas"
 import { PERSO, SECTION_PERSO, TOUT_LE_MONDE } from "../arbre/depuis-l-arbre"
-import { nombreLisible } from "../format/nombres"
-import { estUnContexte } from "./parties-du-contexte"
+import { nombreLisible, scoreLisible } from "../format/nombres"
+import { estUnContexte, type PourLAuteur } from "./parties-du-contexte"
+
+/** Les mots de la demande trouvés dans un titre ou un résumé (le routage les compte) : ce qu'un auteur ajouterait au résumé. */
+const motsEnCommun = (mots: readonly string[]) => (mots.length === 0 ? "aucun mot en commun" : `mots en commun : ${mots.join(", ")}`)
 
 /** Les équipes de l'organisation (`listTeams`) : le nom d'un Contexte d'équipe. */
 export type EquipesNommees = readonly Pick<TeamView, "slug" | "name">[]
@@ -147,7 +150,8 @@ export const TEST_D_UNE_DEMANDE = {
   retenue: "Procédure retenue",
   aucune: "Aucune procédure retenue",
   proches: "Procédures proches",
-  score: (score: number) => `score ${score.toFixed(2).replace(".", ",")}`,
+  /** Le score d'une procédure, puis ses mots en commun avec la demande quand l'aperçu les donne. */
+  score: (score: number, mots?: readonly string[]) => `(score ${scoreLisible(score)}${mots === undefined ? "" : ` ; ${motsEnCommun(mots)}`})`,
   texteExact: "Texte exact envoyé à l'assistant",
   /** Le titre en deux morceaux : sur un écran étroit, seul le premier est montré, pour que la taille tienne sur sa ligne. */
   texteExactCourt: "Texte exact",
@@ -180,10 +184,11 @@ export const LIGNES_SERVIES = {
   linked: "Pages citées",
   /** L'équipe d'une vue invité, et ses responsables quand elle en nomme. */
   equipe: (nom: string, responsables: string) => (responsables === "" ? `Équipe ${nom}` : `Équipe ${nom} · ${responsables.includes(", ") ? "Responsables" : "Responsable"} : ${responsables}`),
-  /** Un contenu proche de la demande testée : son genre et son score. */
-  proche: (nature: string, score: string) => `${NATURES[nature] ?? nature}, score ${score.replace(".", ",")}`,
-  /** Le dernier repli : les contenus qu'une équipe partage, comptés. */
-  partages: (nombre: number) => (nombre > 1 ? `${nombreLisible(nombre)} contenus partagés avec vous` : "1 contenu partagé avec vous"),
+  /** Un contenu proche de la demande testée : son genre, puis, lus dans les données de l'aperçu, son score et ses mots en commun. */
+  proche: (nature: string, auteur?: PourLAuteur) =>
+    auteur ? `${NATURES[nature] ?? nature} ${TEST_D_UNE_DEMANDE.score(auteur.score, auteur.mots)}` : (NATURES[nature] ?? nature),
+  /** La dernière ligne de la vue invité : les points d'entrée au-delà de ceux listés, que l'assistant trouve par `find`. */
+  partages: (nombre: number) => (nombre > 1 ? `et ${nombreLisible(nombre)} autres contenus partagés avec vous` : "et 1 autre contenu partagé avec vous"),
   /** Les contenus lisibles sous un dossier partagé. */
   dessous: (nombre: number) => `et ${accorde(nombre, "contenu", "contenus")} dessous`,
   suite: "La suite de ce contexte est lue à la demande.",

@@ -17,18 +17,18 @@ const comment = (author: string | null, mentions: string[] = []) => ({ author, m
 describe("threads meant for a person", () => {
   // Chaque fil ne diffère du précédent que par ce qui change le verdict pour Léa.
   const THREADS: Record<string, RuledThread> = {
-    mentioned: { author: "marc", teamLeads: [], comments: [comment("marc", ["lea"])] },
-    mentionedByHerself: { author: "lea", teamLeads: [], comments: [comment("lea", ["lea"])] },
-    ownThreadAlone: { author: "lea", teamLeads: [], comments: [comment("lea"), comment("lea")] },
-    ownThreadAnswered: { author: "lea", teamLeads: [], comments: [comment("lea"), comment("marc")] },
-    repliedThenAnswered: { author: "marc", teamLeads: [], comments: [comment("marc"), comment("lea"), comment("ada")] },
-    repliedLast: { author: "marc", teamLeads: [], comments: [comment("marc"), comment("ada"), comment("lea")] },
+    mentioned: { author: "marc", managers: [], comments: [comment("marc", ["lea"])] },
+    mentionedByHerself: { author: "lea", managers: [], comments: [comment("lea", ["lea"])] },
+    ownThreadAlone: { author: "lea", managers: [], comments: [comment("lea"), comment("lea")] },
+    ownThreadAnswered: { author: "lea", managers: [], comments: [comment("lea"), comment("marc")] },
+    repliedThenAnswered: { author: "marc", managers: [], comments: [comment("marc"), comment("lea"), comment("ada")] },
+    repliedLast: { author: "marc", managers: [], comments: [comment("marc"), comment("ada"), comment("lea")] },
     // Son commentaire d'ouverture supprimé : le fil reste le sien, la réponse d'un autre la prévient.
-    openedThenDeleted: { author: "lea", teamLeads: [], comments: [comment("marc"), comment("ada")] },
-    newThreadOfHerTeam: { author: "marc", teamLeads: ["lea"], comments: [comment("marc")] },
-    newThreadOfHerTeamByHerself: { author: "lea", teamLeads: ["lea"], comments: [comment("lea")] },
-    newThreadOfAnotherTeam: { author: "marc", teamLeads: ["claire"], comments: [comment("marc"), comment("ada")] },
-    forgottenAuthor: { author: null, teamLeads: [], comments: [comment(null, ["lea"])] },
+    openedThenDeleted: { author: "lea", managers: [], comments: [comment("marc"), comment("ada")] },
+    newThreadOfHerTeam: { author: "marc", managers: ["lea"], comments: [comment("marc")] },
+    newThreadOfHerTeamByHerself: { author: "lea", managers: ["lea"], comments: [comment("lea")] },
+    newThreadOfAnotherTeam: { author: "marc", managers: ["claire"], comments: [comment("marc"), comment("ada")] },
+    forgottenAuthor: { author: null, managers: [], comments: [comment(null, ["lea"])] },
   }
 
   it("should follow a thread for a mention, for a reply of another where the person wrote, and for a new thread of a team she leads, never for her own comments alone (AC1 to AC3)", () => {
@@ -58,7 +58,7 @@ describe("threads meant for a person", () => {
             first: rank === 0,
             threadAuthor: thread.author,
             earlierAuthors: thread.comments.slice(0, rank).flatMap((earlier) => earlier.author ?? []),
-            teamLeads: thread.teamLeads,
+            managers: thread.managers,
           }),
         ),
       )
@@ -161,15 +161,15 @@ describe("new comments in the recent content of context", () => {
     ])
   })
 
-  it("should keep the block within its twenty lines, a page with new comments taking its place by its date", () => {
+  it("should keep the block within its ten lines, a page with new comments taking its place by its date", () => {
     const many = Array.from({ length: 20 }, (_, index) => ({ path: `ventes/p${String(index).padStart(2, "0")}`, kind: "page", title: `P${index}`, at: `2026-10-${String(26 - index).padStart(2, "0")}T08:00:00.000Z` }))
     const lines = recentText(many, null, since, markedPages([], [commented[2]]))?.text.split("\n") ?? []
 
-    // Le titre, les 20 lignes, puis la consigne, qui ne prend la place d'aucune.
+    // Le titre, les 10 lignes (contexte plus court, AC9 ; 20 avant), puis la consigne, qui ne prend la place d'aucune.
     expect([lines.length, lines.indexOf("- ventes/suivi (table, 3 new comments, 2026-10-23): Suivi"), lines.at(-2), lines.at(-1)]).toEqual([
-      22,
+      12,
       5,
-      "- ventes/p18 (page, 2026-10-08): P18",
+      "- ventes/p08 (page, 2026-10-18): P8",
       SERVED_RECENT.commentsHint,
     ])
   })

@@ -37,7 +37,10 @@ calculée.** Ce second visage s'appelle la **vue invité** d'une équipe.
 4. **Repli fixe, par taille seule**, le palier appliqué valant pour tout le bloc :
    palier 1, résumés entiers tant que le bloc fait 5 000 caractères au plus ; palier 2, résumés coupés à 100 caractères,
    à un mot, suivis de « … » ; palier 3, si le bloc dépasse encore 5 000, plus de résumé ; palier 4, si le palier 3
-   dépasse 10 000, une ligne par équipe.
+   dépasse 10 000, une ligne par équipe. **Remplacé le 2026-11-26 (décision de JB, contexte plus court)** : 25 points
+   d'entrée au plus, le résumé à sa première phrase, puis « and <n> more shared with you: search them with <p>_find and
+   the words of what you need. » ; les paliers, AC3 (ligne sans résumé) et AC7 ne valent plus
+   (`docs/conception/contexte-servi.md`, La vue invité).
 5. **Même source que le rail** : exactement ce que le rail montre dans les sections des équipes dont la personne n'est
    pas membre, niveaux calculés sur l'identité de membre (`asMember`).
 6. **Confidentialité** : chacun ne voit que ce qui lui est ouvert ; les partages d'une équipe sont réservés à ses membres
@@ -61,7 +64,7 @@ calculé dans `read` (à mesurer plus tard) ; un écran pour le rapport du lot 7
 
 ### Lot 1 — La vue invité dans `context`
 
-Texte servi (constantes `SERVED_GUESTS`, `schemas/context-index.ts`) :
+Texte servi (constantes `SERVED_GUESTS`, `schemas/context-index.ts`) ; depuis le 2026-11-26, la consigne dit « you read only what they shared with you, whether listed here or not », et la forme qui suit vaut pour 25 points d'entrée au plus :
 
 ```
 ## Shared with you by other teams (generated from access rights)
@@ -88,7 +91,7 @@ listés : `(+N under it)` les compte.
   seuls contenus qui lui sont ouverts, pas tout l'espace de l'équipe.
 - [ ] **AC6** **Given** des Contextes d'équipe qui remplissent le budget **Then** le bloc reste `full` dans le rapport,
   et ce sont les parties de Contexte qui sont coupées.
-- [ ] **AC7** **Given** un bloc de plus de 5 000 caractères aux résumés entiers **Then** tous les résumés sont coupés à
+- [ ] **AC7** (remplacé le 2026-11-26 par la borne de 25 points d'entrée, contexte plus court) **Given** un bloc de plus de 5 000 caractères aux résumés entiers **Then** tous les résumés sont coupés à
   100 caractères, à un mot, suivis de « … » ; s'il dépasse encore, plus aucun résumé ; si le bloc sans résumé dépasse
   10 000, une ligne par équipe : `### Team <nom>. Lead: A. 12 contents shared with you: search them with <p>_find.`
 - [ ] **AC8** **Given** deux demandes différentes **Then** le bloc est identique à l'octet ; équipes par nom, entrées
@@ -176,8 +179,9 @@ listés : `(+N under it)` les compte.
 ## Implémentation
 
 ### `schemas/`
-- `context-index.ts` : `SERVED_GUESTS` (titre, consigne, forme d'une ligne d'équipe, `under`, paliers `GUESTS_FULL_MAX = 5000`,
-  `GUESTS_PLAIN_MAX = 10000`, `GUEST_SUMMARY_MAX = 100`) ; réexport dans `index.ts`.
+- `context-index.ts` : `SERVED_GUESTS` (titre, consigne, forme d'une ligne d'équipe, `under`, et depuis le 2026-11-26 la
+  ligne `more…` au-delà de `GUESTS_MAX = 25`, qui remplace les paliers `GUESTS_FULL_MAX`, `GUESTS_PLAIN_MAX`,
+  `GUEST_SUMMARY_MAX`) ; réexport dans `index.ts`.
 - `team-shares.ts` (lot 5) : forme de `TeamShares` ; `trash-impact` dans `node-gestures.ts` (lot 3).
 - `contexte.ts` ou l'existant : schéma du paramètre `q` (lot 6).
 

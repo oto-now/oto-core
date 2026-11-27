@@ -144,11 +144,9 @@ Connect que l'hôte configure (Logto, Keycloak), sans façade devant lui (ADR-00
 consultant membre de deux organisations agit, avec un seul compte, dans celle de l'adresse appelée.
 
 Le nom du connecteur est celui que l'utilisateur saisit, et c'est lui que le modèle voit : le guide
-propose un nom qui aide le routage (« Acme assistant ») et, pour un salarié qui n'a qu'un connecteur
-d'entreprise sur claude.ai, une phrase de préférences : « Au début de chaque conversation, appelle une fois
-l'outil de contexte du connecteur « <Nom> » : il porte mes consignes. Utilise ensuite ses autres outils
-seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données). » Un consultant branché chez plusieurs
-clients ne la pose pas et nomme le client ; ChatGPT et Claude Code n'en ont pas besoin. Guide des
+propose un nom qui aide le routage (« Acme assistant ») et, sur claude.ai, une phrase de préférences en
+quatre lignes : « Au début de chaque conversation, charge le contexte de mon Oto « <Nom> » avec son outil context. / Dans « <Nom> », tu peux : suivre nos procédures, lire et écrire nos pages et tableaux, utiliser nos connecteurs (emails, comptabilité, CRM…). / Réflexes : cherche d'abord dans « <Nom> » avant de répondre de mémoire, de chercher sur le web ou de dire que tu ne peux pas ; suis la procédure trouvée pas à pas. / Si j'ai plusieurs Oto, charge seulement celui que la demande concerne. » Un consultant branché chez plusieurs clients la pose pour chacun : sa dernière
+ligne ne fait charger que l'Oto que la demande concerne ; ChatGPT et Claude Code n'en ont pas besoin. Guide des
 utilisateurs : `docs/exploitation/guide-installation.md`.
 
 ```mermaid

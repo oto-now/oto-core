@@ -3,14 +3,14 @@
 // fenêtre d'une heure, l'adresse des liens, l'extrait et le modèle. Le passage sur une base est dans
 // `tests/integration/commentaires-email.test.ts`.
 import { describe, expect, it } from "vitest"
-import { commentsDigestMail, digestSubject, excerpt, EXCERPT_CHARS, isDue, linkOrigin, recipientsOf } from "../../packages/plateforme/cli/comments-mail.mjs"
+import { commentsDigestMail, digestSubject, excerpt, EXCERPT_CHARS, isDue, linkOrigin, managersOf, recipientsOf } from "../../packages/plateforme/cli/comments-mail.mjs"
 
 const MINUTE = 60_000
 
 describe("recipients of a comment", () => {
-  it("should notify the mentioned people, the thread author and the earlier participants of a reply, the team leads of a new thread, and never the author", () => {
-    const reply = { author: "lea", mentions: [], first: false, threadAuthor: "marc", earlierAuthors: ["marc", "ada", "lea"], teamLeads: ["claire"] }
-    const opening = { author: "marc", mentions: [], first: true, threadAuthor: "marc", earlierAuthors: [], teamLeads: ["claire", "marc"] }
+  it("should notify the mentioned people, the thread author and the earlier participants of a reply, the managers of the page for a new thread, and never the author", () => {
+    const reply = { author: "lea", mentions: [], first: false, threadAuthor: "marc", earlierAuthors: ["marc", "ada", "lea"], managers: ["claire"] }
+    const opening = { author: "marc", mentions: [], first: true, threadAuthor: "marc", earlierAuthors: [], managers: ["claire", "marc"] }
 
     expect({
       reply: recipientsOf(reply),
@@ -18,13 +18,36 @@ describe("recipients of a comment", () => {
       // L'auteur du fil a été oublié, comme l'auteur du commentaire d'un assistant resté sans personne.
       replyToForgotten: recipientsOf({ ...reply, threadAuthor: null, earlierAuthors: [] }),
       opening: recipientsOf(opening),
-      openingWithoutTeam: recipientsOf({ ...opening, teamLeads: [], mentions: ["paul"] }),
+      openingWithoutTeam: recipientsOf({ ...opening, managers: [], mentions: ["paul"] }),
     }).toEqual({
       reply: ["marc", "ada"],
       replyWithMention: ["paul", "marc", "ada"],
       replyToForgotten: [],
       opening: ["claire"],
       openingWithoutTeam: ["paul"],
+    })
+  })
+})
+
+describe("managers of a page", () => {
+  it("should name the administrators of an organisation page, the leads of a team folder, the person of her space, and whoever has full access on it", () => {
+    const facts = { ownerKind: "org", ownerUser: null, admins: ["ada"], teamLeads: [], fullAccess: [] }
+
+    expect({
+      organisation: managersOf(facts),
+      // Un administrateur ne gère un dossier d'équipe que par une règle : ses responsables seuls.
+      team: managersOf({ ...facts, ownerKind: "team", teamLeads: ["claire", "lea"] }),
+      teamWithoutLead: managersOf({ ...facts, ownerKind: "team" }),
+      personal: managersOf({ ...facts, ownerKind: "user", ownerUser: "marc" }),
+      unknownOwner: managersOf({ ...facts, ownerKind: null }),
+      fullAccess: managersOf({ ...facts, ownerKind: "team", teamLeads: ["claire"], fullAccess: ["marc", "claire"] }),
+    }).toEqual({
+      organisation: ["ada"],
+      team: ["claire", "lea"],
+      teamWithoutLead: [],
+      personal: ["marc"],
+      unknownOwner: [],
+      fullAccess: ["claire", "marc"],
     })
   })
 })
