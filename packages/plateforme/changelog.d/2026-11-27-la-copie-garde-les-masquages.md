@@ -1,0 +1,2 @@
+### Hosts
+- Migrations: apply `20261127120000_platform_copie_garde_les_masquages.sql` with the package: `duplicate_subtree` is recreated under the same signature, return and grant, and copies the "no access" (`none`) rules of each copied page onto its copy, plus, where they hide that copy from the person who duplicates, one rule in their name at the level they read the original. No table, column or policy; no row rewritten; without it, what the original hides becomes readable in the copy.

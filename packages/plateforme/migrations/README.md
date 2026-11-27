@@ -507,6 +507,11 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   Lue par les membres de l'organisation (`member_orgs()`), écrite par l'équipe plateforme (`member_orgs()` et
   `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
   échoue sur le catalogue d'une organisation. Rien à relancer avant.
+- `20261127120000_platform_copie_garde_les_masquages.sql` (non publiée ; droits d'accès, § Règles d'accès) :
+  `duplicate_subtree` recréée sous sa signature, son retour et son droit : chaque copie reprend les règles `none` de
+  son original, `created_by` à l'appelant ; quand elles cachent la copie à qui copie, qui lit l'original, une règle à
+  son seul nom lui rend sur cette copie le niveau auquel il lit l'original. Aucune table, colonne ni policy ; rien à
+  relancer avant. Rollback dans le fichier.
 
 ## Installer sur un hôte neuf
 
