@@ -133,8 +133,11 @@ function validator(strict: boolean): Ajv2020 {
   return ajv
 }
 
-/** Le validateur que le profil reçoit : chaque schéma compilé une fois par import. */
-function schemaCompiler(): SchemaCompiler {
+/**
+ * Le validateur que reçoit un profil de la lib (hôte, Custom API) : chaque schéma compilé une fois par import ; aussi celui
+ * des connecteurs privés (`private-connectors/validation.ts`).
+ */
+export function schemaCompiler(): SchemaCompiler {
   const ajv = validator(false)
   const compiled = new WeakMap<object, ValidateFunction>()
   return (schema) => {

@@ -138,6 +138,9 @@ const UPDATED_BY_SERVER_ONLY: Record<string, string[]> = {
     "label",
     "description",
   ],
+  // Les connecteurs privés (`20261127170000`) : la version servie et le retrait, écrits par le service une fois décidé que
+  // l'appelant est de l'équipe plateforme (`savePrivateConnector`, `removePrivateConnector`).
+  private_connectors: ["version", "removed_at"],
 }
 
 /**

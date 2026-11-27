@@ -84,6 +84,32 @@ function guardedLookup(resolve: Lookup) {
   }
 }
 
+/** Au plus, la résolution d'une adresse jugée à l'écriture. */
+const RESOLUTION_TIMEOUT_MS = 5_000
+
+/** Le défaut d'une adresse par sa résolution : interne, ou qui ne se résout pas. */
+export type ResolutionFault = "internal" | "unresolved"
+
+/**
+ * Le défaut d'une adresse `https` fixe par sa résolution, jugé à l'écriture d'une définition (un connecteur privé) : une
+ * adresse IP interne, un nom dont l'une des adresses résolues est interne, ou un nom qui ne se résout pas (en 5 s) ;
+ * `null` : toutes publiques. Le même jugement que le transport gardé à chaque connexion (`isPublicAddress`), qui reste
+ * la garde : une résolution qui change ensuite est refusée à l'appel. `resolve` : la résolution, remplacée par les tests.
+ */
+export async function resolutionFault(url: string, resolve: Lookup = dnsLookup): Promise<ResolutionFault | null> {
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, "")
+  if (isIP(host)) return isPublicAddress(host) ? null : "internal"
+  const addresses = await new Promise<LookupAddress[] | null>((settle) => {
+    const timer = setTimeout(() => settle(null), RESOLUTION_TIMEOUT_MS)
+    resolve(host, { all: true }, (error, found) => {
+      clearTimeout(timer)
+      settle(error || !Array.isArray(found) ? null : found)
+    })
+  })
+  if (!addresses || addresses.length === 0) return "unresolved"
+  return addresses.every((entry) => isPublicAddress(entry.address)) ? null : "internal"
+}
+
 /** En-têtes Node vers `Headers` ; un en-tête répété garde chaque valeur. */
 function headersOf(raw: NodeJS.Dict<string | string[]>): Headers {
   const headers = new Headers()

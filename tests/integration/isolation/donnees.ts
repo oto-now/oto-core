@@ -328,6 +328,16 @@ async function seedRows(fx: LocalFixtures, admin: TestSql, of: { b: Place; peopl
     insert into platform.host_apis (org_id, address, document, version, served_at, refused_address, refused_at, problems)
     values (${b.id}, 'https://hote-b.example.test', ${admin.json({ openapi: "3.1.0", info: { title: "B", version: "1" } })}, '1', now(),
       'https://hote-b.example.test', now(), ${admin.json([{ code: "host_document_status", message: "HTTP 500" }])})`
+  // Un connecteur privé de B et sa version (connecteurs privés, `20261127170000`) : écrits sous le rôle du serveur pour
+  // l'équipe plateforme ; lus par les membres de B seuls.
+  const privateConnector = await one(
+    admin<{ id: string }[]>`
+      insert into platform.private_connectors (org_id, name, namespace, version) values (${b.id}, ${`custom_${hex(4)}`}, 'custom_tournees', 1) returning id`,
+    "private connector of B insert",
+  )
+  await admin`
+    insert into platform.private_connector_versions (private_connector_id, org_id, version, document)
+    values (${privateConnector.id}, ${b.id}, 1, ${admin.json({ connector: { name: "custom_tournees" }, functions: [] })})`
   // Un fichier joint de B (E10-S02, ADR-016) : sa ligne seule, aucun objet dans un bucket.
   await admin`
     insert into platform.files (org_id, node_id, name, mime, size, status, created_by)

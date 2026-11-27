@@ -17,6 +17,7 @@ import { listAccountRules, removeAccountRule, setAccountRule } from "../../../se
 import { day, firstOf, listLines, nothingWas, renderHelp, targetOf, type AdminOutput, type OpCall, type OpTable } from "../ops"
 import { noRuleFor, readSubject, ruleOf, rulesOutput, ruleSetText } from "../rule-texts"
 import { HOST_API_OPS } from "./host-api"
+import { PRIVATE_CONNECTOR_OPS } from "./private-connector"
 
 /** Chemins de procédures nommés au plus par le récapitulatif d'une désactivation (AC9). */
 const PROCEDURES_NAMED = 10
@@ -324,4 +325,6 @@ export const CONNECTOR_OPS: OpTable = {
   },
   // L'API de l'hôte de l'organisation (fonctions d'un hôte), ajoutée en dernier : le contrat n'évolue que par ajout.
   ...HOST_API_OPS,
+  // Les connecteurs privés de l'organisation (connecteurs privés), ajoutés en dernier pour la même raison.
+  ...PRIVATE_CONNECTOR_OPS,
 }

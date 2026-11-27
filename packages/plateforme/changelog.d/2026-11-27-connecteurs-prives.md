@@ -1,0 +1,5 @@
+### Hosts
+- Migrations: `20261127170000_platform_connecteurs_prives.sql` adds `platform.private_connectors` and `platform.private_connector_versions` (additive; read by the organisation's members, written under the server role for platform team members). Apply it before deploying: without it, the administration of a private connector fails.
+- Server: `server/private-connectors` checks a private connector definition (Custom API profile of the connectors lib, then oto-core's declaration check, then oto's own checks: namespace equal to the name and not served by the instance, V1 auth kinds, addresses judged by their resolution), saves it as a new version, restores a past version as a new one, and removes it (versions kept). Nothing is served to assistants yet.
+- MCP admin: `admin_connector` gains `private_connectors`, `private_connector`, `save_private_connector` (the definition as JSON text; its first step is the dry-run check), `restore_private_connector` and `remove_private_connector`, the writes in two steps, each at the admin journal.
+- CLI: `org delete` removes both tables with the organisation; `org:export` never exports them.
