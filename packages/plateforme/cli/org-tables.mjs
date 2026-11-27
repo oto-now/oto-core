@@ -47,6 +47,8 @@ export const ORG_TABLES = [
   deleted('account_share_events'),
   deleted('connector_activations'),
   deleted('host_apis'),
+  deleted('private_connectors'),
+  deleted('private_connector_versions'),
   deleted('connector_consents'),
   deleted('hosted_link_requests'),
   deleted('sim_outbox'),

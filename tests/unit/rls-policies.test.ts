@@ -148,6 +148,10 @@ ADDED.push("connector_activations_insert_server")
 // L'API de l'hôte d'une organisation (`20261123150000`, fonctions d'un hôte) : lue par les membres, écrite par l'équipe
 // plateforme sur une organisation qu'elle atteint (`STAFF_ROLE_REQUIRED`).
 ADDED.push("host_apis_select_member", "host_apis_insert_staff", "host_apis_update_staff")
+// Les connecteurs privés d'une organisation et leurs versions (`20261127170000`, connecteurs privés) : lus par les membres,
+// écrits sous le rôle du serveur seul, pour l'équipe plateforme sur une organisation qu'elle atteint (`STAFF_ROLE_REQUIRED`).
+ADDED.push("private_connectors_select_member", "private_connectors_insert_staff", "private_connectors_update_staff")
+ADDED.push("private_connector_versions_select_member", "private_connector_versions_insert_staff")
 
 /** Portée plateforme : les seules policies où `is_staff()` reste (HN-E01S08-3). */
 const PLATFORM_SCOPE = [
@@ -231,6 +235,11 @@ const STAFF_ROLE_REQUIRED = [
   // refreshHostApi (server/host-api/service.ts) : isStaff, sur une organisation atteinte (member_orgs).
   "host_apis_insert_staff",
   "host_apis_update_staff",
+  // savePrivateConnector, restorePrivateConnector, removePrivateConnector (server/private-connectors/service.ts) : isStaff,
+  // sur une organisation atteinte (member_orgs), sous le rôle du serveur.
+  "private_connectors_insert_staff",
+  "private_connectors_update_staff",
+  "private_connector_versions_insert_staff",
 ]
 
 /** Un niveau ou un rôle calculé en base. */

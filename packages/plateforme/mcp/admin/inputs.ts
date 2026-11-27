@@ -44,6 +44,11 @@ export const ADMIN_OPS = {
     "remove_account_rule",
     "host_api",
     "refresh_host_api",
+    "private_connectors",
+    "private_connector",
+    "save_private_connector",
+    "restore_private_connector",
+    "remove_private_connector",
   ],
   admin_journal: ["help", "conversations", "conversation", "admin_log"],
   admin_feedback: ["help", "list", "set_state"],
@@ -137,7 +142,13 @@ export const ADMIN_INPUTS = {
     subject: z.string().optional().describe("Who a rule applies to: team:<slug> or user:<email> (add_account_rule, remove_account_rule)"),
     level: setAccountRuleSchema.shape.level.optional().describe("Rule level (add_account_rule); sensitive opens the sensitive functions, write does not"),
     address: z.string().optional().describe("Address of the host API, https without trailing slash, e.g. https://erp.example.test (refresh_host_api; omitted: the served one)"),
-    confirm: confirm("deactivate, disable_account, refresh_host_api"),
+    namespace: z.string().optional().describe("Namespace of a private connector, custom_… (private_connector, restore_private_connector, remove_private_connector)"),
+    version: z.number().int().optional().describe("Version of a private connector (private_connector: show it; restore_private_connector: serve it again)"),
+    definition: z
+      .string()
+      .optional()
+      .describe("Private connector definition, as JSON text: a Custom API connector.yaml, {connector, functions}, name and namespace custom_… (save_private_connector)"),
+    confirm: confirm("deactivate, disable_account, refresh_host_api, save_private_connector, restore_private_connector, remove_private_connector"),
   }),
   admin_journal: z.object({
     ctx,

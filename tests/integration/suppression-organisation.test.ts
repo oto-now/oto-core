@@ -105,6 +105,10 @@ describe.skipIf(!sqlConfigured || privatePending)(name(SUITE), () => {
     const code = await fx.seedCtxJournal(org.org, claire, [{ tool: "t_read", target: "ventes/offre" }])
     await admin`insert into platform.feedback (org_id, user_id, type, text, number) values (${org.org.id}, ${lea.id}, 'gap', 'Il manque la grille.', 0)`
     await admin`insert into platform.host_apis (org_id, refused_address, refused_at, problems) values (${org.org.id}, 'https://hote.example.test', now(), '[]'::jsonb)`
+    // Un connecteur privé et sa version (connecteurs privés) : la clé interne est unique dans l'instance.
+    const [privateConnector] = await admin<{ id: string }[]>`
+      insert into platform.private_connectors (org_id, name, namespace, version) values (${org.org.id}, ${`custom_${hex(4)}`}, 'custom_erp', 1) returning id`
+    await admin`insert into platform.private_connector_versions (private_connector_id, org_id, version, document) values (${privateConnector.id}, ${org.org.id}, 1, '{}'::jsonb)`
     await admin`insert into platform.pseudonym_orgs (org_id, salt, witness) values (${org.org.id}, ${randomBytes(12).toString("hex")}, 'abcd')`
     await admin`insert into platform.member_exclusions (org_id, user_id) values (${org.org.id}, ${(await fx.createUser()).id})`
     await admin`insert into platform.invitations (org_id, email, invited_by) values (${org.org.id}, ${`test-${hex(6)}@example.invalid`}, ${org.people.ada.id})`

@@ -507,6 +507,16 @@ propre workflow (`supabase db push`, sur Supabase comme sur un Postgres sans Sup
   Lue par les membres de l'organisation (`member_orgs()`), écrite par l'équipe plateforme (`member_orgs()` et
   `is_staff()`) ; ni secret, ni colonne de personne ; jamais exportée (`NEVER_EXPORTED`). Additif ; le paquet sans elle
   échoue sur le catalogue d'une organisation. Rien à relancer avant.
+- `20261127170000_platform_connecteurs_prives.sql` (connecteurs privés, § Stockage) : les tables
+  `platform.private_connectors` (un connecteur privé par espace servi `custom_…`, unique dans l'organisation ; sa clé
+  interne `custom_<8 hex>`, unique dans l'instance ; sa version servie ; son retrait, qui garde clé et historique) et
+  `platform.private_connector_versions` (chaque version enregistrée, en ajout seul : le document validé, la version
+  qu'un retour reprend, sa date ; clé composée qui la garde dans l'organisation de son connecteur). Lues par les membres
+  de l'organisation (`member_orgs()`) ; écrites sous le rôle du serveur seul (`platform_server` : `insert`, et
+  `update(version, removed_at)` sur la première), pour l'équipe plateforme sur une organisation qu'elle atteint
+  (`member_orgs()` et `is_staff()`) ; aucune suppression sous une session. Ni secret, ni colonne de personne ; jamais
+  exportées (`NEVER_EXPORTED`), supprimées avec l'organisation. Additif ; le paquet sans elles échoue sur
+  l'administration d'un connecteur privé. Rien à relancer avant.
 
 ## Installer sur un hôte neuf
 

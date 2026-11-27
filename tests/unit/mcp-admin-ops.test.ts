@@ -21,6 +21,7 @@ import { adminTables, codes, connectAdminMcp, ORGS, PERSONS, TEAMS, type AdminPe
 import { seedAdminFixture, type AdminFixtureSql } from "../helpers/mcp-admin-sql"
 import { pendingMigrations } from "../helpers/pending-migrations"
 import { hex } from "../helpers/plateforme"
+import { ERP, erpDefinition } from "../helpers/private-connectors"
 import type { Row, Tables } from "../helpers/simulated-db"
 import { isoInstants, seedWithAdmin, spyDb, sqlConfigured, type SeededData, type SentQuery, type SpyOptions, portable } from "../helpers/sql"
 
@@ -36,6 +37,15 @@ const SETUP_TIMEOUT = 180_000
 /** La migration de la supervision (N9) : ses opérations se sautent tant que le projet ne l'a pas. */
 const SUPERVISION = "20261119210949"
 const supervisionPending = (await pendingMigrations()).includes(SUPERVISION)
+/** La migration des connecteurs privés : leurs opérations se sautent tant que le projet ne l'a pas. */
+const PRIVATE_CONNECTORS = "20261127170000"
+const privateConnectorsPending = (await pendingMigrations()).includes(PRIVATE_CONNECTORS)
+
+/** La résolution des adresses d'un connecteur privé : toutes publiques, les domaines de test ne se résolvant pas. */
+vi.mock("../../packages/plateforme/server/connectors/address-guard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../packages/plateforme/server/connectors/address-guard")>()),
+  resolutionFault: async () => null,
+}))
 
 /** Une ligne d'ancrage d'`admin_context`, datée de `age` millisecondes. */
 function anchor(code: string, userId: string, age: number): Row {
@@ -278,7 +288,7 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
         "- admin_org: list, get, create, update, add_host, remove_host, grant_access, revoke_access, add_admin, overview, members",
         "- admin_team: list, create, rename, set_lead, add_lead, remove_lead, add_member, remove_member, delete",
         "- admin_node: move, publish, transfer_owner, rules, add_rule, remove_rule",
-        "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule, host_api, refresh_host_api",
+        "- admin_connector: catalogue, activate, deactivate, accounts, create_account, disable_account, account_rules, add_account_rule, remove_account_rule, host_api, refresh_host_api, private_connectors, private_connector, save_private_connector, restore_private_connector, remove_private_connector",
         "- admin_journal: conversations, conversation, admin_log",
         "- admin_feedback: list, set_state",
         "- admin_cell: version, migrations, health",
@@ -787,6 +797,57 @@ describe.skipIf(!sqlConfigured)(portable("admin MCP on a real database"), { time
       } finally {
         await seed.admin`delete from platform.journal where ctx = ${admin.id("FFFF-0006")}`
       }
+    })
+  })
+
+  describe.skipIf(privateConnectorsPending)("private connectors (connecteurs privés)", () => {
+    it("should check a definition at the first step, save it once confirmed, and write each version at the journal", async () => {
+      const mine = await ownSeed()
+      const { session, code } = await opened(mine.admin)
+      const org = mine.admin.orgs.acme.slug
+      const call = (args: Record<string, unknown>) => session.call("admin_connector", { ctx: code, org, ...args })
+      const mark = await lastAdminLine()
+
+      const broken = erpDefinition()
+      broken.connector.base_url = "http://erp.exemple.test/api"
+      const refused = await call({ op: "save_private_connector", definition: JSON.stringify(broken) })
+      expect(refused.text).toBe(
+        [
+          "The definition is refused (1 problem); nothing was saved. Fix them all, then call again.",
+          "- custom_api_base_url_not_https at connector.base_url: the address must start with https://",
+        ].join("\n"),
+      )
+      const first = await call({ op: "save_private_connector", definition: JSON.stringify(erpDefinition()) })
+      expect(first.text).toBe(
+        [
+          `The definition is valid. About to create the private connector ${ERP} in ${org}, served at once; its members then set its keys in the Connectors screen.`,
+          "Nothing was saved. Show this to the user and ask for explicit approval, then call again with confirm: true.",
+        ].join("\n"),
+      )
+      expect((await call({ op: "private_connectors" })).text).toBe(`${org} has no private connector.`)
+      expect((await call({ op: "save_private_connector", definition: JSON.stringify(erpDefinition()), confirm: true })).text).toBe(`Saved: ${ERP} of ${org} is served at version 1.`)
+      const listed = await call({ op: "private_connectors" })
+      expect(listed.text).toMatch(new RegExp(`^Private connectors of ${org}:\\n${ERP} \\(ERP\\): version 1, 2 functions, served since `))
+      expect((await call({ op: "remove_private_connector", namespace: ERP, confirm: true })).text).toBe(`${ERP} of ${org} is no longer served; its versions are kept.`)
+      expect((await call({ op: "restore_private_connector", namespace: ERP, version: 1, confirm: true })).text).toBe(`Back to version 1: ${ERP} of ${org} is served at version 2.`)
+      const shown = await call({ op: "private_connector", namespace: ERP })
+      expect(shown.text).toContain("Versions:\n- 2, saved ")
+      expect(shown.text).toContain(", back to version 1\n- 1, saved ")
+
+      await session.flush()
+      const lines = await mine.seed.admin<{ op: string; target: string | null; is_error: boolean }[]>`
+        select op, target, is_error from platform.admin_journal
+         where user_id = ${mine.admin.persons.sam.id} and id > ${mark} and tool = 'admin_connector' order by id`
+      expect(lines.map((line) => [line.op, line.target, line.is_error])).toEqual([
+        ["save_private_connector", "private_connector", false],
+        ["save_private_connector", "private_connector", false],
+        ["private_connectors", "private_connectors", false],
+        ["save_private_connector", `private_connector:${ERP} v1`, false],
+        ["private_connectors", "private_connectors", false],
+        ["remove_private_connector", `private_connector:${ERP} v1 removed`, false],
+        ["restore_private_connector", `private_connector:${ERP} v2`, false],
+        ["private_connector", `private_connector:${ERP}`, false],
+      ])
     })
   })
 

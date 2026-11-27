@@ -280,7 +280,7 @@ function firstAccessProblem(accesses: readonly PreparedAccess[], check: (access:
 }
 
 /** Un connecteur contrôlé et préparé, chacun de ses accès compris ; au premier problème, `CatalogRegistrationError`. */
-function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, given: HostGiven): DeclaredConnector {
+export function declared(definition: ConnectorDefinition, reserved: ReadonlySet<string>, seen: Set<string>, given: HostGiven): DeclaredConnector {
   const shape = connectorProblem(definition, reserved, seen) ?? presentationProblem(definition) ?? accessesProblem(definition)
   if (shape) throw new CatalogRegistrationError(shape)
   const views = accessViews(definition)
