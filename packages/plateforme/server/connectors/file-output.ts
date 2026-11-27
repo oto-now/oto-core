@@ -12,6 +12,7 @@ import type { FunctionOutput } from "../catalog/define"
 import { actName } from "../catalog/registry"
 import { PlatformError, type PlatformErrorCode } from "../errors"
 import { MEDIA_TYPE, REFUSED_MIMES } from "../files/readers/registry"
+import { servedName } from "../host-api/document"
 import { requireStore } from "../files/service"
 import { isJsonObject } from "../json"
 import type { ConnectorDefinition, ConnectorFileOutput, ConnectorFunctionDefinition } from "./definition"
@@ -385,7 +386,7 @@ function keptOutput(fn: ConnectorFunctionDefinition, kept: TransitFile, route: s
   const expires = new Date(kept.expiresAt)
   return {
     text: [
-      `${fn.name}: file ready: ${fileLink(kept, route)}, yours until ${untilText(expires)} UTC.`,
+      `${servedName(fn)}: file ready: ${fileLink(kept, route)}, yours until ${untilText(expires)} UTC.`,
       `Pass its id ${kept.id} as is to a function that takes a file; it is deleted once sent, or at that time.`,
     ].join("\n"),
     data: { file: { id: kept.id, name: kept.name, mime: kept.mime, size: kept.size, expires_at: expires.toISOString(), url: filePath(kept.id, route) } },

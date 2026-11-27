@@ -74,8 +74,9 @@ export function ZoneDeDepot({ limites, choisir, accepte = ".md,.markdown,.csv,te
   return (
     <label
       htmlFor={id}
-      data-survol={survol ? "" : undefined}
-      className="flex cursor-pointer flex-col items-center gap-1 rounded-lg p-6 text-center ring-1 ring-mute focus-within:ring-2 focus-within:ring-ink data-[survol]:ring-2 data-[survol]:ring-ink"
+      data-dragover={survol ? "" : undefined}
+      // La zone du design system (`oto-filedrop`, survol en `data-dragover`) ; le focus est celui du champ caché qu'elle contient.
+      className="oto-filedrop focus-within:ring-2 focus-within:ring-ink"
       onDragOver={(evenement) => {
         if (!aDesFichiers(evenement)) return
         evenement.preventDefault()
@@ -86,7 +87,7 @@ export function ZoneDeDepot({ limites, choisir, accepte = ".md,.markdown,.csv,te
     >
       <AnimatedIcon as={UploadSimple} size="md" />
       <span className="text-ink">{IMPORT.zone}</span>
-      <span className="text-sm text-mute">{limites}</span>
+      <span>{limites}</span>
       <input
         id={id}
         type="file"

@@ -103,7 +103,7 @@ export function RailApplication({ entreprise, arbre: servi, equipes, handle, com
           <RechercheDuRail arbre={lu} handle={handle} adresses={adresses} administre={administre} />
           <ArbreDuRail arbre={arbre} equipes={equipes} handle={handle} prefixe={adresses.pages} enPanne={enPanne} administre={administre} equipesDeLaPersonne={equipesDeLaPersonne} />
         </RailScroll>
-        <PiedDuRail compte={compte} adresses={adresses} administre={administre} />
+        <PiedDuRail compte={compte} handle={handle} adresses={adresses} administre={administre} />
         <PoigneeDuRail />
       </Rail>
     </>

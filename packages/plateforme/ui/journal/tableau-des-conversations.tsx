@@ -8,6 +8,7 @@
 // demande, ses appels et ses erreurs ; les liens sont ceux de l'hôte (`useHote().Lien`), leurs adresses
 // calculées par la page. Retiré : les clés des arguments et la durée (au détail), `run_id`.
 import { WarningCircle } from "@phosphor-icons/react/dist/csr/WarningCircle"
+import { LIEN } from "../components/classes"
 import { Icon } from "../ds/react/icon"
 import { Badge } from "../ds/react/primitives"
 import { Table, type Column } from "../ds/react/table"
@@ -33,7 +34,7 @@ function ProcedureServie({ ligne }: { ligne: LigneDeConversation }) {
   const { Lien } = useHote()
   if (!ligne.procedure) return ligne.servie
   return (
-    <Lien href={ligne.procedure.href} className="underline underline-offset-2">
+    <Lien href={ligne.procedure.href} className={LIEN}>
       {ligne.procedure.chemin}
     </Lien>
   )

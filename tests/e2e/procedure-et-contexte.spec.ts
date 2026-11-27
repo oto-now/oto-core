@@ -14,7 +14,7 @@ import { attendreLEnregistrement, lireLeHtml, ouvrirAQuoiSert, seConnecterSurLEs
 // `private/<handle>/essai_procedure` (créée par le test si elle manque, avec un premier paragraphe ; le
 // `handle` lu par « Profil » du menu du compte), une étape écrite en texte est ajoutée, publiée seule, puis
 // retirée (la procédure revient à son état de départ) ; le Contexte de l'équipe et le Contexte Perso disent en une phrase qui
-// les lit (E05-S13, AC-17), sans « Ma fiche » (E05-S11, AC-8), et la ligne « Contexte : Privé » de l'encart ouvre la vue
+// les lit (E05-S13, AC-17), sans « Ma fiche » (E05-S11, AC-8), et la ligne « Mes instructions » de l'encart ouvre la vue
 // « Contexte » (`/context`) sur sa partie (AC-11) ; aucune erreur d'hydratation. Une capture par écran et
 // par thème dans `test-results/`.
 
@@ -150,7 +150,7 @@ test.describe("procédure et contexte", () => {
 
       // La procédure jetable, dans l'espace personnel du compte : l'adresse de son Contexte Privé, au rail, porte
       // le `handle` (« Profil » ouvre la page Profil depuis E05-S11, AC-6).
-      const handle = /^\/n\/private\/([^/]+)\/contexte$/.exec((await rail.getByRole("link", { name: "Contexte · Privé" }).getAttribute("href")) ?? "")?.[1]
+      const handle = /^\/n\/private\/([^/]+)\/contexte$/.exec((await rail.getByRole("link", { name: "Mes instructions" }).getAttribute("href")) ?? "")?.[1]
       expect(handle).toBeTruthy()
       const essai = `private/${handle}/essai_procedure`
       await assurerLaProcedure(page, essai)
@@ -193,12 +193,12 @@ test.describe("procédure et contexte", () => {
       await page.goto(`${ADRESSE}/n/private/${handle}/contexte`)
       await attendre((await ouvrirAQuoiSert(page)).getByText(/vous seul le recevez\.$/)).toBeVisible()
       await expect(page.getByRole("region", { name: "Ma fiche" })).toHaveCount(0)
-      await page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("link", { name: /^Contexte : Privé/ }).click()
+      await page.getByRole("note", { name: "Voici ce que votre agent va lire" }).getByRole("link", { name: /^Mes instructions/ }).click()
       await attendre(page).toHaveURL(`${ADRESSE}/context#private-context`)
       // L'adresse change aussitôt, la vue paraît quand ses lectures finissent (aperçu du Contexte compris,
       // `<Suspense>`) : 2,8 s au calme, 3,9 s sous une campagne complète, au-delà de 5 s au plus chargé (mesuré).
       await attendre(page.getByRole("heading", { level: 1, name: "Contexte" })).toBeVisible()
-      await attendre(page.getByRole("region", { name: "Contexte : Privé" })).toBeInViewport()
+      await attendre(page.getByRole("region", { name: "Mes instructions" })).toBeInViewport()
       await capturer(page, testInfo, `vue-contexte-${theme}`)
       expect(hydratation).toEqual([])
       await context.close()

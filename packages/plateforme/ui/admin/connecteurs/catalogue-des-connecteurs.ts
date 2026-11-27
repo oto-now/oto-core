@@ -150,9 +150,10 @@ export type ProprietaireDuConnecteur = { owner_kind: "user" } | { owner_kind: "o
 
 /**
  * Un connecteur que la personne voit, rangé par son propriétaire (`user` : les siens ; `org` ; `team:<nom de l'équipe>`,
- * la vue d'un compte ne portant que le nom de son équipe) : le nom proposé n'en reprend aucun, et compte ceux de l'outil.
+ * la vue d'un compte ne portant que le nom de son équipe) : le nom proposé n'en reprend aucun, et compte ceux de l'outil,
+ * par leur accès (`acces`, absent pour un connecteur à un seul accès) quand l'outil s'ouvre de plusieurs façons.
  */
-export type CompteExistant = { connecteur: string; libelle: string; proprietaire: string }
+export type CompteExistant = { connecteur: string; libelle: string; proprietaire: string; acces?: string }
 
 /** Ce que le nom proposé lit : les connecteurs vus, le prénom de la personne, le nom de l'organisation (absent : non lu). */
 export type Nommage = { comptes: CompteExistant[]; prenom: string | null; organisation: string | null }
@@ -165,12 +166,12 @@ const DEJA: Record<ProprietaireDuConnecteur["owner_kind"], string> = { user: "Vo
 /**
  * Le nom proposé d'un connecteur, d'après son propriétaire : « Pennylane de Nadia » (le sien), « Pennylane · Ventes »
  * (une équipe), « Pennylane · Mortier & Co » (l'organisation) ; suivi du rang quand ce propriétaire a déjà des connecteurs
- * de l'outil (« Pennylane · Mortier & Co (3) »), jamais un nom qu'il porte. L'aide dit à qui le nom sert, ou combien il en a
+ * de l'outil, par la même façon pour un outil qui en a plusieurs (« Pennylane · Mortier & Co (3) »), jamais un nom qu'il porte. L'aide dit à qui le nom sert, ou combien il en a
  * déjà et comment les distinguer ; `deja` : ce nombre.
  */
-export function nomDuConnecteur(outil: Pick<OutilAAjouter, "connecteur" | "libelle">, proprietaire: ProprietaireDuConnecteur, { comptes, prenom, organisation }: Nommage): { nom: string; aide: string; deja: number } {
+export function nomDuConnecteur(outil: Pick<OutilAAjouter, "connecteur" | "libelle" | "acces">, proprietaire: ProprietaireDuConnecteur, { comptes, prenom, organisation }: Nommage): { nom: string; aide: string; deja: number } {
   const siens = comptes.filter((compte) => compte.proprietaire === cleDuProprietaire(proprietaire))
-  const deja = siens.filter((compte) => compte.connecteur === outil.connecteur).length
+  const deja = siens.filter((compte) => compte.connecteur === outil.connecteur && compte.acces === outil.acces?.nom).length
   const { libelle } = outil
   const base =
     proprietaire.owner_kind === "team"

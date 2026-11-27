@@ -6,7 +6,7 @@
 // cloisonnement par grain, jamais le nom d'un collègue. Retiré : « déposé dans les instructions du
 // serveur MCP » (architecture § 10), l'aide servie (`help`).
 import type { TeamView } from "../../schemas"
-import { PERSO, SECTION_PERSO, TOUT_LE_MONDE } from "../arbre/depuis-l-arbre"
+import { PERSO, SECTION_PERSO, titreDeContexte, TOUT_LE_MONDE } from "../arbre/depuis-l-arbre"
 import { nombreLisible } from "../format/nombres"
 import { estUnContexte } from "./parties-du-contexte"
 
@@ -46,9 +46,21 @@ export const ANNEXES = {
 export function aQuoiSert(portee: Portee): string {
   if (portee.genre === "all") return "Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'organisation, lit à chaque conversation."
   if (portee.genre === "equipe") return `Ce que votre Claude/ChatGPT/Mistral, comme celui de chaque membre de l'équipe ${portee.nom}, lit à chaque conversation.`
-  if (portee.genre === "private") return "Ce que votre assistant lit à chaque conversation ; vous seul le recevez."
+  // « Mes instructions » : ce que suit l'assistant de la personne, quel qu'il soit.
+  if (portee.genre === "private") return "Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez."
   return "Ce que l'assistant de la personne de cet espace lit à chaque conversation ; elle seule le reçoit."
 }
+
+/**
+ * La reprise sur « Mes instructions » : la phrase que la personne copie dans son assistant, qui range dans la page les
+ * préférences qu'il garde dans sa mémoire ; sans elle, ces préférences restent dans un seul assistant.
+ */
+export const REPRISE_DES_PREFERENCES = {
+  titre: "Reprendre vos préférences",
+  explication: "Votre assistant garde déjà des préférences ? Copiez-lui cette phrase : il les range ici.",
+  phrase: "Range mes préférences actuelles dans mes instructions Oto, sans doublon",
+  cible: "la phrase de reprise",
+} as const
 
 /**
  * Les blocs de `context` qui ne sont pas un Contexte, par leur nom servi (E03-S08) ; un nom inconnu se montre
@@ -72,7 +84,8 @@ export function nomDuBloc(bloc: { name: string }, equipes: EquipesNommees): stri
   if (!estUnContexte(bloc.name)) return NOMS_DES_BLOCS[bloc.name] ?? bloc.name
   const portee = porteeDe(bloc.name, equipes)
   if (portee.genre === "equipe") return `Contexte : équipe ${portee.nom}`
-  return `Contexte : ${portee.genre === "all" ? TOUT_LE_MONDE : SECTION_PERSO}`
+  // Le Privé servi se nomme comme son titre, « Mes instructions » : un seul nom pour la même page.
+  return portee.genre === "all" ? `Contexte : ${TOUT_LE_MONDE}` : titreDeContexte(SECTION_PERSO)
 }
 
 /**

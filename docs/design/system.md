@@ -55,7 +55,10 @@ Aucune page `/design-system` n'existe dans ce dépôt : le design system de réf
 ## Typographie
 
 Section « Typographie » de `packages/plateforme/ui/styles/oto.css` (Inter et JetBrains Mono, rien
-sous 11 px) ; polices dans `packages/plateforme/ui/ds/tokens/`.
+sous 11 px) ; polices dans `packages/plateforme/ui/ds/tokens/`. Sous `.oto`, les tailles de Tailwind
+(`text-sm`…) y sont rapportées à cette échelle. Les rôles (titre d'écran, de carte, intertitre d'un îlot,
+corps, légende, étiquette) sont dans `packages/plateforme/ui/ds/tokens/typography.css` ; le lien de
+texte (`.oto-link`, derrière `LIEN`) dans `ui/ds/components/css/button.css`.
 
 ## Spacing
 
@@ -64,5 +67,6 @@ Section « Espacement » d'`oto.css` : grille de 4 px, demi-pas réservés au ch
 ## Shadows
 
 Section « Élévation » d'`oto.css` : trois distances (îlot, flottant, dialogue), ombres teintées à
-l'encre du thème. Rayons : section « Rayons » du même fichier. Un nouvel empilement (`z-index`) se
+l'encre du thème. Rayons : section « Rayons » du même fichier, à laquelle les arrondis de Tailwind
+(`rounded-sm` à `rounded-xl`) sont rapportés sous `.oto`. Un nouvel empilement (`z-index`) se
 documente dans cette section d'`oto.css`.

@@ -6,6 +6,7 @@
 // Sans eux, ni le taux d'usage d'une équipe ni la personne inactive ne se voyaient.
 import { useState } from "react"
 import { INACTIVE_DAYS, type UsagePersonRow, type UsageTeamRow } from "../../../schemas"
+import { LIEN } from "../../components/classes"
 import { Badge } from "../../ds/react/primitives"
 import { Table, type Column, type TableSort } from "../../ds/react/table"
 import { dateLisible } from "../../format/dates"
@@ -37,7 +38,7 @@ function ProcedureLaPlusServie({ ligne }: { ligne: LigneDEquipe }) {
   const { Lien } = useHote()
   if (!ligne.topProcedure || !ligne.hrefDeLaProcedure) return ABSENT
   return (
-    <Lien href={ligne.hrefDeLaProcedure} className="underline underline-offset-2">
+    <Lien href={ligne.hrefDeLaProcedure} className={LIEN}>
       {ligne.topProcedure.title}
     </Lien>
   )

@@ -14,11 +14,11 @@ import type { DeactivationImpact } from "../../../schemas"
 import { Icon } from "../../ds/react/icon"
 import { InputAffix } from "../../ds/react/input-affix"
 import { Tooltip } from "../../ds/react/tooltip"
+import { LogoDOrganisation } from "../../marque/logo-d-organisation"
 import { BlocageDeLOutil, DeblocageDeLOutil } from "./blocage-de-l-outil"
 import { outilsCherches, type OutilAAjouter } from "./catalogue-des-connecteurs"
 import type { BloqueurDeLOutil as Blocage } from "./etat-du-compte"
 import { fonctions } from "./libelles-des-partages"
-import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const RECHERCHER = "Rechercher un outil"
 
@@ -33,8 +33,6 @@ export const motDuConnecte = (nombre: number) => (nombre > 1 ? `Connecté : ${no
 
 /** Qui a bloqué l'outil, dit à qui regarde : « vous », son nom, ou « un administrateur » quand il n'est plus membre. */
 export const quiABloque = (par: NonNullable<Blocage>, moi: string) => (par.userId === moi ? "vous" : (par.name ?? "un administrateur"))
-
-const CARTE = "flex h-full w-full items-start gap-3 rounded-lg p-3 text-left ring-1 ring-inset ring-island-bd"
 
 function Connecte({ nombre }: { nombre: number }) {
   const mot = motDuConnecte(nombre)
@@ -60,14 +58,17 @@ type CarteProps = { outil: OutilAAjouter; choisir: (cle: string) => void; gouver
 function Carte({ outil, choisir, gouvernance }: CarteProps) {
   return (
     <li className="group relative">
-      <button type="button" className={`${CARTE} cursor-pointer text-ink hover:bg-desk focus-visible:ring-2 focus-visible:ring-ink`} onClick={() => choisir(outil.connecteur)}>
-        <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
-        <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${gouvernance ? "pr-8" : ""}`}>
-          <span className="flex items-center justify-between gap-2 font-semibold">
-            <span className="min-w-0">{outil.libelle}</span>
-            {outil.connectes > 0 && <Connecte nombre={outil.connectes} />}
+      {/* `.oto-card[data-interactive]` pose `display: block` : la rangée en flex vit dans un enfant. */}
+      <button type="button" data-interactive="" className="oto-card h-full cursor-pointer text-ink focus-visible:ring-2 focus-visible:ring-ink" onClick={() => choisir(outil.connecteur)}>
+        <span className="flex items-start gap-3">
+          <LogoDOrganisation nom={outil.libelle} logo={outil.logo} taille={40} tuile />
+          <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${gouvernance ? "pr-8" : ""}`}>
+            <span className="flex items-center justify-between gap-2 font-semibold">
+              <span className="min-w-0">{outil.libelle}</span>
+              {outil.connectes > 0 && <Connecte nombre={outil.connectes} />}
+            </span>
+            <Precision outil={outil} />
           </span>
-          <Precision outil={outil} />
         </span>
       </button>
       {gouvernance && (
@@ -85,10 +86,10 @@ function Bloque({ outil, moi, gouvernance }: BloqueProps) {
   // « vous » pour l'administrateur qui l'a bloqué ; un membre lit toujours un nom.
   const qui = gouvernance ? quiABloque(outil.bloquePar, moi) : (outil.bloquePar.name ?? "un administrateur")
   return (
-    <li className={`${CARTE} flex-col`}>
+    <li className="oto-card flex h-full flex-col items-start gap-3">
       <span className="flex w-full items-start gap-3">
         <span className="opacity-60">
-          <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
+          <LogoDOrganisation nom={outil.libelle} logo={outil.logo} taille={40} tuile />
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex items-center justify-between gap-2 font-semibold text-mute">
@@ -113,7 +114,7 @@ function Bloques({ outils, moi, gouvernance }: { outils: OutilAAjouter[]; moi: s
   if (uns.length === 0) return null
   return (
     <section aria-labelledby="outils-bloques" className="flex flex-col gap-2">
-      <h4 id="outils-bloques" className="text-sm font-semibold text-ink">
+      <h4 id="outils-bloques" className="oto-section-title">
         Bloqués pour l&apos;organisation
       </h4>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

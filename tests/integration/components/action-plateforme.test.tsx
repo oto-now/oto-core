@@ -169,11 +169,19 @@ describe("ActionPlateforme confirmation (AC20)", () => {
     await waitFor(() => expect(rafraichir).toHaveBeenCalledTimes(1))
   })
 
-  it("should focus in ink every button it renders (AC21)", () => {
+  // Le focus en encre (AC21) vient du `Button` du design system, comme sa forme et sa taille.
+  it("should render every button as the design system's Button, at the size it is given", () => {
     rendre()
-    expect(depart()).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ink")
+    expect(depart()).toHaveClass("oto-btn")
+    expect(depart()).toHaveAttribute("data-size", "md")
+    cleanup()
+    rendre({ taille: "sm" })
     fireEvent.click(depart())
-    for (const bouton of screen.getAllByRole("button")) expect(bouton).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ink")
+    const boutons = screen.getAllByRole("button")
+    expect(boutons.map((bouton) => [bouton.textContent, bouton.className.includes("oto-btn"), bouton.dataset.size])).toEqual([
+      ["Garder", true, "sm"],
+      ["Supprimer l'équipe", true, "sm"],
+    ])
   })
 })
 

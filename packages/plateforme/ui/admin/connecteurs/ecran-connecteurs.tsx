@@ -139,9 +139,9 @@ function mesConnecteurs(donnees: DonneesDesConnecteurs, moi: string): MonConnect
 
 /** Les connecteurs que la personne voit, par propriétaire : les siens, ceux de l'organisation, ceux de chaque équipe. */
 function comptesExistants(donnees: DonneesDesConnecteurs, moi: string): CompteExistant[] {
-  return donnees.accounts.flatMap(({ connector, label, owner }) => {
-    if (owner.kind === "user") return owner.userId === moi ? [{ connecteur: connector, libelle: label, proprietaire: "user" }] : []
-    return [{ connecteur: connector, libelle: label, proprietaire: owner.kind === "org" ? "org" : `team:${owner.teamName ?? ""}` }]
+  return donnees.accounts.flatMap(({ connector, label, owner, access }) => {
+    if (owner.kind === "user") return owner.userId === moi ? [{ connecteur: connector, libelle: label, proprietaire: "user", acces: access }] : []
+    return [{ connecteur: connector, libelle: label, proprietaire: owner.kind === "org" ? "org" : `team:${owner.teamName ?? ""}`, acces: access }]
   })
 }
 
@@ -172,23 +172,27 @@ const ETAPES = [
   { titre: "Demandez à votre assistant", texte: "« Cherche dans mes mails ceux du fournisseur de la semaine dernière. »" },
 ]
 
-/** Sans connecteur : ce qu'est un connecteur, les trois étapes, puis (dans l'îlot de l'ajout) le bouton et le mur de logos. */
+/**
+ * Sans connecteur : ce qu'est un connecteur, les trois étapes, puis (dans l'îlot de l'ajout) le bouton et le mur de logos.
+ * Les rôles de l'état vide du DS (`oto-empty-title`, `oto-empty-text`) sans `EmptyState`, qui centre tout et n'accepte
+ * qu'une phrase : les étapes et le mur en colonnes à côté ne s'y logent pas.
+ */
 function EtatVide() {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-bold text-ink">Votre assistant n&apos;a encore accès à aucun outil</h2>
-        <p className="text-mute">Ajoutez un connecteur avec votre propre compte de l&apos;outil. Il reste privé tant que vous ne le partagez pas.</p>
+        <h2 className="oto-empty-title">Votre assistant n&apos;a encore accès à aucun outil</h2>
+        <p className="oto-empty-text">Ajoutez un connecteur avec votre propre compte de l&apos;outil. Il reste privé tant que vous ne le partagez pas.</p>
       </div>
-      <ol className="flex flex-col gap-3">
+      <ol className="oto-stepper m-0 list-none p-0" data-orientation="vertical">
         {ETAPES.map(({ titre, texte }, rang) => (
-          <li key={titre} className="flex items-start gap-3">
-            <span aria-hidden="true" className="flex size-7 flex-none items-center justify-center rounded-full bg-card text-sm font-bold text-ink">
+          <li key={titre} className="oto-step" data-state="upcoming">
+            <span aria-hidden="true" className="oto-step-marker">
               {rang + 1}
             </span>
-            <span className="flex flex-col">
-              <span className="font-semibold text-ink">{titre}</span>
-              <span className="oto-caption">{texte}</span>
+            <span className="oto-step-body">
+              <span className="oto-step-title">{titre}</span>
+              <span className="oto-step-desc">{texte}</span>
             </span>
           </li>
         ))}
@@ -228,16 +232,11 @@ function Liste({ donnees, moi, vue, ici }: VueProps) {
   return (
     <>
       <ListeDesConnecteurs lignes={lignes} filtres={filtres} filtre={vue.filtre} q={vue.q} recherche={recherche(vue, ici)} ici={ici} />
-      {/* `text-ink` sur `bg-primary/10` posé sur le fond de la page : 10,7:1 au plus bas des huit teintes, jour et nuit. */}
-      <p className="flex items-start gap-3 rounded-lg bg-primary/10 p-3 text-sm text-ink">
-        <span aria-hidden="true" className="mt-0.5 flex-none">
-          <Icon as={Info} size="sm" />
-        </span>
-        <span>
-          Un <strong>connecteur</strong>, c&apos;est un outil (votre messagerie, votre comptabilité…) relié à un compte : le vôtre, celui d&apos;une équipe ou de
-          l&apos;organisation. Il est privé tant que vous ne le partagez pas.
-        </span>
-      </p>
+      {/* Une information posée, pas une annonce : `role="none"`, aucune région que le lecteur d'écran lirait à l'arrivée. */}
+      <Alert role="none" tone="run" icon={<Icon as={Info} size="sm" />}>
+        Un <strong>connecteur</strong>, c&apos;est un outil (votre messagerie, votre comptabilité…) relié à un compte : le vôtre, celui d&apos;une équipe ou de
+        l&apos;organisation. Il est privé tant que vous ne le partagez pas.
+      </Alert>
     </>
   )
 }

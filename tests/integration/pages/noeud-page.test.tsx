@@ -322,7 +322,7 @@ describe("/n/[...chemin] page, procedure and Contexte (E05-S04)", () => {
 
   // Le `handle` de l'identité décide qui reçoit un Contexte Perso ; aucun Contexte ne porte plus « Ma fiche » (AC-8).
   it.each([
-    ["private/lea/contexte", "Ce que votre assistant lit à chaque conversation ; vous seul le recevez."],
+    ["private/lea/contexte", "Ce que votre assistant suit pour vous, quel qu'il soit ; vous seul le recevez."],
     // Le Contexte Perso d'une autre personne, qui l'a partagé : il n'est servi qu'à elle (HN-E05S04-22).
     ["private/marc/contexte", "Ce que l'assistant de la personne de cet espace lit à chaque conversation ; elle seule le reçoit."],
   ])("should give the Contexte %s its annexes and what the agent will read, each line leading to the « Contexte » view, without « Ma fiche »", async (chemin, recu) => {

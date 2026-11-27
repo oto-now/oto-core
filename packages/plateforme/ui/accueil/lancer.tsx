@@ -13,6 +13,7 @@ import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { EmptyState } from "../ds/react/empty-state"
 import { AnimatedIcon } from "../ds/react/icon"
 import { Island, IslandBody, IslandHead } from "../ds/react/island"
+import { Tooltip } from "../ds/react/tooltip"
 import { LANCER } from "./libelles"
 
 /** La conversation nouvelle de Claude, préremplie de la demande : l'adresse que claude.ai lit (`q`). */
@@ -40,19 +41,20 @@ function Lignes({ procedures, Lien, prefixeDesPages }: Omit<LancerProps, "proced
             {/* Coupé par des points de suspension : le titre entier au survol, et dans le nom du lien. */}
             <span title={procedure.title}>{procedure.title}</span>
           </Lien>
-          <a
-            href={adresseDeLancement(procedure)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="oto-icon-btn anim-host"
-            data-variant="ghost"
-            data-size="sm"
-            data-icon-only=""
-            aria-label={LANCER.lancerDans(procedure.title)}
-            title={LANCER.lancer}
-          >
-            <AnimatedIcon as={Robot} size="xs" />
-          </a>
+          <Tooltip content={LANCER.lancer}>
+            <a
+              href={adresseDeLancement(procedure)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="oto-icon-btn anim-host"
+              data-variant="ghost"
+              data-size="sm"
+              data-icon-only=""
+              aria-label={LANCER.lancerDans(procedure.title)}
+            >
+              <AnimatedIcon as={Robot} size="xs" />
+            </a>
+          </Tooltip>
         </li>
       ))}
     </ul>

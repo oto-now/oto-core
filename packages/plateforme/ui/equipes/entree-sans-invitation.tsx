@@ -60,7 +60,7 @@ export function EntreeSansInvitation({ reglage, nomOrganisation }: EntreeSansInv
 
   return (
     <section aria-label={TITRE} className="flex flex-col gap-3 pt-2">
-      <h3 className="text-sm font-semibold text-ink">{TITRE}</h3>
+      <h3 className="oto-section-title">{TITRE}</h3>
       <p className="text-sm text-mute">
         {`Ouverte, toute personne qui a un compte vérifié sur cette application, avec un email d'un de ces domaines, entre dans ${nomOrganisation} comme membre, sans équipe, à sa première connexion ou au premier appel de son assistant. Une personne que vous retirez ne rentre plus, sauf si vous l'invitez de nouveau.`}
       </p>

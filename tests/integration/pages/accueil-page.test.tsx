@@ -134,11 +134,10 @@ describe("/ page reads (AC-b1)", () => {
     expect(ilot("Reprendre").getByRole("link", { name: /^Vous avez lancé la procédure Relancer les impayés/ })).toHaveAttribute("href", "/n/ventes/relance")
     expect(ilot("Lancer avec Claude").getByRole("link", { name: "Relancer les impayés" })).toHaveAttribute("href", "/n/ventes/relance")
     expect(ilot(BRANCHER).getAllByRole("listitem").at(-1)).toHaveTextContent("Claude Code · dernière connexion le 23 septembre 2026")
-    // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête, et les procédures déjà lues (AC-11).
+    // La fenêtre reçoit l'adresse entière, lue à l'origine de la requête (AC-11).
     fireEvent.click(ilot(BRANCHER).getByRole("button", { name: "Brancher" }))
-    const guide = within(screen.getByRole("dialog", { name: GUIDE })).getByRole("tabpanel", { name: "Claude Code" })
-    expect(within(guide).getByText("claude mcp add --transport http demo https://demo.example.test/api/mcp")).toBeInTheDocument()
-    expect(within(guide).getByRole("button", { name: "Copier la demande « Relancer les impayés »" })).toBeInTheDocument()
+    const guide = within(screen.getByRole("dialog", { name: GUIDE }))
+    expect(guide.getByText("https://demo.example.test/api/mcp")).toBeInTheDocument()
     expect(usefulProcedures).toHaveBeenCalledTimes(1)
     expect(previewContext).not.toHaveBeenCalled()
     expect(loadNode).not.toHaveBeenCalled()

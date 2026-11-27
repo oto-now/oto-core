@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react"
 import { fileTypeOf, UPLOAD_BYTES_MAX, type UploadDone, type UploadKind } from "../../schemas"
 import { deposerParLeLien, type ErreurPlateforme } from "../api/client"
 import { messageDErreur } from "../api/messages"
+import { LIEN } from "../components/classes"
 import { ZoneDeDepot } from "../coque/import-de-fichier"
 import { useHote } from "../hote/navigation"
 import { adresseDeVue } from "../noeud/fichier-du-bloc"
@@ -106,7 +107,7 @@ export function FormulaireDeDepot({ jeton, genre, accepte }: FormulaireDeDepotPr
         {annonce}
       </p>
       {etat.phase === "depose" && (
-        <Lien href={etat.adresse} className="self-start text-sm text-ink underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ink">
+        <Lien href={etat.adresse} className={`self-start text-sm ${LIEN}`}>
           {DEPOT.ouvrir}
         </Lien>
       )}

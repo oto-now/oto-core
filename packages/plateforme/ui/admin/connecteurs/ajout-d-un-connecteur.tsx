@@ -19,6 +19,7 @@ import { Alert, Button } from "../../ds/react/primitives"
 import { Radio, RadioGroup } from "../../ds/react/radio"
 import type { SujetsDeRegle } from "../../equipes/types"
 import { useHote } from "../../hote/navigation"
+import { LogoDOrganisation } from "../../marque/logo-d-organisation"
 import { DeblocageDeLOutil } from "./blocage-de-l-outil"
 import { ANCRE_DU_CATALOGUE, CatalogueDeLAjout, type GouvernanceDesOutils } from "./catalogue-de-l-ajout"
 import type { CompteExistant, FaconDeLOutil, Nommage, OutilAAjouter } from "./catalogue-des-connecteurs"
@@ -26,7 +27,6 @@ import { ConnexionChezLeTiers } from "./connexion-chez-le-tiers"
 import { FormulaireDAjout } from "./formulaire-d-ajout"
 import { PlaceDuPied } from "./pied-de-la-fiche"
 import { adresseDeLaVue } from "./lignes-des-connecteurs"
-import { TuileDeLOutil } from "./tuile-de-l-outil"
 
 const TITRE = "Ajouter un connecteur"
 
@@ -140,9 +140,9 @@ function OutilChoisi({ outil: lOutil, equipes, nommage, ici, gouvernance, sujets
         </Button>
       </div>
       <div className="flex items-center gap-4">
-        <TuileDeLOutil nom={outil.libelle} logo={outil.logo} taille="lg" />
+        <LogoDOrganisation nom={outil.libelle} logo={outil.logo} taille={48} tuile />
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h3 ref={titre} tabIndex={-1} className="text-xl font-bold text-ink">
+          <h3 ref={titre} tabIndex={-1} className="oto-card-title text-ink">
             {outil.libelle}
           </h3>
           <span className="oto-caption flex items-center gap-1.5">
@@ -184,17 +184,16 @@ function Mur({ outils, ouvrir }: { outils: OutilAAjouter[]; ouvrir: (cle: string
   if (uns.length === 0) return null
   const tous = outils.length
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl bg-card p-4">
+    <div className="oto-card flex flex-col items-center gap-3">
       <ul aria-label="Quelques outils" className="grid w-full grid-cols-3 gap-2 sm:grid-cols-4">
         {uns.slice(0, LOGOS_DU_MUR).map((outil) => (
           <li key={outil.connecteur}>
-            <button
-              type="button"
-              className="flex w-full flex-col items-center gap-2 rounded-lg bg-island px-1.5 pb-2.5 pt-3.5 text-xs font-medium text-ink ring-1 ring-inset ring-hair hover:ring-island-bd focus-visible:ring-2 focus-visible:ring-ink"
-              onClick={() => ouvrir(outil.connecteur)}
-            >
-              <TuileDeLOutil nom={outil.libelle} logo={outil.logo} />
-              <span className="w-full truncate text-center">{outil.libelle}</span>
+            {/* `.oto-card[data-interactive]` pose `display: block` : la colonne en flex vit dans un enfant. */}
+            <button type="button" data-interactive="" className="oto-card text-xs font-medium text-ink focus-visible:ring-2 focus-visible:ring-ink" onClick={() => ouvrir(outil.connecteur)}>
+              <span className="flex flex-col items-center gap-2">
+                <LogoDOrganisation nom={outil.libelle} logo={outil.logo} taille={40} tuile />
+                <span className="w-full truncate text-center">{outil.libelle}</span>
+              </span>
             </button>
           </li>
         ))}

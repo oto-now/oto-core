@@ -26,7 +26,7 @@ function pied(apparence?: Hote["apparence"]) {
   render(
     <CoquilleOto pleinePage>
       <ContexteDeLHote.Provider value={hote}>
-        <PiedDuRail compte="Claire Morel" adresses={{ pages: "/n/", profil: "/profile" }} administre={false} />
+        <PiedDuRail compte="Claire Morel" handle={null} adresses={{ pages: "/n/", profil: "/profile" }} administre={false} />
       </ContexteDeLHote.Provider>
     </CoquilleOto>,
   )

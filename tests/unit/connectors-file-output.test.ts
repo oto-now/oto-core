@@ -222,6 +222,15 @@ describe("a file returned by a third party", () => {
     expect(new TextDecoder().decode(state.kept[0]?.bytes)).toBe("%PDF-1.7 ok?>")
   })
 
+  it("should name a function that engages and returns a file by its served _act name in its result text", async () => {
+    const base = fileConnector()
+    const engaging = (fn: ConnectorFunctionDefinition): ConnectorFunctionDefinition => (fn.name === "crm.get_attachment" ? { ...fn, class: "write", act: true } : fn)
+    registerConnectors([{ ...base, functions: base.functions.map(engaging) }])
+    api(json({ data: Buffer.from("%PDF-1.7 ok?>").toString("base64url") }))
+    const output = await run("crm_act.get_attachment", { attachment_id: 5 })
+    expect(output.text.split("\n")[0]).toMatch(/^crm_act\.get_attachment: file ready: /)
+  })
+
   it("should send the account's authentication to an address of the API's origin only, and nothing to an address without auth", async () => {
     api(json({ archive: { url: "https://crm.example.test/v2/files/9.zip", name: "archive-octobre.zip" } }))
     const downloads = download(new Response(bytesOf("PK"), { status: 200, headers: { "content-type": "application/zip" } }))

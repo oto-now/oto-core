@@ -14,11 +14,11 @@ import { MCP_RESOURCE_PATH } from "./oauth"
 export type ConnectAddress = {
   /** L'adresse du serveur MCP de l'organisation (`https://acme.oto.cx/api/mcp`, ADR-004). */
   url: string
-  /** Nom recommandé du connecteur : celui que le modèle voit sur claude.ai et ChatGPT (HN-E02S04-1). */
+  /** Nom affiché de l'organisation ; le connecteur, lui, se nomme `cliName`, celui que le guide fait copier et que la phrase cite (HN-E02S04-1). */
   name: string
   /** Nom du serveur pour Claude Code : le préfixe, en ASCII (`mcp-patterns.md § 3`). */
   cliName: string
-  /** Phrase des préférences personnelles de claude.ai : `context` chargé une fois par conversation, pour que les consignes de la personne s'appliquent aussi à une demande qui n'est pas du travail (`mcp-patterns.md § 9`). */
+  /** Phrase des préférences personnelles de claude.ai : `context` chargé une fois par conversation, pour que les consignes de la personne s'appliquent aussi à une demande qui n'est pas du travail (`mcp-patterns.md § 9`) ; ses préférences vivent dans son Contexte privé, « Mes instructions » à l'écran. */
   preferenceSentence: string
 }
 
@@ -38,7 +38,8 @@ export function connectAddress(identity: Identity, origin: string): ConnectAddre
     url: `${origin.replace(/\/+$/, "")}${MCP_RESOURCE_PATH}`,
     name,
     cliName: prefix,
-    preferenceSentence: `Au début de chaque conversation, appelle une fois l'outil de contexte du connecteur « ${name} » : il porte mes consignes. Utilise ensuite ses autres outils seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données).`,
+    // Le connecteur se nomme du préfixe, celui que le guide fait copier : la phrase nomme le même.
+    preferenceSentence: `Au début de chaque conversation, appelle une fois l'outil de contexte du connecteur « ${prefix} » : il porte mes consignes. Mes préférences sont dans mes instructions Oto. Utilise ensuite ses autres outils seulement quand la demande concerne mon travail (mes pages, mes procédures, mes données).`,
   }
 }
 

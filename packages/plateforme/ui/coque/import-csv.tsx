@@ -6,7 +6,7 @@
 // le fichier, un aperçu des 20 premières lignes (`Table`), puis l'envoi par lots de 500 avec sa progression et la
 // reprise d'un lot refusé. Le fichier est lu par le navigateur, jamais téléversé : seules partent les lignes, en
 // JSON. Fichier à part du dialogue (`import-de-fichier.tsx`) pour la borne de 300 lignes d'ESLint.
-import { useMemo, useState, type ReactNode } from "react"
+import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import {
   checkImport,
   CSV_SEPARATORS,
@@ -85,7 +85,7 @@ function EnTeteDeColonne({ entete, nom }: { entete: string; nom: string | null }
   return (
     <>
       {entete}
-      <span className="block text-xs font-normal text-mute">{nom ?? IMPORT.colonneIgnoree}</span>
+      <span className="oto-caption block">{nom ?? IMPORT.colonneIgnoree}</span>
     </>
   )
 }
@@ -147,6 +147,21 @@ function phraseDuRefus(refus: Refus): string {
   return refus === "adresses" ? IMPORT.aucuneAdresse : messageDErreur(refus, IMPORT.refus)
 }
 
+/** La progression de l'envoi (AC-b3) : la barre du design system (`oto-progress`), nommée par son libellé. */
+function Progression({ faites, total }: { faites: number; total: number }) {
+  const id = useId()
+  return (
+    <div>
+      <div className="oto-progress-label">
+        <span id={id}>{IMPORT.progression}</span>
+      </div>
+      <div className="oto-progress" role="progressbar" aria-labelledby={id} aria-valuemin={0} aria-valuemax={total} aria-valuenow={faites}>
+        <div className="oto-progress-bar" style={{ "--progress": `${(faites / Math.max(total, 1)) * 100}%` } as CSSProperties} />
+      </div>
+    </div>
+  )
+}
+
 export function ReglagesDuCsv(proprietes: Proprietes) {
   const { octets, tableau } = proprietes
   const [encodage, setEncodage] = useState<Encodage>(() => encodageDe(octets))
@@ -185,12 +200,7 @@ export function ReglagesDuCsv(proprietes: Proprietes) {
       {controle?.tooLarge && <Alert tone="fail">{IMPORT.tropGrand}</Alert>}
       {controle && <Problemes problemes={controle.problems} />}
       {plan && <Apercu plan={plan} />}
-      {envoi.progression && (
-        <label className="flex flex-col gap-1 text-sm">
-          {IMPORT.progression}
-          <progress value={envoi.progression.faites} max={Math.max(envoi.progression.total, 1)} />
-        </label>
-      )}
+      {envoi.progression && <Progression {...envoi.progression} />}
       {envoi.arret && (
         <Alert tone="fail" actions={<Button onClick={() => void envoi.envoyer(envoi.arret?.faites ?? 0, envoi.arret?.chemin ?? null)}>{IMPORT.reprendre}</Button>}>
           {`${phraseDuRefus(envoi.arret.refus)} ${IMPORT.ecrites(nombreLisible(envoi.arret.faites), total)}`}

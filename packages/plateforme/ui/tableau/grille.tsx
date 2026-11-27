@@ -33,7 +33,7 @@ type Ecran = { entete: TableHeader; reglages: Reglages; adresse: string; liens?:
 /** Le bail en cours d'une ligne réservée, dans sa cellule clé (AC2) : « en cours · claude-claire jusqu'à 14:05 ». */
 function Bail({ ligne, entete }: { ligne: TableRowRead; entete: TableHeader }) {
   if (!ligne.claim) return null
-  return <span className="block text-xs font-normal text-mute">{GRILLE.bail(entete.lifecycle?.working, ligne.claim.worker, heureCourte(ligne.claim.until) ?? "")}</span>
+  return <span className="oto-caption block">{GRILLE.bail(entete.lifecycle?.working, ligne.claim.worker, heureCourte(ligne.claim.until) ?? "")}</span>
 }
 
 /** Le lien de l'hôte, pour un lien `[[…]]` d'une cellule : la navigation sans recharger le document. */

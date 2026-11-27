@@ -1,6 +1,6 @@
 // La page `/connect` (E02-S04 : AC1, AC6 à AC10 ; E11-S09 : AC-12, AC-13) : la session revérifiée par la page
-// (`nextjs-patterns.md § Un layout n'est JAMAIS une frontière d'autorisation`), les deux lectures des
-// services avec le client de la session, chacune passée par `resultatDe`, et les noms des services
+// (`nextjs-patterns.md § Un layout n'est JAMAIS une frontière d'autorisation`), la lecture des connexions
+// avec le client de la session, passée par `resultatDe`, aucune des procédures utiles, et les noms des services
 // adaptés pour l'écran. Session de l'hôte et services du paquet simulés ; `connectAddress` et l'écran
 // sont les vrais.
 import { cleanup, render, screen, within } from "@testing-library/react"
@@ -9,7 +9,6 @@ import { lastConnections, listPrompts, PlatformError, usefulProcedures, type Pla
 import ConnectLoading from "@/app/(dashboard)/connect/loading"
 import ConnectPage, { metadata } from "@/app/(dashboard)/connect/page"
 import { getPlatformIdentity, getRequestOrigin, type PlatformSession } from "@/lib/plateforme/session"
-import { section } from "../../helpers/ecran"
 import { identityOf, ORG } from "../../helpers/reference-org"
 
 vi.mock("@/lib/plateforme/session", () => ({ getPlatformIdentity: vi.fn(), getRequestOrigin: vi.fn() }))
@@ -72,44 +71,31 @@ describe("/connect page session (AC9)", () => {
 })
 
 describe("/connect page reads (AC1, AC7, AC-13)", () => {
-  it("should read three useful procedures, not the prompts, and the connections with the session client, and show the address of the request origin, each procedure as a request and each connection", async () => {
+  it("should read the connections with the session client, neither the prompts nor the useful procedures, and show the name and the address of the request origin and each connection", async () => {
     render(await ConnectPage())
 
-    expect(usefulProcedures).toHaveBeenCalledWith(SESSION.db, IDENTITE, 3)
     expect(listPrompts).not.toHaveBeenCalled()
+    expect(usefulProcedures).not.toHaveBeenCalled()
     expect(lastConnections).toHaveBeenCalledWith(SESSION.db, IDENTITE)
-    // La dernière connexion vient de Claude Code : le guide s'ouvre sur son onglet (AC-2).
-    const guide = screen.getByRole("tabpanel", { name: "Claude Code" })
-    expect(within(guide).getByText("claude mcp add --transport http acme https://acme.example.test/api/mcp")).toBeInTheDocument()
-    expect(within(guide).getByRole("button", { name: "Copier la demande « Qualifier un prospect »" })).toBeInTheDocument()
-    expect(within(section("Vos connexions")).getByRole("listitem")).toHaveTextContent(
-      "Claude Code : dernière connexion le 23 septembre 2026 (claude-code@2.1.280)",
+    expect([...document.querySelectorAll("dd code")].map((valeur) => valeur.textContent)).toEqual(["acme", "https://acme.example.test/api/mcp"])
+    expect(within(screen.getByRole("list", { name: "Vos connexions" })).getByRole("listitem")).toHaveTextContent(
+      "Claude Code · dernière connexion le 23 septembre 2026",
     )
   })
 })
 
 describe("/connect page failed reads (AC-13)", () => {
-  it("should say a failed read of the procedures in the guide only, « Vos connexions » still shown", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    vi.mocked(usefulProcedures).mockRejectedValue(new PlatformError("internal", "Internal error."))
-
-    render(await ConnectPage())
-
-    expect(screen.getAllByRole("alert")).toHaveLength(1)
-    expect(within(screen.getByRole("tabpanel")).getByRole("alert")).toHaveTextContent(ECHEC)
-    expect(within(section("Vos connexions")).getByRole("listitem")).toBeInTheDocument()
-  })
-
-  it("should say a failed read of the connections in « Vos connexions » only, with « Réessayer » on /connect, the requests still shown", async () => {
+  it("should say a failed read of the connections in place of the status line, with « Réessayer » on /connect, the guide still shown", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     vi.mocked(lastConnections).mockRejectedValue(new PlatformError("internal", "Internal error."))
 
     render(await ConnectPage())
 
+    const alerte = screen.getByRole("alert")
     expect(screen.getAllByRole("alert")).toHaveLength(1)
-    expect(within(section("Vos connexions")).getByRole("alert")).toHaveTextContent(ECHEC)
-    expect(within(section("Vos connexions")).getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/connect")
-    expect(within(screen.getByRole("tabpanel", { name: "claude.ai" })).getByRole("button", { name: "Copier la demande « Qualifier un prospect »" })).toBeInTheDocument()
+    expect(alerte).toHaveTextContent(ECHEC)
+    expect(within(alerte).getByRole("link", { name: "Réessayer" })).toHaveAttribute("href", "/connect")
+    expect(screen.getByRole("button", { name: "Copier la phrase de préférences" })).toBeInTheDocument()
   })
 })
 

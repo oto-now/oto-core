@@ -37,12 +37,12 @@ async function sansDefilementHorizontal(page: Page): Promise<boolean> {
 /** Le titre et le total des encarts de la page, dans l'ordre du document. */
 const encarts = (racine: Locator) => racine.locator("details.oto-linked > summary").allInnerTexts()
 
-/** Un nœud neuf, créé par le « + » de la ligne « Contexte · Privé » du rail ; rend son chemin. */
+/** Un nœud neuf, créé par le « + » de la ligne « Mes instructions » du rail ; rend son chemin. */
 async function creerDansPrive(page: Page, largeur: number, genre: "Une page" | "Un tableau"): Promise<string> {
   const rail = await ouvrirLeRail(page, largeur)
-  const ligne = rail.getByRole("link", { name: "Contexte · Privé", exact: true })
+  const ligne = rail.getByRole("link", { name: "Mes instructions", exact: true })
   await ligne.hover()
-  await ligne.locator("xpath=..").getByRole("button", { name: "Ajouter dans Contexte · Privé" }).click()
+  await ligne.locator("xpath=..").getByRole("button", { name: "Ajouter dans Mes instructions" }).click()
   await page.getByRole("menuitem", { name: genre }).click()
   await attendre(page).toHaveURL(/\/contexte\/sans_titre(_\d+)?$/)
   return new URL(page.url()).pathname.slice("/n/".length)

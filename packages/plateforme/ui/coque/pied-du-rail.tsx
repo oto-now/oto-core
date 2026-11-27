@@ -8,10 +8,12 @@
 // Agents, Procédures (portage-ecrans.md § 0), la ligne « Couleur » et « Apparence » (E05-S11, AC-6 : la
 // couleur de la personne se choisit dans Profil, celle de l'organisation dans Organisation), la ligne
 // « Corbeille » du pied (AC-e22). Ajouté : la bascule jour ou nuit, quand l'hôte la sert (`Hote.apparence`) ; le paquet
-// n'écrit pas le mode, il est à l'hôte.
+// n'écrit pas le mode, il est à l'hôte. En tête du menu, « Mes instructions », le Contexte privé de la personne.
+import { Info } from "@phosphor-icons/react/dist/csr/Info"
 import { Moon } from "@phosphor-icons/react/dist/csr/Moon"
 import { SignOut } from "@phosphor-icons/react/dist/csr/SignOut"
 import { Sun } from "@phosphor-icons/react/dist/csr/Sun"
+import { PERSO, SECTION_PERSO, titreDeContexte } from "../arbre/depuis-l-arbre"
 import { AnimatedIcon } from "../ds/react/icon"
 import { RailFoot, RailItem } from "../ds/react/layout"
 import type { MenuItem } from "../ds/react/overlays"
@@ -29,13 +31,18 @@ function bascule({ mode, basculer }: NonNullable<Hote["apparence"]>): MenuItem {
     : { label: COMPTE.modeSombre, icon: <AnimatedIcon as={Moon} size="xs" />, onSelect: basculer }
 }
 
-/** Les items du menu du compte : ses écrans, puis, sous un filet, le mode jour ou nuit et la déconnexion quand l'hôte les sert. */
-function itemsDuCompte(ecrans: readonly EcranPermis[], { naviguer, deconnecter, apparence }: Pick<Hote, "naviguer" | "deconnecter" | "apparence">): MenuItem[] {
+/**
+ * Les items du menu du compte : « Mes instructions » quand la personne a son espace (`instructions`, l'adresse de son
+ * Contexte privé), ses écrans, puis, sous un filet, le mode jour ou nuit et la déconnexion quand l'hôte les sert.
+ */
+function itemsDuCompte(instructions: string | null, ecrans: readonly EcranPermis[], { naviguer, deconnecter, apparence }: Pick<Hote, "naviguer" | "deconnecter" | "apparence">): MenuItem[] {
+  const tete: MenuItem[] = instructions ? [{ label: titreDeContexte(SECTION_PERSO), icon: <AnimatedIcon as={Info} size="xs" />, onSelect: () => naviguer(instructions) }] : []
   const gestes: MenuItem[] = [
     ...(apparence ? [bascule(apparence)] : []),
     ...(deconnecter ? [{ label: COMPTE.deconnexion, icon: <AnimatedIcon as={SignOut} size="xs" />, onSelect: deconnecter }] : []),
   ]
   return [
+    ...tete,
     ...ecrans.map((ecran) => ({ label: ecran.libelle, icon: <AnimatedIcon as={ecran.glyphe} size="xs" />, onSelect: () => naviguer(ecran.adresse) })),
     ...(gestes.length > 0 ? [{ separator: true }, ...gestes] : []),
   ]
@@ -58,13 +65,15 @@ function LignesDuPied({ ecrans, chemin }: { ecrans: readonly EcranPermis[]; chem
 export type PiedDuRailProps = {
   /** Le nom de la personne ; `null` quand l'identité n'a pas été lue (« Mon compte »). */
   compte: string | null
+  /** L'espace de la personne, `private/<handle>` : « Mes instructions » en tête du menu ; `null` ou absent sans profil, rien (facultatif : un hôte qui monte déjà ce pied compile encore). */
+  handle?: string | null
   adresses: AdressesDuRail
   /** `isOrgAdmin` de l'identité : les écrans d'administration que `ecransPermis` réserve. */
   administre: boolean
 }
 
 /** Le pied du rail : « Connecteurs », puis le compte et son menu. */
-export function PiedDuRail({ compte, adresses, administre }: PiedDuRailProps) {
+export function PiedDuRail({ compte, handle = null, adresses, administre }: PiedDuRailProps) {
   const hote = useHote()
   const ecrans = ecransPermis(adresses, administre)
   return (
@@ -73,6 +82,7 @@ export function PiedDuRail({ compte, adresses, administre }: PiedDuRailProps) {
       <RailAccount
         name={compte ?? COMPTE.anonyme}
         items={itemsDuCompte(
+          handle === null ? null : `${adresses.pages}${PERSO}/${handle}/contexte`,
           ecrans.filter((ecran) => ecran.rangement === "compte"),
           hote,
         )}

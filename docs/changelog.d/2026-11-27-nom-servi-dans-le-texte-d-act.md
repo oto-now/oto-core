@@ -1,0 +1,4 @@
+## [2026-11-27] — Connecteurs : le texte du résultat d'une fonction qui engage la nomme sous son nom servi
+**Quoi :** le moteur des connecteurs décrits compose la tête du texte d'un résultat (une valeur, une liste, « done » sans contenu, un fichier prêt) avec le nom servi de la fonction (`servedName`, `server/host-api/document.ts`) : `<connecteur>_act.<fonction>` pour une fonction qui engage ou détruit (`act`), le nom déclaré pour les autres. Les textes des autres fonctions sont inchangés.
+**Pourquoi :** le texte nommait la fonction par son nom déclaré (`brevo.create_list`), sous lequel `call` ne la connaît pas : un assistant qui reprenait ce nom pour rappeler la fonction était refusé.
+**Fichiers :** `packages/plateforme/server/connectors/engine.ts` (`runDescribed`), `packages/plateforme/server/connectors/file-output.ts` (`keptOutput`), `tests/unit/connectors-engine.test.ts`, `tests/unit/connectors-file-output.test.ts`.

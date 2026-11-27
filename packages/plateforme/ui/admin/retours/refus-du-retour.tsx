@@ -6,17 +6,16 @@
 // `ActionPlateforme` sans question. Même glu que `ui/invitations/` (React Hook Form, `zodResolver` sur
 // le schéma que l'API relit). Reçoit le ticket par props, jamais une fonction (`portage-ecrans.md § 2`).
 // Le motif et le refus sont ceux du design system (`Field`, `Textarea`, `Alert`, E05-S09 partie d2) ; les
-// boutons gardent l'allure de ceux d'`ActionPlateforme`, leurs voisins dans la même cellule.
+// boutons sont des `Button` du DS à la taille de ceux d'`ActionPlateforme`, leurs voisins dans la même cellule.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { feedbackStateChangeSchema, type FeedbackStateChange, type FeedbackStateChangeInput } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
-import { BOUTON, BOUTON_DISCRET } from "../../components/classes"
 import { replierLeFocusSur } from "../../components/focus"
 import { Field } from "../../ds/react/forms"
-import { Alert } from "../../ds/react/primitives"
+import { Alert, Button } from "../../ds/react/primitives"
 import { Textarea } from "../../ds/react/textarea"
 import { useRafraichir } from "../../hote/rafraichir"
 import { MESSAGES_DU_RETOUR, MOTIF_TROP_COURT, MOTIF_TROP_LONG } from "./libelles"
@@ -77,9 +76,9 @@ export function RefusDuRetour({ ticket, ancre }: RefusDuRetourProps) {
   return (
     <div ref={racine} className="space-y-1">
       {!ouvert ? (
-        <button ref={depart} type="button" aria-label={`Décliner ${ticket}`} onClick={() => setOuvert(true)} className={BOUTON_DISCRET}>
+        <Button ref={depart} type="button" variant="secondary" size="sm" aria-label={`Décliner ${ticket}`} onClick={() => setOuvert(true)}>
           Décliner
-        </button>
+        </Button>
       ) : (
         <form
           noValidate
@@ -93,12 +92,12 @@ export function RefusDuRetour({ ticket, ancre }: RefusDuRetourProps) {
           </Field>
           {errors.root?.message && <Alert tone="fail" title={errors.root.message} />}
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={isSubmitting} onClick={annuler} className={BOUTON_DISCRET}>
+            <Button type="button" variant="secondary" size="sm" disabled={isSubmitting} onClick={annuler}>
               Annuler
-            </button>
-            <button type="submit" disabled={isSubmitting} aria-busy={isSubmitting || undefined} className={BOUTON}>
+            </Button>
+            <Button type="submit" variant="primary" size="sm" disabled={isSubmitting} aria-busy={isSubmitting || undefined}>
               Confirmer le refus
-            </button>
+            </Button>
           </div>
         </form>
       )}

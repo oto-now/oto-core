@@ -9,19 +9,20 @@
 // des fonctions, qu'un écran serveur ne peut pas lui passer (`portage-ecrans.md § 2`).
 import type { ReactNode } from "react"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
+import { LIEN } from "./classes"
 
 export type ColonneDeTable = { entete: string; numerique?: boolean }
 
 type LienDeCelluleProps = { Lien: LienDeLHote; href: string; children: ReactNode }
 
 /**
- * Le lien d'une cellule vers un autre écran (la procédure, la conversation) : le lien du design system
- * (`.oto-btn[data-variant="link"]`), souligné au repos, pas seulement au survol : la couleur seule ne le
- * distinguerait pas du texte de la ligne (WCAG 1.4.1, `accessibility-patterns.md`).
+ * Le lien d'une cellule vers un autre écran (la procédure, la conversation) : le lien de texte du design
+ * system (`LIEN`, `.oto-link`), souligné au repos : la couleur seule ne le distinguerait pas du texte de la
+ * ligne (WCAG 1.4.1, `accessibility-patterns.md`).
  */
 export function LienDeCellule({ Lien, href, children }: LienDeCelluleProps) {
   return (
-    <Lien href={href} className="oto-btn underline underline-offset-2" data-variant="link">
+    <Lien href={href} className={LIEN}>
       {children}
     </Lien>
   )

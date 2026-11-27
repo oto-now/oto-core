@@ -7,7 +7,7 @@
 // envoi en argument. Sans lui, `ActionPlateforme`, « Abandonner mon texte » et la publication d'un
 // Contexte vide réécrivaient chacun la même question, ses refs et son focus.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
-import { BOUTON, BOUTON_DISCRET } from "./classes"
+import { Button } from "../ds/react/primitives"
 
 type Confirmation = {
   question: string
@@ -16,13 +16,15 @@ type Confirmation = {
   confirmer: () => void
   /** Pendant l'envoi (`ActionPlateforme`), la question reste, ses boutons désactivés, et Échap n'y fait rien. */
   envoi?: boolean
+  /** La taille du bouton de départ, que ses deux boutons remplacent : `sm` par défaut, celle des gestes de ligne. */
+  taille?: "sm" | "md"
 }
 
 /**
  * La question d'un geste confirmé en ligne : `rendu`, à montrer à la place du bouton de départ tant
  * qu'elle est `ouverte` ; `depart`, la référence de ce bouton, qui reprend le focus après `revenir`.
  */
-export function useConfirmationEnLigne({ question, libelleConfirmer, confirmer, envoi = false }: Confirmation) {
+export function useConfirmationEnLigne({ question, libelleConfirmer, confirmer, envoi = false, taille = "sm" }: Confirmation) {
   const id = useId()
   const [ouverte, setOuverte] = useState(false)
   const depart = useRef<HTMLButtonElement>(null)
@@ -55,12 +57,12 @@ export function useConfirmationEnLigne({ question, libelleConfirmer, confirmer, 
       <p id={id} className="text-sm text-ink">
         {question}
       </p>
-      <button ref={garder} type="button" disabled={envoi} onClick={revenir} className={BOUTON_DISCRET}>
+      <Button ref={garder} type="button" variant="secondary" size={taille} disabled={envoi} onClick={revenir}>
         Garder
-      </button>
-      <button type="button" disabled={envoi} aria-busy={envoi} onClick={confirmer} className={BOUTON}>
+      </Button>
+      <Button type="button" variant="primary" size={taille} disabled={envoi} aria-busy={envoi} onClick={confirmer}>
         {libelleConfirmer}
-      </button>
+      </Button>
     </div>
   )
   return { ouverte, rendu, depart, demander: () => setOuverte(true), refermer: () => setOuverte(false), revenir }

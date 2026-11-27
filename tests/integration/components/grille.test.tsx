@@ -193,8 +193,11 @@ describe("TableauDuNoeud, provenance (AC3)", () => {
     expect(montant.querySelector(".oto-cell-info > .text-ink")).toHaveTextContent(/^12 000$/)
     fireEvent.click(within(montant).getByRole("button", { name: "Provenance de « montant_estime »" }))
     const panneau = within(screen.getByRole("dialog", { name: "Provenance de « montant_estime »" }))
-    expect(panneau.getByText("Décidé par Claire Morel").parentElement).toHaveClass("text-mute")
-    expect(panneau.getByRole("link", { name: "https://valbrune.test/deliberation-12" })).toHaveClass("text-mute", "underline")
+    // Le gris est celui de la légende du design system (`oto-caption`), que le lien de texte (`oto-link`, souligné) reprend.
+    expect(panneau.getByText("Décidé par Claire Morel").parentElement).toHaveClass("oto-caption")
+    const lien = panneau.getByRole("link", { name: "https://valbrune.test/deliberation-12" })
+    expect(lien).toHaveClass("oto-link")
+    expect(panneau.getByText("Décidé par Claire Morel").parentElement).toContainElement(lien)
   })
 })
 

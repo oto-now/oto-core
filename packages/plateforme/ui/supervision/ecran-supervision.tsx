@@ -8,6 +8,7 @@
 import { Binoculars } from "@phosphor-icons/react/dist/ssr/Binoculars"
 import { SUPERVISION_DAYS, type SupervisedAccounts, type SupervisedMember, type SupervisedOrg } from "../../schemas"
 import type { Resultat } from "../api/resultat"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
 import { TableServeur, type ColonneDeTable } from "../components/table-serveur"
 import { EmptyState } from "../ds/react/empty-state"
@@ -95,7 +96,7 @@ function LigneDEspace({ espace }: { espace: SupervisedOrg }) {
       <tr>
         <td colSpan={COLONNES.length}>
           <details>
-            <summary className="cursor-pointer underline underline-offset-2">{`Membres et comptes de ${espace.name}`}</summary>
+            <summary className={`w-fit cursor-pointer ${LIEN}`}>{`Membres et comptes de ${espace.name}`}</summary>
             <div className="flex flex-col gap-3 py-2">
               <section aria-label={`Membres de ${espace.name}`} className="flex flex-col gap-1">
                 <h3 className="oto-caption">{`Membres et rôles (${nombreLisible(espace.people.length)})`}</h3>

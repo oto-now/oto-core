@@ -11,6 +11,7 @@ import { Check } from "@phosphor-icons/react/dist/csr/Check"
 import { CircleNotch } from "@phosphor-icons/react/dist/csr/CircleNotch"
 import { adresseRepond } from "../api/client"
 import { IlotDAuthentification } from "../authentification/ilot-d-authentification"
+import { LIEN } from "../components/classes"
 import { useMediaQuery } from "../ds/react/hooks"
 import { Icon } from "../ds/react/icon"
 
@@ -117,7 +118,7 @@ export function DepartVersLOrganisation({ adresse }: { adresse: string }) {
         </p>
         {/* Le lien seulement au retard : avant, l'adresse ne répond pas, et il mènerait à l'erreur du navigateur. */}
         {etat === "retard" && (
-          <a href={adresse} className="text-sm text-ink underline underline-offset-2">
+          <a href={adresse} className={`text-sm ${LIEN}`}>
             {`Ouvrir ${hote}`}
           </a>
         )}

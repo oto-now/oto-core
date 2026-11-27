@@ -166,18 +166,18 @@ describe("EcranConnecteurs, the list", () => {
     expect(screen.getByText("Les outils que votre assistant peut utiliser pour vous.")).toBeInTheDocument()
 
     const banque = ligneDe("Banque")
-    expect(banque.getByText("Crm Pro", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(banque.getByRole("link", { name: "Banque" })).toHaveAccessibleDescription("Crm Pro")
     expect(banque.getByText("Équipe Finance +1")).toBeInTheDocument()
     expect(banque.getByText("Non testé")).toBeInTheDocument()
     expect(banque.queryByRole("button")).toBeNull()
 
     const agenda = ligneDe("Agenda de Paul")
-    expect(agenda.getByText("Microsoft 365", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(agenda.getByRole("link", { name: "Agenda de Paul" })).toHaveAccessibleDescription("Microsoft 365")
     expect(agenda.getByText("Partagé par Paul Durand")).toBeInTheDocument()
     expect(agenda.getByText("Lire")).toBeInTheDocument()
 
     const ventes = ligneDe("Mail Ventes")
-    expect(ventes.getByText("mail", { selector: ".oto-caption" })).toBeInTheDocument()
+    expect(ventes.getByRole("link", { name: "Mail Ventes" })).toHaveAccessibleDescription("mail")
     expect(ventes.getByText("Équipe Ventes")).toBeInTheDocument()
     expect(ventes.getByText("Lire et modifier")).toBeInTheDocument()
 
@@ -428,7 +428,7 @@ describe("EcranConnecteurs, the detail of a connector", () => {
     fetchMock.mockImplementation(async () => reponse(200, { data: { account: BANQUE } }))
     rendre({ accounts: [{ ...BANQUE, description: "Les relevés du compte courant" }, AGENDA] }, { vue: { compte: BANQUE.id } })
     // La description remplace le nom de l'outil sous le libellé, et se lit dans le détail.
-    expect(screen.getByRole("link", { name: "Banque" }).closest("td")?.querySelector(".oto-caption")).toHaveTextContent("Les relevés du compte courant")
+    expect(screen.getByRole("link", { name: "Banque" })).toHaveAccessibleDescription("Les relevés du compte courant")
     const detail = detailDe(BANQUE)
     fireEvent.click(detail.getByRole("button", { name: "Modifier le nom de Banque" }))
     const formulaire = within(detail.getByRole("form", { name: "Nom et description de Banque" }))
@@ -1324,6 +1324,26 @@ describe("EcranConnecteurs, a tool that connects in several ways", () => {
     expect(ligneDe("Console perso").getByText("Console Web · connexion au service")).toBeInTheDocument()
     expect(ligneDe("Console de l'équipe").getByText("Console Web · clé")).toBeInTheDocument()
     expect(ligneDe("Banque").getByText("Crm Pro")).toBeInTheDocument()
+  })
+
+  it("should count in the name hint the connectors of the chosen owner by the chosen way, and follow a change of owner", () => {
+    const PAR_JETON: ConnectorAccountForm = { ...PAR_CLE, access: { name: "api_token", label: "API token" }, fields: [{ name: "token", label: "Jeton", secret: true }] }
+    const DU_JETON: AccountView = { ...PAR_LA_CLE, id: "6b2f3c1d-4e5a-4b6c-8d7e-9f0a1b2c3d74", label: "Console par jeton", access: "api_token" }
+    // La personne a aussi le sien : ni lui ni le connecteur de l'autre façon ne comptent pour l'organisation par la clé.
+    rendre({ ...ADMINISTRE, connectors: [CONSOLE], formulaires: [PAR_CLE, PAR_JETON, PAR_CONNEXION], accounts: [PAR_LE_SERVICE, PAR_LA_CLE, DU_JETON], organisation: "Mortier & Co" })
+    const fenetre = ouvrirLaFiche()
+    const [, parLaCle] = fenetre.getAllByRole("radio")
+    fireEvent.click(parLaCle)
+    const formulaire = within(fenetre.getByRole("form", { name: "Ajouter Console Web" }))
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Console Web · Mortier & Co (2)")
+    expect(formulaire.getByText("L'organisation en a déjà 1. Remplacez « (2) » par ce qui les distingue, par exemple « Console Web · Filiale ABC ».")).toBeInTheDocument()
+
+    const panneau = within(formulaire.getByRole("region", { name: "Qui pourra s'en servir" }))
+    choisirDansLaListe(panneau.getByLabelText("Accès de toute l'organisation"), "Retirer l'accès")
+    fireEvent.change(panneau.getByRole("combobox", { name: "Ajouter une personne ou une équipe" }), { target: { value: "ventes" } })
+    fireEvent.click(panneau.getByRole("option", { name: "Équipe Ventes" }))
+    expect(formulaire.getByLabelText("Nom")).toHaveValue("Console Web · Ventes")
+    expect(formulaire.getByText("C'est ce nom que l'équipe dira à son assistant.")).toBeInTheDocument()
   })
 
   it("should close the choice of the way while the connector is created or the person leaves for the third party", async () => {

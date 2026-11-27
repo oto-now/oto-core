@@ -113,5 +113,5 @@ export const BRANCHEMENT = {
 export const PREMIER_JOUR = {
   rien: "Rien n'a encore tourné",
   texte:
-    "Votre assistant lit vos pages, suit vos procédures et appelle vos outils, dans la limite de vos droits. Branchez-le d'abord : « Brancher votre assistant » vous guide pas à pas.",
+    "Votre assistant lit vos pages, suit vos procédures et appelle vos outils, dans la limite de vos droits. Branchez-le d'abord avec « Brancher ».",
 } as const

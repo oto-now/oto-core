@@ -137,6 +137,18 @@ exclut et ce qu'exige `ui-patterns.md`, qui l'emporte (§ 8). Source en lecture 
   (contour invisible la nuit). `mute` mesure plus de 3:1 sur l'îlot, jour et
   nuit. **Vérifiable :** aucune classe `border-<token>` dans un écran porté (`ui-tokens.test.ts`
   n'exempte aucun écran).
+- **Un bouton des écrans du paquet est le `Button` du design system (`oto-btn`), jamais une chaîne d'utilitaires
+  Tailwind** : une chaîne refaite à la main (`rounded-md px-3 py-2`) perd la pilule et les tailles du DS, et le bouton
+  détonne à côté de ses voisins. Sa taille (`size`) est celle des boutons qui l'entourent : `sm` dans une ligne de
+  tableau ou un panneau aux gestes `sm`, `md` par défaut ailleurs. **Vérifiable :** `ui-tokens.test.ts` (« should draw
+  no button by hand ») refuse, dans `ui/` hors de `ui/ds/`, toute chaîne qui porte un arrondi et les deux marges
+  internes, constante comprise ; exception nommée : la ligne de l'arbre (`arbre/navigateur-d-arbre.tsx`, un lien).
+- **Un lien de texte est `LIEN` (`.oto-link` du DS), `LienDeCellule` dans une cellule de `TableServeur` ; un intertitre
+  d'îlot porte le rôle `.oto-section-title`** : un `underline` ou un `text-sm font-semibold` posé à la main redonne à
+  chaque écran son dessin (soulignement collé, couleur, taille et graisse d'un intertitre). Sous `.oto`, les tailles
+  (`text-sm`) et les arrondis (`rounded-md`) de Tailwind sont rapportés aux échelles du DS (`oto.css`, section 5).
+  **Vérifiable :** `rg -n "\bunderline\b" packages/plateforme/ui --glob '!**/ui/ds/**' --glob '!**/classes.ts'` ne
+  trouve rien ; `rg -n "<h[2-6][^>]*\btext-(sm|base)\b" packages/plateforme/ui --glob '!**/ui/ds/**'` non plus.
 - **Une propriété que pose une classe `oto-*` ne se change pas par un utilitaire sur le même élément** : les feuilles
   du design system sont hors couche et battent `@layer utilities` (`overflow-x-auto` sur un `pre.oto-code`, que
   `overflow: hidden` rognait sans défilement) ; elle se change dans la feuille, sous un sélecteur de contexte.

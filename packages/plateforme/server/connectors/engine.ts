@@ -12,6 +12,7 @@
 import type { AccountMarkReason } from "../../schemas"
 import type { FunctionOutput, FunctionSummary } from "../catalog/define"
 import { PlatformError, type PlatformErrorCode } from "../errors"
+import { servedName } from "../host-api/document"
 import { cut } from "../journal"
 import { isJsonObject } from "../json"
 import { guardedFetch } from "./address-guard"
@@ -398,6 +399,7 @@ function itemsOf(prepared: PreparedFunction, answers: readonly unknown[], path: 
  */
 export async function runDescribed(prepared: PreparedFunction, call: DescribedCall, args: Record<string, unknown>): Promise<FunctionOutput> {
   const { fn, connector } = prepared
+  // Le texte nomme la fonction comme l'assistant l'appelle (`servedName`) : `<connecteur>_act.<fonction>` pour une qui engage.
   const file = fn.output?.file
   if (file) return runFileOutput(prepared, call, args, file)
   const { answers, next } = await executeDescribed(prepared, call, args)
@@ -411,15 +413,15 @@ export async function runDescribed(prepared: PreparedFunction, call: DescribedCa
   if (path !== undefined) {
     const items = itemsOf(prepared, answers, path)
     const pages = answers.length > 1 ? ` from ${answers.length} pages` : ""
-    const head = `${fn.name}: ${items.length} ${items.length === 1 ? "item" : "items"}${pages}${items.length > 0 ? ":" : "."}`
+    const head = `${servedName(fn)}: ${items.length} ${items.length === 1 ? "item" : "items"}${pages}${items.length > 0 ? ":" : "."}`
     return {
       text: [head, ...items.map((item) => `- ${JSON.stringify(item)}`), ...more].join("\n"),
       data: { items, next_cursor: next, pages: answers.length },
     }
   }
   const value = shaped(answers[0], fn)
-  if (value === null) return { text: `${fn.name}: done; ${connector.label} returned no content.`, data: {} }
-  return { text: [`${fn.name}:`, JSON.stringify(value), ...more].join("\n"), data: isJsonObject(value) ? value : { value } }
+  if (value === null) return { text: `${servedName(fn)}: done; ${connector.label} returned no content.`, data: {} }
+  return { text: [`${servedName(fn)}:`, JSON.stringify(value), ...more].join("\n"), data: isJsonObject(value) ? value : { value } }
 }
 
 /** Au plus, en caractères, une valeur citée dans un récapitulatif. */

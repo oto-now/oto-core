@@ -401,6 +401,11 @@
   --r-switch: var(--r-action);
   --r-chip:   var(--r-action);
 }
+/* Les arrondis de Tailwind suivent ces rayons sous `.oto` : l'hôte les tire de son `--radius`, qu'il
+   écrit en dur dans l'utilitaire (`@theme inline`), si bien qu'aucun jeton redéclaré ici ne les atteint ;
+   hors couche, la règle bat `@layer utilities`, et `:where()` la laisse sous les feuilles de `ui/ds/`,
+   chargées après. Ce qui contient prend `--r-container` ; `rounded-full` reste la pilule. */
+.oto :where(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl) { border-radius: var(--r-container); }
 
 /* Typographie : Inter et JetBrains Mono (`ui/ds/tokens/fonts.css`) ; rien sous 11 px, sauf la
    micro-étiquette mono de 10 px. */
@@ -419,6 +424,18 @@
   --fs-3xl:  30px;
   --fs-4xl:  38px;
   --fs-mono-label: 10px;
+
+  /* Les tailles de Tailwind suivent cette échelle sous `.oto` : `text-sm` lit `--text-sm`, déclaré par
+     Tailwind sur `:root` et redéclaré ici, sans toucher l'hôte hors de la coque. Les interlignes restent
+     ceux de Tailwind, des rapports sans unité qui suivent la taille. */
+  --text-xs:   var(--fs-xs);
+  --text-sm:   var(--fs-sm);
+  --text-base: var(--fs-base);
+  --text-lg:   var(--fs-lg);
+  --text-xl:   var(--fs-xl);
+  --text-2xl:  var(--fs-2xl);
+  --text-3xl:  var(--fs-3xl);
+  --text-4xl:  var(--fs-4xl);
 
   --lh-tight:   1.15;
   --lh-snug:    1.3;

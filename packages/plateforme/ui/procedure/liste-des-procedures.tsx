@@ -13,8 +13,10 @@ import type { Resultat } from "../api/resultat"
 import { PERSO, SECTION_PERSO } from "../arbre/depuis-l-arbre"
 import type { LienDeLHote } from "../arbre/navigateur-d-arbre"
 import { Choix, optionsDe } from "../components/choix"
-import { BOUTON, LIEN } from "../components/classes"
+import { LIEN } from "../components/classes"
 import { ErreurDeLecture } from "../components/erreur-de-lecture"
+import { Button } from "../ds/react/primitives"
+import { Skeleton } from "../ds/react/skeleton"
 import { LienDeCellule, TableServeur } from "../components/table-serveur"
 import { etatDeLaProcedure, LISTE } from "./libelles"
 
@@ -52,9 +54,9 @@ function FiltreDEquipe({ equipes, equipe, action, ici, Lien }: FiltreProps) {
         ici={ici}
         Lien={Lien}
       />
-      <button type="submit" className={BOUTON}>
+      <Button type="submit" variant="secondary">
         {LISTE.filtrer}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -102,7 +104,7 @@ export function ListeDesProcedures({ resultat, equipes, ...props }: ListeDesProc
   const ici = props.hrefDeLaListe(props.filtre)
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">{LISTE.titre}</h1>
+      <h1 className="oto-page-title">{LISTE.titre}</h1>
       <FiltreDEquipe equipes={equipes} equipe={props.filtre.team} action={props.hrefDeLaListe({})} ici={ici} Lien={props.Lien} />
       {resultat.error !== undefined ? <ErreurDeLecture message={resultat.error} href={ici} Lien={props.Lien} /> : <Procedures procedures={resultat.data} {...props} />}
     </section>
@@ -114,8 +116,8 @@ export function ListeDesProceduresChargement() {
   return (
     <div role="status" aria-busy="true" className="space-y-3">
       <span className="sr-only">{LISTE.chargement}</span>
-      {["w-1/3", "w-full", "w-full", "w-5/6", "w-2/3"].map((largeur, rang) => (
-        <div key={`${largeur}-${rang}`} aria-hidden="true" className={`h-6 rounded-md bg-skeleton ${largeur}`} />
+      {["33%", "100%", "100%", "83%", "66%"].map((largeur, rang) => (
+        <Skeleton key={`${largeur}-${rang}`} shape="row" width={largeur} className="block" />
       ))}
     </div>
   )

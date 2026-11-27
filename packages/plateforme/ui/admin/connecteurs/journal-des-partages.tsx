@@ -10,6 +10,7 @@ import { useState } from "react"
 import type { AccountShareEventView, AccountView } from "../../../schemas"
 import { appelerPlateforme } from "../../api/client"
 import { messageDErreur } from "../../api/messages"
+import { LIEN } from "../../components/classes"
 import { Alert } from "../../ds/react/primitives"
 import { dateEtHeureLisibles } from "../../format/dates"
 import { NIVEAUX_DU_COMPTE as NIVEAUX, sujetDuPartage } from "./libelles-des-partages"
@@ -46,7 +47,7 @@ export function JournalDesPartages({ compte }: { compte: Pick<AccountView, "id" 
   // Deux enfants de la rangée du titre : le lien à sa droite, le journal ouvert passe à la ligne, sur toute la largeur.
   return (
     <>
-      <button type="button" aria-expanded={ouvert} onClick={() => void ouvrir()} className={`${LIEN_DISCRET} text-ink underline underline-offset-2`}>
+      <button type="button" aria-expanded={ouvert} onClick={() => void ouvrir()} className={`${LIEN_DISCRET} ${LIEN}`}>
         Journal des partages
         <span className="oto-sr-only">{` de ${compte.label}`}</span>
       </button>

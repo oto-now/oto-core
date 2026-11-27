@@ -1,0 +1,2 @@
+### Hosts
+- UI: `EcranConnexion` (`/connect`) shows the guide in two times, add the connector (with direct links to Claude, ChatGPT and Mistral) then paste the sentence in the personal preferences, which names the connector by the same name as the Copy field, under a status line of the last connections; no tabs, no Claude Code, no requests to try. Its `prompts` prop stays accepted and is no longer read.

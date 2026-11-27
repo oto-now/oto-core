@@ -215,7 +215,7 @@ describe("RailApplication zones (AC-a3)", () => {
       within(rail).getByRole("button", { name: "Replier Ventes" }),
       within(rail).getByRole("link", { name: "Contexte · Ventes" }),
       within(rail).getByRole("button", { name: "Replier Privé" }),
-      within(rail).getByRole("link", { name: "Contexte · Privé" }),
+      within(rail).getByRole("link", { name: "Mes instructions" }),
       within(rail).getByRole("link", { name: "Connecteurs" }),
       within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }),
     ]
@@ -300,12 +300,16 @@ describe("RailApplication menus (AC-a4)", () => {
 
   // E05-S11 (AC-6, AC-e22) : « Profil » ouvre la page Profil, la Corbeille s'ouvre d'ici ; ni « Apparence » ni « Couleur ».
   // E11-S10 (AC-e1) : « Contexte » en tête, quand l'hôte en donne l'adresse.
-  it.each([false, true])("should offer Contexte, Profil, Brancher mon Claude, ChatGPT ou Mistral, Corbeille, then Déconnexion in the account menu, the same whatever the administration right (%s)", (administre) => {
+  it.each([false, true])("should offer Mes instructions, Contexte, Profil, Brancher mon Claude, ChatGPT ou Mistral, Corbeille, then Déconnexion in the account menu, the same whatever the administration right (%s)", (administre) => {
     const rail = monter({ administre, adresses: { ...ADRESSES, contexte: "/context" } })
     fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
-    expect(itemsDuMenu()).toEqual(["Contexte", "Profil", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille", "Déconnexion"])
+    expect(itemsDuMenu()).toEqual(["Mes instructions", "Contexte", "Profil", "Brancher mon Claude, ChatGPT ou Mistral", "Corbeille", "Déconnexion"])
+    fireEvent.click(menu().getByRole("menuitem", { name: "Mes instructions" }))
+    expect(hote.naviguer).toHaveBeenCalledWith(`${ADRESSES.pages}private/claire/contexte`)
+
+    fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Contexte" }))
-    expect(hote.naviguer).toHaveBeenCalledWith("/context")
+    expect(hote.naviguer).toHaveBeenLastCalledWith("/context")
 
     fireEvent.click(within(rail).getByRole("button", { name: "Compte : Claire Morel. Ouvrir le menu" }))
     fireEvent.click(menu().getByRole("menuitem", { name: "Profil" }))
@@ -551,9 +555,9 @@ describe("RailApplication keyboard (AC-x3)", () => {
     const ouvert = screen.getByRole("menu")
     expect(ouvert).toHaveFocus()
     fireEvent.keyDown(ouvert, { key: "ArrowDown" })
-    expect(ouvert).toHaveAttribute("aria-activedescendant", within(ouvert).getByRole("menuitem", { name: "Profil" }).id)
+    expect(ouvert).toHaveAttribute("aria-activedescendant", within(ouvert).getByRole("menuitem", { name: "Mes instructions" }).id)
     fireEvent.keyDown(ouvert, { key: "Enter" })
-    expect(hote.naviguer).toHaveBeenCalledWith("/profile")
+    expect(hote.naviguer).toHaveBeenCalledWith(`${ADRESSES.pages}private/claire/contexte`)
     // Le menu part avec le focus : il revient au déclencheur, jamais sur la page.
     expect(compte).toHaveFocus()
   })
@@ -992,7 +996,7 @@ describe("RailApplication, contents under a Contexte (E05-S12, AC-25 to AC-27)",
   it.each([
     ["Contexte · Tout le monde", "contexte/sans_titre"],
     ["Contexte · Ventes", "ventes/contexte/sans_titre"],
-    ["Contexte · Privé", "private/claire/contexte/sans_titre"],
+    ["Mes instructions", "private/claire/contexte/sans_titre"],
   ])("should create a page, a table or a procedure under the Contexte from the « + » of « %s », open it and show it under that line (AC-25)", async (ligne, chemin) => {
     const appels = simulerLAPI({ data: { path: chemin } })
     const { rerender } = render(railA("/n/conseil/grille"))

@@ -66,6 +66,7 @@ function LigneDuLien({ lien, Lien, prefixeDesPages }: Omit<Navigation, "ici"> & 
           confirmation={{ question: LIENS_PUBLICS.question, libelleConfirmer: LIENS_PUBLICS.confirmer }}
           ancre={ANCRE}
           nomAccessible={LIENS_PUBLICS.nomDuGeste(contenu)}
+          taille="sm"
         />
       </td>
     </tr>
